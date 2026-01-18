@@ -2,7 +2,7 @@
 grove() {
     # Set environment variable to indicate we're in the shell wrapper
     local output exit_code
-    GROVE_SHELL=1 output=$("$__GROVE_BIN" "$@" 2>&1)
+    output=$(GROVE_SHELL=1 "$__GROVE_BIN" "$@" 2>&1)
     exit_code=$?
     
     # Parse output line by line for directives
