@@ -1,0 +1,101 @@
+package shell
+
+import (
+	_ "embed"
+	"fmt"
+	"os"
+	"os/exec"
+)
+
+//go:embed templates/grove.zsh
+var zshTemplate string
+
+//go:embed templates/grove.bash
+var bashTemplate string
+
+// GenerateZshIntegration returns the zsh shell integration code
+func GenerateZshIntegration() (string, error) {
+	binaryPath, err := os.Executable()
+	if err != nil {
+		// Fallback to grove in PATH
+		binaryPath = "grove"
+	}
+
+	// Replace placeholder with actual binary path
+	output := zshTemplate
+	output = fmt.Sprintf("# Grove shell integration for zsh\n__GROVE_BIN=\"%s\"\n\n%s", binaryPath, output)
+
+	return output, nil
+}
+
+// GenerateBashIntegration returns the bash shell integration code
+func GenerateBashIntegration() (string, error) {
+	binaryPath, err := os.Executable()
+	if err != nil {
+		// Fallback to grove in PATH
+		binaryPath = "grove"
+	}
+
+	// Replace placeholder with actual binary path
+	output := bashTemplate
+	output = fmt.Sprintf("# Grove shell integration for bash\n__GROVE_BIN=\"%s\"\n\n%s", binaryPath, output)
+
+	return output, nil
+}
+
+// GetWorktreeNames returns a list of worktree names for completion
+func GetWorktreeNames() ([]string, error) {
+	cmd := exec.Command("git", "worktree", "list", "--porcelain")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse worktree names
+	names := []string{}
+	lines := splitLines(string(output))
+	for _, line := range lines {
+		if len(line) > 9 && line[:9] == "worktree " {
+			path := line[9:]
+			// Extract just the directory name
+			parts := splitPath(path)
+			if len(parts) > 0 {
+				names = append(names, parts[len(parts)-1])
+			}
+		}
+	}
+
+	return names, nil
+}
+
+func splitLines(s string) []string {
+	var lines []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			lines = append(lines, s[start:i])
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		lines = append(lines, s[start:])
+	}
+	return lines
+}
+
+func splitPath(path string) []string {
+	var parts []string
+	start := 0
+	for i := 0; i < len(path); i++ {
+		if path[i] == '/' {
+			if i > start {
+				parts = append(parts, path[start:i])
+			}
+			start = i + 1
+		}
+	}
+	if start < len(path) {
+		parts = append(parts, path[start:])
+	}
+	return parts
+}
