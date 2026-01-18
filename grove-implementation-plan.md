@@ -24,6 +24,11 @@
 12. [Ralph Wiggum Iteration Pattern](#ralph-wiggum-iteration-pattern)
 13. [Completion Criteria](#completion-criteria)
 
+### Related Documentation
+
+- **[Command Specifications](docs/COMMAND_SPECIFICATIONS.md)** — Exhaustive behavior specs for every command
+- **[Validation Checklist](docs/VALIDATION_CHECKLIST.md)** — Test cases to verify implementation correctness
+
 ---
 
 ## Project Overview

@@ -4,6 +4,31 @@
 Grove is a Go CLI tool for managing git worktrees with tmux integration.
 Target: developers who context-switch frequently between tasks.
 
+## Key Documentation
+- **[Command Specifications](docs/COMMAND_SPECIFICATIONS.md)** — Exhaustive behavior specs for every command including naming conventions, shell integration protocol, and expected outputs
+- **[Validation Checklist](docs/VALIDATION_CHECKLIST.md)** — Test cases to verify implementation correctness
+- **[Implementation Plan](grove-implementation-plan.md)** — Phase breakdown, task specs, architecture decisions
+
+## Critical Implementation Rules
+
+### Worktree Naming Convention
+Worktrees MUST follow the `{project}-{name}` pattern:
+- `grove-cli-testing` not `testing`
+- `grove-cli-feature-auth` not `feature-auth`
+- Project name derived from: git remote → directory name → config
+
+### Shell Integration Protocol
+Commands that change directories output `cd:/path/to/dir` which the shell wrapper intercepts:
+```bash
+# Binary outputs: cd:/Users/egg/Work/grove-cli-testing
+# Shell wrapper detects GROVE_SHELL=1 and executes the cd
+```
+
+### Display Rules
+- `grove ls` shows SHORT names ("testing", "main") not full paths
+- `grove here` shows: short name, branch, short SHA (7 chars), commit message, age
+- Tmux sessions use FULL names: `grove-cli-testing`
+
 ## Build Commands
 - `make build` - Build the binary
 - `make test` - Run all tests
