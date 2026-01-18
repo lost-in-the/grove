@@ -45,7 +45,10 @@ func GenerateBashIntegration() (string, error) {
 	return output, nil
 }
 
-// GetWorktreeNames returns a list of worktree names for completion
+// GetWorktreeNames returns a list of worktree names for completion.
+// This function is intended for future use by server-side completion
+// or programmatic access to worktree names. Shell completions currently
+// use git commands directly in the shell templates for better performance.
 func GetWorktreeNames() ([]string, error) {
 	cmd := exec.Command("git", "worktree", "list", "--porcelain")
 	output, err := cmd.Output()
@@ -57,7 +60,7 @@ func GetWorktreeNames() ([]string, error) {
 	names := []string{}
 	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
-		if len(line) > 9 && line[:9] == "worktree " {
+		if len(line) >= 9 && line[:9] == "worktree " {
 			path := line[9:]
 			// Extract just the directory name
 			names = append(names, filepath.Base(path))
