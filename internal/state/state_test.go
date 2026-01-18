@@ -3,6 +3,7 @@ package state
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -87,7 +88,7 @@ func TestManagerFreeze(t *testing.T) {
 				return
 			}
 			if tt.wantErr && tt.errSubstr != "" {
-				if err == nil || !contains(err.Error(), tt.errSubstr) {
+				if err == nil || !strings.Contains(err.Error(), tt.errSubstr) {
 					t.Errorf("Freeze() error = %v, want error containing %q", err, tt.errSubstr)
 				}
 			}
@@ -150,7 +151,7 @@ func TestManagerResume(t *testing.T) {
 				return
 			}
 			if tt.wantErr && tt.errSubstr != "" {
-				if err == nil || !contains(err.Error(), tt.errSubstr) {
+				if err == nil || !strings.Contains(err.Error(), tt.errSubstr) {
 					t.Errorf("Resume() error = %v, want error containing %q", err, tt.errSubstr)
 				}
 			}
@@ -214,7 +215,7 @@ func TestManagerIsFrozen(t *testing.T) {
 				return
 			}
 			if tt.wantErr && tt.errSubstr != "" {
-				if err == nil || !contains(err.Error(), tt.errSubstr) {
+				if err == nil || !strings.Contains(err.Error(), tt.errSubstr) {
 					t.Errorf("IsFrozen() error = %v, want error containing %q", err, tt.errSubstr)
 				}
 			}
@@ -419,20 +420,6 @@ func setupTestManager(t *testing.T) *Manager {
 		t.Fatalf("failed to create test manager: %v", err)
 	}
 	return mgr
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || 
-		(len(s) > 0 && len(substr) > 0 && containsHelper(s, substr)))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
 
 func stringSliceEqual(a, b []string) bool {
