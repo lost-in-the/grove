@@ -16,7 +16,7 @@ coverage.html
 go.work
 
 # Binary
-grove
+/grove
 /bin/
 
 # IDE
