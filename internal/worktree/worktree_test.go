@@ -217,3 +217,78 @@ func TestWorktreeList(t *testing.T) {
 		t.Errorf("List() returned %d worktrees, want at least 1", len(trees))
 	}
 }
+
+func TestGetProjectName(t *testing.T) {
+	tests := []struct {
+		name         string
+		remoteURL    string
+		dirName      string
+		wantProject  string
+	}{
+		{
+			name:        "github https url",
+			remoteURL:   "https://github.com/owner/grove-cli",
+			dirName:     "grove-cli",
+			wantProject: "grove-cli",
+		},
+		{
+			name:        "github https url with .git",
+			remoteURL:   "https://github.com/owner/grove-cli.git",
+			dirName:     "grove-cli",
+			wantProject: "grove-cli",
+		},
+		{
+			name:        "github ssh url",
+			remoteURL:   "git@github.com:owner/grove-cli.git",
+			dirName:     "grove-cli",
+			wantProject: "grove-cli",
+		},
+		{
+			name:        "fallback to dir name",
+			remoteURL:   "",
+			dirName:     "my-project",
+			wantProject: "my-project",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := getProjectName(tt.remoteURL, tt.dirName)
+			if got != tt.wantProject {
+				t.Errorf("getProjectName() = %q, want %q", got, tt.wantProject)
+			}
+		})
+	}
+}
+
+func TestTmuxSessionName(t *testing.T) {
+	tests := []struct {
+		name        string
+		project     string
+		worktree    string
+		wantSession string
+	}{
+		{
+			name:        "simple names",
+			project:     "grove-cli",
+			worktree:    "testing",
+			wantSession: "grove-cli-testing",
+		},
+		{
+			name:        "with hyphens",
+			project:     "my-app",
+			worktree:    "feature-auth",
+			wantSession: "my-app-feature-auth",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := &Worktree{Name: tt.worktree}
+			got := TmuxSessionName(tt.project, w.Name)
+			if got != tt.wantSession {
+				t.Errorf("TmuxSessionName() = %q, want %q", got, tt.wantSession)
+			}
+		})
+	}
+}

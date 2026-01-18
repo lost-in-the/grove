@@ -3,7 +3,6 @@ package commands
 import (
 	"fmt"
 
-	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 	"github.com/spf13/cobra"
@@ -23,15 +22,16 @@ This will delete the worktree directory and remove the git worktree reference.`,
 			return fmt.Errorf("worktree name cannot be empty")
 		}
 
-		// Load config
-		cfg, err := config.Load()
+		// Initialize worktree manager
+		mgr, err := worktree.NewManager("")
 		if err != nil {
-			return fmt.Errorf("failed to load config: %w", err)
+			return fmt.Errorf("failed to initialize worktree manager: %w", err)
 		}
 
 		// Kill tmux session if it exists
 		if tmux.IsTmuxAvailable() {
-			sessionName := cfg.Tmux.Prefix + name
+			projectName := mgr.GetProjectName()
+			sessionName := worktree.TmuxSessionName(projectName, name)
 			exists, err := tmux.SessionExists(sessionName)
 			if err == nil && exists {
 				if err := tmux.KillSession(sessionName); err != nil {
@@ -43,11 +43,6 @@ This will delete the worktree directory and remove the git worktree reference.`,
 		}
 
 		// Remove worktree
-		mgr, err := worktree.NewManager("")
-		if err != nil {
-			return fmt.Errorf("failed to initialize worktree manager: %w", err)
-		}
-
 		if err := mgr.Remove(name); err != nil {
 			return fmt.Errorf("failed to remove worktree: %w", err)
 		}

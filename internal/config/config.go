@@ -12,7 +12,6 @@ type Config struct {
 	DefaultBranch string        `toml:"default_base_branch"`
 	Switch        SwitchConfig  `toml:"switch"`
 	Naming        NamingConfig  `toml:"naming"`
-	Tmux          TmuxConfig    `toml:"tmux"`
 	Plugins       PluginsConfig `toml:"plugins"`
 }
 
@@ -24,11 +23,6 @@ type SwitchConfig struct {
 // NamingConfig controls worktree naming conventions
 type NamingConfig struct {
 	Pattern string `toml:"pattern"` // Pattern for naming worktrees
-}
-
-// TmuxConfig controls tmux session behavior
-type TmuxConfig struct {
-	Prefix string `toml:"prefix"` // Prefix for tmux session names
 }
 
 // PluginsConfig controls plugin behavior
@@ -117,9 +111,6 @@ func mergeConfigs(base, override *Config) *Config {
 	}
 	if override.Naming.Pattern != "" {
 		result.Naming.Pattern = override.Naming.Pattern
-	}
-	if override.Tmux.Prefix != "" {
-		result.Tmux.Prefix = override.Tmux.Prefix
 	}
 	// Merge plugin configs - only override if explicitly set (non-nil)
 	if override.Plugins.Docker.Enabled != nil {

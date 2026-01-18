@@ -3,7 +3,6 @@ package commands
 import (
 	"fmt"
 
-	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 	"github.com/spf13/cobra"
@@ -22,12 +21,6 @@ When using shell integration, this will also change your current directory.`,
 		name := args[0]
 		if name == "" {
 			return fmt.Errorf("worktree name cannot be empty")
-		}
-
-		// Load config
-		cfg, err := config.Load()
-		if err != nil {
-			return fmt.Errorf("failed to load config: %w", err)
 		}
 
 		// Get worktree
@@ -63,7 +56,8 @@ When using shell integration, this will also change your current directory.`,
 
 		// Handle tmux session
 		if tmux.IsTmuxAvailable() {
-			sessionName := cfg.Tmux.Prefix + name
+			projectName := mgr.GetProjectName()
+			sessionName := worktree.TmuxSessionName(projectName, name)
 			exists, err := tmux.SessionExists(sessionName)
 			if err != nil {
 				return fmt.Errorf("failed to check session: %w", err)

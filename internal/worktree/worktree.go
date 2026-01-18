@@ -19,7 +19,8 @@ type Worktree struct {
 
 // Manager handles git worktree operations
 type Manager struct {
-	repoRoot string // Root of the git repository
+	repoRoot    string // Root of the git repository
+	projectName string // Cached project name
 }
 
 // NewManager creates a new worktree manager
@@ -241,4 +242,66 @@ func parseWorktreeList(output string) []*Worktree {
 	}
 
 	return trees
+}
+
+// GetProjectName returns the project name for the repository
+func (m *Manager) GetProjectName() string {
+	if m.projectName != "" {
+		return m.projectName
+	}
+
+	// Try to get project name from git remote
+	cmd := exec.Command("git", "remote", "get-url", "origin")
+	cmd.Dir = m.repoRoot
+	output, err := cmd.Output()
+	
+	remoteURL := ""
+	if err == nil {
+		remoteURL = strings.TrimSpace(string(output))
+	}
+
+	// Fallback to directory name
+	dirName := filepath.Base(m.repoRoot)
+	
+	m.projectName = getProjectName(remoteURL, dirName)
+	return m.projectName
+}
+
+// getProjectName extracts project name from git remote URL or falls back to directory name
+func getProjectName(remoteURL, dirName string) string {
+	if remoteURL == "" {
+		return dirName
+	}
+
+	// Extract repo name from URL
+	// Handles: https://github.com/owner/repo, git@github.com:owner/repo.git
+	var repoName string
+	
+	// Remove .git suffix if present
+	remoteURL = strings.TrimSuffix(remoteURL, ".git")
+	
+	// Extract last path component
+	if strings.Contains(remoteURL, "/") {
+		parts := strings.Split(remoteURL, "/")
+		repoName = parts[len(parts)-1]
+	} else if strings.Contains(remoteURL, ":") {
+		// Handle SSH format: git@github.com:owner/repo
+		parts := strings.Split(remoteURL, ":")
+		if len(parts) > 1 {
+			pathParts := strings.Split(parts[1], "/")
+			repoName = pathParts[len(pathParts)-1]
+		}
+	}
+	
+	if repoName == "" {
+		return dirName
+	}
+	
+	return repoName
+}
+
+// TmuxSessionName returns the tmux session name for a worktree
+// Format: {project}-{worktree-name}
+func TmuxSessionName(project, worktreeName string) string {
+	return fmt.Sprintf("%s-%s", project, worktreeName)
 }

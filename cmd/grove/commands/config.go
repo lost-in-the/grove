@@ -24,8 +24,6 @@ var configCmd = &cobra.Command{
 		fmt.Printf("  Dirty Handling: %s\n", cfg.Switch.DirtyHandling)
 		fmt.Printf("\nNaming:\n")
 		fmt.Printf("  Pattern: %s\n", cfg.Naming.Pattern)
-		fmt.Printf("\nTmux:\n")
-		fmt.Printf("  Prefix: %s\n", cfg.Tmux.Prefix)
 
 		return nil
 	},
