@@ -81,6 +81,9 @@ Freezing is idempotent - safe to freeze an already-frozen worktree.`,
 			if err != nil {
 				return fmt.Errorf("failed to get current worktree: %w", err)
 			}
+			if currentTree == nil {
+				return fmt.Errorf("could not determine current worktree")
+			}
 			targetNames = []string{currentTree.DisplayName()}
 		}
 

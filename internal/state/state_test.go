@@ -3,6 +3,7 @@ package state
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -300,7 +301,7 @@ func TestManagerListFrozen(t *testing.T) {
 			if len(frozen) != tt.wantCount {
 				t.Errorf("ListFrozen() returned %d worktrees, want %d", len(frozen), tt.wantCount)
 			}
-			if !stringSliceEqual(frozen, tt.wantNames) {
+			if !slices.Equal(frozen, tt.wantNames) {
 				t.Errorf("ListFrozen() = %v, want %v", frozen, tt.wantNames)
 			}
 		})
@@ -420,16 +421,4 @@ func setupTestManager(t *testing.T) *Manager {
 		t.Fatalf("failed to create test manager: %v", err)
 	}
 	return mgr
-}
-
-func stringSliceEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
