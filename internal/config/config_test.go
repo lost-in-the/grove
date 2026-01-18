@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -144,8 +145,10 @@ func TestValidate(t *testing.T) {
 				return
 			}
 			if tt.wantErr && tt.errMsg != "" {
-				if err == nil || len(tt.errMsg) == 0 {
+				if err == nil {
 					t.Errorf("Expected error message to contain '%s'", tt.errMsg)
+				} else if !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("Expected error message to contain '%s', got '%s'", tt.errMsg, err.Error())
 				}
 			}
 		})

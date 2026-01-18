@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 )
 
 //go:embed templates/grove.zsh
@@ -53,49 +55,14 @@ func GetWorktreeNames() ([]string, error) {
 
 	// Parse worktree names
 	names := []string{}
-	lines := splitLines(string(output))
+	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
 		if len(line) > 9 && line[:9] == "worktree " {
 			path := line[9:]
 			// Extract just the directory name
-			parts := splitPath(path)
-			if len(parts) > 0 {
-				names = append(names, parts[len(parts)-1])
-			}
+			names = append(names, filepath.Base(path))
 		}
 	}
 
 	return names, nil
-}
-
-func splitLines(s string) []string {
-	var lines []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			lines = append(lines, s[start:i])
-			start = i + 1
-		}
-	}
-	if start < len(s) {
-		lines = append(lines, s[start:])
-	}
-	return lines
-}
-
-func splitPath(path string) []string {
-	var parts []string
-	start := 0
-	for i := 0; i < len(path); i++ {
-		if path[i] == '/' {
-			if i > start {
-				parts = append(parts, path[start:i])
-			}
-			start = i + 1
-		}
-	}
-	if start < len(path) {
-		parts = append(parts, path[start:])
-	}
-	return parts
 }

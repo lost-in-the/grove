@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -238,7 +239,9 @@ func GetLastSession() (string, error) {
 
 // parseIntOrZero attempts to parse an integer, returning 0 on error
 func parseIntOrZero(s string) int {
-	var i int
-	fmt.Sscanf(s, "%d", &i)
+	i, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
+	}
 	return i
 }
