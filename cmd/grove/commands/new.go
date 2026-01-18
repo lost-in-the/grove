@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 
+	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 	"github.com/spf13/cobra"
@@ -22,10 +23,22 @@ A new branch with the same name will be created automatically.`,
 			return fmt.Errorf("worktree name cannot be empty")
 		}
 
+		// Load config for tmux prefix
+		cfg, err := config.Load()
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
+
 		// Create worktree
 		mgr, err := worktree.NewManager("")
 		if err != nil {
 			return fmt.Errorf("failed to initialize worktree manager: %w", err)
+		}
+
+		// Check if worktree already exists
+		if existingWt, _ := mgr.Find(name); existingWt != nil {
+			return fmt.Errorf("worktree '%s' already exists\n\nOptions:\n  • Switch to it: grove to %s\n  • Remove it first: grove rm %s\n  • Use different name: grove new %s-v2",
+				name, name, name, name)
 		}
 
 		// Use name as branch name
@@ -38,23 +51,15 @@ A new branch with the same name will be created automatically.`,
 
 		// Create tmux session if tmux is available
 		if tmux.IsTmuxAvailable() {
-			trees, err := mgr.List()
+			// Find the newly created worktree
+			wt, err := mgr.Find(name)
 			if err != nil {
-				return fmt.Errorf("failed to get worktree path: %w", err)
+				return fmt.Errorf("failed to find created worktree: %w", err)
 			}
 
-			var wtPath string
-			for _, tree := range trees {
-				if tree.Name == name {
-					wtPath = tree.Path
-					break
-				}
-			}
-
-			if wtPath != "" {
-				projectName := mgr.GetProjectName()
-				sessionName := worktree.TmuxSessionName(projectName, name)
-				if err := tmux.CreateSession(sessionName, wtPath); err != nil {
+			if wt != nil {
+				sessionName := cfg.Tmux.Prefix + name
+				if err := tmux.CreateSession(sessionName, wt.Path); err != nil {
 					fmt.Printf("⚠ Failed to create tmux session: %v\n", err)
 				} else {
 					fmt.Printf("✓ Created tmux session '%s'\n", sessionName)
