@@ -38,9 +38,9 @@ type PluginsConfig struct {
 
 // DockerPluginConfig controls docker plugin behavior
 type DockerPluginConfig struct {
-	Enabled   bool `toml:"enabled"`
-	AutoStart bool `toml:"auto_start"`
-	AutoStop  bool `toml:"auto_stop"`
+	Enabled   *bool `toml:"enabled"`
+	AutoStart *bool `toml:"auto_start"`
+	AutoStop  *bool `toml:"auto_stop"`
 }
 
 // GetConfigPaths returns the paths to check for config files
@@ -121,10 +121,16 @@ func mergeConfigs(base, override *Config) *Config {
 	if override.Tmux.Prefix != "" {
 		result.Tmux.Prefix = override.Tmux.Prefix
 	}
-	// Merge plugin configs - override takes precedence
-	// Note: For booleans, we can't distinguish between false and unset in TOML,
-	// so we always take the override value
-	result.Plugins = override.Plugins
+	// Merge plugin configs - only override if explicitly set (non-nil)
+	if override.Plugins.Docker.Enabled != nil {
+		result.Plugins.Docker.Enabled = override.Plugins.Docker.Enabled
+	}
+	if override.Plugins.Docker.AutoStart != nil {
+		result.Plugins.Docker.AutoStart = override.Plugins.Docker.AutoStart
+	}
+	if override.Plugins.Docker.AutoStop != nil {
+		result.Plugins.Docker.AutoStop = override.Plugins.Docker.AutoStop
+	}
 
 	return &result
 }

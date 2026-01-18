@@ -185,9 +185,18 @@ The plugin requires a docker-compose file in the worktree directory.
 
 ### Containers don't start automatically
 
-Check that auto-start is enabled (it's enabled by default).
+Check that auto-start is enabled in your configuration.
 
-**Solution**: Manually start containers with `grove up` for now. Configuration support is coming in a future release.
+**Solution**: 
+1. Check your `~/.config/grove/config.toml` file
+2. Ensure `auto_start = true` (or omit it for the default)
+3. Or manually start containers with `grove up`
+
+Example config:
+```toml
+[plugins.docker]
+auto_start = true
+```
 
 ## Port Conflicts
 
@@ -195,15 +204,18 @@ When working with multiple worktrees that run containers, you may encounter port
 
 1. **Use unique ports per worktree**: Modify your docker-compose.yml to use different ports
 2. **Stop containers when not in use**: Use `grove down` when switching away
-3. **Enable auto-stop** (when config support is added): Set `auto_stop = true` in config
+3. **Enable auto-stop**: Set `auto_stop = true` in your config:
+   ```toml
+   [plugins.docker]
+   auto_stop = true
+   ```
 
 ## Planned Features
 
-- [ ] Configuration file support for auto-start/auto-stop
-- [ ] Port conflict detection and prevention
+- [ ] Port conflict detection and automatic prevention
 - [ ] Environment variable generation via direnv integration
 - [ ] Status command to show running containers per worktree
-- [ ] Port allocation strategy to prevent conflicts
+- [ ] Advanced port allocation strategy to prevent conflicts automatically
 
 ## Plugin API
 

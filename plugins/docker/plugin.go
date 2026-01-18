@@ -34,7 +34,7 @@ func (p *Plugin) Init(cfg *config.Config) error {
 	p.cfg = cfg
 
 	// Check if plugin is disabled in config
-	if cfg != nil && !cfg.Plugins.Docker.Enabled {
+	if cfg != nil && cfg.Plugins.Docker.Enabled != nil && !*cfg.Plugins.Docker.Enabled {
 		p.enabled = false
 		return nil
 	}
@@ -252,8 +252,8 @@ func (p *Plugin) getWorktreePath(name string) string {
 
 // getAutoStart returns whether to auto-start containers on switch
 func (p *Plugin) getAutoStart() bool {
-	if p.cfg != nil {
-		return p.cfg.Plugins.Docker.AutoStart
+	if p.cfg != nil && p.cfg.Plugins.Docker.AutoStart != nil {
+		return *p.cfg.Plugins.Docker.AutoStart
 	}
 	// Default to true
 	return true
@@ -261,8 +261,8 @@ func (p *Plugin) getAutoStart() bool {
 
 // getAutoStop returns whether to auto-stop containers on switch
 func (p *Plugin) getAutoStop() bool {
-	if p.cfg != nil {
-		return p.cfg.Plugins.Docker.AutoStop
+	if p.cfg != nil && p.cfg.Plugins.Docker.AutoStop != nil {
+		return *p.cfg.Plugins.Docker.AutoStop
 	}
 	// Default to false
 	return false

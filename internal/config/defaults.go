@@ -12,6 +12,10 @@ func LoadDefaults() *Config {
 	homeDir, _ := os.UserHomeDir()
 	projectsDir := filepath.Join(homeDir, "projects")
 
+	// Create default boolean values
+	trueVal := true
+	falseVal := false
+
 	return &Config{
 		Alias:         "w",
 		ProjectsDir:   projectsDir,
@@ -27,9 +31,9 @@ func LoadDefaults() *Config {
 		},
 		Plugins: PluginsConfig{
 			Docker: DockerPluginConfig{
-				Enabled:   true,
-				AutoStart: true,
-				AutoStop:  false,
+				Enabled:   &trueVal,
+				AutoStart: &trueVal,
+				AutoStop:  &falseVal,
 			},
 		},
 	}
