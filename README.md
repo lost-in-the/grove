@@ -101,6 +101,15 @@ grove rm feature-login
 - `grove version` - Show version information
 - `grove init <shell>` - Generate shell integration code
 
+### Docker Plugin Commands
+
+- `grove up` - Start containers for current worktree
+- `grove down` - Stop containers for current worktree
+- `grove logs [service]` - View container logs
+- `grove restart [service]` - Restart container service(s)
+
+See [Docker Plugin Documentation](plugins/docker/README.md) for details.
+
 ## Configuration
 
 Grove uses TOML configuration files. Configuration is loaded from:
@@ -153,6 +162,53 @@ If no configuration file exists, Grove uses these defaults:
 3. **Shell Integration**: The shell wrapper intercepts directory change commands
 4. **Hook System**: Extensible plugin system for custom workflows (Phase 1+)
 
+## Plugins
+
+Grove supports plugins to extend functionality. Plugins can hook into worktree lifecycle events to provide custom behavior.
+
+### Available Plugins
+
+#### Docker Plugin
+
+Automatically manages Docker containers for your worktrees.
+
+**Features:**
+- Auto-start containers when switching to a worktree
+- Manual container control with `grove up`, `grove down`, `grove logs`, `grove restart`
+- Works with docker-compose.yml files
+- Support for both `docker compose` and `docker-compose` commands
+
+**Quick Start:**
+```bash
+# Navigate to a worktree with docker-compose.yml
+cd ~/projects/my-worktree
+
+# Start containers
+grove up
+
+# View logs
+grove logs
+
+# Restart a service
+grove restart web
+
+# Stop containers
+grove down
+```
+
+See [Docker Plugin Documentation](plugins/docker/README.md) for full details.
+
+### Creating Custom Plugins
+
+Plugins implement the `Plugin` interface and can register hooks to run at lifecycle events:
+
+- `pre-create` / `post-create` - Before/after worktree creation
+- `pre-switch` / `post-switch` - Before/after switching worktrees
+- `pre-freeze` / `post-resume` - Before freezing/after resuming (Phase 2)
+- `pre-remove` / `post-remove` - Before/after worktree removal
+
+See the [Plugin Development Guide](docs/plugins.md) for more information (coming soon).
+
 ## Requirements
 
 - Go 1.21 or later (for building)
@@ -196,10 +252,11 @@ Apache 2.0 - see [LICENSE](LICENSE)
 - Tmux integration
 - Hook system foundation
 
-### Phase 1: Docker Plugin (Planned)
+### Phase 1: Docker Plugin ✅
 - Container lifecycle tied to worktrees
-- Port allocation
-- Service management
+- Service management commands (up, down, logs, restart)
+- Auto-start/stop integration with hooks
+- Plugin system infrastructure
 
 ### Phase 2: State Management (Planned)
 - Freeze/resume functionality
