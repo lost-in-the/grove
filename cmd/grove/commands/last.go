@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/LeahArmstrong/grove-cli/internal/config"
@@ -72,7 +73,20 @@ var lastCmd = &cobra.Command{
 		}
 
 		// Output directory change command for shell integration
-		fmt.Printf("cd:%s\n", targetTree.Path)
+		hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
+		
+		if hasShellIntegration {
+			// Shell wrapper will parse this and execute cd
+			fmt.Printf("cd:%s\n", targetTree.Path)
+		} else {
+			// Not in shell wrapper - show helpful message
+			fmt.Fprintf(os.Stderr, "\nNote: Directory switching requires shell integration.\n")
+			fmt.Fprintf(os.Stderr, "Add this to your shell config (~/.zshrc or ~/.bashrc):\n\n")
+			fmt.Fprintf(os.Stderr, "  eval \"$(grove init zsh)\"   # for zsh\n")
+			fmt.Fprintf(os.Stderr, "  eval \"$(grove init bash)\"  # for bash\n\n")
+			fmt.Fprintf(os.Stderr, "To change directory manually:\n")
+			fmt.Fprintf(os.Stderr, "  cd %s\n", targetTree.Path)
+		}
 
 		return nil
 	},

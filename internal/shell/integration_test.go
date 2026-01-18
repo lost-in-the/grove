@@ -16,6 +16,7 @@ func TestGenerateZshIntegration(t *testing.T) {
 		"# Grove shell integration for zsh",
 		"__GROVE_BIN=",
 		"grove()",
+		"GROVE_SHELL=1",
 		"cd:",
 		"_grove_completion()",
 		"compdef _grove_completion grove",
@@ -40,6 +41,7 @@ func TestGenerateBashIntegration(t *testing.T) {
 		"# Grove shell integration for bash",
 		"__GROVE_BIN=",
 		"grove()",
+		"GROVE_SHELL=1",
 		"cd:",
 		"_grove_completion()",
 		"complete -F _grove_completion grove",
@@ -89,5 +91,51 @@ func TestGetWorktreeNames_ParsesCorrectly(t *testing.T) {
 		}
 	} else {
 		t.Error("Line should match worktree pattern")
+	}
+}
+
+func TestZshDirectiveParsing(t *testing.T) {
+	// Test that the zsh template correctly handles cd: directives
+	output, err := GenerateZshIntegration()
+	if err != nil {
+		t.Fatalf("GenerateZshIntegration() failed: %v", err)
+	}
+
+	// Verify the parsing logic is present
+	expectedPatterns := []string{
+		"cd:*",                  // Pattern matching for cd directive
+		"cd_target=",            // Variable to store target directory
+		"should_cd=",            // Flag to track if cd should be executed
+		"cd \"$cd_target\"",     // Actual cd execution
+		"GROVE_SHELL=1",         // Environment variable set
+	}
+
+	for _, pattern := range expectedPatterns {
+		if !strings.Contains(output, pattern) {
+			t.Errorf("GenerateZshIntegration() missing expected pattern: %s", pattern)
+		}
+	}
+}
+
+func TestBashDirectiveParsing(t *testing.T) {
+	// Test that the bash template correctly handles cd: directives
+	output, err := GenerateBashIntegration()
+	if err != nil {
+		t.Fatalf("GenerateBashIntegration() failed: %v", err)
+	}
+
+	// Verify the parsing logic is present
+	expectedPatterns := []string{
+		"cd:*",                  // Pattern matching for cd directive
+		"cd_target=",            // Variable to store target directory
+		"should_cd=",            // Flag to track if cd should be executed
+		"cd \"$cd_target\"",     // Actual cd execution
+		"GROVE_SHELL=1",         // Environment variable set
+	}
+
+	for _, pattern := range expectedPatterns {
+		if !strings.Contains(output, pattern) {
+			t.Errorf("GenerateBashIntegration() missing expected pattern: %s", pattern)
+		}
 	}
 }

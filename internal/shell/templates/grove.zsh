@@ -1,27 +1,38 @@
 # Grove function wrapper for zsh
 grove() {
-    local output
-    output=$("$__GROVE_BIN" "$@" 2>&1)
-    local exit_code=$?
+    # Set environment variable to indicate we're in the shell wrapper
+    local output exit_code
+    GROVE_SHELL=1 output=$("$__GROVE_BIN" "$@" 2>&1)
+    exit_code=$?
     
-    # Check if output contains directory change instruction
-    # Extract only the first line starting with cd:
-    if [[ "$output" == cd:* ]]; then
-        local target_dir
-        target_dir=$(echo "$output" | grep "^cd:" | head -n1 | sed 's/^cd://')
-        
-        # Change directory
-        cd "$target_dir" || return 1
-        
-        # Print any output that's not the cd: line
-        local other_output
-        other_output=$(echo "$output" | grep -v "^cd:")
-        if [[ -n "$other_output" ]]; then
-            echo "$other_output"
+    # Parse output line by line for directives
+    local should_cd=0
+    local cd_target=""
+    local other_lines=""
+    
+    while IFS= read -r line; do
+        if [[ "$line" == cd:* ]]; then
+            # Extract directory path from cd: directive
+            cd_target="${line#cd:}"
+            should_cd=1
+        else
+            # Collect non-directive output
+            if [[ -n "$other_lines" ]]; then
+                other_lines="${other_lines}"$'\n'"${line}"
+            else
+                other_lines="$line"
+            fi
         fi
-    else
-        # Just print the output
-        echo "$output"
+    done <<< "$output"
+    
+    # Execute directory change if directive was found
+    if [[ $should_cd -eq 1 && -n "$cd_target" ]]; then
+        cd "$cd_target" || return 1
+    fi
+    
+    # Print any non-directive output
+    if [[ -n "$other_lines" ]]; then
+        echo "$other_lines"
     fi
     
     return $exit_code
