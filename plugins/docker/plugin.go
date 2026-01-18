@@ -157,6 +157,10 @@ func (p *Plugin) Restart(worktreePath string, service string) error {
 
 // up starts containers
 func (p *Plugin) up(worktreePath string, detach bool) error {
+	if !p.hasDockerCompose(worktreePath) {
+		return fmt.Errorf("no docker-compose file found in %s", worktreePath)
+	}
+
 	args := []string{"up"}
 	if detach {
 		args = append(args, "-d")
@@ -171,6 +175,10 @@ func (p *Plugin) up(worktreePath string, detach bool) error {
 
 // down stops containers
 func (p *Plugin) down(worktreePath string) error {
+	if !p.hasDockerCompose(worktreePath) {
+		return fmt.Errorf("no docker-compose file found in %s", worktreePath)
+	}
+
 	cmd := p.composeCommand(worktreePath, "down")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

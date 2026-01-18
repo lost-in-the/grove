@@ -3,6 +3,7 @@ package docker
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/LeahArmstrong/grove-cli/internal/config"
@@ -282,5 +283,117 @@ func TestPlugin_OnPreSwitch(t *testing.T) {
 	err := plugin.onPreSwitch(ctx)
 	if err != nil {
 		t.Errorf("onPreSwitch() error = %v, want nil", err)
+	}
+}
+
+func TestPlugin_Up(t *testing.T) {
+	plugin := New()
+
+	// Create temp directory for testing
+	tmpDir, err := os.MkdirTemp("", "grove-docker-up-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	tests := []struct {
+		name        string
+		createFile  bool
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:        "no compose file",
+			createFile:  false,
+			wantErr:     true,
+			errContains: "no docker-compose file found",
+		},
+		{
+			name:       "with compose file",
+			createFile: true,
+			wantErr:    false, // Will fail to run docker but won't error on validation
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			testDir := filepath.Join(tmpDir, tt.name)
+			if err := os.MkdirAll(testDir, 0755); err != nil {
+				t.Fatal(err)
+			}
+
+			if tt.createFile {
+				file := filepath.Join(testDir, "docker-compose.yml")
+				if err := os.WriteFile(file, []byte("version: '3'\n"), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			err := plugin.Up(testDir, true)
+			if tt.wantErr {
+				if err == nil {
+					t.Error("Up() expected error but got nil")
+				} else if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("Up() error = %v, want error containing %s", err, tt.errContains)
+				}
+			}
+			// Note: We don't check for success case as it would require docker to be installed
+		})
+	}
+}
+
+func TestPlugin_Down(t *testing.T) {
+	plugin := New()
+
+	// Create temp directory for testing
+	tmpDir, err := os.MkdirTemp("", "grove-docker-down-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	tests := []struct {
+		name        string
+		createFile  bool
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:        "no compose file",
+			createFile:  false,
+			wantErr:     true,
+			errContains: "no docker-compose file found",
+		},
+		{
+			name:       "with compose file",
+			createFile: true,
+			wantErr:    false, // Will fail to run docker but won't error on validation
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			testDir := filepath.Join(tmpDir, tt.name)
+			if err := os.MkdirAll(testDir, 0755); err != nil {
+				t.Fatal(err)
+			}
+
+			if tt.createFile {
+				file := filepath.Join(testDir, "docker-compose.yml")
+				if err := os.WriteFile(file, []byte("version: '3'\n"), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			err := plugin.Down(testDir)
+			if tt.wantErr {
+				if err == nil {
+					t.Error("Down() expected error but got nil")
+				} else if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("Down() error = %v, want error containing %s", err, tt.errContains)
+				}
+			}
+			// Note: We don't check for success case as it would require docker to be installed
+		})
 	}
 }

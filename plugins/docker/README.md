@@ -90,7 +90,9 @@ auto_start = true
 auto_stop = false
 ```
 
-**Note:** Configuration support is planned. Currently, the plugin uses these defaults:
+### Defaults
+
+If not specified in your configuration file, these defaults are used:
 - `enabled`: true (if docker is available)
 - `auto_start`: true
 - `auto_stop`: false

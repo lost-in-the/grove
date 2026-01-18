@@ -121,10 +121,10 @@ func mergeConfigs(base, override *Config) *Config {
 	if override.Tmux.Prefix != "" {
 		result.Tmux.Prefix = override.Tmux.Prefix
 	}
-	// Merge plugin configs - use explicit checks for booleans
-	result.Plugins.Docker.Enabled = override.Plugins.Docker.Enabled || base.Plugins.Docker.Enabled
-	result.Plugins.Docker.AutoStart = override.Plugins.Docker.AutoStart || base.Plugins.Docker.AutoStart
-	result.Plugins.Docker.AutoStop = override.Plugins.Docker.AutoStop || base.Plugins.Docker.AutoStop
+	// Merge plugin configs - override takes precedence
+	// Note: For booleans, we can't distinguish between false and unset in TOML,
+	// so we always take the override value
+	result.Plugins = override.Plugins
 
 	return &result
 }
