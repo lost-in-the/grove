@@ -8,13 +8,24 @@ import (
 	"strings"
 )
 
+const (
+	// gitLogFormatParts is the expected number of parts in git log output
+	gitLogFormatParts = 4
+)
+
 // Worktree represents a git worktree
 type Worktree struct {
-	Name    string // Short name (derived from path)
-	Path    string // Absolute path to worktree
-	Branch  string // Branch name or "detached"
-	Commit  string // Commit hash
-	IsDirty bool   // Whether there are uncommitted changes
+	Name          string // Short name (derived from path)
+	Path          string // Absolute path to worktree
+	Branch        string // Branch name or "detached"
+	Commit        string // Commit hash (full)
+	ShortCommit   string // Short commit hash (7 chars)
+	CommitMessage string // Commit message subject
+	CommitAge     string // Relative commit time
+	IsDirty       bool   // Whether there are uncommitted changes
+	DirtyFiles    string // List of dirty files (from git status --porcelain)
+	IsMain        bool   // Whether this is the main worktree
+	ShortName     string // Short name without project prefix
 }
 
 // Manager handles git worktree operations
@@ -42,13 +53,18 @@ func NewManager(repoRoot string) (*Manager, error) {
 }
 
 // Create creates a new worktree
+// The name parameter is the short name (e.g., "testing")
+// The directory will be created with the full name including project prefix
 func (m *Manager) Create(name, branch string) error {
 	if name == "" {
 		return fmt.Errorf("worktree name cannot be empty")
 	}
 
+	// Get full name with project prefix
+	fullName := m.FullName(name)
+
 	// Worktree path is relative to repo root's parent
-	wtPath := filepath.Join(filepath.Dir(m.repoRoot), name)
+	wtPath := filepath.Join(filepath.Dir(m.repoRoot), fullName)
 
 	// Check if worktree already exists
 	if _, err := os.Stat(wtPath); err == nil {
@@ -69,12 +85,17 @@ func (m *Manager) Create(name, branch string) error {
 }
 
 // CreateFromExisting creates a worktree from an existing branch
+// The name parameter is the short name (e.g., "testing")
+// The directory will be created with the full name including project prefix
 func (m *Manager) CreateFromExisting(name, branch string) error {
 	if name == "" {
 		return fmt.Errorf("worktree name cannot be empty")
 	}
 
-	wtPath := filepath.Join(filepath.Dir(m.repoRoot), name)
+	// Get full name with project prefix
+	fullName := m.FullName(name)
+
+	wtPath := filepath.Join(filepath.Dir(m.repoRoot), fullName)
 
 	// Check if worktree already exists
 	if _, err := os.Stat(wtPath); err == nil {
@@ -94,6 +115,27 @@ func (m *Manager) CreateFromExisting(name, branch string) error {
 	return nil
 }
 
+// Find searches for a worktree by short name or full name
+// Returns the worktree if found, nil if not found
+func (m *Manager) Find(name string) (*Worktree, error) {
+	trees, err := m.List()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list worktrees: %w", err)
+	}
+
+	fullName := m.FullName(name)
+
+	for _, tree := range trees {
+		// Match by short name or full name or path basename
+		baseName := filepath.Base(tree.Path)
+		if tree.ShortName == name || baseName == name || baseName == fullName {
+			return tree, nil
+		}
+	}
+
+	return nil, nil
+}
+
 // List returns all worktrees in the repository
 func (m *Manager) List() ([]*Worktree, error) {
 	cmd := exec.Command("git", "worktree", "list", "--porcelain")
@@ -104,7 +146,9 @@ func (m *Manager) List() ([]*Worktree, error) {
 		return nil, fmt.Errorf("failed to list worktrees: %w", err)
 	}
 
-	trees := parseWorktreeList(string(output))
+	projectName := m.GetProjectName()
+	mainPath := m.getMainWorktreePath()
+	trees := parseWorktreeList(string(output), mainPath, projectName)
 
 	// Check dirty status for each worktree
 	for _, tree := range trees {
@@ -176,6 +220,22 @@ func (m *Manager) GetCurrent() (*Worktree, error) {
 
 	for _, tree := range trees {
 		if tree.Path == currentPath {
+			// Enrich with commit information
+			shortHash, message, age, err := m.getCommitInfo(tree.Path)
+			if err == nil {
+				tree.ShortCommit = shortHash
+				tree.CommitMessage = message
+				tree.CommitAge = age
+			}
+
+			// Get dirty files if the worktree is dirty
+			if tree.IsDirty {
+				dirtyFiles, err := m.getDirtyFiles(tree.Path)
+				if err == nil {
+					tree.DirtyFiles = dirtyFiles
+				}
+			}
+
 			return tree, nil
 		}
 	}
@@ -183,21 +243,52 @@ func (m *Manager) GetCurrent() (*Worktree, error) {
 	return nil, fmt.Errorf("current worktree not found")
 }
 
-// isDirty checks if a worktree has uncommitted changes
-func (m *Manager) isDirty(path string) (bool, error) {
+// getDirtyFiles returns the list of dirty files from git status
+func (m *Manager) getDirtyFiles(path string) (string, error) {
 	cmd := exec.Command("git", "status", "--porcelain")
 	cmd.Dir = path
 
 	output, err := cmd.Output()
 	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(string(output)), nil
+}
+
+// isDirty checks if a worktree has uncommitted changes
+func (m *Manager) isDirty(path string) (bool, error) {
+	dirtyFiles, err := m.getDirtyFiles(path)
+	if err != nil {
 		return false, err
 	}
 
-	return len(strings.TrimSpace(string(output))) > 0, nil
+	return len(dirtyFiles) > 0, nil
+}
+
+// getCommitInfo retrieves detailed commit information for a worktree
+func (m *Manager) getCommitInfo(path string) (shortHash, message, age string, err error) {
+	// Use a delimiter that's unlikely to appear in commit messages
+	// Format: full_hash<delim>short_hash<delim>subject<delim>relative_date
+	cmd := exec.Command("git", "log", "-1", "--format=%H%x1E%h%x1E%s%x1E%cr")
+	cmd.Dir = path
+
+	output, err := cmd.Output()
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to get commit info: %w", err)
+	}
+
+	// Split by ASCII Record Separator (0x1E) which is safe for commit messages
+	parts := strings.Split(strings.TrimSpace(string(output)), "\x1E")
+	if len(parts) < gitLogFormatParts {
+		return "", "", "", fmt.Errorf("unexpected git log output format")
+	}
+
+	return parts[1], parts[2], parts[3], nil
 }
 
 // parseWorktreeList parses the output of 'git worktree list --porcelain'
-func parseWorktreeList(output string) []*Worktree {
+func parseWorktreeList(output, mainPath, projectName string) []*Worktree {
 	var trees []*Worktree
 	var current *Worktree
 
@@ -214,9 +305,23 @@ func parseWorktreeList(output string) []*Worktree {
 
 		if strings.HasPrefix(line, "worktree ") {
 			path := strings.TrimPrefix(line, "worktree ")
+			name := filepath.Base(path)
+			isMain := (path == mainPath)
+			
+			// Extract short name by removing project prefix
+			shortName := name
+			if !isMain {
+				prefix := projectName + "-"
+				if strings.HasPrefix(name, prefix) {
+					shortName = strings.TrimPrefix(name, prefix)
+				}
+			}
+			
 			current = &Worktree{
-				Path: path,
-				Name: filepath.Base(path),
+				Path:      path,
+				Name:      name,
+				IsMain:    isMain,
+				ShortName: shortName,
 			}
 		} else if strings.HasPrefix(line, "HEAD ") {
 			if current != nil {
@@ -244,66 +349,23 @@ func parseWorktreeList(output string) []*Worktree {
 	return trees
 }
 
+// DisplayName returns the display name for a worktree
+// Main worktree returns "main", others return short name without project prefix
+func (w *Worktree) DisplayName() string {
+	if w.IsMain {
+		return "main"
+	}
+	return w.ShortName
+}
+
 // GetProjectName returns the project name for the repository
 func (m *Manager) GetProjectName() string {
 	if m.projectName != "" {
 		return m.projectName
 	}
 
-	// Try to get project name from git remote
-	cmd := exec.Command("git", "remote", "get-url", "origin")
-	cmd.Dir = m.repoRoot
-	output, err := cmd.Output()
-	
-	remoteURL := ""
-	if err == nil {
-		remoteURL = strings.TrimSpace(string(output))
-	}
-
-	// Fallback to directory name
-	dirName := filepath.Base(m.repoRoot)
-	
-	m.projectName = getProjectName(remoteURL, dirName)
+	m.projectName = m.detectProjectName()
 	return m.projectName
-}
-
-// getProjectName extracts project name from git remote URL or falls back to directory name
-func getProjectName(remoteURL, dirName string) string {
-	if remoteURL == "" {
-		return dirName
-	}
-
-	// Remove .git suffix if present
-	remoteURL = strings.TrimSuffix(remoteURL, ".git")
-	
-	// Extract repo name from URL
-	// Handles: https://github.com/owner/repo, git@github.com:owner/repo.git
-	var repoName string
-	
-	// Try SSH format first: git@github.com:owner/repo
-	if strings.Contains(remoteURL, ":") && !strings.HasPrefix(remoteURL, "http") {
-		parts := strings.SplitN(remoteURL, ":", 2)
-		if len(parts) == 2 && parts[1] != "" {
-			// Extract last path component
-			pathParts := strings.Split(parts[1], "/")
-			if len(pathParts) > 0 {
-				repoName = pathParts[len(pathParts)-1]
-			}
-		}
-	} else if strings.Contains(remoteURL, "/") {
-		// Handle HTTP(S) format: https://github.com/owner/repo
-		parts := strings.Split(remoteURL, "/")
-		if len(parts) > 0 {
-			repoName = parts[len(parts)-1]
-		}
-	}
-	
-	// Fallback to directory name if extraction failed
-	if repoName == "" {
-		return dirName
-	}
-	
-	return repoName
 }
 
 // TmuxSessionName returns the tmux session name for a worktree
@@ -311,3 +373,6 @@ func getProjectName(remoteURL, dirName string) string {
 func TmuxSessionName(project, worktreeName string) string {
 	return fmt.Sprintf("%s-%s", project, worktreeName)
 }
+
+
+

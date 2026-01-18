@@ -53,7 +53,7 @@ detached
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			trees := parseWorktreeList(tt.input)
+			trees := parseWorktreeList(tt.input, "/home/user/project", "project")
 			if len(trees) != tt.wantCount {
 				t.Errorf("parseWorktreeList() got %d worktrees, want %d", len(trees), tt.wantCount)
 			}
@@ -148,7 +148,10 @@ func TestWorktreeCreate(t *testing.T) {
 
 			if !tt.wantErr {
 				// Verify worktree was created
-				wtPath := filepath.Join(tmpDir, "..", tt.wtName)
+				// Create() uses FullName() which adds project prefix
+				projectName := m.GetProjectName()
+				fullName := projectName + "-" + tt.wtName
+				wtPath := filepath.Join(tmpDir, "..", fullName)
 				if _, err := os.Stat(wtPath); os.IsNotExist(err) {
 					t.Errorf("Worktree directory not created: %s", wtPath)
 				}
@@ -218,68 +221,54 @@ func TestWorktreeList(t *testing.T) {
 	}
 }
 
-func TestGetProjectName(t *testing.T) {
+func TestExtractProjectNameFromRemote(t *testing.T) {
 	tests := []struct {
 		name         string
 		remoteURL    string
-		dirName      string
 		wantProject  string
 	}{
 		{
 			name:        "github https url",
 			remoteURL:   "https://github.com/owner/grove-cli",
-			dirName:     "grove-cli",
 			wantProject: "grove-cli",
 		},
 		{
 			name:        "github https url with .git",
 			remoteURL:   "https://github.com/owner/grove-cli.git",
-			dirName:     "grove-cli",
 			wantProject: "grove-cli",
 		},
 		{
 			name:        "github ssh url",
 			remoteURL:   "git@github.com:owner/grove-cli.git",
-			dirName:     "grove-cli",
 			wantProject: "grove-cli",
 		},
 		{
-			name:        "fallback to dir name",
+			name:        "empty url",
 			remoteURL:   "",
-			dirName:     "my-project",
-			wantProject: "my-project",
+			wantProject: "",
 		},
 		{
 			name:        "ssh url without .git",
 			remoteURL:   "git@github.com:owner/grove-cli",
-			dirName:     "grove-cli",
 			wantProject: "grove-cli",
 		},
 		{
 			name:        "nested path in ssh url",
 			remoteURL:   "git@github.com:org/team/grove-cli.git",
-			dirName:     "grove-cli",
 			wantProject: "grove-cli",
 		},
 		{
 			name:        "nested path in https url",
 			remoteURL:   "https://github.com/org/team/grove-cli.git",
-			dirName:     "grove-cli",
 			wantProject: "grove-cli",
-		},
-		{
-			name:        "malformed url falls back to dir",
-			remoteURL:   ":",
-			dirName:     "fallback-project",
-			wantProject: "fallback-project",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := getProjectName(tt.remoteURL, tt.dirName)
+			got := extractProjectNameFromRemote(tt.remoteURL)
 			if got != tt.wantProject {
-				t.Errorf("getProjectName() = %q, want %q", got, tt.wantProject)
+				t.Errorf("extractProjectNameFromRemote() = %q, want %q", got, tt.wantProject)
 			}
 		})
 	}

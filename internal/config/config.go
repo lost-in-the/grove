@@ -7,11 +7,13 @@ import (
 
 // Config represents the complete grove configuration
 type Config struct {
+	ProjectName   string        `toml:"project_name"`
 	Alias         string        `toml:"alias"`
 	ProjectsDir   string        `toml:"projects_dir"`
 	DefaultBranch string        `toml:"default_base_branch"`
 	Switch        SwitchConfig  `toml:"switch"`
 	Naming        NamingConfig  `toml:"naming"`
+	Tmux          TmuxConfig    `toml:"tmux"`
 	Plugins       PluginsConfig `toml:"plugins"`
 }
 
@@ -23,6 +25,11 @@ type SwitchConfig struct {
 // NamingConfig controls worktree naming conventions
 type NamingConfig struct {
 	Pattern string `toml:"pattern"` // Pattern for naming worktrees
+}
+
+// TmuxConfig controls tmux session behavior
+type TmuxConfig struct {
+	Prefix string `toml:"prefix"` // Prefix for tmux session names
 }
 
 // PluginsConfig controls plugin behavior
@@ -97,6 +104,9 @@ func Load() (*Config, error) {
 func mergeConfigs(base, override *Config) *Config {
 	result := *base
 
+	if override.ProjectName != "" {
+		result.ProjectName = override.ProjectName
+	}
 	if override.Alias != "" {
 		result.Alias = override.Alias
 	}
@@ -111,6 +121,9 @@ func mergeConfigs(base, override *Config) *Config {
 	}
 	if override.Naming.Pattern != "" {
 		result.Naming.Pattern = override.Naming.Pattern
+	}
+	if override.Tmux.Prefix != "" {
+		result.Tmux.Prefix = override.Tmux.Prefix
 	}
 	// Merge plugin configs - only override if explicitly set (non-nil)
 	if override.Plugins.Docker.Enabled != nil {
