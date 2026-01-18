@@ -12,9 +12,9 @@ type Hook func(ctx *Context) error
 
 // Context contains information passed to hooks
 type Context struct {
-	Worktree     string         // Current worktree name
-	PrevWorktree string         // Previous worktree name
-	Config       *config.Config // Grove configuration
+	Worktree     string                 // Current worktree name
+	PrevWorktree string                 // Previous worktree name
+	Config       *config.Config         // Grove configuration
 	Data         map[string]interface{} // Additional data for plugins
 }
 
@@ -80,14 +80,14 @@ const (
 // GetEventName returns a human-readable name for an event
 func GetEventName(event string) string {
 	names := map[string]string{
-		EventPreCreate:   "Pre-Create",
-		EventPostCreate:  "Post-Create",
-		EventPreSwitch:   "Pre-Switch",
-		EventPostSwitch:  "Post-Switch",
-		EventPreFreeze:   "Pre-Freeze",
-		EventPostResume:  "Post-Resume",
-		EventPreRemove:   "Pre-Remove",
-		EventPostRemove:  "Post-Remove",
+		EventPreCreate:  "Pre-Create",
+		EventPostCreate: "Post-Create",
+		EventPreSwitch:  "Pre-Switch",
+		EventPostSwitch: "Post-Switch",
+		EventPreFreeze:  "Pre-Freeze",
+		EventPostResume: "Post-Resume",
+		EventPreRemove:  "Pre-Remove",
+		EventPostRemove: "Post-Remove",
 	}
 
 	if name, ok := names[event]; ok {

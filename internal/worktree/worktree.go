@@ -10,11 +10,11 @@ import (
 
 // Worktree represents a git worktree
 type Worktree struct {
-	Name   string // Short name (derived from path)
-	Path   string // Absolute path to worktree
-	Branch string // Branch name or "detached"
-	Commit string // Commit hash
-	IsDirty bool  // Whether there are uncommitted changes
+	Name    string // Short name (derived from path)
+	Path    string // Absolute path to worktree
+	Branch  string // Branch name or "detached"
+	Commit  string // Commit hash
+	IsDirty bool   // Whether there are uncommitted changes
 }
 
 // Manager handles git worktree operations
@@ -58,7 +58,7 @@ func (m *Manager) Create(name, branch string) error {
 	args := []string{"worktree", "add", "-b", branch, wtPath}
 	cmd := exec.Command("git", args...)
 	cmd.Dir = m.repoRoot
-	
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to create worktree: %s: %w", string(output), err)
@@ -84,7 +84,7 @@ func (m *Manager) CreateFromExisting(name, branch string) error {
 	args := []string{"worktree", "add", wtPath, branch}
 	cmd := exec.Command("git", args...)
 	cmd.Dir = m.repoRoot
-	
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to create worktree: %s: %w", string(output), err)
@@ -97,14 +97,14 @@ func (m *Manager) CreateFromExisting(name, branch string) error {
 func (m *Manager) List() ([]*Worktree, error) {
 	cmd := exec.Command("git", "worktree", "list", "--porcelain")
 	cmd.Dir = m.repoRoot
-	
+
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list worktrees: %w", err)
 	}
 
 	trees := parseWorktreeList(string(output))
-	
+
 	// Check dirty status for each worktree
 	for _, tree := range trees {
 		dirty, err := m.isDirty(tree.Path)
@@ -143,7 +143,7 @@ func (m *Manager) Remove(name string) error {
 	// Remove the worktree
 	cmd := exec.Command("git", "worktree", "remove", targetPath)
 	cmd.Dir = m.repoRoot
-	
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		// Try force remove if regular remove fails
@@ -186,7 +186,7 @@ func (m *Manager) GetCurrent() (*Worktree, error) {
 func (m *Manager) isDirty(path string) (bool, error) {
 	cmd := exec.Command("git", "status", "--porcelain")
 	cmd.Dir = path
-	
+
 	output, err := cmd.Output()
 	if err != nil {
 		return false, err

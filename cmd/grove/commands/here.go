@@ -26,7 +26,7 @@ var hereCmd = &cobra.Command{
 		fmt.Printf("Branch: %s\n", tree.Branch)
 		fmt.Printf("Path:   %s\n", tree.Path)
 		fmt.Printf("Commit: %s\n", tree.Commit)
-		
+
 		status := "clean"
 		if tree.IsDirty {
 			status = "dirty"

@@ -76,7 +76,7 @@ func TestWorktreeCreate(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	
+
 	// Initialize a git repo
 	initCmd := exec.Command("git", "init")
 	initCmd.Dir = tmpDir
@@ -102,7 +102,7 @@ func TestWorktreeCreate(t *testing.T) {
 	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
-	
+
 	addCmd := exec.Command("git", "add", ".")
 	addCmd.Dir = tmpDir
 	if err := addCmd.Run(); err != nil {
@@ -164,7 +164,7 @@ func TestWorktreeList(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	
+
 	// Initialize a git repo
 	initCmd := exec.Command("git", "init")
 	initCmd.Dir = tmpDir
@@ -190,7 +190,7 @@ func TestWorktreeList(t *testing.T) {
 	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
-	
+
 	addCmd := exec.Command("git", "add", ".")
 	addCmd.Dir = tmpDir
 	if err := addCmd.Run(); err != nil {

@@ -7,12 +7,12 @@ import (
 
 // Config represents the complete grove configuration
 type Config struct {
-	Alias         string        `toml:"alias"`
-	ProjectsDir   string        `toml:"projects_dir"`
-	DefaultBranch string        `toml:"default_base_branch"`
-	Switch        SwitchConfig  `toml:"switch"`
-	Naming        NamingConfig  `toml:"naming"`
-	Tmux          TmuxConfig    `toml:"tmux"`
+	Alias         string       `toml:"alias"`
+	ProjectsDir   string       `toml:"projects_dir"`
+	DefaultBranch string       `toml:"default_base_branch"`
+	Switch        SwitchConfig `toml:"switch"`
+	Naming        NamingConfig `toml:"naming"`
+	Tmux          TmuxConfig   `toml:"tmux"`
 }
 
 // SwitchConfig controls worktree switching behavior

@@ -139,7 +139,7 @@ func TestListSessions(t *testing.T) {
 func TestGetLastSession(t *testing.T) {
 	// Test the last session storage
 	testSession := "test-last-session"
-	
+
 	err := StoreLastSession(testSession)
 	if err != nil {
 		t.Fatalf("StoreLastSession() error = %v", err)

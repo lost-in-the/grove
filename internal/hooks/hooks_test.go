@@ -73,7 +73,7 @@ func TestHookFailure(t *testing.T) {
 
 	// Fire should continue even if one hook fails
 	err := registry.Fire("test-event", &Context{})
-	
+
 	// Should return error but continue executing other hooks
 	if err == nil {
 		t.Error("Expected error from failing hook")

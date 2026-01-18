@@ -57,9 +57,9 @@ prefix = "grove-"
 			},
 		},
 		{
-			name: "empty config uses defaults",
+			name:       "empty config uses defaults",
 			configData: ``,
-			wantErr: false,
+			wantErr:    false,
 			validate: func(t *testing.T, cfg *Config) {
 				if cfg.Alias != "w" {
 					t.Errorf("Expected default alias 'w', got '%s'", cfg.Alias)
@@ -72,7 +72,7 @@ prefix = "grove-"
 alias = "grove
 invalid toml here
 `,
-			wantErr: true,
+			wantErr:  true,
 			validate: nil,
 		},
 	}
