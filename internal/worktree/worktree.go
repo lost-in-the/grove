@@ -273,26 +273,32 @@ func getProjectName(remoteURL, dirName string) string {
 		return dirName
 	}
 
+	// Remove .git suffix if present
+	remoteURL = strings.TrimSuffix(remoteURL, ".git")
+	
 	// Extract repo name from URL
 	// Handles: https://github.com/owner/repo, git@github.com:owner/repo.git
 	var repoName string
 	
-	// Remove .git suffix if present
-	remoteURL = strings.TrimSuffix(remoteURL, ".git")
-	
-	// Extract last path component
-	if strings.Contains(remoteURL, "/") {
-		parts := strings.Split(remoteURL, "/")
-		repoName = parts[len(parts)-1]
-	} else if strings.Contains(remoteURL, ":") {
-		// Handle SSH format: git@github.com:owner/repo
-		parts := strings.Split(remoteURL, ":")
-		if len(parts) > 1 {
+	// Try SSH format first: git@github.com:owner/repo
+	if strings.Contains(remoteURL, ":") && !strings.HasPrefix(remoteURL, "http") {
+		parts := strings.SplitN(remoteURL, ":", 2)
+		if len(parts) == 2 && parts[1] != "" {
+			// Extract last path component
 			pathParts := strings.Split(parts[1], "/")
-			repoName = pathParts[len(pathParts)-1]
+			if len(pathParts) > 0 {
+				repoName = pathParts[len(pathParts)-1]
+			}
+		}
+	} else if strings.Contains(remoteURL, "/") {
+		// Handle HTTP(S) format: https://github.com/owner/repo
+		parts := strings.Split(remoteURL, "/")
+		if len(parts) > 0 {
+			repoName = parts[len(parts)-1]
 		}
 	}
 	
+	// Fallback to directory name if extraction failed
 	if repoName == "" {
 		return dirName
 	}

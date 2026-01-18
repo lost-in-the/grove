@@ -249,6 +249,30 @@ func TestGetProjectName(t *testing.T) {
 			dirName:     "my-project",
 			wantProject: "my-project",
 		},
+		{
+			name:        "ssh url without .git",
+			remoteURL:   "git@github.com:owner/grove-cli",
+			dirName:     "grove-cli",
+			wantProject: "grove-cli",
+		},
+		{
+			name:        "nested path in ssh url",
+			remoteURL:   "git@github.com:org/team/grove-cli.git",
+			dirName:     "grove-cli",
+			wantProject: "grove-cli",
+		},
+		{
+			name:        "nested path in https url",
+			remoteURL:   "https://github.com/org/team/grove-cli.git",
+			dirName:     "grove-cli",
+			wantProject: "grove-cli",
+		},
+		{
+			name:        "malformed url falls back to dir",
+			remoteURL:   ":",
+			dirName:     "fallback-project",
+			wantProject: "fallback-project",
+		},
 	}
 
 	for _, tt := range tests {
