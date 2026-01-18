@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 	"github.com/spf13/cobra"
@@ -21,22 +20,20 @@ var lastCmd = &cobra.Command{
 			return fmt.Errorf("no last session found: %w", err)
 		}
 
-		// Load config to get prefix
-		cfg, err := config.Load()
-		if err != nil {
-			return fmt.Errorf("failed to load config: %w", err)
-		}
-
-		// Remove prefix to get worktree name
-		name := lastSession
-		if strings.HasPrefix(lastSession, cfg.Tmux.Prefix) {
-			name = strings.TrimPrefix(lastSession, cfg.Tmux.Prefix)
-		}
-
-		// Get worktree
+		// Get worktree manager
 		mgr, err := worktree.NewManager("")
 		if err != nil {
 			return fmt.Errorf("failed to initialize worktree manager: %w", err)
+		}
+
+		projectName := mgr.GetProjectName()
+
+		// Extract worktree name from session name
+		// Expected format: {project}-{worktree-name}
+		name := lastSession
+		expectedPrefix := projectName + "-"
+		if strings.HasPrefix(lastSession, expectedPrefix) {
+			name = strings.TrimPrefix(lastSession, expectedPrefix)
 		}
 
 		trees, err := mgr.List()

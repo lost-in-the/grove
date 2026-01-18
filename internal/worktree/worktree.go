@@ -19,7 +19,8 @@ type Worktree struct {
 
 // Manager handles git worktree operations
 type Manager struct {
-	repoRoot string // Root of the git repository
+	repoRoot    string // Root of the git repository
+	projectName string // Cached project name
 }
 
 // NewManager creates a new worktree manager
@@ -241,4 +242,72 @@ func parseWorktreeList(output string) []*Worktree {
 	}
 
 	return trees
+}
+
+// GetProjectName returns the project name for the repository
+func (m *Manager) GetProjectName() string {
+	if m.projectName != "" {
+		return m.projectName
+	}
+
+	// Try to get project name from git remote
+	cmd := exec.Command("git", "remote", "get-url", "origin")
+	cmd.Dir = m.repoRoot
+	output, err := cmd.Output()
+	
+	remoteURL := ""
+	if err == nil {
+		remoteURL = strings.TrimSpace(string(output))
+	}
+
+	// Fallback to directory name
+	dirName := filepath.Base(m.repoRoot)
+	
+	m.projectName = getProjectName(remoteURL, dirName)
+	return m.projectName
+}
+
+// getProjectName extracts project name from git remote URL or falls back to directory name
+func getProjectName(remoteURL, dirName string) string {
+	if remoteURL == "" {
+		return dirName
+	}
+
+	// Remove .git suffix if present
+	remoteURL = strings.TrimSuffix(remoteURL, ".git")
+	
+	// Extract repo name from URL
+	// Handles: https://github.com/owner/repo, git@github.com:owner/repo.git
+	var repoName string
+	
+	// Try SSH format first: git@github.com:owner/repo
+	if strings.Contains(remoteURL, ":") && !strings.HasPrefix(remoteURL, "http") {
+		parts := strings.SplitN(remoteURL, ":", 2)
+		if len(parts) == 2 && parts[1] != "" {
+			// Extract last path component
+			pathParts := strings.Split(parts[1], "/")
+			if len(pathParts) > 0 {
+				repoName = pathParts[len(pathParts)-1]
+			}
+		}
+	} else if strings.Contains(remoteURL, "/") {
+		// Handle HTTP(S) format: https://github.com/owner/repo
+		parts := strings.Split(remoteURL, "/")
+		if len(parts) > 0 {
+			repoName = parts[len(parts)-1]
+		}
+	}
+	
+	// Fallback to directory name if extraction failed
+	if repoName == "" {
+		return dirName
+	}
+	
+	return repoName
+}
+
+// TmuxSessionName returns the tmux session name for a worktree
+// Format: {project}-{worktree-name}
+func TmuxSessionName(project, worktreeName string) string {
+	return fmt.Sprintf("%s-%s", project, worktreeName)
 }

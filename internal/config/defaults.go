@@ -26,9 +26,6 @@ func LoadDefaults() *Config {
 		Naming: NamingConfig{
 			Pattern: "{type}/{description}",
 		},
-		Tmux: TmuxConfig{
-			Prefix: "grove-",
-		},
 		Plugins: PluginsConfig{
 			Docker: DockerPluginConfig{
 				Enabled:   &trueVal,

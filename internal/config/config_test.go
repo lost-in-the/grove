@@ -37,9 +37,6 @@ default_base_branch = "develop"
 
 [switch]
 dirty_handling = "auto-stash"
-
-[tmux]
-prefix = "grove-"
 `,
 			wantErr: false,
 			validate: func(t *testing.T, cfg *Config) {
