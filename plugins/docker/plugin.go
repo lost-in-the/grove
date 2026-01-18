@@ -84,7 +84,8 @@ func (p *Plugin) onPostSwitch(ctx *hooks.Context) error {
 		return nil // No docker-compose file, nothing to do
 	}
 
-	// Start containers
+	// Start containers in foreground mode (detach=false) to show startup logs
+	// This helps users see any errors during container startup
 	return p.up(worktreePath, false)
 }
 
@@ -188,7 +189,9 @@ func (p *Plugin) down(worktreePath string) error {
 
 // composeCommand creates a docker-compose command
 func (p *Plugin) composeCommand(worktreePath string, args ...string) *exec.Cmd {
-	// Try docker compose first (newer syntax)
+	// Try docker compose first (newer Compose V2 syntax)
+	// Note: We assume if 'docker' exists, it supports 'compose' subcommand
+	// This is generally safe as Docker Desktop and modern Docker installs include Compose V2
 	if _, err := exec.LookPath("docker"); err == nil {
 		cmdArgs := append([]string{"compose"}, args...)
 		cmd := exec.Command("docker", cmdArgs...)
@@ -196,7 +199,7 @@ func (p *Plugin) composeCommand(worktreePath string, args ...string) *exec.Cmd {
 		return cmd
 	}
 
-	// Fall back to docker-compose
+	// Fall back to docker-compose (standalone Compose V1)
 	cmd := exec.Command("docker-compose", args...)
 	cmd.Dir = worktreePath
 	return cmd
