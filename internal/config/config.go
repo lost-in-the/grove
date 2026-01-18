@@ -7,12 +7,13 @@ import (
 
 // Config represents the complete grove configuration
 type Config struct {
-	Alias         string       `toml:"alias"`
-	ProjectsDir   string       `toml:"projects_dir"`
-	DefaultBranch string       `toml:"default_base_branch"`
-	Switch        SwitchConfig `toml:"switch"`
-	Naming        NamingConfig `toml:"naming"`
-	Tmux          TmuxConfig   `toml:"tmux"`
+	Alias         string        `toml:"alias"`
+	ProjectsDir   string        `toml:"projects_dir"`
+	DefaultBranch string        `toml:"default_base_branch"`
+	Switch        SwitchConfig  `toml:"switch"`
+	Naming        NamingConfig  `toml:"naming"`
+	Tmux          TmuxConfig    `toml:"tmux"`
+	Plugins       PluginsConfig `toml:"plugins"`
 }
 
 // SwitchConfig controls worktree switching behavior
@@ -28,6 +29,18 @@ type NamingConfig struct {
 // TmuxConfig controls tmux session behavior
 type TmuxConfig struct {
 	Prefix string `toml:"prefix"` // Prefix for tmux session names
+}
+
+// PluginsConfig controls plugin behavior
+type PluginsConfig struct {
+	Docker DockerPluginConfig `toml:"docker"`
+}
+
+// DockerPluginConfig controls docker plugin behavior
+type DockerPluginConfig struct {
+	Enabled   bool `toml:"enabled"`
+	AutoStart bool `toml:"auto_start"`
+	AutoStop  bool `toml:"auto_stop"`
 }
 
 // GetConfigPaths returns the paths to check for config files
@@ -108,6 +121,10 @@ func mergeConfigs(base, override *Config) *Config {
 	if override.Tmux.Prefix != "" {
 		result.Tmux.Prefix = override.Tmux.Prefix
 	}
+	// Merge plugin configs - use explicit checks for booleans
+	result.Plugins.Docker.Enabled = override.Plugins.Docker.Enabled || base.Plugins.Docker.Enabled
+	result.Plugins.Docker.AutoStart = override.Plugins.Docker.AutoStart || base.Plugins.Docker.AutoStart
+	result.Plugins.Docker.AutoStop = override.Plugins.Docker.AutoStop || base.Plugins.Docker.AutoStop
 
 	return &result
 }

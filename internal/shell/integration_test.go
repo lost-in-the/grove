@@ -58,7 +58,7 @@ func TestGetWorktreeNames(t *testing.T) {
 	// This test requires a git repository with worktrees
 	// It will fail gracefully if not in a git repo
 	names, err := GetWorktreeNames()
-	
+
 	// We don't fail if there's an error (e.g., not in git repo)
 	// but we verify the function signature works
 	if err != nil {
@@ -79,7 +79,7 @@ func TestGetWorktreeNames_ParsesCorrectly(t *testing.T) {
 	// This is more of a documentation test showing how the function
 	// should parse git output. The actual parsing is tested through
 	// integration with real git commands.
-	
+
 	// Test that we use the correct approach
 	testLine := "worktree /path/to/worktree"
 	if len(testLine) >= 9 && strings.HasPrefix(testLine, "worktree ") {

@@ -25,6 +25,13 @@ func LoadDefaults() *Config {
 		Tmux: TmuxConfig{
 			Prefix: "grove-",
 		},
+		Plugins: PluginsConfig{
+			Docker: DockerPluginConfig{
+				Enabled:   true,
+				AutoStart: true,
+				AutoStop:  false,
+			},
+		},
 	}
 }
 

@@ -32,7 +32,13 @@ func (p *Plugin) Name() string {
 // Init initializes the plugin with configuration
 func (p *Plugin) Init(cfg *config.Config) error {
 	p.cfg = cfg
-	
+
+	// Check if plugin is disabled in config
+	if cfg != nil && !cfg.Plugins.Docker.Enabled {
+		p.enabled = false
+		return nil
+	}
+
 	// Check if docker-compose is available
 	if _, err := exec.LookPath("docker-compose"); err != nil {
 		// Try docker compose (newer syntax)
@@ -41,7 +47,7 @@ func (p *Plugin) Init(cfg *config.Config) error {
 			return fmt.Errorf("docker or docker-compose not found in PATH")
 		}
 	}
-	
+
 	return nil
 }
 
@@ -51,12 +57,12 @@ func (p *Plugin) RegisterHooks(registry *hooks.Registry) error {
 	registry.Register(hooks.EventPostSwitch, func(ctx *hooks.Context) error {
 		return p.onPostSwitch(ctx)
 	})
-	
+
 	// Stop containers before switching away (optional)
 	registry.Register(hooks.EventPreSwitch, func(ctx *hooks.Context) error {
 		return p.onPreSwitch(ctx)
 	})
-	
+
 	return nil
 }
 
@@ -72,12 +78,12 @@ func (p *Plugin) onPostSwitch(ctx *hooks.Context) error {
 	if !autoStart {
 		return nil
 	}
-	
+
 	worktreePath := p.getWorktreePath(ctx.Worktree)
 	if !p.hasDockerCompose(worktreePath) {
 		return nil // No docker-compose file, nothing to do
 	}
-	
+
 	// Start containers
 	return p.up(worktreePath, false)
 }
@@ -89,12 +95,12 @@ func (p *Plugin) onPreSwitch(ctx *hooks.Context) error {
 	if !autoStop {
 		return nil
 	}
-	
+
 	worktreePath := p.getWorktreePath(ctx.PrevWorktree)
 	if !p.hasDockerCompose(worktreePath) {
 		return nil // No docker-compose file, nothing to do
 	}
-	
+
 	// Stop containers
 	return p.down(worktreePath)
 }
@@ -114,7 +120,7 @@ func (p *Plugin) Logs(worktreePath string, service string, follow bool) error {
 	if !p.hasDockerCompose(worktreePath) {
 		return fmt.Errorf("no docker-compose file found in %s", worktreePath)
 	}
-	
+
 	args := []string{"logs"}
 	if follow {
 		args = append(args, "-f")
@@ -122,12 +128,12 @@ func (p *Plugin) Logs(worktreePath string, service string, follow bool) error {
 	if service != "" {
 		args = append(args, service)
 	}
-	
+
 	cmd := p.composeCommand(worktreePath, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
-	
+
 	return cmd.Run()
 }
 
@@ -136,16 +142,16 @@ func (p *Plugin) Restart(worktreePath string, service string) error {
 	if !p.hasDockerCompose(worktreePath) {
 		return fmt.Errorf("no docker-compose file found in %s", worktreePath)
 	}
-	
+
 	args := []string{"restart"}
 	if service != "" {
 		args = append(args, service)
 	}
-	
+
 	cmd := p.composeCommand(worktreePath, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	
+
 	return cmd.Run()
 }
 
@@ -155,11 +161,11 @@ func (p *Plugin) up(worktreePath string, detach bool) error {
 	if detach {
 		args = append(args, "-d")
 	}
-	
+
 	cmd := p.composeCommand(worktreePath, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	
+
 	return cmd.Run()
 }
 
@@ -168,7 +174,7 @@ func (p *Plugin) down(worktreePath string) error {
 	cmd := p.composeCommand(worktreePath, "down")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	
+
 	return cmd.Run()
 }
 
@@ -181,7 +187,7 @@ func (p *Plugin) composeCommand(worktreePath string, args ...string) *exec.Cmd {
 		cmd.Dir = worktreePath
 		return cmd
 	}
-	
+
 	// Fall back to docker-compose
 	cmd := exec.Command("docker-compose", args...)
 	cmd.Dir = worktreePath
@@ -196,14 +202,14 @@ func (p *Plugin) hasDockerCompose(worktreePath string) bool {
 		"compose.yml",
 		"compose.yaml",
 	}
-	
+
 	for _, file := range composeFiles {
 		path := filepath.Join(worktreePath, file)
 		if _, err := os.Stat(path); err == nil {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -212,12 +218,12 @@ func (p *Plugin) getWorktreePath(name string) string {
 	if name == "" {
 		return ""
 	}
-	
+
 	// If it's already an absolute path, return it
 	if filepath.IsAbs(name) {
 		return name
 	}
-	
+
 	// Get from config or use current directory
 	if p.cfg != nil && p.cfg.ProjectsDir != "" {
 		projectsDir := p.cfg.ProjectsDir
@@ -230,7 +236,7 @@ func (p *Plugin) getWorktreePath(name string) string {
 		}
 		return filepath.Join(projectsDir, name)
 	}
-	
+
 	// Fall back to current directory
 	cwd, _ := os.Getwd()
 	return filepath.Join(cwd, name)
@@ -238,14 +244,18 @@ func (p *Plugin) getWorktreePath(name string) string {
 
 // getAutoStart returns whether to auto-start containers on switch
 func (p *Plugin) getAutoStart() bool {
-	// TODO: Read from config when docker plugin config is added
-	// For now, default to true
+	if p.cfg != nil {
+		return p.cfg.Plugins.Docker.AutoStart
+	}
+	// Default to true
 	return true
 }
 
 // getAutoStop returns whether to auto-stop containers on switch
 func (p *Plugin) getAutoStop() bool {
-	// TODO: Read from config when docker plugin config is added
-	// For now, default to false to avoid disrupting running containers
+	if p.cfg != nil {
+		return p.cfg.Plugins.Docker.AutoStop
+	}
+	// Default to false
 	return false
 }
