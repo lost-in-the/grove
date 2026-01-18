@@ -123,8 +123,7 @@ func (m *Manager) Find(name string) (*Worktree, error) {
 		return nil, fmt.Errorf("failed to list worktrees: %w", err)
 	}
 
-	projectName := m.GetProjectName()
-	fullName := projectName + "-" + name
+	fullName := m.FullName(name)
 
 	for _, tree := range trees {
 		// Match by short name or full name or path basename
@@ -374,3 +373,6 @@ func (m *Manager) GetProjectName() string {
 func TmuxSessionName(project, worktreeName string) string {
 	return fmt.Sprintf("%s-%s", project, worktreeName)
 }
+
+
+

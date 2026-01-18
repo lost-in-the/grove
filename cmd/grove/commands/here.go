@@ -30,9 +30,6 @@ var hereCmd = &cobra.Command{
 			return fmt.Errorf("failed to get current worktree: %w", err)
 		}
 
-		// Get project name from worktree manager
-		projectName := mgr.GetProjectName()
-
 		// The tmux session name should match the directory name
 		// For main worktree: project name
 		// For other worktrees: project-name (full directory name)
@@ -47,9 +44,6 @@ var hereCmd = &cobra.Command{
 
 		// Print formatted output
 		displayName := tree.DisplayName()
-		if tree.IsMain {
-			displayName = projectName
-		}
 		fmt.Printf("%s (%s)\n", displayName, tree.Branch)
 		fmt.Println(strings.Repeat("━", 40))
 		fmt.Printf("Path:    %s\n", tree.Path)
