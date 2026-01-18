@@ -15,6 +15,10 @@ func Validate(cfg *Config) error {
 	}
 
 	// Validate dirty handling options
+	if cfg.Switch.DirtyHandling == "" {
+		return fmt.Errorf("dirty_handling cannot be empty")
+	}
+
 	validDirtyHandling := map[string]bool{
 		"auto-stash": true,
 		"prompt":     true,

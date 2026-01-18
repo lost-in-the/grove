@@ -5,18 +5,20 @@ grove() {
     local exit_code=$?
     
     # Check if output contains directory change instruction
+    # Extract only the first line starting with cd:
     if [[ "$output" == cd:* ]]; then
-        local target_dir="${output#cd:}"
-        # Remove the cd: line from output
-        output=$(echo "$output" | grep -v "^cd:")
-        
-        # Print any remaining output
-        if [[ -n "$output" ]]; then
-            echo "$output"
-        fi
+        local target_dir
+        target_dir=$(echo "$output" | grep "^cd:" | head -n1 | sed 's/^cd://')
         
         # Change directory
         cd "$target_dir" || return 1
+        
+        # Print any output that's not the cd: line
+        local other_output
+        other_output=$(echo "$output" | grep -v "^cd:")
+        if [[ -n "$other_output" ]]; then
+            echo "$other_output"
+        fi
     else
         # Just print the output
         echo "$output"

@@ -5,18 +5,20 @@ grove() {
     local exit_code=$?
     
     # Check if output contains directory change instruction
+    # Extract only the first line starting with cd:
     if [[ "$output" == cd:* ]]; then
-        local target_dir="${output#cd:}"
-        # Remove the cd: line from output
-        output=$(echo "$output" | grep -v "^cd:")
-        
-        # Print any remaining output
-        if [[ -n "$output" ]]; then
-            echo "$output"
-        fi
+        local target_dir
+        target_dir=$(echo "$output" | grep "^cd:" | head -n1 | sed 's/^cd://')
         
         # Change directory
         cd "$target_dir" || return 1
+        
+        # Print any output that's not the cd: line
+        local other_output
+        other_output=$(echo "$output" | grep -v "^cd:")
+        if [[ -n "$other_output" ]]; then
+            echo "$other_output"
+        fi
     else
         # Just print the output
         echo "$output"
@@ -28,7 +30,16 @@ grove() {
 # Tab completion for grove
 _grove_completion() {
     local cur prev words cword
-    _init_completion || return
+    # Check if bash-completion is available
+    if declare -F _init_completion >/dev/null 2>&1; then
+        _init_completion || return
+    else
+        # Fallback for systems without bash-completion
+        cur="${COMP_WORDS[COMP_CWORD]}"
+        prev="${COMP_WORDS[COMP_CWORD-1]}"
+        words=("${COMP_WORDS[@]}")
+        cword=$COMP_CWORD
+    fi
     
     local commands="ls new to rm here last config version init"
     

@@ -131,9 +131,25 @@ func TestValidate(t *testing.T) {
 				Alias:         "",
 				ProjectsDir:   "/tmp",
 				DefaultBranch: "main",
+				Switch: SwitchConfig{
+					DirtyHandling: "prompt",
+				},
 			},
 			wantErr: true,
 			errMsg:  "alias",
+		},
+		{
+			name: "empty dirty handling",
+			config: &Config{
+				Alias:         "w",
+				ProjectsDir:   "/tmp",
+				DefaultBranch: "main",
+				Switch: SwitchConfig{
+					DirtyHandling: "",
+				},
+			},
+			wantErr: true,
+			errMsg:  "dirty_handling",
 		},
 	}
 

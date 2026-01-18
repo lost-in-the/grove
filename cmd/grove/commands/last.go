@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
@@ -28,8 +29,8 @@ var lastCmd = &cobra.Command{
 
 		// Remove prefix to get worktree name
 		name := lastSession
-		if len(lastSession) > len(cfg.Tmux.Prefix) {
-			name = lastSession[len(cfg.Tmux.Prefix):]
+		if strings.HasPrefix(lastSession, cfg.Tmux.Prefix) {
+			name = strings.TrimPrefix(lastSession, cfg.Tmux.Prefix)
 		}
 
 		// Get worktree

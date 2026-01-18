@@ -60,7 +60,7 @@ func GetWorktreeNames() ([]string, error) {
 	names := []string{}
 	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
-		if len(line) >= 9 && line[:9] == "worktree " {
+		if len(line) >= 9 && strings.HasPrefix(line, "worktree ") {
 			path := line[9:]
 			// Extract just the directory name
 			names = append(names, filepath.Base(path))
