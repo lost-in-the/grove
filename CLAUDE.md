@@ -1,0 +1,55 @@
+# Grove - Worktree Flow Manager
+
+## Project Context
+Grove is a Go CLI tool for managing git worktrees with tmux integration.
+Target: developers who context-switch frequently between tasks.
+
+## Build Commands
+- `make build` - Build the binary
+- `make test` - Run all tests
+- `make test-verbose` - Run tests with verbose output
+- `make test-coverage` - Generate coverage report
+- `make lint` - Run linters
+- `make fmt` - Format code
+- `make clean` - Clean build artifacts
+- `make install` - Install locally
+
+## Code Style
+- Follow standard Go formatting (gofmt)
+- Use table-driven tests
+- Prefer composition over inheritance
+- Small interfaces (1-3 methods)
+- Error messages: lowercase, no punctuation
+- Wrap errors with context: `fmt.Errorf("operation failed: %w", err)`
+
+## Architecture Rules
+- `cmd/` - Entry points only, no business logic
+- `internal/` - Core logic, not importable externally
+- `plugins/` - Self-contained plugins implementing hook interfaces
+- Each plugin must have its own README.md
+
+## Testing Requirements
+- TDD: Write tests before implementation
+- Table-driven tests for multiple cases
+- Test file next to source: `foo.go` → `foo_test.go`
+- Minimum 80% coverage for core packages
+- Integration tests in `_test.go` files with build tag `//go:build integration`
+
+## Git Workflow
+- Conventional commits: `type(scope): description`
+- Types: feat, fix, docs, style, refactor, test, chore
+- Branch naming: `type/short-description`
+- Squash merge to main
+
+## DO NOT
+- Use `panic()` except in truly unrecoverable situations
+- Add dependencies without justification in commit message
+- Skip tests for "simple" changes
+- Use `interface{}` without type assertions
+- Commit without running `make lint test`
+
+## IMPORTANT
+- Every command must complete in <500ms
+- Shell integration must work in both zsh and bash
+- Test tmux operations with mock when possible
+- Document all public functions
