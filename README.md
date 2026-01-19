@@ -110,6 +110,15 @@ grove rm feature-login
 
 Time tracking is automatic and passive - it records time whenever you switch between worktrees.
 
+### Issue/PR Integration
+
+- `grove fetch pr/<number>` - Create worktree from GitHub PR
+- `grove fetch issue/<number>` - Create worktree from GitHub issue
+- `grove issues` - Browse and select issues with fzf
+- `grove prs` - Browse and select PRs with fzf
+
+Requires `gh` CLI and `fzf` to be installed. See [Tracker Plugin Documentation](plugins/tracker/README.md) for details.
+
 ### Docker Integration
 
 - `grove up` - Start Docker containers for current worktree
@@ -117,20 +126,13 @@ Time tracking is automatic and passive - it records time whenever you switch bet
 - `grove logs [service]` - View container logs
 - `grove restart [service]` - Restart container(s)
 
+See [Docker Plugin Documentation](plugins/docker/README.md) for details.
+
 ### Configuration
 
 - `grove config` - Show current configuration
 - `grove version` - Show version information
 - `grove init <shell>` - Generate shell integration code
-
-### Docker Plugin Commands
-
-- `grove up` - Start containers for current worktree
-- `grove down` - Stop containers for current worktree
-- `grove logs [service]` - View container logs
-- `grove restart [service]` - Restart container service(s)
-
-See [Docker Plugin Documentation](plugins/docker/README.md) for details.
 
 ## Configuration
 
