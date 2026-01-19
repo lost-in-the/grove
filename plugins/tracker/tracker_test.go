@@ -84,11 +84,11 @@ func TestList(t *testing.T) {
 
 func TestGenerateWorktreeName(t *testing.T) {
 	tests := []struct {
-		name       string
-		issueType  string
-		number     int
-		title      string
-		want       string
+		name      string
+		issueType string
+		number    int
+		title     string
+		want      string
 	}{
 		{
 			name:      "simple title",

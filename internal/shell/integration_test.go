@@ -103,11 +103,11 @@ func TestZshDirectiveParsing(t *testing.T) {
 
 	// Verify the parsing logic is present
 	expectedPatterns := []string{
-		"cd:*",                  // Pattern matching for cd directive
-		"cd_target=",            // Variable to store target directory
-		"should_cd=",            // Flag to track if cd should be executed
-		"cd \"$cd_target\"",     // Actual cd execution
-		"GROVE_SHELL=1",         // Environment variable set
+		"cd:*",              // Pattern matching for cd directive
+		"cd_target=",        // Variable to store target directory
+		"should_cd=",        // Flag to track if cd should be executed
+		"cd \"$cd_target\"", // Actual cd execution
+		"GROVE_SHELL=1",     // Environment variable set
 	}
 
 	for _, pattern := range expectedPatterns {
@@ -126,11 +126,11 @@ func TestBashDirectiveParsing(t *testing.T) {
 
 	// Verify the parsing logic is present
 	expectedPatterns := []string{
-		"cd:*",                  // Pattern matching for cd directive
-		"cd_target=",            // Variable to store target directory
-		"should_cd=",            // Flag to track if cd should be executed
-		"cd \"$cd_target\"",     // Actual cd execution
-		"GROVE_SHELL=1",         // Environment variable set
+		"cd:*",              // Pattern matching for cd directive
+		"cd_target=",        // Variable to store target directory
+		"should_cd=",        // Flag to track if cd should be executed
+		"cd \"$cd_target\"", // Actual cd execution
+		"GROVE_SHELL=1",     // Environment variable set
 	}
 
 	for _, pattern := range expectedPatterns {

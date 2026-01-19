@@ -46,7 +46,7 @@ func sendMacOS(title, message string) error {
 	// Escape quotes to prevent injection
 	title = escapeAppleScript(title)
 	message = escapeAppleScript(message)
-	
+
 	script := fmt.Sprintf(`display notification "%s" with title "%s"`, message, title)
 	cmd := exec.Command("osascript", "-e", script)
 	return cmd.Run()

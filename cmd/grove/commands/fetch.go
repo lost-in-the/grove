@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 	"github.com/LeahArmstrong/grove-cli/plugins/tracker"
@@ -65,12 +64,6 @@ For PRs, the remote branch will be checked out.`,
 
 		// Create GitHub adapter
 		gh := tracker.NewGitHubAdapter(repo)
-
-		// Load config
-		cfg, err := config.Load()
-		if err != nil {
-			return fmt.Errorf("failed to load config: %w", err)
-		}
 
 		// Initialize worktree manager
 		mgr, err := worktree.NewManager("")
@@ -141,7 +134,9 @@ For PRs, the remote branch will be checked out.`,
 			}
 
 			if wt != nil {
-				sessionName := cfg.Tmux.Prefix + worktreeName
+				// Use consistent session naming: {project}-{name}
+				projectName := mgr.GetProjectName()
+				sessionName := worktree.TmuxSessionName(projectName, worktreeName)
 				if err := tmux.CreateSession(sessionName, wt.Path); err != nil {
 					fmt.Printf("⚠ Failed to create tmux session: %v\n", err)
 				} else {

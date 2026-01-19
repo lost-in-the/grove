@@ -23,4 +23,3 @@ func TestResumeCmdArgs(t *testing.T) {
 		t.Fatal("resumeCmd.Args should be set")
 	}
 }
-

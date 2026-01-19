@@ -51,19 +51,24 @@ _grove_completion() {
         words=("${COMP_WORDS[@]}")
         cword=$COMP_CWORD
     fi
-    
-    local commands="ls new to rm here last config version init"
-    
+
+    local commands="ls new to rm here last freeze resume time fetch issues prs up down logs restart config version init"
+
     if [[ $cword -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$commands" -- "$cur"))
         return 0
     fi
-    
+
     case "${words[1]}" in
-        to|rm)
-            # Complete with worktree names
-            local worktrees=$(git worktree list --porcelain 2>/dev/null | awk '/^worktree / {print $2}' | xargs -n1 basename)
+        to|rm|freeze)
+            # Complete with worktree short names (using grove ls -q for consistency)
+            local worktrees=$(GROVE_SHELL=1 "$__GROVE_BIN" ls -q 2>/dev/null)
             COMPREPLY=($(compgen -W "$worktrees" -- "$cur"))
+            ;;
+        resume)
+            # For resume, show all worktrees including frozen
+            local all_worktrees=$(GROVE_SHELL=1 "$__GROVE_BIN" ls -q -a 2>/dev/null)
+            COMPREPLY=($(compgen -W "$all_worktrees" -- "$cur"))
             ;;
         init)
             COMPREPLY=($(compgen -W "zsh bash" -- "$cur"))
