@@ -115,6 +115,45 @@ func (m *Manager) CreateFromExisting(name, branch string) error {
 	return nil
 }
 
+// CreateFromBranch creates a worktree from a branch (local or remote).
+// For remote branches (e.g., PR branches), it fetches and checks out the branch.
+// The name parameter is the short name (e.g., "pr-123-fix-bug")
+func (m *Manager) CreateFromBranch(name, branch string) error {
+	if name == "" {
+		return fmt.Errorf("worktree name cannot be empty")
+	}
+	if branch == "" {
+		return fmt.Errorf("branch name cannot be empty")
+	}
+
+	// Get full name with project prefix
+	fullName := m.FullName(name)
+	wtPath := filepath.Join(filepath.Dir(m.repoRoot), fullName)
+
+	// Check if worktree already exists
+	if _, err := os.Stat(wtPath); err == nil {
+		return fmt.Errorf("worktree already exists at %s", wtPath)
+	}
+
+	// First, try to fetch the branch if it doesn't exist locally
+	// This is important for PR branches that only exist remotely
+	fetchCmd := exec.Command("git", "fetch", "origin", branch+":"+branch)
+	fetchCmd.Dir = m.repoRoot
+	_ = fetchCmd.Run() // Ignore errors - branch might already exist locally
+
+	// Create worktree from the branch
+	args := []string{"worktree", "add", wtPath, branch}
+	cmd := exec.Command("git", args...)
+	cmd.Dir = m.repoRoot
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to create worktree from branch %q: %s: %w", branch, string(output), err)
+	}
+
+	return nil
+}
+
 // Find searches for a worktree by short name or full name
 // Returns the worktree if found, nil if not found
 func (m *Manager) Find(name string) (*Worktree, error) {
