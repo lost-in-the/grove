@@ -33,7 +33,7 @@ Download the latest release for your platform from the [releases page](https://g
 
 ```bash
 # Example for macOS (arm64)
-curl -L https://github.com/LeahArmstrong/grove-cli/releases/latest/download/grove_Darwin_arm64.tar.gz | tar xz
+curl -L https://github.com/LeahArmstrong/grove-cli/releases/latest/download/grove-cli_v1.0.0_Darwin_arm64.tar.gz | tar xz
 sudo mv grove /usr/local/bin/
 ```
 
