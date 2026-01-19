@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Phase 5: Polish & Production Readiness**
+  - GoReleaser configuration for automated releases
+  - Homebrew formula for easy installation
+  - GitHub Actions workflow for release automation
+  - Shell integration files (grove.zsh, grove.bash)
+  - Shell completions (zsh and bash)
+  - Multi-platform binary builds (Linux, macOS, Windows)
+  - Release notes automation
+- **Phase 4: Issue Integration**
+  - Tracker plugin with adapter pattern
+  - GitHub adapter using `gh` CLI
+  - `grove fetch pr/<number>` command
+  - `grove fetch issue/<number>` command
+  - `grove issues` command with fzf browsing
+  - `grove prs` command with fzf browsing
+  - Smart worktree naming from issue/PR metadata
+  - Filtering options (state, labels, assignee, author)
 - **Phase 3: Time Tracking**
   - Time tracking plugin with automatic session management
   - `grove time` command to show time for current or all worktrees
@@ -15,21 +32,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Hook integration for automatic time tracking on worktree switch
   - JSON output support for `grove time` commands
   - Notification system for macOS and Linux
-- Initial Phase 0 foundation implementation
-- Core commands: ls, new, to, rm, here, last
-- Shell integration for zsh and bash
-- TOML configuration system
-- Git worktree operations
-- Tmux session management
-- Hook system foundation
-- **Phase 1: Docker Plugin**
-  - Docker container management integrated with worktrees
-  - `grove up`, `grove down`, `grove logs`, `grove restart` commands
 - **Phase 2: State Management**
   - `grove freeze` and `grove resume` commands
   - State persistence for frozen worktrees
+  - Docker integration with freeze/resume lifecycle
+- **Phase 1: Docker Plugin**
+  - Docker container management integrated with worktrees
+  - `grove up`, `grove down`, `grove logs`, `grove restart` commands
+  - Hook-based auto-start/stop functionality
+- **Phase 0: Foundation**
+  - Core commands: ls, new, to, rm, here, last
+  - Shell integration for zsh and bash with cd directive
+  - TOML configuration system
+  - Git worktree operations
+  - Tmux session management
+  - Hook system foundation
 
 ### Changed
+- Updated README with Homebrew installation as primary method
+- Updated roadmap to mark all phases complete
+- Improved installation documentation
 
 ### Fixed
 

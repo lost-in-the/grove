@@ -12,13 +12,32 @@ Zero-friction worktree management for developers.
 
 ## Installation
 
-### From Source
+### Homebrew (macOS/Linux)
+
+```bash
+brew tap LeahArmstrong/tap
+brew install grove
+```
+
+This is the recommended installation method. It includes automatic updates and shell completions.
+
+### Go Install
 
 ```bash
 go install github.com/LeahArmstrong/grove-cli/cmd/grove@latest
 ```
 
-### Build Locally
+### From Release Binaries
+
+Download the latest release for your platform from the [releases page](https://github.com/LeahArmstrong/grove-cli/releases).
+
+```bash
+# Example for macOS (arm64)
+curl -L https://github.com/LeahArmstrong/grove-cli/releases/latest/download/grove_Darwin_arm64.tar.gz | tar xz
+sudo mv grove /usr/local/bin/
+```
+
+### Build from Source
 
 ```bash
 git clone https://github.com/LeahArmstrong/grove-cli
@@ -282,26 +301,29 @@ Apache 2.0 - see [LICENSE](LICENSE)
 - Auto-start/stop integration with hooks
 - Plugin system infrastructure
 
-### Phase 2: State Management (Planned)
+### Phase 2: State Management ✅
 - Freeze/resume functionality
 - Dirty worktree handling
 - State persistence
+- Docker integration with freeze/resume
 
-### Phase 3: Time Tracking (Planned)
+### Phase 3: Time Tracking ✅
 - Passive time tracking per worktree
 - Weekly summaries
-- Parallel test execution
+- JSON output format
+- Notification system
 
-### Phase 4: Issue Integration (Planned)
-- GitHub PR/issue integration
-- Linear integration
-- Smart worktree naming
+### Phase 4: Issue Integration ✅
+- GitHub PR/issue integration (via `gh` CLI)
+- Smart worktree naming from metadata
+- Interactive browsing with `fzf`
+- Filtering by state, labels, assignee, author
 
-### Phase 5: Polish (Planned)
-- TUI mode
-- Template system
-- Database plugin
+### Phase 5: Polish ✅
+- Release automation (GoReleaser)
 - Homebrew formula
+- Comprehensive documentation
+- Shell completions (zsh, bash)
 
 ## FAQ
 
