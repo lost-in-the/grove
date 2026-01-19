@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 	"github.com/spf13/cobra"
@@ -45,6 +46,23 @@ When using shell integration, this will also change your current directory.`,
 
 		if targetTree == nil {
 			return fmt.Errorf("worktree '%s' not found", name)
+		}
+
+		// Get current worktree for hook context
+		currentTree, _ := mgr.GetCurrent()
+		var prevWorktree string
+		if currentTree != nil {
+			prevWorktree = currentTree.Name
+		}
+
+		// Fire pre-switch hooks
+		hookCtx := &hooks.Context{
+			Worktree:     name,
+			PrevWorktree: prevWorktree,
+		}
+		if err := hooks.Fire(hooks.EventPreSwitch, hookCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: pre-switch hooks failed: %v\n", err)
+			// Continue anyway
 		}
 
 		// Store current session as last if inside tmux
@@ -97,6 +115,12 @@ When using shell integration, this will also change your current directory.`,
 			fmt.Fprintf(os.Stderr, "  eval \"$(grove init bash)\"  # for bash\n\n")
 			fmt.Fprintf(os.Stderr, "To change directory manually:\n")
 			fmt.Fprintf(os.Stderr, "  cd %s\n", targetTree.Path)
+		}
+
+		// Fire post-switch hooks
+		if err := hooks.Fire(hooks.EventPostSwitch, hookCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: post-switch hooks failed: %v\n", err)
+			// Continue anyway
 		}
 
 		return nil

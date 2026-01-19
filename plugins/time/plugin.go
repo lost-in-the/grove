@@ -8,6 +8,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 )
 
 // TimeEntry represents a single time tracking entry
@@ -37,6 +39,91 @@ type TimeTracker struct {
 type timeState struct {
 	Entries        []TimeEntry       `json:"entries"`
 	ActiveSessions map[string]string `json:"active_sessions"` // worktree -> start time (RFC3339)
+}
+
+// globalTracker is the singleton instance used by hooks
+var globalTracker *TimeTracker
+
+// InitializePlugin initializes the time tracking plugin and registers hooks
+func InitializePlugin() error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	stateDir := filepath.Join(homeDir, ".config", "grove", "state")
+	tracker, err := NewTimeTracker(stateDir)
+	if err != nil {
+		return fmt.Errorf("failed to initialize time tracker: %w", err)
+	}
+
+	globalTracker = tracker
+
+	// Register hooks
+	hooks.Register(hooks.EventPostSwitch, onPostSwitch)
+	hooks.Register(hooks.EventPreFreeze, onPreFreeze)
+	hooks.Register(hooks.EventPostResume, onPostResume)
+
+	return nil
+}
+
+// onPostSwitch handles the post-switch hook
+func onPostSwitch(ctx *hooks.Context) error {
+	if globalTracker == nil {
+		return nil // Plugin not initialized
+	}
+
+	// End session for previous worktree if exists
+	if ctx.PrevWorktree != "" {
+		if _, err := globalTracker.EndSession(ctx.PrevWorktree); err != nil {
+			// Log but don't fail
+			fmt.Fprintf(os.Stderr, "warning: failed to end time session for %s: %v\n", ctx.PrevWorktree, err)
+		}
+	}
+
+	// Start session for new worktree
+	if ctx.Worktree != "" {
+		if err := globalTracker.StartSession(ctx.Worktree); err != nil {
+			// Log but don't fail
+			fmt.Fprintf(os.Stderr, "warning: failed to start time session for %s: %v\n", ctx.Worktree, err)
+		}
+	}
+
+	return nil
+}
+
+// onPreFreeze handles the pre-freeze hook
+func onPreFreeze(ctx *hooks.Context) error {
+	if globalTracker == nil {
+		return nil // Plugin not initialized
+	}
+
+	// End session for the worktree being frozen
+	if ctx.Worktree != "" {
+		if _, err := globalTracker.EndSession(ctx.Worktree); err != nil {
+			// Log but don't fail
+			fmt.Fprintf(os.Stderr, "warning: failed to end time session for %s: %v\n", ctx.Worktree, err)
+		}
+	}
+
+	return nil
+}
+
+// onPostResume handles the post-resume hook
+func onPostResume(ctx *hooks.Context) error {
+	if globalTracker == nil {
+		return nil // Plugin not initialized
+	}
+
+	// Start session for resumed worktree
+	if ctx.Worktree != "" {
+		if err := globalTracker.StartSession(ctx.Worktree); err != nil {
+			// Log but don't fail
+			fmt.Fprintf(os.Stderr, "warning: failed to start time session for %s: %v\n", ctx.Worktree, err)
+		}
+	}
+
+	return nil
 }
 
 // NewTimeTracker creates a new time tracker
