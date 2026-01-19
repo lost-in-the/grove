@@ -1,0 +1,191 @@
+# GoReleaser configuration for Grove
+# Documentation: https://goreleaser.com
+
+before:
+  hooks:
+    # Ensure go.mod is tidy
+    - go mod tidy
+    # Run tests before building
+    - go test ./...
+
+builds:
+  - id: grove
+    main: ./cmd/grove
+    binary: grove
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    # Skip combinations that don't make sense
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X github.com/LeahArmstrong/grove-cli/internal/version.Version={{.Version}}
+      - -X github.com/LeahArmstrong/grove-cli/internal/version.Commit={{.Commit}}
+      - -X github.com/LeahArmstrong/grove-cli/internal/version.BuildDate={{.Date}}
+
+archives:
+  - id: grove
+    format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+      - CONTRIBUTING.md
+      - shell/**
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - 'typo'
+  groups:
+    - title: 'Features'
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: 'Bug Fixes'
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: 'Performance Improvements'
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: 'Other Changes'
+      order: 999
+
+release:
+  github:
+    owner: LeahArmstrong
+    name: grove-cli
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## Grove {{ .Tag }} ({{ .Date }})
+
+    Zero-friction worktree management for developers.
+
+    ### Installation
+
+    #### Homebrew (macOS/Linux)
+    ```bash
+    brew tap LeahArmstrong/tap
+    brew install grove
+    ```
+
+    #### Direct Download
+    Download the appropriate binary for your platform from the assets below.
+
+    #### Go Install
+    ```bash
+    go install github.com/LeahArmstrong/grove-cli/cmd/grove@{{ .Tag }}
+    ```
+
+  footer: |
+    **Full Changelog**: https://github.com/LeahArmstrong/grove-cli/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+    ## Quick Start
+
+    After installation, set up shell integration:
+
+    ```bash
+    # For zsh
+    eval "$(grove init zsh)"
+
+    # For bash
+    eval "$(grove init bash)"
+    ```
+
+    Then create your first worktree:
+    ```bash
+    grove new my-feature
+    grove to my-feature
+    ```
+
+    See the [README](https://github.com/LeahArmstrong/grove-cli#readme) for full documentation.
+
+# Homebrew tap configuration
+brews:
+  - repository:
+      owner: LeahArmstrong
+      name: homebrew-tap
+    homepage: https://github.com/LeahArmstrong/grove-cli
+    description: Zero-friction worktree management for developers
+    license: Apache-2.0
+    skip_upload: false
+    install: |
+      bin.install "grove"
+      
+      # Install shell integration files
+      (share/"grove").install "shell/grove.zsh"
+      (share/"grove").install "shell/grove.bash"
+      
+      # Install completion files
+      bash_completion.install "shell/completions/grove.bash" => "grove"
+      zsh_completion.install "shell/completions/_grove.zsh" => "_grove"
+    
+    test: |
+      system "#{bin}/grove", "version"
+    
+    caveats: |
+      To enable grove, add this to your shell configuration:
+
+      For zsh (~/.zshrc):
+        eval "$(grove init zsh)"
+
+      For bash (~/.bashrc):
+        eval "$(grove init bash)"
+
+      Then reload your shell:
+        source ~/.zshrc  # or ~/.bashrc
+
+# Docker image configuration (optional, for future container deployment)
+dockers:
+  - skip_push: true
+    dockerfile: Dockerfile
+    image_templates:
+      - "ghcr.io/leaharmstrong/grove-cli:{{ .Tag }}"
+      - "ghcr.io/leaharmstrong/grove-cli:latest"
+
+# Snapcraft configuration (for Linux snap package)
+# Disabled for initial release, can be enabled later
+# snapcrafts:
+#   - skip_push: false
+
+# AUR (Arch User Repository) configuration
+# Disabled for initial release, can be enabled later  
+# aurs:
+#   - skip_push: false
+
+# Announcement configuration
+announce:
+  skip: true
+  # Can be configured later for automated announcements to:
+  # - Twitter
+  # - Mastodon
+  # - Discord
+  # - Slack
