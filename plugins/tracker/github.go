@@ -286,7 +286,11 @@ func (g *GitHubAdapter) runGH(args ...string) ([]byte, error) {
 	cmd := exec.Command("gh", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("gh %s: %w: %s", strings.Join(args, " "), err, string(output))
+		outputStr := strings.TrimSpace(string(output))
+		if outputStr != "" {
+			return nil, fmt.Errorf("failed to run gh %s: %w\nOutput: %s", strings.Join(args, " "), err, outputStr)
+		}
+		return nil, fmt.Errorf("failed to run gh %s: %w", strings.Join(args, " "), err)
 	}
 	return output, nil
 }

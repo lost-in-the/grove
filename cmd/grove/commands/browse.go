@@ -71,7 +71,7 @@ Examples:
 			return nil
 		}
 
-		// Prepare fzf input
+		// Prepare fzf input with pipe for capturing selection
 		fzfCmd := exec.Command("fzf",
 			"--ansi",
 			"--header=Select an issue (Ctrl-C to cancel)",
@@ -87,8 +87,12 @@ Examples:
 			return fmt.Errorf("failed to create fzf stdin pipe: %w", err)
 		}
 
-		// Set fzf output to stdout
-		fzfCmd.Stdout = os.Stdout
+		// Capture fzf output
+		stdout, err := fzfCmd.StdoutPipe()
+		if err != nil {
+			return fmt.Errorf("failed to create fzf stdout pipe: %w", err)
+		}
+
 		fzfCmd.Stderr = os.Stderr
 
 		// Start fzf
@@ -111,6 +115,13 @@ Examples:
 		writer.Flush()
 		stdin.Close()
 
+		// Read selected issue
+		scanner := bufio.NewScanner(stdout)
+		var selection string
+		if scanner.Scan() {
+			selection = scanner.Text()
+		}
+
 		// Wait for fzf to complete
 		if err := fzfCmd.Wait(); err != nil {
 			if exitErr, ok := err.(*exec.ExitError); ok {
@@ -122,12 +133,26 @@ Examples:
 			return fmt.Errorf("fzf selection failed: %w", err)
 		}
 
-		// Note: The actual selection and worktree creation would require
-		// capturing fzf output and parsing it. For now, this shows the
-		// selection interface. We'll need to enhance this to capture
-		// the selection and create the worktree.
+		if selection == "" {
+			return nil
+		}
 
-		return nil
+		// Parse selection to extract issue number
+		// Format: #123 | ...
+		parts := strings.Split(selection, "|")
+		if len(parts) == 0 {
+			return fmt.Errorf("invalid selection format")
+		}
+
+		numberStr := strings.TrimSpace(strings.TrimPrefix(parts[0], "#"))
+		number, err := strconv.Atoi(numberStr)
+		if err != nil {
+			return fmt.Errorf("invalid issue number: %w", err)
+		}
+
+		// Run fetch command with the selected issue
+		fetchCmd.SetArgs([]string{fmt.Sprintf("issue/%d", number)})
+		return fetchCmd.Execute()
 	},
 }
 

@@ -8,6 +8,11 @@ import (
 	"time"
 )
 
+const (
+	// maxSlugLength is the maximum length of a slug in worktree names
+	maxSlugLength = 40
+)
+
 // Issue represents an issue from a tracking system.
 type Issue struct {
 	Number    int       `json:"number"`
@@ -97,9 +102,8 @@ func GenerateWorktreeName(issueType string, number int, title string) string {
 	slug := slugify(title)
 
 	// Limit slug length to keep names manageable
-	maxSlugLen := 40
-	if len(slug) > maxSlugLen {
-		slug = slug[:maxSlugLen]
+	if len(slug) > maxSlugLength {
+		slug = slug[:maxSlugLength]
 	}
 
 	return fmt.Sprintf("%s-%d-%s", issueType, number, slug)
