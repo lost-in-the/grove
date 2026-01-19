@@ -14,6 +14,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	separatorWidth = 40 // Width of separator lines in output
+)
+
 var timeCmd = &cobra.Command{
 	Use:   "time [subcommand]",
 	Short: "Show time tracking information",
@@ -162,13 +166,13 @@ func showAllWorktreesTime(tracker *timePlugin.TimeTracker) error {
 
 	// Display formatted output
 	fmt.Println("Worktree Time Tracking")
-	fmt.Println(strings.Repeat("─", 40))
+	fmt.Println(strings.Repeat("─", separatorWidth))
 
 	for _, wt := range times {
 		fmt.Printf("%-20s %s\n", wt.name, formatDuration(wt.duration))
 	}
 
-	fmt.Println(strings.Repeat("─", 40))
+	fmt.Println(strings.Repeat("─", separatorWidth))
 	fmt.Printf("%-20s %s\n", "Total", formatDuration(grandTotal))
 
 	return nil
@@ -214,7 +218,7 @@ func runTimeWeek(cmd *cobra.Command, args []string) error {
 	weekStr := summary.WeekStart.Format("Jan 2")
 
 	fmt.Printf("Time Tracking (Week of %s)\n", weekStr)
-	fmt.Println(strings.Repeat("─", 40))
+	fmt.Println(strings.Repeat("─", separatorWidth))
 
 	// Sort worktrees by time (descending)
 	type worktreeTime struct {
@@ -235,7 +239,7 @@ func runTimeWeek(cmd *cobra.Command, args []string) error {
 		fmt.Printf("%-20s %s\n", wt.name, formatDuration(wt.duration))
 	}
 
-	fmt.Println(strings.Repeat("─", 40))
+	fmt.Println(strings.Repeat("─", separatorWidth))
 	fmt.Printf("%-20s %s\n", "Total", formatDuration(summary.Total))
 
 	return nil

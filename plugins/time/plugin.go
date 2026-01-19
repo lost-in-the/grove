@@ -311,6 +311,7 @@ func (t *TimeTracker) GetWeeklySummary() (*WeeklySummary, error) {
 	weekday := now.Weekday()
 	daysFromMonday := int(weekday - time.Monday)
 	if weekday == time.Sunday {
+		// Sunday is treated as 6 days from Monday (end of week)
 		daysFromMonday = 6
 	}
 	weekStart := now.AddDate(0, 0, -daysFromMonday).Truncate(24 * time.Hour)
