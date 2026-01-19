@@ -31,19 +31,11 @@ When using shell integration, this will also change your current directory.`,
 			return fmt.Errorf("failed to initialize worktree manager: %w", err)
 		}
 
-		trees, err := mgr.List()
+		// Find worktree by short name or full name
+		targetTree, err := mgr.Find(name)
 		if err != nil {
-			return fmt.Errorf("failed to list worktrees: %w", err)
+			return fmt.Errorf("failed to find worktree: %w", err)
 		}
-
-		var targetTree *worktree.Worktree
-		for _, tree := range trees {
-			if tree.Name == name {
-				targetTree = tree
-				break
-			}
-		}
-
 		if targetTree == nil {
 			return fmt.Errorf("worktree '%s' not found", name)
 		}
@@ -103,7 +95,7 @@ When using shell integration, this will also change your current directory.`,
 
 		// Output directory change command for shell integration
 		hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
-		
+
 		if hasShellIntegration {
 			// Shell wrapper will parse this and execute cd
 			fmt.Printf("cd:%s\n", targetTree.Path)

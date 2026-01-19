@@ -33,4 +33,3 @@ func TestFreezeCmdArgs(t *testing.T) {
 		t.Fatal("freezeCmd.Args should be set")
 	}
 }
-

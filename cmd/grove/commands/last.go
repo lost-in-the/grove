@@ -71,7 +71,7 @@ var lastCmd = &cobra.Command{
 
 		// Output directory change command for shell integration
 		hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
-		
+
 		if hasShellIntegration {
 			// Shell wrapper will parse this and execute cd
 			fmt.Printf("cd:%s\n", targetTree.Path)

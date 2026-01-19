@@ -17,8 +17,8 @@ type State struct {
 
 // FreezeInfo contains information about a frozen worktree
 type FreezeInfo struct {
-	Name      string    `json:"name"`
-	FrozenAt  time.Time `json:"frozen_at"`
+	Name     string    `json:"name"`
+	FrozenAt time.Time `json:"frozen_at"`
 }
 
 // Manager handles state management for Grove

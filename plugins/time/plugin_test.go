@@ -134,7 +134,7 @@ func TestTimeTracker_GetWeeklySummary(t *testing.T) {
 
 	// Track sessions this week and last week
 	now := time.Now()
-	
+
 	// Calculate start of this week to ensure we're tracking in the right period
 	weekday := now.Weekday()
 	daysFromMonday := int(weekday - time.Monday)
@@ -142,17 +142,17 @@ func TestTimeTracker_GetWeeklySummary(t *testing.T) {
 		daysFromMonday = 6
 	}
 	weekStart := now.AddDate(0, 0, -daysFromMonday).Truncate(24 * time.Hour)
-	
+
 	// Create entries definitely within this week (yesterday and today)
 	yesterday := now.Add(-24 * time.Hour)
 	if yesterday.Before(weekStart) {
 		// If yesterday was last week, use today instead
 		yesterday = now
 	}
-	
+
 	tracker.Track("tree1", yesterday, yesterday.Add(1*time.Hour))
 	tracker.Track("tree2", yesterday.Add(2*time.Hour), yesterday.Add(3*time.Hour))
-	
+
 	// This one should not be included (last week)
 	lastWeek := weekStart.Add(-48 * time.Hour)
 	tracker.Track("tree1", lastWeek, lastWeek.Add(2*time.Hour))

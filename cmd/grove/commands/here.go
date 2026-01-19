@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -14,6 +15,36 @@ const (
 	// maxDirtyFilesShown is the maximum number of dirty files to display
 	maxDirtyFilesShown = 5
 )
+
+var (
+	hereQuiet bool
+	hereJSON  bool
+)
+
+// hereOutput represents the JSON output structure for grove here
+type hereOutput struct {
+	Name     string     `json:"name"`
+	FullName string     `json:"fullName"`
+	Project  string     `json:"project"`
+	Branch   string     `json:"branch"`
+	Path     string     `json:"path"`
+	Commit   commitInfo `json:"commit"`
+	Status   string     `json:"status"`
+	Changes  []string   `json:"changes,omitempty"`
+	Tmux     tmuxInfo   `json:"tmux"`
+}
+
+type commitInfo struct {
+	Hash      string `json:"hash"`
+	ShortHash string `json:"shortHash"`
+	Message   string `json:"message"`
+	Age       string `json:"age"`
+}
+
+type tmuxInfo struct {
+	Session string `json:"session"`
+	Status  string `json:"status"`
+}
 
 var hereCmd = &cobra.Command{
 	Use:   "here",
@@ -30,20 +61,78 @@ var hereCmd = &cobra.Command{
 			return fmt.Errorf("failed to get current worktree: %w", err)
 		}
 
-		// The tmux session name should match the directory name
-		// For main worktree: project name
-		// For other worktrees: project-name (full directory name)
-		tmuxSessionName := filepath.Base(tree.Path)
+		displayName := tree.DisplayName()
+
+		// Quiet mode: just print the name
+		if hereQuiet {
+			fmt.Println(displayName)
+			return nil
+		}
+
+		projectName := mgr.GetProjectName()
+		tmuxSessionName := worktree.TmuxSessionName(projectName, tree.ShortName)
 		tmuxStatus := tmux.GetSessionStatus(tmuxSessionName)
 
-		// Format status
+		// Fallback: check with directory basename
+		if tmuxStatus == "none" {
+			tmuxSessionName = filepath.Base(tree.Path)
+			tmuxStatus = tmux.GetSessionStatus(tmuxSessionName)
+		}
+
+		// JSON mode
+		if hereJSON {
+			status := "clean"
+			if tree.IsDirty {
+				status = "dirty"
+			}
+
+			var changes []string
+			if tree.DirtyFiles != "" {
+				changes = strings.Split(tree.DirtyFiles, "\n")
+				// Filter empty strings
+				filtered := make([]string, 0, len(changes))
+				for _, c := range changes {
+					if c != "" {
+						filtered = append(filtered, c)
+					}
+				}
+				changes = filtered
+			}
+
+			output := hereOutput{
+				Name:     displayName,
+				FullName: tree.Name,
+				Project:  projectName,
+				Branch:   tree.Branch,
+				Path:     tree.Path,
+				Commit: commitInfo{
+					Hash:      tree.Commit,
+					ShortHash: tree.ShortCommit,
+					Message:   tree.CommitMessage,
+					Age:       tree.CommitAge,
+				},
+				Status:  status,
+				Changes: changes,
+				Tmux: tmuxInfo{
+					Session: tmuxSessionName,
+					Status:  tmuxStatus,
+				},
+			}
+
+			jsonBytes, err := json.MarshalIndent(output, "", "  ")
+			if err != nil {
+				return fmt.Errorf("failed to marshal JSON: %w", err)
+			}
+			fmt.Println(string(jsonBytes))
+			return nil
+		}
+
+		// Default: formatted output
 		statusIcon := "✓ Clean"
 		if tree.IsDirty {
 			statusIcon = "● Dirty"
 		}
 
-		// Print formatted output
-		displayName := tree.DisplayName()
 		fmt.Printf("%s (%s)\n", displayName, tree.Branch)
 		fmt.Println(strings.Repeat("━", 40))
 		fmt.Printf("Path:    %s\n", tree.Path)
@@ -88,5 +177,7 @@ var hereCmd = &cobra.Command{
 }
 
 func init() {
+	hereCmd.Flags().BoolVarP(&hereQuiet, "quiet", "q", false, "Just print the worktree name")
+	hereCmd.Flags().BoolVarP(&hereJSON, "json", "j", false, "Output as JSON")
 	rootCmd.AddCommand(hereCmd)
 }

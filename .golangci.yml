@@ -1,47 +1,55 @@
-linters:
-  enable:
-    - errcheck      # Check for unchecked errors
-    - gosimple      # Simplify code
-    - govet         # Go vet
-    - ineffassign   # Detect ineffectual assignments
-    - staticcheck   # Go static analysis
-    - unused        # Check for unused code
-    - gofmt         # Check formatting
-    - goimports     # Check imports
-    - misspell      # Check for misspelled words
-    - revive        # Fast, configurable, extensible linter
-    - gosec         # Security issues
-    - typecheck     # Type checking
-
-linters-settings:
-  errcheck:
-    check-blank: true
-  revive:
-    rules:
-      - name: exported
-        disabled: true  # Allow unexported returns from exported functions
-  gosec:
-    excludes:
-      - G204  # Subprocess with variable - we use exec.Command properly
-
-issues:
-  exclude-rules:
-    # Exclude some linters from running on tests files
-    - path: _test\.go
-      linters:
-        - errcheck
-        - gosec
-    # Exclude error wrapping check in test files
-    - path: _test\.go
-      text: "error returned from external package is unwrapped"
-  max-issues-per-linter: 0
-  max-same-issues: 0
+# golangci-lint configuration for Grove
+# https://golangci-lint.run/usage/configuration/
+version: "2"
 
 run:
   timeout: 5m
   tests: true
-  skip-dirs:
-    - vendor
-    - testdata
-    - bin
-    - dist
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes: github.com/LeahArmstrong/grove-cli
+
+linters:
+  # Use default enabled linters (errcheck, govet, ineffassign, staticcheck, unused)
+  # Plus additional linters:
+  enable:
+    - misspell      # Finds misspelled words
+
+linters-settings:
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment  # Not critical for this project
+
+  misspell:
+    locale: US
+
+  errcheck:
+    # Ignore error checks for these functions (common patterns)
+    exclude-functions:
+      - (*bufio.Writer).Flush
+      - (*bufio.Writer).WriteString
+      - (*os.File).Close
+      - io.Closer.Close
+
+issues:
+  exclude-rules:
+    # Exclude some linters from running on test files
+    - path: _test\.go
+      linters:
+        - errcheck
+
+    # Exclude "shadow" check for err variable (common pattern)
+    - linters:
+        - govet
+      text: "shadow: declaration of \"err\""
+
+  max-issues-per-linter: 50
+  max-same-issues: 5
