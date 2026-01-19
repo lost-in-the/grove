@@ -58,6 +58,9 @@ jobs:
           version: v1.55
           args: --timeout=5m
 
+      - name: Run go vet
+        run: go vet ./...
+
       - name: Run gofmt check
         run: |
           if [ -n "$(gofmt -s -l .)" ]; then

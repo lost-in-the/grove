@@ -250,7 +250,7 @@ Plugins implement the `Plugin` interface and can register hooks to run at lifecy
 - `pre-freeze` / `post-resume` - Before freezing/after resuming (Phase 2)
 - `pre-remove` / `post-remove` - Before/after worktree removal
 
-See the [Plugin Development Guide](docs/plugins.md) for more information (coming soon).
+See the [Plugin Development Guide](docs/PLUGIN_DEVELOPMENT.md) for more information.
 
 ## Requirements
 
