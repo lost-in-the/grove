@@ -84,17 +84,24 @@ func TestWorktreeCreate(t *testing.T) {
 		t.Fatalf("Failed to init git repo: %v", err)
 	}
 
-	// Configure git user
-	configNameCmd := exec.Command("git", "config", "user.name", "Test User")
+	// Configure git user locally (required for CI environments without global config)
+	configNameCmd := exec.Command("git", "config", "--local", "user.name", "Test User")
 	configNameCmd.Dir = tmpDir
 	if err := configNameCmd.Run(); err != nil {
 		t.Fatalf("Failed to config git user.name: %v", err)
 	}
 
-	configEmailCmd := exec.Command("git", "config", "user.email", "test@example.com")
+	configEmailCmd := exec.Command("git", "config", "--local", "user.email", "test@example.com")
 	configEmailCmd.Dir = tmpDir
 	if err := configEmailCmd.Run(); err != nil {
 		t.Fatalf("Failed to config git user.email: %v", err)
+	}
+
+	// Disable GPG signing for test commits
+	disableSignCmd := exec.Command("git", "config", "--local", "commit.gpgsign", "false")
+	disableSignCmd.Dir = tmpDir
+	if err := disableSignCmd.Run(); err != nil {
+		t.Fatalf("Failed to disable gpgsign: %v", err)
 	}
 
 	// Create initial commit
@@ -175,17 +182,24 @@ func TestWorktreeList(t *testing.T) {
 		t.Fatalf("Failed to init git repo: %v", err)
 	}
 
-	// Configure git user
-	configNameCmd := exec.Command("git", "config", "user.name", "Test User")
+	// Configure git user locally (required for CI environments without global config)
+	configNameCmd := exec.Command("git", "config", "--local", "user.name", "Test User")
 	configNameCmd.Dir = tmpDir
 	if err := configNameCmd.Run(); err != nil {
 		t.Fatalf("Failed to config git user.name: %v", err)
 	}
 
-	configEmailCmd := exec.Command("git", "config", "user.email", "test@example.com")
+	configEmailCmd := exec.Command("git", "config", "--local", "user.email", "test@example.com")
 	configEmailCmd.Dir = tmpDir
 	if err := configEmailCmd.Run(); err != nil {
 		t.Fatalf("Failed to config git user.email: %v", err)
+	}
+
+	// Disable GPG signing for test commits
+	disableSignCmd := exec.Command("git", "config", "--local", "commit.gpgsign", "false")
+	disableSignCmd.Dir = tmpDir
+	if err := disableSignCmd.Run(); err != nil {
+		t.Fatalf("Failed to disable gpgsign: %v", err)
 	}
 
 	// Create initial commit
@@ -223,9 +237,9 @@ func TestWorktreeList(t *testing.T) {
 
 func TestExtractProjectNameFromRemote(t *testing.T) {
 	tests := []struct {
-		name         string
-		remoteURL    string
-		wantProject  string
+		name        string
+		remoteURL   string
+		wantProject string
 	}{
 		{
 			name:        "github https url",

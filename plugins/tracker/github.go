@@ -38,11 +38,11 @@ func (g *GitHubAdapter) FetchIssue(number int) (*Issue, error) {
 	}
 
 	var ghIssue struct {
-		Number    int       `json:"number"`
-		Title     string    `json:"title"`
-		Body      string    `json:"body"`
-		State     string    `json:"state"`
-		Author    struct {
+		Number int    `json:"number"`
+		Title  string `json:"title"`
+		Body   string `json:"body"`
+		State  string `json:"state"`
+		Author struct {
 			Login string `json:"login"`
 		} `json:"author"`
 		Labels []struct {
@@ -88,11 +88,11 @@ func (g *GitHubAdapter) FetchPR(number int) (*PullRequest, error) {
 	}
 
 	var ghPR struct {
-		Number      int       `json:"number"`
-		Title       string    `json:"title"`
-		Body        string    `json:"body"`
-		State       string    `json:"state"`
-		Author      struct {
+		Number int    `json:"number"`
+		Title  string `json:"title"`
+		Body   string `json:"body"`
+		State  string `json:"state"`
+		Author struct {
 			Login string `json:"login"`
 		} `json:"author"`
 		Labels []struct {
@@ -132,27 +132,27 @@ func (g *GitHubAdapter) FetchPR(number int) (*PullRequest, error) {
 // ListIssues retrieves issues with optional filtering.
 func (g *GitHubAdapter) ListIssues(opts ListOptions) ([]*Issue, error) {
 	args := []string{"issue", "list", "--json", "number,title,state,author,labels,createdAt,updatedAt,url"}
-	
+
 	if opts.State != "" && opts.State != "all" {
 		args = append(args, "--state", opts.State)
 	}
-	
+
 	if opts.Assignee != "" {
 		args = append(args, "--assignee", opts.Assignee)
 	}
-	
+
 	if opts.Author != "" {
 		args = append(args, "--author", opts.Author)
 	}
-	
+
 	if len(opts.Labels) > 0 {
 		args = append(args, "--label", strings.Join(opts.Labels, ","))
 	}
-	
+
 	if opts.Limit > 0 {
 		args = append(args, "--limit", strconv.Itoa(opts.Limit))
 	}
-	
+
 	if g.repo != "" {
 		args = append(args, "--repo", g.repo)
 	}
@@ -163,10 +163,10 @@ func (g *GitHubAdapter) ListIssues(opts ListOptions) ([]*Issue, error) {
 	}
 
 	var ghIssues []struct {
-		Number    int       `json:"number"`
-		Title     string    `json:"title"`
-		State     string    `json:"state"`
-		Author    struct {
+		Number int    `json:"number"`
+		Title  string `json:"title"`
+		State  string `json:"state"`
+		Author struct {
 			Login string `json:"login"`
 		} `json:"author"`
 		Labels []struct {
@@ -206,27 +206,27 @@ func (g *GitHubAdapter) ListIssues(opts ListOptions) ([]*Issue, error) {
 // ListPRs retrieves pull requests with optional filtering.
 func (g *GitHubAdapter) ListPRs(opts ListOptions) ([]*PullRequest, error) {
 	args := []string{"pr", "list", "--json", "number,title,state,author,labels,headRefName,baseRefName,createdAt,updatedAt,url"}
-	
+
 	if opts.State != "" && opts.State != "all" {
 		args = append(args, "--state", opts.State)
 	}
-	
+
 	if opts.Assignee != "" {
 		args = append(args, "--assignee", opts.Assignee)
 	}
-	
+
 	if opts.Author != "" {
 		args = append(args, "--author", opts.Author)
 	}
-	
+
 	if len(opts.Labels) > 0 {
 		args = append(args, "--label", strings.Join(opts.Labels, ","))
 	}
-	
+
 	if opts.Limit > 0 {
 		args = append(args, "--limit", strconv.Itoa(opts.Limit))
 	}
-	
+
 	if g.repo != "" {
 		args = append(args, "--repo", g.repo)
 	}
@@ -237,10 +237,10 @@ func (g *GitHubAdapter) ListPRs(opts ListOptions) ([]*PullRequest, error) {
 	}
 
 	var ghPRs []struct {
-		Number      int       `json:"number"`
-		Title       string    `json:"title"`
-		State       string    `json:"state"`
-		Author      struct {
+		Number int    `json:"number"`
+		Title  string `json:"title"`
+		State  string `json:"state"`
+		Author struct {
 			Login string `json:"login"`
 		} `json:"author"`
 		Labels []struct {

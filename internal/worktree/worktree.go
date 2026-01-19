@@ -346,7 +346,7 @@ func parseWorktreeList(output, mainPath, projectName string) []*Worktree {
 			path := strings.TrimPrefix(line, "worktree ")
 			name := filepath.Base(path)
 			isMain := (path == mainPath)
-			
+
 			// Extract short name by removing project prefix
 			shortName := name
 			if !isMain {
@@ -355,7 +355,7 @@ func parseWorktreeList(output, mainPath, projectName string) []*Worktree {
 					shortName = strings.TrimPrefix(name, prefix)
 				}
 			}
-			
+
 			current = &Worktree{
 				Path:      path,
 				Name:      name,
@@ -417,4 +417,3 @@ func TmuxSessionName(project, worktreeName string) string {
 func (m *Manager) GetRepoRoot() string {
 	return m.repoRoot
 }
-

@@ -52,7 +52,7 @@ Freezing is idempotent - safe to freeze an already-frozen worktree.`,
 
 		// Determine which worktrees to freeze
 		var targetNames []string
-		
+
 		if freezeAll {
 			// Freeze all worktrees except current
 			trees, err := mgr.List()

@@ -41,8 +41,9 @@ grove() {
 # Tab completion for grove
 _grove_completion() {
     local -a worktrees
-    worktrees=($(git worktree list --porcelain 2>/dev/null | awk '/^worktree / {print $2}' | xargs -n1 basename))
-    
+    # Use grove ls -q for short names (consistent with display)
+    worktrees=($(GROVE_SHELL=1 "$__GROVE_BIN" ls -q 2>/dev/null))
+
     local -a commands
     commands=(
         'ls:List all worktrees'
@@ -51,17 +52,33 @@ _grove_completion() {
         'rm:Remove a worktree'
         'here:Show current worktree'
         'last:Switch to previous worktree'
+        'freeze:Freeze a worktree'
+        'resume:Resume a frozen worktree'
+        'time:Show time tracking'
+        'fetch:Create worktree from issue/PR'
+        'issues:Browse GitHub issues'
+        'prs:Browse GitHub PRs'
+        'up:Start Docker containers'
+        'down:Stop Docker containers'
+        'logs:View Docker logs'
+        'restart:Restart Docker containers'
         'config:Show configuration'
         'version:Show version'
         'init:Generate shell integration'
     )
-    
+
     if (( CURRENT == 2 )); then
         _describe 'command' commands
     elif (( CURRENT == 3 )); then
         case "${words[2]}" in
-            to|rm)
+            to|rm|freeze)
                 _describe 'worktree' worktrees
+                ;;
+            resume)
+                # For resume, show all worktrees including frozen
+                local -a all_worktrees
+                all_worktrees=($(GROVE_SHELL=1 "$__GROVE_BIN" ls -q -a 2>/dev/null))
+                _describe 'worktree' all_worktrees
                 ;;
             init)
                 _values 'shell' 'zsh' 'bash'

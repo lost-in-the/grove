@@ -22,10 +22,10 @@ type TimeEntry struct {
 
 // WeeklySummary represents time tracked in the current week
 type WeeklySummary struct {
-	Total       time.Duration
-	ByWorktree  map[string]time.Duration
-	WeekStart   time.Time
-	EntryCount  int
+	Total      time.Duration
+	ByWorktree map[string]time.Duration
+	WeekStart  time.Time
+	EntryCount int
 }
 
 // TimeTracker manages time tracking for worktrees
@@ -134,7 +134,7 @@ func NewTimeTracker(stateDir string) (*TimeTracker, error) {
 	}
 
 	stateFile := filepath.Join(stateDir, "time.json")
-	
+
 	tracker := &TimeTracker{
 		stateFile:      stateFile,
 		activeSessions: make(map[string]time.Time),
@@ -184,7 +184,7 @@ func (t *TimeTracker) StartSession(worktree string) error {
 
 	// Idempotent - if already started, just update the time
 	t.activeSessions[worktree] = time.Now()
-	
+
 	return t.save()
 }
 

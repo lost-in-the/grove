@@ -7,7 +7,7 @@ Target: developers who context-switch frequently between tasks.
 ## Key Documentation
 - **[Command Specifications](docs/COMMAND_SPECIFICATIONS.md)** — Exhaustive behavior specs for every command including naming conventions, shell integration protocol, and expected outputs
 - **[Validation Checklist](docs/VALIDATION_CHECKLIST.md)** — Test cases to verify implementation correctness
-- **[Implementation Plan](grove-implementation-plan.md)** — Phase breakdown, task specs, architecture decisions
+- **[Implementation Plan](docs/IMPLEMENTATION_PLAN.md)** — Phase breakdown, task specs, architecture decisions
 
 ## Critical Implementation Rules
 
