@@ -51,7 +51,7 @@ _grove() {
                 _describe 'command' '(week:Show weekly summary)'
                 ;;
             fetch)
-                _describe 'type' '(pr:Fetch pull request issue:Fetch issue is:Fetch issue)'
+                _describe 'type' '(pr:Fetch pull request issue:Fetch issue is:Fetch issue shorthand)'
                 ;;
             issues|prs)
                 _arguments \
