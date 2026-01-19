@@ -1,6 +1,7 @@
 ---
 name: grove-dev
 description: Grove CLI development specialist - Go worktree manager following TDD practices and project conventions
+tools: ["*"]
 ---
 
 # Grove Development Agent
