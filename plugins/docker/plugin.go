@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,6 +11,9 @@ import (
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 )
+
+// ErrNoComposeFile is returned when no docker-compose file is found
+var ErrNoComposeFile = errors.New("no docker-compose file found")
 
 // Plugin implements the docker plugin for grove
 type Plugin struct {
@@ -159,7 +163,7 @@ func (p *Plugin) Restart(worktreePath string, service string) error {
 // up starts containers
 func (p *Plugin) up(worktreePath string, detach bool) error {
 	if !p.hasDockerCompose(worktreePath) {
-		return fmt.Errorf("no docker-compose file found in %s", worktreePath)
+		return ErrNoComposeFile
 	}
 
 	args := []string{"up"}
@@ -177,7 +181,7 @@ func (p *Plugin) up(worktreePath string, detach bool) error {
 // down stops containers
 func (p *Plugin) down(worktreePath string) error {
 	if !p.hasDockerCompose(worktreePath) {
-		return fmt.Errorf("no docker-compose file found in %s", worktreePath)
+		return ErrNoComposeFile
 	}
 
 	cmd := p.composeCommand(worktreePath, "down")

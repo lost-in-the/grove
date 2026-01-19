@@ -374,5 +374,8 @@ func TmuxSessionName(project, worktreeName string) string {
 	return fmt.Sprintf("%s-%s", project, worktreeName)
 }
 
-
+// GetRepoRoot returns the repository root path
+func (m *Manager) GetRepoRoot() string {
+	return m.repoRoot
+}
 
