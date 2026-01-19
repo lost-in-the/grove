@@ -112,6 +112,7 @@ _grove_completion() {
 }
 
 complete -F _grove_completion grove
+complete -F _grove_completion w
 
 # Alias
 alias w=grove

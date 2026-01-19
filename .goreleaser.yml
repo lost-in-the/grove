@@ -29,7 +29,7 @@ builds:
       - -s -w
       - -X github.com/LeahArmstrong/grove-cli/internal/version.Version={{.Version}}
       - -X github.com/LeahArmstrong/grove-cli/internal/version.Commit={{.Commit}}
-      - -X github.com/LeahArmstrong/grove-cli/internal/version.Date={{.Date}}
+      - -X github.com/LeahArmstrong/grove-cli/internal/version.BuildDate={{.Date}}
 
 archives:
   - id: grove
@@ -47,6 +47,7 @@ archives:
       - README.md
       - CHANGELOG.md
       - CONTRIBUTING.md
+      - shell/**
 
 checksum:
   name_template: 'checksums.txt'
@@ -115,7 +116,7 @@ release:
     # For zsh
     eval "$(grove init zsh)"
 
-    # For bash  
+    # For bash
     eval "$(grove init bash)"
     ```
 
