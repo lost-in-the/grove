@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Phase 3: Time Tracking**
+  - Time tracking plugin with automatic session management
+  - `grove time` command to show time for current or all worktrees
+  - `grove time week` command for weekly summary
+  - Hook integration for automatic time tracking on worktree switch
+  - JSON output support for `grove time` commands
+  - Notification system for macOS and Linux
 - Initial Phase 0 foundation implementation
 - Core commands: ls, new, to, rm, here, last
 - Shell integration for zsh and bash
@@ -15,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Git worktree operations
 - Tmux session management
 - Hook system foundation
+- **Phase 1: Docker Plugin**
+  - Docker container management integrated with worktrees
+  - `grove up`, `grove down`, `grove logs`, `grove restart` commands
+- **Phase 2: State Management**
+  - `grove freeze` and `grove resume` commands
+  - State persistence for frozen worktrees
 
 ### Changed
 

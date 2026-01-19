@@ -95,6 +95,28 @@ grove rm feature-login
 - `grove here` - Show current worktree info
 - `grove last` - Switch to previous worktree
 
+### State Management
+
+- `grove freeze [name]` - Freeze worktree (stops Docker containers)
+- `grove freeze --all` - Freeze all worktrees except current
+- `grove resume <name>` - Resume frozen worktree
+
+### Time Tracking
+
+- `grove time` - Show time spent in current worktree
+- `grove time --all` - Show time for all worktrees
+- `grove time week` - Show weekly summary across all worktrees
+- `grove time --json` - Output in JSON format
+
+Time tracking is automatic and passive - it records time whenever you switch between worktrees.
+
+### Docker Integration
+
+- `grove up` - Start Docker containers for current worktree
+- `grove down` - Stop Docker containers for current worktree
+- `grove logs [service]` - View container logs
+- `grove restart [service]` - Restart container(s)
+
 ### Configuration
 
 - `grove config` - Show current configuration
