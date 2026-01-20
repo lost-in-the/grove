@@ -23,9 +23,25 @@ func GenerateZshIntegration() (string, error) {
 		binaryPath = "grove"
 	}
 
-	// Replace placeholder with actual binary path
-	output := zshTemplate
-	output = fmt.Sprintf("# Grove shell integration for zsh\n__GROVE_BIN=\"%s\"\n\n%s", binaryPath, output)
+	header := `# Grove shell integration for zsh
+# ─────────────────────────────────────────────────────────────────────────────
+# SETUP: Add this line to your ~/.zshrc, then restart your shell:
+#   eval "$(grove init zsh)"
+#
+# WHAT THIS DOES:
+#   1. Creates a 'grove' shell function that wraps the binary
+#      - Intercepts 'cd:/path' output from commands like 'grove to'
+#      - Actually changes your working directory (binaries can't do this)
+#   2. Registers tab completion for grove commands and worktree names
+#   3. Creates 'w' as an alias for 'grove'
+#
+# WHY A WRAPPER: Subprocesses cannot change the parent shell's directory.
+# The wrapper captures grove's output, detects 'cd:' directives, and
+# executes the directory change in your current shell.
+# ─────────────────────────────────────────────────────────────────────────────
+
+`
+	output := fmt.Sprintf("%s__GROVE_BIN=\"%s\"\n\n%s", header, binaryPath, zshTemplate)
 
 	return output, nil
 }
@@ -38,9 +54,25 @@ func GenerateBashIntegration() (string, error) {
 		binaryPath = "grove"
 	}
 
-	// Replace placeholder with actual binary path
-	output := bashTemplate
-	output = fmt.Sprintf("# Grove shell integration for bash\n__GROVE_BIN=\"%s\"\n\n%s", binaryPath, output)
+	header := `# Grove shell integration for bash
+# ─────────────────────────────────────────────────────────────────────────────
+# SETUP: Add this line to your ~/.bashrc, then restart your shell:
+#   eval "$(grove init bash)"
+#
+# WHAT THIS DOES:
+#   1. Creates a 'grove' shell function that wraps the binary
+#      - Intercepts 'cd:/path' output from commands like 'grove to'
+#      - Actually changes your working directory (binaries can't do this)
+#   2. Registers tab completion for grove commands and worktree names
+#   3. Creates 'w' as an alias for 'grove'
+#
+# WHY A WRAPPER: Subprocesses cannot change the parent shell's directory.
+# The wrapper captures grove's output, detects 'cd:' directives, and
+# executes the directory change in your current shell.
+# ─────────────────────────────────────────────────────────────────────────────
+
+`
+	output := fmt.Sprintf("%s__GROVE_BIN=\"%s\"\n\n%s", header, binaryPath, bashTemplate)
 
 	return output, nil
 }
