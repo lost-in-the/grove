@@ -36,3 +36,14 @@ Thumbs.db
 
 # Build artifacts
 dist/
+
+# Development tools
+.claude/
+.serena/
+scripts/
+
+# Test sandbox
+grove-test/
+
+# Temporary plan files
+plan-*.md
