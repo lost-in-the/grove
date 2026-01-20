@@ -126,7 +126,9 @@ var lsCmd = &cobra.Command{
 
 			for _, tree := range filteredTrees {
 				status := "clean"
-				if tree.IsDirty {
+				if tree.IsPrunable {
+					status = "stale"
+				} else if tree.IsDirty {
 					status = "dirty"
 				}
 
@@ -191,7 +193,9 @@ var lsCmd = &cobra.Command{
 
 			// Git status
 			status := "clean"
-			if tree.IsDirty {
+			if tree.IsPrunable {
+				status = "stale"
+			} else if tree.IsDirty {
 				status = "dirty"
 			}
 

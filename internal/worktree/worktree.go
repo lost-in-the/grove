@@ -26,6 +26,7 @@ type Worktree struct {
 	DirtyFiles    string // List of dirty files (from git status --porcelain)
 	IsMain        bool   // Whether this is the main worktree
 	ShortName     string // Short name without project prefix
+	IsPrunable    bool   // Whether the worktree directory is missing (stale)
 }
 
 // Manager handles git worktree operations
@@ -212,26 +213,37 @@ func (m *Manager) Remove(name string) error {
 		return fmt.Errorf("failed to list worktrees: %w", err)
 	}
 
-	var targetPath string
+	var targetTree *Worktree
 	for _, tree := range trees {
-		if tree.Name == name {
-			targetPath = tree.Path
+		if tree.Name == name || tree.ShortName == name {
+			targetTree = tree
 			break
 		}
 	}
 
-	if targetPath == "" {
+	if targetTree == nil {
 		return fmt.Errorf("worktree '%s' not found", name)
 	}
 
-	// Remove the worktree
-	cmd := exec.Command("git", "worktree", "remove", targetPath)
+	// If the worktree is prunable (directory missing), use git worktree prune
+	if targetTree.IsPrunable {
+		cmd := exec.Command("git", "worktree", "prune")
+		cmd.Dir = m.repoRoot
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("failed to prune stale worktree: %s: %w", string(output), err)
+		}
+		return nil
+	}
+
+	// Remove the worktree normally
+	cmd := exec.Command("git", "worktree", "remove", targetTree.Path)
 	cmd.Dir = m.repoRoot
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		// Try force remove if regular remove fails
-		cmd = exec.Command("git", "worktree", "remove", "--force", targetPath)
+		cmd = exec.Command("git", "worktree", "remove", "--force", targetTree.Path)
 		cmd.Dir = m.repoRoot
 		output, err = cmd.CombinedOutput()
 		if err != nil {
@@ -376,6 +388,10 @@ func parseWorktreeList(output, mainPath, projectName string) []*Worktree {
 		} else if strings.HasPrefix(line, "detached") {
 			if current != nil {
 				current.Branch = "detached"
+			}
+		} else if strings.HasPrefix(line, "prunable") {
+			if current != nil {
+				current.IsPrunable = true
 			}
 		}
 	}

@@ -40,6 +40,11 @@ When using shell integration, this will also change your current directory.`,
 			return fmt.Errorf("worktree '%s' not found", name)
 		}
 
+		// Check if worktree is stale (directory missing)
+		if targetTree.IsPrunable {
+			return fmt.Errorf("worktree '%s' is stale (directory missing). Run 'grove rm %s' to clean up", name, name)
+		}
+
 		// Get current worktree for hook context
 		currentTree, _ := mgr.GetCurrent()
 		var prevWorktree string
