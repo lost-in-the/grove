@@ -97,6 +97,246 @@ invalid toml here
 	}
 }
 
+func TestMergeConfigs(t *testing.T) {
+	boolTrue := true
+	boolFalse := false
+
+	tests := []struct {
+		name     string
+		base     *Config
+		override *Config
+		validate func(*testing.T, *Config)
+	}{
+		{
+			name: "override empty does nothing",
+			base: &Config{
+				ProjectName:   "base-project",
+				Alias:         "base-alias",
+				ProjectsDir:   "/base/dir",
+				DefaultBranch: "main",
+			},
+			override: &Config{},
+			validate: func(t *testing.T, cfg *Config) {
+				if cfg.ProjectName != "base-project" {
+					t.Errorf("Expected ProjectName 'base-project', got '%s'", cfg.ProjectName)
+				}
+				if cfg.Alias != "base-alias" {
+					t.Errorf("Expected Alias 'base-alias', got '%s'", cfg.Alias)
+				}
+			},
+		},
+		{
+			name: "override replaces values",
+			base: &Config{
+				ProjectName:   "base-project",
+				Alias:         "base-alias",
+				ProjectsDir:   "/base/dir",
+				DefaultBranch: "main",
+				Switch:        SwitchConfig{DirtyHandling: "prompt"},
+				Naming:        NamingConfig{Pattern: "base-pattern"},
+				Tmux:          TmuxConfig{Prefix: "base-prefix"},
+			},
+			override: &Config{
+				ProjectName:   "override-project",
+				Alias:         "override-alias",
+				ProjectsDir:   "/override/dir",
+				DefaultBranch: "develop",
+				Switch:        SwitchConfig{DirtyHandling: "auto-stash"},
+				Naming:        NamingConfig{Pattern: "override-pattern"},
+				Tmux:          TmuxConfig{Prefix: "override-prefix"},
+			},
+			validate: func(t *testing.T, cfg *Config) {
+				if cfg.ProjectName != "override-project" {
+					t.Errorf("Expected ProjectName 'override-project', got '%s'", cfg.ProjectName)
+				}
+				if cfg.DefaultBranch != "develop" {
+					t.Errorf("Expected DefaultBranch 'develop', got '%s'", cfg.DefaultBranch)
+				}
+				if cfg.Switch.DirtyHandling != "auto-stash" {
+					t.Errorf("Expected DirtyHandling 'auto-stash', got '%s'", cfg.Switch.DirtyHandling)
+				}
+			},
+		},
+		{
+			name: "docker plugin config merges correctly",
+			base: &Config{
+				Plugins: PluginsConfig{
+					Docker: DockerPluginConfig{
+						Enabled:   &boolTrue,
+						AutoStart: &boolTrue,
+						AutoStop:  &boolTrue,
+					},
+				},
+			},
+			override: &Config{
+				Plugins: PluginsConfig{
+					Docker: DockerPluginConfig{
+						Enabled: &boolFalse,
+						// AutoStart and AutoStop not set - should keep base values
+					},
+				},
+			},
+			validate: func(t *testing.T, cfg *Config) {
+				if cfg.Plugins.Docker.Enabled == nil || *cfg.Plugins.Docker.Enabled != false {
+					t.Errorf("Expected Enabled false")
+				}
+				if cfg.Plugins.Docker.AutoStart == nil || *cfg.Plugins.Docker.AutoStart != true {
+					t.Errorf("Expected AutoStart to remain true from base")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := mergeConfigs(tt.base, tt.override)
+			tt.validate(t, result)
+		})
+	}
+}
+
+func TestGetConfigPaths(t *testing.T) {
+	globalPath, projectPath, err := GetConfigPaths()
+	if err != nil {
+		t.Fatalf("GetConfigPaths() error = %v", err)
+	}
+
+	// Global path should contain .config/grove
+	if !strings.Contains(globalPath, filepath.Join(".config", "grove", "config.toml")) {
+		t.Errorf("Global path should contain .config/grove/config.toml, got '%s'", globalPath)
+	}
+
+	// Project path should contain .grove
+	if !strings.Contains(projectPath, filepath.Join(".grove", "config.toml")) {
+		t.Errorf("Project path should contain .grove/config.toml, got '%s'", projectPath)
+	}
+}
+
+func TestLoad(t *testing.T) {
+	// Save original working directory
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working directory: %v", err)
+	}
+	defer os.Chdir(origDir)
+
+	// Create temp directory structure
+	tmpDir := t.TempDir()
+	projectDir := filepath.Join(tmpDir, "project")
+	groveDir := filepath.Join(projectDir, ".grove")
+
+	if err := os.MkdirAll(groveDir, 0755); err != nil {
+		t.Fatalf("Failed to create dirs: %v", err)
+	}
+
+	// Write project config
+	projectConfig := `
+alias = "test-alias"
+default_base_branch = "develop"
+
+[switch]
+dirty_handling = "auto-stash"
+`
+	if err := os.WriteFile(filepath.Join(groveDir, "config.toml"), []byte(projectConfig), 0644); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
+
+	// Change to project directory
+	if err := os.Chdir(projectDir); err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
+	}
+
+	// Load config
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	// Verify loaded config
+	if cfg.Alias != "test-alias" {
+		t.Errorf("Expected alias 'test-alias', got '%s'", cfg.Alias)
+	}
+	if cfg.DefaultBranch != "develop" {
+		t.Errorf("Expected default_base_branch 'develop', got '%s'", cfg.DefaultBranch)
+	}
+	if cfg.Switch.DirtyHandling != "auto-stash" {
+		t.Errorf("Expected dirty_handling 'auto-stash', got '%s'", cfg.Switch.DirtyHandling)
+	}
+}
+
+func TestLoadWithInvalidProjectConfig(t *testing.T) {
+	// Save original working directory
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working directory: %v", err)
+	}
+	defer os.Chdir(origDir)
+
+	// Create temp directory structure
+	tmpDir := t.TempDir()
+	projectDir := filepath.Join(tmpDir, "project")
+	groveDir := filepath.Join(projectDir, ".grove")
+
+	if err := os.MkdirAll(groveDir, 0755); err != nil {
+		t.Fatalf("Failed to create dirs: %v", err)
+	}
+
+	// Write invalid config
+	if err := os.WriteFile(filepath.Join(groveDir, "config.toml"), []byte("invalid toml {{{"), 0644); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
+
+	// Change to project directory
+	if err := os.Chdir(projectDir); err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
+	}
+
+	// Load config should fail
+	_, err = Load()
+	if err == nil {
+		t.Error("Load() expected error with invalid config, got nil")
+	}
+}
+
+func TestLoadWithInvalidValidation(t *testing.T) {
+	// Save original working directory
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working directory: %v", err)
+	}
+	defer os.Chdir(origDir)
+
+	// Create temp directory structure
+	tmpDir := t.TempDir()
+	projectDir := filepath.Join(tmpDir, "project")
+	groveDir := filepath.Join(projectDir, ".grove")
+
+	if err := os.MkdirAll(groveDir, 0755); err != nil {
+		t.Fatalf("Failed to create dirs: %v", err)
+	}
+
+	// Write config with invalid dirty_handling
+	projectConfig := `
+alias = "test"
+[switch]
+dirty_handling = "invalid-value"
+`
+	if err := os.WriteFile(filepath.Join(groveDir, "config.toml"), []byte(projectConfig), 0644); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
+
+	// Change to project directory
+	if err := os.Chdir(projectDir); err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
+	}
+
+	// Load config should fail validation
+	_, err = Load()
+	if err == nil {
+		t.Error("Load() expected validation error, got nil")
+	}
+}
+
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		name    string

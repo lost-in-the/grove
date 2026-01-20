@@ -55,6 +55,57 @@ func TestIsAvailable(t *testing.T) {
 	_ = available
 }
 
+func TestIsMacOSNotifyAvailable(t *testing.T) {
+	// Test that the function returns a boolean (osascript should be available on macOS)
+	available := isMacOSNotifyAvailable()
+	// On macOS, this should be true
+	if !available {
+		t.Log("osascript not available (might be running in non-macOS environment)")
+	}
+}
+
+func TestSendMacOS(t *testing.T) {
+	// Only run on macOS
+	if !isMacOSNotifyAvailable() {
+		t.Skip("osascript not available")
+	}
+
+	tests := []struct {
+		name    string
+		title   string
+		message string
+		wantErr bool
+	}{
+		{
+			name:    "simple notification",
+			title:   "Test",
+			message: "Hello from test",
+			wantErr: false,
+		},
+		{
+			name:    "special characters in title",
+			title:   `Test with "special" chars`,
+			message: "Message",
+			wantErr: false,
+		},
+		{
+			name:    "special characters in message",
+			title:   "Title",
+			message: `Message with \special\ "chars"`,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := sendMacOS(tt.title, tt.message)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("sendMacOS() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestEscapeAppleScript(t *testing.T) {
 	tests := []struct {
 		name  string

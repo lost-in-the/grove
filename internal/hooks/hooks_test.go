@@ -89,3 +89,92 @@ func TestNoHooksRegistered(t *testing.T) {
 		t.Errorf("Fire() error = %v, expected nil", err)
 	}
 }
+
+func TestGetEventName(t *testing.T) {
+	tests := []struct {
+		event    string
+		expected string
+	}{
+		{EventPreCreate, "Pre-Create"},
+		{EventPostCreate, "Post-Create"},
+		{EventPreSwitch, "Pre-Switch"},
+		{EventPostSwitch, "Post-Switch"},
+		{EventPreFreeze, "Pre-Freeze"},
+		{EventPostResume, "Post-Resume"},
+		{EventPreRemove, "Pre-Remove"},
+		{EventPostRemove, "Post-Remove"},
+		{"unknown-event", "unknown-event"}, // Unknown events return themselves
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.event, func(t *testing.T) {
+			got := GetEventName(tt.event)
+			if got != tt.expected {
+				t.Errorf("GetEventName(%q) = %q, want %q", tt.event, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestValidateEvent(t *testing.T) {
+	tests := []struct {
+		event   string
+		wantErr bool
+	}{
+		{EventPreCreate, false},
+		{EventPostCreate, false},
+		{EventPreSwitch, false},
+		{EventPostSwitch, false},
+		{EventPreFreeze, false},
+		{EventPostResume, false},
+		{EventPreRemove, false},
+		{EventPostRemove, false},
+		{"invalid-event", true},
+		{"", true},
+		{"pre-create-typo", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.event, func(t *testing.T) {
+			err := ValidateEvent(tt.event)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateEvent(%q) error = %v, wantErr %v", tt.event, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestGlobalRegistry(t *testing.T) {
+	// Reset global registry for test isolation
+	oldRegistry := globalRegistry
+	globalRegistry = NewRegistry()
+	defer func() { globalRegistry = oldRegistry }()
+
+	called := false
+	Register("test-global", func(ctx *Context) error {
+		called = true
+		return nil
+	})
+
+	err := Fire("test-global", &Context{Worktree: "test-wt"})
+	if err != nil {
+		t.Errorf("Fire() error = %v", err)
+	}
+
+	if !called {
+		t.Error("Global hook was not called")
+	}
+}
+
+func TestGlobalRegistryNoHooks(t *testing.T) {
+	// Reset global registry for test isolation
+	oldRegistry := globalRegistry
+	globalRegistry = NewRegistry()
+	defer func() { globalRegistry = oldRegistry }()
+
+	// Should not error when no hooks registered
+	err := Fire("nonexistent", &Context{})
+	if err != nil {
+		t.Errorf("Fire() error = %v, expected nil", err)
+	}
+}

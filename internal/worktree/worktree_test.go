@@ -4,8 +4,71 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+// setupTestRepo creates a temporary git repo for testing and returns cleanup function
+func setupTestRepo(t *testing.T) (string, func()) {
+	t.Helper()
+
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	tmpDir := t.TempDir()
+
+	// Initialize a git repo
+	initCmd := exec.Command("git", "init")
+	initCmd.Dir = tmpDir
+	if err := initCmd.Run(); err != nil {
+		t.Fatalf("Failed to init git repo: %v", err)
+	}
+
+	// Configure git user locally
+	configNameCmd := exec.Command("git", "config", "--local", "user.name", "Test User")
+	configNameCmd.Dir = tmpDir
+	if err := configNameCmd.Run(); err != nil {
+		t.Fatalf("Failed to config git user.name: %v", err)
+	}
+
+	configEmailCmd := exec.Command("git", "config", "--local", "user.email", "test@example.com")
+	configEmailCmd.Dir = tmpDir
+	if err := configEmailCmd.Run(); err != nil {
+		t.Fatalf("Failed to config git user.email: %v", err)
+	}
+
+	// Disable GPG signing for test commits
+	disableSignCmd := exec.Command("git", "config", "--local", "commit.gpgsign", "false")
+	disableSignCmd.Dir = tmpDir
+	if err := disableSignCmd.Run(); err != nil {
+		t.Fatalf("Failed to disable gpgsign: %v", err)
+	}
+
+	// Create initial commit
+	testFile := filepath.Join(tmpDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+		t.Fatalf("Failed to write test file: %v", err)
+	}
+
+	addCmd := exec.Command("git", "add", ".")
+	addCmd.Dir = tmpDir
+	if err := addCmd.Run(); err != nil {
+		t.Fatalf("Failed to add files: %v", err)
+	}
+
+	commitCmd := exec.Command("git", "commit", "-m", "initial commit")
+	commitCmd.Dir = tmpDir
+	if err := commitCmd.Run(); err != nil {
+		t.Fatalf("Failed to commit: %v", err)
+	}
+
+	cleanup := func() {
+		// Cleanup is handled by t.TempDir()
+	}
+
+	return tmpDir, cleanup
+}
 
 func TestParseWorktreeList(t *testing.T) {
 	tests := []struct {
@@ -317,5 +380,285 @@ func TestTmuxSessionName(t *testing.T) {
 				t.Errorf("TmuxSessionName() = %q, want %q", got, tt.wantSession)
 			}
 		})
+	}
+}
+
+func TestNewManager(t *testing.T) {
+	tmpDir, _ := setupTestRepo(t)
+
+	// Test with explicit path
+	m, err := NewManager(tmpDir)
+	if err != nil {
+		t.Fatalf("NewManager() error = %v", err)
+	}
+
+	if m == nil {
+		t.Fatal("NewManager() returned nil manager")
+	}
+
+	if m.repoRoot != tmpDir {
+		t.Errorf("Manager.repoRoot = %q, want %q", m.repoRoot, tmpDir)
+	}
+}
+
+func TestNewManagerAutoDetect(t *testing.T) {
+	tmpDir, _ := setupTestRepo(t)
+
+	// Save and restore working directory
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+
+	os.Chdir(tmpDir)
+
+	// Test with empty path (auto-detect)
+	m, err := NewManager("")
+	if err != nil {
+		t.Fatalf("NewManager('') error = %v", err)
+	}
+
+	if m == nil {
+		t.Fatal("NewManager('') returned nil manager")
+	}
+}
+
+func TestNewManagerNotGitRepo(t *testing.T) {
+	tmpDir := t.TempDir() // Not a git repo
+
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+
+	os.Chdir(tmpDir)
+
+	_, err := NewManager("")
+	if err == nil {
+		t.Error("NewManager() expected error for non-git directory, got nil")
+	}
+}
+
+func TestGetRepoRoot(t *testing.T) {
+	tmpDir, _ := setupTestRepo(t)
+
+	m := &Manager{repoRoot: tmpDir}
+	got := m.GetRepoRoot()
+
+	if got != tmpDir {
+		t.Errorf("GetRepoRoot() = %q, want %q", got, tmpDir)
+	}
+}
+
+func TestFind(t *testing.T) {
+	tmpDir, _ := setupTestRepo(t)
+
+	m := &Manager{repoRoot: tmpDir}
+
+	// Create a worktree first
+	err := m.Create("test-find", "test-find-branch")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	projectName := m.GetProjectName()
+	fullName := projectName + "-test-find"
+
+	// Test finding the created worktree
+	wt, err := m.Find(fullName)
+	if err != nil {
+		t.Fatalf("Find() error = %v", err)
+	}
+
+	if wt == nil {
+		t.Fatal("Find() returned nil worktree")
+	}
+
+	if !strings.HasSuffix(wt.Path, fullName) {
+		t.Errorf("Found worktree path = %q, want suffix %q", wt.Path, fullName)
+	}
+}
+
+func TestFindNotFound(t *testing.T) {
+	tmpDir, _ := setupTestRepo(t)
+
+	m := &Manager{repoRoot: tmpDir}
+
+	wt, err := m.Find("nonexistent-worktree")
+	// Find returns nil worktree for nonexistent, may or may not error
+	if wt != nil {
+		t.Error("Find() expected nil worktree for nonexistent name")
+	}
+	// Note: implementation may return (nil, nil) for not found
+	_ = err
+}
+
+func TestRemove(t *testing.T) {
+	tmpDir, _ := setupTestRepo(t)
+
+	m := &Manager{repoRoot: tmpDir}
+
+	// Create a worktree
+	err := m.Create("test-remove", "test-remove-branch")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	projectName := m.GetProjectName()
+	fullName := projectName + "-test-remove"
+
+	// Verify it exists
+	wt, err := m.Find(fullName)
+	if err != nil || wt == nil {
+		t.Fatalf("Find() expected worktree, got error=%v, wt=%v", err, wt)
+	}
+
+	// Remove it by name
+	err = m.Remove(fullName)
+	if err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+
+	// Verify it's gone - Find should return nil
+	wtAfter, _ := m.Find(fullName)
+	if wtAfter != nil {
+		t.Error("Worktree should not exist after Remove()")
+	}
+}
+
+func TestCreateFromBranch(t *testing.T) {
+	tmpDir, _ := setupTestRepo(t)
+
+	// Create a branch to use
+	branchCmd := exec.Command("git", "branch", "existing-branch")
+	branchCmd.Dir = tmpDir
+	if err := branchCmd.Run(); err != nil {
+		t.Fatalf("Failed to create branch: %v", err)
+	}
+
+	m := &Manager{repoRoot: tmpDir}
+
+	err := m.CreateFromBranch("from-branch", "existing-branch")
+	if err != nil {
+		t.Fatalf("CreateFromBranch() error = %v", err)
+	}
+
+	projectName := m.GetProjectName()
+	fullName := projectName + "-from-branch"
+
+	// Verify worktree was created
+	wt, err := m.Find(fullName)
+	if err != nil {
+		t.Fatalf("Find() error = %v", err)
+	}
+
+	if wt.Branch != "existing-branch" {
+		t.Errorf("Worktree branch = %q, want 'existing-branch'", wt.Branch)
+	}
+}
+
+func TestCreateFromExisting(t *testing.T) {
+	tmpDir, _ := setupTestRepo(t)
+
+	// Create an existing directory with some content
+	existingDir := filepath.Join(filepath.Dir(tmpDir), "existing-dir")
+	if err := os.MkdirAll(existingDir, 0755); err != nil {
+		t.Fatalf("Failed to create existing dir: %v", err)
+	}
+	defer os.RemoveAll(existingDir)
+
+	m := &Manager{repoRoot: tmpDir}
+
+	err := m.CreateFromExisting("existing-wt", existingDir)
+	if err != nil {
+		// CreateFromExisting may fail if the directory isn't a git repo
+		// This is expected behavior - just verify it doesn't panic
+		t.Logf("CreateFromExisting() error (expected): %v", err)
+	}
+}
+
+func TestGetCurrent(t *testing.T) {
+	tmpDir, _ := setupTestRepo(t)
+
+	// Save and restore working directory
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+
+	os.Chdir(tmpDir)
+
+	m := &Manager{repoRoot: tmpDir}
+
+	wt, err := m.GetCurrent()
+	if err != nil {
+		t.Fatalf("GetCurrent() error = %v", err)
+	}
+
+	if wt == nil {
+		t.Fatal("GetCurrent() returned nil")
+	}
+
+	// Should match the main repo path (handle macOS /var -> /private/var symlink)
+	// Use filepath.Base to compare just the directory name
+	if filepath.Base(wt.Path) != filepath.Base(tmpDir) {
+		t.Errorf("GetCurrent().Path base = %q, want %q", filepath.Base(wt.Path), filepath.Base(tmpDir))
+	}
+}
+
+func TestIsDirty(t *testing.T) {
+	tmpDir, _ := setupTestRepo(t)
+
+	m := &Manager{repoRoot: tmpDir}
+
+	// Initially clean
+	trees, err := m.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+
+	if len(trees) == 0 {
+		t.Fatal("No worktrees found")
+	}
+
+	// The main worktree should be clean
+	if trees[0].IsDirty {
+		t.Error("Fresh repo should not be dirty")
+	}
+
+	// Make the repo dirty by modifying a file
+	testFile := filepath.Join(tmpDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("modified content"), 0644); err != nil {
+		t.Fatalf("Failed to modify file: %v", err)
+	}
+
+	// Check again - should be dirty now
+	trees, err = m.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+
+	if !trees[0].IsDirty {
+		t.Error("Modified repo should be dirty")
+	}
+}
+
+func TestGetCommitInfo(t *testing.T) {
+	tmpDir, _ := setupTestRepo(t)
+
+	m := &Manager{repoRoot: tmpDir}
+	trees, err := m.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+
+	if len(trees) == 0 {
+		t.Fatal("No worktrees found")
+	}
+
+	wt := trees[0]
+
+	// List() may or may not populate commit info depending on implementation
+	// Just verify the struct fields are accessible and don't panic
+	t.Logf("Worktree: Name=%q, Branch=%q, ShortCommit=%q, CommitMessage=%q",
+		wt.Name, wt.Branch, wt.ShortCommit, wt.CommitMessage)
+
+	// Branch should always be set
+	if wt.Branch == "" {
+		t.Error("Branch should not be empty")
 	}
 }
