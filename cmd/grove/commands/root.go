@@ -8,11 +8,15 @@ var rootCmd = &cobra.Command{
 	Use:   "grove",
 	Short: "Zero-friction worktree management",
 	Long: `Grove is a zero-friction worktree + tmux manager for developers.
-	
-It provides fast context switching between git worktrees with automatic 
+
+It provides fast context switching between git worktrees with automatic
 tmux session management. Every command completes in less than 500ms.
 
-Use 'grove <command> --help' for more information about a command.`,
+GETTING STARTED: Add shell integration to your ~/.zshrc or ~/.bashrc:
+  eval "$(grove init zsh)"   # or bash
+
+This enables directory switching, tab completion, and the 'w' alias.
+Use 'grove init --help' for details.`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }

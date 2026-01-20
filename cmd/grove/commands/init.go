@@ -11,15 +11,29 @@ var initCmd = &cobra.Command{
 	Use:   "init [shell]",
 	Short: "Generate shell integration code",
 	Long: `Generate shell integration code for your shell (zsh or bash).
-	
-Add this to your shell configuration file (~/.zshrc or ~/.bashrc):
 
-  eval "$(grove init zsh)"  # for zsh
-  eval "$(grove init bash)" # for bash
+SETUP: Add this line to your shell config file, then restart your shell:
 
-This enables:
-- Directory switching after 'grove to' command
-- Tab completion for worktree names`,
+  # For zsh (~/.zshrc):
+  eval "$(grove init zsh)"
+
+  # For bash (~/.bashrc):
+  eval "$(grove init bash)"
+
+Or apply immediately without restart:
+  source <(grove init zsh)
+
+WHAT THIS ENABLES:
+  • Directory switching - 'grove to <name>' changes your working directory
+  • Tab completion - Complete commands and worktree names with <TAB>
+  • 'w' alias - Shorthand for 'grove' command
+
+WHY EVAL: The integration defines shell functions and aliases that must run
+in your current shell (not a subprocess). Without eval, you'd just see the
+script printed to stdout.
+
+NOTE: This is the recommended setup. For native zsh completion files only
+(without directory switching), use 'grove completion zsh' instead.`,
 	ValidArgs: []string{"zsh", "bash"},
 	Args:      cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
