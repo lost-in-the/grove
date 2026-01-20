@@ -35,8 +35,11 @@ script printed to stdout.
 NOTE: This is the recommended setup. For native zsh completion files only
 (without directory switching), use 'grove completion zsh' instead.`,
 	ValidArgs: []string{"zsh", "bash"},
-	Args:      cobra.ExactArgs(1),
+	Args:      cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return cmd.Help()
+		}
 		shellType := args[0]
 
 		var output string
