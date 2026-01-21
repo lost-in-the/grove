@@ -23,8 +23,8 @@ and stops all services defined in it.
 Examples:
   grove down   # Stop all containers
   w down       # Using alias`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// Get current directory
+	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
+		// Get current directory (docker-compose works in cwd)
 		cwd, err := os.Getwd()
 		if err != nil {
 			return fmt.Errorf("failed to get current directory: %w", err)
@@ -44,5 +44,5 @@ Examples:
 
 		fmt.Println("Containers stopped")
 		return nil
-	},
+	}),
 }

@@ -1,14 +1,18 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
+	"github.com/LeahArmstrong/grove-cli/internal/output"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 	"github.com/spf13/cobra"
 )
+
+var toJSON bool
 
 var toCmd = &cobra.Command{
 	Use:     "to <name>",
@@ -19,14 +23,13 @@ If no tmux session exists, create one.
 
 When using shell integration, this will also change your current directory.`,
 	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		name := args[0]
 		if name == "" {
 			return fmt.Errorf("worktree name cannot be empty")
 		}
 
-		// Get worktree
-		mgr, err := worktree.NewManager("")
+		mgr, err := worktree.NewManager(ctx.ProjectRoot)
 		if err != nil {
 			return fmt.Errorf("failed to initialize worktree manager: %w", err)
 		}
@@ -45,11 +48,13 @@ When using shell integration, this will also change your current directory.`,
 			return fmt.Errorf("worktree '%s' is stale (directory missing). Run 'grove rm %s' to clean up", name, name)
 		}
 
-		// Get current worktree for hook context
+		// Get current worktree for hook context and state update
 		currentTree, _ := mgr.GetCurrent()
 		var prevWorktree string
 		if currentTree != nil {
-			prevWorktree = currentTree.Name
+			prevWorktree = currentTree.DisplayName()
+			// Update last_worktree in state before switching
+			_ = ctx.State.SetLastWorktree(prevWorktree)
 		}
 
 		// Fire pre-switch hooks
@@ -59,7 +64,6 @@ When using shell integration, this will also change your current directory.`,
 		}
 		if err := hooks.Fire(hooks.EventPreSwitch, hookCtx); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: pre-switch hooks failed: %v\n", err)
-			// Continue anyway
 		}
 
 		// Store current session as last if inside tmux
@@ -70,9 +74,10 @@ When using shell integration, this will also change your current directory.`,
 			}
 		}
 
+		projectName := mgr.GetProjectName()
+
 		// Handle tmux session
 		if tmux.IsTmuxAvailable() {
-			projectName := mgr.GetProjectName()
 			sessionName := worktree.TmuxSessionName(projectName, name)
 			exists, err := tmux.SessionExists(sessionName)
 			if err != nil {
@@ -80,22 +85,38 @@ When using shell integration, this will also change your current directory.`,
 			}
 
 			if !exists {
-				// Create session if it doesn't exist
 				if err := tmux.CreateSession(sessionName, targetTree.Path); err != nil {
 					return fmt.Errorf("failed to create session: %w", err)
 				}
-				fmt.Printf("✓ Created tmux session '%s'\n", sessionName)
+				if !toJSON {
+					fmt.Printf("✓ Created tmux session '%s'\n", sessionName)
+				}
 			}
 
-			// Switch or attach to session
 			if tmux.IsInsideTmux() {
 				if err := tmux.SwitchSession(sessionName); err != nil {
 					return fmt.Errorf("failed to switch session: %w", err)
 				}
-			} else {
+			} else if !toJSON {
 				fmt.Printf("✓ Tmux session '%s' ready\n", sessionName)
 				fmt.Printf("Run: tmux attach -t %s\n", sessionName)
 			}
+		}
+
+		// Update last_accessed_at for target worktree
+		_ = ctx.State.TouchWorktree(targetTree.DisplayName())
+
+		// JSON output mode
+		if toJSON {
+			result := output.SwitchResult{
+				SwitchTo: targetTree.Path,
+				Name:     targetTree.DisplayName(),
+				Branch:   targetTree.Branch,
+				Path:     targetTree.Path,
+			}
+			data, _ := json.MarshalIndent(result, "", "  ")
+			fmt.Println(string(data))
+			return nil
 		}
 
 		// Output directory change command for shell integration
@@ -105,7 +126,6 @@ When using shell integration, this will also change your current directory.`,
 			// Shell wrapper will parse this and execute cd
 			fmt.Printf("cd:%s\n", targetTree.Path)
 		} else {
-			// Not in shell wrapper - show helpful message
 			fmt.Fprintf(os.Stderr, "\nNote: Directory switching requires shell integration.\n")
 			fmt.Fprintf(os.Stderr, "Add this to your shell config (~/.zshrc or ~/.bashrc):\n\n")
 			fmt.Fprintf(os.Stderr, "  eval \"$(grove init zsh)\"   # for zsh\n")
@@ -117,13 +137,13 @@ When using shell integration, this will also change your current directory.`,
 		// Fire post-switch hooks
 		if err := hooks.Fire(hooks.EventPostSwitch, hookCtx); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: post-switch hooks failed: %v\n", err)
-			// Continue anyway
 		}
 
 		return nil
-	},
+	}),
 }
 
 func init() {
+	toCmd.Flags().BoolVarP(&toJSON, "json", "j", false, "Output as JSON with switch_to field")
 	rootCmd.AddCommand(toCmd)
 }

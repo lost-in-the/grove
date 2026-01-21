@@ -1,57 +1,66 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
 
+	"github.com/LeahArmstrong/grove-cli/internal/output"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 	"github.com/spf13/cobra"
 )
 
+var lastJSON bool
+
 var lastCmd = &cobra.Command{
 	Use:   "last",
 	Short: "Switch to the previous worktree",
 	Long:  `Switch to the last worktree you were working in.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// Get last session
-		lastSession, err := tmux.GetLastSession()
-		if err != nil {
-			return fmt.Errorf("no last session found: %w", err)
+	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
+		// Try to get last worktree from state first (V2 approach)
+		lastWorktree, err := ctx.State.GetLastWorktree()
+		if err != nil || lastWorktree == "" {
+			// Fallback to tmux session tracking (legacy approach)
+			lastSession, err := tmux.GetLastSession()
+			if err != nil {
+				return fmt.Errorf("no last worktree found: %w", err)
+			}
+
+			mgr, err := worktree.NewManager(ctx.ProjectRoot)
+			if err != nil {
+				return fmt.Errorf("failed to initialize worktree manager: %w", err)
+			}
+
+			projectName := mgr.GetProjectName()
+			expectedPrefix := projectName + "-"
+			if trimmed, found := strings.CutPrefix(lastSession, expectedPrefix); found {
+				lastWorktree = trimmed
+			} else {
+				lastWorktree = lastSession
+			}
 		}
 
-		// Get worktree manager
-		mgr, err := worktree.NewManager("")
+		mgr, err := worktree.NewManager(ctx.ProjectRoot)
 		if err != nil {
 			return fmt.Errorf("failed to initialize worktree manager: %w", err)
 		}
 
-		projectName := mgr.GetProjectName()
-
-		// Extract worktree name from session name
-		// Expected format: {project}-{worktree-name}
-		name := lastSession
-		expectedPrefix := projectName + "-"
-		if strings.HasPrefix(lastSession, expectedPrefix) {
-			name = strings.TrimPrefix(lastSession, expectedPrefix)
-		}
-
-		trees, err := mgr.List()
+		// Find the target worktree
+		targetTree, err := mgr.Find(lastWorktree)
 		if err != nil {
-			return fmt.Errorf("failed to list worktrees: %w", err)
+			return fmt.Errorf("failed to find worktree: %w", err)
 		}
-
-		var targetTree *worktree.Worktree
-		for _, tree := range trees {
-			if tree.Name == name {
-				targetTree = tree
-				break
-			}
-		}
-
 		if targetTree == nil {
-			return fmt.Errorf("last worktree '%s' not found", name)
+			return fmt.Errorf("last worktree '%s' not found", lastWorktree)
+		}
+
+		// Get current worktree for state update
+		currentTree, _ := mgr.GetCurrent()
+		if currentTree != nil {
+			// Update last_worktree in state before switching
+			_ = ctx.State.SetLastWorktree(currentTree.DisplayName())
 		}
 
 		// Store current session as last if inside tmux
@@ -62,21 +71,38 @@ var lastCmd = &cobra.Command{
 			}
 		}
 
+		projectName := mgr.GetProjectName()
+
 		// Switch to session
 		if tmux.IsTmuxAvailable() && tmux.IsInsideTmux() {
-			if err := tmux.SwitchSession(lastSession); err != nil {
+			sessionName := worktree.TmuxSessionName(projectName, lastWorktree)
+			if err := tmux.SwitchSession(sessionName); err != nil {
 				return fmt.Errorf("failed to switch session: %w", err)
 			}
+		}
+
+		// Update last_accessed_at for target worktree
+		_ = ctx.State.TouchWorktree(targetTree.DisplayName())
+
+		// JSON output mode
+		if lastJSON {
+			result := output.SwitchResult{
+				SwitchTo: targetTree.Path,
+				Name:     targetTree.DisplayName(),
+				Branch:   targetTree.Branch,
+				Path:     targetTree.Path,
+			}
+			data, _ := json.MarshalIndent(result, "", "  ")
+			fmt.Println(string(data))
+			return nil
 		}
 
 		// Output directory change command for shell integration
 		hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
 
 		if hasShellIntegration {
-			// Shell wrapper will parse this and execute cd
 			fmt.Printf("cd:%s\n", targetTree.Path)
 		} else {
-			// Not in shell wrapper - show helpful message
 			fmt.Fprintf(os.Stderr, "\nNote: Directory switching requires shell integration.\n")
 			fmt.Fprintf(os.Stderr, "Add this to your shell config (~/.zshrc or ~/.bashrc):\n\n")
 			fmt.Fprintf(os.Stderr, "  eval \"$(grove init zsh)\"   # for zsh\n")
@@ -86,9 +112,10 @@ var lastCmd = &cobra.Command{
 		}
 
 		return nil
-	},
+	}),
 }
 
 func init() {
+	lastCmd.Flags().BoolVarP(&lastJSON, "json", "j", false, "Output as JSON with switch_to field")
 	rootCmd.AddCommand(lastCmd)
 }

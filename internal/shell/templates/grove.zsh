@@ -11,8 +11,12 @@ grove() {
     local other_lines=""
     
     while IFS= read -r line; do
-        if [[ "$line" == cd:* ]]; then
-            # Extract directory path from cd: directive
+        if [[ "$line" == GROVE_CD:* ]]; then
+            # Extract directory path from GROVE_CD: directive (V2)
+            cd_target="${line#GROVE_CD:}"
+            should_cd=1
+        elif [[ "$line" == cd:* ]]; then
+            # Extract directory path from cd: directive (legacy)
             cd_target="${line#cd:}"
             should_cd=1
         else
@@ -52,9 +56,13 @@ _grove_completion() {
         'rm:Remove a worktree'
         'here:Show current worktree'
         'last:Switch to previous worktree'
-        'freeze:Freeze a worktree'
-        'resume:Resume a frozen worktree'
-        'time:Show time tracking'
+        'fork:Fork current worktree'
+        'compare:Compare worktrees'
+        'apply:Apply changes from another worktree'
+        'sync:Sync environment worktrees'
+        'clean:Remove old unused worktrees'
+        'repair:Repair state inconsistencies'
+        'setup:Initialize grove project'
         'fetch:Create worktree from issue/PR'
         'issues:Browse GitHub issues'
         'prs:Browse GitHub PRs'
@@ -71,14 +79,8 @@ _grove_completion() {
         _describe 'command' commands
     elif (( CURRENT == 3 )); then
         case "${words[2]}" in
-            to|rm|freeze)
+            to|rm|compare|sync)
                 _describe 'worktree' worktrees
-                ;;
-            resume)
-                # For resume, show all worktrees including frozen
-                local -a all_worktrees
-                all_worktrees=($(GROVE_SHELL=1 "$__GROVE_BIN" ls -q -a 2>/dev/null))
-                _describe 'worktree' all_worktrees
                 ;;
             init)
                 _values 'shell' 'zsh' 'bash'

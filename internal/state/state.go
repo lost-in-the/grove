@@ -10,47 +10,58 @@ import (
 	"time"
 )
 
-// State represents the persisted state
+// CurrentVersion is the current state schema version
+const CurrentVersion = 1
+
+// State represents the persisted state (V2 schema)
 type State struct {
-	Frozen map[string]*FreezeInfo `json:"frozen"`
+	Version      int                       `json:"version"`
+	Project      string                    `json:"project"`
+	LastWorktree string                    `json:"last_worktree,omitempty"`
+	Worktrees    map[string]*WorktreeState `json:"worktrees"`
 }
 
-// FreezeInfo contains information about a frozen worktree
-type FreezeInfo struct {
-	Name     string    `json:"name"`
-	FrozenAt time.Time `json:"frozen_at"`
+// WorktreeState contains metadata for a single worktree
+// NOTE: Protected/Immutable are NOT stored in state - they come from config.toml
+type WorktreeState struct {
+	Path           string     `json:"path"`
+	Branch         string     `json:"branch"`
+	Root           bool       `json:"root"`
+	DockerProject  string     `json:"docker_project"`
+	CreatedAt      time.Time  `json:"created_at"`
+	LastAccessedAt time.Time  `json:"last_accessed_at"`
+	ParentWorktree string     `json:"parent_worktree,omitempty"`
+	Environment    bool       `json:"environment,omitempty"`
+	Mirror         string     `json:"mirror,omitempty"`
+	LastSyncedAt   *time.Time `json:"last_synced_at,omitempty"`
 }
 
 // Manager handles state management for Grove
 type Manager struct {
-	stateDir  string
+	groveDir  string // Path to .grove directory
 	stateFile string
 	mu        sync.RWMutex
 	state     *State
 }
 
-// NewManager creates a new state manager
-// If stateDir is empty, it uses $HOME/.config/grove/state/
-func NewManager(stateDir string) (*Manager, error) {
-	if stateDir == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get home directory: %w", err)
-		}
-		stateDir = filepath.Join(homeDir, ".config", "grove", "state")
+// NewManager creates a new state manager for a grove project
+// groveDir should be the path to the .grove directory (e.g., /path/to/project/.grove)
+func NewManager(groveDir string) (*Manager, error) {
+	if groveDir == "" {
+		return nil, fmt.Errorf("grove directory path is required")
 	}
 
-	// Ensure state directory exists
-	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create state directory: %w", err)
+	// Ensure grove directory exists
+	if err := os.MkdirAll(groveDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create grove directory: %w", err)
 	}
 
-	stateFile := filepath.Join(stateDir, "frozen.json")
+	stateFile := filepath.Join(groveDir, "state.json")
 
 	mgr := &Manager{
-		stateDir:  stateDir,
+		groveDir:  groveDir,
 		stateFile: stateFile,
-		state:     &State{Frozen: make(map[string]*FreezeInfo)},
+		state:     newEmptyState(),
 	}
 
 	// Load existing state if it exists
@@ -61,9 +72,45 @@ func NewManager(stateDir string) (*Manager, error) {
 	return mgr, nil
 }
 
-// Freeze marks a worktree as frozen
-// This is idempotent - freezing an already frozen worktree is a no-op
-func (m *Manager) Freeze(name string) error {
+// newEmptyState creates a new empty state with initialized maps
+func newEmptyState() *State {
+	return &State{
+		Version:   CurrentVersion,
+		Worktrees: make(map[string]*WorktreeState),
+	}
+}
+
+// --- V2 State Methods ---
+
+// SetProject sets the project name in state
+func (m *Manager) SetProject(name string) error {
+	if name == "" {
+		return fmt.Errorf("project name cannot be empty")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.state.Project = name
+	return m.save()
+}
+
+// GetProject returns the project name from state
+func (m *Manager) GetProject() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.state.Project
+}
+
+// GetLastWorktree returns the last active worktree name
+func (m *Manager) GetLastWorktree() (string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.state.LastWorktree, nil
+}
+
+// SetLastWorktree updates the last active worktree
+func (m *Manager) SetLastWorktree(name string) error {
 	if name == "" {
 		return fmt.Errorf("worktree name cannot be empty")
 	}
@@ -71,18 +118,44 @@ func (m *Manager) Freeze(name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Add to frozen map (or update if already exists)
-	m.state.Frozen[name] = &FreezeInfo{
-		Name:     name,
-		FrozenAt: time.Now(),
-	}
-
+	m.state.LastWorktree = name
 	return m.save()
 }
 
-// Resume clears the frozen state for a worktree
-// This is idempotent - resuming a non-frozen worktree is a no-op
-func (m *Manager) Resume(name string) error {
+// AddWorktree adds a new worktree to state
+func (m *Manager) AddWorktree(name string, ws *WorktreeState) error {
+	if name == "" {
+		return fmt.Errorf("worktree name cannot be empty")
+	}
+	if ws == nil {
+		return fmt.Errorf("worktree state cannot be nil")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.state.Worktrees[name] = ws
+	return m.save()
+}
+
+// GetWorktree returns the worktree state for a given name
+func (m *Manager) GetWorktree(name string) (*WorktreeState, error) {
+	if name == "" {
+		return nil, fmt.Errorf("worktree name cannot be empty")
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	ws, ok := m.state.Worktrees[name]
+	if !ok {
+		return nil, nil // Not found, not an error
+	}
+	return ws, nil
+}
+
+// RemoveWorktree removes a worktree from state
+func (m *Manager) RemoveWorktree(name string) error {
 	if name == "" {
 		return fmt.Errorf("worktree name cannot be empty")
 	}
@@ -90,14 +163,30 @@ func (m *Manager) Resume(name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Remove from frozen map (no-op if not present)
-	delete(m.state.Frozen, name)
-
+	delete(m.state.Worktrees, name)
 	return m.save()
 }
 
-// IsFrozen checks if a worktree is frozen
-func (m *Manager) IsFrozen(name string) (bool, error) {
+// TouchWorktree updates the last_accessed_at timestamp for a worktree
+func (m *Manager) TouchWorktree(name string) error {
+	if name == "" {
+		return fmt.Errorf("worktree name cannot be empty")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	ws, ok := m.state.Worktrees[name]
+	if !ok {
+		return fmt.Errorf("worktree %q not found in state", name)
+	}
+
+	ws.LastAccessedAt = time.Now()
+	return m.save()
+}
+
+// IsEnvironment checks if a worktree is an environment worktree
+func (m *Manager) IsEnvironment(name string) (bool, error) {
 	if name == "" {
 		return false, fmt.Errorf("worktree name cannot be empty")
 	}
@@ -105,24 +194,31 @@ func (m *Manager) IsFrozen(name string) (bool, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	_, frozen := m.state.Frozen[name]
-	return frozen, nil
+	ws, ok := m.state.Worktrees[name]
+	if !ok {
+		return false, nil
+	}
+	return ws.Environment, nil
 }
 
-// ListFrozen returns a sorted list of all frozen worktrees
-func (m *Manager) ListFrozen() ([]string, error) {
+// ListWorktrees returns a sorted list of all worktree names in state
+func (m *Manager) ListWorktrees() []string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	names := make([]string, 0, len(m.state.Frozen))
-	for name := range m.state.Frozen {
+	names := make([]string, 0, len(m.state.Worktrees))
+	for name := range m.state.Worktrees {
 		names = append(names, name)
 	}
-
-	// Sort for consistent output
 	sort.Strings(names)
+	return names
+}
 
-	return names, nil
+// GetState returns a copy of the current state (for debugging/inspection)
+func (m *Manager) GetState() State {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return *m.state
 }
 
 // load reads the state from disk
@@ -137,9 +233,9 @@ func (m *Manager) load() error {
 		return fmt.Errorf("failed to parse state file: %w", err)
 	}
 
-	// Ensure frozen map is initialized
-	if state.Frozen == nil {
-		state.Frozen = make(map[string]*FreezeInfo)
+	// Migrate state if needed
+	if err := migrateStateVersion(&state); err != nil {
+		return fmt.Errorf("failed to migrate state: %w", err)
 	}
 
 	m.state = &state

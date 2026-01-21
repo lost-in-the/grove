@@ -24,7 +24,7 @@ Examples:
   grove issues          # Browse all open issues
   grove issues --state all  # Include closed issues
   grove issues --label bug  # Filter by label`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		// Get flags
 		state, _ := cmd.Flags().GetString("state")
 		labels, _ := cmd.Flags().GetStringSlice("label")
@@ -153,7 +153,7 @@ Examples:
 		// Run fetch command with the selected issue
 		fetchCmd.SetArgs([]string{fmt.Sprintf("issue/%d", number)})
 		return fetchCmd.Execute()
-	},
+	}),
 }
 
 var prsCmd = &cobra.Command{
@@ -168,7 +168,7 @@ Examples:
   grove prs             # Browse all open PRs
   grove prs --state all # Include closed PRs
   grove prs --label feature  # Filter by label`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		// Get flags
 		state, _ := cmd.Flags().GetString("state")
 		labels, _ := cmd.Flags().GetStringSlice("label")
@@ -298,7 +298,7 @@ Examples:
 		// Run fetch command with the selected PR
 		fetchCmd.SetArgs([]string{fmt.Sprintf("pr/%d", number)})
 		return fetchCmd.Execute()
-	},
+	}),
 }
 
 func truncate(s string, maxLen int) string {

@@ -23,15 +23,17 @@ var (
 
 // hereOutput represents the JSON output structure for grove here
 type hereOutput struct {
-	Name     string     `json:"name"`
-	FullName string     `json:"fullName"`
-	Project  string     `json:"project"`
-	Branch   string     `json:"branch"`
-	Path     string     `json:"path"`
-	Commit   commitInfo `json:"commit"`
-	Status   string     `json:"status"`
-	Changes  []string   `json:"changes,omitempty"`
-	Tmux     tmuxInfo   `json:"tmux"`
+	Name        string     `json:"name"`
+	FullName    string     `json:"fullName"`
+	Project     string     `json:"project"`
+	Branch      string     `json:"branch"`
+	Path        string     `json:"path"`
+	Commit      commitInfo `json:"commit"`
+	Status      string     `json:"status"`
+	Changes     []string   `json:"changes,omitempty"`
+	Tmux        tmuxInfo   `json:"tmux"`
+	Environment bool       `json:"environment,omitempty"`
+	Mirror      string     `json:"mirror,omitempty"`
 }
 
 type commitInfo struct {
@@ -50,8 +52,8 @@ var hereCmd = &cobra.Command{
 	Use:   "here",
 	Short: "Show current worktree information",
 	Long:  `Display information about the current worktree including name, branch, and status.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		mgr, err := worktree.NewManager("")
+	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
+		mgr, err := worktree.NewManager(ctx.ProjectRoot)
 		if err != nil {
 			return fmt.Errorf("failed to initialize worktree manager: %w", err)
 		}
@@ -79,6 +81,15 @@ var hereCmd = &cobra.Command{
 			tmuxStatus = tmux.GetSessionStatus(tmuxSessionName)
 		}
 
+		// Get environment info from state
+		isEnv, _ := ctx.State.IsEnvironment(displayName)
+		mirror := ""
+		if isEnv {
+			if ws, err := ctx.State.GetWorktree(displayName); err == nil && ws != nil {
+				mirror = ws.Mirror
+			}
+		}
+
 		// JSON mode
 		if hereJSON {
 			status := "clean"
@@ -89,7 +100,6 @@ var hereCmd = &cobra.Command{
 			var changes []string
 			if tree.DirtyFiles != "" {
 				changes = strings.Split(tree.DirtyFiles, "\n")
-				// Filter empty strings
 				filtered := make([]string, 0, len(changes))
 				for _, c := range changes {
 					if c != "" {
@@ -117,6 +127,8 @@ var hereCmd = &cobra.Command{
 					Session: tmuxSessionName,
 					Status:  tmuxStatus,
 				},
+				Environment: isEnv,
+				Mirror:      mirror,
 			}
 
 			jsonBytes, err := json.MarshalIndent(output, "", "  ")
@@ -150,7 +162,6 @@ var hereCmd = &cobra.Command{
 		// Show dirty files if present
 		if tree.IsDirty && tree.DirtyFiles != "" {
 			lines := strings.Split(tree.DirtyFiles, "\n")
-			// Show first few files
 			if len(lines) > maxDirtyFilesShown {
 				for i := 0; i < maxDirtyFilesShown; i++ {
 					fmt.Printf("         %s\n", lines[i])
@@ -165,6 +176,15 @@ var hereCmd = &cobra.Command{
 			}
 		}
 
+		// Show environment info
+		if isEnv {
+			fmt.Printf("Type:    environment")
+			if mirror != "" {
+				fmt.Printf(" (mirror: %s)", mirror)
+			}
+			fmt.Println()
+		}
+
 		// Show tmux status
 		fmt.Printf("tmux:    %s", tmuxSessionName)
 		if tmuxStatus != "none" {
@@ -173,7 +193,7 @@ var hereCmd = &cobra.Command{
 		fmt.Println()
 
 		return nil
-	},
+	}),
 }
 
 func init() {

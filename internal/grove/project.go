@@ -1,0 +1,127 @@
+// Package grove provides utilities for working with grove projects.
+package grove
+
+import (
+	"os"
+	"path/filepath"
+)
+
+// FindRoot searches for the .grove directory starting from startDir and walking up.
+// Returns the path to the .grove directory if found, or empty string if not found.
+func FindRoot(startDir string) (string, error) {
+	if startDir == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "", err
+		}
+		startDir = cwd
+	}
+
+	// Convert to absolute path
+	absDir, err := filepath.Abs(startDir)
+	if err != nil {
+		return "", err
+	}
+
+	// Walk up the directory tree looking for .grove
+	current := absDir
+	for {
+		groveDir := filepath.Join(current, ".grove")
+		if info, err := os.Stat(groveDir); err == nil && info.IsDir() {
+			return groveDir, nil
+		}
+
+		// Move to parent directory
+		parent := filepath.Dir(current)
+		if parent == current {
+			// Reached root, not found
+			return "", nil
+		}
+		current = parent
+	}
+}
+
+// IsGroveProject checks if the current directory is within a grove project.
+// Returns the .grove directory path if found, or empty string if not.
+func IsGroveProject() (string, error) {
+	return FindRoot("")
+}
+
+// ProjectRoot returns the project root directory (parent of .grove).
+// Returns empty string if not in a grove project.
+func ProjectRoot() (string, error) {
+	groveDir, err := FindRoot("")
+	if err != nil {
+		return "", err
+	}
+	if groveDir == "" {
+		return "", nil
+	}
+	return filepath.Dir(groveDir), nil
+}
+
+// IsInsideWorktree checks if the current directory is inside a git worktree
+// (as opposed to the main repository). This is used by grove setup to prevent
+// initialization from within a worktree.
+func IsInsideWorktree() (bool, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return false, err
+	}
+
+	// Check for .git file (worktrees have a .git file pointing to the main repo)
+	gitPath := filepath.Join(cwd, ".git")
+	info, err := os.Stat(gitPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// No .git at all - walk up to find it
+			return isWorktreeByWalkingUp(cwd)
+		}
+		return false, err
+	}
+
+	// If .git is a file (not directory), we're in a worktree
+	return !info.IsDir(), nil
+}
+
+// isWorktreeByWalkingUp walks up the directory tree to find .git
+func isWorktreeByWalkingUp(startDir string) (bool, error) {
+	current := startDir
+	for {
+		gitPath := filepath.Join(current, ".git")
+		info, err := os.Stat(gitPath)
+		if err == nil {
+			// Found .git - check if it's a file (worktree) or directory (main repo)
+			return !info.IsDir(), nil
+		}
+
+		parent := filepath.Dir(current)
+		if parent == current {
+			// Reached filesystem root - not in any git repo
+			return false, nil
+		}
+		current = parent
+	}
+}
+
+// StateDir returns the path to the state.json file for the current project.
+// Returns empty string if not in a grove project.
+func StateDir() (string, error) {
+	return FindRoot("")
+}
+
+// ConfigPath returns the path to the config.toml file for the current project.
+// Returns empty string if not in a grove project.
+func ConfigPath() (string, error) {
+	groveDir, err := FindRoot("")
+	if err != nil || groveDir == "" {
+		return "", err
+	}
+	return filepath.Join(groveDir, "config.toml"), nil
+}
+
+// MustProjectRoot returns the project root given a .grove directory path.
+// This is a convenience function when you already have the grove directory.
+func MustProjectRoot(groveDir string) string {
+	return filepath.Dir(groveDir)
+}

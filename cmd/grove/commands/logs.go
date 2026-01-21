@@ -30,8 +30,8 @@ Examples:
   grove logs web       # Show logs from 'web' service only
   grove logs -f=false  # Show logs without following
   w logs db            # Using alias`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// Get current directory
+	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
+		// Get current directory (docker-compose works in cwd)
 		cwd, err := os.Getwd()
 		if err != nil {
 			return fmt.Errorf("failed to get current directory: %w", err)
@@ -56,5 +56,5 @@ Examples:
 		}
 
 		return nil
-	},
+	}),
 }

@@ -11,8 +11,12 @@ grove() {
     local other_lines=""
     
     while IFS= read -r line; do
-        if [[ "$line" == cd:* ]]; then
-            # Extract directory path from cd: directive
+        if [[ "$line" == GROVE_CD:* ]]; then
+            # Extract directory path from GROVE_CD: directive (V2)
+            cd_target="${line#GROVE_CD:}"
+            should_cd=1
+        elif [[ "$line" == cd:* ]]; then
+            # Extract directory path from cd: directive (legacy)
             cd_target="${line#cd:}"
             should_cd=1
         else
@@ -52,7 +56,7 @@ _grove_completion() {
         cword=$COMP_CWORD
     fi
 
-    local commands="ls new to rm here last freeze resume time fetch issues prs up down logs restart config version init"
+    local commands="ls new to rm here last fork compare apply sync clean repair setup fetch issues prs up down logs restart config version init"
 
     if [[ $cword -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$commands" -- "$cur"))
@@ -60,15 +64,10 @@ _grove_completion() {
     fi
 
     case "${words[1]}" in
-        to|rm|freeze)
+        to|rm|compare|sync)
             # Complete with worktree short names (using grove ls -q for consistency)
             local worktrees=$(GROVE_SHELL=1 "$__GROVE_BIN" ls -q 2>/dev/null)
             COMPREPLY=($(compgen -W "$worktrees" -- "$cur"))
-            ;;
-        resume)
-            # For resume, show all worktrees including frozen
-            local all_worktrees=$(GROVE_SHELL=1 "$__GROVE_BIN" ls -q -a 2>/dev/null)
-            COMPREPLY=($(compgen -W "$all_worktrees" -- "$cur"))
             ;;
         init)
             COMPREPLY=($(compgen -W "zsh bash" -- "$cur"))

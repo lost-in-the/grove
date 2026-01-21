@@ -5,7 +5,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/LeahArmstrong/grove-cli/internal/state"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 	"github.com/LeahArmstrong/grove-cli/plugins/tracker"
@@ -25,7 +27,7 @@ Examples:
 The worktree name will be automatically generated from the issue/PR metadata.
 For PRs, the remote branch will be checked out.`,
 	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		// Parse argument: pr/123 or issue/456
 		parts := strings.SplitN(args[0], "/", 2)
 		if len(parts) != 2 {
@@ -66,7 +68,7 @@ For PRs, the remote branch will be checked out.`,
 		gh := tracker.NewGitHubAdapter(repo)
 
 		// Initialize worktree manager
-		mgr, err := worktree.NewManager("")
+		mgr, err := worktree.NewManager(ctx.ProjectRoot)
 		if err != nil {
 			return fmt.Errorf("failed to initialize worktree manager: %w", err)
 		}
@@ -126,38 +128,52 @@ For PRs, the remote branch will be checked out.`,
 			fmt.Printf("✓ Created worktree '%s' with new branch '%s'\n", worktreeName, branchName)
 		}
 
-		// Create tmux session if available
-		if tmux.IsTmuxAvailable() {
-			wt, err := mgr.Find(worktreeName)
-			if err != nil {
-				return fmt.Errorf("failed to find created worktree: %w", err)
-			}
+		// Get the created worktree
+		wt, err := mgr.Find(worktreeName)
+		if err != nil {
+			return fmt.Errorf("failed to find created worktree: %w", err)
+		}
 
-			if wt != nil {
-				// Use consistent session naming: {project}-{name}
-				projectName := mgr.GetProjectName()
-				sessionName := worktree.TmuxSessionName(projectName, worktreeName)
-				if err := tmux.CreateSession(sessionName, wt.Path); err != nil {
-					fmt.Printf("⚠ Failed to create tmux session: %v\n", err)
-				} else {
-					fmt.Printf("✓ Created tmux session '%s'\n", sessionName)
-				}
+		// Register worktree in state
+		if wt != nil {
+			now := time.Now()
+			wsState := &state.WorktreeState{
+				Path:           wt.Path,
+				Branch:         branchName,
+				CreatedAt:      now,
+				LastAccessedAt: now,
 			}
+			_ = ctx.State.AddWorktree(worktreeName, wsState)
+		}
+
+		// Create tmux session if available
+		if tmux.IsTmuxAvailable() && wt != nil {
+			// Use consistent session naming: {project}-{name}
+			projectName := mgr.GetProjectName()
+			sessionName := worktree.TmuxSessionName(projectName, worktreeName)
+			if err := tmux.CreateSession(sessionName, wt.Path); err != nil {
+				fmt.Printf("⚠ Failed to create tmux session: %v\n", err)
+			} else {
+				fmt.Printf("✓ Created tmux session '%s'\n", sessionName)
+			}
+		}
+
+		// Get current worktree to update last_worktree
+		currentTree, _ := mgr.GetCurrent()
+		if currentTree != nil {
+			_ = ctx.State.SetLastWorktree(currentTree.DisplayName())
 		}
 
 		// Switch to the worktree if shell integration is active
 		hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
-		if hasShellIntegration {
-			wt, err := mgr.Find(worktreeName)
-			if err == nil && wt != nil {
-				fmt.Printf("cd:%s\n", wt.Path)
-			}
+		if hasShellIntegration && wt != nil {
+			fmt.Printf("cd:%s\n", wt.Path)
 		} else {
 			fmt.Printf("\nTo switch to this worktree:\n  grove to %s\n", worktreeName)
 		}
 
 		return nil
-	},
+	}),
 }
 
 func init() {

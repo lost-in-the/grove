@@ -7,14 +7,26 @@ import (
 
 // Config represents the complete grove configuration
 type Config struct {
-	ProjectName   string        `toml:"project_name"`
-	Alias         string        `toml:"alias"`
-	ProjectsDir   string        `toml:"projects_dir"`
-	DefaultBranch string        `toml:"default_base_branch"`
-	Switch        SwitchConfig  `toml:"switch"`
-	Naming        NamingConfig  `toml:"naming"`
-	Tmux          TmuxConfig    `toml:"tmux"`
-	Plugins       PluginsConfig `toml:"plugins"`
+	ProjectName   string           `toml:"project_name"`
+	Alias         string           `toml:"alias"`
+	ProjectsDir   string           `toml:"projects_dir"`
+	DefaultBranch string           `toml:"default_base_branch"`
+	Switch        SwitchConfig     `toml:"switch"`
+	Naming        NamingConfig     `toml:"naming"`
+	Tmux          TmuxConfig       `toml:"tmux"`
+	Plugins       PluginsConfig    `toml:"plugins"`
+	Protection    ProtectionConfig `toml:"protection"`
+
+	// Runtime settings (from env vars, not persisted)
+	NoColor        bool `toml:"-"` // GROVE_NO_COLOR - disable colored output
+	Debug          bool `toml:"-"` // GROVE_DEBUG - enable debug logging
+	NonInteractive bool `toml:"-"` // GROVE_NONINTERACTIVE - disable prompts
+}
+
+// ProtectionConfig controls worktree protection settings
+type ProtectionConfig struct {
+	Protected []string `toml:"protected"` // Cannot rm without --force --unprotect
+	Immutable []string `toml:"immutable"` // Cannot apply changes to
 }
 
 // SwitchConfig controls worktree switching behavior
@@ -65,13 +77,19 @@ func GetConfigPaths() (string, string, error) {
 }
 
 // Load loads the configuration from the default locations
-// It starts with defaults, then loads global config, then project config
+// It starts with defaults, then loads global config, then project config,
+// and finally applies environment variable overrides.
 func Load() (*Config, error) {
 	cfg := LoadDefaults()
 
 	globalPath, projectPath, err := GetConfigPaths()
 	if err != nil {
 		return cfg, err
+	}
+
+	// GROVE_CONFIG overrides the global config path
+	if envConfig := os.Getenv("GROVE_CONFIG"); envConfig != "" {
+		globalPath = envConfig
 	}
 
 	// Load global config if it exists
@@ -92,12 +110,30 @@ func Load() (*Config, error) {
 		cfg = mergeConfigs(cfg, projectCfg)
 	}
 
+	// Apply environment variable overrides for runtime settings
+	cfg.NoColor = envBool("GROVE_NO_COLOR")
+	cfg.Debug = envBool("GROVE_DEBUG")
+	cfg.NonInteractive = envBool("GROVE_NONINTERACTIVE")
+
 	// Validate the final configuration
 	if err := Validate(cfg); err != nil {
 		return nil, err
 	}
 
 	return cfg, nil
+}
+
+// envBool returns true if the environment variable is set and non-empty.
+// Common truthy values like "1", "true", "yes" all return true.
+// An empty string or unset variable returns false.
+func envBool(name string) bool {
+	val := os.Getenv(name)
+	if val == "" {
+		return false
+	}
+	// Any non-empty value is considered true
+	// This matches common Unix conventions (e.g., TERM, NO_COLOR)
+	return true
 }
 
 // mergeConfigs merges two configs, with the second overriding the first
@@ -136,5 +172,33 @@ func mergeConfigs(base, override *Config) *Config {
 		result.Plugins.Docker.AutoStop = override.Plugins.Docker.AutoStop
 	}
 
+	// Merge protection config
+	if len(override.Protection.Protected) > 0 {
+		result.Protection.Protected = override.Protection.Protected
+	}
+	if len(override.Protection.Immutable) > 0 {
+		result.Protection.Immutable = override.Protection.Immutable
+	}
+
 	return &result
+}
+
+// IsProtected checks if a worktree is in the protected list
+func (c *Config) IsProtected(name string) bool {
+	for _, p := range c.Protection.Protected {
+		if p == name {
+			return true
+		}
+	}
+	return false
+}
+
+// IsImmutable checks if a worktree is in the immutable list
+func (c *Config) IsImmutable(name string) bool {
+	for _, p := range c.Protection.Immutable {
+		if p == name {
+			return true
+		}
+	}
+	return false
 }

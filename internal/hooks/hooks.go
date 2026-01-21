@@ -67,10 +67,6 @@ const (
 	EventPreSwitch = "pre-switch"
 	// EventPostSwitch fires after switching to a worktree
 	EventPostSwitch = "post-switch"
-	// EventPreFreeze fires before freezing a worktree
-	EventPreFreeze = "pre-freeze"
-	// EventPostResume fires after resuming a worktree
-	EventPostResume = "post-resume"
 	// EventPreRemove fires before removing a worktree
 	EventPreRemove = "pre-remove"
 	// EventPostRemove fires after removing a worktree
@@ -84,8 +80,6 @@ func GetEventName(event string) string {
 		EventPostCreate: "Post-Create",
 		EventPreSwitch:  "Pre-Switch",
 		EventPostSwitch: "Post-Switch",
-		EventPreFreeze:  "Pre-Freeze",
-		EventPostResume: "Post-Resume",
 		EventPreRemove:  "Pre-Remove",
 		EventPostRemove: "Post-Remove",
 	}
@@ -103,8 +97,6 @@ func ValidateEvent(event string) error {
 		EventPostCreate,
 		EventPreSwitch,
 		EventPostSwitch,
-		EventPreFreeze,
-		EventPostResume,
 		EventPreRemove,
 		EventPostRemove,
 	}

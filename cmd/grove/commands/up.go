@@ -30,8 +30,8 @@ Examples:
   grove up              # Start containers in detached mode
   grove up --detach=false  # Start containers in foreground
   w up                  # Using alias`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// Get current directory
+	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
+		// Get current directory (docker-compose works in cwd)
 		cwd, err := os.Getwd()
 		if err != nil {
 			return fmt.Errorf("failed to get current directory: %w", err)
@@ -53,5 +53,5 @@ Examples:
 			fmt.Println("Containers started in detached mode")
 		}
 		return nil
-	},
+	}),
 }

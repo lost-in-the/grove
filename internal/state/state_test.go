@@ -11,298 +11,41 @@ import (
 func TestNewManager(t *testing.T) {
 	tests := []struct {
 		name      string
-		stateDir  string
+		groveDir  string
 		wantErr   bool
 		errSubstr string
 	}{
 		{
-			name:     "valid state directory",
-			stateDir: filepath.Join(t.TempDir(), "state"),
+			name:     "valid grove directory",
+			groveDir: filepath.Join(t.TempDir(), ".grove"),
 			wantErr:  false,
 		},
 		{
-			name:     "empty state directory uses default",
-			stateDir: "",
-			wantErr:  false,
+			name:      "empty grove directory returns error",
+			groveDir:  "",
+			wantErr:   true,
+			errSubstr: "grove directory path is required",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mgr, err := NewManager(tt.stateDir)
+			mgr, err := NewManager(tt.groveDir)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("NewManager() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr && tt.errSubstr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.errSubstr) {
+					t.Errorf("NewManager() error = %v, want error containing %q", err, tt.errSubstr)
+				}
 				return
 			}
 			if !tt.wantErr && mgr == nil {
 				t.Error("NewManager() returned nil manager without error")
 			}
-			if !tt.wantErr && mgr.stateDir == "" {
-				t.Error("NewManager() returned manager with empty stateDir")
-			}
-		})
-	}
-}
-
-func TestManagerFreeze(t *testing.T) {
-	tests := []struct {
-		name      string
-		worktree  string
-		setup     func(*Manager) error
-		wantErr   bool
-		errSubstr string
-	}{
-		{
-			name:     "freeze new worktree",
-			worktree: "feature-auth",
-			wantErr:  false,
-		},
-		{
-			name:     "freeze already frozen worktree is idempotent",
-			worktree: "feature-auth",
-			setup: func(m *Manager) error {
-				return m.Freeze("feature-auth")
-			},
-			wantErr: false,
-		},
-		{
-			name:      "empty worktree name",
-			worktree:  "",
-			wantErr:   true,
-			errSubstr: "worktree name cannot be empty",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mgr := setupTestManager(t)
-
-			if tt.setup != nil {
-				if err := tt.setup(mgr); err != nil {
-					t.Fatalf("setup failed: %v", err)
-				}
-			}
-
-			err := mgr.Freeze(tt.worktree)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Freeze() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if tt.wantErr && tt.errSubstr != "" {
-				if err == nil || !strings.Contains(err.Error(), tt.errSubstr) {
-					t.Errorf("Freeze() error = %v, want error containing %q", err, tt.errSubstr)
-				}
-			}
-			if !tt.wantErr {
-				// Verify it's frozen
-				frozen, err := mgr.IsFrozen(tt.worktree)
-				if err != nil {
-					t.Errorf("IsFrozen() error = %v", err)
-				}
-				if !frozen {
-					t.Errorf("Freeze() succeeded but worktree is not frozen")
-				}
-			}
-		})
-	}
-}
-
-func TestManagerResume(t *testing.T) {
-	tests := []struct {
-		name      string
-		worktree  string
-		setup     func(*Manager) error
-		wantErr   bool
-		errSubstr string
-	}{
-		{
-			name:     "resume frozen worktree",
-			worktree: "feature-auth",
-			setup: func(m *Manager) error {
-				return m.Freeze("feature-auth")
-			},
-			wantErr: false,
-		},
-		{
-			name:     "resume non-frozen worktree is idempotent",
-			worktree: "feature-auth",
-			wantErr:  false,
-		},
-		{
-			name:      "empty worktree name",
-			worktree:  "",
-			wantErr:   true,
-			errSubstr: "worktree name cannot be empty",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mgr := setupTestManager(t)
-
-			if tt.setup != nil {
-				if err := tt.setup(mgr); err != nil {
-					t.Fatalf("setup failed: %v", err)
-				}
-			}
-
-			err := mgr.Resume(tt.worktree)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Resume() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if tt.wantErr && tt.errSubstr != "" {
-				if err == nil || !strings.Contains(err.Error(), tt.errSubstr) {
-					t.Errorf("Resume() error = %v, want error containing %q", err, tt.errSubstr)
-				}
-			}
-			if !tt.wantErr {
-				// Verify it's not frozen
-				frozen, err := mgr.IsFrozen(tt.worktree)
-				if err != nil {
-					t.Errorf("IsFrozen() error = %v", err)
-				}
-				if frozen {
-					t.Errorf("Resume() succeeded but worktree is still frozen")
-				}
-			}
-		})
-	}
-}
-
-func TestManagerIsFrozen(t *testing.T) {
-	tests := []struct {
-		name       string
-		worktree   string
-		setup      func(*Manager) error
-		wantFrozen bool
-		wantErr    bool
-		errSubstr  string
-	}{
-		{
-			name:       "frozen worktree returns true",
-			worktree:   "feature-auth",
-			setup:      func(m *Manager) error { return m.Freeze("feature-auth") },
-			wantFrozen: true,
-			wantErr:    false,
-		},
-		{
-			name:       "non-frozen worktree returns false",
-			worktree:   "feature-auth",
-			wantFrozen: false,
-			wantErr:    false,
-		},
-		{
-			name:      "empty worktree name",
-			worktree:  "",
-			wantErr:   true,
-			errSubstr: "worktree name cannot be empty",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mgr := setupTestManager(t)
-
-			if tt.setup != nil {
-				if err := tt.setup(mgr); err != nil {
-					t.Fatalf("setup failed: %v", err)
-				}
-			}
-
-			frozen, err := mgr.IsFrozen(tt.worktree)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("IsFrozen() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if tt.wantErr && tt.errSubstr != "" {
-				if err == nil || !strings.Contains(err.Error(), tt.errSubstr) {
-					t.Errorf("IsFrozen() error = %v, want error containing %q", err, tt.errSubstr)
-				}
-			}
-			if !tt.wantErr && frozen != tt.wantFrozen {
-				t.Errorf("IsFrozen() = %v, want %v", frozen, tt.wantFrozen)
-			}
-		})
-	}
-}
-
-func TestManagerListFrozen(t *testing.T) {
-	tests := []struct {
-		name      string
-		setup     func(*Manager) error
-		wantCount int
-		wantNames []string
-		wantErr   bool
-	}{
-		{
-			name:      "no frozen worktrees",
-			wantCount: 0,
-			wantNames: []string{},
-			wantErr:   false,
-		},
-		{
-			name: "single frozen worktree",
-			setup: func(m *Manager) error {
-				return m.Freeze("feature-auth")
-			},
-			wantCount: 1,
-			wantNames: []string{"feature-auth"},
-			wantErr:   false,
-		},
-		{
-			name: "multiple frozen worktrees",
-			setup: func(m *Manager) error {
-				if err := m.Freeze("feature-auth"); err != nil {
-					return err
-				}
-				if err := m.Freeze("bugfix-123"); err != nil {
-					return err
-				}
-				return m.Freeze("refactor-db")
-			},
-			wantCount: 3,
-			wantNames: []string{"bugfix-123", "feature-auth", "refactor-db"}, // sorted
-			wantErr:   false,
-		},
-		{
-			name: "frozen and resumed worktrees",
-			setup: func(m *Manager) error {
-				if err := m.Freeze("feature-auth"); err != nil {
-					return err
-				}
-				if err := m.Freeze("bugfix-123"); err != nil {
-					return err
-				}
-				// Resume one
-				return m.Resume("feature-auth")
-			},
-			wantCount: 1,
-			wantNames: []string{"bugfix-123"},
-			wantErr:   false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mgr := setupTestManager(t)
-
-			if tt.setup != nil {
-				if err := tt.setup(mgr); err != nil {
-					t.Fatalf("setup failed: %v", err)
-				}
-			}
-
-			frozen, err := mgr.ListFrozen()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ListFrozen() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if len(frozen) != tt.wantCount {
-				t.Errorf("ListFrozen() returned %d worktrees, want %d", len(frozen), tt.wantCount)
-			}
-			if !slices.Equal(frozen, tt.wantNames) {
-				t.Errorf("ListFrozen() = %v, want %v", frozen, tt.wantNames)
+			if !tt.wantErr && mgr.groveDir == "" {
+				t.Error("NewManager() returned manager with empty groveDir")
 			}
 		})
 	}
@@ -312,17 +55,17 @@ func TestManagerPersistence(t *testing.T) {
 	t.Run("state persists across manager instances", func(t *testing.T) {
 		stateDir := t.TempDir()
 
-		// Create first manager and freeze worktrees
+		// Create first manager and add worktrees
 		mgr1, err := NewManager(stateDir)
 		if err != nil {
 			t.Fatalf("NewManager() error = %v", err)
 		}
 
-		if err := mgr1.Freeze("feature-auth"); err != nil {
-			t.Fatalf("Freeze() error = %v", err)
+		if err := mgr1.AddWorktree("feature-auth", &WorktreeState{Path: "/path/1", Branch: "main"}); err != nil {
+			t.Fatalf("AddWorktree() error = %v", err)
 		}
-		if err := mgr1.Freeze("bugfix-123"); err != nil {
-			t.Fatalf("Freeze() error = %v", err)
+		if err := mgr1.AddWorktree("bugfix-123", &WorktreeState{Path: "/path/2", Branch: "dev"}); err != nil {
+			t.Fatalf("AddWorktree() error = %v", err)
 		}
 
 		// Create second manager with same state dir
@@ -332,21 +75,18 @@ func TestManagerPersistence(t *testing.T) {
 		}
 
 		// Verify state is loaded
-		frozen, err := mgr2.ListFrozen()
-		if err != nil {
-			t.Fatalf("ListFrozen() error = %v", err)
-		}
-		if len(frozen) != 2 {
-			t.Errorf("ListFrozen() returned %d worktrees, want 2", len(frozen))
+		worktrees := mgr2.ListWorktrees()
+		if len(worktrees) != 2 {
+			t.Errorf("ListWorktrees() returned %d worktrees, want 2", len(worktrees))
 		}
 
-		// Verify individual checks
-		isFrozen, err := mgr2.IsFrozen("feature-auth")
+		// Verify individual worktree
+		ws, err := mgr2.GetWorktree("feature-auth")
 		if err != nil {
-			t.Fatalf("IsFrozen() error = %v", err)
+			t.Fatalf("GetWorktree() error = %v", err)
 		}
-		if !isFrozen {
-			t.Error("feature-auth should be frozen")
+		if ws == nil {
+			t.Error("feature-auth should exist")
 		}
 	})
 
@@ -357,12 +97,12 @@ func TestManagerPersistence(t *testing.T) {
 			t.Fatalf("NewManager() error = %v", err)
 		}
 
-		if err := mgr.Freeze("feature-auth"); err != nil {
-			t.Fatalf("Freeze() error = %v", err)
+		if err := mgr.AddWorktree("feature-auth", &WorktreeState{Path: "/path", Branch: "main"}); err != nil {
+			t.Fatalf("AddWorktree() error = %v", err)
 		}
 
 		// Verify state file exists and is valid JSON
-		stateFile := filepath.Join(stateDir, "frozen.json")
+		stateFile := filepath.Join(stateDir, "state.json")
 		if _, err := os.Stat(stateFile); err != nil {
 			t.Errorf("state file does not exist: %v", err)
 		}
@@ -373,40 +113,333 @@ func TestManagerPersistence(t *testing.T) {
 			t.Fatalf("NewManager() failed to load state: %v", err)
 		}
 
-		frozen, err := mgr2.ListFrozen()
-		if err != nil {
-			t.Fatalf("ListFrozen() error = %v", err)
-		}
-		if len(frozen) != 1 {
-			t.Errorf("loaded state has %d worktrees, want 1", len(frozen))
+		worktrees := mgr2.ListWorktrees()
+		if len(worktrees) != 1 {
+			t.Errorf("loaded state has %d worktrees, want 1", len(worktrees))
 		}
 	})
 }
 
 func TestConcurrentOperations(t *testing.T) {
-	t.Run("concurrent freeze operations", func(t *testing.T) {
+	t.Run("concurrent worktree operations", func(t *testing.T) {
 		mgr := setupTestManager(t)
 
-		// Launch concurrent freeze operations
+		// Launch concurrent AddWorktree operations
 		done := make(chan error, 3)
-		go func() { done <- mgr.Freeze("worktree-1") }()
-		go func() { done <- mgr.Freeze("worktree-2") }()
-		go func() { done <- mgr.Freeze("worktree-3") }()
+		go func() { done <- mgr.AddWorktree("worktree-1", &WorktreeState{Path: "/p1", Branch: "b1"}) }()
+		go func() { done <- mgr.AddWorktree("worktree-2", &WorktreeState{Path: "/p2", Branch: "b2"}) }()
+		go func() { done <- mgr.AddWorktree("worktree-3", &WorktreeState{Path: "/p3", Branch: "b3"}) }()
 
 		// Wait for all to complete
 		for i := 0; i < 3; i++ {
 			if err := <-done; err != nil {
-				t.Errorf("concurrent Freeze() error = %v", err)
+				t.Errorf("concurrent AddWorktree() error = %v", err)
 			}
 		}
 
-		// Verify all are frozen
-		frozen, err := mgr.ListFrozen()
-		if err != nil {
-			t.Fatalf("ListFrozen() error = %v", err)
+		// Verify all worktrees exist
+		worktrees := mgr.ListWorktrees()
+		if len(worktrees) != 3 {
+			t.Errorf("ListWorktrees() = %d worktrees, want 3", len(worktrees))
 		}
-		if len(frozen) != 3 {
-			t.Errorf("ListFrozen() = %d worktrees, want 3", len(frozen))
+	})
+}
+
+// --- V2 State Method Tests ---
+
+func TestManagerProject(t *testing.T) {
+	t.Run("set and get project name", func(t *testing.T) {
+		mgr := setupTestManager(t)
+
+		// Initially empty
+		if name := mgr.GetProject(); name != "" {
+			t.Errorf("GetProject() = %q, want empty", name)
+		}
+
+		// Set project
+		if err := mgr.SetProject("grove-cli"); err != nil {
+			t.Fatalf("SetProject() error = %v", err)
+		}
+
+		// Get project
+		if name := mgr.GetProject(); name != "grove-cli" {
+			t.Errorf("GetProject() = %q, want %q", name, "grove-cli")
+		}
+	})
+
+	t.Run("empty project name returns error", func(t *testing.T) {
+		mgr := setupTestManager(t)
+		err := mgr.SetProject("")
+		if err == nil {
+			t.Error("SetProject(\"\") should return error")
+		}
+	})
+}
+
+func TestManagerLastWorktree(t *testing.T) {
+	t.Run("set and get last worktree", func(t *testing.T) {
+		mgr := setupTestManager(t)
+
+		// Initially empty
+		last, err := mgr.GetLastWorktree()
+		if err != nil {
+			t.Fatalf("GetLastWorktree() error = %v", err)
+		}
+		if last != "" {
+			t.Errorf("GetLastWorktree() = %q, want empty", last)
+		}
+
+		// Set last worktree
+		if err := mgr.SetLastWorktree("testing"); err != nil {
+			t.Fatalf("SetLastWorktree() error = %v", err)
+		}
+
+		// Get last worktree
+		last, err = mgr.GetLastWorktree()
+		if err != nil {
+			t.Fatalf("GetLastWorktree() error = %v", err)
+		}
+		if last != "testing" {
+			t.Errorf("GetLastWorktree() = %q, want %q", last, "testing")
+		}
+	})
+
+	t.Run("empty worktree name returns error", func(t *testing.T) {
+		mgr := setupTestManager(t)
+		err := mgr.SetLastWorktree("")
+		if err == nil {
+			t.Error("SetLastWorktree(\"\") should return error")
+		}
+	})
+}
+
+func TestManagerWorktreeOperations(t *testing.T) {
+	t.Run("add and get worktree", func(t *testing.T) {
+		mgr := setupTestManager(t)
+
+		ws := &WorktreeState{
+			Path:   "/path/to/worktree",
+			Branch: "feature-auth",
+			Root:   false,
+		}
+
+		if err := mgr.AddWorktree("testing", ws); err != nil {
+			t.Fatalf("AddWorktree() error = %v", err)
+		}
+
+		got, err := mgr.GetWorktree("testing")
+		if err != nil {
+			t.Fatalf("GetWorktree() error = %v", err)
+		}
+		if got == nil {
+			t.Fatal("GetWorktree() returned nil")
+		}
+		if got.Path != ws.Path {
+			t.Errorf("GetWorktree().Path = %q, want %q", got.Path, ws.Path)
+		}
+		if got.Branch != ws.Branch {
+			t.Errorf("GetWorktree().Branch = %q, want %q", got.Branch, ws.Branch)
+		}
+	})
+
+	t.Run("get non-existent worktree returns nil", func(t *testing.T) {
+		mgr := setupTestManager(t)
+		got, err := mgr.GetWorktree("nonexistent")
+		if err != nil {
+			t.Fatalf("GetWorktree() error = %v", err)
+		}
+		if got != nil {
+			t.Errorf("GetWorktree() = %v, want nil", got)
+		}
+	})
+
+	t.Run("remove worktree", func(t *testing.T) {
+		mgr := setupTestManager(t)
+
+		ws := &WorktreeState{Path: "/path", Branch: "main"}
+		if err := mgr.AddWorktree("testing", ws); err != nil {
+			t.Fatalf("AddWorktree() error = %v", err)
+		}
+
+		if err := mgr.RemoveWorktree("testing"); err != nil {
+			t.Fatalf("RemoveWorktree() error = %v", err)
+		}
+
+		got, _ := mgr.GetWorktree("testing")
+		if got != nil {
+			t.Error("worktree should be removed")
+		}
+	})
+
+	t.Run("list worktrees returns sorted names", func(t *testing.T) {
+		mgr := setupTestManager(t)
+
+		mgr.AddWorktree("zebra", &WorktreeState{Path: "/z"})
+		mgr.AddWorktree("alpha", &WorktreeState{Path: "/a"})
+		mgr.AddWorktree("middle", &WorktreeState{Path: "/m"})
+
+		names := mgr.ListWorktrees()
+		expected := []string{"alpha", "middle", "zebra"}
+		if !slices.Equal(names, expected) {
+			t.Errorf("ListWorktrees() = %v, want %v", names, expected)
+		}
+	})
+}
+
+func TestManagerTouchWorktree(t *testing.T) {
+	t.Run("touch updates last_accessed_at", func(t *testing.T) {
+		mgr := setupTestManager(t)
+
+		ws := &WorktreeState{Path: "/path", Branch: "main"}
+		if err := mgr.AddWorktree("testing", ws); err != nil {
+			t.Fatalf("AddWorktree() error = %v", err)
+		}
+
+		if err := mgr.TouchWorktree("testing"); err != nil {
+			t.Fatalf("TouchWorktree() error = %v", err)
+		}
+
+		got, _ := mgr.GetWorktree("testing")
+		if got.LastAccessedAt.IsZero() {
+			t.Error("LastAccessedAt should be set after touch")
+		}
+	})
+
+	t.Run("touch non-existent worktree returns error", func(t *testing.T) {
+		mgr := setupTestManager(t)
+		err := mgr.TouchWorktree("nonexistent")
+		if err == nil {
+			t.Error("TouchWorktree() on non-existent should return error")
+		}
+	})
+}
+
+func TestManagerIsEnvironment(t *testing.T) {
+	t.Run("returns true for environment worktree", func(t *testing.T) {
+		mgr := setupTestManager(t)
+
+		ws := &WorktreeState{
+			Path:        "/path",
+			Branch:      "main",
+			Environment: true,
+			Mirror:      "origin/main",
+		}
+		if err := mgr.AddWorktree("production", ws); err != nil {
+			t.Fatalf("AddWorktree() error = %v", err)
+		}
+
+		isEnv, err := mgr.IsEnvironment("production")
+		if err != nil {
+			t.Fatalf("IsEnvironment() error = %v", err)
+		}
+		if !isEnv {
+			t.Error("IsEnvironment() = false, want true")
+		}
+	})
+
+	t.Run("returns false for regular worktree", func(t *testing.T) {
+		mgr := setupTestManager(t)
+
+		ws := &WorktreeState{Path: "/path", Branch: "feature"}
+		if err := mgr.AddWorktree("testing", ws); err != nil {
+			t.Fatalf("AddWorktree() error = %v", err)
+		}
+
+		isEnv, err := mgr.IsEnvironment("testing")
+		if err != nil {
+			t.Fatalf("IsEnvironment() error = %v", err)
+		}
+		if isEnv {
+			t.Error("IsEnvironment() = true, want false")
+		}
+	})
+
+	t.Run("returns false for non-existent worktree", func(t *testing.T) {
+		mgr := setupTestManager(t)
+		isEnv, err := mgr.IsEnvironment("nonexistent")
+		if err != nil {
+			t.Fatalf("IsEnvironment() error = %v", err)
+		}
+		if isEnv {
+			t.Error("IsEnvironment() = true, want false for non-existent")
+		}
+	})
+}
+
+func TestManagerGetState(t *testing.T) {
+	t.Run("returns copy of state", func(t *testing.T) {
+		mgr := setupTestManager(t)
+
+		if err := mgr.SetProject("test-project"); err != nil {
+			t.Fatalf("SetProject() error = %v", err)
+		}
+		if err := mgr.AddWorktree("testing", &WorktreeState{Path: "/path"}); err != nil {
+			t.Fatalf("AddWorktree() error = %v", err)
+		}
+
+		state := mgr.GetState()
+		if state.Project != "test-project" {
+			t.Errorf("GetState().Project = %q, want %q", state.Project, "test-project")
+		}
+		if len(state.Worktrees) != 1 {
+			t.Errorf("GetState().Worktrees has %d entries, want 1", len(state.Worktrees))
+		}
+	})
+}
+
+func TestV2StatePersistence(t *testing.T) {
+	t.Run("V2 state persists across manager instances", func(t *testing.T) {
+		stateDir := t.TempDir()
+
+		// Create first manager and add V2 state
+		mgr1, err := NewManager(stateDir)
+		if err != nil {
+			t.Fatalf("NewManager() error = %v", err)
+		}
+
+		if err := mgr1.SetProject("my-project"); err != nil {
+			t.Fatalf("SetProject() error = %v", err)
+		}
+		if err := mgr1.SetLastWorktree("testing"); err != nil {
+			t.Fatalf("SetLastWorktree() error = %v", err)
+		}
+		ws := &WorktreeState{
+			Path:        "/path/to/testing",
+			Branch:      "feature-auth",
+			Environment: true,
+			Mirror:      "origin/main",
+		}
+		if err := mgr1.AddWorktree("testing", ws); err != nil {
+			t.Fatalf("AddWorktree() error = %v", err)
+		}
+
+		// Create second manager and verify persistence
+		mgr2, err := NewManager(stateDir)
+		if err != nil {
+			t.Fatalf("NewManager() error = %v", err)
+		}
+
+		if project := mgr2.GetProject(); project != "my-project" {
+			t.Errorf("GetProject() = %q, want %q", project, "my-project")
+		}
+
+		last, _ := mgr2.GetLastWorktree()
+		if last != "testing" {
+			t.Errorf("GetLastWorktree() = %q, want %q", last, "testing")
+		}
+
+		got, _ := mgr2.GetWorktree("testing")
+		if got == nil {
+			t.Fatal("GetWorktree() returned nil")
+		}
+		if got.Branch != "feature-auth" {
+			t.Errorf("GetWorktree().Branch = %q, want %q", got.Branch, "feature-auth")
+		}
+		if !got.Environment {
+			t.Error("GetWorktree().Environment should be true")
+		}
+		if got.Mirror != "origin/main" {
+			t.Errorf("GetWorktree().Mirror = %q, want %q", got.Mirror, "origin/main")
 		}
 	})
 }

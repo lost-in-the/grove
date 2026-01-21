@@ -99,8 +99,6 @@ func TestGetEventName(t *testing.T) {
 		{EventPostCreate, "Post-Create"},
 		{EventPreSwitch, "Pre-Switch"},
 		{EventPostSwitch, "Post-Switch"},
-		{EventPreFreeze, "Pre-Freeze"},
-		{EventPostResume, "Post-Resume"},
 		{EventPreRemove, "Pre-Remove"},
 		{EventPostRemove, "Post-Remove"},
 		{"unknown-event", "unknown-event"}, // Unknown events return themselves
@@ -125,8 +123,6 @@ func TestValidateEvent(t *testing.T) {
 		{EventPostCreate, false},
 		{EventPreSwitch, false},
 		{EventPostSwitch, false},
-		{EventPreFreeze, false},
-		{EventPostResume, false},
 		{EventPreRemove, false},
 		{EventPostRemove, false},
 		{"invalid-event", true},
