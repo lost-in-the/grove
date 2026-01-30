@@ -967,7 +967,7 @@ This JSON checklist is for agent progress tracking. Agents should update the sta
         {
           "id": "TUI-2.3",
           "name": "Detail Panel Enhancements",
-          "status": "pending",
+          "status": "complete",
           "files": ["internal/tui/detail_v2.go", "internal/tui/detail_v2_test.go"],
           "testFirst": true,
           "acceptanceCriteria": [
