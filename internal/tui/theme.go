@@ -1,6 +1,17 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"os"
+
+	"github.com/charmbracelet/lipgloss"
+)
+
+// noColor returns true when NO_COLOR or GROVE_NO_COLOR is set.
+func noColor() bool {
+	_, nc := os.LookupEnv("NO_COLOR")
+	_, gnc := os.LookupEnv("GROVE_NO_COLOR")
+	return nc || gnc
+}
 
 // Theme holds all styles for the TUI.
 var Theme = struct {

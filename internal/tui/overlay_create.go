@@ -5,42 +5,6 @@ import (
 	"strings"
 )
 
-// --- Delete overlay ---
-
-// DeleteState holds the state for the delete confirmation overlay.
-type DeleteState struct {
-	Item         *WorktreeItem
-	Warnings     []string
-	DeleteBranch bool
-}
-
-func renderDelete(s *DeleteState, width int) string {
-	var b strings.Builder
-
-	fmt.Fprintf(&b, "Delete %q?\n\n", s.Item.ShortName)
-
-	for _, w := range s.Warnings {
-		b.WriteString(Theme.WarningText.Render("⚠ "+w) + "\n")
-	}
-	if len(s.Warnings) > 0 {
-		b.WriteString("\n")
-	}
-
-	checkbox := "[ ]"
-	if s.DeleteBranch {
-		checkbox = "[x]"
-	}
-	fmt.Fprintf(&b, "%s Also delete branch %s\n", checkbox, s.Item.Branch)
-
-	b.WriteString("\n" + Theme.Footer.Render("[y] confirm  [n] cancel  [space] toggle branch"))
-
-	return Theme.OverlayBorder.Render(
-		Theme.OverlayTitle.Render("Delete Worktree") + "\n\n" + b.String(),
-	)
-}
-
-// --- Create overlay ---
-
 // CreateStep represents the current step in the create wizard.
 type CreateStep int
 
@@ -74,11 +38,17 @@ type CreateState struct {
 	BaseBranch   string
 
 	// Branch action state (split vs fork)
-	ActionChoice   int  // 0 = split (use as-is), 1 = fork (new branch from it)
-	DontShowAgain  bool
+	ActionChoice  int // 0 = split (use as-is), 1 = fork (new branch from it)
+	DontShowAgain bool
+
+	// Creating state
+	Creating bool
 }
 
-func renderCreate(s *CreateState, width int) string {
+func renderCreate(s *CreateState, width int, spinnerView string) string {
+	if s.Creating {
+		return renderCreateSpinner(s, spinnerView)
+	}
 	switch s.Step {
 	case CreateStepName:
 		return renderCreateName(s)
@@ -90,6 +60,17 @@ func renderCreate(s *CreateState, width int) string {
 		return renderCreateBranchAction(s)
 	}
 	return ""
+}
+
+func renderCreateSpinner(s *CreateState, spinnerView string) string {
+	var b strings.Builder
+	b.WriteString(spinnerView + " Creating worktree " + Theme.DetailValue.Render(s.Name) + "...\n")
+	if s.Error != "" {
+		b.WriteString("\n" + Theme.ErrorText.Render(s.Error) + "\n")
+	}
+	return Theme.OverlayBorder.Render(
+		Theme.OverlayTitle.Render("New Worktree") + "\n\n" + b.String(),
+	)
 }
 
 func renderCreateName(s *CreateState) string {
@@ -206,32 +187,4 @@ func renderCreateBranchAction(s *CreateState) string {
 	return Theme.OverlayBorder.Render(
 		Theme.OverlayTitle.Render("New Worktree") + "\n\n" + b.String(),
 	)
-}
-
-func filteredBranches(branches []string, filter string) []string {
-	if filter == "" {
-		return branches
-	}
-	lower := strings.ToLower(filter)
-	var result []string
-	for _, br := range branches {
-		if strings.Contains(strings.ToLower(br), lower) {
-			result = append(result, br)
-		}
-	}
-	return result
-}
-
-// ValidateWorktreeName checks if a name is valid for a worktree.
-func ValidateWorktreeName(name string) string {
-	if name == "" {
-		return ""
-	}
-	if strings.ContainsAny(name, " /\\:*?\"<>|") {
-		return "name contains invalid characters"
-	}
-	if strings.HasPrefix(name, "-") || strings.HasPrefix(name, ".") {
-		return "name cannot start with - or ."
-	}
-	return ""
 }

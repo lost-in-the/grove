@@ -1,6 +1,8 @@
 package tui
 
-import "github.com/charmbracelet/bubbles/key"
+import (
+	"github.com/charmbracelet/bubbles/key"
+)
 
 // KeyMap defines all keybindings for the TUI.
 type KeyMap struct {
@@ -20,11 +22,31 @@ type KeyMap struct {
 	Back    key.Binding
 	Tab     key.Binding
 
+	// Sort
+	Sort key.Binding
+
+	// PRs
+	PRs key.Binding
+
 	// Overlay-specific
 	Confirm key.Binding
 	Deny    key.Binding
 	Toggle  key.Binding
 	All     key.Binding
+}
+
+// ShortHelp returns keybindings for the short help view (help.KeyMap interface).
+func (k KeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Enter, k.New, k.Delete, k.PRs, k.Sort, k.Filter, k.Help, k.Quit}
+}
+
+// FullHelp returns keybindings for the full help view (help.KeyMap interface).
+func (k KeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{k.Up, k.Down, k.Enter},
+		{k.New, k.Delete, k.PRs, k.Sort, k.Filter, k.Refresh},
+		{k.Help, k.Quit, k.Escape},
+	}
 }
 
 // DefaultKeyMap returns the default set of keybindings.
@@ -89,6 +111,16 @@ func DefaultKeyMap() KeyMap {
 		Tab: key.NewBinding(
 			key.WithKeys("tab"),
 			key.WithHelp("tab", "detail"),
+		),
+
+		Sort: key.NewBinding(
+			key.WithKeys("o"),
+			key.WithHelp("o", "sort"),
+		),
+
+		PRs: key.NewBinding(
+			key.WithKeys("p"),
+			key.WithHelp("p", "PRs"),
 		),
 
 		// Overlay keys

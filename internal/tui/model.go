@@ -3,17 +3,21 @@ package tui
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/git"
-	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
-	"github.com/LeahArmstrong/grove-cli/internal/tmux"
+	"github.com/LeahArmstrong/grove-cli/internal/tuilog"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 )
 
@@ -25,45 +29,85 @@ const (
 	ViewHelp
 	ViewDelete
 	ViewCreate
+	ViewBulk
+	ViewPRs
 )
 
 // Model is the root Bubble Tea model.
 type Model struct {
+	// Data
 	worktreeMgr *worktree.Manager
 	stateMgr    *state.Manager
 	projectRoot string
 	projectName string
-	items       []WorktreeItem
-	keys        KeyMap
+	cfg         *config.Config
 
+	// Child components (bubbles)
+	list    list.Model
+	detail  viewport.Model
+	spinner spinner.Model
+	help    help.Model
+
+	// Keys
+	keys KeyMap
+
+	// State
 	activeView ActiveView
-	cursor     int
-	width      int
-	height     int
+	ready      bool // true after first WindowSizeMsg
+	loading    bool // true while fetching worktrees
+	statusMsg  string
+	statusTTL  time.Time
 
-	filtering  bool
-	filterText string
+	// Sort
+	sortMode SortMode
 
+	// Overlay state
 	deleteState *DeleteState
 	createState *CreateState
+	bulkState   *BulkState
+	prState     *PRViewState
 
-	cfg *config.Config
-
+	// Output
 	switchTo string
 	err      error
+
+	// Layout
+	width, height int
 }
 
 // NewModel creates a new TUI model.
 func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string) Model {
 	cfg, _ := config.Load()
+	keys := DefaultKeyMap()
+
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+
+	delegate := NewWorktreeDelegate()
+	l := list.New(nil, delegate, 0, 0)
+	l.SetShowTitle(false)
+	l.SetShowStatusBar(false)
+	l.SetShowHelp(false)
+	l.SetFilteringEnabled(true)
+	l.KeyMap.Filter.SetKeys("/")
+	// Map our navigation keys to list's keymap
+	l.KeyMap.CursorUp.SetKeys("up", "k")
+	l.KeyMap.CursorDown.SetKeys("down", "j")
+
+	h := help.New()
+
 	return Model{
 		worktreeMgr: mgr,
 		stateMgr:    stateMgr,
 		projectRoot: projectRoot,
 		projectName: mgr.GetProjectName(),
-		keys:        DefaultKeyMap(),
-		activeView:  ViewDashboard,
 		cfg:         cfg,
+		keys:        keys,
+		list:        l,
+		spinner:     s,
+		help:        h,
+		activeView:  ViewDashboard,
+		loading:     true,
 	}
 }
 
@@ -73,181 +117,246 @@ func (m Model) SwitchTo() string { return m.switchTo }
 // Err returns any error that occurred.
 func (m Model) Err() error { return m.err }
 
-// --- Messages ---
-
-type worktreesFetchedMsg struct {
-	items []WorktreeItem
-	err   error
-}
-
-type worktreeDeletedMsg struct {
-	name         string
-	deleteBranch bool
-	err          error
-}
-
-type worktreeCreatedMsg struct {
-	name string
-	path string
-	err  error
-}
-
-// --- Commands ---
-
-func (m Model) fetchWorktrees() tea.Msg {
-	items, err := FetchWorktrees(m.worktreeMgr, m.stateMgr)
-	return worktreesFetchedMsg{items: items, err: err}
-}
-
-func deleteWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot, name string, deleteBranch bool) tea.Cmd {
-	return func() tea.Msg {
-		projectName := mgr.GetProjectName()
-
-		// Kill tmux session before removing worktree
-		if tmux.IsTmuxAvailable() {
-			sessionName := worktree.TmuxSessionName(projectName, name)
-			if exists, _ := tmux.SessionExists(sessionName); exists {
-				_ = tmux.KillSession(sessionName)
-			}
-		}
-
-		// Capture the branch before removal so we can delete it afterwards
-		var branch string
-		wt, _ := mgr.Find(name)
-		if wt != nil {
-			branch = wt.Branch
-		}
-
-		// Run pre-remove hooks
-		hookExecutor, hookErr := hooks.NewExecutor()
-		if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPreRemove) {
-			hookCtx := &hooks.ExecutionContext{
-				Event:    hooks.EventPreRemove,
-				Worktree: name,
-				Project:  projectName,
-			}
-			if wt != nil {
-				hookCtx.Branch = wt.Branch
-				hookCtx.NewPath = wt.Path
-				hookCtx.WorktreeFull = projectName + "-" + name
-			}
-			_ = hookExecutor.Execute(hooks.EventPreRemove, hookCtx)
-		}
-
-		err := mgr.Remove(name)
-		if err != nil {
-			return worktreeDeletedMsg{name: name, deleteBranch: deleteBranch, err: err}
-		}
-
-		// Remove from state
-		_ = stateMgr.RemoveWorktree(name)
-
-		// Delete branch if requested
-		if deleteBranch && branch != "" {
-			branchMgr, branchErr := git.NewBranchManager(projectRoot)
-			if branchErr == nil {
-				_ = branchMgr.Delete(branch, false)
-			}
-		}
-
-		return worktreeDeletedMsg{name: name, deleteBranch: deleteBranch, err: nil}
-	}
-}
-
-func createWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot, name, baseBranch string) tea.Cmd {
-	return func() tea.Msg {
-		branchArg := name
-		if baseBranch != "" {
-			branchArg = baseBranch
-		}
-		err := mgr.Create(name, branchArg)
-		if err != nil {
-			return worktreeCreatedMsg{name: name, err: err}
-		}
-		wt, err := mgr.Find(name)
-		if err != nil || wt == nil {
-			return worktreeCreatedMsg{name: name, err: fmt.Errorf("worktree created but not found")}
-		}
-
-		projectName := mgr.GetProjectName()
-
-		// Register in state (matches grove new behavior)
-		now := time.Now()
-		wsState := &state.WorktreeState{
-			Path:           wt.Path,
-			Branch:         name,
-			CreatedAt:      now,
-			LastAccessedAt: now,
-		}
-		_ = stateMgr.AddWorktree(name, wsState)
-
-		// Create tmux session
-		if tmux.IsTmuxAvailable() {
-			sessionName := worktree.TmuxSessionName(projectName, name)
-			_ = tmux.CreateSession(sessionName, wt.Path)
-		}
-
-		// Run post-create hooks
-		hookExecutor, hookErr := hooks.NewExecutor()
-		if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPostCreate) {
-			hookCtx := &hooks.ExecutionContext{
-				Event:        hooks.EventPostCreate,
-				Worktree:     name,
-				WorktreeFull: projectName + "-" + name,
-				Branch:       name,
-				Project:      projectName,
-				MainPath:     projectRoot,
-				NewPath:      wt.Path,
-			}
-			_ = hookExecutor.Execute(hooks.EventPostCreate, hookCtx)
-		}
-
-		return worktreeCreatedMsg{name: name, path: wt.Path}
-	}
-}
-
 // --- Tea interface ---
 
 func (m Model) Init() tea.Cmd {
-	return m.fetchWorktrees
+	tuilog.Printf("Init: loading=%v ready=%v", m.loading, m.ready)
+	return tea.Batch(m.spinner.Tick, m.fetchWorktrees)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.ready = true
+		m.updateLayout()
+		tuilog.Printf("WindowSizeMsg: %dx%d, list size: %dx%d", msg.Width, msg.Height, m.list.Width(), m.list.Height())
 		return m, nil
 
 	case worktreesFetchedMsg:
 		if msg.err != nil {
+			tuilog.Printf("worktreesFetchedMsg: error=%v", msg.err)
 			m.err = msg.err
 			return m, tea.Quit
 		}
-		m.items = msg.items
+		tuilog.Printf("worktreesFetchedMsg: %d items, ready=%v", len(msg.items), m.ready)
+		listItems := make([]list.Item, len(msg.items))
+		for i, item := range msg.items {
+			listItems[i] = item
+		}
+		if m.sortMode != SortByName {
+			listItems = sortWorktreeItems(listItems, m.sortMode)
+		}
+		m.list.SetItems(listItems)
+		m.loading = false
+		m.updateDetailContent()
 		return m, nil
 
 	case worktreeDeletedMsg:
 		m.activeView = ViewDashboard
 		m.deleteState = nil
-		return m, m.fetchWorktrees
+		if msg.err == nil {
+			m.statusMsg = fmt.Sprintf("Deleted %q", msg.name)
+			m.statusTTL = time.Now().Add(3 * time.Second)
+			cmds = append(cmds, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+				return statusClearMsg{deadline: m.statusTTL}
+			}))
+		}
+		cmds = append(cmds, m.fetchWorktrees)
+		return m, tea.Batch(cmds...)
 
 	case worktreeCreatedMsg:
 		if msg.err != nil {
 			if m.createState != nil {
+				m.createState.Creating = false
 				m.createState.Error = msg.err.Error()
 			}
 			return m, nil
 		}
 		m.activeView = ViewDashboard
 		m.createState = nil
-		return m, m.fetchWorktrees
+		m.statusMsg = fmt.Sprintf("Created %q", msg.name)
+		m.statusTTL = time.Now().Add(3 * time.Second)
+		cmds = append(cmds, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+			return statusClearMsg{deadline: m.statusTTL}
+		}))
+		cmds = append(cmds, m.fetchWorktrees)
+		return m, tea.Batch(cmds...)
+
+	case statusClearMsg:
+		if !msg.deadline.Before(m.statusTTL) {
+			m.statusMsg = ""
+		}
+		return m, nil
+
+	case prsFetchedMsg:
+		if m.prState != nil {
+			m.prState.Loading = false
+			if msg.err != nil {
+				m.prState.Error = msg.err.Error()
+			} else {
+				m.prState.PRs = msg.prs
+			}
+		}
+		return m, nil
+
+	case prWorktreeCreatedMsg:
+		if m.prState != nil {
+			m.prState.Creating = false
+		}
+		if msg.err != nil {
+			if m.prState != nil {
+				m.prState.Error = msg.err.Error()
+			}
+			return m, nil
+		}
+		m.activeView = ViewDashboard
+		m.prState = nil
+		m.statusMsg = fmt.Sprintf("Created worktree from PR %q", msg.name)
+		m.statusTTL = time.Now().Add(3 * time.Second)
+		cmds = append(cmds, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+			return statusClearMsg{deadline: m.statusTTL}
+		}))
+		cmds = append(cmds, m.fetchWorktrees)
+		return m, tea.Batch(cmds...)
+
+	case bulkDeleteDoneMsg:
+		m.activeView = ViewDashboard
+		m.bulkState = nil
+		m.statusMsg = fmt.Sprintf("Deleted %d worktrees", msg.count)
+		m.statusTTL = time.Now().Add(3 * time.Second)
+		return m, tea.Batch(
+			tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+				return statusClearMsg{deadline: m.statusTTL}
+			}),
+			m.fetchWorktrees,
+		)
+
+	case spinner.TickMsg:
+		if m.loading || (m.createState != nil && m.createState.Creating) || (m.prState != nil && (m.prState.Loading || m.prState.Creating)) {
+			var cmd tea.Cmd
+			m.spinner, cmd = m.spinner.Update(msg)
+			return m, cmd
+		}
+		return m, nil
 
 	case tea.KeyMsg:
+		tuilog.Printf("KeyMsg: type=%d string=%q runes=%v", msg.Type, msg.String(), msg.Runes)
+		// Overlays capture all input
+		if m.activeView != ViewDashboard {
+			return m.handleKey(msg)
+		}
+
+		// If list is filtering, let it handle all keys except esc
+		if m.list.FilterState() == list.Filtering {
+			prevIdx := m.list.Index()
+			var cmd tea.Cmd
+			m.list, cmd = m.list.Update(msg)
+			if m.list.Index() != prevIdx {
+				m.updateDetailContent()
+			}
+			return m, cmd
+		}
+
 		return m.handleKey(msg)
+
+	default:
+		// Forward unhandled messages to the list so it can process
+		// internal messages (e.g. filter match results from fuzzy search).
+		var cmd tea.Cmd
+		m.list, cmd = m.list.Update(msg)
+		return m, cmd
+	}
+}
+
+func (m *Model) updateLayout() {
+	if m.width == 0 || m.height == 0 {
+		return
 	}
 
-	return m, nil
+	headerHeight := 1 // status bar
+	footerHeight := 1 // help
+	available := m.height - headerHeight - footerHeight
+
+	useSideBySide := m.width > 120
+	if useSideBySide {
+		// Adaptive list width: based on content, clamped to [40, 55% of terminal]
+		listWidth := m.adaptiveListWidth()
+		maxListWidth := m.width * 55 / 100
+		if listWidth > maxListWidth {
+			listWidth = maxListWidth
+		}
+		detailWidth := m.width - listWidth - 1
+		m.list.SetSize(listWidth, available)
+		m.detail.Width = detailWidth
+		m.detail.Height = available
+	} else {
+		// Stacked: cap list height at item count * row height + padding
+		itemCount := len(m.list.Items())
+		rowHeight := 1 // delegate Height()
+		idealListHeight := itemCount*rowHeight + 2 // +2 for padding
+		maxListHeight := available * 6 / 10
+		listHeight := idealListHeight
+		if listHeight > maxListHeight {
+			listHeight = maxListHeight
+		}
+		if listHeight < 3 {
+			listHeight = 3
+		}
+		detailHeight := available - listHeight - 1
+		if detailHeight < 3 {
+			detailHeight = 3
+		}
+		m.list.SetSize(m.width, listHeight)
+		m.detail.Width = m.width
+		m.detail.Height = detailHeight
+	}
+
+	m.help.Width = m.width
+}
+
+// adaptiveListWidth calculates list panel width based on the widest rendered row.
+func (m *Model) adaptiveListWidth() int {
+	minWidth := 40
+	maxRendered := minWidth
+	for _, li := range m.list.Items() {
+		item, ok := li.(WorktreeItem)
+		if !ok {
+			continue
+		}
+		// Approximate row width: num(2) + cursor(2) + name + gap(2) + branch + gap(2) + age + gap(2) + status(8) + tmux(12)
+		w := 2 + 2 + len(item.ShortName) + 2 + len(item.Branch) + 2 + 8 + 2 + 8
+		if item.TmuxStatus != "none" {
+			w += 12
+		}
+		if w > maxRendered {
+			maxRendered = w
+		}
+	}
+	return maxRendered
+}
+
+func (m *Model) updateDetailContent() {
+	item, ok := m.selectedItem()
+	if !ok {
+		m.detail.SetContent("")
+		return
+	}
+	content := renderDetailContent(&item, m.detail.Width)
+	m.detail.SetContent(content)
+	m.detail.GotoTop()
+}
+
+func (m Model) selectedItem() (WorktreeItem, bool) {
+	selected := m.list.SelectedItem()
+	if selected == nil {
+		return WorktreeItem{}, false
+	}
+	item, ok := selected.(WorktreeItem)
+	return item, ok
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -259,6 +368,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleDeleteKey(msg)
 	case ViewCreate:
 		return m.handleCreateKey(msg)
+	case ViewBulk:
+		return m.handleBulkKey(msg)
+	case ViewPRs:
+		return m.handlePRKey(msg)
 	case ViewDashboard:
 		return m.handleDashboardKey(msg)
 	}
@@ -266,69 +379,20 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.filtering {
-		switch {
-		case key.Matches(msg, m.keys.Escape):
-			m.filtering = false
-			m.filterText = ""
-			return m, nil
-		case key.Matches(msg, m.keys.Enter):
-			m.filtering = false
-			return m, nil
-		case msg.Type == tea.KeyBackspace:
-			if len(m.filterText) > 0 {
-				m.filterText = m.filterText[:len(m.filterText)-1]
-			}
-			return m, nil
-		case msg.Type == tea.KeyRunes:
-			m.filterText += string(msg.Runes)
-			return m, nil
-		}
-		return m, nil
-	}
-
-	visible := m.visibleItems()
-
 	switch {
 	case key.Matches(msg, m.keys.Quit):
 		return m, tea.Quit
 
 	case key.Matches(msg, m.keys.Escape):
-		if m.filterText != "" {
-			m.filterText = ""
-			return m, nil
-		}
 		return m, tea.Quit
-
-	case key.Matches(msg, m.keys.Up):
-		if m.cursor > 0 {
-			m.cursor--
-		}
-		return m, nil
-
-	case key.Matches(msg, m.keys.Down):
-		if m.cursor < len(visible)-1 {
-			m.cursor++
-		}
-		return m, nil
-
-	case key.Matches(msg, m.keys.Enter):
-		if m.cursor >= 0 && m.cursor < len(visible) {
-			m.switchTo = visible[m.cursor].Path
-			return m, tea.Quit
-		}
-
-	case key.Matches(msg, m.keys.Filter):
-		m.filtering = true
-		m.filterText = ""
-		return m, nil
 
 	case key.Matches(msg, m.keys.Help):
 		m.activeView = ViewHelp
 		return m, nil
 
 	case key.Matches(msg, m.keys.Refresh):
-		return m, m.fetchWorktrees
+		m.loading = true
+		return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
 
 	case key.Matches(msg, m.keys.New):
 		m.activeView = ViewCreate
@@ -339,21 +403,64 @@ func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.keys.Delete):
-		if m.cursor >= 0 && m.cursor < len(visible) {
-			item := &visible[m.cursor]
-			if item.IsMain || item.IsProtected {
-				return m, nil
-			}
+		item, ok := m.selectedItem()
+		if ok && !item.IsMain && !item.IsProtected {
 			m.activeView = ViewDelete
 			m.deleteState = &DeleteState{
-				Item:     item,
-				Warnings: gatherDeleteWarnings(item),
+				Item:     &item,
+				Warnings: gatherDeleteWarnings(&item),
+			}
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.Enter):
+		item, ok := m.selectedItem()
+		if ok {
+			if item.IsCurrent {
+				return m, tea.Quit
+			}
+			m.switchTo = item.Path
+			return m, tea.Quit
+		}
+
+	case key.Matches(msg, m.keys.Sort):
+		m.sortMode = m.sortMode.Next()
+		m.applySortToList()
+		return m, nil
+
+	case key.Matches(msg, m.keys.All):
+		return m.enterBulkMode()
+
+	case key.Matches(msg, m.keys.PRs):
+		return m.enterPRView()
+	}
+
+	// Quick-switch: number keys 1-9 jump to nth visible item
+	if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 {
+		r := msg.Runes[0]
+		if r >= '1' && r <= '9' {
+			idx := int(r - '1')
+			items := m.list.Items()
+			if idx < len(items) {
+				item := items[idx].(WorktreeItem)
+				if item.IsCurrent {
+					return m, tea.Quit
+				}
+				m.switchTo = item.Path
+				return m, tea.Quit
 			}
 			return m, nil
 		}
 	}
 
-	return m, nil
+	// Route to list
+	prevIdx := m.list.Index()
+	var cmd tea.Cmd
+	m.list, cmd = m.list.Update(msg)
+	if m.list.Index() != prevIdx {
+		m.updateDetailContent()
+	}
+	return m, cmd
 }
 
 func (m Model) handleDeleteKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -462,7 +569,7 @@ func (m Model) handleCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				s.Step = CreateStepPickBranch
 				return m, nil
 			}
-			return m, createWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, s.Name, "")
+			return m.startCreate(s.Name, "")
 		}
 
 	case CreateStepPickBranch:
@@ -471,11 +578,6 @@ func (m Model) handleCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.Escape):
 			m.activeView = ViewDashboard
 			m.createState = nil
-			return m, nil
-
-		case key.Matches(msg, m.keys.Back):
-			s.Step = CreateStepBranch
-			s.BranchFilter = ""
 			return m, nil
 
 		case key.Matches(msg, m.keys.Up):
@@ -493,14 +595,12 @@ func (m Model) handleCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.Enter):
 			if len(filtered) > 0 && s.BranchCursor < len(filtered) {
 				s.BaseBranch = filtered[s.BranchCursor]
-				// Check if we should skip the action notice
 				if m.cfg != nil && m.cfg.TUI.SkipBranchNotice != nil && *m.cfg.TUI.SkipBranchNotice {
 					action := m.cfg.TUI.DefaultBranchAction
 					if action == "fork" {
-						return m, createWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, s.Name, "")
+						return m.startCreate(s.Name, "")
 					}
-					// default to split
-					return m, createWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, s.Name, s.BaseBranch)
+					return m.startCreate(s.Name, s.BaseBranch)
 				}
 				s.ActionChoice = 0
 				s.DontShowAgain = false
@@ -551,7 +651,6 @@ func (m Model) handleCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case key.Matches(msg, m.keys.Enter):
-			// Persist "don't show again" preference
 			if s.DontShowAgain && m.cfg != nil {
 				action := "fork"
 				if s.ActionChoice == 0 {
@@ -564,57 +663,316 @@ func (m Model) handleCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 
 			if s.ActionChoice == 0 {
-				// Split: use existing branch as-is
-				return m, createWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, s.Name, s.BaseBranch)
+				return m.startCreate(s.Name, s.BaseBranch)
 			}
-			// Fork: create new branch (name-based) from current HEAD
-			return m, createWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, s.Name, "")
+			return m.startCreate(s.Name, "")
 		}
 	}
 
 	return m, nil
 }
 
-func (m Model) visibleItems() []WorktreeItem {
-	if m.filterText == "" {
-		return m.items
+func (m *Model) startCreate(name, baseBranch string) (tea.Model, tea.Cmd) {
+	m.createState.Creating = true
+	return m, tea.Batch(m.spinner.Tick, createWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, name, baseBranch))
+}
+
+func (m *Model) applySortToList() {
+	sorted := sortWorktreeItems(m.list.Items(), m.sortMode)
+	m.list.SetItems(sorted)
+	m.updateDetailContent()
+}
+
+func (m Model) enterPRView() (tea.Model, tea.Cmd) {
+	// Collect existing worktree branches for badge display
+	branches := make(map[string]bool)
+	for _, li := range m.list.Items() {
+		item := li.(WorktreeItem)
+		branches[item.Branch] = true
 	}
-	return filterItems(m.items, m.filterText)
+
+	m.activeView = ViewPRs
+	m.prState = &PRViewState{
+		Loading:          true,
+		WorktreeBranches: branches,
+	}
+	return m, tea.Batch(m.spinner.Tick, m.fetchPRsCmd)
+}
+
+func (m Model) enterBulkMode() (tea.Model, tea.Cmd) {
+	// Collect deletable (non-main, non-protected) worktrees
+	var deletable []WorktreeItem
+	for _, li := range m.list.Items() {
+		item := li.(WorktreeItem)
+		if !item.IsMain && !item.IsProtected && !item.IsCurrent {
+			deletable = append(deletable, item)
+		}
+	}
+
+	m.activeView = ViewBulk
+	m.bulkState = &BulkState{
+		Items:    deletable,
+		Selected: make([]bool, len(deletable)),
+	}
+	return m, nil
+}
+
+func (m Model) handleBulkKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.bulkState == nil {
+		m.activeView = ViewDashboard
+		return m, nil
+	}
+
+	s := m.bulkState
+
+	if s.Deleting {
+		// Ignore input while deleting
+		return m, nil
+	}
+
+	switch {
+	case key.Matches(msg, m.keys.Escape):
+		m.activeView = ViewDashboard
+		m.bulkState = nil
+		return m, nil
+
+	case key.Matches(msg, m.keys.Up):
+		if s.Cursor > 0 {
+			s.Cursor--
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.Down):
+		if s.Cursor < len(s.Items)-1 {
+			s.Cursor++
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.Toggle):
+		if s.Cursor < len(s.Items) {
+			s.Selected[s.Cursor] = !s.Selected[s.Cursor]
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.Enter):
+		selected := s.SelectedItems()
+		if len(selected) == 0 {
+			return m, nil
+		}
+		s.Deleting = true
+		s.Progress = fmt.Sprintf("Deleting %d worktrees...", len(selected))
+		return m, m.bulkDeleteCmd(selected)
+	}
+
+	return m, nil
+}
+
+func (m Model) bulkDeleteCmd(items []WorktreeItem) tea.Cmd {
+	return func() tea.Msg {
+		for _, item := range items {
+			// Reuse existing delete logic inline (without branch deletion for bulk)
+			deleteWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, item.ShortName, false)()
+		}
+		return bulkDeleteDoneMsg{count: len(items)}
+	}
 }
 
 func (m Model) View() string {
-	if m.width == 0 || m.height == 0 {
+	if !m.ready {
+		tuilog.Printf("View: not ready")
 		return "loading..."
+	}
+
+	if m.loading {
+		return lipgloss.Place(m.width, m.height,
+			lipgloss.Center, lipgloss.Center,
+			m.spinner.View()+" Loading worktrees...",
+		)
 	}
 
 	switch m.activeView {
 	case ViewHelp:
-		return renderHelp(m.width, m.height)
+		return m.renderHelp()
 
 	case ViewDelete:
 		if m.deleteState != nil {
 			overlay := renderDelete(m.deleteState, m.width)
-			bg := renderDashboard(m.items, m.cursor, m.filterText, m.filtering, m.width, m.height)
+			bg := m.renderDashboard()
 			return centerOverlay(bg, overlay, m.width, m.height)
 		}
 
 	case ViewCreate:
 		if m.createState != nil {
-			overlay := renderCreate(m.createState, m.width)
-			bg := renderDashboard(m.items, m.cursor, m.filterText, m.filtering, m.width, m.height)
+			overlay := renderCreate(m.createState, m.width, m.spinner.View())
+			bg := m.renderDashboard()
+			return centerOverlay(bg, overlay, m.width, m.height)
+		}
+
+	case ViewBulk:
+		if m.bulkState != nil {
+			overlay := renderBulk(m.bulkState, m.width)
+			bg := m.renderDashboard()
+			return centerOverlay(bg, overlay, m.width, m.height)
+		}
+
+	case ViewPRs:
+		if m.prState != nil {
+			overlay := renderPRView(m.prState, m.width, m.spinner.View())
+			bg := m.renderDashboard()
 			return centerOverlay(bg, overlay, m.width, m.height)
 		}
 	}
 
-	return renderDashboard(m.items, m.cursor, m.filterText, m.filtering, m.width, m.height)
+	return m.renderDashboard()
 }
 
-func centerOverlay(_, overlay string, width, height int) string {
-	return lipgloss.Place(width, height,
-		lipgloss.Center, lipgloss.Center,
-		overlay,
-		lipgloss.WithWhitespaceChars(" "),
+func (m Model) renderDashboard() string {
+	statusBar := m.renderStatusBar()
+
+	useSideBySide := m.width > 120
+
+	var body string
+	if useSideBySide {
+		listView := m.list.View()
+		detailView := m.renderDetailPanel()
+		body = lipgloss.JoinHorizontal(lipgloss.Top, listView, " ", detailView)
+	} else {
+		listView := m.list.View()
+		separator := Theme.DetailDim.Render(strings.Repeat("─", m.width))
+		detailView := m.renderDetailPanel()
+		body = listView + "\n" + separator + "\n" + detailView
+	}
+
+	footer := m.help.View(m.keys)
+
+	return statusBar + "\n" + body + "\n" + footer
+}
+
+func (m Model) renderStatusBar() string {
+	parts := []string{
+		Theme.Header.Render(" " + m.projectName),
+		Theme.DetailDim.Render(fmt.Sprintf(" %d worktrees", len(m.list.Items()))),
+	}
+
+	if m.sortMode != SortByName {
+		parts = append(parts, Theme.DetailDim.Render("↕ "+m.sortMode.String()))
+	}
+
+	if m.statusMsg != "" {
+		parts = append(parts, " "+Theme.SuccessText.Render("✓ "+m.statusMsg))
+	}
+
+	return strings.Join(parts, "  ")
+}
+
+func (m Model) renderDetailPanel() string {
+	return m.detail.View()
+}
+
+func (m Model) renderHelp() string {
+	cols := []struct {
+		header string
+		items  [][2]string
+	}{
+		{
+			header: "Navigation",
+			items: [][2]string{
+				{"j/k ↑/↓", "move"},
+				{"enter", "switch to worktree"},
+				{"esc", "back / close"},
+			},
+		},
+		{
+			header: "Actions",
+			items: [][2]string{
+				{"n", "new worktree"},
+				{"d", "delete worktree"},
+				{"p", "browse PRs"},
+				{"a", "bulk delete merged"},
+				{"o", "cycle sort mode"},
+				{"r", "refresh list"},
+			},
+		},
+		{
+			header: "Views",
+			items: [][2]string{
+				{"1-9", "quick-switch"},
+				{"/", "filter / search"},
+				{"?", "this help"},
+				{"q", "quit"},
+			},
+		},
+	}
+
+	var sections []string
+	for _, col := range cols {
+		var lines []string
+		lines = append(lines, Theme.DetailTitle.Render(col.header))
+		for _, item := range col.items {
+			k := Theme.HelpKey.Render(padRight(item[0], 12))
+			desc := Theme.HelpDesc.Render(item[1])
+			lines = append(lines, "  "+k+desc)
+		}
+		sections = append(sections, strings.Join(lines, "\n"))
+	}
+
+	body := strings.Join(sections, "\n\n")
+	body += "\n\n" + Theme.DetailDim.Render("Guided flows: follow on-screen prompts.")
+	body += "\n" + Theme.DetailDim.Render("Backspace goes back. Esc cancels.")
+	body += "\n\n" + Theme.Footer.Render("[any key to close]")
+
+	return Theme.OverlayBorder.Render(
+		Theme.OverlayTitle.Render("Keybindings") + "\n\n" + body,
 	)
+}
+
+func centerOverlay(bg, overlay string, width, height int) string {
+	// Split background and overlay into lines
+	bgLines := strings.Split(bg, "\n")
+	overlayLines := strings.Split(overlay, "\n")
+
+	// Pad/trim bg to exactly height lines
+	for len(bgLines) < height {
+		bgLines = append(bgLines, "")
+	}
+	if len(bgLines) > height {
+		bgLines = bgLines[:height]
+	}
+
+	// Dim the background lines
+	dimStyle := lipgloss.NewStyle().Faint(true)
+	for i, line := range bgLines {
+		bgLines[i] = dimStyle.Render(line)
+	}
+
+	// Calculate overlay position (centered)
+	overlayHeight := len(overlayLines)
+	overlayWidth := 0
+	for _, line := range overlayLines {
+		if w := lipgloss.Width(line); w > overlayWidth {
+			overlayWidth = w
+		}
+	}
+
+	startRow := (height - overlayHeight) / 2
+	if startRow < 0 {
+		startRow = 0
+	}
+	startCol := (width - overlayWidth) / 2
+	if startCol < 0 {
+		startCol = 0
+	}
+
+	// Composite overlay on top of dimmed background
+	padding := strings.Repeat(" ", startCol)
+	for i, oLine := range overlayLines {
+		row := startRow + i
+		if row >= 0 && row < len(bgLines) {
+			bgLines[row] = padding + oLine
+		}
+	}
+
+	return strings.Join(bgLines, "\n")
 }
 
 func gatherDeleteWarnings(item *WorktreeItem) []string {
@@ -633,22 +991,35 @@ func gatherDeleteWarnings(item *WorktreeItem) []string {
 
 // Run starts the TUI and returns the path to switch to (if any).
 func Run(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string) (string, error) {
+	tuilog.Init()
+	defer tuilog.Close()
+
+	tuilog.Printf("Run: projectRoot=%s", projectRoot)
+
 	model := NewModel(mgr, stateMgr, projectRoot)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	finalModel, err := p.Run()
 	if err != nil {
+		tuilog.Printf("Run: tea.Program error: %v", err)
 		return "", fmt.Errorf("TUI error: %w", err)
 	}
 
 	m := finalModel.(Model)
+	tuilog.Printf("Run: exit ready=%v loading=%v items=%d switchTo=%q err=%v",
+		m.ready, m.loading, len(m.list.Items()), m.switchTo, m.err)
+
 	if m.Err() != nil {
 		return "", m.Err()
 	}
 
 	switchPath := m.SwitchTo()
-	if switchPath != "" && os.Getenv("GROVE_SHELL") == "1" {
-		fmt.Printf("cd:%s\n", switchPath)
+	if switchPath != "" {
+		if cdFile := os.Getenv("GROVE_CD_FILE"); cdFile != "" {
+			os.WriteFile(cdFile, []byte(switchPath), 0600)
+		} else if os.Getenv("GROVE_SHELL") == "1" {
+			fmt.Printf("cd:%s\n", switchPath)
+		}
 	}
 
 	return switchPath, nil
