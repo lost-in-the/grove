@@ -337,6 +337,153 @@ dirty_handling = "invalid-value"
 	}
 }
 
+func TestSetProjectConfigValues(t *testing.T) {
+	// Save original working directory
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working directory: %v", err)
+	}
+	defer os.Chdir(origDir)
+
+	tests := []struct {
+		name     string
+		initial  string // initial file content ("" means no file)
+		updates  map[string]string
+		validate func(*testing.T, string)
+	}{
+		{
+			name: "update existing key in existing section",
+			initial: `project_name = "myproject"
+
+[switch]
+dirty_handling = "prompt"
+`,
+			updates: map[string]string{"switch.dirty_handling": `"auto-stash"`},
+			validate: func(t *testing.T, content string) {
+				if !strings.Contains(content, `dirty_handling = "auto-stash"`) {
+					t.Errorf("expected updated value, got:\n%s", content)
+				}
+				if strings.Contains(content, `"prompt"`) {
+					t.Errorf("old value should be gone, got:\n%s", content)
+				}
+			},
+		},
+		{
+			name: "add new key to existing section",
+			initial: `[tui]
+skip_branch_notice = true
+`,
+			updates: map[string]string{"tui.default_branch_action": `"split"`},
+			validate: func(t *testing.T, content string) {
+				if !strings.Contains(content, `default_branch_action = "split"`) {
+					t.Errorf("expected new key, got:\n%s", content)
+				}
+				if !strings.Contains(content, "skip_branch_notice = true") {
+					t.Errorf("existing key should be preserved, got:\n%s", content)
+				}
+			},
+		},
+		{
+			name: "create new section and key",
+			initial: `project_name = "myproject"
+`,
+			updates: map[string]string{"tui.skip_branch_notice": "true"},
+			validate: func(t *testing.T, content string) {
+				if !strings.Contains(content, "[tui]") {
+					t.Errorf("expected [tui] section, got:\n%s", content)
+				}
+				if !strings.Contains(content, "skip_branch_notice = true") {
+					t.Errorf("expected key, got:\n%s", content)
+				}
+			},
+		},
+		{
+			name: "preserves comments",
+			initial: `# Project configuration
+project_name = "myproject"
+
+[switch]
+# auto-stash, prompt, refuse
+dirty_handling = "prompt"
+`,
+			updates: map[string]string{"switch.dirty_handling": `"auto-stash"`},
+			validate: func(t *testing.T, content string) {
+				if !strings.Contains(content, "# Project configuration") {
+					t.Errorf("top comment should be preserved, got:\n%s", content)
+				}
+				if !strings.Contains(content, "# auto-stash, prompt, refuse") {
+					t.Errorf("section comment should be preserved, got:\n%s", content)
+				}
+				if !strings.Contains(content, `dirty_handling = "auto-stash"`) {
+					t.Errorf("value should be updated, got:\n%s", content)
+				}
+			},
+		},
+		{
+			name:    "handles missing file",
+			initial: "",
+			updates: map[string]string{"tui.skip_branch_notice": "true"},
+			validate: func(t *testing.T, content string) {
+				if !strings.Contains(content, "[tui]") {
+					t.Errorf("expected [tui] section, got:\n%s", content)
+				}
+				if !strings.Contains(content, "skip_branch_notice = true") {
+					t.Errorf("expected key, got:\n%s", content)
+				}
+			},
+		},
+		{
+			name: "top-level key without section",
+			initial: `project_name = "old"
+
+[switch]
+dirty_handling = "prompt"
+`,
+			updates: map[string]string{"project_name": `"new"`},
+			validate: func(t *testing.T, content string) {
+				if !strings.Contains(content, `project_name = "new"`) {
+					t.Errorf("expected updated top-level key, got:\n%s", content)
+				}
+				if strings.Contains(content, `"old"`) {
+					t.Errorf("old value should be gone, got:\n%s", content)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			projectDir := filepath.Join(tmpDir, "project")
+			groveDir := filepath.Join(projectDir, ".grove")
+			if err := os.MkdirAll(groveDir, 0755); err != nil {
+				t.Fatalf("Failed to create dirs: %v", err)
+			}
+
+			configPath := filepath.Join(groveDir, "config.toml")
+			if tt.initial != "" {
+				if err := os.WriteFile(configPath, []byte(tt.initial), 0644); err != nil {
+					t.Fatalf("Failed to write initial config: %v", err)
+				}
+			}
+
+			if err := os.Chdir(projectDir); err != nil {
+				t.Fatalf("Failed to chdir: %v", err)
+			}
+
+			if err := SetProjectConfigValues(tt.updates); err != nil {
+				t.Fatalf("SetProjectConfigValues() error = %v", err)
+			}
+
+			data, err := os.ReadFile(configPath)
+			if err != nil {
+				t.Fatalf("Failed to read result: %v", err)
+			}
+			tt.validate(t, string(data))
+		})
+	}
+}
+
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		name    string
