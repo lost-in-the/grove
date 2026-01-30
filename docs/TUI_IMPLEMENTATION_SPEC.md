@@ -954,7 +954,7 @@ This JSON checklist is for agent progress tracking. Agents should update the sta
         {
           "id": "TUI-2.2",
           "name": "Contextual Help Footer",
-          "status": "pending",
+          "status": "complete",
           "files": ["internal/tui/help_v2.go", "internal/tui/help_v2_test.go"],
           "testFirst": true,
           "acceptanceCriteria": [
