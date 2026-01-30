@@ -907,7 +907,7 @@ This JSON checklist is for agent progress tracking. Agents should update the sta
         {
           "id": "TUI-1.3",
           "name": "Toast Notification System",
-          "status": "pending",
+          "status": "complete",
           "files": ["internal/tui/toast.go", "internal/tui/toast_test.go"],
           "testFirst": true,
           "acceptanceCriteria": [
