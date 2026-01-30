@@ -1,6 +1,19 @@
 # Grove function wrapper for bash
 grove() {
-    # Set environment variable to indicate we're in the shell wrapper
+    # Bare "grove" with no args launches TUI — run directly, no capture
+    if [[ $# -eq 0 ]]; then
+        local cd_file=$(mktemp "${TMPDIR:-/tmp}/grove-cd.XXXXXX")
+        GROVE_SHELL=1 GROVE_CD_FILE="$cd_file" "$__GROVE_BIN"
+        local exit_code=$?
+        if [[ -s "$cd_file" ]]; then
+            local target=$(cat "$cd_file")
+            cd "$target" 2>/dev/null
+        fi
+        rm -f "$cd_file"
+        return $exit_code
+    fi
+
+    # All other commands: capture output and parse for cd: directives
     local output exit_code
     output=$(GROVE_SHELL=1 "$__GROVE_BIN" "$@" 2>&1)
     exit_code=$?

@@ -3,7 +3,9 @@ package grove
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // FindRoot searches for the .grove directory starting from startDir and walking up.
@@ -34,11 +36,21 @@ func FindRoot(startDir string) (string, error) {
 		// Move to parent directory
 		parent := filepath.Dir(current)
 		if parent == current {
-			// Reached root, not found
-			return "", nil
+			break
 		}
 		current = parent
 	}
+
+	// Fallback: find main worktree's .grove via git
+	mainPath, err := getMainWorktreePath(absDir)
+	if err == nil && mainPath != "" {
+		groveDir := filepath.Join(mainPath, ".grove")
+		if info, err := os.Stat(groveDir); err == nil && info.IsDir() {
+			return groveDir, nil
+		}
+	}
+
+	return "", nil
 }
 
 // IsGroveProject checks if the current directory is within a grove project.
@@ -124,4 +136,20 @@ func ConfigPath() (string, error) {
 // This is a convenience function when you already have the grove directory.
 func MustProjectRoot(groveDir string) string {
 	return filepath.Dir(groveDir)
+}
+
+// getMainWorktreePath returns the path of the main worktree by parsing
+// the first entry from `git worktree list --porcelain`.
+func getMainWorktreePath(fromDir string) (string, error) {
+	cmd := exec.Command("git", "-C", fromDir, "worktree", "list", "--porcelain")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(string(output), "\n") {
+		if path, found := strings.CutPrefix(line, "worktree "); found {
+			return path, nil
+		}
+	}
+	return "", nil
 }

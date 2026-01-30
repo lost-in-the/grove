@@ -40,10 +40,17 @@ dist/
 # Development tools
 .claude/
 .serena/
-scripts/
+
+# Ralph Wiggum logs
+logs/
 
 # Test sandbox
 grove-test/
 
 # Temporary plan files
 plan-*.md
+
+# Grove (worktree manager)
+.grove/state.json
+.grove/state.json.bak
+.grove/.envrc

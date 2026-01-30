@@ -150,9 +150,8 @@ Examples:
 			return fmt.Errorf("invalid issue number: %w", err)
 		}
 
-		// Run fetch command with the selected issue
-		fetchCmd.SetArgs([]string{fmt.Sprintf("issue/%d", number)})
-		return fetchCmd.Execute()
+		// Create worktree from the selected issue
+		return fetchItem(ctx, "issue", number)
 	}),
 }
 
@@ -295,9 +294,8 @@ Examples:
 			return fmt.Errorf("invalid PR number: %w", err)
 		}
 
-		// Run fetch command with the selected PR
-		fetchCmd.SetArgs([]string{fmt.Sprintf("pr/%d", number)})
-		return fetchCmd.Execute()
+		// Create worktree from the selected PR
+		return fetchItem(ctx, "pr", number)
 	}),
 }
 

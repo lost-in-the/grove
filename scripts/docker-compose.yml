@@ -1,0 +1,33 @@
+version: '3.8'
+
+# Persistent validation environment for grove-cli
+#
+# Usage:
+#   docker compose -f scripts/docker-compose.yml up -d    # Start container
+#   docker compose -f scripts/docker-compose.yml exec validator bash  # Enter shell
+#   # Inside container: claude /login   (one-time auth)
+#   # Inside container: ./scripts/ralph-validate.sh 5
+#   docker compose -f scripts/docker-compose.yml down     # Stop when done
+
+services:
+  validator:
+    build:
+      context: ..
+      dockerfile: scripts/Dockerfile.validate
+    container_name: grove-validator
+    volumes:
+      # Project directory
+      - ..:/workspace:rw
+      # Persist Claude auth between container restarts
+      - claude-data:/home/validator/.claude
+    working_dir: /workspace
+    # Keep container running
+    entrypoint: ["tail", "-f", "/dev/null"]
+    stdin_open: true
+    tty: true
+    # Network access for Claude API
+    network_mode: host
+
+volumes:
+  claude-data:
+    name: grove-claude-data
