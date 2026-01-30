@@ -942,7 +942,7 @@ This JSON checklist is for agent progress tracking. Agents should update the sta
         {
           "id": "TUI-2.1",
           "name": "Dashboard Header",
-          "status": "pending",
+          "status": "complete",
           "files": ["internal/tui/header.go", "internal/tui/header_test.go"],
           "testFirst": true,
           "acceptanceCriteria": [
