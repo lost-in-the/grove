@@ -876,7 +876,7 @@ This JSON checklist is for agent progress tracking. Agents should update the sta
     {
       "id": "TUI-1",
       "name": "Foundation",
-      "status": "pending",
+      "status": "complete",
       "tasks": [
         {
           "id": "TUI-1.1",
@@ -920,7 +920,7 @@ This JSON checklist is for agent progress tracking. Agents should update the sta
         {
           "id": "TUI-1.4",
           "name": "List Item Delegate V2",
-          "status": "pending",
+          "status": "complete",
           "dependsOn": ["TUI-1.2"],
           "files": ["internal/tui/list_v2.go", "internal/tui/list_v2_test.go"],
           "testFirst": true,
