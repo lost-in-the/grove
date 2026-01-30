@@ -101,6 +101,141 @@ func TestColorScheme_NOCOLORRespected(t *testing.T) {
 	}
 }
 
+// --- StyleSet Tests ---
+
+func TestStyleSet_NewStyleSetReturnsPopulated(t *testing.T) {
+	scheme := defaultColorScheme()
+	ss := NewStyleSet(scheme)
+
+	// Verify key styles are non-zero (have properties set)
+	tests := []struct {
+		name  string
+		style lipgloss.Style
+		check func(lipgloss.Style) bool
+		desc  string
+	}{
+		{"RoundedBorder has border", ss.RoundedBorder,
+			func(s lipgloss.Style) bool { return s.GetBorderStyle() != lipgloss.Border{} },
+			"should have a border"},
+		{"Title is bold", ss.Title,
+			func(s lipgloss.Style) bool { return s.GetBold() },
+			"should be bold"},
+		{"TextMuted has foreground", ss.TextMuted,
+			func(s lipgloss.Style) bool { return s.GetForeground() != lipgloss.NoColor{} },
+			"should have foreground color"},
+		{"StatusSuccess has foreground", ss.StatusSuccess,
+			func(s lipgloss.Style) bool { return s.GetForeground() != lipgloss.NoColor{} },
+			"should have foreground color"},
+		{"StatusWarning has foreground", ss.StatusWarning,
+			func(s lipgloss.Style) bool { return s.GetForeground() != lipgloss.NoColor{} },
+			"should have foreground color"},
+		{"StatusDanger has foreground", ss.StatusDanger,
+			func(s lipgloss.Style) bool { return s.GetForeground() != lipgloss.NoColor{} },
+			"should have foreground color"},
+		{"OverlayBorder has padding", ss.OverlayBorder,
+			func(s lipgloss.Style) bool { return s.GetPaddingLeft() > 0 },
+			"should have padding"},
+		{"HelpKey is bold", ss.HelpKey,
+			func(s lipgloss.Style) bool { return s.GetBold() },
+			"should be bold"},
+		{"ListCursor has foreground", ss.ListCursor,
+			func(s lipgloss.Style) bool { return s.GetForeground() != lipgloss.NoColor{} },
+			"should have foreground color"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if !tt.check(tt.style) {
+				t.Errorf("StyleSet.%s: %s", tt.name, tt.desc)
+			}
+		})
+	}
+}
+
+func TestStyleSet_AllCategoriesPresent(t *testing.T) {
+	scheme := defaultColorScheme()
+	ss := NewStyleSet(scheme)
+
+	// Borders
+	_ = ss.RoundedBorder
+	_ = ss.DetailBorder
+
+	// Text
+	_ = ss.Title
+	_ = ss.TextNormal
+	_ = ss.TextBright
+	_ = ss.TextMuted
+
+	// Status
+	_ = ss.StatusSuccess
+	_ = ss.StatusWarning
+	_ = ss.StatusDanger
+	_ = ss.StatusInfo
+
+	// List items
+	_ = ss.SelectedItem
+	_ = ss.NormalItem
+	_ = ss.CurrentItem
+	_ = ss.DimmedItem
+	_ = ss.ListCursor
+	_ = ss.ListCursorDim
+
+	// Status badges
+	_ = ss.StatusClean
+	_ = ss.StatusDirty
+	_ = ss.StatusStale
+	_ = ss.TmuxBadge
+	_ = ss.EnvBadge
+
+	// Detail panel
+	_ = ss.DetailTitle
+	_ = ss.DetailLabel
+	_ = ss.DetailValue
+	_ = ss.DetailDim
+	_ = ss.DetailFile
+	_ = ss.DetailFileAdd
+	_ = ss.DetailFileMod
+	_ = ss.DetailFileDel
+
+	// Overlay
+	_ = ss.OverlayBorder
+	_ = ss.OverlayTitle
+	_ = ss.OverlayPrompt
+	_ = ss.WarningText
+	_ = ss.ErrorText
+	_ = ss.SuccessText
+
+	// Help
+	_ = ss.HelpKey
+	_ = ss.HelpDesc
+	_ = ss.HelpSep
+
+	// Footer
+	_ = ss.Header
+	_ = ss.Footer
+
+	// Input
+	_ = ss.InputBorder
+	_ = ss.InputText
+}
+
+func TestStyleSet_GlobalStylesInitialized(t *testing.T) {
+	// The global Styles variable should be initialized
+	if Styles.Title.GetBold() != true {
+		t.Error("global Styles.Title should be bold")
+	}
+}
+
+func TestStyleSet_NOCOLORProducesPlainStyles(t *testing.T) {
+	scheme := noColorScheme()
+	ss := NewStyleSet(scheme)
+
+	// Styles should still be valid (not panic), just without colors
+	_ = ss.StatusSuccess.Render("test")
+	_ = ss.RoundedBorder.Render("test")
+	_ = ss.Title.Render("test")
+}
+
 func TestColorScheme_AllFieldsPopulated(t *testing.T) {
 	scheme := defaultColorScheme()
 
