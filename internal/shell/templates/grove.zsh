@@ -62,7 +62,8 @@ _grove_completion() {
         'sync:Sync environment worktrees'
         'clean:Remove old unused worktrees'
         'repair:Repair state inconsistencies'
-        'setup:Initialize grove project'
+        'init:Initialize grove project'
+        'setup:Initialize grove project (alias for init)'
         'fetch:Create worktree from issue/PR'
         'issues:Browse GitHub issues'
         'prs:Browse GitHub PRs'
@@ -72,7 +73,7 @@ _grove_completion() {
         'restart:Restart Docker containers'
         'config:Show configuration'
         'version:Show version'
-        'init:Generate shell integration'
+        'install:Generate shell integration'
     )
 
     if (( CURRENT == 2 )); then
@@ -82,7 +83,7 @@ _grove_completion() {
             to|rm|compare|sync)
                 _describe 'worktree' worktrees
                 ;;
-            init)
+            install)
                 _values 'shell' 'zsh' 'bash'
                 ;;
         esac

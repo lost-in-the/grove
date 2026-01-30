@@ -1,0 +1,112 @@
+package tui
+
+import "github.com/charmbracelet/bubbles/key"
+
+// KeyMap defines all keybindings for the TUI.
+type KeyMap struct {
+	Up      key.Binding
+	Down    key.Binding
+	Enter   key.Binding
+	New     key.Binding
+	Delete  key.Binding
+	Fork    key.Binding
+	Filter  key.Binding
+	Sync    key.Binding
+	Refresh key.Binding
+	Config  key.Binding
+	Help    key.Binding
+	Quit    key.Binding
+	Escape  key.Binding
+	Back    key.Binding
+	Tab     key.Binding
+
+	// Overlay-specific
+	Confirm key.Binding
+	Deny    key.Binding
+	Toggle  key.Binding
+	All     key.Binding
+}
+
+// DefaultKeyMap returns the default set of keybindings.
+func DefaultKeyMap() KeyMap {
+	return KeyMap{
+		Up: key.NewBinding(
+			key.WithKeys("up", "k"),
+			key.WithHelp("↑/k", "up"),
+		),
+		Down: key.NewBinding(
+			key.WithKeys("down", "j"),
+			key.WithHelp("↓/j", "down"),
+		),
+		Enter: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "switch"),
+		),
+		New: key.NewBinding(
+			key.WithKeys("n"),
+			key.WithHelp("n", "new"),
+		),
+		Delete: key.NewBinding(
+			key.WithKeys("d"),
+			key.WithHelp("d", "delete"),
+		),
+		Fork: key.NewBinding(
+			key.WithKeys("f"),
+			key.WithHelp("f", "fork"),
+		),
+		Filter: key.NewBinding(
+			key.WithKeys("/"),
+			key.WithHelp("/", "filter"),
+		),
+		Sync: key.NewBinding(
+			key.WithKeys("s"),
+			key.WithHelp("s", "sync"),
+		),
+		Refresh: key.NewBinding(
+			key.WithKeys("r"),
+			key.WithHelp("r", "refresh"),
+		),
+		Config: key.NewBinding(
+			key.WithKeys("c"),
+			key.WithHelp("c", "config"),
+		),
+		Help: key.NewBinding(
+			key.WithKeys("?"),
+			key.WithHelp("?", "help"),
+		),
+		Quit: key.NewBinding(
+			key.WithKeys("q"),
+			key.WithHelp("q", "quit"),
+		),
+		Escape: key.NewBinding(
+			key.WithKeys("esc"),
+			key.WithHelp("esc", "back"),
+		),
+		Back: key.NewBinding(
+			key.WithKeys("backspace"),
+			key.WithHelp("backspace", "back"),
+		),
+		Tab: key.NewBinding(
+			key.WithKeys("tab"),
+			key.WithHelp("tab", "detail"),
+		),
+
+		// Overlay keys
+		Confirm: key.NewBinding(
+			key.WithKeys("y"),
+			key.WithHelp("y", "confirm"),
+		),
+		Deny: key.NewBinding(
+			key.WithKeys("n"),
+			key.WithHelp("n", "cancel"),
+		),
+		Toggle: key.NewBinding(
+			key.WithKeys(" "),
+			key.WithHelp("space", "toggle"),
+		),
+		All: key.NewBinding(
+			key.WithKeys("a"),
+			key.WithHelp("a", "all merged"),
+		),
+	}
+}

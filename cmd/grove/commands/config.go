@@ -15,6 +15,7 @@ import (
 var (
 	configEdit   bool
 	configGlobal bool
+	configHooks  bool
 )
 
 var configCmd = &cobra.Command{
@@ -24,33 +25,39 @@ var configCmd = &cobra.Command{
 
 By default, shows merged configuration from global and project configs.
 Use --global to work with the global config (~/.config/grove/config.toml).
+Use --hooks to work with hooks config instead of main config.
 Use --edit to open the config file in your $EDITOR.
 
 Examples:
-  grove config           # Show merged configuration
-  grove config --edit    # Edit project config
-  grove config --global  # Show global config only
-  grove config --global --edit  # Edit global config`,
+  grove config                    # Show merged configuration
+  grove config --edit             # Edit project config
+  grove config --global           # Show global config only
+  grove config --global --edit    # Edit global config
+  grove config --hooks            # Show hooks configuration
+  grove config --hooks --edit     # Edit project hooks config
+  grove config --hooks -g -e      # Edit global hooks config`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Determine which config file to use
 		var configPath string
+		filename := "config.toml"
+		if configHooks {
+			filename = "hooks.toml"
+		}
 
 		if configGlobal {
-			// Global config: ~/.config/grove/config.toml
 			homeDir, err := os.UserHomeDir()
 			if err != nil {
 				return fmt.Errorf("failed to get home directory: %w", err)
 			}
-			configPath = filepath.Join(homeDir, ".config", "grove", "config.toml")
+			configPath = filepath.Join(homeDir, ".config", "grove", filename)
 		} else {
-			// Project config: requires grove context
 			groveDir, err := grove.FindRoot("")
 			if err != nil || groveDir == "" {
 				fmt.Fprintf(os.Stderr, "Error: not a grove project\n")
-				fmt.Fprintf(os.Stderr, "Run 'grove setup' to initialize, or use --global for global config\n")
+				fmt.Fprintf(os.Stderr, "Run 'grove init' to initialize, or use --global for global config\n")
 				os.Exit(exitcode.NotGroveProject)
 			}
-			configPath = filepath.Join(groveDir, "config.toml")
+			configPath = filepath.Join(groveDir, filename)
 		}
 
 		// Edit mode
@@ -80,7 +87,11 @@ Examples:
 			return editorCmd.Run()
 		}
 
-		// Show mode: display current configuration
+		// Show mode
+		if configHooks {
+			return showHooksConfig(configPath)
+		}
+
 		cfg, err := config.Load()
 		if err != nil {
 			return fmt.Errorf("failed to load config: %w", err)
@@ -119,8 +130,28 @@ Examples:
 	},
 }
 
+func showHooksConfig(configPath string) error {
+	fmt.Printf("Hooks configuration:\n")
+	fmt.Printf("  File: %s\n\n", configPath)
+
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Println("  No hooks configured.")
+			fmt.Println("  Run 'grove init' to auto-detect and generate hooks,")
+			fmt.Println("  or 'grove config --hooks -e' to create manually.")
+			return nil
+		}
+		return fmt.Errorf("failed to read hooks config: %w", err)
+	}
+
+	fmt.Print(string(content))
+	return nil
+}
+
 func init() {
 	configCmd.Flags().BoolVarP(&configEdit, "edit", "e", false, "Open config file in $EDITOR")
 	configCmd.Flags().BoolVarP(&configGlobal, "global", "g", false, "Use global config (~/.config/grove/config.toml)")
+	configCmd.Flags().BoolVar(&configHooks, "hooks", false, "Work with hooks config instead of main config")
 	rootCmd.AddCommand(configCmd)
 }

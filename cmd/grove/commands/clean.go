@@ -7,15 +7,19 @@ import (
 
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
+	"github.com/LeahArmstrong/grove-cli/internal/git"
+	"github.com/LeahArmstrong/grove-cli/internal/prompt"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 	"github.com/spf13/cobra"
 )
 
 var (
-	cleanOlderThan   int
+	cleanOlderThan    int
 	cleanIncludeDirty bool
-	cleanDryRun      bool
+	cleanDryRun       bool
+	cleanKeepBranches bool
+	cleanDeleteBranches bool
 )
 
 // CleanCandidate represents a worktree that may be cleaned
@@ -36,6 +40,7 @@ var cleanCmd = &cobra.Command{
 
 By default, targets worktrees not accessed in 30 days.
 Dirty worktrees are excluded unless --include-dirty is specified.
+After removing worktrees, you'll be prompted to delete associated branches.
 
 Always excludes:
   - Root/main worktree
@@ -46,10 +51,12 @@ Always excludes:
 This command ALWAYS prompts for confirmation, even in non-interactive mode.
 
 Examples:
-  grove clean                    # Clean worktrees older than 30 days
-  grove clean --older-than 7     # Clean worktrees older than 7 days
-  grove clean --include-dirty    # Include dirty worktrees
-  grove clean --dry-run          # Show what would be cleaned`,
+  grove clean                      # Clean worktrees older than 30 days
+  grove clean --older-than 7       # Clean worktrees older than 7 days
+  grove clean --include-dirty      # Include dirty worktrees
+  grove clean --delete-branches    # Delete branches without prompting
+  grove clean --keep-branches      # Keep all branches
+  grove clean --dry-run            # Show what would be cleaned`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		mgr, err := worktree.NewManager(ctx.ProjectRoot)
 		if err != nil {
@@ -164,6 +171,7 @@ Examples:
 		// Perform cleanup
 		removed := 0
 		failed := 0
+		removedBranches := []string{}
 
 		for _, c := range cleanable {
 			// Remove worktree
@@ -187,17 +195,147 @@ Examples:
 
 			fmt.Printf("  Removed '%s'\n", c.Name)
 			removed++
+
+			// Track branch for later deletion
+			if c.Branch != "" {
+				removedBranches = append(removedBranches, c.Branch)
+			}
 		}
 
 		fmt.Printf("\nCleanup complete: %d removed, %d failed\n", removed, failed)
 
+		// Handle branch deletion
+		if len(removedBranches) > 0 && !cleanKeepBranches {
+			if err := handleBatchBranchDeletion(ctx.ProjectRoot, removedBranches, cleanDeleteBranches); err != nil {
+				fmt.Printf("⚠ Branch cleanup: %v\n", err)
+			}
+		}
+
 		return nil
 	}),
+}
+
+// BranchInfo holds branch status for batch processing
+type BranchInfo struct {
+	Name          string
+	Status        *git.BranchStatus
+	SafeToDelete  bool
+	StatusSummary string
+}
+
+// handleBatchBranchDeletion handles batch deletion of branches after grove clean
+func handleBatchBranchDeletion(repoPath string, branches []string, forceDelete bool) error {
+	branchMgr, err := git.NewBranchManager(repoPath)
+	if err != nil {
+		return fmt.Errorf("failed to initialize branch manager: %w", err)
+	}
+
+	// Collect branch info
+	branchInfos := []BranchInfo{}
+	for _, branch := range branches {
+		status, err := branchMgr.GetStatus(branch, "")
+		if err != nil {
+			continue
+		}
+
+		// Skip branches used by other worktrees
+		if status.UsedByWorktree != "" {
+			continue
+		}
+
+		info := BranchInfo{
+			Name:   branch,
+			Status: status,
+		}
+
+		// Determine if safe to delete and build summary
+		if status.IsMerged && status.UnpushedCount == 0 {
+			info.SafeToDelete = true
+			info.StatusSummary = "merged, safe to delete"
+		} else if status.UnpushedCount > 0 {
+			info.SafeToDelete = false
+			info.StatusSummary = fmt.Sprintf("%d unpushed commit(s)", status.UnpushedCount)
+		} else if !status.IsMerged {
+			info.SafeToDelete = false
+			info.StatusSummary = "not merged"
+		}
+
+		branchInfos = append(branchInfos, info)
+	}
+
+	if len(branchInfos) == 0 {
+		return nil
+	}
+
+	// Force delete - no prompting
+	if forceDelete {
+		deleted := 0
+		for _, info := range branchInfos {
+			if err := branchMgr.Delete(info.Name, true); err != nil {
+				fmt.Printf("  Failed to delete branch '%s': %v\n", info.Name, err)
+			} else {
+				fmt.Printf("  Deleted branch '%s'\n", info.Name)
+				deleted++
+			}
+		}
+		if deleted > 0 {
+			fmt.Printf("Deleted %d branch(es)\n", deleted)
+		}
+		return nil
+	}
+
+	// Interactive mode - show summary and prompt
+	fmt.Println("\nAssociated branches:")
+	hasUnsafe := false
+	for _, info := range branchInfos {
+		marker := "•"
+		if !info.SafeToDelete {
+			marker = "⚠"
+			hasUnsafe = true
+		}
+		fmt.Printf("  %s %s (%s)\n", marker, info.Name, info.StatusSummary)
+	}
+
+	if hasUnsafe {
+		fmt.Println("\n⚠ Some branches have unpushed commits or are not merged")
+	}
+
+	// Ask for confirmation
+	question := fmt.Sprintf("\nDelete %d associated branch(es)?", len(branchInfos))
+	confirmed, err := prompt.Confirm(question, true)
+	if err != nil {
+		// Non-interactive
+		fmt.Printf("ℹ Branches not deleted (use --delete-branches or --keep-branches)\n")
+		return nil
+	}
+
+	if confirmed {
+		deleted := 0
+		for _, info := range branchInfos {
+			// Force delete if not safe (user confirmed)
+			if err := branchMgr.Delete(info.Name, !info.SafeToDelete); err != nil {
+				fmt.Printf("  Failed to delete branch '%s': %v\n", info.Name, err)
+			} else {
+				fmt.Printf("  Deleted branch '%s'\n", info.Name)
+				deleted++
+			}
+		}
+		if deleted > 0 {
+			fmt.Printf("Deleted %d branch(es)\n", deleted)
+		}
+	} else {
+		fmt.Println("Kept all branches")
+	}
+
+	return nil
 }
 
 func init() {
 	cleanCmd.Flags().IntVar(&cleanOlderThan, "older-than", 30, "Remove worktrees not accessed in this many days")
 	cleanCmd.Flags().BoolVar(&cleanIncludeDirty, "include-dirty", false, "Include worktrees with uncommitted changes")
 	cleanCmd.Flags().BoolVar(&cleanDryRun, "dry-run", false, "Show what would be cleaned without making changes")
+	cleanCmd.Flags().BoolVar(&cleanKeepBranches, "keep-branches", false, "Do not delete associated branches")
+	cleanCmd.Flags().BoolVar(&cleanDeleteBranches, "delete-branches", false, "Delete associated branches without prompting")
+	cleanCmd.MarkFlagsMutuallyExclusive("keep-branches", "delete-branches")
 	rootCmd.AddCommand(cleanCmd)
 }

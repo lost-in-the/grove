@@ -294,6 +294,11 @@ func (m *Manager) GetCurrent() (*Worktree, error) {
 	return nil, fmt.Errorf("current worktree not found")
 }
 
+// GetDirtyFiles returns the list of dirty files from git status.
+func (m *Manager) GetDirtyFiles(path string) (string, error) {
+	return m.getDirtyFiles(path)
+}
+
 // getDirtyFiles returns the list of dirty files from git status
 func (m *Manager) getDirtyFiles(path string) (string, error) {
 	cmd := exec.Command("git", "status", "--porcelain")
@@ -315,6 +320,11 @@ func (m *Manager) isDirty(path string) (bool, error) {
 	}
 
 	return len(dirtyFiles) > 0, nil
+}
+
+// GetCommitInfo retrieves detailed commit information for a worktree.
+func (m *Manager) GetCommitInfo(path string) (shortHash, message, age string, err error) {
+	return m.getCommitInfo(path)
 }
 
 // getCommitInfo retrieves detailed commit information for a worktree

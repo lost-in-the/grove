@@ -56,7 +56,7 @@ _grove_completion() {
         cword=$COMP_CWORD
     fi
 
-    local commands="ls new to rm here last fork compare apply sync clean repair setup fetch issues prs up down logs restart config version init"
+    local commands="ls new to rm here last fork compare apply sync clean repair init setup fetch issues prs up down logs restart config version install"
 
     if [[ $cword -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$commands" -- "$cur"))
@@ -69,7 +69,7 @@ _grove_completion() {
             local worktrees=$(GROVE_SHELL=1 "$__GROVE_BIN" ls -q 2>/dev/null)
             COMPREPLY=($(compgen -W "$worktrees" -- "$cur"))
             ;;
-        init)
+        install)
             COMPREPLY=($(compgen -W "zsh bash" -- "$cur"))
             ;;
     esac

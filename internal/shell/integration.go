@@ -26,7 +26,7 @@ func GenerateZshIntegration() (string, error) {
 	header := `# Grove shell integration for zsh
 # ─────────────────────────────────────────────────────────────────────────────
 # SETUP: Add this line to your ~/.zshrc, then restart your shell:
-#   eval "$(grove init zsh)"
+#   eval "$(grove install zsh)"
 #
 # WHAT THIS DOES:
 #   1. Creates a 'grove' shell function that wraps the binary
@@ -57,7 +57,7 @@ func GenerateBashIntegration() (string, error) {
 	header := `# Grove shell integration for bash
 # ─────────────────────────────────────────────────────────────────────────────
 # SETUP: Add this line to your ~/.bashrc, then restart your shell:
-#   eval "$(grove init bash)"
+#   eval "$(grove install bash)"
 #
 # WHAT THIS DOES:
 #   1. Creates a 'grove' shell function that wraps the binary

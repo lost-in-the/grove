@@ -1,0 +1,136 @@
+# Grove Hooks Configuration
+#
+# This file configures hooks that run on worktree lifecycle events.
+# Place this file at:
+#   - ~/.config/grove/hooks.toml (global, applies to all projects)
+#   - .grove/hooks.toml (project-specific, merged with global)
+#
+# Project hooks are appended to global hooks unless override_* flags are set.
+
+# =============================================================================
+# Post-Create Hooks - Run after 'grove new <name>'
+# =============================================================================
+
+# Copy .env file from main worktree
+[[hooks.post_create]]
+type = "copy"
+from = ".env"                    # Relative to main worktree
+to = ".env"                      # Relative to new worktree
+required = false                 # Warn if missing, don't fail
+
+# Copy Rails master key
+[[hooks.post_create]]
+type = "copy"
+from = "config/master.key"
+to = "config/master.key"
+
+# Symlink node_modules to save disk space
+[[hooks.post_create]]
+type = "symlink"
+from = "node_modules"
+to = "node_modules"
+
+# Symlink vendor/bundle for Ruby projects
+[[hooks.post_create]]
+type = "symlink"
+from = "vendor/bundle"
+to = "vendor/bundle"
+
+# Run bundle install in new worktree
+[[hooks.post_create]]
+type = "command"
+command = "bundle install --quiet"
+working_dir = "new"              # "new" (default), "main", or absolute path
+timeout = 300                    # 5 minutes
+on_failure = "warn"              # "warn" (default), "fail", "ignore"
+
+# Run npm install
+[[hooks.post_create]]
+type = "command"
+command = "npm install --silent"
+timeout = 180
+
+# Generate .env from template with variable substitution
+[[hooks.post_create]]
+type = "template"
+from = ".env.template"
+to = ".env"
+vars = { PORT = "{{.port}}", DB_NAME = "{{.worktree}}_development" }
+
+# =============================================================================
+# Pre-Remove Hooks - Run before 'grove rm <name>'
+# =============================================================================
+
+# Stop Docker containers before removing worktree
+[[hooks.pre_remove]]
+type = "command"
+command = "docker compose down --remove-orphans 2>/dev/null || true"
+on_failure = "ignore"
+
+# =============================================================================
+# Post-Remove Hooks - Run after worktree is removed
+# =============================================================================
+
+# Clean up any leftover processes
+[[hooks.post_remove]]
+type = "command"
+command = "pkill -f '{{.worktree}}' 2>/dev/null || true"
+on_failure = "ignore"
+
+# =============================================================================
+# Template Variables
+# =============================================================================
+#
+# Available in all string fields:
+#
+#   {{.worktree}}      - Short worktree name (e.g., "testing")
+#   {{.worktree_full}} - Full directory name (e.g., "grove-cli-testing")
+#   {{.branch}}        - Git branch name (e.g., "feature/testing")
+#   {{.project}}       - Project name (e.g., "grove-cli")
+#   {{.main_path}}     - Absolute path to main worktree
+#   {{.new_path}}      - Absolute path to new worktree
+#   {{.prev_path}}     - Absolute path to previous worktree (switch events)
+#   {{.port}}          - Allocated port number (if using port allocation)
+#   {{.user}}          - Current username
+#   {{.timestamp}}     - Unix timestamp
+#   {{.date}}          - ISO date (YYYY-MM-DD)
+#
+# =============================================================================
+# Per-Branch/Worktree Overrides
+# =============================================================================
+#
+# Override hook behavior for specific branch/worktree patterns.
+# First match wins. Patterns use filepath.Match glob syntax.
+
+# Skip symlinks for hotfix branches (faster setup)
+[[overrides]]
+match = "hotfix/*"
+skip = ["symlink"]
+extra_copy = [".env.production"]
+
+# Skip all hooks for CI branches
+[[overrides]]
+match = "ci-*"
+skip_hooks = true
+
+# Add production credentials for payment feature branches
+[[overrides]]
+match = "feature/payments-*"
+extra_copy = ["config/credentials/production.yml.enc"]
+
+# Run extra database setup for migration branches
+[[overrides]]
+match = "db-*"
+extra_run = ["bin/rails db:migrate"]
+
+# =============================================================================
+# Override Flags
+# =============================================================================
+#
+# By default, project hooks are appended to global hooks.
+# Set these to true to completely replace global hooks for an event:
+#
+# [hooks]
+# override_post_create = true    # Only use this file's post_create hooks
+# override_pre_remove = true
+# override_post_remove = true

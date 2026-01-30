@@ -128,8 +128,8 @@ When using shell integration, this will also change your current directory.`,
 		} else {
 			fmt.Fprintf(os.Stderr, "\nNote: Directory switching requires shell integration.\n")
 			fmt.Fprintf(os.Stderr, "Add this to your shell config (~/.zshrc or ~/.bashrc):\n\n")
-			fmt.Fprintf(os.Stderr, "  eval \"$(grove init zsh)\"   # for zsh\n")
-			fmt.Fprintf(os.Stderr, "  eval \"$(grove init bash)\"  # for bash\n\n")
+			fmt.Fprintf(os.Stderr, "  eval \"$(grove install zsh)\"   # for zsh\n")
+			fmt.Fprintf(os.Stderr, "  eval \"$(grove install bash)\"  # for bash\n\n")
 			fmt.Fprintf(os.Stderr, "To change directory manually:\n")
 			fmt.Fprintf(os.Stderr, "  cd %s\n", targetTree.Path)
 		}

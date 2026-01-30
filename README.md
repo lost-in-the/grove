@@ -4,6 +4,7 @@ Zero-friction worktree management for developers.
 
 ## Features
 
+- **Interactive TUI Dashboard**: Run `grove` with no arguments to launch a full-screen terminal UI for browsing, creating, and deleting worktrees
 - **Fast Context Switching**: Switch between git worktrees in <500ms
 - **Automatic Tmux Integration**: Create and manage tmux sessions for each worktree
 - **Simple Commands**: Just 6 core commands to learn
@@ -102,6 +103,30 @@ grove here
 ```bash
 grove rm feature-login
 ```
+
+## TUI Dashboard
+
+Run `grove` with no arguments inside a grove project to launch the interactive dashboard:
+
+```
+ grove
+  ❯ feature-login    main          3m ago    ● dirty  ⬡ tmux
+    feature-auth     auth          1h ago    ✓ clean  ⬡ tmux
+    hotfix-css       fix/css       2d ago    ✓ clean
+────────────────────────────────────────────────────────────
+  feature-login · b3a1f2c · "add login form validation"
+  branch: feat/login  ↑2 ↓0  3 minutes ago
+  M cmd/login.go
+  M internal/auth/session.go
+  + templates/login.html
+ [enter] switch  [n] new  [d] delete  [/] filter  [?] help  [q] quit
+```
+
+**Navigation**: `j`/`k` or arrow keys to move, `enter` to switch to a worktree, `/` to filter by name or branch.
+
+**Actions**: `n` opens a guided worktree creation wizard, `d` opens a delete confirmation with safety warnings.
+
+**Disable**: Set `GROVE_TUI=0` to make bare `grove` show help instead. The TUI also only launches when a TTY is detected; piped/scripted usage falls through to help automatically.
 
 ## Commands
 
@@ -324,6 +349,14 @@ Apache 2.0 - see [LICENSE](LICENSE)
 - Homebrew formula
 - Comprehensive documentation
 - Shell completions (zsh, bash)
+
+### Phase 6: TUI Dashboard ✅
+- Full-screen interactive dashboard (`grove` with no args)
+- Worktree list with git status, branch, age, tmux indicators
+- Detail panel with commit info, upstream tracking, dirty files
+- Guided create/delete workflows with inline validation
+- Substring filter, vim keybindings, responsive layout
+- Opt-out via `GROVE_TUI=0` or non-TTY detection
 
 ## FAQ
 

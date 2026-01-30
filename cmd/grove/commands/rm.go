@@ -6,15 +6,20 @@ import (
 
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
+	"github.com/LeahArmstrong/grove-cli/internal/git"
+	"github.com/LeahArmstrong/grove-cli/internal/hooks"
+	"github.com/LeahArmstrong/grove-cli/internal/prompt"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 	"github.com/spf13/cobra"
 )
 
 var (
-	rmForce     bool
-	rmUnprotect bool
-	rmDryRun    bool
+	rmForce        bool
+	rmUnprotect    bool
+	rmDryRun       bool
+	rmKeepBranch   bool
+	rmDeleteBranch bool
 )
 
 var rmCmd = &cobra.Command{
@@ -24,13 +29,16 @@ var rmCmd = &cobra.Command{
 	Long: `Remove a git worktree by name and kill its associated tmux session.
 
 This will delete the worktree directory and remove the git worktree reference.
+By default, you'll be prompted to delete the associated branch.
 
 Protected worktrees (configured in config.toml) require both --force and --unprotect flags.
 Environment worktrees are implicitly protected.
 
 Examples:
-  grove rm feature-auth           # Remove regular worktree
-  grove rm staging --force --unprotect  # Remove protected worktree`,
+  grove rm feature-auth                  # Remove worktree, prompt for branch
+  grove rm feature-auth --delete-branch  # Remove worktree and branch
+  grove rm feature-auth --keep-branch    # Remove worktree, keep branch
+  grove rm staging --force --unprotect   # Remove protected worktree`,
 	Args: cobra.ExactArgs(1),
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		name := args[0]
@@ -78,6 +86,16 @@ Examples:
 			wt, _ := mgr.Find(name)
 			if wt != nil {
 				fmt.Printf("  Path: %s\n", wt.Path)
+				if wt.Branch != "" {
+					fmt.Printf("  Branch: %s\n", wt.Branch)
+					if rmDeleteBranch {
+						fmt.Printf("  Would delete branch: %s\n", wt.Branch)
+					} else if rmKeepBranch {
+						fmt.Printf("  Would keep branch: %s\n", wt.Branch)
+					} else {
+						fmt.Printf("  Would prompt for branch deletion\n")
+					}
+				}
 			}
 			if tmux.IsTmuxAvailable() {
 				sessionName := worktree.TmuxSessionName(mgr.GetProjectName(), name)
@@ -104,6 +122,33 @@ Examples:
 			}
 		}
 
+		// Get branch name before removing (need worktree info)
+		var branchName string
+		wt, _ := mgr.Find(name)
+		if wt != nil && wt.Branch != "" {
+			branchName = wt.Branch
+		}
+
+		// Execute pre-remove hooks
+		hookExecutor, hookErr := hooks.NewExecutor()
+		if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPreRemove) {
+			hookCtx := &hooks.ExecutionContext{
+				Event:    hooks.EventPreRemove,
+				Worktree: name,
+				Branch:   branchName,
+				Project:  projectName,
+				MainPath: ctx.ProjectRoot,
+			}
+			if wt != nil {
+				hookCtx.NewPath = wt.Path
+				hookCtx.WorktreeFull = projectName + "-" + name
+			}
+			fmt.Println("\nRunning pre-remove hooks...")
+			if err := hookExecutor.Execute(hooks.EventPreRemove, hookCtx); err != nil {
+				fmt.Printf("⚠ Hook execution had errors: %v\n", err)
+			}
+		}
+
 		// Remove worktree
 		if err := mgr.Remove(name); err != nil {
 			return fmt.Errorf("failed to remove worktree: %w", err)
@@ -114,13 +159,112 @@ Examples:
 
 		fmt.Printf("✓ Removed worktree '%s'\n", name)
 
+		// Handle branch deletion
+		if branchName != "" && !rmKeepBranch {
+			if err := handleBranchDeletion(ctx.ProjectRoot, branchName, rmDeleteBranch, rmForce); err != nil {
+				fmt.Printf("⚠ Branch handling: %v\n", err)
+			}
+		}
+
+		// Execute post-remove hooks
+		if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPostRemove) {
+			hookCtx := &hooks.ExecutionContext{
+				Event:    hooks.EventPostRemove,
+				Worktree: name,
+				Branch:   branchName,
+				Project:  projectName,
+				MainPath: ctx.ProjectRoot,
+			}
+			fmt.Println("\nRunning post-remove hooks...")
+			_ = hookExecutor.Execute(hooks.EventPostRemove, hookCtx)
+		}
+
 		return nil
 	}),
 }
 
+// handleBranchDeletion manages the branch deletion logic
+func handleBranchDeletion(repoPath, branch string, forceDelete, forceUnmerged bool) error {
+	branchMgr, err := git.NewBranchManager(repoPath)
+	if err != nil {
+		return fmt.Errorf("failed to initialize branch manager: %w", err)
+	}
+
+	// Get branch status
+	status, err := branchMgr.GetStatus(branch, "")
+	if err != nil {
+		return fmt.Errorf("failed to get branch status: %w", err)
+	}
+
+	// If branch is used by another worktree, keep it
+	if status.UsedByWorktree != "" {
+		fmt.Printf("ℹ Branch '%s' is used by worktree at %s (keeping)\n", branch, status.UsedByWorktree)
+		return nil
+	}
+
+	// If forceDelete flag is set, delete without prompting
+	if forceDelete {
+		if err := branchMgr.Delete(branch, forceUnmerged); err != nil {
+			return fmt.Errorf("failed to delete branch: %w", err)
+		}
+		fmt.Printf("✓ Deleted branch '%s'\n", branch)
+		return nil
+	}
+
+	// Interactive mode - build prompt with details
+	var details []string
+
+	if !status.IsMerged {
+		details = append(details, "⚠ Branch is not merged into default branch")
+	}
+
+	if status.UnpushedCount > 0 {
+		details = append(details, fmt.Sprintf("⚠ Has %d unpushed commit(s)", status.UnpushedCount))
+
+		// Show commits
+		commits, _ := branchMgr.GetUnpushedCommits(branch, 5)
+		for _, commit := range commits {
+			details = append(details, "  "+commit)
+		}
+		if status.UnpushedCount > 5 {
+			details = append(details, fmt.Sprintf("  ... and %d more", status.UnpushedCount-5))
+		}
+	}
+
+	if status.IsMerged && status.UnpushedCount == 0 {
+		details = append(details, "✓ Branch is merged and safe to delete")
+	}
+
+	header := fmt.Sprintf("\nBranch '%s':", branch)
+
+	// Ask for confirmation
+	confirmed, err := prompt.ConfirmWithDetails(header, details, "Delete branch?", true)
+	if err != nil {
+		// Non-interactive - provide guidance
+		fmt.Printf("ℹ Branch '%s' not deleted (use --delete-branch or --keep-branch)\n", branch)
+		return nil
+	}
+
+	if confirmed {
+		// Use force delete if branch is not merged
+		needsForce := !status.IsMerged || forceUnmerged
+		if err := branchMgr.Delete(branch, needsForce); err != nil {
+			return fmt.Errorf("failed to delete branch: %w", err)
+		}
+		fmt.Printf("✓ Deleted branch '%s'\n", branch)
+	} else {
+		fmt.Printf("ℹ Kept branch '%s'\n", branch)
+	}
+
+	return nil
+}
+
 func init() {
-	rmCmd.Flags().BoolVarP(&rmForce, "force", "f", false, "Force removal (required with --unprotect for protected worktrees)")
+	rmCmd.Flags().BoolVarP(&rmForce, "force", "f", false, "Force removal (required with --unprotect for protected worktrees, allows deleting unmerged branches)")
 	rmCmd.Flags().BoolVar(&rmUnprotect, "unprotect", false, "Allow removing protected worktrees (requires --force)")
 	rmCmd.Flags().BoolVar(&rmDryRun, "dry-run", false, "Show what would be removed without making changes")
+	rmCmd.Flags().BoolVar(&rmKeepBranch, "keep-branch", false, "Do not delete the associated branch")
+	rmCmd.Flags().BoolVar(&rmDeleteBranch, "delete-branch", false, "Delete the associated branch without prompting")
+	rmCmd.MarkFlagsMutuallyExclusive("keep-branch", "delete-branch")
 	rootCmd.AddCommand(rmCmd)
 }

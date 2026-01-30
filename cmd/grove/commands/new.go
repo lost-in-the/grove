@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
+	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 	"github.com/LeahArmstrong/grove-cli/internal/output"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
@@ -133,6 +134,34 @@ Examples:
 				}
 			} else if !newJSON {
 				fmt.Printf("✓ Created tmux session '%s'\n", sessionName)
+			}
+		}
+
+		// Execute post-create hooks
+		hookExecutor, err := hooks.NewExecutor()
+		if err != nil {
+			if !newJSON {
+				fmt.Printf("⚠ Failed to load hooks config: %v\n", err)
+			}
+		} else if hookExecutor.HasHooksForEvent(hooks.EventPostCreate) {
+			hookCtx := &hooks.ExecutionContext{
+				Event:        hooks.EventPostCreate,
+				Worktree:     name,
+				WorktreeFull: projectName + "-" + name,
+				Branch:       branchName,
+				Project:      projectName,
+				MainPath:     ctx.ProjectRoot,
+				NewPath:      wt.Path,
+			}
+
+			if !newJSON {
+				fmt.Println("\nRunning post-create hooks...")
+			}
+
+			if err := hookExecutor.Execute(hooks.EventPostCreate, hookCtx); err != nil {
+				if !newJSON {
+					fmt.Printf("⚠ Hook execution had errors: %v\n", err)
+				}
 			}
 		}
 
