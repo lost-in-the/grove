@@ -994,7 +994,7 @@ This JSON checklist is for agent progress tracking. Agents should update the sta
     {
       "id": "TUI-3",
       "name": "Wizards",
-      "status": "pending",
+      "status": "complete",
       "dependsOn": ["TUI-2"],
       "tasks": [
         {
@@ -1037,7 +1037,7 @@ This JSON checklist is for agent progress tracking. Agents should update the sta
         {
           "id": "TUI-3.4",
           "name": "Enhanced Delete Confirmation",
-          "status": "pending",
+          "status": "complete",
           "files": ["internal/tui/overlay_delete_v2.go", "internal/tui/overlay_delete_v2_test.go"],
           "testFirst": true,
           "acceptanceCriteria": [

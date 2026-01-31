@@ -817,7 +817,7 @@ func (m Model) View() string {
 
 	case ViewDelete:
 		if m.deleteState != nil {
-			overlay := renderDelete(m.deleteState, m.width)
+			overlay := renderDeleteV2(m.deleteState, m.width)
 			bg := m.renderDashboard()
 			return centerOverlay(bg, overlay, m.width, m.height)
 		}
