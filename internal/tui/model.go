@@ -122,8 +122,15 @@ func (m Model) Err() error { return m.err }
 // --- Tea interface ---
 
 func (m Model) Init() tea.Cmd {
-	tuilog.Printf("Init: loading=%v ready=%v", m.loading, m.ready)
-	return tea.Batch(m.spinner.Tick, m.fetchWorktrees)
+	tuilog.Printf("Init: loading=%v ready=%v activeView=%d", m.loading, m.ready, m.activeView)
+	cmds := []tea.Cmd{m.spinner.Tick, m.fetchWorktrees}
+	if m.activeView == ViewPRs {
+		cmds = append(cmds, m.fetchPRsCmd)
+	}
+	if m.activeView == ViewIssues {
+		cmds = append(cmds, m.fetchIssuesCmd)
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -1063,24 +1070,71 @@ func gatherDeleteWarnings(item *WorktreeItem) []string {
 	return warnings
 }
 
+// ConfigureForPRs configures the model to start directly in the PR browser view.
+func (m Model) ConfigureForPRs() Model {
+	branches := make(map[string]bool)
+	for _, li := range m.list.Items() {
+		if item, ok := li.(WorktreeItem); ok {
+			branches[item.Branch] = true
+		}
+	}
+	m.activeView = ViewPRs
+	m.prState = &PRViewState{
+		Loading:          true,
+		WorktreeBranches: branches,
+	}
+	return m
+}
+
+// ConfigureForIssues configures the model to start directly in the issue browser view.
+func (m Model) ConfigureForIssues() Model {
+	m.activeView = ViewIssues
+	m.issueState = &IssueViewState{
+		Loading: true,
+	}
+	return m
+}
+
+// RunPRs starts the TUI directly in the PR browser view.
+func RunPRs(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string) (string, error) {
+	tuilog.Init()
+	defer tuilog.Close()
+
+	model := NewModel(mgr, stateMgr, projectRoot).ConfigureForPRs()
+	return runModel(model)
+}
+
+// RunIssues starts the TUI directly in the issue browser view.
+func RunIssues(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string) (string, error) {
+	tuilog.Init()
+	defer tuilog.Close()
+
+	model := NewModel(mgr, stateMgr, projectRoot).ConfigureForIssues()
+	return runModel(model)
+}
+
 // Run starts the TUI and returns the path to switch to (if any).
 func Run(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string) (string, error) {
 	tuilog.Init()
 	defer tuilog.Close()
 
-	tuilog.Printf("Run: projectRoot=%s", projectRoot)
-
 	model := NewModel(mgr, stateMgr, projectRoot)
+	return runModel(model)
+}
+
+func runModel(model Model) (string, error) {
+	tuilog.Printf("runModel: projectRoot=%s activeView=%d", model.projectRoot, model.activeView)
+
 	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	finalModel, err := p.Run()
 	if err != nil {
-		tuilog.Printf("Run: tea.Program error: %v", err)
+		tuilog.Printf("runModel: tea.Program error: %v", err)
 		return "", fmt.Errorf("TUI error: %w", err)
 	}
 
 	m := finalModel.(Model)
-	tuilog.Printf("Run: exit ready=%v loading=%v items=%d switchTo=%q err=%v",
+	tuilog.Printf("runModel: exit ready=%v loading=%v items=%d switchTo=%q err=%v",
 		m.ready, m.loading, len(m.list.Items()), m.switchTo, m.err)
 
 	if m.Err() != nil {

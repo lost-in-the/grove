@@ -1051,7 +1051,7 @@ This JSON checklist is for agent progress tracking. Agents should update the sta
     {
       "id": "TUI-4",
       "name": "PR/Issue Integration",
-      "status": "pending",
+      "status": "complete",
       "dependsOn": ["TUI-3"],
       "tasks": [
         {
@@ -1107,7 +1107,7 @@ This JSON checklist is for agent progress tracking. Agents should update the sta
         {
           "id": "TUI-4.5",
           "name": "Unified CLI/TUI Entry",
-          "status": "pending",
+          "status": "complete",
           "files": ["cmd/grove/commands/browse.go"],
           "testFirst": true,
           "acceptanceCriteria": [
