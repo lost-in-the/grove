@@ -83,8 +83,7 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 	cfg, _ := config.Load()
 	keys := DefaultKeyMap()
 
-	s := spinner.New()
-	s.Spinner = spinner.Dot
+	s := GroveSpinner()
 
 	delegate := NewWorktreeDelegate()
 	l := list.New(nil, delegate, 0, 0)

@@ -124,7 +124,10 @@ func (tm *ToastModel) View(width int) string {
 	icon := t.Level.style().Render(t.Level.Icon())
 	content := fmt.Sprintf("%s %s", icon, t.Message)
 
-	box := lipgloss.NewStyle().
+	// Apply fade-out effect as toast nears expiry
+	fadeStyle := ToastOpacity(t)
+
+	box := fadeStyle.
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(Colors.SurfaceBorder).
 		Padding(0, 1).

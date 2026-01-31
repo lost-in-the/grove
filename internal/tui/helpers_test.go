@@ -5,7 +5,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -18,8 +17,7 @@ type testOpt func(*Model)
 func newTestModel(opts ...testOpt) Model {
 	keys := DefaultKeyMap()
 
-	s := spinner.New()
-	s.Spinner = spinner.Dot
+	s := GroveSpinner()
 
 	delegate := NewWorktreeDelegate()
 	l := list.New(nil, delegate, 0, 0)

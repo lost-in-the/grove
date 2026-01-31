@@ -1139,7 +1139,7 @@ This JSON checklist is for agent progress tracking. Agents should update the sta
         {
           "id": "TUI-5.2",
           "name": "Animation Refinements",
-          "status": "pending",
+          "status": "complete",
           "files": ["internal/tui/animation.go"],
           "testFirst": false,
           "acceptanceCriteria": [
