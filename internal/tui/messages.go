@@ -49,3 +49,16 @@ type prWorktreeCreatedMsg struct {
 	path string
 	err  error
 }
+
+// issuesFetchedMsg is sent when issue data has been loaded.
+type issuesFetchedMsg struct {
+	issues []*tracker.Issue
+	err    error
+}
+
+// issueWorktreeCreatedMsg is sent after creating a worktree from an issue.
+type issueWorktreeCreatedMsg struct {
+	name string
+	path string
+	err  error
+}

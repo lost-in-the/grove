@@ -31,6 +31,7 @@ const (
 	ViewCreate
 	ViewBulk
 	ViewPRs
+	ViewIssues
 )
 
 // Model is the root Bubble Tea model.
@@ -66,6 +67,7 @@ type Model struct {
 	createState *CreateState
 	bulkState   *BulkState
 	prState     *PRViewState
+	issueState  *IssueViewState
 
 	// Output
 	switchTo string
@@ -203,6 +205,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case issuesFetchedMsg:
+		if m.issueState != nil {
+			m.issueState.Loading = false
+			if msg.err != nil {
+				m.issueState.Error = msg.err.Error()
+			} else {
+				m.issueState.Issues = msg.issues
+			}
+		}
+		return m, nil
+
+	case issueWorktreeCreatedMsg:
+		if m.issueState != nil {
+			m.issueState.Creating = false
+		}
+		if msg.err != nil {
+			if m.issueState != nil {
+				m.issueState.Error = msg.err.Error()
+			}
+			return m, nil
+		}
+		m.activeView = ViewDashboard
+		m.issueState = nil
+		m.statusMsg = fmt.Sprintf("Created worktree from issue %q", msg.name)
+		m.statusTTL = time.Now().Add(3 * time.Second)
+		cmds = append(cmds, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+			return statusClearMsg{deadline: m.statusTTL}
+		}))
+		cmds = append(cmds, m.fetchWorktrees)
+		return m, tea.Batch(cmds...)
+
 	case prWorktreeCreatedMsg:
 		if m.prState != nil {
 			m.prState.Creating = false
@@ -236,7 +269,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		)
 
 	case spinner.TickMsg:
-		if m.loading || (m.createState != nil && m.createState.Creating) || (m.prState != nil && (m.prState.Loading || m.prState.Creating)) {
+		if m.loading || (m.createState != nil && m.createState.Creating) || (m.prState != nil && (m.prState.Loading || m.prState.Creating)) || (m.issueState != nil && (m.issueState.Loading || m.issueState.Creating)) {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			return m, cmd
@@ -384,6 +417,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleBulkKey(msg)
 	case ViewPRs:
 		return m.handlePRKey(msg)
+	case ViewIssues:
+		return m.handleIssueKey(msg)
 	case ViewDashboard:
 		return m.handleDashboardKey(msg)
 	}
@@ -445,6 +480,9 @@ func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, m.keys.PRs):
 		return m.enterPRView()
+
+	case key.Matches(msg, m.keys.Issues):
+		return m.enterIssueView()
 	}
 
 	// Quick-switch: number keys 1-9 jump to nth visible item
@@ -720,6 +758,14 @@ func (m Model) enterPRView() (tea.Model, tea.Cmd) {
 	return m, tea.Batch(m.spinner.Tick, m.fetchPRsCmd)
 }
 
+func (m Model) enterIssueView() (tea.Model, tea.Cmd) {
+	m.activeView = ViewIssues
+	m.issueState = &IssueViewState{
+		Loading: true,
+	}
+	return m, tea.Batch(m.spinner.Tick, m.fetchIssuesCmd)
+}
+
 func (m Model) enterBulkMode() (tea.Model, tea.Cmd) {
 	// Collect deletable (non-main, non-protected) worktrees
 	var deletable []WorktreeItem
@@ -839,6 +885,13 @@ func (m Model) View() string {
 	case ViewPRs:
 		if m.prState != nil {
 			overlay := renderPRViewV2(m.prState, m.width, m.spinner.View())
+			bg := m.renderDashboard()
+			return centerOverlay(bg, overlay, m.width, m.height)
+		}
+
+	case ViewIssues:
+		if m.issueState != nil {
+			overlay := renderIssueView(m.issueState, m.width, m.spinner.View())
 			bg := m.renderDashboard()
 			return centerOverlay(bg, overlay, m.width, m.height)
 		}

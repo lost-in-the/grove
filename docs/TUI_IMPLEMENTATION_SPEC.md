@@ -1094,7 +1094,7 @@ This JSON checklist is for agent progress tracking. Agents should update the sta
         {
           "id": "TUI-4.4",
           "name": "Issue Browser",
-          "status": "pending",
+          "status": "complete",
           "files": ["internal/tui/view_issues.go", "internal/tui/view_issues_test.go"],
           "testFirst": true,
           "acceptanceCriteria": [

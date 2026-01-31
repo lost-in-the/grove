@@ -28,6 +28,9 @@ type KeyMap struct {
 	// PRs
 	PRs key.Binding
 
+	// Issues
+	Issues key.Binding
+
 	// Overlay-specific
 	Confirm key.Binding
 	Deny    key.Binding
@@ -37,14 +40,14 @@ type KeyMap struct {
 
 // ShortHelp returns keybindings for the short help view (help.KeyMap interface).
 func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Enter, k.New, k.Delete, k.PRs, k.Sort, k.Filter, k.Help, k.Quit}
+	return []key.Binding{k.Enter, k.New, k.Delete, k.PRs, k.Issues, k.Sort, k.Filter, k.Help, k.Quit}
 }
 
 // FullHelp returns keybindings for the full help view (help.KeyMap interface).
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Enter},
-		{k.New, k.Delete, k.PRs, k.Sort, k.Filter, k.Refresh},
+		{k.New, k.Delete, k.PRs, k.Issues, k.Sort, k.Filter, k.Refresh},
 		{k.Help, k.Quit, k.Escape},
 	}
 }
@@ -121,6 +124,11 @@ func DefaultKeyMap() KeyMap {
 		PRs: key.NewBinding(
 			key.WithKeys("p"),
 			key.WithHelp("p", "PRs"),
+		),
+
+		Issues: key.NewBinding(
+			key.WithKeys("i"),
+			key.WithHelp("i", "issues"),
 		),
 
 		// Overlay keys
