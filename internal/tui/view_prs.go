@@ -20,6 +20,7 @@ type PRViewState struct {
 	WorktreeBranches map[string]bool // branches that have worktrees
 	Creating         bool
 	Filter           string
+	ShowPreview      bool // toggle PR preview panel with Tab
 }
 
 func (m Model) fetchPRsCmd() tea.Msg {
@@ -72,6 +73,10 @@ func (m Model) handlePRKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if s.Cursor < len(filtered)-1 {
 			s.Cursor++
 		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.Tab):
+		s.ShowPreview = !s.ShowPreview
 		return m, nil
 
 	case key.Matches(msg, m.keys.Enter):

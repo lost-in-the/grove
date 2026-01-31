@@ -29,6 +29,11 @@ func renderPRViewV2(s *PRViewState, width int, spinnerView string) string {
 	}
 
 	filtered := filteredPRs(s.PRs, s.Filter)
+
+	// If preview mode and we have a selected PR, render the preview instead
+	if s.ShowPreview && len(filtered) > 0 && s.Cursor < len(filtered) {
+		return renderPRPreview(filtered[s.Cursor], width)
+	}
 	total := len(s.PRs)
 
 	// Filter bar with count

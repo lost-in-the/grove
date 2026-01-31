@@ -1082,7 +1082,7 @@ This JSON checklist is for agent progress tracking. Agents should update the sta
         {
           "id": "TUI-4.3",
           "name": "PR Preview Panel",
-          "status": "pending",
+          "status": "complete",
           "files": ["internal/tui/pr_preview.go", "internal/tui/pr_preview_test.go"],
           "testFirst": true,
           "acceptanceCriteria": [
