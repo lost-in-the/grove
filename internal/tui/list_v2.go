@@ -24,8 +24,17 @@ func delegateColumnsV2(width int) delegateColumns {
 		return delegateColumns{Name: 24, Branch: 20, Age: 8}
 	case width > 90:
 		return delegateColumns{Name: 20, Branch: 16, Age: 8}
-	default:
+	case width >= 80:
 		return delegateColumns{Name: 16, Branch: 12, Age: 6}
+	case width >= 60:
+		return delegateColumns{Name: 14, Branch: 10, Age: 0}
+	default:
+		// Very narrow: name only, no branch or age
+		name := 12
+		if width < 50 {
+			name = 10
+		}
+		return delegateColumns{Name: name, Branch: 0, Age: 0}
 	}
 }
 
@@ -134,20 +143,28 @@ func (d WorktreeDelegateV2) Render(w io.Writer, m list.Model, index int, listIte
 	}
 	name := nameStyle.Render(fmt.Sprintf("%-*s", cols.Name, truncate(item.ShortName, cols.Name)))
 
-	branch := Styles.TextMuted.Render(fmt.Sprintf("%-*s", cols.Branch, truncate(item.Branch, cols.Branch)))
+	line := numPrefix + indicator + name
 
-	age := ""
-	if item.CommitAge != "" {
-		age = Styles.TextMuted.Render(fmt.Sprintf("%-*s", cols.Age, compactAge(item.CommitAge)))
-	} else {
-		age = fmt.Sprintf("%-*s", cols.Age, "")
+	if cols.Branch > 0 {
+		branch := Styles.TextMuted.Render(fmt.Sprintf("%-*s", cols.Branch, truncate(item.Branch, cols.Branch)))
+		line += "  " + branch
+	}
+
+	if cols.Age > 0 {
+		age := ""
+		if item.CommitAge != "" {
+			age = Styles.TextMuted.Render(fmt.Sprintf("%-*s", cols.Age, compactAge(item.CommitAge)))
+		} else {
+			age = fmt.Sprintf("%-*s", cols.Age, "")
+		}
+		line += "  " + age
 	}
 
 	status := worktreeStatusTextV2(item)
+	line += "  " + status
+
 	syncBadge := worktreeSyncBadgeV2(item)
 	tmuxBadge := worktreeTmuxBadgeV2(item)
-
-	line := numPrefix + indicator + name + "  " + branch + "  " + age + "  " + status
 	if syncBadge != "" {
 		line += "  " + syncBadge
 	}

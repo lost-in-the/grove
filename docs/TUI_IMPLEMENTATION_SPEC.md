@@ -1151,7 +1151,7 @@ This JSON checklist is for agent progress tracking. Agents should update the sta
         {
           "id": "TUI-5.3",
           "name": "Narrow Terminal Layout",
-          "status": "pending",
+          "status": "complete",
           "files": ["internal/tui/responsive.go", "internal/tui/responsive_test.go"],
           "testFirst": true,
           "acceptanceCriteria": [
