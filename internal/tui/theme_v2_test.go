@@ -15,9 +15,9 @@ func TestColorScheme_SemanticColors(t *testing.T) {
 		wantLight string
 	}{
 		{"Primary", Colors.Primary, "#A78BFA", "#7C3AED"},
-		{"Secondary", Colors.Secondary, "#38BDF8", "#0284C7"},
-		{"Success", Colors.Success, "#34D399", "#059669"},
-		{"Warning", Colors.Warning, "#FBBF24", "#D97706"},
+		{"Secondary", Colors.Secondary, "#38BDF8", "#0369A1"},
+		{"Success", Colors.Success, "#34D399", "#047857"},
+		{"Warning", Colors.Warning, "#FBBF24", "#92400E"},
 		{"Danger", Colors.Danger, "#F87171", "#DC2626"},
 		{"Info", Colors.Info, "#60A5FA", "#2563EB"},
 	}

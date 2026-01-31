@@ -1121,7 +1121,7 @@ This JSON checklist is for agent progress tracking. Agents should update the sta
     {
       "id": "TUI-5",
       "name": "Polish",
-      "status": "pending",
+      "status": "complete",
       "dependsOn": ["TUI-4"],
       "tasks": [
         {
@@ -1163,8 +1163,8 @@ This JSON checklist is for agent progress tracking. Agents should update the sta
         {
           "id": "TUI-5.4",
           "name": "Accessibility Review",
-          "status": "pending",
-          "files": [],
+          "status": "complete",
+          "files": ["internal/tui/accessibility.go", "internal/tui/accessibility_test.go", "internal/tui/theme_v2.go"],
           "testFirst": false,
           "acceptanceCriteria": [
             "Color contrast WCAG AA",
@@ -1176,8 +1176,8 @@ This JSON checklist is for agent progress tracking. Agents should update the sta
     }
   ],
   "completionCriteria": {
-    "allTasksComplete": false,
-    "testsPass": false,
+    "allTasksComplete": true,
+    "testsPass": true,
     "coverageAbove80": false,
     "manualTestingComplete": false,
     "documentationUpdated": false

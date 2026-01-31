@@ -39,11 +39,11 @@ func defaultColorScheme() ColorScheme {
 	return ColorScheme{
 		// Brand — purple/blue inspired by lazygit/charm aesthetics
 		Primary:   lipgloss.AdaptiveColor{Dark: "#A78BFA", Light: "#7C3AED"},
-		Secondary: lipgloss.AdaptiveColor{Dark: "#38BDF8", Light: "#0284C7"},
+		Secondary: lipgloss.AdaptiveColor{Dark: "#38BDF8", Light: "#0369A1"},
 
-		// Status — Tailwind-inspired semantic colors
-		Success: lipgloss.AdaptiveColor{Dark: "#34D399", Light: "#059669"},
-		Warning: lipgloss.AdaptiveColor{Dark: "#FBBF24", Light: "#D97706"},
+		// Status — Tailwind-inspired semantic colors (light adjusted for WCAG AA)
+		Success: lipgloss.AdaptiveColor{Dark: "#34D399", Light: "#047857"},
+		Warning: lipgloss.AdaptiveColor{Dark: "#FBBF24", Light: "#92400E"},
 		Danger:  lipgloss.AdaptiveColor{Dark: "#F87171", Light: "#DC2626"},
 		Info:    lipgloss.AdaptiveColor{Dark: "#60A5FA", Light: "#2563EB"},
 
@@ -65,10 +65,14 @@ func noColorScheme() ColorScheme {
 	return ColorScheme{}
 }
 
-// NewColorScheme creates a ColorScheme, respecting NO_COLOR and GROVE_NO_COLOR.
+// NewColorScheme creates a ColorScheme, respecting NO_COLOR, GROVE_NO_COLOR,
+// and GROVE_HIGH_CONTRAST environment variables.
 func NewColorScheme() ColorScheme {
 	if isNoColor() {
 		return noColorScheme()
+	}
+	if isHighContrast() {
+		return highContrastColorScheme()
 	}
 	return defaultColorScheme()
 }
