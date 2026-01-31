@@ -31,6 +31,7 @@ type WorktreeItem struct {
 	IsProtected   bool
 	IsPrunable    bool
 	TmuxStatus    string // "attached", "detached", "none"
+	HasRemote     bool   // true if branch has upstream tracking
 	AheadCount    int    // commits ahead of upstream
 	BehindCount   int    // commits behind upstream
 	LastAccessed  time.Time
@@ -70,6 +71,33 @@ func (w *WorktreeItem) AgeText() string {
 		return ""
 	}
 	return Theme.DetailDim.Render(w.CommitAge)
+}
+
+// SyncStatusText returns a compact sync status string for the list view.
+func (w *WorktreeItem) SyncStatusText() string {
+	if !w.HasRemote {
+		return "⚠ no remote"
+	}
+	if w.AheadCount == 0 && w.BehindCount == 0 {
+		return "✓ synced"
+	}
+	var parts []string
+	if w.AheadCount > 0 {
+		parts = append(parts, fmt.Sprintf("↑%d", w.AheadCount))
+	}
+	if w.BehindCount > 0 {
+		parts = append(parts, fmt.Sprintf("↓%d", w.BehindCount))
+	}
+	return strings.Join(parts, " ")
+}
+
+// hasUpstream returns true if the branch at the given worktree path
+// has an upstream tracking branch configured.
+func hasUpstream(worktreePath string) bool {
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
+	cmd.Dir = worktreePath
+	err := cmd.Run()
+	return err == nil
 }
 
 // FetchWorktrees gathers all enriched worktree data for display.
@@ -177,7 +205,8 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager) ([]WorktreeI
 					}
 				}
 
-				if isCurrent {
+				if hasUpstream(treePath) {
+					item.HasRemote = true
 					ahead, behind := getUpstreamCounts(treePath)
 					item.AheadCount = ahead
 					item.BehindCount = behind

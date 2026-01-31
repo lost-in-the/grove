@@ -210,12 +210,12 @@ func TestRenderDetailV2_SyncStatus(t *testing.T) {
 	}{
 		{
 			name:     "ahead commits",
-			item:     WorktreeItem{ShortName: "t", Branch: "main", AheadCount: 3},
+			item:     WorktreeItem{ShortName: "t", Branch: "main", HasRemote: true, AheadCount: 3},
 			wantText: "↑3",
 		},
 		{
 			name:     "behind commits",
-			item:     WorktreeItem{ShortName: "t", Branch: "main", BehindCount: 2},
+			item:     WorktreeItem{ShortName: "t", Branch: "main", HasRemote: true, BehindCount: 2},
 			wantText: "↓2",
 		},
 	}

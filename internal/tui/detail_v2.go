@@ -68,8 +68,8 @@ func renderMetadataGrid(item *WorktreeItem, width int) string {
 	statusVal := renderStatusValue(item)
 	rows = append(rows, label("Status")+statusVal)
 
-	// Sync (ahead/behind)
-	if item.AheadCount > 0 || item.BehindCount > 0 {
+	// Sync (ahead/behind/synced) — only show when remote is tracked
+	if item.HasRemote {
 		syncVal := renderSyncValue(item)
 		rows = append(rows, label("Sync")+syncVal)
 	}
@@ -96,8 +96,14 @@ func renderStatusValue(item *WorktreeItem) string {
 	}
 }
 
-// renderSyncValue returns styled sync status (ahead/behind).
+// renderSyncValue returns styled sync status (ahead/behind/synced/no remote).
 func renderSyncValue(item *WorktreeItem) string {
+	if !item.HasRemote {
+		return Styles.StatusWarning.Render("⚠ no remote")
+	}
+	if item.AheadCount == 0 && item.BehindCount == 0 {
+		return Styles.StatusSuccess.Render("✓ synced")
+	}
 	var parts []string
 	if item.AheadCount > 0 {
 		parts = append(parts, Styles.StatusSuccess.Render(fmt.Sprintf("↑%d", item.AheadCount)))

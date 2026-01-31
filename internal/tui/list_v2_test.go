@@ -137,6 +137,32 @@ func TestWorktreeDelegateV2_ResponsiveColumns(t *testing.T) {
 	}
 }
 
+func TestWorktreeSyncBadgeV2(t *testing.T) {
+	tests := []struct {
+		name string
+		item WorktreeItem
+		want string
+	}{
+		{"No remote", WorktreeItem{HasRemote: false}, ""},
+		{"Synced", WorktreeItem{HasRemote: true}, ""},
+		{"Ahead", WorktreeItem{HasRemote: true, AheadCount: 3}, "↑3"},
+		{"Behind", WorktreeItem{HasRemote: true, BehindCount: 2}, "↓2"},
+		{"Diverged", WorktreeItem{HasRemote: true, AheadCount: 1, BehindCount: 4}, "↑1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			badge := worktreeSyncBadgeV2(tt.item)
+			if tt.want == "" && badge != "" {
+				t.Errorf("worktreeSyncBadgeV2() = %q, want empty", badge)
+			}
+			if tt.want != "" && !strings.Contains(badge, tt.want) {
+				t.Errorf("worktreeSyncBadgeV2() = %q, want to contain %q", badge, tt.want)
+			}
+		})
+	}
+}
+
 func TestWorktreeDelegateV2_Height(t *testing.T) {
 	d := NewWorktreeDelegateV2()
 	if d.Height() != 1 {

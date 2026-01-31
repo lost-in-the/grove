@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -72,6 +73,24 @@ func worktreeTmuxBadgeV2(item WorktreeItem) string {
 	}
 }
 
+// worktreeSyncBadgeV2 returns a compact sync status badge for the list.
+func worktreeSyncBadgeV2(item WorktreeItem) string {
+	if !item.HasRemote {
+		return ""
+	}
+	if item.AheadCount == 0 && item.BehindCount == 0 {
+		return ""
+	}
+	var parts []string
+	if item.AheadCount > 0 {
+		parts = append(parts, Styles.StatusSuccess.Render(fmt.Sprintf("↑%d", item.AheadCount)))
+	}
+	if item.BehindCount > 0 {
+		parts = append(parts, Styles.StatusWarning.Render(fmt.Sprintf("↓%d", item.BehindCount)))
+	}
+	return strings.Join(parts, "")
+}
+
 // WorktreeDelegateV2 implements list.ItemDelegate with visual indicators.
 type WorktreeDelegateV2 struct{}
 
@@ -125,9 +144,13 @@ func (d WorktreeDelegateV2) Render(w io.Writer, m list.Model, index int, listIte
 	}
 
 	status := worktreeStatusTextV2(item)
+	syncBadge := worktreeSyncBadgeV2(item)
 	tmuxBadge := worktreeTmuxBadgeV2(item)
 
 	line := numPrefix + indicator + name + "  " + branch + "  " + age + "  " + status
+	if syncBadge != "" {
+		line += "  " + syncBadge
+	}
 	if tmuxBadge != "" {
 		line += "  " + tmuxBadge
 	}
