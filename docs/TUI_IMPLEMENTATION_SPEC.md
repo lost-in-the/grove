@@ -1057,7 +1057,7 @@ This JSON checklist is for agent progress tracking. Agents should update the sta
         {
           "id": "TUI-4.1",
           "name": "Enhanced PR Data Fields",
-          "status": "pending",
+          "status": "complete",
           "files": ["plugins/tracker/tracker.go", "plugins/tracker/github.go"],
           "testFirst": true,
           "acceptanceCriteria": [

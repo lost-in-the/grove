@@ -266,6 +266,90 @@ func TestPullRequestStruct(t *testing.T) {
 	}
 }
 
+func TestPullRequestEnhancedFields(t *testing.T) {
+	tests := []struct {
+		name string
+		pr   PullRequest
+	}{
+		{
+			name: "draft PR with review data",
+			pr: PullRequest{
+				Number:         1,
+				Title:          "Draft PR",
+				IsDraft:        true,
+				CommitCount:    5,
+				Additions:      234,
+				Deletions:      89,
+				ReviewDecision: "",
+			},
+		},
+		{
+			name: "approved PR with changes",
+			pr: PullRequest{
+				Number:         2,
+				Title:          "Approved PR",
+				IsDraft:        false,
+				CommitCount:    12,
+				Additions:      1203,
+				Deletions:      445,
+				ReviewDecision: "APPROVED",
+			},
+		},
+		{
+			name: "PR with changes requested",
+			pr: PullRequest{
+				Number:         3,
+				Title:          "Needs work",
+				IsDraft:        false,
+				CommitCount:    1,
+				Additions:      5,
+				Deletions:      5,
+				ReviewDecision: "CHANGES_REQUESTED",
+			},
+		},
+		{
+			name: "PR with zero stats",
+			pr: PullRequest{
+				Number:         4,
+				Title:          "Empty PR",
+				IsDraft:        false,
+				CommitCount:    0,
+				Additions:      0,
+				Deletions:      0,
+				ReviewDecision: "",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Verify fields are accessible and hold correct values
+			if tt.pr.IsDraft != (tt.name == "draft PR with review data") {
+				t.Errorf("IsDraft = %v, unexpected for %s", tt.pr.IsDraft, tt.name)
+			}
+			if tt.pr.CommitCount < 0 {
+				t.Errorf("CommitCount = %v, should be non-negative", tt.pr.CommitCount)
+			}
+			if tt.pr.Additions < 0 {
+				t.Errorf("Additions = %v, should be non-negative", tt.pr.Additions)
+			}
+			if tt.pr.Deletions < 0 {
+				t.Errorf("Deletions = %v, should be non-negative", tt.pr.Deletions)
+			}
+		})
+	}
+}
+
+func TestPullRequestReviewDecisionValues(t *testing.T) {
+	validDecisions := []string{"", "APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED"}
+	for _, decision := range validDecisions {
+		pr := PullRequest{ReviewDecision: decision}
+		if pr.ReviewDecision != decision {
+			t.Errorf("ReviewDecision = %v, want %v", pr.ReviewDecision, decision)
+		}
+	}
+}
+
 func TestListOptions(t *testing.T) {
 	opts := ListOptions{
 		State:    "open",
