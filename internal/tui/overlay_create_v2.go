@@ -7,10 +7,16 @@ import (
 
 // renderCreateV2 is the V2 dispatcher for the create wizard overlay.
 // It integrates the Stepper component and context summary for multi-step flows.
+// When UseHuhForms is true, it delegates rendering to Huh forms for applicable steps.
 func renderCreateV2(s *CreateState, width int, spinnerView string) string {
 	if s.Creating {
 		return renderCreateSpinnerV2(s, spinnerView)
 	}
+
+	if s.UseHuhForms {
+		return renderCreateHuh(s, width)
+	}
+
 	switch s.Step {
 	case CreateStepName:
 		return renderCreateNameV2(s, width)
@@ -22,6 +28,50 @@ func renderCreateV2(s *CreateState, width int, spinnerView string) string {
 		return renderCreateBranchActionV2(s, width)
 	}
 	return ""
+}
+
+// renderCreateHuh renders the create wizard using Huh forms.
+func renderCreateHuh(s *CreateState, width int) string {
+	var b strings.Builder
+
+	// Stepper
+	stepLabels := []string{"Name", "Branch"}
+	stepper := NewStepper(stepLabels...)
+	switch s.Step {
+	case CreateStepName:
+		stepper.Current = 0
+	default:
+		stepper.Current = 1
+	}
+	b.WriteString(stepper.View(width-8) + "\n\n")
+
+	// Context summary for steps beyond name
+	if s.Step > CreateStepName && s.Name != "" {
+		b.WriteString(renderContextSummary(s, width-8) + "\n\n")
+	}
+
+	// Render the active Huh form
+	switch s.Step {
+	case CreateStepName:
+		if s.NameForm != nil {
+			b.WriteString(s.NameForm.View())
+		}
+	case CreateStepBranch:
+		if s.BranchForm != nil {
+			b.WriteString(s.BranchForm.View())
+		}
+	case CreateStepPickBranch:
+		if s.BranchPickForm != nil {
+			b.WriteString(s.BranchPickForm.View())
+		}
+	case CreateStepBranchAction:
+		// BranchAction still uses manual rendering
+		return renderCreateBranchActionV2(s, width)
+	}
+
+	return Theme.OverlayBorder.Render(
+		Theme.OverlayTitle.Render("New Worktree") + "\n\n" + b.String(),
+	)
 }
 
 func renderCreateSpinnerV2(s *CreateState, spinnerView string) string {

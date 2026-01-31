@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/LeahArmstrong/grove-cli/internal/config"
@@ -304,6 +305,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	default:
+		// Forward messages to active Huh form when in create view
+		if m.activeView == ViewCreate && m.createState != nil && m.createState.UseHuhForms {
+			return m.forwardToActiveHuhForm(msg)
+		}
 		// Forward unhandled messages to the list so it can process
 		// internal messages (e.g. filter match results from fuzzy search).
 		var cmd tea.Cmd
@@ -453,6 +458,15 @@ func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.createState = &CreateState{
 			Step:        CreateStepName,
 			ProjectName: m.projectName,
+			UseHuhForms: true,
+		}
+		if m.createState.UseHuhForms {
+			m.createState.NameForm = NewCreateNameForm(
+				&m.createState.Name,
+				m.projectName,
+				m.existingWorktreeItems(),
+			)
+			return m, m.createState.NameForm.Init()
 		}
 		return m, nil
 
@@ -551,6 +565,11 @@ func (m Model) handleCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	s := m.createState
+
+	// Delegate to Huh forms when enabled
+	if s.UseHuhForms {
+		return m.handleCreateKeyHuh(msg)
+	}
 
 	switch s.Step {
 	case CreateStepName:
@@ -735,6 +754,171 @@ func (m Model) handleCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	return m, nil
+}
+
+// handleCreateKeyHuh handles create wizard input using Huh forms.
+func (m Model) handleCreateKeyHuh(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	s := m.createState
+
+	switch s.Step {
+	case CreateStepName:
+		if s.NameForm == nil {
+			return m, nil
+		}
+		model, cmd := s.NameForm.Update(msg)
+		s.NameForm = model.(*huh.Form)
+
+		if s.NameForm.State == huh.StateAborted {
+			m.activeView = ViewDashboard
+			m.createState = nil
+			return m, nil
+		}
+		if s.NameForm.State == huh.StateCompleted {
+			s.Error = ""
+			s.Step = CreateStepBranch
+			s.BranchForm = NewCreateBranchForm(&s.BranchChoiceStr)
+			return m, s.BranchForm.Init()
+		}
+		return m, cmd
+
+	case CreateStepBranch:
+		if s.BranchForm == nil {
+			return m, nil
+		}
+		model, cmd := s.BranchForm.Update(msg)
+		s.BranchForm = model.(*huh.Form)
+
+		if s.BranchForm.State == huh.StateAborted {
+			m.activeView = ViewDashboard
+			m.createState = nil
+			return m, nil
+		}
+		if s.BranchForm.State == huh.StateCompleted {
+			if s.BranchChoiceStr == "existing" {
+				branches, err := git.ListLocalBranches(m.projectRoot)
+				if err != nil {
+					s.Error = fmt.Sprintf("failed to list branches: %v", err)
+					return m, nil
+				}
+				s.Branches = branches
+				s.BranchPickForm = NewBranchPickerForm(&s.SelectedBranch, branches)
+				s.Step = CreateStepPickBranch
+				return m, s.BranchPickForm.Init()
+			}
+			return m.startCreate(s.Name, "")
+		}
+		return m, cmd
+
+	case CreateStepPickBranch:
+		if s.BranchPickForm == nil {
+			return m, nil
+		}
+		model, cmd := s.BranchPickForm.Update(msg)
+		s.BranchPickForm = model.(*huh.Form)
+
+		if s.BranchPickForm.State == huh.StateAborted {
+			m.activeView = ViewDashboard
+			m.createState = nil
+			return m, nil
+		}
+		if s.BranchPickForm.State == huh.StateCompleted {
+			s.BaseBranch = s.SelectedBranch
+			if m.cfg != nil && m.cfg.TUI.SkipBranchNotice != nil && *m.cfg.TUI.SkipBranchNotice {
+				action := m.cfg.TUI.DefaultBranchAction
+				if action == "fork" {
+					return m.startCreate(s.Name, "")
+				}
+				return m.startCreate(s.Name, s.BaseBranch)
+			}
+			s.ActionChoice = 0
+			s.DontShowAgain = false
+			s.Step = CreateStepBranchAction
+			// BranchAction step still uses manual handling (not a Huh form)
+			return m, nil
+		}
+		return m, cmd
+
+	case CreateStepBranchAction:
+		// BranchAction still uses the non-Huh handling since it has
+		// custom checkbox + "don't show again" behavior
+		return m.handleBranchActionKey(msg)
+	}
+
+	return m, nil
+}
+
+// forwardToActiveHuhForm forwards non-key messages to the active Huh form.
+func (m Model) forwardToActiveHuhForm(msg tea.Msg) (tea.Model, tea.Cmd) {
+	s := m.createState
+	var activeForm **huh.Form
+	switch s.Step {
+	case CreateStepName:
+		activeForm = &s.NameForm
+	case CreateStepBranch:
+		activeForm = &s.BranchForm
+	case CreateStepPickBranch:
+		activeForm = &s.BranchPickForm
+	default:
+		return m, nil
+	}
+	if *activeForm == nil {
+		return m, nil
+	}
+	model, cmd := (*activeForm).Update(msg)
+	*activeForm = model.(*huh.Form)
+	return m, cmd
+}
+
+// handleBranchActionKey handles the branch action step (split vs fork).
+func (m Model) handleBranchActionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	s := m.createState
+	switch {
+	case key.Matches(msg, m.keys.Escape):
+		m.activeView = ViewDashboard
+		m.createState = nil
+		return m, nil
+
+	case key.Matches(msg, m.keys.Back):
+		s.Step = CreateStepPickBranch
+		if s.BranchPickForm != nil {
+			return m, s.BranchPickForm.Init()
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.Up):
+		if s.ActionChoice > 0 {
+			s.ActionChoice--
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.Down):
+		if s.ActionChoice < 1 {
+			s.ActionChoice++
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.Toggle):
+		s.DontShowAgain = !s.DontShowAgain
+		return m, nil
+
+	case key.Matches(msg, m.keys.Enter):
+		if s.DontShowAgain && m.cfg != nil {
+			action := "fork"
+			if s.ActionChoice == 0 {
+				action = "split"
+			}
+			_ = config.SetProjectConfigValues(map[string]string{
+				"tui.skip_branch_notice":    "true",
+				"tui.default_branch_action": `"` + action + `"`,
+			})
+		}
+
+		if s.ActionChoice == 0 {
+			return m.startCreate(s.Name, s.BaseBranch)
+		}
+		return m.startCreate(s.Name, "")
+	}
 	return m, nil
 }
 

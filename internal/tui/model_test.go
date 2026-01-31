@@ -162,7 +162,7 @@ func TestDeleteFlow(t *testing.T) {
 func TestCreateWizardFlow(t *testing.T) {
 	t.Run("name step: typing adds characters", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
-		m = sendKey(m, "n")
+		m = enterCreateManual(m)
 		m = sendKey(m, "t")
 		m = sendKey(m, "e")
 		m = sendKey(m, "s")
@@ -174,7 +174,7 @@ func TestCreateWizardFlow(t *testing.T) {
 
 	t.Run("name step: backspace removes character", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
-		m = sendKey(m, "n")
+		m = enterCreateManual(m)
 		m = sendKey(m, "a")
 		m = sendKey(m, "b")
 		m = sendKey(m, "backspace")
@@ -185,7 +185,7 @@ func TestCreateWizardFlow(t *testing.T) {
 
 	t.Run("name step: enter with empty name shows error", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
-		m = sendKey(m, "n")
+		m = enterCreateManual(m)
 		m = sendKey(m, "enter")
 		if m.createState.Error != "name cannot be empty" {
 			t.Errorf("expected empty name error, got %q", m.createState.Error)
@@ -194,7 +194,7 @@ func TestCreateWizardFlow(t *testing.T) {
 
 	t.Run("name step: invalid chars show error", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
-		m = sendKey(m, "n")
+		m = enterCreateManual(m)
 		m = sendKey(m, "/")
 		if m.createState.Error == "" {
 			t.Error("expected validation error for invalid character")
@@ -203,7 +203,7 @@ func TestCreateWizardFlow(t *testing.T) {
 
 	t.Run("name step: enter with valid name advances to branch step", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
-		m = sendKey(m, "n")
+		m = enterCreateManual(m)
 		m = sendKey(m, "f")
 		m = sendKey(m, "o")
 		m = sendKey(m, "o")
@@ -215,7 +215,7 @@ func TestCreateWizardFlow(t *testing.T) {
 
 	t.Run("branch step: backspace goes back to name", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
-		m = sendKey(m, "n")
+		m = enterCreateManual(m)
 		m = sendKey(m, "f")
 		m = sendKey(m, "o")
 		m = sendKey(m, "o")
@@ -228,7 +228,7 @@ func TestCreateWizardFlow(t *testing.T) {
 
 	t.Run("esc at any step cancels create", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
-		m = sendKey(m, "n")
+		m = enterCreateManual(m)
 		m = sendKey(m, "esc")
 		if m.activeView != ViewDashboard {
 			t.Errorf("expected ViewDashboard, got %d", m.activeView)
@@ -778,7 +778,7 @@ func TestBulkEnterWithSelection(t *testing.T) {
 
 func TestWorktreeCreatedMsgWithError(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
-	m = sendKey(m, "n")
+	m = enterCreateManual(m)
 	m.createState.Name = "test"
 	m = sendMsg(m, worktreeCreatedMsg{err: errTest})
 	if m.createState == nil {
@@ -888,7 +888,7 @@ func TestUpdateDetailContentNoItems(t *testing.T) {
 
 func TestCreateNameBackspaceOnEmpty(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
-	m = sendKey(m, "n")
+	m = enterCreateManual(m)
 	m.createState.Name = ""
 	m = sendKey(m, "backspace")
 	// Should not panic, name stays empty
@@ -899,7 +899,7 @@ func TestCreateNameBackspaceOnEmpty(t *testing.T) {
 
 func TestCreateBranchEsc(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
-	m = sendKey(m, "n")
+	m = enterCreateManual(m)
 	m.createState.Step = CreateStepBranch
 	m = sendKey(m, "esc")
 	if m.activeView != ViewDashboard {
@@ -909,7 +909,7 @@ func TestCreateBranchEsc(t *testing.T) {
 
 func TestCreateNameEnterWithInvalidName(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
-	m = sendKey(m, "n")
+	m = enterCreateManual(m)
 	m.createState.Name = "invalid name with spaces"
 	m = sendKey(m, "enter")
 	if m.createState.Error == "" {
@@ -922,7 +922,7 @@ func TestCreateNameEnterWithInvalidName(t *testing.T) {
 
 func TestBranchStepUpAtZero(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
-	m = sendKey(m, "n")
+	m = enterCreateManual(m)
 	m.createState.Step = CreateStepBranch
 	m.createState.BranchChoice = 0
 	m = sendKey(m, "k")
@@ -933,7 +933,7 @@ func TestBranchStepUpAtZero(t *testing.T) {
 
 func TestPickBranchUpAtZero(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
-	m = sendKey(m, "n")
+	m = enterCreateManual(m)
 	m.createState.Step = CreateStepPickBranch
 	m.createState.Branches = []string{"main", "dev"}
 	m.createState.BranchCursor = 0
@@ -945,7 +945,7 @@ func TestPickBranchUpAtZero(t *testing.T) {
 
 func TestBranchActionUpAtZero(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
-	m = sendKey(m, "n")
+	m = enterCreateManual(m)
 	m.createState.Step = CreateStepBranchAction
 	m.createState.ActionChoice = 0
 	m = sendKey(m, "k")
@@ -956,7 +956,7 @@ func TestBranchActionUpAtZero(t *testing.T) {
 
 func TestBranchActionDownAtMax(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
-	m = sendKey(m, "n")
+	m = enterCreateManual(m)
 	m.createState.Step = CreateStepBranchAction
 	m.createState.ActionChoice = 1
 	m = sendKey(m, "j")
@@ -993,7 +993,7 @@ func TestSwitchToAndErr(t *testing.T) {
 
 func TestCreateWizardPickBranchNavigation(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
-	m = sendKey(m, "n")
+	m = enterCreateManual(m)
 	// Type a name
 	m = sendKey(m, "f")
 	m = sendKey(m, "o")
@@ -1015,7 +1015,7 @@ func TestCreateWizardPickBranchNavigation(t *testing.T) {
 
 func TestCreateWizardBranchActionNavigation(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
-	m = sendKey(m, "n")
+	m = enterCreateManual(m)
 
 	// Directly set up the branch action step
 	m.createState.Step = CreateStepBranchAction
@@ -1050,7 +1050,7 @@ func TestCreateWizardBranchActionNavigation(t *testing.T) {
 func TestCreateWizardPickBranchFilterAndNavigation(t *testing.T) {
 	t.Run("typing adds to filter", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
-		m = sendKey(m, "n")
+		m = enterCreateManual(m)
 		m.createState.Step = CreateStepPickBranch
 		m.createState.Branches = []string{"main", "develop", "feature/auth"}
 
@@ -1062,7 +1062,7 @@ func TestCreateWizardPickBranchFilterAndNavigation(t *testing.T) {
 
 	t.Run("backspace removes filter char", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
-		m = sendKey(m, "n")
+		m = enterCreateManual(m)
 		m.createState.Step = CreateStepPickBranch
 		m.createState.Branches = []string{"main", "develop"}
 		m.createState.BranchFilter = "de"
@@ -1075,7 +1075,7 @@ func TestCreateWizardPickBranchFilterAndNavigation(t *testing.T) {
 
 	t.Run("backspace with empty filter goes back", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
-		m = sendKey(m, "n")
+		m = enterCreateManual(m)
 		m.createState.Step = CreateStepPickBranch
 		m.createState.Branches = []string{"main"}
 		m.createState.BranchFilter = ""
@@ -1088,7 +1088,7 @@ func TestCreateWizardPickBranchFilterAndNavigation(t *testing.T) {
 
 	t.Run("arrow down moves cursor", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
-		m = sendKey(m, "n")
+		m = enterCreateManual(m)
 		m.createState.Step = CreateStepPickBranch
 		m.createState.Branches = []string{"main", "develop", "feature/auth"}
 		m.createState.BranchCursor = 0
@@ -1123,7 +1123,7 @@ func TestBulkSelectedItems(t *testing.T) {
 
 func TestCreateWizardEscFromPickBranch(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
-	m = sendKey(m, "n")
+	m = enterCreateManual(m)
 	m.createState.Step = CreateStepPickBranch
 	m.createState.Branches = []string{"main"}
 	m = sendKey(m, "esc")
@@ -1134,7 +1134,7 @@ func TestCreateWizardEscFromPickBranch(t *testing.T) {
 
 func TestCreateWizardEscFromBranchAction(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
-	m = sendKey(m, "n")
+	m = enterCreateManual(m)
 	m.createState.Step = CreateStepBranchAction
 	m.createState.BaseBranch = "develop"
 	m = sendKey(m, "esc")

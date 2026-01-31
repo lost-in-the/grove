@@ -139,3 +139,13 @@ func sendMsg(m Model, msg tea.Msg) Model {
 	result, _ := m.Update(msg)
 	return result.(Model)
 }
+
+// enterCreateManual enters the create wizard and disables Huh forms so that
+// manual key handling tests continue to work.
+func enterCreateManual(m Model) Model {
+	m = sendKey(m, "n")
+	if m.createState != nil {
+		m.createState.UseHuhForms = false
+	}
+	return m
+}

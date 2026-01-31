@@ -3,6 +3,8 @@ package tui
 import (
 	"fmt"
 	"strings"
+
+	"github.com/charmbracelet/huh"
 )
 
 // CreateStep represents the current step in the create wizard.
@@ -46,6 +48,14 @@ type CreateState struct {
 
 	// Creating state
 	Creating bool
+
+	// Huh form integration
+	NameForm       *huh.Form // Huh form for name input step
+	BranchForm     *huh.Form // Huh form for branch strategy selection
+	BranchPickForm *huh.Form // Huh form for branch picker
+	BranchChoiceStr string   // value bound to Huh branch strategy select
+	SelectedBranch  string   // value bound to Huh branch picker select
+	UseHuhForms    bool      // whether to use Huh forms (can be toggled)
 }
 
 func renderCreate(s *CreateState, width int, spinnerView string) string {

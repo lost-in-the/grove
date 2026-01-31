@@ -1127,7 +1127,7 @@ This JSON checklist is for agent progress tracking. Agents should update the sta
         {
           "id": "TUI-5.1",
           "name": "Huh Forms Integration",
-          "status": "pending",
+          "status": "complete",
           "files": ["internal/tui/forms.go", "internal/tui/forms_test.go"],
           "testFirst": true,
           "acceptanceCriteria": [
