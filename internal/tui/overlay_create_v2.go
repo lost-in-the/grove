@@ -52,11 +52,26 @@ func renderCreateNameV2(s *CreateState, width int) string {
 
 	if s.Error != "" {
 		b.WriteString("\n" + Theme.ErrorText.Render(s.Error) + "\n")
+	} else if s.ExistingWorktree != nil {
+		ex := s.ExistingWorktree
+		b.WriteString("\n" + Theme.ErrorText.Render("✗ Worktree \""+ex.ShortName+"\" already exists") + "\n")
+		b.WriteString("\n  Existing worktree:\n")
+		fmt.Fprintf(&b, "    Path:     %s\n", ex.Path)
+		fmt.Fprintf(&b, "    Branch:   %s\n", ex.Branch)
+		if ex.IsDirty {
+			fmt.Fprintf(&b, "    Status:   ● dirty (%d files)\n", len(ex.DirtyFiles))
+		} else {
+			b.WriteString("    Status:   ● clean\n")
+		}
 	} else if s.Name != "" {
 		b.WriteString("\n" + Theme.SuccessText.Render("✓ valid name") + "\n")
 	}
 
-	b.WriteString("\n" + Theme.Footer.Render("[enter] next  [esc] cancel"))
+	if s.ExistingWorktree != nil {
+		b.WriteString("\n" + Theme.Footer.Render("[enter] Switch to existing  [tab] edit name  [esc] cancel"))
+	} else {
+		b.WriteString("\n" + Theme.Footer.Render("[enter] next  [esc] cancel"))
+	}
 
 	return Theme.OverlayBorder.Render(
 		Theme.OverlayTitle.Render("New Worktree") + "\n\n" + b.String(),

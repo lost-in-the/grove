@@ -1025,7 +1025,7 @@ This JSON checklist is for agent progress tracking. Agents should update the sta
         {
           "id": "TUI-3.3",
           "name": "Duplicate Validation",
-          "status": "pending",
+          "status": "complete",
           "files": ["internal/tui/overlay_create_v2.go"],
           "testFirst": true,
           "acceptanceCriteria": [

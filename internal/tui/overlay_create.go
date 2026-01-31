@@ -41,6 +41,9 @@ type CreateState struct {
 	ActionChoice  int // 0 = split (use as-is), 1 = fork (new branch from it)
 	DontShowAgain bool
 
+	// Duplicate validation
+	ExistingWorktree *WorktreeItem // populated if name conflicts with existing worktree
+
 	// Creating state
 	Creating bool
 }

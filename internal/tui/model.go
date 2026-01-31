@@ -350,6 +350,18 @@ func (m *Model) updateDetailContent() {
 	m.detail.GotoTop()
 }
 
+// existingWorktreeItems returns all current worktree items from the list.
+func (m Model) existingWorktreeItems() []WorktreeItem {
+	items := m.list.Items()
+	result := make([]WorktreeItem, 0, len(items))
+	for _, li := range items {
+		if item, ok := li.(WorktreeItem); ok {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
 func (m Model) selectedItem() (WorktreeItem, bool) {
 	selected := m.list.SelectedItem()
 	if selected == nil {
@@ -512,6 +524,13 @@ func (m Model) handleCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				s.Error = errMsg
 				return m, nil
 			}
+			// If duplicate exists, switch to it
+			if s.ExistingWorktree != nil {
+				m.switchTo = s.ExistingWorktree.Path
+				m.activeView = ViewDashboard
+				m.createState = nil
+				return m, tea.Quit
+			}
 			s.Error = ""
 			s.Step = CreateStepBranch
 			return m, nil
@@ -520,6 +539,7 @@ func (m Model) handleCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if len(s.Name) > 0 {
 				s.Name = s.Name[:len(s.Name)-1]
 				s.Error = ""
+				s.ExistingWorktree = checkDuplicateWorktree(s.Name, m.existingWorktreeItems())
 			}
 			return m, nil
 
@@ -530,6 +550,7 @@ func (m Model) handleCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			} else {
 				s.Error = ""
 			}
+			s.ExistingWorktree = checkDuplicateWorktree(s.Name, m.existingWorktreeItems())
 			return m, nil
 		}
 
