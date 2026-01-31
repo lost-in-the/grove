@@ -1012,7 +1012,7 @@ This JSON checklist is for agent progress tracking. Agents should update the sta
         {
           "id": "TUI-3.2",
           "name": "Create Wizard Context",
-          "status": "pending",
+          "status": "complete",
           "dependsOn": ["TUI-3.1"],
           "files": ["internal/tui/overlay_create_v2.go", "internal/tui/overlay_create_v2_test.go"],
           "testFirst": true,

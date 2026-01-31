@@ -803,7 +803,7 @@ func (m Model) View() string {
 
 	case ViewCreate:
 		if m.createState != nil {
-			overlay := renderCreate(m.createState, m.width, m.spinner.View())
+			overlay := renderCreateV2(m.createState, m.width, m.spinner.View())
 			bg := m.renderDashboard()
 			return centerOverlay(bg, overlay, m.width, m.height)
 		}
