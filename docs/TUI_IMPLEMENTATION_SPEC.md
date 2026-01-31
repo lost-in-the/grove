@@ -1000,7 +1000,7 @@ This JSON checklist is for agent progress tracking. Agents should update the sta
         {
           "id": "TUI-3.1",
           "name": "Stepper Component",
-          "status": "pending",
+          "status": "complete",
           "files": ["internal/tui/stepper.go", "internal/tui/stepper_test.go"],
           "testFirst": true,
           "acceptanceCriteria": [
