@@ -838,7 +838,7 @@ func (m Model) View() string {
 
 	case ViewPRs:
 		if m.prState != nil {
-			overlay := renderPRView(m.prState, m.width, m.spinner.View())
+			overlay := renderPRViewV2(m.prState, m.width, m.spinner.View())
 			bg := m.renderDashboard()
 			return centerOverlay(bg, overlay, m.width, m.height)
 		}

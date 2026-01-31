@@ -1069,7 +1069,7 @@ This JSON checklist is for agent progress tracking. Agents should update the sta
         {
           "id": "TUI-4.2",
           "name": "PR Browser Table Layout",
-          "status": "pending",
+          "status": "complete",
           "dependsOn": ["TUI-4.1"],
           "files": ["internal/tui/view_prs_v2.go", "internal/tui/view_prs_v2_test.go"],
           "testFirst": true,
