@@ -218,14 +218,18 @@ Examples:
 	}),
 }
 
-// getCurrentCommit returns the current HEAD commit SHA
+// getCurrentCommit returns the current HEAD commit SHA (short, 7 chars)
 func getCurrentCommit(repoPath string) (string, error) {
 	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "HEAD")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(string(output))[:7], nil
+	trimmed := strings.TrimSpace(string(output))
+	if len(trimmed) < 7 {
+		return trimmed, nil
+	}
+	return trimmed[:7], nil
 }
 
 func init() {

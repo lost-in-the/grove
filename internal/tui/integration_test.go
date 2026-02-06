@@ -234,6 +234,36 @@ func TestCreateWorktreeCmd_InvalidName(t *testing.T) {
 	}
 }
 
+func TestCreateWorktreeCmd_BranchInState(t *testing.T) {
+	repo := setupRailsFixture(t)
+	mgr, stateMgr := newTestManagers(t, repo)
+
+	cmd := createWorktreeCmd(mgr, stateMgr, repo, "my-feature", "")
+	msg := cmd()
+
+	created, ok := msg.(worktreeCreatedMsg)
+	if !ok {
+		t.Fatalf("expected worktreeCreatedMsg, got %T", msg)
+	}
+	if created.err != nil {
+		t.Fatalf("unexpected error: %v", created.err)
+	}
+
+	// Verify state records the actual git branch, not the worktree name
+	ws, err := stateMgr.GetWorktree("my-feature")
+	if err != nil {
+		t.Fatalf("GetWorktree error: %v", err)
+	}
+	if ws == nil {
+		t.Fatal("worktree not found in state")
+	}
+	// The branch should be the git branch name (which is "my-feature" when
+	// created without baseBranch, but the key point is it comes from wt.Branch)
+	if ws.Branch == "" {
+		t.Error("expected non-empty branch in state")
+	}
+}
+
 // --- deleteWorktreeCmd ---
 
 func TestDeleteWorktreeCmd_Basic(t *testing.T) {

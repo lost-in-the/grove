@@ -62,6 +62,9 @@ var hereCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to get current worktree: %w", err)
 		}
+		if tree == nil {
+			return fmt.Errorf("not in a grove worktree")
+		}
 
 		displayName := tree.DisplayName()
 

@@ -1,13 +1,18 @@
 package tui
 
 import (
+	"bytes"
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/LeahArmstrong/grove-cli/internal/hooks"
+	"github.com/LeahArmstrong/grove-cli/internal/state"
+	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 	"github.com/LeahArmstrong/grove-cli/plugins/tracker"
 )
@@ -102,7 +107,7 @@ func (m Model) handlePRKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			s.CreatingPR = pr
 			s.Error = ""
 			name := tracker.GenerateWorktreeName("pr", pr.Number, pr.Title)
-			return m, tea.Batch(m.spinner.Tick, createPRWorktreeCmd(m.worktreeMgr, m.projectRoot, name, pr.Branch))
+			return m, tea.Batch(m.spinner.Tick, createPRWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, name, pr.Branch))
 		}
 		return m, nil
 
@@ -207,7 +212,7 @@ func filteredPRs(prs []*tracker.PullRequest, filter string) []*tracker.PullReque
 	return result
 }
 
-func createPRWorktreeCmd(mgr *worktree.Manager, projectRoot, name, branch string) tea.Cmd {
+func createPRWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot, name, branch string) tea.Cmd {
 	return func() tea.Msg {
 		err := mgr.CreateFromBranch(name, branch)
 		if err != nil {
@@ -215,8 +220,44 @@ func createPRWorktreeCmd(mgr *worktree.Manager, projectRoot, name, branch string
 		}
 		wt, err := mgr.Find(name)
 		if err != nil || wt == nil {
-			return prWorktreeCreatedMsg{name: name, path: projectRoot}
+			return prWorktreeCreatedMsg{name: name, err: fmt.Errorf("worktree created but not found")}
 		}
-		return prWorktreeCreatedMsg{name: name, path: wt.Path}
+
+		projectName := mgr.GetProjectName()
+
+		// Register in state
+		now := time.Now()
+		wsState := &state.WorktreeState{
+			Path:           wt.Path,
+			Branch:         wt.Branch,
+			CreatedAt:      now,
+			LastAccessedAt: now,
+		}
+		_ = stateMgr.AddWorktree(name, wsState)
+
+		// Create tmux session
+		if tmux.IsTmuxAvailable() {
+			sessionName := worktree.TmuxSessionName(projectName, name)
+			_ = tmux.CreateSession(sessionName, wt.Path)
+		}
+
+		// Run post-create hooks
+		var hookBuf bytes.Buffer
+		hookExecutor, hookErr := hooks.NewExecutor()
+		if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPostCreate) {
+			hookExecutor.Output = &hookBuf
+			hookCtx := &hooks.ExecutionContext{
+				Event:        hooks.EventPostCreate,
+				Worktree:     name,
+				WorktreeFull: projectName + "-" + name,
+				Branch:       wt.Branch,
+				Project:      projectName,
+				MainPath:     projectRoot,
+				NewPath:      wt.Path,
+			}
+			_ = hookExecutor.Execute(hooks.EventPostCreate, hookCtx)
+		}
+
+		return prWorktreeCreatedMsg{name: name, path: wt.Path, hookOutput: hookBuf.String()}
 	}
 }
