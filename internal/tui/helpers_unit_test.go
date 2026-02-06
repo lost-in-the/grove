@@ -36,6 +36,8 @@ func TestTruncate(t *testing.T) {
 		{"hello", 5, "hello"},
 		{"hello", 4, "hel…"},
 		{"hello", 1, "h"},
+		{"hello", 0, ""},
+		{"hello", -1, ""},
 		{"", 5, ""},
 	}
 	for _, tt := range tests {

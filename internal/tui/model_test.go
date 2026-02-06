@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -797,6 +798,10 @@ func TestWorktreeDeletedMsgWithError(t *testing.T) {
 	if m.statusMsg != "" {
 		t.Error("expected no status message on delete error")
 	}
+	// Toast should show the error
+	if m.toast.Current == nil || m.toast.Current.Level != ToastError {
+		t.Error("expected error toast on delete failure")
+	}
 }
 
 func TestBulkDeleteDoneMsg(t *testing.T) {
@@ -1140,6 +1145,51 @@ func TestCreateWizardEscFromBranchAction(t *testing.T) {
 	m = sendKey(m, "esc")
 	if m.activeView != ViewDashboard {
 		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	}
+}
+
+func TestDownKeyOnEmptyBulkList(t *testing.T) {
+	m := newTestModel(withSize(80, 24))
+	m.activeView = ViewBulk
+	m.bulkState = &BulkState{Items: nil, Selected: nil}
+	// Down on empty bulk list must not panic (underflow guard)
+	m = sendKey(m, "down")
+	if m.bulkState.Cursor != 0 {
+		t.Errorf("expected cursor 0, got %d", m.bulkState.Cursor)
+	}
+}
+
+func TestDownKeyOnEmptyConfigTab(t *testing.T) {
+	m := newTestModel(withSize(80, 24))
+	m.activeView = ViewConfig
+	m.configState = NewConfigState()
+	// Empty fields — Down must not panic
+	m = sendKey(m, "down")
+	if m.configState.Cursor != 0 {
+		t.Errorf("expected cursor 0, got %d", m.configState.Cursor)
+	}
+}
+
+func TestDownKeyOnEmptySyncSources(t *testing.T) {
+	m := newTestModel(withSize(80, 24))
+	m.activeView = ViewSync
+	m.syncState = &SyncState{Sources: nil}
+	// Down on empty sync sources must not panic
+	m = sendKey(m, "down")
+	if m.syncState.Selected != 0 {
+		t.Errorf("expected selected 0, got %d", m.syncState.Selected)
+	}
+}
+
+func TestSortWithMixedTypes(t *testing.T) {
+	// Sort should handle non-WorktreeItem elements gracefully
+	items := []list.Item{
+		WorktreeItem{ShortName: "alpha"},
+		WorktreeItem{ShortName: "beta"},
+	}
+	sorted := sortWorktreeItems(items, SortByName)
+	if len(sorted) != 2 {
+		t.Errorf("expected 2 sorted items, got %d", len(sorted))
 	}
 }
 

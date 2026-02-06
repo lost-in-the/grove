@@ -43,8 +43,11 @@ func sortWorktreeItems(items []list.Item, mode SortMode) []list.Item {
 	copy(sorted, items)
 
 	sort.SliceStable(sorted, func(i, j int) bool {
-		a := sorted[i].(WorktreeItem)
-		b := sorted[j].(WorktreeItem)
+		a, aOk := sorted[i].(WorktreeItem)
+		b, bOk := sorted[j].(WorktreeItem)
+		if !aOk || !bOk {
+			return false
+		}
 		return compareWorktrees(a, b, mode)
 	})
 
