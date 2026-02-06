@@ -96,7 +96,7 @@ func createWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRo
 		now := time.Now()
 		wsState := &state.WorktreeState{
 			Path:           wt.Path,
-			Branch:         name,
+			Branch:         wt.Branch,
 			CreatedAt:      now,
 			LastAccessedAt: now,
 		}
@@ -117,7 +117,7 @@ func createWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRo
 				Event:        hooks.EventPostCreate,
 				Worktree:     name,
 				WorktreeFull: projectName + "-" + name,
-				Branch:       name,
+				Branch:       wt.Branch,
 				Project:      projectName,
 				MainPath:     projectRoot,
 				NewPath:      wt.Path,

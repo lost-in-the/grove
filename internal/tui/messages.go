@@ -46,9 +46,10 @@ type prsFetchedMsg struct {
 
 // prWorktreeCreatedMsg is sent after creating a worktree from a PR.
 type prWorktreeCreatedMsg struct {
-	name string
-	path string
-	err  error
+	name       string
+	path       string
+	err        error
+	hookOutput string
 }
 
 // issuesFetchedMsg is sent when issue data has been loaded.
@@ -59,7 +60,8 @@ type issuesFetchedMsg struct {
 
 // issueWorktreeCreatedMsg is sent after creating a worktree from an issue.
 type issueWorktreeCreatedMsg struct {
-	name string
-	path string
-	err  error
+	name       string
+	path       string
+	err        error
+	hookOutput string
 }
