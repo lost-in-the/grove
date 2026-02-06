@@ -21,9 +21,10 @@ const (
 
 // WorktreeWIPInfo pairs a worktree item with its WIP status.
 type WorktreeWIPInfo struct {
-	Item   WorktreeItem
-	HasWIP bool
-	Files  []string
+	Item    WorktreeItem
+	HasWIP  bool
+	Files   []string
+	CheckErr error // non-nil if WIP check failed
 }
 
 // SyncState holds the state for the sync overlay.
@@ -77,12 +78,16 @@ func gatherWIPInfoCmd(items []WorktreeItem) tea.Cmd {
 			wip := worktree.NewWIPHandler(item.Path)
 			hasWIP, err := wip.HasWIP()
 			if err != nil {
-				sources = append(sources, WorktreeWIPInfo{Item: item})
+				sources = append(sources, WorktreeWIPInfo{Item: item, CheckErr: err})
 				continue
 			}
 			var files []string
 			if hasWIP {
-				files, _ = wip.ListWIPFiles()
+				files, err = wip.ListWIPFiles()
+				if err != nil {
+					sources = append(sources, WorktreeWIPInfo{Item: item, HasWIP: hasWIP, CheckErr: fmt.Errorf("failed to list files: %w", err)})
+					continue
+				}
 			}
 			sources = append(sources, WorktreeWIPInfo{
 				Item:   item,
@@ -163,10 +168,20 @@ func (m Model) handleSyncKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.keys.Enter):
 			src := s.selectedSource()
-			if src != nil && src.HasWIP {
-				s.Step = SyncStepPreview
-				s.Stepper.Current = 1
+			if src == nil {
+				return m, nil
 			}
+			if src.CheckErr != nil {
+				s.Err = fmt.Errorf("cannot sync: WIP check failed for %s", src.Item.ShortName)
+				return m, nil
+			}
+			if !src.HasWIP {
+				s.Err = fmt.Errorf("no uncommitted changes in %s", src.Item.ShortName)
+				return m, nil
+			}
+			s.Err = nil
+			s.Step = SyncStepPreview
+			s.Stepper.Current = 1
 			return m, nil
 		}
 
@@ -262,7 +277,9 @@ func renderSync(s *SyncState, width int) string {
 
 				name := src.Item.ShortName
 				var status string
-				if src.HasWIP {
+				if src.CheckErr != nil {
+					status = Styles.ErrorText.Render("error")
+				} else if src.HasWIP {
 					status = Styles.WarningText.Render(fmt.Sprintf("%d files changed", len(src.Files)))
 				} else {
 					status = Styles.DetailDim.Render("clean")

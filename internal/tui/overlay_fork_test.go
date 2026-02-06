@@ -320,6 +320,45 @@ func TestForkWIPForm(t *testing.T) {
 	}
 }
 
+func TestForkOverlay_WIPCheckErrorDoesNotSkip(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 30))
+	m.activeView = ViewFork
+	m.forkState = NewForkState(WorktreeItem{ShortName: "test", Branch: "test"})
+
+	// WIP check fails — should NOT skip to confirm
+	m = sendMsg(m, forkWIPCheckMsg{hasWIP: false, err: errTest})
+	if m.forkState.Step != ForkStepName {
+		t.Errorf("expected ForkStepName when WIP check errors, got %d", m.forkState.Step)
+	}
+	if m.forkState.Err == nil {
+		t.Error("expected error to be set")
+	}
+}
+
+func TestForkCompleteMsg_PartialSuccess(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 30))
+	m.activeView = ViewFork
+	m.forkState = &ForkState{
+		Step:    ForkStepConfirm,
+		Source:  WorktreeItem{ShortName: "test"},
+		Name:    "new-feature",
+		Forking: true,
+		Stepper: NewStepper("Name", "WIP", "Confirm"),
+	}
+
+	// Partial success: worktree created but WIP patch failed
+	m = sendMsg(m, forkCompleteMsg{name: "new-feature", path: "/tmp/new", err: errTest})
+	if m.activeView != ViewDashboard {
+		t.Errorf("expected ViewDashboard for partial success, got %d", m.activeView)
+	}
+	if m.forkState != nil {
+		t.Error("expected forkState nil for partial success")
+	}
+	if m.pendingSelect != "new-feature" {
+		t.Errorf("expected pendingSelect set for partial success, got %q", m.pendingSelect)
+	}
+}
+
 func TestWIPStrategyConstants(t *testing.T) {
 	if WIPMove != 0 || WIPCopy != 1 || WIPLeave != 2 {
 		t.Error("unexpected WIP strategy constant values")

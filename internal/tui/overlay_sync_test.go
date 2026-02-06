@@ -321,6 +321,57 @@ func TestRenderSync_AllSteps(t *testing.T) {
 	})
 }
 
+func TestSyncOverlay_SelectSourceWithError(t *testing.T) {
+	m := newTestModel(withItems(5), withSize(80, 30))
+	m = sendKey(m, "s")
+
+	sources := []WorktreeWIPInfo{
+		{Item: WorktreeItem{ShortName: "broken"}, CheckErr: errTest},
+	}
+	m = sendMsg(m, syncWIPInfoMsg{sources: sources})
+
+	m = sendKey(m, "enter")
+	if m.syncState.Step != SyncStepSource {
+		t.Errorf("expected SyncStepSource for errored source, got %d", m.syncState.Step)
+	}
+	if m.syncState.Err == nil {
+		t.Error("expected error feedback for errored source")
+	}
+}
+
+func TestSyncOverlay_SelectCleanShowsFeedback(t *testing.T) {
+	m := newTestModel(withItems(5), withSize(80, 30))
+	m = sendKey(m, "s")
+
+	sources := []WorktreeWIPInfo{
+		{Item: WorktreeItem{ShortName: "clean-wt"}, HasWIP: false},
+	}
+	m = sendMsg(m, syncWIPInfoMsg{sources: sources})
+
+	m = sendKey(m, "enter")
+	if m.syncState.Step != SyncStepSource {
+		t.Errorf("expected SyncStepSource, got %d", m.syncState.Step)
+	}
+	if m.syncState.Err == nil {
+		t.Error("expected error feedback for clean source")
+	}
+}
+
+func TestRenderSync_SourceWithCheckError(t *testing.T) {
+	s := &SyncState{
+		Step:   SyncStepSource,
+		Target: WorktreeItem{ShortName: "main"},
+		Sources: []WorktreeWIPInfo{
+			{Item: WorktreeItem{ShortName: "broken"}, CheckErr: errTest},
+		},
+		Stepper: NewStepper("Source", "Preview", "Confirm"),
+	}
+	v := renderSync(s, 80)
+	if !strings.Contains(v, "error") {
+		t.Error("expected 'error' status for broken source")
+	}
+}
+
 func TestSelectedSource(t *testing.T) {
 	s := &SyncState{
 		Sources: []WorktreeWIPInfo{

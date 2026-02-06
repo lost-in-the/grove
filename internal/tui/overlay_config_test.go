@@ -206,6 +206,19 @@ func TestConfigSavedMsg_Error(t *testing.T) {
 	}
 }
 
+func TestConfigSavedMsg_ErrorAfterClose(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 30))
+	// Simulate save-on-close: configState is already nil when error arrives
+	m.activeView = ViewDashboard
+	m.configState = nil
+
+	m = sendMsg(m, configSavedMsg{err: errTest})
+	// Should show toast error even though configState is nil
+	if m.activeView != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	}
+}
+
 func TestPopulateConfigFields(t *testing.T) {
 	cfg := config.LoadDefaults()
 	cfg.ProjectName = "grove-cli"

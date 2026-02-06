@@ -41,6 +41,7 @@ type ForkState struct {
 	WIPStrategy WIPStrategy
 	HasWIP      bool
 	WIPFiles    []string
+	WIPChoice   string // persists WIP form selection across back navigation
 	Err         error
 	Forking     bool
 	Stepper     *Stepper
@@ -80,7 +81,10 @@ func checkWIPCmd(source WorktreeItem) tea.Cmd {
 		}
 		var files []string
 		if hasWIP {
-			files, _ = wip.ListWIPFiles()
+			files, err = wip.ListWIPFiles()
+			if err != nil {
+				return forkWIPCheckMsg{hasWIP: hasWIP, err: fmt.Errorf("failed to list WIP files: %w", err)}
+			}
 		}
 		return forkWIPCheckMsg{hasWIP: hasWIP, files: files}
 	}
@@ -147,8 +151,7 @@ func forkWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, forkState *
 		if len(wipPatch) > 0 {
 			newWipHandler := worktree.NewWIPHandler(newTree.Path)
 			if err := newWipHandler.ApplyPatch(wipPatch); err != nil {
-				// Non-fatal: worktree was created but patch failed
-				return forkCompleteMsg{name: name, path: newTree.Path, err: nil}
+				return forkCompleteMsg{name: name, path: newTree.Path, err: fmt.Errorf("worktree created but failed to apply changes: %w", err)}
 			}
 		}
 
@@ -245,8 +248,7 @@ func (m Model) handleForkKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if s.HasWIP {
 				s.Step = ForkStepWIP
 				s.Stepper.Current = 1
-				var wipChoice string
-				s.Form = NewForkWIPForm(&wipChoice)
+				s.Form = NewForkWIPForm(&s.WIPChoice)
 				return m, s.Form.Init()
 			}
 			s.Step = ForkStepConfirm
@@ -276,11 +278,10 @@ func (m Model) handleForkKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if s.Form.State == huh.StateCompleted {
 			// Extract WIP strategy from form value
-			wipChoice := s.Form.GetString("0")
 			switch {
-			case strings.Contains(wipChoice, "move") || wipChoice == "move":
+			case strings.Contains(s.WIPChoice, "move") || s.WIPChoice == "move":
 				s.WIPStrategy = WIPMove
-			case strings.Contains(wipChoice, "copy") || wipChoice == "copy":
+			case strings.Contains(s.WIPChoice, "copy") || s.WIPChoice == "copy":
 				s.WIPStrategy = WIPCopy
 			default:
 				s.WIPStrategy = WIPLeave
@@ -303,8 +304,7 @@ func (m Model) handleForkKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if s.HasWIP {
 				s.Step = ForkStepWIP
 				s.Stepper.Current = 1
-				var wipChoice string
-				s.Form = NewForkWIPForm(&wipChoice)
+				s.Form = NewForkWIPForm(&s.WIPChoice)
 				return m, s.Form.Init()
 			}
 			s.Step = ForkStepName

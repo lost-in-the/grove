@@ -301,8 +301,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.forkState.WIPFiles = msg.files
 			if msg.err != nil {
 				m.forkState.Err = msg.err
-			}
-			if !msg.hasWIP {
+				// Don't skip WIP step on error — we don't know the real state
+			} else if !msg.hasWIP {
 				// Skip WIP step if no WIP
 				m.forkState.Step = ForkStepConfirm
 				m.forkState.Stepper.Current = 2
@@ -312,6 +312,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case forkCompleteMsg:
 		if msg.err != nil {
+			if msg.name != "" {
+				// Partial success: worktree created but WIP patch failed
+				m.activeView = ViewDashboard
+				m.forkState = nil
+				m.pendingSelect = msg.name
+				m.toast.Show(NewToast(fmt.Sprintf("Forked %q (warning: %s)", msg.name, msg.err), ToastWarning))
+				return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
+			}
 			if m.forkState != nil {
 				m.forkState.Err = msg.err
 				m.forkState.Forking = false
@@ -362,14 +370,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			if m.configState != nil {
 				m.configState.Err = msg.err
+			} else {
+				// Config overlay was already closed (save-on-close), show toast
+				m.toast.Show(NewToast("Config save failed: "+msg.err.Error(), ToastError))
 			}
 			return m, nil
 		}
-		m.activeView = ViewDashboard
-		m.configState = nil
+		if m.configState != nil {
+			// Config overlay still open — close it
+			m.activeView = ViewDashboard
+			m.configState = nil
+		}
 		m.toast.Show(NewToast("Configuration saved", ToastSuccess))
 		// Reload config
-		m.cfg, _ = config.Load()
+		if cfg, err := config.Load(); err == nil {
+			m.cfg = cfg
+		}
 		return m, nil
 
 	case spinner.TickMsg:
