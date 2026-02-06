@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -227,6 +228,53 @@ func TestSyncWIPInfoMsg(t *testing.T) {
 	}
 }
 
+func TestSyncWIPInfoMsg_Error(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 30))
+	m.activeView = ViewSync
+	m.syncState = &SyncState{
+		Step:    SyncStepSource,
+		Stepper: NewStepper("Source", "Preview", "Confirm"),
+	}
+
+	m = sendMsg(m, syncWIPInfoMsg{err: errTest})
+	if m.syncState.Err == nil {
+		t.Error("expected error on syncState from WIP info error")
+	}
+	if m.syncState.Sources != nil {
+		t.Error("expected Sources to remain nil on error")
+	}
+}
+
+func TestSyncOverlay_ConfirmWithNilSource(t *testing.T) {
+	m := newTestModel(withItems(5), withSize(80, 30))
+	m.activeView = ViewSync
+	m.syncState = &SyncState{
+		Step:     SyncStepConfirm,
+		Target:   WorktreeItem{ShortName: "main"},
+		Sources:  nil, // empty sources
+		Selected: 0,
+		Stepper:  NewStepper("Source", "Preview", "Confirm"),
+	}
+	m.syncState.Stepper.Current = 2
+
+	// Should not panic or start syncing
+	m = sendKey(m, "enter")
+	if m.syncState.Syncing {
+		t.Error("expected Syncing=false when source is nil")
+	}
+}
+
+func TestNewSyncState_NoCurrentWorktree(t *testing.T) {
+	items := []WorktreeItem{
+		{ShortName: "a", IsCurrent: false},
+		{ShortName: "b", IsCurrent: false},
+	}
+	s := NewSyncState(items)
+	if s.Target.ShortName != "" {
+		t.Errorf("expected empty target when no current worktree, got %q", s.Target.ShortName)
+	}
+}
+
 func TestRenderSync_AllSteps(t *testing.T) {
 	t.Run("source step empty", func(t *testing.T) {
 		s := &SyncState{
@@ -369,6 +417,42 @@ func TestRenderSync_SourceWithCheckError(t *testing.T) {
 	v := renderSync(s, 80)
 	if !strings.Contains(v, "error") {
 		t.Error("expected 'error' status for broken source")
+	}
+}
+
+func TestRenderSync_BoundaryWidths(t *testing.T) {
+	s := &SyncState{
+		Step:    SyncStepSource,
+		Target:  WorktreeItem{ShortName: "main"},
+		Stepper: NewStepper("Source", "Preview", "Confirm"),
+	}
+	v := renderSync(s, 40)
+	if v == "" {
+		t.Fatal("expected non-empty render at narrow width")
+	}
+	v = renderSync(s, 200)
+	if v == "" {
+		t.Fatal("expected non-empty render at wide width")
+	}
+}
+
+func TestRenderSync_PreviewTruncation(t *testing.T) {
+	files := make([]string, 20)
+	for i := range files {
+		files[i] = fmt.Sprintf("M file%02d.go", i)
+	}
+	s := &SyncState{
+		Step:   SyncStepPreview,
+		Target: WorktreeItem{ShortName: "main"},
+		Sources: []WorktreeWIPInfo{
+			{Item: WorktreeItem{ShortName: "src"}, HasWIP: true, Files: files},
+		},
+		Stepper: NewStepper("Source", "Preview", "Confirm"),
+	}
+	s.Stepper.Current = 1
+	v := renderSync(s, 80)
+	if !strings.Contains(v, "and") {
+		t.Error("expected truncation indicator for >12 files")
 	}
 }
 

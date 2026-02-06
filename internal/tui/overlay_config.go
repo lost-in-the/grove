@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -91,9 +92,9 @@ func saveConfigCmd(state *ConfigState) tea.Cmd {
 				// Only save changed fields
 				if field.Value != field.Default {
 					val := field.Value
-					// Quote string values for TOML
+					// Quote string values for TOML with proper escaping
 					if field.Type == ConfigString || field.Type == ConfigEnum {
-						val = `"` + val + `"`
+						val = strconv.Quote(val)
 					}
 					updates[field.Key] = val
 				}

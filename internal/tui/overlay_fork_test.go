@@ -221,6 +221,59 @@ func TestForkCompleteMsg_Error(t *testing.T) {
 	}
 }
 
+func TestForkOverlay_ConfirmWithNilManagers(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 30))
+	m.activeView = ViewFork
+	m.forkState = &ForkState{
+		Step:    ForkStepConfirm,
+		Source:  WorktreeItem{ShortName: "test"},
+		Name:    "new-feature",
+		Stepper: NewStepper("Name", "WIP", "Confirm"),
+	}
+	m.forkState.Stepper.Current = 2
+	// worktreeMgr and stateMgr are nil on test model
+
+	m = sendKey(m, "enter")
+	if m.forkState.Forking {
+		t.Error("expected Forking=false when managers are nil")
+	}
+}
+
+func TestRenderFork_BoundaryWidths(t *testing.T) {
+	s := &ForkState{
+		Step:    ForkStepName,
+		Source:  WorktreeItem{ShortName: "test", Branch: "test"},
+		Stepper: NewStepper("Name", "WIP", "Confirm"),
+	}
+	// Narrow width
+	v := renderFork(s, 40)
+	if v == "" {
+		t.Fatal("expected non-empty render at narrow width")
+	}
+	// Wide width
+	v = renderFork(s, 200)
+	if v == "" {
+		t.Fatal("expected non-empty render at wide width")
+	}
+}
+
+func TestRenderFork_ConfirmWIPCopy(t *testing.T) {
+	s := &ForkState{
+		Step:        ForkStepConfirm,
+		Source:      WorktreeItem{ShortName: "test", Branch: "test"},
+		Name:        "fork",
+		WIPStrategy: WIPCopy,
+		HasWIP:      true,
+		WIPFiles:    []string{"file.go"},
+		Stepper:     NewStepper("Name", "WIP", "Confirm"),
+	}
+	s.Stepper.Current = 2
+	v := renderFork(s, 80)
+	if !strings.Contains(v, "copy to both") {
+		t.Error("expected 'copy to both' for WIPCopy strategy")
+	}
+}
+
 func TestRenderFork_AllSteps(t *testing.T) {
 	t.Run("name step", func(t *testing.T) {
 		s := &ForkState{

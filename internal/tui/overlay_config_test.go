@@ -393,6 +393,25 @@ func TestNewConfigEditForm(t *testing.T) {
 	})
 }
 
+func TestConfigOverlay_EscDirtySaves(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 30))
+	m = sendKey(m, "c")
+
+	cfg := config.LoadDefaults()
+	m.configState.Fields = populateConfigFields(cfg)
+	m.configState.Config = cfg
+	m.configState.Dirty = true
+
+	m = sendKey(m, "esc")
+	// Should close overlay and transition to dashboard
+	if m.activeView != ViewDashboard {
+		t.Errorf("expected ViewDashboard after dirty esc, got %d", m.activeView)
+	}
+	if m.configState != nil {
+		t.Error("expected configState nil after dirty esc")
+	}
+}
+
 func TestConfigFieldTypeConstants(t *testing.T) {
 	if ConfigString != 0 || ConfigBool != 1 || ConfigEnum != 2 || ConfigList != 3 {
 		t.Error("unexpected ConfigFieldType constant values")
