@@ -9,6 +9,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 
+	"github.com/LeahArmstrong/grove-cli/internal/state"
+	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 	"github.com/LeahArmstrong/grove-cli/plugins/tracker"
 )
@@ -86,7 +88,7 @@ func (m Model) handleIssueKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			s.Creating = true
 			s.Error = ""
 			name := tracker.GenerateWorktreeName("issue", issue.Number, issue.Title)
-			return m, tea.Batch(m.spinner.Tick, createIssueWorktreeCmd(m.worktreeMgr, m.projectRoot, name))
+			return m, tea.Batch(m.spinner.Tick, createIssueWorktreeCmd(m.worktreeMgr, m.stateMgr, name))
 		}
 		return m, nil
 
@@ -106,7 +108,7 @@ func (m Model) handleIssueKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func createIssueWorktreeCmd(mgr *worktree.Manager, projectRoot, name string) tea.Cmd {
+func createIssueWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, name string) tea.Cmd {
 	return func() tea.Msg {
 		err := mgr.Create(name, "")
 		if err != nil {
@@ -114,8 +116,28 @@ func createIssueWorktreeCmd(mgr *worktree.Manager, projectRoot, name string) tea
 		}
 		wt, err := mgr.Find(name)
 		if err != nil || wt == nil {
-			return issueWorktreeCreatedMsg{name: name, path: projectRoot}
+			return issueWorktreeCreatedMsg{name: name, err: fmt.Errorf("worktree created but not found")}
 		}
+
+		// Register in state (consistent with createWorktreeCmd)
+		if stateMgr != nil {
+			now := time.Now()
+			wsState := &state.WorktreeState{
+				Path:           wt.Path,
+				Branch:         name,
+				CreatedAt:      now,
+				LastAccessedAt: now,
+			}
+			_ = stateMgr.AddWorktree(name, wsState)
+		}
+
+		// Create tmux session
+		projectName := mgr.GetProjectName()
+		if tmux.IsTmuxAvailable() {
+			sessionName := worktree.TmuxSessionName(projectName, name)
+			_ = tmux.CreateSession(sessionName, wt.Path)
+		}
+
 		return issueWorktreeCreatedMsg{name: name, path: wt.Path}
 	}
 }

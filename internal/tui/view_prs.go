@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/LeahArmstrong/grove-cli/internal/state"
+	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 	"github.com/LeahArmstrong/grove-cli/plugins/tracker"
 )
@@ -102,7 +105,7 @@ func (m Model) handlePRKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			s.CreatingPR = pr
 			s.Error = ""
 			name := tracker.GenerateWorktreeName("pr", pr.Number, pr.Title)
-			return m, tea.Batch(m.spinner.Tick, createPRWorktreeCmd(m.worktreeMgr, m.projectRoot, name, pr.Branch))
+			return m, tea.Batch(m.spinner.Tick, createPRWorktreeCmd(m.worktreeMgr, m.stateMgr, name, pr.Branch))
 		}
 		return m, nil
 
@@ -207,7 +210,7 @@ func filteredPRs(prs []*tracker.PullRequest, filter string) []*tracker.PullReque
 	return result
 }
 
-func createPRWorktreeCmd(mgr *worktree.Manager, projectRoot, name, branch string) tea.Cmd {
+func createPRWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, name, branch string) tea.Cmd {
 	return func() tea.Msg {
 		err := mgr.CreateFromBranch(name, branch)
 		if err != nil {
@@ -215,8 +218,28 @@ func createPRWorktreeCmd(mgr *worktree.Manager, projectRoot, name, branch string
 		}
 		wt, err := mgr.Find(name)
 		if err != nil || wt == nil {
-			return prWorktreeCreatedMsg{name: name, path: projectRoot}
+			return prWorktreeCreatedMsg{name: name, err: fmt.Errorf("worktree created but not found")}
 		}
+
+		// Register in state (consistent with createWorktreeCmd)
+		if stateMgr != nil {
+			now := time.Now()
+			wsState := &state.WorktreeState{
+				Path:           wt.Path,
+				Branch:         branch,
+				CreatedAt:      now,
+				LastAccessedAt: now,
+			}
+			_ = stateMgr.AddWorktree(name, wsState)
+		}
+
+		// Create tmux session
+		projectName := mgr.GetProjectName()
+		if tmux.IsTmuxAvailable() {
+			sessionName := worktree.TmuxSessionName(projectName, name)
+			_ = tmux.CreateSession(sessionName, wt.Path)
+		}
+
 		return prWorktreeCreatedMsg{name: name, path: wt.Path}
 	}
 }

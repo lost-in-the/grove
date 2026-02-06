@@ -45,7 +45,8 @@ type Model struct {
 	stateMgr    *state.Manager
 	projectRoot string
 	projectName string
-	cfg         *config.Config
+	cfg        *config.Config
+	cfgLoadErr error // non-nil if config failed to load at startup
 
 	// Child components (bubbles)
 	list    list.Model
@@ -94,7 +95,10 @@ type Model struct {
 
 // NewModel creates a new TUI model.
 func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string) Model {
-	cfg, _ := config.Load()
+	cfg, cfgErr := config.Load()
+	if cfgErr != nil {
+		tuilog.Printf("warning: failed to load config: %v", cfgErr)
+	}
 	keys := DefaultKeyMap()
 
 	s := GroveSpinner()
@@ -117,7 +121,8 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		stateMgr:    stateMgr,
 		projectRoot: projectRoot,
 		projectName: mgr.GetProjectName(),
-		cfg:         cfg,
+		cfg:        cfg,
+		cfgLoadErr: cfgErr,
 		keys:        keys,
 		list:        l,
 		spinner:     s,
@@ -154,11 +159,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		wasReady := m.ready
 		m.width = msg.Width
 		m.height = msg.Height
 		m.ready = true
 		m.updateLayout()
 		tuilog.Printf("WindowSizeMsg: %dx%d, list size: %dx%d", msg.Width, msg.Height, m.list.Width(), m.list.Height())
+		if !wasReady && m.cfgLoadErr != nil {
+			m.toast.Show(NewToast("Config load failed: "+m.cfgLoadErr.Error(), ToastWarning))
+			m.cfgLoadErr = nil
+		}
 		return m, nil
 
 	case worktreesFetchedMsg:
@@ -195,7 +205,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case worktreeDeletedMsg:
 		m.activeView = ViewDashboard
 		m.deleteState = nil
-		if msg.err == nil {
+		if msg.err != nil {
+			m.toast.Show(NewToast(fmt.Sprintf("Delete failed: %s", msg.err), ToastError))
+		} else {
 			m.statusMsg = fmt.Sprintf("Deleted %q", msg.name)
 			m.statusTTL = time.Now().Add(3 * time.Second)
 			m.toast.Show(NewToast(fmt.Sprintf("Deleted %q", msg.name), ToastSuccess))
@@ -681,12 +693,13 @@ func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			idx := int(r - '1')
 			items := m.list.Items()
 			if idx < len(items) {
-				item := items[idx].(WorktreeItem)
-				if item.IsCurrent {
+				if item, ok := items[idx].(WorktreeItem); ok {
+					if item.IsCurrent {
+						return m, tea.Quit
+					}
+					m.switchTo = item.Path
 					return m, tea.Quit
 				}
-				m.switchTo = item.Path
-				return m, tea.Quit
 			}
 			return m, nil
 		}
@@ -911,10 +924,12 @@ func (m Model) handleCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				if s.ActionChoice == 0 {
 					action = "split"
 				}
-				_ = config.SetProjectConfigValues(map[string]string{
+				if err := config.SetProjectConfigValues(map[string]string{
 					"tui.skip_branch_notice":    "true",
 					"tui.default_branch_action": `"` + action + `"`,
-				})
+				}); err != nil {
+					m.toast.Show(NewToast("Failed to save preference: "+err.Error(), ToastWarning))
+				}
 			}
 
 			if s.ActionChoice == 1 {
@@ -1115,10 +1130,12 @@ func (m Model) handleBranchActionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if s.ActionChoice == 0 {
 				action = "split"
 			}
-			_ = config.SetProjectConfigValues(map[string]string{
+			if err := config.SetProjectConfigValues(map[string]string{
 				"tui.skip_branch_notice":    "true",
 				"tui.default_branch_action": `"` + action + `"`,
-			})
+			}); err != nil {
+				m.toast.Show(NewToast("Failed to save preference: "+err.Error(), ToastWarning))
+			}
 		}
 
 		if s.ActionChoice == 1 {
@@ -1172,8 +1189,9 @@ func (m Model) enterPRView() (tea.Model, tea.Cmd) {
 	// Collect existing worktree branches for badge display
 	branches := make(map[string]bool)
 	for _, li := range m.list.Items() {
-		item := li.(WorktreeItem)
-		branches[item.Branch] = true
+		if item, ok := li.(WorktreeItem); ok {
+			branches[item.Branch] = true
+		}
 	}
 
 	m.activeView = ViewPRs
@@ -1196,9 +1214,10 @@ func (m Model) enterBulkMode() (tea.Model, tea.Cmd) {
 	// Collect deletable (non-main, non-protected) worktrees
 	var deletable []WorktreeItem
 	for _, li := range m.list.Items() {
-		item := li.(WorktreeItem)
-		if !item.IsMain && !item.IsProtected && !item.IsCurrent {
-			deletable = append(deletable, item)
+		if item, ok := li.(WorktreeItem); ok {
+			if !item.IsMain && !item.IsProtected && !item.IsCurrent {
+				deletable = append(deletable, item)
+			}
 		}
 	}
 
@@ -1236,7 +1255,7 @@ func (m Model) handleBulkKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.keys.Down):
-		if s.Cursor < len(s.Items)-1 {
+		if len(s.Items) > 0 && s.Cursor < len(s.Items)-1 {
 			s.Cursor++
 		}
 		return m, nil

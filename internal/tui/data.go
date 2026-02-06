@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/LeahArmstrong/grove-cli/internal/config"
+	"github.com/LeahArmstrong/grove-cli/internal/tuilog"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
@@ -110,7 +111,10 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager) ([]WorktreeI
 	projectName := mgr.GetProjectName()
 
 	// Load config for protection checks
-	cfg, _ := config.Load()
+	cfg, cfgErr := config.Load()
+	if cfgErr != nil {
+		tuilog.Printf("warning: failed to load config for protection checks: %v", cfgErr)
+	}
 
 	// Current worktree
 	currentTree, _ := mgr.GetCurrent()
@@ -197,11 +201,13 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager) ([]WorktreeI
 				if isDirty {
 					dirtyFiles, err := mgr.GetDirtyFiles(treePath)
 					if err == nil && dirtyFiles != "" {
+						var files []string
 						for _, f := range strings.Split(dirtyFiles, "\n") {
 							if f != "" {
-								item.DirtyFiles = append(item.DirtyFiles, f)
+								files = append(files, f)
 							}
 						}
+						item.DirtyFiles = files
 					}
 				}
 

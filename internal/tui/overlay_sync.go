@@ -161,7 +161,7 @@ func (m Model) handleSyncKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case key.Matches(msg, m.keys.Down):
-			if s.Selected < len(s.Sources)-1 {
+			if len(s.Sources) > 0 && s.Selected < len(s.Sources)-1 {
 				s.Selected++
 			}
 			return m, nil

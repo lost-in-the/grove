@@ -311,7 +311,7 @@ func (m Model) handleConfigKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, m.keys.Down):
 		tabFields := s.Fields[s.Tab]
-		if s.Cursor < len(tabFields)-1 {
+		if len(tabFields) > 0 && s.Cursor < len(tabFields)-1 {
 			s.Cursor++
 		}
 		return m, nil
