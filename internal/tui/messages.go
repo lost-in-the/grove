@@ -34,7 +34,8 @@ type statusClearMsg struct {
 
 // bulkDeleteDoneMsg is sent when bulk deletion completes.
 type bulkDeleteDoneMsg struct {
-	count int
+	count  int
+	failed []string // names of worktrees that failed to delete
 }
 
 // prsFetchedMsg is sent when PR data has been loaded.

@@ -46,14 +46,15 @@ type ConfigField struct {
 
 // ConfigState holds the state for the config overlay.
 type ConfigState struct {
-	Tab      ConfigTab
-	Fields   [][]ConfigField // fields per tab
-	Cursor   int             // field cursor within current tab
-	Editing  bool            // inline edit active
-	EditForm *huh.Form       // active Huh form for editing
-	Err      error
-	Dirty    bool           // unsaved changes exist
-	Config   *config.Config // loaded config
+	Tab               ConfigTab
+	Fields            [][]ConfigField // fields per tab
+	Cursor            int             // field cursor within current tab
+	Editing           bool            // inline edit active
+	EditForm          *huh.Form       // active Huh form for editing
+	EditOriginalValue string          // value before form opened (Huh binds directly)
+	Err               error
+	Dirty             bool           // unsaved changes exist
+	Config            *config.Config // loaded config
 }
 
 // NewConfigState creates an empty ConfigState.
@@ -319,6 +320,7 @@ func (m Model) handleConfigKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		tabFields := s.Fields[s.Tab]
 		if s.Cursor < len(tabFields) {
 			field := &tabFields[s.Cursor]
+			s.EditOriginalValue = field.Value // save before Huh binds to pointer
 			s.Editing = true
 			s.EditForm = newConfigEditForm(field)
 			return m, s.EditForm.Init()
@@ -341,19 +343,22 @@ func (m Model) handleConfigEditKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	s.EditForm = model.(*huh.Form)
 
 	if s.EditForm.State == huh.StateAborted {
+		// Restore original value — Huh modifies field.Value through pointer binding
+		tabFields := s.Fields[s.Tab]
+		if s.Cursor < len(tabFields) {
+			tabFields[s.Cursor].Value = s.EditOriginalValue
+		}
 		s.Editing = false
 		s.EditForm = nil
 		return m, nil
 	}
 
 	if s.EditForm.State == huh.StateCompleted {
-		// Extract value from the form
+		// Huh already updated field.Value through pointer binding,
+		// so compare against saved original to detect changes
 		tabFields := s.Fields[s.Tab]
 		if s.Cursor < len(tabFields) {
-			field := &tabFields[s.Cursor]
-			newVal := s.EditForm.GetString("value")
-			if newVal != field.Value {
-				field.Value = newVal
+			if tabFields[s.Cursor].Value != s.EditOriginalValue {
 				s.Dirty = true
 			}
 		}

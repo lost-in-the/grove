@@ -290,9 +290,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case bulkDeleteDoneMsg:
 		m.activeView = ViewDashboard
 		m.bulkState = nil
-		m.statusMsg = fmt.Sprintf("Deleted %d worktrees", msg.count)
+		if len(msg.failed) > 0 {
+			m.statusMsg = fmt.Sprintf("Deleted %d worktrees (%d failed)", msg.count, len(msg.failed))
+			m.toast.Show(NewToast(fmt.Sprintf("Deleted %d worktrees, %d failed", msg.count, len(msg.failed)), ToastWarning))
+		} else {
+			m.statusMsg = fmt.Sprintf("Deleted %d worktrees", msg.count)
+			m.toast.Show(NewToast(fmt.Sprintf("Deleted %d worktrees", msg.count), ToastSuccess))
+		}
 		m.statusTTL = time.Now().Add(3 * time.Second)
-		m.toast.Show(NewToast(fmt.Sprintf("Deleted %d worktrees", msg.count), ToastSuccess))
 		return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
 
 	case forkWIPCheckMsg:
@@ -1257,11 +1262,14 @@ func (m Model) handleBulkKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) bulkDeleteCmd(items []WorktreeItem) tea.Cmd {
 	return func() tea.Msg {
+		var failed []string
 		for _, item := range items {
-			// Reuse existing delete logic inline (without branch deletion for bulk)
-			deleteWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, item.ShortName, false)()
+			result := deleteWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, item.ShortName, false)()
+			if msg, ok := result.(worktreeDeletedMsg); ok && msg.err != nil {
+				failed = append(failed, item.ShortName)
+			}
 		}
-		return bulkDeleteDoneMsg{count: len(items)}
+		return bulkDeleteDoneMsg{count: len(items) - len(failed), failed: failed}
 	}
 }
 
@@ -1584,7 +1592,9 @@ func runModel(model Model) (string, error) {
 	switchPath := m.SwitchTo()
 	if switchPath != "" {
 		if cdFile := os.Getenv("GROVE_CD_FILE"); cdFile != "" {
-			os.WriteFile(cdFile, []byte(switchPath), 0600)
+			if err := os.WriteFile(cdFile, []byte(switchPath), 0600); err != nil {
+				return "", fmt.Errorf("failed to write cd file: %w", err)
+			}
 		} else if os.Getenv("GROVE_SHELL") == "1" {
 			fmt.Printf("cd:%s\n", switchPath)
 		}

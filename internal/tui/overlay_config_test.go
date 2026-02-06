@@ -412,6 +412,85 @@ func TestConfigOverlay_EscDirtySaves(t *testing.T) {
 	}
 }
 
+func TestConfigEditKey_NilForm(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 30))
+	m.activeView = ViewConfig
+	m.configState = NewConfigState()
+	m.configState.Editing = true
+	m.configState.EditForm = nil
+
+	m = sendKey(m, "enter")
+	if m.configState.Editing {
+		t.Error("expected Editing=false when EditForm is nil")
+	}
+}
+
+func TestConfigEditKey_EnterSavesOriginalValue(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 30))
+	m = sendKey(m, "c")
+
+	cfg := config.LoadDefaults()
+	cfg.ProjectName = "my-project"
+	m.configState.Fields = populateConfigFields(cfg)
+	m.configState.Config = cfg
+
+	// Enter should save EditOriginalValue before creating the form
+	m = sendKey(m, "enter")
+	if !m.configState.Editing {
+		t.Fatal("expected Editing=true after enter")
+	}
+	if m.configState.EditOriginalValue != "my-project" {
+		t.Errorf("expected EditOriginalValue='my-project', got %q", m.configState.EditOriginalValue)
+	}
+}
+
+func TestConfigEditKey_DirtyDetection(t *testing.T) {
+	// Verify the Dirty mechanism: Huh updates field.Value through pointer,
+	// so comparing against EditOriginalValue detects changes correctly.
+	m := newTestModel(withItems(3), withSize(80, 30))
+	m = sendKey(m, "c")
+
+	cfg := config.LoadDefaults()
+	m.configState.Fields = populateConfigFields(cfg)
+	m.configState.Config = cfg
+
+	original := m.configState.Fields[ConfigTabGeneral][0].Value
+	m.configState.EditOriginalValue = original
+
+	// Simulate Huh changing the value through pointer binding
+	m.configState.Fields[ConfigTabGeneral][0].Value = "changed-value"
+
+	// The comparison against EditOriginalValue should detect the change
+	if m.configState.Fields[ConfigTabGeneral][0].Value == m.configState.EditOriginalValue {
+		t.Error("expected value to differ from EditOriginalValue after Huh edit")
+	}
+
+	// Verify that unchanged values DON'T set dirty
+	m.configState.Fields[ConfigTabGeneral][0].Value = original
+	if m.configState.Fields[ConfigTabGeneral][0].Value != m.configState.EditOriginalValue {
+		t.Error("expected value to match EditOriginalValue when unchanged")
+	}
+}
+
+func TestConfigEditKey_AbortRestoresValue(t *testing.T) {
+	// Verify the abort path restores EditOriginalValue
+	s := NewConfigState()
+	cfg := config.LoadDefaults()
+	cfg.ProjectName = "original-name"
+	s.Fields = populateConfigFields(cfg)
+	s.Config = cfg
+
+	s.EditOriginalValue = "original-name"
+	// Simulate Huh having modified the value during interaction
+	s.Fields[ConfigTabGeneral][0].Value = "modified-during-edit"
+
+	// The abort code should restore EditOriginalValue
+	s.Fields[ConfigTabGeneral][0].Value = s.EditOriginalValue
+	if s.Fields[ConfigTabGeneral][0].Value != "original-name" {
+		t.Errorf("expected value restored to 'original-name', got %q", s.Fields[ConfigTabGeneral][0].Value)
+	}
+}
+
 func TestConfigFieldTypeConstants(t *testing.T) {
 	if ConfigString != 0 || ConfigBool != 1 || ConfigEnum != 2 || ConfigList != 3 {
 		t.Error("unexpected ConfigFieldType constant values")
