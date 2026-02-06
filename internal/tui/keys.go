@@ -33,18 +33,23 @@ type KeyMap struct {
 	Deny    key.Binding
 	Toggle  key.Binding
 	All     key.Binding
+
+	// Fork/Sync/Config
+	Fork   key.Binding
+	Sync   key.Binding
+	Config key.Binding
 }
 
 // ShortHelp returns keybindings for the short help view (help.KeyMap interface).
 func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Enter, k.New, k.Delete, k.PRs, k.Issues, k.Sort, k.Filter, k.Help, k.Quit}
+	return []key.Binding{k.Enter, k.New, k.Delete, k.Fork, k.Sync, k.Config, k.PRs, k.Issues, k.Sort, k.Filter, k.Help, k.Quit}
 }
 
 // FullHelp returns keybindings for the full help view (help.KeyMap interface).
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Enter},
-		{k.New, k.Delete, k.PRs, k.Issues, k.Sort, k.Filter, k.Refresh},
+		{k.New, k.Delete, k.Fork, k.Sync, k.Config, k.PRs, k.Issues, k.Sort, k.Filter, k.Refresh},
 		{k.Help, k.Quit, k.Escape},
 	}
 }
@@ -132,6 +137,19 @@ func DefaultKeyMap() KeyMap {
 		All: key.NewBinding(
 			key.WithKeys("a"),
 			key.WithHelp("a", "all merged"),
+		),
+
+		Fork: key.NewBinding(
+			key.WithKeys("f"),
+			key.WithHelp("f", "fork"),
+		),
+		Sync: key.NewBinding(
+			key.WithKeys("s"),
+			key.WithHelp("s", "sync"),
+		),
+		Config: key.NewBinding(
+			key.WithKeys("c"),
+			key.WithHelp("c", "config"),
 		),
 	}
 }

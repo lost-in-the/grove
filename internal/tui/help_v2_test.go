@@ -11,11 +11,14 @@ func TestHelpFooterCompactHints(t *testing.T) {
 		view     ActiveView
 		wantKeys []string
 	}{
-		{"Dashboard hints", ViewDashboard, []string{"↑↓", "enter", "n", "d", "?"}},
+		{"Dashboard hints", ViewDashboard, []string{"↑↓", "enter", "n", "d", "?", "f", "s", "c"}},
 		{"Create hints", ViewCreate, []string{"enter", "esc"}},
 		{"Delete hints", ViewDelete, []string{"y", "n", "space"}},
 		{"Bulk hints", ViewBulk, []string{"space", "enter", "esc"}},
 		{"PRs hints", ViewPRs, []string{"enter", "esc", "↑↓"}},
+		{"Fork hints", ViewFork, []string{"enter", "esc"}},
+		{"Sync hints", ViewSync, []string{"enter", "esc", "↑↓"}},
+		{"Config hints", ViewConfig, []string{"enter", "esc", "tab"}},
 	}
 
 	for _, tt := range tests {
@@ -41,7 +44,7 @@ func TestHelpFooterCompactHints(t *testing.T) {
 
 func TestHelpFooterRenderCompact(t *testing.T) {
 	hf := NewHelpFooter()
-	result := hf.RenderCompact(ViewDashboard, 120)
+	result := hf.RenderCompact(ViewDashboard, 200)
 
 	if result == "" {
 		t.Fatal("RenderCompact returned empty string")

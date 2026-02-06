@@ -33,6 +33,9 @@ const (
 	ViewBulk
 	ViewPRs
 	ViewIssues
+	ViewFork
+	ViewSync
+	ViewConfig
 )
 
 // Model is the root Bubble Tea model.
@@ -74,6 +77,9 @@ type Model struct {
 	bulkState   *BulkState
 	prState     *PRViewState
 	issueState  *IssueViewState
+	forkState   *ForkState
+	syncState   *SyncState
+	configState *ConfigState
 
 	// Post-create selection
 	pendingSelect string
@@ -289,13 +295,90 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toast.Show(NewToast(fmt.Sprintf("Deleted %d worktrees", msg.count), ToastSuccess))
 		return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
 
+	case forkWIPCheckMsg:
+		if m.forkState != nil {
+			m.forkState.HasWIP = msg.hasWIP
+			m.forkState.WIPFiles = msg.files
+			if msg.err != nil {
+				m.forkState.Err = msg.err
+			}
+			if !msg.hasWIP {
+				// Skip WIP step if no WIP
+				m.forkState.Step = ForkStepConfirm
+				m.forkState.Stepper.Current = 2
+			}
+		}
+		return m, nil
+
+	case forkCompleteMsg:
+		if msg.err != nil {
+			if m.forkState != nil {
+				m.forkState.Err = msg.err
+				m.forkState.Forking = false
+			}
+			return m, nil
+		}
+		m.activeView = ViewDashboard
+		m.forkState = nil
+		m.pendingSelect = msg.name
+		m.toast.Show(NewToast(fmt.Sprintf("Forked %q", msg.name), ToastSuccess))
+		return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
+
+	case syncWIPInfoMsg:
+		if m.syncState != nil {
+			if msg.err != nil {
+				m.syncState.Err = msg.err
+			} else {
+				m.syncState.Sources = msg.sources
+			}
+		}
+		return m, nil
+
+	case syncCompleteMsg:
+		if msg.err != nil {
+			if m.syncState != nil {
+				m.syncState.Err = msg.err
+				m.syncState.Syncing = false
+			}
+			return m, nil
+		}
+		m.activeView = ViewDashboard
+		m.syncState = nil
+		m.toast.Show(NewToast(fmt.Sprintf("Synced %d files", msg.filesApplied), ToastSuccess))
+		return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
+
+	case configLoadedMsg:
+		if m.configState != nil {
+			if msg.err != nil {
+				m.configState.Err = msg.err
+			} else {
+				m.configState.Config = msg.cfg
+				m.configState.Fields = populateConfigFields(msg.cfg)
+			}
+		}
+		return m, nil
+
+	case configSavedMsg:
+		if msg.err != nil {
+			if m.configState != nil {
+				m.configState.Err = msg.err
+			}
+			return m, nil
+		}
+		m.activeView = ViewDashboard
+		m.configState = nil
+		m.toast.Show(NewToast("Configuration saved", ToastSuccess))
+		// Reload config
+		m.cfg, _ = config.Load()
+		return m, nil
+
 	case spinner.TickMsg:
 		// Tick toast expiry on every spinner tick
 		if m.toast != nil {
 			m.toast.Tick()
 		}
 		var spinnerCmds []tea.Cmd
-		if m.loading || (m.createState != nil && m.createState.Creating) || (m.prState != nil && (m.prState.Loading || m.prState.Creating)) || (m.issueState != nil && (m.issueState.Loading || m.issueState.Creating)) || (m.toast != nil && m.toast.Current != nil) {
+		if m.loading || (m.createState != nil && m.createState.Creating) || (m.forkState != nil && m.forkState.Forking) || (m.syncState != nil && m.syncState.Syncing) || (m.prState != nil && (m.prState.Loading || m.prState.Creating)) || (m.issueState != nil && (m.issueState.Loading || m.issueState.Creating)) || (m.toast != nil && m.toast.Current != nil) {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			spinnerCmds = append(spinnerCmds, cmd)
@@ -326,6 +409,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Forward messages to active Huh form when in create view
 		if m.activeView == ViewCreate && m.createState != nil && m.createState.UseHuhForms {
 			return m.forwardToActiveHuhForm(msg)
+		}
+		// Forward messages to active Huh form when in fork view
+		if m.activeView == ViewFork && m.forkState != nil && m.forkState.Form != nil {
+			return m.forwardToForkHuhForm(msg)
+		}
+		// Forward messages to active Huh form when in config view
+		if m.activeView == ViewConfig && m.configState != nil && m.configState.Editing && m.configState.EditForm != nil {
+			return m.forwardToConfigHuhForm(msg)
 		}
 		// Forward unhandled messages to the list so it can process
 		// internal messages (e.g. filter match results from fuzzy search).
@@ -462,6 +553,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handlePRKey(msg)
 	case ViewIssues:
 		return m.handleIssueKey(msg)
+	case ViewFork:
+		return m.handleForkKey(msg)
+	case ViewSync:
+		return m.handleSyncKey(msg)
+	case ViewConfig:
+		return m.handleConfigKey(msg)
 	case ViewDashboard:
 		return m.handleDashboardKey(msg)
 	}
@@ -535,6 +632,25 @@ func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, m.keys.Issues):
 		return m.enterIssueView()
+
+	case key.Matches(msg, m.keys.Fork):
+		item, ok := m.selectedItem()
+		if ok {
+			m.activeView = ViewFork
+			m.forkState = NewForkState(item)
+			return m, checkWIPCmd(item)
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.Sync):
+		m.activeView = ViewSync
+		m.syncState = NewSyncState(m.existingWorktreeItems())
+		return m, gatherWIPInfoCmd(m.existingWorktreeItems())
+
+	case key.Matches(msg, m.keys.Config):
+		m.activeView = ViewConfig
+		m.configState = NewConfigState()
+		return m, loadConfigCmd()
 	}
 
 	// Quick-switch: number keys 1-9 jump to nth visible item
@@ -1191,6 +1307,27 @@ func (m Model) View() string {
 	case ViewIssues:
 		if m.issueState != nil {
 			overlay := renderIssueView(m.issueState, m.width, m.spinner.View())
+			bg := m.renderDashboard()
+			return centerOverlay(bg, overlay, m.width, m.height)
+		}
+
+	case ViewFork:
+		if m.forkState != nil {
+			overlay := renderFork(m.forkState, m.width)
+			bg := m.renderDashboard()
+			return centerOverlay(bg, overlay, m.width, m.height)
+		}
+
+	case ViewSync:
+		if m.syncState != nil {
+			overlay := renderSync(m.syncState, m.width)
+			bg := m.renderDashboard()
+			return centerOverlay(bg, overlay, m.width, m.height)
+		}
+
+	case ViewConfig:
+		if m.configState != nil {
+			overlay := renderConfig(m.configState, m.width)
 			bg := m.renderDashboard()
 			return centerOverlay(bg, overlay, m.width, m.height)
 		}

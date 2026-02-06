@@ -36,6 +36,9 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 			{"enter", "switch"},
 			{"n", "new"},
 			{"d", "delete"},
+			{"f", "fork"},
+			{"s", "sync"},
+			{"c", "config"},
 			{"o", "sort"},
 			{"/", "filter"},
 			{"p", "PRs"},
@@ -64,6 +67,24 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 		return []Hint{
 			{"↑↓", "navigate"},
 			{"enter", "create worktree"},
+			{"esc", "close"},
+		}
+	case ViewFork:
+		return []Hint{
+			{"enter", "continue"},
+			{"esc", "cancel"},
+		}
+	case ViewSync:
+		return []Hint{
+			{"↑↓", "navigate"},
+			{"enter", "select"},
+			{"esc", "cancel"},
+		}
+	case ViewConfig:
+		return []Hint{
+			{"tab", "next tab"},
+			{"↑↓", "navigate"},
+			{"enter", "edit"},
 			{"esc", "close"},
 		}
 	default:
@@ -121,6 +142,9 @@ func (h *HelpFooter) RenderExpanded(width int) string {
 			items: []Hint{
 				{"n", "new worktree"},
 				{"d", "delete"},
+				{"f", "fork worktree"},
+				{"s", "sync changes"},
+				{"c", "configure"},
 				{"p", "browse PRs"},
 				{"i", "browse issues"},
 				{"a", "bulk delete"},
