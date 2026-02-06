@@ -723,6 +723,11 @@ func (m Model) handleDeleteKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch {
 	case key.Matches(msg, m.keys.Confirm):
+		if m.deleteState.Item == nil {
+			m.activeView = ViewDashboard
+			m.deleteState = nil
+			return m, nil
+		}
 		name := m.deleteState.Item.ShortName
 		return m, deleteWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, name, m.deleteState.DeleteBranch)
 

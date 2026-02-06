@@ -1193,6 +1193,85 @@ func TestSortWithMixedTypes(t *testing.T) {
 	}
 }
 
+func TestHandlePRKeyNilState(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 24))
+	m.activeView = ViewPRs
+	m.prState = nil
+	m = sendKey(m, "j")
+	if m.activeView != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	}
+}
+
+func TestHandleIssueKeyNilState(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 24))
+	m.activeView = ViewIssues
+	m.issueState = nil
+	m = sendKey(m, "j")
+	if m.activeView != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	}
+}
+
+func TestPRWorktreeCreatedMsg_Error(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 24))
+	m.activeView = ViewPRs
+	m.prState = &PRViewState{Creating: true}
+	m = sendMsg(m, prWorktreeCreatedMsg{name: "pr-123", err: errTest})
+	if m.prState == nil {
+		t.Fatal("expected prState preserved on error")
+	}
+	if m.prState.Creating {
+		t.Error("expected Creating=false after error")
+	}
+	if m.prState.Error == "" {
+		t.Error("expected error message on prState")
+	}
+}
+
+func TestPRWorktreeCreatedMsg_Success(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 24))
+	m.activeView = ViewPRs
+	m.prState = &PRViewState{Creating: true}
+	m = sendMsg(m, prWorktreeCreatedMsg{name: "pr-123", path: "/tmp/pr-123"})
+	if m.activeView != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	}
+	if m.prState != nil {
+		t.Error("expected prState nil after success")
+	}
+	if m.pendingSelect != "pr-123" {
+		t.Errorf("expected pendingSelect=pr-123, got %q", m.pendingSelect)
+	}
+}
+
+func TestIssueWorktreeCreatedMsg_Error(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 24))
+	m.activeView = ViewIssues
+	m.issueState = &IssueViewState{Creating: true}
+	m = sendMsg(m, issueWorktreeCreatedMsg{name: "issue-42", err: errTest})
+	if m.issueState == nil {
+		t.Fatal("expected issueState preserved on error")
+	}
+	if m.issueState.Creating {
+		t.Error("expected Creating=false after error")
+	}
+	if m.issueState.Error == "" {
+		t.Error("expected error message on issueState")
+	}
+}
+
+func TestDeleteConfirmNilItem(t *testing.T) {
+	m := newTestModel(withSize(80, 24))
+	m.activeView = ViewDelete
+	m.deleteState = &DeleteState{Item: nil}
+	// Confirm on nil item should not panic
+	m = sendKey(m, "y")
+	if m.activeView != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	}
+}
+
 func containsStr(s, sub string) bool {
 	return len(s) > 0 && len(sub) > 0 && contains(s, sub)
 }

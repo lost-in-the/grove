@@ -13,6 +13,10 @@ type DeleteState struct {
 }
 
 func renderDelete(s *DeleteState, width int) string {
+	if s == nil || s.Item == nil {
+		return ""
+	}
+
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "Delete %q?\n\n", s.Item.ShortName)
