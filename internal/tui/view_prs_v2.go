@@ -9,23 +9,28 @@ import (
 // diff stats, and worktree badges.
 func renderPRViewV2(s *PRViewState, width int, spinnerView string) string {
 	if s.Loading {
-		return Theme.OverlayBorder.Render(
-			Theme.OverlayTitle.Render("Pull Requests") + "\n\n" +
+		return Styles.OverlayBorder.Render(
+			Styles.OverlayTitle.Render("Pull Requests") + "\n\n" +
 				spinnerView + " Loading PRs...",
 		)
 	}
 
 	if s.Creating {
-		return Theme.OverlayBorder.Render(
-			Theme.OverlayTitle.Render("Pull Requests") + "\n\n" +
-				spinnerView + " Creating worktree from PR...",
+		creatingMsg := "Creating worktree from PR..."
+		if s.CreatingPR != nil {
+			creatingMsg = fmt.Sprintf("Creating worktree for PR #%d: %s...",
+				s.CreatingPR.Number, truncate(s.CreatingPR.Title, 40))
+		}
+		return Styles.OverlayBorder.Render(
+			Styles.OverlayTitle.Render("Pull Requests") + "\n\n" +
+				spinnerView + " " + creatingMsg,
 		)
 	}
 
 	var b strings.Builder
 
 	if s.Error != "" {
-		b.WriteString(Theme.ErrorText.Render(s.Error) + "\n\n")
+		b.WriteString(Styles.ErrorText.Render(s.Error) + "\n\n")
 	}
 
 	filtered := filteredPRs(s.PRs, s.Filter)
@@ -39,14 +44,14 @@ func renderPRViewV2(s *PRViewState, width int, spinnerView string) string {
 	// Filter bar with count
 	if s.Filter != "" {
 		fmt.Fprintf(&b, "Filter: %s█", s.Filter)
-		fmt.Fprintf(&b, "  %s", Theme.DetailDim.Render(fmt.Sprintf("%d of %d", len(filtered), total)))
+		fmt.Fprintf(&b, "  %s", Styles.DetailDim.Render(fmt.Sprintf("%d of %d", len(filtered), total)))
 		b.WriteString("\n\n")
 	} else if total > 0 {
-		b.WriteString(Theme.DetailDim.Render(fmt.Sprintf("%d open", total)) + "\n\n")
+		b.WriteString(Styles.DetailDim.Render(fmt.Sprintf("%d open", total)) + "\n\n")
 	}
 
 	if len(filtered) == 0 {
-		b.WriteString(Theme.DetailDim.Render("  (no matching PRs)") + "\n")
+		b.WriteString(Styles.DetailDim.Render("  (no matching PRs)") + "\n")
 	} else {
 		maxShow := 10
 		start := 0
@@ -68,54 +73,54 @@ func renderPRViewV2(s *PRViewState, width int, spinnerView string) string {
 
 			cursor := "  "
 			if i == s.Cursor {
-				cursor = Theme.ListCursor.String()
+				cursor = Styles.ListCursor.String()
 			}
 
 			// Line 1: cursor + #number + title + branch
-			number := Theme.DetailDim.Render(fmt.Sprintf("#%-5d", pr.Number))
+			number := Styles.DetailDim.Render(fmt.Sprintf("#%-5d", pr.Number))
 			titleStr := pr.Title
 			if pr.IsDraft {
-				titleStr = Theme.WarningText.Render("[DRAFT]") + " " + titleStr
+				titleStr = Styles.WarningText.Render("[DRAFT]") + " " + titleStr
 			}
 			titleStr = truncate(titleStr, contentWidth-30)
-			branch := Theme.DetailDim.Render(truncate(pr.Branch, 20))
+			branch := Styles.DetailDim.Render(truncate(pr.Branch, 20))
 			b.WriteString(fmt.Sprintf("%s%s %s  %s\n", cursor, number, titleStr, branch))
 
 			// Line 2: metadata indent + author + commits + diff stats + worktree badge
 			indent := "         " // align with title after cursor+number
-			author := Theme.DetailDim.Render("@" + pr.Author)
-			commits := Theme.DetailDim.Render(formatCommitCount(pr.CommitCount))
+			author := Styles.DetailDim.Render("@" + pr.Author)
+			commits := Styles.DetailDim.Render(formatCommitCount(pr.CommitCount))
 			diffStats := formatDiffStats(pr.Additions, pr.Deletions)
 
 			badge := ""
 			if s.WorktreeBranches[pr.Branch] {
-				badge = "  " + Theme.SuccessText.Render("✓ worktree")
+				badge = "  " + Styles.SuccessText.Render("✓ worktree")
 			}
 
 			b.WriteString(fmt.Sprintf("%s%s · %s · %s%s\n", indent, author, commits, diffStats, badge))
 
 			// Separator between items (except last)
 			if i < end-1 {
-				b.WriteString(Theme.DetailDim.Render("  " + strings.Repeat("─", contentWidth-4)) + "\n")
+				b.WriteString(Styles.DetailDim.Render("  " + strings.Repeat("─", contentWidth-4)) + "\n")
 			}
 		}
 
 		if end < len(filtered) {
-			b.WriteString(Theme.DetailDim.Render(fmt.Sprintf("\n  … and %d more", len(filtered)-end)) + "\n")
+			b.WriteString(Styles.DetailDim.Render(fmt.Sprintf("\n  … and %d more", len(filtered)-end)) + "\n")
 		}
 	}
 
-	b.WriteString("\n" + Theme.Footer.Render("[enter] create worktree  [tab] preview  [esc] close  type to filter"))
+	b.WriteString("\n" + Styles.Footer.Render("[enter] create worktree  [tab] preview  [esc] close  type to filter"))
 
-	return Theme.OverlayBorder.Render(
-		Theme.OverlayTitle.Render("Pull Requests") + "\n\n" + b.String(),
+	return Styles.OverlayBorder.Render(
+		Styles.OverlayTitle.Render("Pull Requests") + "\n\n" + b.String(),
 	)
 }
 
 // formatDiffStats formats additions/deletions with comma separators.
 func formatDiffStats(additions, deletions int) string {
-	return Theme.DetailFileAdd.Render("+"+formatNumber(additions)) + " " +
-		Theme.DetailFileDel.Render("-"+formatNumber(deletions))
+	return Styles.DetailFileAdd.Render("+"+formatNumber(additions)) + " " +
+		Styles.DetailFileDel.Render("-"+formatNumber(deletions))
 }
 
 // formatCommitCount returns "N commit(s)".

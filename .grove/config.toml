@@ -1,0 +1,11 @@
+# Grove project configuration
+project_name = "grove-cli"
+
+[switch]
+dirty_handling = "prompt"  # auto-stash, prompt, refuse
+
+[naming]
+pattern = "{project}-{name}"
+
+[tmux]
+prefix = ""  # Optional prefix for tmux session names

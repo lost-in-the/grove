@@ -68,7 +68,7 @@ func TestColorScheme_TextColors(t *testing.T) {
 	}{
 		{"TextNormal", Colors.TextNormal, "#CDD6F4", "#1E293B"},
 		{"TextBright", Colors.TextBright, "#FFFFFF", "#0F172A"},
-		{"TextMuted", Colors.TextMuted, "#6C7086", "#64748B"},
+		{"TextMuted", Colors.TextMuted, "#9399B2", "#475569"},
 	}
 
 	for _, tt := range tests {

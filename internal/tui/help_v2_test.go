@@ -41,7 +41,7 @@ func TestHelpFooterCompactHints(t *testing.T) {
 
 func TestHelpFooterRenderCompact(t *testing.T) {
 	hf := NewHelpFooter()
-	result := hf.RenderCompact(ViewDashboard, 80)
+	result := hf.RenderCompact(ViewDashboard, 120)
 
 	if result == "" {
 		t.Fatal("RenderCompact returned empty string")

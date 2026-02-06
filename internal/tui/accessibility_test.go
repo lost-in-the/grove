@@ -73,6 +73,7 @@ func TestDefaultColorScheme_WCAGAAContrast(t *testing.T) {
 		"Info":       scheme.Info,
 		"TextNormal": scheme.TextNormal,
 		"TextBright": scheme.TextBright,
+		"TextMuted":  scheme.TextMuted,
 	}
 
 	const minRatio = 4.5

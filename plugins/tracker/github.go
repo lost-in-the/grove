@@ -217,7 +217,7 @@ func (g *GitHubAdapter) ListIssues(opts ListOptions) ([]*Issue, error) {
 
 // ListPRs retrieves pull requests with optional filtering.
 func (g *GitHubAdapter) ListPRs(opts ListOptions) ([]*PullRequest, error) {
-	args := []string{"pr", "list", "--json", "number,title,state,author,labels,headRefName,baseRefName,isDraft,commits,additions,deletions,reviewDecision,createdAt,updatedAt,url"}
+	args := []string{"pr", "list", "--json", "number,title,body,state,author,labels,headRefName,baseRefName,isDraft,commits,additions,deletions,reviewDecision,createdAt,updatedAt,url"}
 
 	if opts.State != "" && opts.State != "all" {
 		args = append(args, "--state", opts.State)
@@ -251,6 +251,7 @@ func (g *GitHubAdapter) ListPRs(opts ListOptions) ([]*PullRequest, error) {
 	var ghPRs []struct {
 		Number int    `json:"number"`
 		Title  string `json:"title"`
+		Body   string `json:"body"`
 		State  string `json:"state"`
 		Author struct {
 			Login string `json:"login"`
@@ -286,6 +287,7 @@ func (g *GitHubAdapter) ListPRs(opts ListOptions) ([]*PullRequest, error) {
 		prs[i] = &PullRequest{
 			Number:         gh.Number,
 			Title:          gh.Title,
+			Body:           gh.Body,
 			State:          strings.ToLower(gh.State),
 			Author:         gh.Author.Login,
 			Labels:         labels,

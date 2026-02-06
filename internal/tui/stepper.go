@@ -104,8 +104,12 @@ func (s *Stepper) View(width int) string {
 		}
 	}
 
-	// Build label line
+	// Build label line — each step gets an equal-width column, label centered within it.
+	// Total dot line visible width: (n-1)*connWidth + n = n-1 segments + n dots.
+	totalWidth := n + (n-1)*connWidth
+
 	var labelLine strings.Builder
+	labelPos := 0
 	for i, step := range s.Steps {
 		var styled string
 		switch {
@@ -117,14 +121,39 @@ func (s *Stepper) View(width int) string {
 			styled = futureLabel.Render(step)
 		}
 
+		styledWidth := lipgloss.Width(styled)
+
+		// Center of this step's column
+		var colStart int
 		if i == 0 {
-			labelLine.WriteString(styled)
+			colStart = 0
+		} else if i == n-1 {
+			// Last label: right-align so it doesn't overshoot
+			colStart = totalWidth - styledWidth
 		} else {
-			// Pad to roughly align under the corresponding dot
-			gap := max(connWidth+1-lipgloss.Width(styled)/2, 1)
-			labelLine.WriteString(strings.Repeat(" ", gap))
-			labelLine.WriteString(styled)
+			// Center under the dot at position i*(connWidth+1)
+			dotPos := i * (connWidth + 1)
+			colStart = dotPos - styledWidth/2
 		}
+
+		// Clamp: don't overlap previous label, don't go negative
+		if colStart < labelPos {
+			colStart = labelPos
+		}
+
+		// Don't exceed total width
+		if colStart+styledWidth > totalWidth {
+			colStart = totalWidth - styledWidth
+			if colStart < labelPos {
+				colStart = labelPos
+			}
+		}
+
+		if colStart > labelPos {
+			labelLine.WriteString(strings.Repeat(" ", colStart-labelPos))
+		}
+		labelLine.WriteString(styled)
+		labelPos = colStart + styledWidth
 	}
 
 	return dotLine.String() + "\n" + labelLine.String()

@@ -10,21 +10,15 @@ import (
 // The nameValue pointer will be populated with the user's input.
 // existingItems is used for duplicate detection validation.
 func NewCreateNameForm(nameValue *string, projectName string, existingItems []WorktreeItem) *huh.Form {
-	description := "Worktree name"
-	if projectName != "" {
-		description = fmt.Sprintf("Will create: %s-<name>", projectName)
-	}
-
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
 				Title("Worktree Name").
-				Description(description).
 				Placeholder("feature-name").
 				Validate(createNameValidator(existingItems)).
 				Value(nameValue),
 		),
-	).WithTheme(huh.ThemeCharm())
+	).WithTheme(huh.ThemeCharm()).WithShowHelp(false).WithAccessible(isHighContrast())
 
 	return form
 }
@@ -42,7 +36,7 @@ func NewCreateBranchForm(choice *string) *huh.Form {
 				).
 				Value(choice),
 		),
-	).WithTheme(huh.ThemeCharm())
+	).WithTheme(huh.ThemeCharm()).WithShowHelp(false).WithAccessible(isHighContrast())
 
 	return form
 }
@@ -63,7 +57,7 @@ func NewBranchPickerForm(selected *string, branches []string) *huh.Form {
 				Filtering(true).
 				Value(selected),
 		),
-	).WithTheme(huh.ThemeCharm())
+	).WithTheme(huh.ThemeCharm()).WithShowHelp(false).WithAccessible(isHighContrast())
 
 	return form
 }

@@ -38,6 +38,8 @@ func newTestModel(opts ...testOpt) Model {
 		list:        l,
 		spinner:     s,
 		help:        h,
+		toast:       NewToastModel(),
+		helpFooter:  NewHelpFooter(),
 		detail:      viewport.New(80, 20),
 		activeView:  ViewDashboard,
 		loading:     false,

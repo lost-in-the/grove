@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os/exec"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -19,6 +20,7 @@ type PRViewState struct {
 	Error            string
 	WorktreeBranches map[string]bool // branches that have worktrees
 	Creating         bool
+	CreatingPR       *tracker.PullRequest // PR being created
 	Filter           string
 	ShowPreview      bool // toggle PR preview panel with Tab
 }
@@ -79,6 +81,15 @@ func (m Model) handlePRKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		s.ShowPreview = !s.ShowPreview
 		return m, nil
 
+	case msg.String() == "o":
+		if s.ShowPreview && len(filtered) > 0 && s.Cursor < len(filtered) {
+			pr := filtered[s.Cursor]
+			if pr.URL != "" {
+				_ = exec.Command("open", pr.URL).Start()
+			}
+		}
+		return m, nil
+
 	case key.Matches(msg, m.keys.Enter):
 		if len(filtered) > 0 && s.Cursor < len(filtered) {
 			pr := filtered[s.Cursor]
@@ -88,6 +99,7 @@ func (m Model) handlePRKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			s.Creating = true
+			s.CreatingPR = pr
 			s.Error = ""
 			name := tracker.GenerateWorktreeName("pr", pr.Number, pr.Title)
 			return m, tea.Batch(m.spinner.Tick, createPRWorktreeCmd(m.worktreeMgr, m.projectRoot, name, pr.Branch))
@@ -112,15 +124,15 @@ func (m Model) handlePRKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func renderPRView(s *PRViewState, width int, spinnerView string) string {
 	if s.Loading {
-		return Theme.OverlayBorder.Render(
-			Theme.OverlayTitle.Render("Pull Requests") + "\n\n" +
+		return Styles.OverlayBorder.Render(
+			Styles.OverlayTitle.Render("Pull Requests") + "\n\n" +
 				spinnerView + " Loading PRs...",
 		)
 	}
 
 	if s.Creating {
-		return Theme.OverlayBorder.Render(
-			Theme.OverlayTitle.Render("Pull Requests") + "\n\n" +
+		return Styles.OverlayBorder.Render(
+			Styles.OverlayTitle.Render("Pull Requests") + "\n\n" +
 				spinnerView + " Creating worktree from PR...",
 		)
 	}
@@ -128,7 +140,7 @@ func renderPRView(s *PRViewState, width int, spinnerView string) string {
 	var b strings.Builder
 
 	if s.Error != "" {
-		b.WriteString(Theme.ErrorText.Render(s.Error) + "\n\n")
+		b.WriteString(Styles.ErrorText.Render(s.Error) + "\n\n")
 	}
 
 	if s.Filter != "" {
@@ -137,7 +149,7 @@ func renderPRView(s *PRViewState, width int, spinnerView string) string {
 
 	filtered := filteredPRs(s.PRs, s.Filter)
 	if len(filtered) == 0 {
-		b.WriteString(Theme.DetailDim.Render("  (no matching PRs)") + "\n")
+		b.WriteString(Styles.DetailDim.Render("  (no matching PRs)") + "\n")
 	} else {
 		maxShow := 15
 		start := 0
@@ -152,30 +164,30 @@ func renderPRView(s *PRViewState, width int, spinnerView string) string {
 			pr := filtered[i]
 			cursor := "  "
 			if i == s.Cursor {
-				cursor = Theme.ListCursor.String()
+				cursor = Styles.ListCursor.String()
 			}
 
-			number := Theme.DetailDim.Render(fmt.Sprintf("#%-5d", pr.Number))
+			number := Styles.DetailDim.Render(fmt.Sprintf("#%-5d", pr.Number))
 			title := truncate(pr.Title, 50)
-			branch := Theme.DetailDim.Render(truncate(pr.Branch, 20))
-			author := Theme.DetailDim.Render("@" + pr.Author)
+			branch := Styles.DetailDim.Render(truncate(pr.Branch, 20))
+			author := Styles.DetailDim.Render("@" + pr.Author)
 
 			badge := ""
 			if s.WorktreeBranches[pr.Branch] {
-				badge = " " + Theme.SuccessText.Render("[worktree]")
+				badge = " " + Styles.SuccessText.Render("[worktree]")
 			}
 
 			b.WriteString(fmt.Sprintf("%s%s %s  %s  %s%s\n", cursor, number, title, branch, author, badge))
 		}
 		if end < len(filtered) {
-			b.WriteString(Theme.DetailDim.Render(fmt.Sprintf("  … and %d more", len(filtered)-end)) + "\n")
+			b.WriteString(Styles.DetailDim.Render(fmt.Sprintf("  … and %d more", len(filtered)-end)) + "\n")
 		}
 	}
 
-	b.WriteString("\n" + Theme.Footer.Render("[enter] create worktree  [esc] close  type to filter"))
+	b.WriteString("\n" + Styles.Footer.Render("[enter] create worktree  [esc] close  type to filter"))
 
-	return Theme.OverlayBorder.Render(
-		Theme.OverlayTitle.Render("Pull Requests") + "\n\n" + b.String(),
+	return Styles.OverlayBorder.Render(
+		Styles.OverlayTitle.Render("Pull Requests") + "\n\n" + b.String(),
 	)
 }
 

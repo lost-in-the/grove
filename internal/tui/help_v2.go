@@ -36,7 +36,10 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 			{"enter", "switch"},
 			{"n", "new"},
 			{"d", "delete"},
+			{"o", "sort"},
+			{"/", "filter"},
 			{"p", "PRs"},
+			{"i", "issues"},
 			{"?", "more"},
 		}
 	case ViewCreate:
@@ -119,6 +122,7 @@ func (h *HelpFooter) RenderExpanded(width int) string {
 				{"n", "new worktree"},
 				{"d", "delete"},
 				{"p", "browse PRs"},
+				{"i", "browse issues"},
 				{"a", "bulk delete"},
 				{"o", "cycle sort"},
 				{"r", "refresh"},

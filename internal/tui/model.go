@@ -50,6 +50,11 @@ type Model struct {
 	spinner spinner.Model
 	help    help.Model
 
+	// V2 components
+	header     Header
+	toast      *ToastModel
+	helpFooter *HelpFooter
+
 	// Keys
 	keys KeyMap
 
@@ -69,6 +74,9 @@ type Model struct {
 	bulkState   *BulkState
 	prState     *PRViewState
 	issueState  *IssueViewState
+
+	// Post-create selection
+	pendingSelect string
 
 	// Output
 	switchTo string
@@ -108,6 +116,8 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		list:        l,
 		spinner:     s,
 		help:        h,
+		toast:       NewToastModel(),
+		helpFooter:  NewHelpFooter(),
 		activeView:  ViewDashboard,
 		loading:     true,
 	}
@@ -161,6 +171,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.list.SetItems(listItems)
 		m.loading = false
+
+		// Select newly created worktree if pending
+		if m.pendingSelect != "" {
+			for i, li := range listItems {
+				if item, ok := li.(WorktreeItem); ok && item.ShortName == m.pendingSelect {
+					m.list.Select(i)
+					break
+				}
+			}
+			m.pendingSelect = ""
+		}
+
 		m.updateDetailContent()
 		return m, nil
 
@@ -170,9 +192,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err == nil {
 			m.statusMsg = fmt.Sprintf("Deleted %q", msg.name)
 			m.statusTTL = time.Now().Add(3 * time.Second)
-			cmds = append(cmds, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
-				return statusClearMsg{deadline: m.statusTTL}
-			}))
+			m.toast.Show(NewToast(fmt.Sprintf("Deleted %q", msg.name), ToastSuccess))
+			cmds = append(cmds, m.spinner.Tick)
 		}
 		cmds = append(cmds, m.fetchWorktrees)
 		return m, tea.Batch(cmds...)
@@ -187,12 +208,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.activeView = ViewDashboard
 		m.createState = nil
+		m.pendingSelect = msg.name
 		m.statusMsg = fmt.Sprintf("Created %q", msg.name)
 		m.statusTTL = time.Now().Add(3 * time.Second)
-		cmds = append(cmds, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
-			return statusClearMsg{deadline: m.statusTTL}
-		}))
-		cmds = append(cmds, m.fetchWorktrees)
+		m.toast.Show(NewToast(fmt.Sprintf("Created %q", msg.name), ToastSuccess))
+		cmds = append(cmds, m.spinner.Tick, m.fetchWorktrees)
 		return m, tea.Batch(cmds...)
 
 	case statusClearMsg:
@@ -235,12 +255,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.activeView = ViewDashboard
 		m.issueState = nil
+		m.pendingSelect = msg.name
 		m.statusMsg = fmt.Sprintf("Created worktree from issue %q", msg.name)
 		m.statusTTL = time.Now().Add(3 * time.Second)
-		cmds = append(cmds, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
-			return statusClearMsg{deadline: m.statusTTL}
-		}))
-		cmds = append(cmds, m.fetchWorktrees)
+		m.toast.Show(NewToast(fmt.Sprintf("Created worktree from issue %q", msg.name), ToastSuccess))
+		cmds = append(cmds, m.spinner.Tick, m.fetchWorktrees)
 		return m, tea.Batch(cmds...)
 
 	case prWorktreeCreatedMsg:
@@ -255,12 +274,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.activeView = ViewDashboard
 		m.prState = nil
+		m.pendingSelect = msg.name
 		m.statusMsg = fmt.Sprintf("Created worktree from PR %q", msg.name)
 		m.statusTTL = time.Now().Add(3 * time.Second)
-		cmds = append(cmds, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
-			return statusClearMsg{deadline: m.statusTTL}
-		}))
-		cmds = append(cmds, m.fetchWorktrees)
+		m.toast.Show(NewToast(fmt.Sprintf("Created worktree from PR %q", msg.name), ToastSuccess))
+		cmds = append(cmds, m.spinner.Tick, m.fetchWorktrees)
 		return m, tea.Batch(cmds...)
 
 	case bulkDeleteDoneMsg:
@@ -268,20 +286,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.bulkState = nil
 		m.statusMsg = fmt.Sprintf("Deleted %d worktrees", msg.count)
 		m.statusTTL = time.Now().Add(3 * time.Second)
-		return m, tea.Batch(
-			tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
-				return statusClearMsg{deadline: m.statusTTL}
-			}),
-			m.fetchWorktrees,
-		)
+		m.toast.Show(NewToast(fmt.Sprintf("Deleted %d worktrees", msg.count), ToastSuccess))
+		return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
 
 	case spinner.TickMsg:
-		if m.loading || (m.createState != nil && m.createState.Creating) || (m.prState != nil && (m.prState.Loading || m.prState.Creating)) || (m.issueState != nil && (m.issueState.Loading || m.issueState.Creating)) {
+		// Tick toast expiry on every spinner tick
+		if m.toast != nil {
+			m.toast.Tick()
+		}
+		var spinnerCmds []tea.Cmd
+		if m.loading || (m.createState != nil && m.createState.Creating) || (m.prState != nil && (m.prState.Loading || m.prState.Creating)) || (m.issueState != nil && (m.issueState.Loading || m.issueState.Creating)) || (m.toast != nil && m.toast.Current != nil) {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
-			return m, cmd
+			spinnerCmds = append(spinnerCmds, cmd)
 		}
-		return m, nil
+		return m, tea.Batch(spinnerCmds...)
 
 	case tea.KeyMsg:
 		tuilog.Printf("KeyMsg: type=%d string=%q runes=%v", msg.Type, msg.String(), msg.Runes)
@@ -364,17 +383,30 @@ func (m *Model) updateLayout() {
 
 // adaptiveListWidth calculates list panel width based on the widest rendered row.
 func (m *Model) adaptiveListWidth() int {
-	minWidth := 40
+	// Floor: 45% of terminal in side-by-side mode
+	minWidth := m.width * 45 / 100
+	if minWidth < 40 {
+		minWidth = 40
+	}
 	maxRendered := minWidth
 	for _, li := range m.list.Items() {
 		item, ok := li.(WorktreeItem)
 		if !ok {
 			continue
 		}
-		// Approximate row width: num(2) + cursor(2) + name + gap(2) + branch + gap(2) + age + gap(2) + status(8) + tmux(12)
-		w := 2 + 2 + len(item.ShortName) + 2 + len(item.Branch) + 2 + 8 + 2 + 8
+		// Match delegate Render(): num(2) + cursor(2) + name(padded) + gap(2) + branch(padded) + gap(2) + age(8) + gap(2) + status(8) + gap(2) + tmux(12)
+		nameWidth := 16
+		branchWidth := 12
+		if m.width > 100 {
+			nameWidth = 24
+			branchWidth = 20
+		} else if m.width > 80 {
+			nameWidth = 20
+			branchWidth = 16
+		}
+		w := 2 + 2 + nameWidth + 2 + branchWidth + 2 + 8 + 2 + 8
 		if item.TmuxStatus != "none" {
-			w += 12
+			w += 2 + 12
 		}
 		if w > maxRendered {
 			maxRendered = w
@@ -389,7 +421,7 @@ func (m *Model) updateDetailContent() {
 		m.detail.SetContent("")
 		return
 	}
-	content := renderDetailContent(&item, m.detail.Width)
+	content := renderDetailV2(&item, m.detail.Width)
 	m.detail.SetContent(content)
 	m.detail.GotoTop()
 }
@@ -445,7 +477,7 @@ func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case key.Matches(msg, m.keys.Help):
-		m.activeView = ViewHelp
+		m.helpFooter.Toggle()
 		return m, nil
 
 	case key.Matches(msg, m.keys.Refresh):
@@ -544,7 +576,7 @@ func (m Model) handleDeleteKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		name := m.deleteState.Item.ShortName
 		return m, deleteWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, name, m.deleteState.DeleteBranch)
 
-	case key.Matches(msg, m.keys.Escape), msg.String() == "n":
+	case key.Matches(msg, m.keys.Escape), key.Matches(msg, m.keys.Deny):
 		m.activeView = ViewDashboard
 		m.deleteState = nil
 		return m, nil
@@ -653,7 +685,9 @@ func (m Model) handleCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				s.Step = CreateStepPickBranch
 				return m, nil
 			}
-			return m.startCreate(s.Name, "")
+			s.BaseBranch = ""
+			s.Step = CreateStepConfirm
+			return m, nil
 		}
 
 	case CreateStepPickBranch:
@@ -746,11 +780,15 @@ func (m Model) handleCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				})
 			}
 
-			if s.ActionChoice == 0 {
-				return m.startCreate(s.Name, s.BaseBranch)
+			if s.ActionChoice == 1 {
+				s.BaseBranch = ""
 			}
-			return m.startCreate(s.Name, "")
+			s.Step = CreateStepConfirm
+			return m, nil
 		}
+
+	case CreateStepConfirm:
+		return m.handleConfirmKey(msg)
 	}
 
 	return m, nil
@@ -773,15 +811,15 @@ func (m Model) handleCreateKeyHuh(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.createState = nil
 			return m, nil
 		}
-		if s.NameForm.State == huh.StateCompleted {
-			s.Error = ""
-			s.Step = CreateStepBranch
-			s.BranchForm = NewCreateBranchForm(&s.BranchChoiceStr)
-			return m, s.BranchForm.Init()
-		}
-		return m, cmd
+		return m.checkCreateFormCompletion(cmd)
 
 	case CreateStepBranch:
+		// Intercept backspace to go back to Name step before Huh consumes it
+		if key.Matches(msg, m.keys.Back) {
+			s.Step = CreateStepName
+			s.NameForm = NewCreateNameForm(&s.Name, s.ProjectName, m.existingWorktreeItems())
+			return m, s.NameForm.Init()
+		}
 		if s.BranchForm == nil {
 			return m, nil
 		}
@@ -793,23 +831,15 @@ func (m Model) handleCreateKeyHuh(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.createState = nil
 			return m, nil
 		}
-		if s.BranchForm.State == huh.StateCompleted {
-			if s.BranchChoiceStr == "existing" {
-				branches, err := git.ListLocalBranches(m.projectRoot)
-				if err != nil {
-					s.Error = fmt.Sprintf("failed to list branches: %v", err)
-					return m, nil
-				}
-				s.Branches = branches
-				s.BranchPickForm = NewBranchPickerForm(&s.SelectedBranch, branches)
-				s.Step = CreateStepPickBranch
-				return m, s.BranchPickForm.Init()
-			}
-			return m.startCreate(s.Name, "")
-		}
-		return m, cmd
+		return m.checkCreateFormCompletion(cmd)
 
 	case CreateStepPickBranch:
+		// Intercept backspace to go back to Branch step before Huh consumes it
+		if key.Matches(msg, m.keys.Back) {
+			s.Step = CreateStepBranch
+			s.BranchForm = NewCreateBranchForm(&s.BranchChoiceStr)
+			return m, s.BranchForm.Init()
+		}
 		if s.BranchPickForm == nil {
 			return m, nil
 		}
@@ -821,27 +851,13 @@ func (m Model) handleCreateKeyHuh(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.createState = nil
 			return m, nil
 		}
-		if s.BranchPickForm.State == huh.StateCompleted {
-			s.BaseBranch = s.SelectedBranch
-			if m.cfg != nil && m.cfg.TUI.SkipBranchNotice != nil && *m.cfg.TUI.SkipBranchNotice {
-				action := m.cfg.TUI.DefaultBranchAction
-				if action == "fork" {
-					return m.startCreate(s.Name, "")
-				}
-				return m.startCreate(s.Name, s.BaseBranch)
-			}
-			s.ActionChoice = 0
-			s.DontShowAgain = false
-			s.Step = CreateStepBranchAction
-			// BranchAction step still uses manual handling (not a Huh form)
-			return m, nil
-		}
-		return m, cmd
+		return m.checkCreateFormCompletion(cmd)
 
 	case CreateStepBranchAction:
-		// BranchAction still uses the non-Huh handling since it has
-		// custom checkbox + "don't show again" behavior
 		return m.handleBranchActionKey(msg)
+
+	case CreateStepConfirm:
+		return m.handleConfirmKey(msg)
 	}
 
 	return m, nil
@@ -866,6 +882,61 @@ func (m Model) forwardToActiveHuhForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	model, cmd := (*activeForm).Update(msg)
 	*activeForm = model.(*huh.Form)
+
+	// Check if the async update completed the form (e.g. Enter key result)
+	return m.checkCreateFormCompletion(cmd)
+}
+
+// checkCreateFormCompletion checks if the current Huh form has completed
+// and transitions to the next step. Called after both key and non-key updates.
+func (m Model) checkCreateFormCompletion(cmd tea.Cmd) (tea.Model, tea.Cmd) {
+	s := m.createState
+
+	switch s.Step {
+	case CreateStepName:
+		if s.NameForm != nil && s.NameForm.State == huh.StateCompleted {
+			s.Error = ""
+			s.Step = CreateStepBranch
+			s.BranchForm = NewCreateBranchForm(&s.BranchChoiceStr)
+			return m, s.BranchForm.Init()
+		}
+
+	case CreateStepBranch:
+		if s.BranchForm != nil && s.BranchForm.State == huh.StateCompleted {
+			if s.BranchChoiceStr == "existing" {
+				branches, err := git.ListLocalBranches(m.projectRoot)
+				if err != nil {
+					s.Error = fmt.Sprintf("failed to list branches: %v", err)
+					return m, nil
+				}
+				s.Branches = branches
+				s.BranchPickForm = NewBranchPickerForm(&s.SelectedBranch, branches)
+				s.Step = CreateStepPickBranch
+				return m, s.BranchPickForm.Init()
+			}
+			s.BaseBranch = ""
+			s.Step = CreateStepConfirm
+			return m, nil
+		}
+
+	case CreateStepPickBranch:
+		if s.BranchPickForm != nil && s.BranchPickForm.State == huh.StateCompleted {
+			s.BaseBranch = s.SelectedBranch
+			if m.cfg != nil && m.cfg.TUI.SkipBranchNotice != nil && *m.cfg.TUI.SkipBranchNotice {
+				action := m.cfg.TUI.DefaultBranchAction
+				if action == "fork" {
+					s.BaseBranch = ""
+				}
+				s.Step = CreateStepConfirm
+				return m, nil
+			}
+			s.ActionChoice = 0
+			s.DontShowAgain = false
+			s.Step = CreateStepBranchAction
+			return m, nil
+		}
+	}
+
 	return m, cmd
 }
 
@@ -913,15 +984,43 @@ func (m Model) handleBranchActionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			})
 		}
 
-		if s.ActionChoice == 0 {
-			return m.startCreate(s.Name, s.BaseBranch)
+		if s.ActionChoice == 1 {
+			// fork: new branch, don't use existing
+			s.BaseBranch = ""
 		}
-		return m.startCreate(s.Name, "")
+		s.Step = CreateStepConfirm
+		return m, nil
+	}
+	return m, nil
+}
+
+// handleConfirmKey handles the confirmation step key input.
+func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	s := m.createState
+	switch {
+	case key.Matches(msg, m.keys.Escape):
+		m.activeView = ViewDashboard
+		m.createState = nil
+		return m, nil
+
+	case key.Matches(msg, m.keys.Back):
+		s.Step = CreateStepBranch
+		if s.UseHuhForms {
+			s.BranchForm = NewCreateBranchForm(&s.BranchChoiceStr)
+			return m, s.BranchForm.Init()
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.Enter):
+		return m.startCreate(s.Name, s.BaseBranch)
 	}
 	return m, nil
 }
 
 func (m *Model) startCreate(name, baseBranch string) (tea.Model, tea.Cmd) {
+	if m.createState.Creating {
+		return m, nil
+	}
 	m.createState.Creating = true
 	return m, tea.Batch(m.spinner.Tick, createWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, name, baseBranch))
 }
@@ -1037,6 +1136,14 @@ func (m Model) bulkDeleteCmd(items []WorktreeItem) tea.Cmd {
 func (m Model) View() string {
 	if !m.ready {
 		tuilog.Printf("View: not ready")
+		// For PR/Issue views launched directly, render a loading overlay
+		// even before WindowSizeMsg arrives so alt-screen isn't blank.
+		if m.activeView == ViewPRs && m.prState != nil {
+			return m.spinner.View() + " Loading PRs..."
+		}
+		if m.activeView == ViewIssues && m.issueState != nil {
+			return m.spinner.View() + " Loading issues..."
+		}
 		return "loading..."
 	}
 
@@ -1049,7 +1156,9 @@ func (m Model) View() string {
 
 	switch m.activeView {
 	case ViewHelp:
-		return m.renderHelp()
+		// ViewHelp is unused (help is rendered via helpFooter overlay on dashboard).
+		// Fall through to dashboard rendering.
+		return m.renderDashboard()
 
 	case ViewDelete:
 		if m.deleteState != nil {
@@ -1091,7 +1200,20 @@ func (m Model) View() string {
 }
 
 func (m Model) renderDashboard() string {
-	statusBar := m.renderStatusBar()
+	// Build header from current state
+	m.header = Header{
+		ProjectName:   m.projectName,
+		WorktreeCount: len(m.list.Items()),
+	}
+	// Find current worktree info for header
+	for _, li := range m.list.Items() {
+		if item, ok := li.(WorktreeItem); ok && item.IsCurrent {
+			m.header.CurrentBranch = item.Branch
+			m.header.CurrentName = item.ShortName
+			break
+		}
+	}
+	statusBar := m.header.View(m.width)
 
 	useSideBySide := m.width > 120
 
@@ -1102,28 +1224,45 @@ func (m Model) renderDashboard() string {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, listView, " ", detailView)
 	} else {
 		listView := m.list.View()
-		separator := Theme.DetailDim.Render(strings.Repeat("─", m.width))
+		separator := Styles.DetailDim.Render(strings.Repeat("─", m.width))
 		detailView := m.renderDetailPanel()
 		body = listView + "\n" + separator + "\n" + detailView
 	}
 
-	footer := m.help.View(m.keys)
+	// Help footer: always show compact hints
+	footer := m.helpFooter.RenderCompact(m.activeView, m.width)
 
-	return statusBar + "\n" + body + "\n" + footer
+	// Composite toast onto the header line (right-aligned) to avoid layout shift
+	if m.toast != nil && m.toast.Current != nil {
+		toastView := m.toast.View(m.width)
+		if toastView != "" {
+			statusBar = compositeToastOnHeader(statusBar, toastView, m.width)
+		}
+	}
+
+	dashboard := statusBar + "\n" + body + "\n" + footer
+
+	// Render expanded help as centered overlay
+	if m.helpFooter.Expanded {
+		helpOverlay := m.helpFooter.RenderExpanded(m.width)
+		return centerOverlay(dashboard, helpOverlay, m.width, m.height)
+	}
+
+	return dashboard
 }
 
 func (m Model) renderStatusBar() string {
 	parts := []string{
-		Theme.Header.Render(" " + m.projectName),
-		Theme.DetailDim.Render(fmt.Sprintf(" %d worktrees", len(m.list.Items()))),
+		Styles.Header.Render(" " + m.projectName),
+		Styles.TextMuted.Render(fmt.Sprintf(" %d worktrees", len(m.list.Items()))),
 	}
 
 	if m.sortMode != SortByName {
-		parts = append(parts, Theme.DetailDim.Render("↕ "+m.sortMode.String()))
+		parts = append(parts, Styles.TextMuted.Render("↕ "+m.sortMode.String()))
 	}
 
 	if m.statusMsg != "" {
-		parts = append(parts, " "+Theme.SuccessText.Render("✓ "+m.statusMsg))
+		parts = append(parts, " "+Styles.StatusSuccess.Render("✓ "+m.statusMsg))
 	}
 
 	return strings.Join(parts, "  ")
@@ -1133,61 +1272,26 @@ func (m Model) renderDetailPanel() string {
 	return m.detail.View()
 }
 
-func (m Model) renderHelp() string {
-	cols := []struct {
-		header string
-		items  [][2]string
-	}{
-		{
-			header: "Navigation",
-			items: [][2]string{
-				{"j/k ↑/↓", "move"},
-				{"enter", "switch to worktree"},
-				{"esc", "back / close"},
-			},
-		},
-		{
-			header: "Actions",
-			items: [][2]string{
-				{"n", "new worktree"},
-				{"d", "delete worktree"},
-				{"p", "browse PRs"},
-				{"a", "bulk delete merged"},
-				{"o", "cycle sort mode"},
-				{"r", "refresh list"},
-			},
-		},
-		{
-			header: "Views",
-			items: [][2]string{
-				{"1-9", "quick-switch"},
-				{"/", "filter / search"},
-				{"?", "this help"},
-				{"q", "quit"},
-			},
-		},
+// compositeToastOnHeader overlays a right-aligned toast onto the header line,
+// avoiding layout shift in alt-screen mode.
+func compositeToastOnHeader(header, toast string, width int) string {
+	headerWidth := lipgloss.Width(header)
+	toastWidth := lipgloss.Width(toast)
+
+	// If both fit, place toast on the right side of the header line
+	if headerWidth+toastWidth+2 <= width {
+		gap := width - headerWidth - toastWidth
+		return header + strings.Repeat(" ", gap) + toast
 	}
 
-	var sections []string
-	for _, col := range cols {
-		var lines []string
-		lines = append(lines, Theme.DetailTitle.Render(col.header))
-		for _, item := range col.items {
-			k := Theme.HelpKey.Render(padRight(item[0], 12))
-			desc := Theme.HelpDesc.Render(item[1])
-			lines = append(lines, "  "+k+desc)
-		}
-		sections = append(sections, strings.Join(lines, "\n"))
+	// If toast alone fits, it takes priority (temporary notification)
+	if toastWidth < width {
+		padding := width - toastWidth
+		return strings.Repeat(" ", padding) + toast
 	}
 
-	body := strings.Join(sections, "\n\n")
-	body += "\n\n" + Theme.DetailDim.Render("Guided flows: follow on-screen prompts.")
-	body += "\n" + Theme.DetailDim.Render("Backspace goes back. Esc cancels.")
-	body += "\n\n" + Theme.Footer.Render("[any key to close]")
-
-	return Theme.OverlayBorder.Render(
-		Theme.OverlayTitle.Render("Keybindings") + "\n\n" + body,
-	)
+	// Fallback: just show header
+	return header
 }
 
 func centerOverlay(bg, overlay string, width, height int) string {
@@ -1245,7 +1349,7 @@ func gatherDeleteWarnings(item *WorktreeItem) []string {
 		warnings = append(warnings, "This worktree is protected")
 	}
 	if item.IsDirty {
-		warnings = append(warnings, "Working tree is dirty")
+		warnings = append(warnings, "worktree has uncommitted changes")
 	}
 	if item.IsEnvironment {
 		warnings = append(warnings, "This is an environment worktree")
@@ -1313,7 +1417,7 @@ func runModel(model Model) (string, error) {
 	finalModel, err := p.Run()
 	if err != nil {
 		tuilog.Printf("runModel: tea.Program error: %v", err)
-		return "", fmt.Errorf("TUI error: %w", err)
+		return "", fmt.Errorf("tui error: %w", err)
 	}
 
 	m := finalModel.(Model)

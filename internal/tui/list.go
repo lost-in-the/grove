@@ -46,33 +46,33 @@ func (d WorktreeDelegate) Render(w io.Writer, m list.Model, index int, listItem 
 	// Number prefix for quick-switch (1-9)
 	numPrefix := "  "
 	if index < 9 {
-		numPrefix = Theme.DetailDim.Render(fmt.Sprintf("%d ", index+1))
+		numPrefix = Styles.DetailDim.Render(fmt.Sprintf("%d ", index+1))
 	}
 
 	var cursor string
 	if selected {
-		cursor = Theme.ListCursor.String()
+		cursor = Styles.ListCursor.String()
 	} else {
-		cursor = Theme.ListCursorDim.String()
+		cursor = Styles.ListCursorDim.String()
 	}
 
-	nameStyle := Theme.NormalItem
+	nameStyle := Styles.NormalItem
 	if selected {
-		nameStyle = Theme.SelectedItem
+		nameStyle = Styles.SelectedItem
 	}
 	if item.IsCurrent {
-		nameStyle = Theme.CurrentItem
+		nameStyle = Styles.CurrentItem
 		if selected {
 			nameStyle = nameStyle.Bold(true)
 		}
 	}
 	name := nameStyle.Render(fmt.Sprintf("%-*s", nameWidth, truncate(item.ShortName, nameWidth)))
 
-	branch := Theme.DetailDim.Render(fmt.Sprintf("%-*s", branchWidth, truncate(item.Branch, branchWidth)))
+	branch := Styles.DetailDim.Render(fmt.Sprintf("%-*s", branchWidth, truncate(item.Branch, branchWidth)))
 
 	age := strings.Repeat(" ", ageWidth)
 	if item.CommitAge != "" {
-		age = Theme.DetailDim.Render(fmt.Sprintf("%-*s", ageWidth, compactAge(item.CommitAge)))
+		age = Styles.DetailDim.Render(fmt.Sprintf("%-*s", ageWidth, compactAge(item.CommitAge)))
 	}
 
 	status := item.StatusText()

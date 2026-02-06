@@ -2,10 +2,13 @@ package tui
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 )
+
+var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 // renderDetailV2 builds an enhanced detail panel with bordered card,
 // metadata grid, sync status, changed files list, and tmux indicator.
@@ -160,23 +163,29 @@ func renderChangesSection(files []string, width int) string {
 
 // injectBorderTitle replaces the top border of a rounded-border box
 // with the title inset after the corner character.
+// It strips ANSI codes before rune-slicing to avoid cutting inside escape sequences.
 func injectBorderTitle(rendered, title string) string {
 	lines := strings.Split(rendered, "\n")
 	if len(lines) == 0 {
 		return rendered
 	}
 
-	topLine := lines[0]
-	topRunes := []rune(topLine)
-
-	// Find where to inject: after "╭─ "
+	// Strip ANSI from the top line so rune indexing is safe
+	clean := ansiRegex.ReplaceAllString(lines[0], "")
+	cleanRunes := []rune(clean)
 	titleWidth := lipgloss.Width(title)
 
-	// Build new top: corner + "─ " + title + remaining border chars
-	if len(topRunes) > titleWidth+3 {
-		newTop := string(topRunes[:2]) + title + string(topRunes[2+titleWidth:])
-		lines[0] = newTop
+	if len(cleanRunes) <= titleWidth+3 {
+		return rendered
 	}
+
+	// Re-apply the border colour to the spliced segments
+	borderColor := Styles.DetailBorder.GetBorderTopForeground()
+	borderStyle := lipgloss.NewStyle().Foreground(borderColor)
+
+	newTop := borderStyle.Render(string(cleanRunes[:2])) + title +
+		borderStyle.Render(string(cleanRunes[2+titleWidth:]))
+	lines[0] = newTop
 
 	return strings.Join(lines, "\n")
 }

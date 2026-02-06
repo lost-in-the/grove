@@ -38,11 +38,11 @@ func TestUpdateDashboardNavigation(t *testing.T) {
 			},
 		},
 		{
-			name: "? opens help view",
+			name: "? toggles help footer",
 			key:  "?",
 			assert: func(t *testing.T, m Model) {
-				if m.activeView != ViewHelp {
-					t.Errorf("expected ViewHelp, got %d", m.activeView)
+				if !m.helpFooter.Expanded {
+					t.Error("expected helpFooter.Expanded=true after ?")
 				}
 			},
 		},
@@ -239,16 +239,16 @@ func TestCreateWizardFlow(t *testing.T) {
 	})
 }
 
-func TestHelpViewReturns(t *testing.T) {
+func TestHelpFooterToggleFromDashboard(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
 	m = sendKey(m, "?")
-	if m.activeView != ViewHelp {
-		t.Fatalf("expected ViewHelp, got %d", m.activeView)
+	if !m.helpFooter.Expanded {
+		t.Fatal("expected helpFooter.Expanded=true after first ?")
 	}
-	// Any key should return to dashboard
-	m = sendKey(m, "x")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after keypress, got %d", m.activeView)
+	// Second ? should collapse
+	m = sendKey(m, "?")
+	if m.helpFooter.Expanded {
+		t.Error("expected helpFooter.Expanded=false after second ?")
 	}
 }
 
@@ -653,7 +653,7 @@ func TestRenderBulkOverlay(t *testing.T) {
 
 func TestDetailContent(t *testing.T) {
 	t.Run("nil item", func(t *testing.T) {
-		got := renderDetailContent(nil, 80)
+		got := renderDetailV2(nil, 80)
 		if got != "" {
 			t.Error("expected empty content for nil item")
 		}
@@ -661,7 +661,7 @@ func TestDetailContent(t *testing.T) {
 
 	t.Run("narrow width", func(t *testing.T) {
 		item := &WorktreeItem{ShortName: "test"}
-		got := renderDetailContent(item, 10)
+		got := renderDetailV2(item, 10)
 		if got != "" {
 			t.Error("expected empty content for narrow width")
 		}
@@ -680,7 +680,7 @@ func TestDetailContent(t *testing.T) {
 			IsDirty:       true,
 			DirtyFiles:    []string{"M  file.go", "?? new.go", " D old.go"},
 		}
-		got := renderDetailContent(item, 80)
+		got := renderDetailV2(item, 80)
 		if got == "" {
 			t.Error("expected non-empty detail content")
 		}
@@ -712,15 +712,15 @@ func TestGatherDeleteWarnings(t *testing.T) {
 func TestNoColor(t *testing.T) {
 	// Ensure env is clean
 	t.Setenv("NO_COLOR", "1")
-	if !noColor() {
-		t.Error("expected noColor()=true when NO_COLOR set")
+	if !isNoColor() {
+		t.Error("expected isNoColor()=true when NO_COLOR set")
 	}
 }
 
 func TestNoColorGrove(t *testing.T) {
 	t.Setenv("GROVE_NO_COLOR", "1")
-	if !noColor() {
-		t.Error("expected noColor()=true when GROVE_NO_COLOR set")
+	if !isNoColor() {
+		t.Error("expected isNoColor()=true when GROVE_NO_COLOR set")
 	}
 }
 

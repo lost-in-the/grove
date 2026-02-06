@@ -116,6 +116,47 @@ func TestHeaderCurrentIndicator(t *testing.T) {
 	}
 }
 
+func TestHeaderView_LongProjectName(t *testing.T) {
+	h := Header{
+		ProjectName:   "my-very-long-project-name-that-might-overflow",
+		WorktreeCount: 2,
+		CurrentBranch: "main",
+		CurrentName:   "main",
+	}
+	view := h.View(50)
+	if lipgloss.Width(view) > 50 {
+		t.Errorf("header exceeded width 50: got %d", lipgloss.Width(view))
+	}
+}
+
+func TestHeaderView_Unicode(t *testing.T) {
+	h := Header{
+		ProjectName:   "проект",
+		WorktreeCount: 3,
+		CurrentBranch: "фича",
+		CurrentName:   "фича",
+	}
+	view := h.View(80)
+	plain := stripAnsi(view)
+	if !strings.Contains(plain, "проект") {
+		t.Errorf("header should contain unicode project name, got: %s", plain)
+	}
+}
+
+func TestHeaderView_MinimumWidth(t *testing.T) {
+	h := Header{
+		ProjectName:   "proj",
+		WorktreeCount: 1,
+		CurrentBranch: "main",
+		CurrentName:   "main",
+	}
+	// Very narrow — should not panic
+	view := h.View(5)
+	if view == "" {
+		t.Error("header should produce output even at very narrow widths")
+	}
+}
+
 // stripAnsi removes ANSI escape codes for plain text comparison.
 func stripAnsi(s string) string {
 	var result strings.Builder

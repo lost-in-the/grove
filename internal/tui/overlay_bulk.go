@@ -41,16 +41,16 @@ func renderBulk(s *BulkState, width int) string {
 
 	if s.Deleting {
 		b.WriteString(s.Progress + "\n")
-		return Theme.OverlayBorder.Render(
-			Theme.OverlayTitle.Render("Bulk Delete") + "\n\n" + b.String(),
+		return Styles.OverlayBorder.Render(
+			Styles.OverlayTitle.Render("Bulk Delete") + "\n\n" + b.String(),
 		)
 	}
 
 	if len(s.Items) == 0 {
-		b.WriteString(Theme.DetailDim.Render("No merged worktrees to clean up.") + "\n")
-		b.WriteString("\n" + Theme.Footer.Render("[esc] close"))
-		return Theme.OverlayBorder.Render(
-			Theme.OverlayTitle.Render("Bulk Delete") + "\n\n" + b.String(),
+		b.WriteString(Styles.DetailDim.Render("No merged worktrees to clean up.") + "\n")
+		b.WriteString("\n" + Styles.Footer.Render("[esc] close"))
+		return Styles.OverlayBorder.Render(
+			Styles.OverlayTitle.Render("Bulk Delete") + "\n\n" + b.String(),
 		)
 	}
 
@@ -71,7 +71,7 @@ func renderBulk(s *BulkState, width int) string {
 		item := s.Items[i]
 		cursor := "  "
 		if i == s.Cursor {
-			cursor = Theme.ListCursor.String()
+			cursor = Styles.ListCursor.String()
 		}
 
 		checkbox := "[ ]"
@@ -80,17 +80,17 @@ func renderBulk(s *BulkState, width int) string {
 		}
 
 		name := item.ShortName
-		branch := Theme.DetailDim.Render(" (" + item.Branch + ")")
+		branch := Styles.DetailDim.Render(" (" + item.Branch + ")")
 		b.WriteString(cursor + checkbox + " " + name + branch + "\n")
 	}
 
 	if end < len(s.Items) {
-		b.WriteString(Theme.DetailDim.Render(fmt.Sprintf("  … and %d more", len(s.Items)-end)) + "\n")
+		b.WriteString(Styles.DetailDim.Render(fmt.Sprintf("  … and %d more", len(s.Items)-end)) + "\n")
 	}
 
-	b.WriteString("\n" + Theme.Footer.Render("[space] toggle  [enter] delete selected  [esc] cancel"))
+	b.WriteString("\n" + Styles.Footer.Render("[space] toggle  [enter] delete selected  [esc] cancel"))
 
-	return Theme.OverlayBorder.Render(
-		Theme.OverlayTitle.Render("Bulk Delete") + "\n\n" + b.String(),
+	return Styles.OverlayBorder.Render(
+		Styles.OverlayTitle.Render("Bulk Delete") + "\n\n" + b.String(),
 	)
 }

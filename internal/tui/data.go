@@ -45,21 +45,21 @@ func (w WorktreeItem) FilterValue() string { return w.ShortName + " " + w.Branch
 // StatusText returns a display string for git status.
 func (w *WorktreeItem) StatusText() string {
 	if w.IsPrunable {
-		return Theme.StatusStale.Render("✗ stale")
+		return Styles.StatusStale.Render("✗ stale")
 	}
 	if w.IsDirty {
-		return Theme.StatusDirty.Render("● dirty")
+		return Styles.StatusDirty.Render("● dirty")
 	}
-	return Theme.StatusClean.Render("✓ clean")
+	return Styles.StatusClean.Render("✓ clean")
 }
 
 // TmuxText returns a display string for tmux status.
 func (w *WorktreeItem) TmuxText() string {
 	switch w.TmuxStatus {
 	case "attached":
-		return Theme.TmuxBadge.Render("⬡ attached")
+		return Styles.TmuxBadge.Render("⬡ attached")
 	case "detached":
-		return Theme.TmuxBadge.Render("⬡ tmux")
+		return Styles.TmuxBadge.Render("⬡ tmux")
 	default:
 		return ""
 	}
@@ -70,7 +70,7 @@ func (w *WorktreeItem) AgeText() string {
 	if w.CommitAge == "" {
 		return ""
 	}
-	return Theme.DetailDim.Render(w.CommitAge)
+	return Styles.DetailDim.Render(w.CommitAge)
 }
 
 // SyncStatusText returns a compact sync status string for the list view.

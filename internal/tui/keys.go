@@ -11,11 +11,8 @@ type KeyMap struct {
 	Enter   key.Binding
 	New     key.Binding
 	Delete  key.Binding
-	Fork    key.Binding
 	Filter  key.Binding
-	Sync    key.Binding
 	Refresh key.Binding
-	Config  key.Binding
 	Help    key.Binding
 	Quit    key.Binding
 	Escape  key.Binding
@@ -75,25 +72,13 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("d"),
 			key.WithHelp("d", "delete"),
 		),
-		Fork: key.NewBinding(
-			key.WithKeys("f"),
-			key.WithHelp("f", "fork"),
-		),
 		Filter: key.NewBinding(
 			key.WithKeys("/"),
 			key.WithHelp("/", "filter"),
 		),
-		Sync: key.NewBinding(
-			key.WithKeys("s"),
-			key.WithHelp("s", "sync"),
-		),
 		Refresh: key.NewBinding(
 			key.WithKeys("r"),
 			key.WithHelp("r", "refresh"),
-		),
-		Config: key.NewBinding(
-			key.WithKeys("c"),
-			key.WithHelp("c", "config"),
 		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),

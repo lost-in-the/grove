@@ -123,15 +123,15 @@ func createIssueWorktreeCmd(mgr *worktree.Manager, projectRoot, name string) tea
 // renderIssueView renders the issue browser overlay.
 func renderIssueView(s *IssueViewState, width int, spinnerView string) string {
 	if s.Loading {
-		return Theme.OverlayBorder.Render(
-			Theme.OverlayTitle.Render("Issues") + "\n\n" +
+		return Styles.OverlayBorder.Render(
+			Styles.OverlayTitle.Render("Issues") + "\n\n" +
 				spinnerView + " Loading issues...",
 		)
 	}
 
 	if s.Creating {
-		return Theme.OverlayBorder.Render(
-			Theme.OverlayTitle.Render("Issues") + "\n\n" +
+		return Styles.OverlayBorder.Render(
+			Styles.OverlayTitle.Render("Issues") + "\n\n" +
 				spinnerView + " Creating worktree from issue...",
 		)
 	}
@@ -139,7 +139,7 @@ func renderIssueView(s *IssueViewState, width int, spinnerView string) string {
 	var b strings.Builder
 
 	if s.Error != "" {
-		b.WriteString(Theme.ErrorText.Render(s.Error) + "\n\n")
+		b.WriteString(Styles.ErrorText.Render(s.Error) + "\n\n")
 	}
 
 	filtered := filteredIssues(s.Issues, s.Filter)
@@ -154,14 +154,14 @@ func renderIssueView(s *IssueViewState, width int, spinnerView string) string {
 	// Filter bar with count
 	if s.Filter != "" {
 		fmt.Fprintf(&b, "Filter: %s█", s.Filter)
-		fmt.Fprintf(&b, "  %s", Theme.DetailDim.Render(fmt.Sprintf("%d of %d", len(filtered), total)))
+		fmt.Fprintf(&b, "  %s", Styles.DetailDim.Render(fmt.Sprintf("%d of %d", len(filtered), total)))
 		b.WriteString("\n\n")
 	} else if total > 0 {
-		b.WriteString(Theme.DetailDim.Render(fmt.Sprintf("%d open", total)) + "\n\n")
+		b.WriteString(Styles.DetailDim.Render(fmt.Sprintf("%d open", total)) + "\n\n")
 	}
 
 	if len(filtered) == 0 {
-		b.WriteString(Theme.DetailDim.Render("  (no matching issues)") + "\n")
+		b.WriteString(Styles.DetailDim.Render("  (no matching issues)") + "\n")
 	} else {
 		maxShow := 10
 		start := 0
@@ -183,22 +183,22 @@ func renderIssueView(s *IssueViewState, width int, spinnerView string) string {
 
 			cursor := "  "
 			if i == s.Cursor {
-				cursor = Theme.ListCursor.String()
+				cursor = Styles.ListCursor.String()
 			}
 
 			// Line 1: cursor + #number + title
-			number := Theme.DetailDim.Render(fmt.Sprintf("#%-5d", issue.Number))
+			number := Styles.DetailDim.Render(fmt.Sprintf("#%-5d", issue.Number))
 			titleStr := truncate(issue.Title, contentWidth-20)
 			b.WriteString(fmt.Sprintf("%s%s %s\n", cursor, number, titleStr))
 
 			// Line 2: metadata indent + author + age + labels
 			indent := "         "
-			author := Theme.DetailDim.Render("@" + issue.Author)
-			age := Theme.DetailDim.Render(formatIssueAge(issue.CreatedAt))
+			author := Styles.DetailDim.Render("@" + issue.Author)
+			age := Styles.DetailDim.Render(formatIssueAge(issue.CreatedAt))
 
 			var labelParts []string
 			for _, l := range issue.Labels {
-				labelParts = append(labelParts, Theme.WarningText.Render(l))
+				labelParts = append(labelParts, Styles.WarningText.Render(l))
 			}
 			labels := ""
 			if len(labelParts) > 0 {
@@ -209,19 +209,19 @@ func renderIssueView(s *IssueViewState, width int, spinnerView string) string {
 
 			// Separator between items (except last)
 			if i < end-1 {
-				b.WriteString(Theme.DetailDim.Render("  " + strings.Repeat("─", contentWidth-4)) + "\n")
+				b.WriteString(Styles.DetailDim.Render("  " + strings.Repeat("─", contentWidth-4)) + "\n")
 			}
 		}
 
 		if end < len(filtered) {
-			b.WriteString(Theme.DetailDim.Render(fmt.Sprintf("\n  … and %d more", len(filtered)-end)) + "\n")
+			b.WriteString(Styles.DetailDim.Render(fmt.Sprintf("\n  … and %d more", len(filtered)-end)) + "\n")
 		}
 	}
 
-	b.WriteString("\n" + Theme.Footer.Render("[enter] create worktree  [tab] preview  [esc] close  type to filter"))
+	b.WriteString("\n" + Styles.Footer.Render("[enter] create worktree  [tab] preview  [esc] close  type to filter"))
 
-	return Theme.OverlayBorder.Render(
-		Theme.OverlayTitle.Render("Issues") + "\n\n" + b.String(),
+	return Styles.OverlayBorder.Render(
+		Styles.OverlayTitle.Render("Issues") + "\n\n" + b.String(),
 	)
 }
 
@@ -232,40 +232,40 @@ func renderIssuePreview(issue *tracker.Issue, width int) string {
 	var b strings.Builder
 
 	// Title
-	b.WriteString(Theme.OverlayTitle.Render(fmt.Sprintf("#%d  %s", issue.Number, issue.Title)))
+	b.WriteString(Styles.OverlayTitle.Render(fmt.Sprintf("#%d  %s", issue.Number, issue.Title)))
 	b.WriteString("\n\n")
 
 	// Metadata row
 	meta := []string{
-		Theme.DetailDim.Render("Author: ") + "@" + issue.Author,
+		Styles.DetailDim.Render("Author: ") + "@" + issue.Author,
 	}
 	if len(issue.Labels) > 0 {
 		labelStrs := make([]string, len(issue.Labels))
 		for i, l := range issue.Labels {
-			labelStrs[i] = Theme.WarningText.Render(l)
+			labelStrs[i] = Styles.WarningText.Render(l)
 		}
-		meta = append(meta, Theme.DetailDim.Render("Labels: ")+strings.Join(labelStrs, ", "))
+		meta = append(meta, Styles.DetailDim.Render("Labels: ")+strings.Join(labelStrs, ", "))
 	}
 	if !issue.CreatedAt.IsZero() {
-		meta = append(meta, Theme.DetailDim.Render("Opened: ")+formatIssueAge(issue.CreatedAt))
+		meta = append(meta, Styles.DetailDim.Render("Opened: ")+formatIssueAge(issue.CreatedAt))
 	}
 	b.WriteString(strings.Join(meta, "  ·  "))
 	b.WriteString("\n")
-	b.WriteString(Theme.DetailDim.Render(strings.Repeat("─", contentWidth)))
+	b.WriteString(Styles.DetailDim.Render(strings.Repeat("─", contentWidth)))
 	b.WriteString("\n\n")
 
 	// Body
 	if issue.Body == "" {
-		b.WriteString(Theme.DetailDim.Render("No description provided."))
+		b.WriteString(Styles.DetailDim.Render("No description provided."))
 	} else {
 		rendered := renderIssueMarkdown(issue.Body, contentWidth)
 		b.WriteString(rendered)
 	}
 
 	b.WriteString("\n\n")
-	b.WriteString(Theme.Footer.Render("[enter] Create worktree  [tab] Back  [esc] Close"))
+	b.WriteString(Styles.Footer.Render("[enter] Create worktree  [tab] Back  [esc] Close"))
 
-	return Theme.OverlayBorder.Render(b.String())
+	return Styles.OverlayBorder.Render(b.String())
 }
 
 // renderIssueMarkdown renders markdown to styled terminal output using glamour.

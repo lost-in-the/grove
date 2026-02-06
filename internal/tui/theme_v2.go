@@ -56,7 +56,7 @@ func defaultColorScheme() ColorScheme {
 		// Text
 		TextNormal: lipgloss.AdaptiveColor{Dark: "#CDD6F4", Light: "#1E293B"},
 		TextBright: lipgloss.AdaptiveColor{Dark: "#FFFFFF", Light: "#0F172A"},
-		TextMuted:  lipgloss.AdaptiveColor{Dark: "#6C7086", Light: "#64748B"},
+		TextMuted:  lipgloss.AdaptiveColor{Dark: "#9399B2", Light: "#475569"},
 	}
 }
 
