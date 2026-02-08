@@ -75,6 +75,10 @@ func highContrastColorScheme() ColorScheme {
 		SurfaceDim:    lipgloss.AdaptiveColor{Dark: "#7F849C", Light: "#64748B"},
 		SurfaceBorder: lipgloss.AdaptiveColor{Dark: "#585B70", Light: "#94A3B8"},
 
+		// Selection / Header
+		SelectionBg: lipgloss.AdaptiveColor{Dark: "#313244", Light: "#E2E8F0"},
+		HeaderBg:    lipgloss.AdaptiveColor{Dark: "#181825", Light: "#F1F5F9"},
+
 		// Text — all meet 4.5:1 including muted
 		TextNormal: lipgloss.AdaptiveColor{Dark: "#E4E8F7", Light: "#0F172A"},
 		TextBright: lipgloss.AdaptiveColor{Dark: "#FFFFFF", Light: "#000000"},

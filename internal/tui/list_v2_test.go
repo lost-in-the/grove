@@ -165,8 +165,8 @@ func TestWorktreeSyncBadgeV2(t *testing.T) {
 
 func TestWorktreeDelegateV2_Height(t *testing.T) {
 	d := NewWorktreeDelegateV2()
-	if d.Height() != 1 {
-		t.Errorf("Height() = %d, want 1", d.Height())
+	if d.Height() != 2 {
+		t.Errorf("Height() = %d, want 2", d.Height())
 	}
 }
 

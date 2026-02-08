@@ -44,6 +44,20 @@ func renderDetailV2(item *WorktreeItem, width int) string {
 	return card
 }
 
+// renderSectionHeader renders a thin ruled header like "── Git ──────────".
+func renderSectionHeader(title string, width int) string {
+	label := " " + title + " "
+	labelLen := len(label)
+	leftLen := 2
+	rightLen := width - leftLen - labelLen
+	if rightLen < 0 {
+		rightLen = 0
+	}
+	return Styles.DetailDim.Render(strings.Repeat("─", leftLen)) +
+		Styles.DetailLabel.Render(label) +
+		Styles.DetailDim.Render(strings.Repeat("─", rightLen))
+}
+
 // renderMetadataGrid renders label: value rows for the detail panel.
 func renderMetadataGrid(item *WorktreeItem, width int) string {
 	const labelWidth = 10
@@ -53,6 +67,9 @@ func renderMetadataGrid(item *WorktreeItem, width int) string {
 	}
 
 	var rows []string
+
+	// Git section
+	rows = append(rows, renderSectionHeader("Git", width))
 
 	// Branch
 	branchVal := Styles.DetailValue.Render(truncate(item.Branch, width-labelWidth-2))
@@ -67,9 +84,13 @@ func renderMetadataGrid(item *WorktreeItem, width int) string {
 		rows = append(rows, label("Commit")+commitVal)
 	}
 
-	// Status
+	// Status section
+	rows = append(rows, "")
+	rows = append(rows, renderSectionHeader("Status", width))
+
+	// Working status
 	statusVal := renderStatusValue(item)
-	rows = append(rows, label("Status")+statusVal)
+	rows = append(rows, label("Working")+statusVal)
 
 	// Sync (ahead/behind/synced) — only show when remote is tracked
 	if item.HasRemote {

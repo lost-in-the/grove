@@ -59,7 +59,7 @@ func renderPRPreview(pr *tracker.PullRequest, width int) string {
 	b.WriteString("\n\n")
 	b.WriteString(Styles.Footer.Render("[enter] Create worktree  [o] Open in browser  [tab] Back  [esc] Close"))
 
-	return Styles.OverlayBorder.Render(b.String())
+	return Styles.OverlayBorderInfo.Render(b.String())
 }
 
 // renderMarkdown renders markdown to styled terminal output using glamour.

@@ -359,7 +359,7 @@ func renderFork(s *ForkState, width int) string {
 			b.WriteString("\n" + indent + Styles.ErrorText.Render(s.Err.Error()) + "\n")
 		}
 		b.WriteString("\n" + Styles.Footer.Render(indent+"Please wait..."))
-		return Styles.OverlayBorder.Width(overlayWidth).Render(
+		return Styles.OverlayBorderSuccess.Width(overlayWidth).Render(
 			Styles.OverlayTitle.Render("Fork Worktree") + "\n\n" + b.String(),
 		)
 	}
@@ -412,7 +412,7 @@ func renderFork(s *ForkState, width int) string {
 		b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] fork  [backspace] back  [esc] cancel"))
 	}
 
-	return Styles.OverlayBorder.Width(overlayWidth).Render(
+	return Styles.OverlayBorderSuccess.Width(overlayWidth).Render(
 		Styles.OverlayTitle.Render("Fork Worktree") + "\n\n" + b.String(),
 	)
 }

@@ -37,6 +37,22 @@ func (l ToastLevel) Icon() string {
 	}
 }
 
+// borderColor returns the border color for a toast level.
+func (l ToastLevel) borderColor() lipgloss.AdaptiveColor {
+	switch l {
+	case ToastSuccess:
+		return Colors.Success
+	case ToastWarning:
+		return Colors.Warning
+	case ToastError:
+		return Colors.Danger
+	case ToastInfo:
+		return Colors.Info
+	default:
+		return Colors.SurfaceBorder
+	}
+}
+
 // style returns the lipgloss style for a toast level.
 func (l ToastLevel) style() lipgloss.Style {
 	switch l {
@@ -129,7 +145,7 @@ func (tm *ToastModel) View(width int) string {
 
 	box := fadeStyle.
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(Colors.SurfaceBorder).
+		BorderForeground(t.Level.borderColor()).
 		Padding(0, 1).
 		Render(content)
 

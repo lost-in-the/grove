@@ -59,7 +59,7 @@ func renderDeleteV2(s *DeleteState, width int) string {
 		Styles.HelpKey.Render("space") + Styles.HelpDesc.Render(" toggle branch")
 	b.WriteString(footer)
 
-	return Styles.OverlayBorder.Width(overlayWidth).Render(
+	return Styles.OverlayBorderDanger.Width(overlayWidth).Render(
 		Styles.OverlayTitle.Render("Delete Worktree") + "\n\n" + b.String(),
 	)
 }

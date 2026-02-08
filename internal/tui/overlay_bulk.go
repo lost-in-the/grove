@@ -41,7 +41,7 @@ func renderBulk(s *BulkState, width int) string {
 
 	if s.Deleting {
 		b.WriteString(s.Progress + "\n")
-		return Styles.OverlayBorder.Render(
+		return Styles.OverlayBorderDanger.Render(
 			Styles.OverlayTitle.Render("Bulk Delete") + "\n\n" + b.String(),
 		)
 	}
@@ -49,7 +49,7 @@ func renderBulk(s *BulkState, width int) string {
 	if len(s.Items) == 0 {
 		b.WriteString(Styles.DetailDim.Render("No merged worktrees to clean up.") + "\n")
 		b.WriteString("\n" + Styles.Footer.Render("[esc] close"))
-		return Styles.OverlayBorder.Render(
+		return Styles.OverlayBorderDanger.Render(
 			Styles.OverlayTitle.Render("Bulk Delete") + "\n\n" + b.String(),
 		)
 	}
@@ -90,7 +90,7 @@ func renderBulk(s *BulkState, width int) string {
 
 	b.WriteString("\n" + Styles.Footer.Render("[space] toggle  [enter] delete selected  [esc] cancel"))
 
-	return Styles.OverlayBorder.Render(
+	return Styles.OverlayBorderDanger.Render(
 		Styles.OverlayTitle.Render("Bulk Delete") + "\n\n" + b.String(),
 	)
 }

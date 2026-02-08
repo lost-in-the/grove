@@ -456,22 +456,25 @@ func (m *Model) updateLayout() {
 	footerHeight := 1 // help
 	available := m.height - headerHeight - footerHeight
 
+	contentWidth := m.width - 2 // body padding (1 char each side)
+
 	useSideBySide := m.width > 120
 	if useSideBySide {
 		// Adaptive list width: based on content, clamped to [40, 55% of terminal]
 		listWidth := m.adaptiveListWidth()
-		maxListWidth := m.width * 55 / 100
+		maxListWidth := contentWidth * 55 / 100
 		if listWidth > maxListWidth {
 			listWidth = maxListWidth
 		}
-		detailWidth := m.width - listWidth - 1
+		dividerWidth := 3 // " │ "
+		detailWidth := contentWidth - listWidth - dividerWidth
 		m.list.SetSize(listWidth, available)
 		m.detail.Width = detailWidth
 		m.detail.Height = available
 	} else {
 		// Stacked: cap list height at item count * row height + padding
 		itemCount := len(m.list.Items())
-		rowHeight := 1 // delegate Height()
+		rowHeight := 2 // delegate Height()
 		idealListHeight := itemCount*rowHeight + 2 // +2 for padding
 		maxListHeight := available * 6 / 10
 		listHeight := idealListHeight
@@ -485,12 +488,12 @@ func (m *Model) updateLayout() {
 		if detailHeight < 3 {
 			detailHeight = 3
 		}
-		m.list.SetSize(m.width, listHeight)
-		m.detail.Width = m.width
+		m.list.SetSize(contentWidth, listHeight)
+		m.detail.Width = contentWidth
 		m.detail.Height = detailHeight
 	}
 
-	m.help.Width = m.width
+	m.help.Width = contentWidth
 }
 
 // adaptiveListWidth calculates list panel width based on the widest rendered row.
@@ -1288,9 +1291,24 @@ func (m Model) View() string {
 	}
 
 	if m.loading {
+		brand := Styles.Header.Render("  grove")
+		loading := m.spinner.View() + " " + Styles.TextMuted.Render("Loading worktrees...")
+		content := brand + "\n\n" + loading
 		return lipgloss.Place(m.width, m.height,
 			lipgloss.Center, lipgloss.Center,
-			m.spinner.View()+" Loading worktrees...",
+			content,
+		)
+	}
+
+	// Empty state: no worktrees after loading
+	if len(m.list.Items()) == 0 {
+		brand := Styles.Header.Render("  grove")
+		msg := Styles.TextMuted.Render("No worktrees found")
+		hint := Styles.HelpKey.Render("n") + " " + Styles.HelpDesc.Render("to create your first worktree")
+		content := brand + "\n\n" + msg + "\n" + hint
+		return lipgloss.Place(m.width, m.height,
+			lipgloss.Center, lipgloss.Center,
+			content,
 		)
 	}
 
@@ -1377,15 +1395,18 @@ func (m Model) renderDashboard() string {
 	statusBar := m.header.View(m.width)
 
 	useSideBySide := m.width > 120
+	bodyWidth := m.width - 2 // 1-char padding each side
 
 	var body string
 	if useSideBySide {
 		listView := m.list.View()
+		divider := renderVerticalDivider(m.list.Height(), Colors.SurfaceDim)
 		detailView := m.renderDetailPanel()
-		body = lipgloss.JoinHorizontal(lipgloss.Top, listView, " ", detailView)
+		body = lipgloss.JoinHorizontal(lipgloss.Top, listView, divider, detailView)
 	} else {
 		listView := m.list.View()
-		separator := Styles.DetailDim.Render(strings.Repeat("─", m.width))
+		// Named separator showing selected worktree
+		separator := renderNamedSeparator(m.selectedItemName(), bodyWidth)
 		detailView := m.renderDetailPanel()
 		body = listView + "\n" + separator + "\n" + detailView
 	}
@@ -1401,6 +1422,9 @@ func (m Model) renderDashboard() string {
 		}
 	}
 
+	// Wrap body in 1-char horizontal padding for visual framing
+	body = lipgloss.NewStyle().Padding(0, 1).Render(body)
+
 	dashboard := statusBar + "\n" + body + "\n" + footer
 
 	// Render expanded help as centered overlay
@@ -1410,6 +1434,42 @@ func (m Model) renderDashboard() string {
 	}
 
 	return dashboard
+}
+
+// selectedItemName returns the short name of the currently selected worktree.
+func (m Model) selectedItemName() string {
+	item, ok := m.selectedItem()
+	if !ok {
+		return ""
+	}
+	return item.ShortName
+}
+
+// renderVerticalDivider creates a thin column of │ characters for side-by-side layout.
+func renderVerticalDivider(height int, color lipgloss.AdaptiveColor) string {
+	style := lipgloss.NewStyle().Foreground(color).Padding(0, 1)
+	lines := make([]string, height)
+	for i := range lines {
+		lines[i] = style.Render("│")
+	}
+	return strings.Join(lines, "\n")
+}
+
+// renderNamedSeparator renders a horizontal rule with the selected worktree name embedded.
+func renderNamedSeparator(name string, width int) string {
+	if name == "" {
+		return Styles.TextMuted.Render(strings.Repeat("─", width))
+	}
+	label := " " + name + " "
+	labelWidth := lipgloss.Width(label)
+	leftLen := 2
+	rightLen := width - leftLen - labelWidth
+	if rightLen < 0 {
+		rightLen = 0
+	}
+	return Styles.TextMuted.Render(strings.Repeat("─", leftLen)) +
+		Styles.TextMuted.Render(label) +
+		Styles.TextMuted.Render(strings.Repeat("─", rightLen))
 }
 
 func (m Model) renderStatusBar() string {
