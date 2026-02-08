@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
+	"github.com/LeahArmstrong/grove-cli/internal/tuilog"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 	"github.com/LeahArmstrong/grove-cli/plugins/tracker"
 )
@@ -90,7 +92,18 @@ func (m Model) handlePRKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if s.ShowPreview && len(filtered) > 0 && s.Cursor < len(filtered) {
 			pr := filtered[s.Cursor]
 			if pr.URL != "" {
-				_ = exec.Command("open", pr.URL).Start()
+				var cmd *exec.Cmd
+				switch runtime.GOOS {
+				case "darwin":
+					cmd = exec.Command("open", pr.URL)
+				case "windows":
+					cmd = exec.Command("cmd", "/c", "start", pr.URL)
+				default:
+					cmd = exec.Command("xdg-open", pr.URL)
+				}
+				if err := cmd.Start(); err != nil {
+					tuilog.Printf("warning: failed to open URL %q: %v", pr.URL, err)
+				}
 			}
 		}
 		return m, nil
@@ -234,17 +247,22 @@ func createPRWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, project
 				CreatedAt:      now,
 				LastAccessedAt: now,
 			}
-			_ = stateMgr.AddWorktree(name, wsState)
+			if err := stateMgr.AddWorktree(name, wsState); err != nil {
+				tuilog.Printf("warning: failed to register PR worktree %q in state: %v", name, err)
+			}
 		}
 
 		// Create tmux session
 		if tmux.IsTmuxAvailable() {
 			sessionName := worktree.TmuxSessionName(projectName, name)
-			_ = tmux.CreateSession(sessionName, wt.Path)
+			if err := tmux.CreateSession(sessionName, wt.Path); err != nil {
+				tuilog.Printf("warning: failed to create tmux session %q: %v", sessionName, err)
+			}
 		}
 
 		// Run post-create hooks
 		var hookBuf bytes.Buffer
+		var hookExecErr error
 		hookExecutor, hookErr := hooks.NewExecutor()
 		if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPostCreate) {
 			hookExecutor.Output = &hookBuf
@@ -257,9 +275,12 @@ func createPRWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, project
 				MainPath:     projectRoot,
 				NewPath:      wt.Path,
 			}
-			_ = hookExecutor.Execute(hooks.EventPostCreate, hookCtx)
+			hookExecErr = hookExecutor.Execute(hooks.EventPostCreate, hookCtx)
+			if hookExecErr != nil {
+				tuilog.Printf("warning: post-create hook failed for PR worktree %q: %v", name, hookExecErr)
+			}
 		}
 
-		return prWorktreeCreatedMsg{name: name, path: wt.Path, hookOutput: hookBuf.String()}
+		return prWorktreeCreatedMsg{name: name, path: wt.Path, hookOutput: hookBuf.String(), hookErr: hookExecErr}
 	}
 }

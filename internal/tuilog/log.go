@@ -37,6 +37,7 @@ func Init() {
 	if path == "1" || path == "true" {
 		home, err := os.UserHomeDir()
 		if err != nil {
+			fmt.Fprintf(os.Stderr, "grove: warning: cannot resolve home dir for debug log: %v\n", err)
 			return
 		}
 		path = filepath.Join(home, ".grove-debug.log")
@@ -44,6 +45,7 @@ func Init() {
 
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "grove: warning: failed to open debug log %s: %v\n", path, err)
 		return
 	}
 

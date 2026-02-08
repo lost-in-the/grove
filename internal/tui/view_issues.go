@@ -13,6 +13,7 @@ import (
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
+	"github.com/LeahArmstrong/grove-cli/internal/tuilog"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 	"github.com/LeahArmstrong/grove-cli/plugins/tracker"
 )
@@ -132,17 +133,22 @@ func createIssueWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, proj
 				CreatedAt:      now,
 				LastAccessedAt: now,
 			}
-			_ = stateMgr.AddWorktree(name, wsState)
+			if err := stateMgr.AddWorktree(name, wsState); err != nil {
+				tuilog.Printf("warning: failed to register issue worktree %q in state: %v", name, err)
+			}
 		}
 
 		// Create tmux session
 		if tmux.IsTmuxAvailable() {
 			sessionName := worktree.TmuxSessionName(projectName, name)
-			_ = tmux.CreateSession(sessionName, wt.Path)
+			if err := tmux.CreateSession(sessionName, wt.Path); err != nil {
+				tuilog.Printf("warning: failed to create tmux session %q: %v", sessionName, err)
+			}
 		}
 
 		// Run post-create hooks
 		var hookBuf bytes.Buffer
+		var hookExecErr error
 		hookExecutor, hookErr := hooks.NewExecutor()
 		if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPostCreate) {
 			hookExecutor.Output = &hookBuf
@@ -155,10 +161,13 @@ func createIssueWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, proj
 				MainPath:     projectRoot,
 				NewPath:      wt.Path,
 			}
-			_ = hookExecutor.Execute(hooks.EventPostCreate, hookCtx)
+			hookExecErr = hookExecutor.Execute(hooks.EventPostCreate, hookCtx)
+			if hookExecErr != nil {
+				tuilog.Printf("warning: post-create hook failed for issue worktree %q: %v", name, hookExecErr)
+			}
 		}
 
-		return issueWorktreeCreatedMsg{name: name, path: wt.Path, hookOutput: hookBuf.String()}
+		return issueWorktreeCreatedMsg{name: name, path: wt.Path, hookOutput: hookBuf.String(), hookErr: hookExecErr}
 	}
 }
 

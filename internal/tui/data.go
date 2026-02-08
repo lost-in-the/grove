@@ -117,7 +117,10 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager) ([]WorktreeI
 	}
 
 	// Current worktree
-	currentTree, _ := mgr.GetCurrent()
+	currentTree, currentErr := mgr.GetCurrent()
+	if currentErr != nil {
+		tuilog.Printf("warning: failed to get current worktree: %v", currentErr)
+	}
 	var currentPath string
 	if currentTree != nil {
 		currentPath = currentTree.Path
@@ -127,7 +130,9 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager) ([]WorktreeI
 	var sessions map[string]*tmux.Session
 	if tmux.IsTmuxAvailable() {
 		sessionList, err := tmux.ListSessions()
-		if err == nil {
+		if err != nil {
+			tuilog.Printf("warning: failed to list tmux sessions: %v", err)
+		} else {
 			sessions = make(map[string]*tmux.Session, len(sessionList))
 			for _, s := range sessionList {
 				sessions[s.Name] = s
@@ -192,7 +197,9 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager) ([]WorktreeI
 				defer wg.Done()
 
 				shortHash, message, age, err := mgr.GetCommitInfo(treePath)
-				if err == nil {
+				if err != nil {
+					tuilog.Printf("warning: failed to get commit info for %q: %v", treePath, err)
+				} else {
 					item.Commit = shortHash
 					item.CommitMessage = message
 					item.CommitAge = age
@@ -200,6 +207,9 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager) ([]WorktreeI
 
 				if isDirty {
 					dirtyFiles, err := mgr.GetDirtyFiles(treePath)
+					if err != nil {
+						tuilog.Printf("warning: failed to get dirty files for %q: %v", treePath, err)
+					}
 					if err == nil && dirtyFiles != "" {
 						var files []string
 						for _, f := range strings.Split(dirtyFiles, "\n") {

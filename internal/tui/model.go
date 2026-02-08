@@ -207,6 +207,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.deleteState = nil
 		if msg.err != nil {
 			m.toast.Show(NewToast(fmt.Sprintf("Delete failed: %s", msg.err), ToastError))
+		} else if msg.branchErr != nil {
+			m.statusMsg = fmt.Sprintf("Deleted %q (branch kept)", msg.name)
+			m.statusTTL = time.Now().Add(3 * time.Second)
+			m.toast.Show(NewToast(fmt.Sprintf("Deleted %q but %s", msg.name, msg.branchErr), ToastWarning))
+			cmds = append(cmds, m.spinner.Tick)
 		} else {
 			m.statusMsg = fmt.Sprintf("Deleted %q", msg.name)
 			m.statusTTL = time.Now().Add(3 * time.Second)
@@ -229,7 +234,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pendingSelect = msg.name
 		m.statusMsg = fmt.Sprintf("Created %q", msg.name)
 		m.statusTTL = time.Now().Add(3 * time.Second)
-		m.toast.Show(NewToast(fmt.Sprintf("Created %q", msg.name), ToastSuccess))
+		if msg.hookErr != nil {
+			m.toast.Show(NewToast(fmt.Sprintf("Created %q (hook failed: %s)", msg.name, msg.hookErr), ToastWarning))
+		} else {
+			m.toast.Show(NewToast(fmt.Sprintf("Created %q", msg.name), ToastSuccess))
+		}
+		if msg.hookOutput != "" {
+			tuilog.Printf("hook output for %q: %s", msg.name, msg.hookOutput)
+		}
 		cmds = append(cmds, m.spinner.Tick, m.fetchWorktrees)
 		return m, tea.Batch(cmds...)
 
@@ -276,7 +288,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pendingSelect = msg.name
 		m.statusMsg = fmt.Sprintf("Created worktree from issue %q", msg.name)
 		m.statusTTL = time.Now().Add(3 * time.Second)
-		m.toast.Show(NewToast(fmt.Sprintf("Created worktree from issue %q", msg.name), ToastSuccess))
+		if msg.hookErr != nil {
+			m.toast.Show(NewToast(fmt.Sprintf("Created from issue %q (hook failed: %s)", msg.name, msg.hookErr), ToastWarning))
+		} else {
+			m.toast.Show(NewToast(fmt.Sprintf("Created worktree from issue %q", msg.name), ToastSuccess))
+		}
+		if msg.hookOutput != "" {
+			tuilog.Printf("hook output for issue worktree %q: %s", msg.name, msg.hookOutput)
+		}
 		cmds = append(cmds, m.spinner.Tick, m.fetchWorktrees)
 		return m, tea.Batch(cmds...)
 
@@ -295,7 +314,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pendingSelect = msg.name
 		m.statusMsg = fmt.Sprintf("Created worktree from PR %q", msg.name)
 		m.statusTTL = time.Now().Add(3 * time.Second)
-		m.toast.Show(NewToast(fmt.Sprintf("Created worktree from PR %q", msg.name), ToastSuccess))
+		if msg.hookErr != nil {
+			m.toast.Show(NewToast(fmt.Sprintf("Created from PR %q (hook failed: %s)", msg.name, msg.hookErr), ToastWarning))
+		} else {
+			m.toast.Show(NewToast(fmt.Sprintf("Created worktree from PR %q", msg.name), ToastSuccess))
+		}
+		if msg.hookOutput != "" {
+			tuilog.Printf("hook output for PR worktree %q: %s", msg.name, msg.hookOutput)
+		}
 		cmds = append(cmds, m.spinner.Tick, m.fetchWorktrees)
 		return m, tea.Batch(cmds...)
 
@@ -303,8 +329,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.activeView = ViewDashboard
 		m.bulkState = nil
 		if len(msg.failed) > 0 {
-			m.statusMsg = fmt.Sprintf("Deleted %d worktrees (%d failed)", msg.count, len(msg.failed))
-			m.toast.Show(NewToast(fmt.Sprintf("Deleted %d worktrees, %d failed", msg.count, len(msg.failed)), ToastWarning))
+			var names []string
+			for name, errMsg := range msg.failed {
+				names = append(names, name)
+				tuilog.Printf("bulk delete failed for %q: %s", name, errMsg)
+			}
+			m.statusMsg = fmt.Sprintf("Deleted %d worktrees (%d failed: %s)", msg.count, len(msg.failed), strings.Join(names, ", "))
+			m.toast.Show(NewToast(fmt.Sprintf("Deleted %d, failed: %s", msg.count, strings.Join(names, ", ")), ToastWarning))
 		} else {
 			m.statusMsg = fmt.Sprintf("Deleted %d worktrees", msg.count)
 			m.toast.Show(NewToast(fmt.Sprintf("Deleted %d worktrees", msg.count), ToastSuccess))
@@ -399,8 +430,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.configState = nil
 		}
 		m.toast.Show(NewToast("Configuration saved", ToastSuccess))
-		// Reload config
-		if cfg, err := config.Load(); err == nil {
+		// Reload config so in-memory state reflects saved changes
+		if cfg, err := config.Load(); err != nil {
+			tuilog.Printf("error: config reload after save failed: %v", err)
+			m.toast.Show(NewToast("Saved but reload failed — restart TUI to apply", ToastWarning))
+		} else {
 			m.cfg = cfg
 		}
 		return m, nil
@@ -690,7 +724,8 @@ func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Quick-switch: number keys 1-9 jump to nth visible item
-	if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 {
+	// Disabled when the list has an active filter to avoid switching to hidden items
+	if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 && m.list.FilterState() == list.Unfiltered {
 		r := msg.Runes[0]
 		if r >= '1' && r <= '9' {
 			idx := int(r - '1')
@@ -1289,11 +1324,11 @@ func (m Model) handleBulkKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) bulkDeleteCmd(items []WorktreeItem) tea.Cmd {
 	return func() tea.Msg {
-		var failed []string
+		failed := make(map[string]string)
 		for _, item := range items {
 			result := deleteWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, item.ShortName, false)()
 			if msg, ok := result.(worktreeDeletedMsg); ok && msg.err != nil {
-				failed = append(failed, item.ShortName)
+				failed[item.ShortName] = msg.err.Error()
 			}
 		}
 		return bulkDeleteDoneMsg{count: len(items) - len(failed), failed: failed}

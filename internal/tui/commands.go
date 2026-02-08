@@ -11,6 +11,7 @@ import (
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
+	"github.com/LeahArmstrong/grove-cli/internal/tuilog"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 )
 
@@ -26,14 +27,21 @@ func deleteWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRo
 		// Kill tmux session before removing worktree
 		if tmux.IsTmuxAvailable() {
 			sessionName := worktree.TmuxSessionName(projectName, name)
-			if exists, _ := tmux.SessionExists(sessionName); exists {
-				_ = tmux.KillSession(sessionName)
+			if exists, err := tmux.SessionExists(sessionName); err != nil {
+				tuilog.Printf("warning: failed to check tmux session %q: %v", sessionName, err)
+			} else if exists {
+				if err := tmux.KillSession(sessionName); err != nil {
+					tuilog.Printf("warning: failed to kill tmux session %q: %v", sessionName, err)
+				}
 			}
 		}
 
 		// Capture the branch before removal so we can delete it afterwards
 		var branch string
-		wt, _ := mgr.Find(name)
+		wt, findErr := mgr.Find(name)
+		if findErr != nil {
+			tuilog.Printf("warning: failed to find worktree %q for branch capture: %v", name, findErr)
+		}
 		if wt != nil {
 			branch = wt.Branch
 		}
@@ -52,7 +60,9 @@ func deleteWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRo
 				hookCtx.NewPath = wt.Path
 				hookCtx.WorktreeFull = projectName + "-" + name
 			}
-			_ = hookExecutor.Execute(hooks.EventPreRemove, hookCtx)
+			if err := hookExecutor.Execute(hooks.EventPreRemove, hookCtx); err != nil {
+				tuilog.Printf("warning: pre-remove hook failed for %q: %v", name, err)
+			}
 		}
 
 		err := mgr.Remove(name)
@@ -61,17 +71,22 @@ func deleteWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRo
 		}
 
 		// Remove from state
-		_ = stateMgr.RemoveWorktree(name)
+		if err := stateMgr.RemoveWorktree(name); err != nil {
+			tuilog.Printf("warning: failed to remove %q from state: %v", name, err)
+		}
 
 		// Delete branch if requested
+		var branchErr error
 		if deleteBranch && branch != "" {
-			branchMgr, branchErr := git.NewBranchManager(projectRoot)
-			if branchErr == nil {
-				_ = branchMgr.Delete(branch, false)
+			branchMgr, initErr := git.NewBranchManager(projectRoot)
+			if initErr != nil {
+				branchErr = fmt.Errorf("branch manager init failed: %w", initErr)
+			} else if err := branchMgr.Delete(branch, false); err != nil {
+				branchErr = fmt.Errorf("failed to delete branch %q: %w", branch, err)
 			}
 		}
 
-		return worktreeDeletedMsg{name: name, deleteBranch: deleteBranch, err: nil}
+		return worktreeDeletedMsg{name: name, deleteBranch: deleteBranch, err: nil, branchErr: branchErr}
 	}
 }
 
@@ -100,16 +115,21 @@ func createWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRo
 			CreatedAt:      now,
 			LastAccessedAt: now,
 		}
-		_ = stateMgr.AddWorktree(name, wsState)
+		if err := stateMgr.AddWorktree(name, wsState); err != nil {
+			tuilog.Printf("warning: failed to register worktree %q in state: %v", name, err)
+		}
 
 		// Create tmux session
 		if tmux.IsTmuxAvailable() {
 			sessionName := worktree.TmuxSessionName(projectName, name)
-			_ = tmux.CreateSession(sessionName, wt.Path)
+			if err := tmux.CreateSession(sessionName, wt.Path); err != nil {
+				tuilog.Printf("warning: failed to create tmux session %q: %v", sessionName, err)
+			}
 		}
 
 		// Run post-create hooks, capturing output to avoid corrupting TUI
 		var hookBuf bytes.Buffer
+		var hookExecErr error
 		hookExecutor, hookErr := hooks.NewExecutor()
 		if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPostCreate) {
 			hookExecutor.Output = &hookBuf
@@ -122,9 +142,12 @@ func createWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRo
 				MainPath:     projectRoot,
 				NewPath:      wt.Path,
 			}
-			_ = hookExecutor.Execute(hooks.EventPostCreate, hookCtx)
+			hookExecErr = hookExecutor.Execute(hooks.EventPostCreate, hookCtx)
+			if hookExecErr != nil {
+				tuilog.Printf("warning: post-create hook failed for %q: %v", name, hookExecErr)
+			}
 		}
 
-		return worktreeCreatedMsg{name: name, path: wt.Path, hookOutput: hookBuf.String()}
+		return worktreeCreatedMsg{name: name, path: wt.Path, hookOutput: hookBuf.String(), hookErr: hookExecErr}
 	}
 }

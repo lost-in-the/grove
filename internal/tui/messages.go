@@ -17,6 +17,7 @@ type worktreeDeletedMsg struct {
 	name         string
 	deleteBranch bool
 	err          error
+	branchErr    error // non-nil if worktree removed but branch deletion failed
 }
 
 // worktreeCreatedMsg is sent after a worktree creation attempt.
@@ -25,6 +26,7 @@ type worktreeCreatedMsg struct {
 	path       string
 	err        error
 	hookOutput string
+	hookErr    error // non-nil if hook execution failed
 }
 
 // statusClearMsg is sent to clear the status bar toast message.
@@ -35,7 +37,7 @@ type statusClearMsg struct {
 // bulkDeleteDoneMsg is sent when bulk deletion completes.
 type bulkDeleteDoneMsg struct {
 	count  int
-	failed []string // names of worktrees that failed to delete
+	failed map[string]string // name → error message for worktrees that failed
 }
 
 // prsFetchedMsg is sent when PR data has been loaded.
@@ -50,6 +52,7 @@ type prWorktreeCreatedMsg struct {
 	path       string
 	err        error
 	hookOutput string
+	hookErr    error
 }
 
 // issuesFetchedMsg is sent when issue data has been loaded.
@@ -64,4 +67,5 @@ type issueWorktreeCreatedMsg struct {
 	path       string
 	err        error
 	hookOutput string
+	hookErr    error
 }
