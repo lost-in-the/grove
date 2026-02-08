@@ -26,6 +26,10 @@ func buildFakeGrove(t *testing.T) string {
 func runZshWrapper(t *testing.T, binPath string, groveArgs string, env ...string) (string, string, int) {
 	t.Helper()
 
+	if _, err := exec.LookPath("zsh"); err != nil {
+		t.Skip("zsh not available")
+	}
+
 	// Extract only the grove() function from the template (skip compdef/completion)
 	funcEnd := strings.Index(zshTemplate, "\n# Tab completion")
 	wrapperFunc := zshTemplate
