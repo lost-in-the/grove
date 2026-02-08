@@ -77,7 +77,7 @@ func (g *GitHubAdapter) FetchIssue(number int) (*Issue, error) {
 
 // FetchPR retrieves a pull request by number.
 func (g *GitHubAdapter) FetchPR(number int) (*PullRequest, error) {
-	args := []string{"pr", "view", strconv.Itoa(number), "--json", "number,title,body,state,author,labels,headRefName,baseRefName,createdAt,updatedAt,url"}
+	args := []string{"pr", "view", strconv.Itoa(number), "--json", "number,title,body,state,author,labels,headRefName,baseRefName,isDraft,commits,additions,deletions,reviewDecision,createdAt,updatedAt,url"}
 	if g.repo != "" {
 		args = append(args, "--repo", g.repo)
 	}
@@ -98,11 +98,18 @@ func (g *GitHubAdapter) FetchPR(number int) (*PullRequest, error) {
 		Labels []struct {
 			Name string `json:"name"`
 		} `json:"labels"`
-		HeadRefName string    `json:"headRefName"`
-		BaseRefName string    `json:"baseRefName"`
-		CreatedAt   time.Time `json:"createdAt"`
-		UpdatedAt   time.Time `json:"updatedAt"`
-		URL         string    `json:"url"`
+		HeadRefName    string `json:"headRefName"`
+		BaseRefName    string `json:"baseRefName"`
+		IsDraft        bool   `json:"isDraft"`
+		Commits        []struct {
+			Oid string `json:"oid"`
+		} `json:"commits"`
+		Additions      int       `json:"additions"`
+		Deletions      int       `json:"deletions"`
+		ReviewDecision string    `json:"reviewDecision"`
+		CreatedAt      time.Time `json:"createdAt"`
+		UpdatedAt      time.Time `json:"updatedAt"`
+		URL            string    `json:"url"`
 	}
 
 	if err := json.Unmarshal(output, &ghPR); err != nil {
@@ -115,17 +122,22 @@ func (g *GitHubAdapter) FetchPR(number int) (*PullRequest, error) {
 	}
 
 	return &PullRequest{
-		Number:     ghPR.Number,
-		Title:      ghPR.Title,
-		Body:       ghPR.Body,
-		State:      strings.ToLower(ghPR.State),
-		Author:     ghPR.Author.Login,
-		Labels:     labels,
-		Branch:     ghPR.HeadRefName,
-		BaseBranch: ghPR.BaseRefName,
-		CreatedAt:  ghPR.CreatedAt,
-		UpdatedAt:  ghPR.UpdatedAt,
-		URL:        ghPR.URL,
+		Number:         ghPR.Number,
+		Title:          ghPR.Title,
+		Body:           ghPR.Body,
+		State:          strings.ToLower(ghPR.State),
+		Author:         ghPR.Author.Login,
+		Labels:         labels,
+		Branch:         ghPR.HeadRefName,
+		BaseBranch:     ghPR.BaseRefName,
+		IsDraft:        ghPR.IsDraft,
+		CommitCount:    len(ghPR.Commits),
+		Additions:      ghPR.Additions,
+		Deletions:      ghPR.Deletions,
+		ReviewDecision: ghPR.ReviewDecision,
+		CreatedAt:      ghPR.CreatedAt,
+		UpdatedAt:      ghPR.UpdatedAt,
+		URL:            ghPR.URL,
 	}, nil
 }
 
@@ -205,7 +217,7 @@ func (g *GitHubAdapter) ListIssues(opts ListOptions) ([]*Issue, error) {
 
 // ListPRs retrieves pull requests with optional filtering.
 func (g *GitHubAdapter) ListPRs(opts ListOptions) ([]*PullRequest, error) {
-	args := []string{"pr", "list", "--json", "number,title,state,author,labels,headRefName,baseRefName,createdAt,updatedAt,url"}
+	args := []string{"pr", "list", "--json", "number,title,body,state,author,labels,headRefName,baseRefName,isDraft,commits,additions,deletions,reviewDecision,createdAt,updatedAt,url"}
 
 	if opts.State != "" && opts.State != "all" {
 		args = append(args, "--state", opts.State)
@@ -239,6 +251,7 @@ func (g *GitHubAdapter) ListPRs(opts ListOptions) ([]*PullRequest, error) {
 	var ghPRs []struct {
 		Number int    `json:"number"`
 		Title  string `json:"title"`
+		Body   string `json:"body"`
 		State  string `json:"state"`
 		Author struct {
 			Login string `json:"login"`
@@ -246,11 +259,18 @@ func (g *GitHubAdapter) ListPRs(opts ListOptions) ([]*PullRequest, error) {
 		Labels []struct {
 			Name string `json:"name"`
 		} `json:"labels"`
-		HeadRefName string    `json:"headRefName"`
-		BaseRefName string    `json:"baseRefName"`
-		CreatedAt   time.Time `json:"createdAt"`
-		UpdatedAt   time.Time `json:"updatedAt"`
-		URL         string    `json:"url"`
+		HeadRefName    string `json:"headRefName"`
+		BaseRefName    string `json:"baseRefName"`
+		IsDraft        bool   `json:"isDraft"`
+		Commits        []struct {
+			Oid string `json:"oid"`
+		} `json:"commits"`
+		Additions      int       `json:"additions"`
+		Deletions      int       `json:"deletions"`
+		ReviewDecision string    `json:"reviewDecision"`
+		CreatedAt      time.Time `json:"createdAt"`
+		UpdatedAt      time.Time `json:"updatedAt"`
+		URL            string    `json:"url"`
 	}
 
 	if err := json.Unmarshal(output, &ghPRs); err != nil {
@@ -265,16 +285,22 @@ func (g *GitHubAdapter) ListPRs(opts ListOptions) ([]*PullRequest, error) {
 		}
 
 		prs[i] = &PullRequest{
-			Number:     gh.Number,
-			Title:      gh.Title,
-			State:      strings.ToLower(gh.State),
-			Author:     gh.Author.Login,
-			Labels:     labels,
-			Branch:     gh.HeadRefName,
-			BaseBranch: gh.BaseRefName,
-			CreatedAt:  gh.CreatedAt,
-			UpdatedAt:  gh.UpdatedAt,
-			URL:        gh.URL,
+			Number:         gh.Number,
+			Title:          gh.Title,
+			Body:           gh.Body,
+			State:          strings.ToLower(gh.State),
+			Author:         gh.Author.Login,
+			Labels:         labels,
+			Branch:         gh.HeadRefName,
+			BaseBranch:     gh.BaseRefName,
+			IsDraft:        gh.IsDraft,
+			CommitCount:    len(gh.Commits),
+			Additions:      gh.Additions,
+			Deletions:      gh.Deletions,
+			ReviewDecision: gh.ReviewDecision,
+			CreatedAt:      gh.CreatedAt,
+			UpdatedAt:      gh.UpdatedAt,
+			URL:            gh.URL,
 		}
 	}
 

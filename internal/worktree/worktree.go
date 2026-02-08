@@ -166,9 +166,9 @@ func (m *Manager) Find(name string) (*Worktree, error) {
 	fullName := m.FullName(name)
 
 	for _, tree := range trees {
-		// Match by short name or full name or path basename
+		// Match by short name, display name, full name, or path basename
 		baseName := filepath.Base(tree.Path)
-		if tree.ShortName == name || baseName == name || baseName == fullName {
+		if tree.ShortName == name || tree.DisplayName() == name || baseName == name || baseName == fullName {
 			return tree, nil
 		}
 	}
@@ -215,7 +215,7 @@ func (m *Manager) Remove(name string) error {
 
 	var targetTree *Worktree
 	for _, tree := range trees {
-		if tree.Name == name || tree.ShortName == name {
+		if tree.Name == name || tree.ShortName == name || tree.DisplayName() == name {
 			targetTree = tree
 			break
 		}

@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/user"
 	"time"
@@ -32,6 +33,7 @@ type ExecutionContext struct {
 // Executor runs user-configured hooks for lifecycle events
 type Executor struct {
 	config *HooksConfig
+	Output io.Writer // destination for status messages; defaults to os.Stdout
 }
 
 // NewExecutor creates a new hook executor with loaded configuration
@@ -41,12 +43,21 @@ func NewExecutor() (*Executor, error) {
 		return nil, fmt.Errorf("failed to load hooks config: %w", err)
 	}
 
-	return &Executor{config: cfg}, nil
+	return &Executor{config: cfg, Output: os.Stdout}, nil
 }
 
 // NewExecutorWithConfig creates an executor with a provided config (useful for testing)
 func NewExecutorWithConfig(cfg *HooksConfig) *Executor {
-	return &Executor{config: cfg}
+	return &Executor{config: cfg, Output: os.Stdout}
+}
+
+// printf writes to the executor's output writer.
+func (e *Executor) printf(format string, args ...any) {
+	w := e.Output
+	if w == nil {
+		w = os.Stdout
+	}
+	fmt.Fprintf(w, format, args...)
 }
 
 // Execute runs all configured hooks for an event
@@ -79,7 +90,7 @@ func (e *Executor) Execute(event string, ctx *ExecutionContext) error {
 		if err != nil {
 			// Determine how to handle the error
 			if action.Required || action.OnFailure == "fail" {
-				fmt.Printf("✗ Hook failed: %v\n", err)
+				e.printf("✗ Hook failed: %v\n", err)
 				if firstRequiredErr == nil {
 					firstRequiredErr = err
 				}
@@ -87,7 +98,7 @@ func (e *Executor) Execute(event string, ctx *ExecutionContext) error {
 				// Silent - do nothing
 			} else {
 				// Default: warn
-				fmt.Printf("⚠ Hook warning: %v\n", err)
+				e.printf("⚠ Hook warning: %v\n", err)
 			}
 		}
 	}
@@ -240,7 +251,7 @@ func (e *Executor) executeCopy(action *HookAction, ctx *ExecutionContext, vars *
 		}
 	}
 
-	fmt.Printf("✓ Copied %s\n", to)
+	e.printf("✓ Copied %s\n", to)
 	return nil
 }
 
@@ -273,7 +284,7 @@ func (e *Executor) executeSymlink(action *HookAction, ctx *ExecutionContext, var
 		return fmt.Errorf("symlink %s -> %s: %w", to, from, err)
 	}
 
-	fmt.Printf("✓ Symlinked %s\n", to)
+	e.printf("✓ Symlinked %s\n", to)
 	return nil
 }
 
@@ -301,7 +312,7 @@ func (e *Executor) executeCommand(action *HookAction, ctx *ExecutionContext, var
 	}
 
 	elapsed := time.Since(start)
-	fmt.Printf("✓ Ran: %s (%.1fs)\n", command, elapsed.Seconds())
+	e.printf("✓ Ran: %s (%.1fs)\n", command, elapsed.Seconds())
 	return nil
 }
 
@@ -348,7 +359,7 @@ func (e *Executor) executeTemplate(action *HookAction, ctx *ExecutionContext, va
 		return fmt.Errorf("template: cannot write %s: %w", dstPath, err)
 	}
 
-	fmt.Printf("✓ Generated %s from template\n", to)
+	e.printf("✓ Generated %s from template\n", to)
 	return nil
 }
 

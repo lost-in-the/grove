@@ -79,6 +79,17 @@ Examples:
 			}
 		}
 
+		// Check if trying to remove the current worktree
+		currentTree, _ := mgr.GetCurrent()
+		if currentTree != nil {
+			wt, _ := mgr.Find(name)
+			if wt != nil && currentTree.Path == wt.Path {
+				fmt.Fprintf(os.Stderr, "Error: cannot remove current worktree '%s'\n", name)
+				fmt.Fprintf(os.Stderr, "Switch to another worktree first: grove to <name>\n")
+				os.Exit(exitcode.CannotRemove)
+			}
+		}
+
 		// Dry run - just show what would happen
 		if rmDryRun {
 			fmt.Printf("Would remove worktree '%s'\n", name)

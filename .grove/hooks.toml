@@ -1,0 +1,12 @@
+# Grove hooks configuration
+# Auto-generated for detected project type: go
+#
+# Edit: grove config --hooks -e
+# Docs: https://github.com/LeahArmstrong/grove-cli#hooks
+
+[[hooks.post_create]]
+type = "copy"
+from = ".env"
+to = ".env"
+required = false
+

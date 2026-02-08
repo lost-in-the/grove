@@ -28,17 +28,22 @@ type Issue struct {
 
 // PullRequest represents a pull request from a tracking system.
 type PullRequest struct {
-	Number     int       `json:"number"`
-	Title      string    `json:"title"`
-	Body       string    `json:"body"`
-	State      string    `json:"state"`
-	Author     string    `json:"author"`
-	Labels     []string  `json:"labels"`
-	Branch     string    `json:"branch"`
-	BaseBranch string    `json:"base_branch"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
-	URL        string    `json:"url"`
+	Number         int       `json:"number"`
+	Title          string    `json:"title"`
+	Body           string    `json:"body"`
+	State          string    `json:"state"`
+	Author         string    `json:"author"`
+	Labels         []string  `json:"labels"`
+	Branch         string    `json:"branch"`
+	BaseBranch     string    `json:"base_branch"`
+	IsDraft        bool      `json:"is_draft"`
+	CommitCount    int       `json:"commit_count"`
+	Additions      int       `json:"additions"`
+	Deletions      int       `json:"deletions"`
+	ReviewDecision string    `json:"review_decision"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+	URL            string    `json:"url"`
 }
 
 // ListOptions configures filtering for list operations.

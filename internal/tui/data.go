@@ -5,9 +5,11 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/LeahArmstrong/grove-cli/internal/config"
+	"github.com/LeahArmstrong/grove-cli/internal/tuilog"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
@@ -30,29 +32,35 @@ type WorktreeItem struct {
 	IsProtected   bool
 	IsPrunable    bool
 	TmuxStatus    string // "attached", "detached", "none"
+	HasRemote     bool   // true if branch has upstream tracking
 	AheadCount    int    // commits ahead of upstream
 	BehindCount   int    // commits behind upstream
 	LastAccessed  time.Time
 }
 
+// list.Item interface implementation for bubbles/list.
+func (w WorktreeItem) Title() string       { return w.ShortName }
+func (w WorktreeItem) Description() string { return w.Branch }
+func (w WorktreeItem) FilterValue() string { return w.ShortName + " " + w.Branch }
+
 // StatusText returns a display string for git status.
 func (w *WorktreeItem) StatusText() string {
 	if w.IsPrunable {
-		return Theme.StatusStale.Render("✗ stale")
+		return Styles.StatusStale.Render("✗ stale")
 	}
 	if w.IsDirty {
-		return Theme.StatusDirty.Render("● dirty")
+		return Styles.StatusDirty.Render("● dirty")
 	}
-	return Theme.StatusClean.Render("✓ clean")
+	return Styles.StatusClean.Render("✓ clean")
 }
 
 // TmuxText returns a display string for tmux status.
 func (w *WorktreeItem) TmuxText() string {
 	switch w.TmuxStatus {
 	case "attached":
-		return Theme.TmuxBadge.Render("⬡ attached")
+		return Styles.TmuxBadge.Render("⬡ attached")
 	case "detached":
-		return Theme.TmuxBadge.Render("⬡ tmux")
+		return Styles.TmuxBadge.Render("⬡ tmux")
 	default:
 		return ""
 	}
@@ -63,7 +71,34 @@ func (w *WorktreeItem) AgeText() string {
 	if w.CommitAge == "" {
 		return ""
 	}
-	return Theme.DetailDim.Render(w.CommitAge)
+	return Styles.DetailDim.Render(w.CommitAge)
+}
+
+// SyncStatusText returns a compact sync status string for the list view.
+func (w *WorktreeItem) SyncStatusText() string {
+	if !w.HasRemote {
+		return "⚠ no remote"
+	}
+	if w.AheadCount == 0 && w.BehindCount == 0 {
+		return "✓ synced"
+	}
+	var parts []string
+	if w.AheadCount > 0 {
+		parts = append(parts, fmt.Sprintf("↑%d", w.AheadCount))
+	}
+	if w.BehindCount > 0 {
+		parts = append(parts, fmt.Sprintf("↓%d", w.BehindCount))
+	}
+	return strings.Join(parts, " ")
+}
+
+// hasUpstream returns true if the branch at the given worktree path
+// has an upstream tracking branch configured.
+func hasUpstream(worktreePath string) bool {
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
+	cmd.Dir = worktreePath
+	err := cmd.Run()
+	return err == nil
 }
 
 // FetchWorktrees gathers all enriched worktree data for display.
@@ -76,10 +111,16 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager) ([]WorktreeI
 	projectName := mgr.GetProjectName()
 
 	// Load config for protection checks
-	cfg, _ := config.Load()
+	cfg, cfgErr := config.Load()
+	if cfgErr != nil {
+		tuilog.Printf("warning: failed to load config for protection checks: %v", cfgErr)
+	}
 
 	// Current worktree
-	currentTree, _ := mgr.GetCurrent()
+	currentTree, currentErr := mgr.GetCurrent()
+	if currentErr != nil {
+		tuilog.Printf("warning: failed to get current worktree: %v", currentErr)
+	}
 	var currentPath string
 	if currentTree != nil {
 		currentPath = currentTree.Path
@@ -89,7 +130,9 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager) ([]WorktreeI
 	var sessions map[string]*tmux.Session
 	if tmux.IsTmuxAvailable() {
 		sessionList, err := tmux.ListSessions()
-		if err == nil {
+		if err != nil {
+			tuilog.Printf("warning: failed to list tmux sessions: %v", err)
+		} else {
 			sessions = make(map[string]*tmux.Session, len(sessionList))
 			for _, s := range sessionList {
 				sessions[s.Name] = s
@@ -97,43 +140,23 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager) ([]WorktreeI
 		}
 	}
 
-	items := make([]WorktreeItem, 0, len(trees))
-	for _, tree := range trees {
-		item := WorktreeItem{
-			ShortName:  tree.DisplayName(),
-			FullName:   tree.Name,
-			Path:       tree.Path,
-			Branch:     tree.Branch,
-			IsDirty:    tree.IsDirty,
-			IsMain:     tree.IsMain,
-			IsCurrent:  tree.Path == currentPath,
-			IsPrunable: tree.IsPrunable,
-			TmuxStatus: "none",
-		}
+	items := make([]WorktreeItem, len(trees))
 
-		// Enrich with commit info (List() doesn't populate these)
-		if !tree.IsPrunable {
-			shortHash, message, age, err := mgr.GetCommitInfo(tree.Path)
-			if err == nil {
-				item.Commit = shortHash
-				item.CommitMessage = message
-				item.CommitAge = age
-			}
-		}
+	// Enrich worktrees in parallel for performance (git calls per tree)
+	var wg sync.WaitGroup
+	for i, tree := range trees {
+		item := &items[i]
+		item.ShortName = tree.DisplayName()
+		item.FullName = tree.Name
+		item.Path = tree.Path
+		item.Branch = tree.Branch
+		item.IsDirty = tree.IsDirty
+		item.IsMain = tree.IsMain
+		item.IsCurrent = tree.Path == currentPath
+		item.IsPrunable = tree.IsPrunable
+		item.TmuxStatus = "none"
 
-		// Dirty files
-		if tree.IsDirty && !tree.IsPrunable {
-			dirtyFiles, err := mgr.GetDirtyFiles(tree.Path)
-			if err == nil && dirtyFiles != "" {
-				for _, f := range strings.Split(dirtyFiles, "\n") {
-					if f != "" {
-						item.DirtyFiles = append(item.DirtyFiles, f)
-					}
-				}
-			}
-		}
-
-		// Tmux status
+		// Tmux status (no git call, fast)
 		if sessions != nil {
 			sessionName := worktree.TmuxSessionName(projectName, tree.ShortName)
 			if s, ok := sessions[sessionName]; ok {
@@ -151,18 +174,7 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager) ([]WorktreeI
 			}
 		}
 
-		// Upstream tracking status (ahead/behind).
-		// Currently only fetched for the active worktree to keep startup
-		// fast (~20-30ms per git call). A future configuration option
-		// (e.g. tui.fetch_all_upstream = true) could expand this to fetch
-		// for every worktree, ideally in parallel goroutines.
-		if item.IsCurrent && !tree.IsPrunable {
-			ahead, behind := getUpstreamCounts(tree.Path)
-			item.AheadCount = ahead
-			item.BehindCount = behind
-		}
-
-		// State info
+		// State info (no git call, fast)
 		if stateMgr != nil {
 			isEnv, _ := stateMgr.IsEnvironment(tree.ShortName)
 			item.IsEnvironment = isEnv
@@ -173,13 +185,52 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager) ([]WorktreeI
 			}
 		}
 
-		// Protection check
+		// Protection check (no git call, fast)
 		if cfg != nil {
 			item.IsProtected = cfg.IsProtected(tree.ShortName)
 		}
 
-		items = append(items, item)
+		// Parallel: commit info + dirty files + upstream
+		if !tree.IsPrunable {
+			wg.Add(1)
+			go func(item *WorktreeItem, treePath string, isDirty, isCurrent bool) {
+				defer wg.Done()
+
+				shortHash, message, age, err := mgr.GetCommitInfo(treePath)
+				if err != nil {
+					tuilog.Printf("warning: failed to get commit info for %q: %v", treePath, err)
+				} else {
+					item.Commit = shortHash
+					item.CommitMessage = message
+					item.CommitAge = age
+				}
+
+				if isDirty {
+					dirtyFiles, err := mgr.GetDirtyFiles(treePath)
+					if err != nil {
+						tuilog.Printf("warning: failed to get dirty files for %q: %v", treePath, err)
+					}
+					if err == nil && dirtyFiles != "" {
+						var files []string
+						for _, f := range strings.Split(dirtyFiles, "\n") {
+							if f != "" {
+								files = append(files, f)
+							}
+						}
+						item.DirtyFiles = files
+					}
+				}
+
+				if hasUpstream(treePath) {
+					item.HasRemote = true
+					ahead, behind := getUpstreamCounts(treePath)
+					item.AheadCount = ahead
+					item.BehindCount = behind
+				}
+			}(item, tree.Path, tree.IsDirty, item.IsCurrent)
+		}
 	}
+	wg.Wait()
 
 	return items, nil
 }

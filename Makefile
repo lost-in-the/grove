@@ -1,4 +1,4 @@
-.PHONY: build test lint fmt clean install help
+.PHONY: build test test-integration test-all lint fmt clean install help test-fixture
 
 # Variables
 BINARY_NAME=grove
@@ -55,9 +55,18 @@ clean: ## Clean build artifacts
 	@echo "Clean complete"
 
 install: build ## Install the binary to $GOPATH/bin
-	@echo "Installing $(BINARY_NAME)..."
-	@go install $(MAIN_PATH)
-	@echo "$(BINARY_NAME) installed"
+	@echo "Installing $(BINARY_NAME) to $$(go env GOPATH)/bin..."
+	@cp $(BUILD_DIR)/$(BINARY_NAME) "$$(go env GOPATH)/bin/$(BINARY_NAME)"
+	@echo "$(BINARY_NAME) installed to $$(go env GOPATH)/bin/$(BINARY_NAME)"
+
+test-integration: ## Run integration tests (requires git, slower)
+	@echo "Running integration tests..."
+	@go test -v -race -tags=integration -timeout 60s ./internal/tui/
+
+test-all: test test-integration ## Run unit + integration tests
+
+test-fixture: ## Create persistent test fixture for TUI testing
+	@./scripts/create-fixture.sh
 
 tidy: ## Tidy go.mod
 	@echo "Tidying go.mod..."

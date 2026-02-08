@@ -235,6 +235,18 @@ func detectDefaultBranch(repoPath string) (string, error) {
 		}
 	}
 
+	// Try git config init.defaultBranch
+	cmd = exec.Command("git", "-C", repoPath, "config", "init.defaultBranch")
+	if output, err = cmd.Output(); err == nil {
+		candidate := strings.TrimSpace(string(output))
+		if candidate != "" {
+			verify := exec.Command("git", "-C", repoPath, "rev-parse", "--verify", candidate)
+			if verify.Run() == nil {
+				return candidate, nil
+			}
+		}
+	}
+
 	// Fall back to checking common default branch names
 	for _, candidate := range []string{"main", "master"} {
 		cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--verify", candidate)
@@ -243,11 +255,15 @@ func detectDefaultBranch(repoPath string) (string, error) {
 		}
 	}
 
-	// Last resort: use the current branch
+	// Last resort: use the current branch (skip if detached HEAD)
 	cmd = exec.Command("git", "-C", repoPath, "rev-parse", "--abbrev-ref", "HEAD")
 	output, err = cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("could not determine default branch")
 	}
-	return strings.TrimSpace(string(output)), nil
+	branch := strings.TrimSpace(string(output))
+	if branch != "" && branch != "HEAD" {
+		return branch, nil
+	}
+	return "", fmt.Errorf("could not determine default branch")
 }

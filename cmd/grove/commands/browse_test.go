@@ -102,6 +102,26 @@ func TestPrsCmd(t *testing.T) {
 	}
 }
 
+func TestPrsCmd_HasFzfFlag(t *testing.T) {
+	flag := prsCmd.Flags().Lookup("fzf")
+	if flag == nil {
+		t.Fatal("prs command should have --fzf flag")
+	}
+	if flag.DefValue != "false" {
+		t.Errorf("--fzf should default to false, got %s", flag.DefValue)
+	}
+}
+
+func TestIssuesCmd_HasFzfFlag(t *testing.T) {
+	flag := issuesCmd.Flags().Lookup("fzf")
+	if flag == nil {
+		t.Fatal("issues command should have --fzf flag")
+	}
+	if flag.DefValue != "false" {
+		t.Errorf("--fzf should default to false, got %s", flag.DefValue)
+	}
+}
+
 func TestTruncate(t *testing.T) {
 	tests := []struct {
 		name   string
