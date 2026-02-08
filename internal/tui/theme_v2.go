@@ -25,6 +25,10 @@ type ColorScheme struct {
 	SurfaceDim    lipgloss.AdaptiveColor
 	SurfaceBorder lipgloss.AdaptiveColor
 
+	// Selection / Header
+	SelectionBg lipgloss.AdaptiveColor
+	HeaderBg    lipgloss.AdaptiveColor
+
 	// Text
 	TextNormal lipgloss.AdaptiveColor
 	TextBright lipgloss.AdaptiveColor
@@ -52,6 +56,10 @@ func defaultColorScheme() ColorScheme {
 		SurfaceFg:     lipgloss.AdaptiveColor{Dark: "#CDD6F4", Light: "#1E293B"},
 		SurfaceDim:    lipgloss.AdaptiveColor{Dark: "#585B70", Light: "#94A3B8"},
 		SurfaceBorder: lipgloss.AdaptiveColor{Dark: "#45475A", Light: "#CBD5E1"},
+
+		// Selection / Header
+		SelectionBg: lipgloss.AdaptiveColor{Dark: "#313244", Light: "#E2E8F0"},
+		HeaderBg:    lipgloss.AdaptiveColor{Dark: "#181825", Light: "#F1F5F9"},
 
 		// Text
 		TextNormal: lipgloss.AdaptiveColor{Dark: "#CDD6F4", Light: "#1E293B"},
@@ -114,12 +122,16 @@ type StyleSet struct {
 	ListCursor    lipgloss.Style
 	ListCursorDim lipgloss.Style
 
+	// List selection
+	SelectionRow lipgloss.Style
+
 	// Status badges
-	StatusClean lipgloss.Style
-	StatusDirty lipgloss.Style
-	StatusStale lipgloss.Style
-	TmuxBadge   lipgloss.Style
-	EnvBadge    lipgloss.Style
+	StatusClean    lipgloss.Style
+	StatusDirty    lipgloss.Style
+	StatusStale    lipgloss.Style
+	TmuxBadge      lipgloss.Style
+	TmuxBadgeActive lipgloss.Style
+	EnvBadge       lipgloss.Style
 
 	// Detail panel
 	DetailTitle   lipgloss.Style
@@ -131,13 +143,19 @@ type StyleSet struct {
 	DetailFileMod lipgloss.Style
 	DetailFileDel lipgloss.Style
 
+	// Layout
+	HeaderBar lipgloss.Style
+
 	// Overlay / dialogs
-	OverlayBorder lipgloss.Style
-	OverlayTitle  lipgloss.Style
-	OverlayPrompt lipgloss.Style
-	WarningText   lipgloss.Style
-	ErrorText     lipgloss.Style
-	SuccessText   lipgloss.Style
+	OverlayBorder        lipgloss.Style
+	OverlayBorderDanger  lipgloss.Style
+	OverlayBorderSuccess lipgloss.Style
+	OverlayBorderInfo    lipgloss.Style
+	OverlayTitle         lipgloss.Style
+	OverlayPrompt        lipgloss.Style
+	WarningText          lipgloss.Style
+	ErrorText            lipgloss.Style
+	SuccessText          lipgloss.Style
 
 	// Help
 	HelpKey  lipgloss.Style
@@ -175,9 +193,16 @@ func NewStyleSet(cs ColorScheme) StyleSet {
 		StatusDanger:  lipgloss.NewStyle().Foreground(cs.Danger),
 		StatusInfo:    lipgloss.NewStyle().Foreground(cs.Info),
 
+		// List selection
+		SelectionRow: lipgloss.NewStyle().Background(cs.SelectionBg),
+
 		// Layout
 		Header: lipgloss.NewStyle().Bold(true).Foreground(cs.Primary),
 		Footer: lipgloss.NewStyle().Foreground(cs.TextMuted),
+		HeaderBar: lipgloss.NewStyle().
+			Background(cs.HeaderBg).
+			Bold(true).
+			Padding(0, 1),
 
 		// List items
 		SelectedItem:  lipgloss.NewStyle().Bold(true).Foreground(cs.TextBright),
@@ -188,11 +213,12 @@ func NewStyleSet(cs ColorScheme) StyleSet {
 		ListCursorDim: lipgloss.NewStyle().SetString("  "),
 
 		// Status badges
-		StatusClean: lipgloss.NewStyle().Foreground(cs.Success),
-		StatusDirty: lipgloss.NewStyle().Foreground(cs.Warning),
-		StatusStale: lipgloss.NewStyle().Foreground(cs.Danger),
-		TmuxBadge:   lipgloss.NewStyle().Foreground(cs.Primary),
-		EnvBadge:    lipgloss.NewStyle().Foreground(cs.Info),
+		StatusClean:    lipgloss.NewStyle().Foreground(cs.Success),
+		StatusDirty:    lipgloss.NewStyle().Foreground(cs.Warning),
+		StatusStale:    lipgloss.NewStyle().Foreground(cs.Danger),
+		TmuxBadge:      lipgloss.NewStyle().Foreground(cs.Primary),
+		TmuxBadgeActive: lipgloss.NewStyle().Foreground(cs.Success),
+		EnvBadge:       lipgloss.NewStyle().Foreground(cs.Info),
 
 		// Detail panel
 		DetailTitle:   lipgloss.NewStyle().Bold(true).Foreground(cs.TextBright),
@@ -209,6 +235,18 @@ func NewStyleSet(cs ColorScheme) StyleSet {
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(cs.Primary).
 			Padding(1, 2),
+		OverlayBorderDanger: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(cs.Danger).
+			Padding(1, 2),
+		OverlayBorderSuccess: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(cs.Success).
+			Padding(1, 2),
+		OverlayBorderInfo: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(cs.Info).
+			Padding(1, 2),
 		OverlayTitle:  lipgloss.NewStyle().Bold(true).Foreground(cs.Primary),
 		OverlayPrompt: lipgloss.NewStyle().Foreground(cs.TextNormal),
 		WarningText:   lipgloss.NewStyle().Foreground(cs.Warning),
@@ -218,7 +256,7 @@ func NewStyleSet(cs ColorScheme) StyleSet {
 		// Help
 		HelpKey:  lipgloss.NewStyle().Foreground(cs.Primary).Bold(true),
 		HelpDesc: lipgloss.NewStyle().Foreground(cs.TextMuted),
-		HelpSep:  lipgloss.NewStyle().Foreground(cs.TextMuted).SetString("  "),
+		HelpSep:  lipgloss.NewStyle().Foreground(cs.TextMuted).SetString(" · "),
 
 		// Input
 		InputBorder: lipgloss.NewStyle().

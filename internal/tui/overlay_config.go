@@ -448,12 +448,14 @@ func renderConfig(s *ConfigState, width int) string {
 	for i := ConfigTab(0); i < ConfigTabCount; i++ {
 		name := tabName(i)
 		if i == s.Tab {
-			tabs = append(tabs, Styles.Header.Render("["+name+"]"))
+			tabs = append(tabs, Styles.Header.Bold(true).Underline(true).Render(name))
 		} else {
-			tabs = append(tabs, Styles.TextMuted.Render(" "+name+" "))
+			tabs = append(tabs, Styles.TextMuted.Render(name))
 		}
 	}
-	b.WriteString(indent + strings.Join(tabs, "  ") + "\n\n")
+	tabBar := indent + strings.Join(tabs, "  ")
+	tabRule := indent + Styles.TextMuted.Render(strings.Repeat("─", contentWidth))
+	b.WriteString(tabBar + "\n" + tabRule + "\n\n")
 
 	if s.Err != nil {
 		b.WriteString(indent + Styles.ErrorText.Render("Error: "+s.Err.Error()) + "\n\n")

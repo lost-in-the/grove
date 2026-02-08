@@ -42,29 +42,31 @@ func (h Header) View(width int) string {
 
 	rightWidth := lipgloss.Width(right)
 
-	// If both sides fit, space them apart
-	gap := width - leftWidth - rightWidth
-	if gap >= 2 && right != "" {
-		return left + strings.Repeat(" ", gap) + right
-	}
+	var content string
 
-	// If right doesn't fit, truncate or omit it
-	if right != "" && width-leftWidth >= 10 {
+	// If both sides fit, space them apart
+	gap := width - leftWidth - rightWidth - 2 // -2 for HeaderBar padding
+	if gap >= 2 && right != "" {
+		content = left + strings.Repeat(" ", gap) + right
+	} else if right != "" && width-leftWidth >= 10 {
+		// If right doesn't fit, truncate or omit it
 		available := width - leftWidth - 4 // 2 spaces + dot + space
 		if available > 0 && available < len(h.CurrentName) {
 			truncated := h.CurrentName[:available] + "…"
 			right = Styles.StatusSuccess.Render("●") + " " + Styles.TextNormal.Render(truncated)
-			gap = width - leftWidth - lipgloss.Width(right)
+			gap = width - leftWidth - lipgloss.Width(right) - 2
 			if gap >= 2 {
-				return left + strings.Repeat(" ", gap) + right
+				content = left + strings.Repeat(" ", gap) + right
+			} else {
+				content = left
 			}
+		} else {
+			content = left
 		}
+	} else {
+		content = left
 	}
 
-	// Narrow: just left side, truncated to width
-	if leftWidth > width {
-		return left[:width]
-	}
-
-	return left
+	// Wrap in full-width header bar with background
+	return Styles.HeaderBar.Width(width).Render(content)
 }

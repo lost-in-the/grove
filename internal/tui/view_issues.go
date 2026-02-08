@@ -165,14 +165,14 @@ func createIssueWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, proj
 // renderIssueView renders the issue browser overlay.
 func renderIssueView(s *IssueViewState, width int, spinnerView string) string {
 	if s.Loading {
-		return Styles.OverlayBorder.Render(
+		return Styles.OverlayBorderInfo.Render(
 			Styles.OverlayTitle.Render("Issues") + "\n\n" +
 				spinnerView + " Loading issues...",
 		)
 	}
 
 	if s.Creating {
-		return Styles.OverlayBorder.Render(
+		return Styles.OverlayBorderInfo.Render(
 			Styles.OverlayTitle.Render("Issues") + "\n\n" +
 				spinnerView + " Creating worktree from issue...",
 		)
@@ -249,9 +249,9 @@ func renderIssueView(s *IssueViewState, width int, spinnerView string) string {
 
 			b.WriteString(fmt.Sprintf("%s%s · %s%s\n", indent, author, age, labels))
 
-			// Separator between items (except last)
+			// Blank line between items (except last)
 			if i < end-1 {
-				b.WriteString(Styles.DetailDim.Render("  " + strings.Repeat("─", contentWidth-4)) + "\n")
+				b.WriteString("\n")
 			}
 		}
 
@@ -262,7 +262,7 @@ func renderIssueView(s *IssueViewState, width int, spinnerView string) string {
 
 	b.WriteString("\n" + Styles.Footer.Render("[enter] create worktree  [tab] preview  [esc] close  type to filter"))
 
-	return Styles.OverlayBorder.Render(
+	return Styles.OverlayBorderInfo.Render(
 		Styles.OverlayTitle.Render("Issues") + "\n\n" + b.String(),
 	)
 }
@@ -307,7 +307,7 @@ func renderIssuePreview(issue *tracker.Issue, width int) string {
 	b.WriteString("\n\n")
 	b.WriteString(Styles.Footer.Render("[enter] Create worktree  [tab] Back  [esc] Close"))
 
-	return Styles.OverlayBorder.Render(b.String())
+	return Styles.OverlayBorderInfo.Render(b.String())
 }
 
 // renderIssueMarkdown renders markdown to styled terminal output using glamour.

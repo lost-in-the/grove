@@ -105,7 +105,7 @@ func (h *HelpFooter) RenderCompact(view ActiveView, width int) string {
 		parts = append(parts, part)
 	}
 
-	sep := Styles.HelpSep.Render("  ")
+	sep := Styles.HelpSep.Render(" · ")
 	line := strings.Join(parts, sep)
 
 	// Truncate if wider than available width

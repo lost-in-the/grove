@@ -3,6 +3,8 @@ package tui
 import (
 	"fmt"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 // renderCreateV2 is the V2 dispatcher for the create wizard overlay.
@@ -101,7 +103,7 @@ func renderCreateHuh(s *CreateState, width int) string {
 		return renderCreateConfirmV2(s, width)
 	}
 
-	return Styles.OverlayBorder.Width(overlayWidth).Render(
+	return Styles.OverlayBorderSuccess.Width(overlayWidth).Render(
 		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + b.String(),
 	)
 }
@@ -128,7 +130,7 @@ func renderCreateSpinnerV2(s *CreateState, spinnerView string) string {
 	}
 	b.WriteString("\n" + Styles.Footer.Render("Please wait..."))
 
-	return Styles.OverlayBorder.Width(overlayWidth).Render(
+	return Styles.OverlayBorderSuccess.Width(overlayWidth).Render(
 		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + b.String(),
 	)
 }
@@ -171,7 +173,7 @@ func renderCreateNameV2(s *CreateState, width int) string {
 		b.WriteString("\n" + Styles.Footer.Render("[enter] next  [esc] cancel"))
 	}
 
-	return Styles.OverlayBorder.Render(
+	return Styles.OverlayBorderSuccess.Render(
 		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + b.String(),
 	)
 }
@@ -199,7 +201,7 @@ func renderCreateBranchV2(s *CreateState, width int) string {
 
 	b.WriteString("\n" + Styles.Footer.Render("[enter] create  [backspace] back  [esc] cancel"))
 
-	return Styles.OverlayBorder.Render(
+	return Styles.OverlayBorderSuccess.Render(
 		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + b.String(),
 	)
 }
@@ -246,7 +248,7 @@ func renderCreatePickBranchV2(s *CreateState, width int) string {
 
 	b.WriteString("\n" + Styles.Footer.Render("[enter] select  [backspace] back/filter  [esc] cancel  type to filter"))
 
-	return Styles.OverlayBorder.Render(
+	return Styles.OverlayBorderSuccess.Render(
 		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + b.String(),
 	)
 }
@@ -285,7 +287,7 @@ func renderCreateBranchActionV2(s *CreateState, width int) string {
 
 	b.WriteString("\n" + Styles.Footer.Render("[enter] confirm  [backspace] back  [esc] cancel  [space] toggle"))
 
-	return Styles.OverlayBorder.Render(
+	return Styles.OverlayBorderSuccess.Render(
 		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + b.String(),
 	)
 }
@@ -295,24 +297,29 @@ func renderContextSummary(s *CreateState, width int) string {
 	var lines []string
 
 	if s.Name != "" {
-		lines = append(lines, fmt.Sprintf("  Name:     %s", s.Name))
+		lines = append(lines, fmt.Sprintf("Name:     %s", s.Name))
 		if s.ProjectName != "" {
-			lines = append(lines, fmt.Sprintf("  Full:     %s-%s", s.ProjectName, s.Name))
+			lines = append(lines, fmt.Sprintf("Full:     %s-%s", s.ProjectName, s.Name))
 		}
 	}
 
 	if s.BaseBranch != "" {
-		lines = append(lines, fmt.Sprintf("  Branch:   %s", s.BaseBranch))
+		lines = append(lines, fmt.Sprintf("Branch:   %s", s.BaseBranch))
 	}
 
-	header := Styles.DetailDim.Render("┌─ Summary ") +
-		Styles.DetailDim.Render(strings.Repeat("─", max(width-14, 0))) +
-		Styles.DetailDim.Render("┐")
-	footer := Styles.DetailDim.Render("└" + strings.Repeat("─", max(width-4, 0)) + "┘")
+	body := Styles.TextMuted.Render(strings.Join(lines, "\n"))
 
-	body := strings.Join(lines, "\n")
+	boxWidth := width - 2
+	if boxWidth < 20 {
+		boxWidth = 20
+	}
 
-	return header + "\n" + body + "\n" + footer
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(Colors.SurfaceDim).
+		Padding(0, 1).
+		Width(boxWidth).
+		Render(Styles.DetailLabel.Render("Summary") + "\n" + body)
 }
 
 // renderCreateConfirmV2 renders the confirmation step with full summary.
@@ -348,7 +355,7 @@ func renderCreateConfirmV2(s *CreateState, width int) string {
 	b.WriteString("\n" + Styles.SuccessText.Render(indent+"Ready to create worktree.") + "\n")
 	b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] create  [backspace] back  [esc] cancel"))
 
-	return Styles.OverlayBorder.Width(overlayWidth).Render(
+	return Styles.OverlayBorderSuccess.Width(overlayWidth).Render(
 		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + b.String(),
 	)
 }

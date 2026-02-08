@@ -74,9 +74,9 @@ func worktreeStatusTextV2(item WorktreeItem) string {
 func worktreeTmuxBadgeV2(item WorktreeItem) string {
 	switch item.TmuxStatus {
 	case "attached":
-		return Styles.TmuxBadge.Render("⬡ tmux")
+		return Styles.TmuxBadgeActive.Render("⬡ tmux●")
 	case "detached":
-		return Styles.TmuxBadge.Render("⬡ tmux")
+		return Styles.TmuxBadge.Render("⬡ tmux○")
 	default:
 		return ""
 	}
@@ -108,7 +108,7 @@ func NewWorktreeDelegateV2() WorktreeDelegateV2 {
 	return WorktreeDelegateV2{}
 }
 
-func (d WorktreeDelegateV2) Height() int                             { return 1 }
+func (d WorktreeDelegateV2) Height() int                             { return 2 }
 func (d WorktreeDelegateV2) Spacing() int                            { return 0 }
 func (d WorktreeDelegateV2) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 
@@ -141,37 +141,60 @@ func (d WorktreeDelegateV2) Render(w io.Writer, m list.Model, index int, listIte
 			nameStyle = nameStyle.Bold(true)
 		}
 	}
-	name := nameStyle.Render(fmt.Sprintf("%-*s", cols.Name, truncate(item.ShortName, cols.Name)))
+	name := nameStyle.Render(truncate(item.ShortName, cols.Name))
 
-	line := numPrefix + indicator + name
+	// Line 1: numPrefix + indicator + name
+	line1 := numPrefix + indicator + name
+
+	// Line 2: metadata row (indented to align with name)
+	prefixPad := "     " // align under name (2 num + 1 indicator + 1 space + 1)
+	var metaParts []string
 
 	if cols.Branch > 0 {
-		branch := Styles.TextMuted.Render(fmt.Sprintf("%-*s", cols.Branch, truncate(item.Branch, cols.Branch)))
-		line += "  " + branch
+		metaParts = append(metaParts, truncate(item.Branch, cols.Branch))
 	}
 
-	if cols.Age > 0 {
-		age := ""
-		if item.CommitAge != "" {
-			age = Styles.TextMuted.Render(fmt.Sprintf("%-*s", cols.Age, compactAge(item.CommitAge)))
-		} else {
-			age = fmt.Sprintf("%-*s", cols.Age, "")
-		}
-		line += "  " + age
+	if cols.Age > 0 && item.CommitAge != "" {
+		metaParts = append(metaParts, compactAge(item.CommitAge))
 	}
 
-	status := worktreeStatusTextV2(item)
-	line += "  " + status
+	metaParts = append(metaParts, cleanAnsi(worktreeStatusTextV2(item)))
 
 	syncBadge := worktreeSyncBadgeV2(item)
-	tmuxBadge := worktreeTmuxBadgeV2(item)
 	if syncBadge != "" {
-		line += "  " + syncBadge
+		metaParts = append(metaParts, cleanAnsi(syncBadge))
 	}
+	tmuxBadge := worktreeTmuxBadgeV2(item)
 	if tmuxBadge != "" {
-		line += "  " + tmuxBadge
+		metaParts = append(metaParts, cleanAnsi(tmuxBadge))
 	}
 
-	rendered := lipgloss.NewStyle().MaxWidth(width).Render(line)
-	fmt.Fprint(w, rendered)
+	line2 := prefixPad + Styles.TextMuted.Render(strings.Join(metaParts, " · "))
+
+	// Apply selection background to both lines
+	if selected {
+		line1 = padToWidth(line1, width)
+		line2 = padToWidth(line2, width)
+		line1 = Styles.SelectionRow.MaxWidth(width).Render(line1)
+		line2 = Styles.SelectionRow.MaxWidth(width).Render(line2)
+	} else {
+		line1 = lipgloss.NewStyle().MaxWidth(width).Render(line1)
+		line2 = lipgloss.NewStyle().MaxWidth(width).Render(line2)
+	}
+
+	fmt.Fprint(w, line1+"\n"+line2)
+}
+
+// padToWidth pads a string with spaces to reach the target width.
+func padToWidth(s string, width int) string {
+	w := lipgloss.Width(s)
+	if w < width {
+		return s + strings.Repeat(" ", width-w)
+	}
+	return s
+}
+
+// cleanAnsi removes ANSI escape sequences from a string for plain-text display.
+func cleanAnsi(s string) string {
+	return ansiRegex.ReplaceAllString(s, "")
 }
