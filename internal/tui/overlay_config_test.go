@@ -241,8 +241,8 @@ func TestPopulateConfigFields(t *testing.T) {
 
 	// Behavior tab
 	behavior := fields[ConfigTabBehavior]
-	if len(behavior) != 4 {
-		t.Errorf("expected 4 Behavior fields, got %d", len(behavior))
+	if len(behavior) != 5 {
+		t.Errorf("expected 5 Behavior fields, got %d", len(behavior))
 	}
 
 	// Plugins tab
@@ -322,8 +322,28 @@ func TestRenderConfig_AllStates(t *testing.T) {
 		s.Dirty = true
 
 		v := renderConfig(s, 100)
-		if !strings.Contains(v, "unsaved") {
-			t.Error("expected 'unsaved' indicator in dirty state")
+		if !strings.Contains(v, "save & close") {
+			t.Error("expected 'save & close' footer in dirty state")
+		}
+		if strings.Contains(v, "unsaved") {
+			t.Error("expected no 'unsaved' indicator — replaced by per-field coloring")
+		}
+	})
+
+	t.Run("confirming state", func(t *testing.T) {
+		s := NewConfigState()
+		cfg := config.LoadDefaults()
+		s.Config = cfg
+		s.Fields = populateConfigFields(cfg)
+		s.Dirty = true
+		s.Confirming = true
+
+		v := renderConfig(s, 100)
+		if !strings.Contains(v, "Save changes?") {
+			t.Error("expected 'Save changes?' prompt in confirming state")
+		}
+		if !strings.Contains(v, "save") || !strings.Contains(v, "discard") {
+			t.Error("expected save/discard hints in confirming state")
 		}
 	})
 
@@ -393,7 +413,7 @@ func TestNewConfigEditForm(t *testing.T) {
 	})
 }
 
-func TestConfigOverlay_EscDirtySaves(t *testing.T) {
+func TestConfigOverlay_EscDirtyConfirms(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
 	m = sendKey(m, "c")
 
@@ -403,12 +423,55 @@ func TestConfigOverlay_EscDirtySaves(t *testing.T) {
 	m.configState.Dirty = true
 
 	m = sendKey(m, "esc")
-	// Should close overlay and transition to dashboard
+	// Should show confirmation prompt, not close
+	if m.activeView != ViewConfig {
+		t.Errorf("expected ViewConfig after dirty esc, got %d", m.activeView)
+	}
+	if m.configState == nil {
+		t.Fatal("expected configState to still exist")
+	}
+	if !m.configState.Confirming {
+		t.Error("expected Confirming=true after dirty esc")
+	}
+}
+
+func TestConfigOverlay_ConfirmEnterSaves(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 30))
+	m = sendKey(m, "c")
+
+	cfg := config.LoadDefaults()
+	m.configState.Fields = populateConfigFields(cfg)
+	m.configState.Config = cfg
+	m.configState.Dirty = true
+	m.configState.Confirming = true
+
+	m = sendKey(m, "enter")
+	// Enter while confirming should save and close
 	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after dirty esc, got %d", m.activeView)
+		t.Errorf("expected ViewDashboard after confirm enter, got %d", m.activeView)
 	}
 	if m.configState != nil {
-		t.Error("expected configState nil after dirty esc")
+		t.Error("expected configState nil after confirm enter")
+	}
+}
+
+func TestConfigOverlay_ConfirmEscDiscards(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 30))
+	m = sendKey(m, "c")
+
+	cfg := config.LoadDefaults()
+	m.configState.Fields = populateConfigFields(cfg)
+	m.configState.Config = cfg
+	m.configState.Dirty = true
+	m.configState.Confirming = true
+
+	m = sendKey(m, "esc")
+	// Esc while confirming should discard and close
+	if m.activeView != ViewDashboard {
+		t.Errorf("expected ViewDashboard after confirm esc, got %d", m.activeView)
+	}
+	if m.configState != nil {
+		t.Error("expected configState nil after confirm esc")
 	}
 }
 

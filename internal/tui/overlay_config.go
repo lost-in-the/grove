@@ -54,6 +54,7 @@ type ConfigState struct {
 	EditOriginalValue string          // value before form opened (Huh binds directly)
 	Err               error
 	Dirty             bool           // unsaved changes exist
+	Confirming        bool           // save confirmation prompt active
 	Config            *config.Config // loaded config
 }
 
@@ -156,6 +157,10 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 	if cfg.TUI.SkipBranchNotice != nil && *cfg.TUI.SkipBranchNotice {
 		skipNotice = "true"
 	}
+	tmuxMode := cfg.Tmux.Mode
+	if tmuxMode == "" {
+		tmuxMode = "auto"
+	}
 	fields[ConfigTabBehavior] = []ConfigField{
 		{
 			Key:         "switch.dirty_handling",
@@ -165,6 +170,15 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Type:        ConfigEnum,
 			Options:     []string{"auto-stash", "prompt", "refuse"},
 			Description: "How to handle dirty worktree on switch",
+		},
+		{
+			Key:         "tmux.mode",
+			Label:       "tmux_mode",
+			Value:       tmuxMode,
+			Default:     tmuxMode,
+			Type:        ConfigEnum,
+			Options:     []string{"auto", "manual", "off"},
+			Description: "Tmux session behavior: auto-attach, print instructions, or skip",
 		},
 		{
 			Key:         "naming.pattern",
@@ -286,13 +300,28 @@ func (m Model) handleConfigKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleConfigEditKey(msg)
 	}
 
-	switch {
-	case key.Matches(msg, m.keys.Escape):
-		if s.Dirty {
-			// Save on close if dirty
+	// Handle confirmation prompt keys
+	if s.Confirming {
+		switch {
+		case key.Matches(msg, m.keys.Enter):
+			// Save and close
 			m.activeView = ViewDashboard
 			m.configState = nil
 			return m, saveConfigCmd(s)
+		case key.Matches(msg, m.keys.Escape):
+			// Discard and close
+			m.activeView = ViewDashboard
+			m.configState = nil
+			return m, nil
+		}
+		return m, nil
+	}
+
+	switch {
+	case key.Matches(msg, m.keys.Escape):
+		if s.Dirty {
+			s.Confirming = true
+			return m, nil
 		}
 		m.activeView = ViewDashboard
 		m.configState = nil
@@ -300,6 +329,11 @@ func (m Model) handleConfigKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, m.keys.Tab):
 		s.Tab = ConfigTab((int(s.Tab) + 1) % int(ConfigTabCount))
+		s.Cursor = 0
+		return m, nil
+
+	case key.Matches(msg, m.keys.ShiftTab):
+		s.Tab = ConfigTab((int(s.Tab) - 1 + int(ConfigTabCount)) % int(ConfigTabCount))
 		s.Cursor = 0
 		return m, nil
 
@@ -378,6 +412,29 @@ func (m Model) forwardToConfigHuhForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	model, cmd := s.EditForm.Update(msg)
 	s.EditForm = model.(*huh.Form)
+
+	// Check if the form completed or aborted via an internal message
+	if s.EditForm.State == huh.StateAborted {
+		tabFields := s.Fields[s.Tab]
+		if s.Cursor < len(tabFields) {
+			tabFields[s.Cursor].Value = s.EditOriginalValue
+		}
+		s.Editing = false
+		s.EditForm = nil
+		return m, nil
+	}
+	if s.EditForm.State == huh.StateCompleted {
+		tabFields := s.Fields[s.Tab]
+		if s.Cursor < len(tabFields) {
+			if tabFields[s.Cursor].Value != s.EditOriginalValue {
+				s.Dirty = true
+			}
+		}
+		s.Editing = false
+		s.EditForm = nil
+		return m, nil
+	}
+
 	return m, cmd
 }
 
@@ -470,6 +527,15 @@ func renderConfig(s *ConfigState, width int) string {
 		)
 	}
 
+	// If confirming save, show the confirmation prompt
+	if s.Confirming {
+		b.WriteString("\n" + indent + Styles.WarningText.Render("Save changes?") + "\n")
+		b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] save  [esc] discard"))
+		return Styles.OverlayBorder.Width(overlayWidth).Render(
+			Styles.OverlayTitle.Render("Configuration") + "\n\n" + b.String(),
+		)
+	}
+
 	// Field list for current tab
 	tabFields := s.Fields[s.Tab]
 	if len(tabFields) == 0 {
@@ -504,7 +570,13 @@ func renderConfig(s *ConfigState, width int) string {
 				value = value[:maxValWidth-3] + "..."
 			}
 
-			line := indent + cursor + Styles.DetailLabel.Render(label) + "  " + Styles.DetailValue.Render(value)
+			// Use warning color for changed fields
+			valueStyle := Styles.DetailValue
+			if field.Value != field.Default {
+				valueStyle = Styles.WarningText
+			}
+
+			line := indent + cursor + Styles.DetailLabel.Render(label) + "  " + valueStyle.Render(value)
 			b.WriteString(line + "\n")
 
 			// Show description for selected field
@@ -515,10 +587,10 @@ func renderConfig(s *ConfigState, width int) string {
 	}
 
 	if s.Dirty {
-		b.WriteString("\n" + indent + Styles.WarningText.Render("● unsaved changes") + "\n")
+		b.WriteString("\n" + Styles.Footer.Render(indent+"tab/shift+tab sections  ↑↓ navigate  enter edit  esc save & close"))
+	} else {
+		b.WriteString("\n" + Styles.Footer.Render(indent+"tab/shift+tab sections  ↑↓ navigate  enter edit  esc close"))
 	}
-
-	b.WriteString("\n" + Styles.Footer.Render(indent+"tab next section  ↑↓ navigate  enter edit  esc close"))
 
 	return Styles.OverlayBorder.Width(overlayWidth).Render(
 		Styles.OverlayTitle.Render("Configuration") + "\n\n" + b.String(),
