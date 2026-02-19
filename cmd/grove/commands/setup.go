@@ -8,7 +8,7 @@ var setupCmd = &cobra.Command{
 	Use:    "setup",
 	Short:  "Initialize a new grove project (alias for 'grove init')",
 	Hidden: true,
-	Args:   cobra.NoArgs,
+	Args:   initArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runInit()
 	},

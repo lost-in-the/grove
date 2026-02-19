@@ -83,7 +83,8 @@ type Model struct {
 	configState *ConfigState
 
 	// Post-create selection
-	pendingSelect string
+	pendingSelect     string
+	pendingSelectPath string
 
 	// Output
 	switchTo string
@@ -188,15 +189,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.list.SetItems(listItems)
 		m.loading = false
 
-		// Select newly created worktree if pending
+		// Select newly created worktree if pending (highlight it in the list)
 		if m.pendingSelect != "" {
 			for i, li := range listItems {
 				if item, ok := li.(WorktreeItem); ok && item.ShortName == m.pendingSelect {
 					m.list.Select(i)
+					tuilog.Printf("pendingSelect: highlighted %q at index %d, path=%q", m.pendingSelect, i, item.Path)
 					break
 				}
 			}
 			m.pendingSelect = ""
+			m.pendingSelectPath = ""
 		}
 
 		m.updateDetailContent()
@@ -232,6 +235,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.activeView = ViewDashboard
 		m.createState = nil
 		m.pendingSelect = msg.name
+		m.pendingSelectPath = msg.path
 		m.statusMsg = fmt.Sprintf("Created %q", msg.name)
 		m.statusTTL = time.Now().Add(3 * time.Second)
 		if msg.hookErr != nil {
@@ -286,6 +290,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.activeView = ViewDashboard
 		m.issueState = nil
 		m.pendingSelect = msg.name
+		m.pendingSelectPath = msg.path
 		m.statusMsg = fmt.Sprintf("Created worktree from issue %q", msg.name)
 		m.statusTTL = time.Now().Add(3 * time.Second)
 		if msg.hookErr != nil {
@@ -312,6 +317,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.activeView = ViewDashboard
 		m.prState = nil
 		m.pendingSelect = msg.name
+		m.pendingSelectPath = msg.path
 		m.statusMsg = fmt.Sprintf("Created worktree from PR %q", msg.name)
 		m.statusTTL = time.Now().Add(3 * time.Second)
 		if msg.hookErr != nil {
@@ -365,6 +371,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.activeView = ViewDashboard
 				m.forkState = nil
 				m.pendingSelect = msg.name
+				m.pendingSelectPath = msg.path
 				m.toast.Show(NewToast(fmt.Sprintf("Forked %q (warning: %s)", msg.name, msg.err), ToastWarning))
 				return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
 			}
@@ -377,6 +384,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.activeView = ViewDashboard
 		m.forkState = nil
 		m.pendingSelect = msg.name
+		m.pendingSelectPath = msg.path
 		m.toast.Show(NewToast(fmt.Sprintf("Forked %q", msg.name), ToastSuccess))
 		return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
 
@@ -682,6 +690,7 @@ func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Enter):
 		item, ok := m.selectedItem()
 		if ok {
+			tuilog.Printf("Enter: item=%q path=%q isCurrent=%v", item.ShortName, item.Path, item.IsCurrent)
 			if item.IsCurrent {
 				return m, tea.Quit
 			}
@@ -1711,11 +1720,18 @@ func runModel(model Model) (string, error) {
 	switchPath := m.SwitchTo()
 	if switchPath != "" {
 		if cdFile := os.Getenv("GROVE_CD_FILE"); cdFile != "" {
+			tuilog.Printf("runModel: writing switchTo=%q to GROVE_CD_FILE=%q", switchPath, cdFile)
 			if err := os.WriteFile(cdFile, []byte(switchPath), 0600); err != nil {
 				return "", fmt.Errorf("failed to write cd file: %w", err)
 			}
 		} else if os.Getenv("GROVE_SHELL") == "1" {
-			fmt.Printf("cd:%s\n", switchPath)
+			tuilog.Printf("runModel: printing cd directive for switchTo=%q", switchPath)
+			// Leading newline ensures cd: directive is on its own line,
+			// separated from any bubbletea alt-screen exit escape codes
+			// that may precede it on stdout.
+			fmt.Printf("\ncd:%s\n", switchPath)
+		} else {
+			tuilog.Printf("runModel: switchTo=%q but no GROVE_CD_FILE or GROVE_SHELL set — cannot switch", switchPath)
 		}
 	}
 

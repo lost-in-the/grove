@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/detect"
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
 	"github.com/LeahArmstrong/grove-cli/internal/grove"
@@ -19,6 +20,17 @@ var (
 	initFull        bool
 	initNoHooks     bool
 )
+
+func initArgs(_ *cobra.Command, args []string) error {
+	if len(args) > 0 {
+		shell := args[0]
+		if shell == "zsh" || shell == "bash" || shell == "fish" {
+			return fmt.Errorf("to set up shell integration, use: grove install %s\n\n  eval \"$(grove install %s)\"", shell, shell)
+		}
+		return fmt.Errorf("unknown argument %q\n\nUsage: grove init [flags]", shell)
+	}
+	return nil
+}
 
 var initCmd = &cobra.Command{
 	Use:   "init",
@@ -43,7 +55,7 @@ Example:
   grove init
   grove init --full
   grove init --no-hooks`,
-	Args: cobra.NoArgs,
+	Args: initArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runInit()
 	},
@@ -145,6 +157,10 @@ export GROVE_PROJECT="` + projectName + `"
 		hooksPath := filepath.Join(groveDir, "hooks.toml")
 		if _, err := os.Stat(hooksPath); os.IsNotExist(err) {
 			profile := detect.Detect(cwd)
+			cfg, _ := config.Load()
+			if cfg != nil && cfg.IsExternalDockerMode() && cfg.Plugins.Docker.External != nil {
+				filterProfileForExternalDocker(profile, cfg.Plugins.Docker.External)
+			}
 			if profile.Type != "unknown" {
 				hooksContent := generateHooksToml(profile)
 				if err := os.WriteFile(hooksPath, []byte(hooksContent), 0644); err != nil {
@@ -208,6 +224,57 @@ export GROVE_PROJECT="` + projectName + `"
 	fmt.Println("  grove to <name>    Switch to a worktree")
 
 	return nil
+}
+
+// filterProfileForExternalDocker removes entries from a profile that are already
+// handled by the external docker plugin, preventing conflicts in hooks.toml.
+func filterProfileForExternalDocker(profile *detect.ProjectProfile, ext *config.ExternalComposeConfig) {
+	// Build sets for quick lookup
+	symlinkSet := make(map[string]bool, len(ext.SymlinkDirs))
+	for _, s := range ext.SymlinkDirs {
+		symlinkSet[s] = true
+	}
+	copySet := make(map[string]bool, len(ext.CopyFiles))
+	for _, f := range ext.CopyFiles {
+		copySet[f] = true
+	}
+
+	// Filter symlinks
+	filtered := profile.Symlinks[:0]
+	for _, s := range profile.Symlinks {
+		if !symlinkSet[s] {
+			filtered = append(filtered, s)
+		}
+	}
+	profile.Symlinks = filtered
+
+	// Filter copy files
+	filteredCopy := profile.Copy[:0]
+	for _, f := range profile.Copy {
+		if !copySet[f] {
+			filteredCopy = append(filteredCopy, f)
+		}
+	}
+	profile.Copy = filteredCopy
+
+	// Filter commands that operate on symlinked dirs
+	filteredCmds := profile.Commands[:0]
+	for _, c := range profile.Commands {
+		skip := false
+		if symlinkSet["vendor/bundle"] && strings.Contains(c, "bundle install") {
+			skip = true
+		}
+		if symlinkSet["node_modules"] && strings.Contains(c, "npm install") {
+			skip = true
+		}
+		if symlinkSet[".venv"] && strings.Contains(c, "pip install") {
+			skip = true
+		}
+		if !skip {
+			filteredCmds = append(filteredCmds, c)
+		}
+	}
+	profile.Commands = filteredCmds
 }
 
 // generateHooksToml creates hooks.toml content from a detected profile

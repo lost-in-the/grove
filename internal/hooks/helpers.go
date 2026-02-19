@@ -112,16 +112,16 @@ func copyDir(src, dst string) error {
 }
 
 // runCommand executes a shell command with a timeout
-// Output is streamed to stdout/stderr in real-time
-func runCommand(command, workDir string, timeout time.Duration) error {
+// Output is streamed to the provided stdout/stderr writers in real-time
+func runCommand(command, workDir string, timeout time.Duration, stdout, stderr io.Writer) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	// Use shell to execute the command
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
 	cmd.Dir = workDir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	cmd.Stdin = nil
 
 	// Set up environment

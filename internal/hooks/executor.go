@@ -307,7 +307,11 @@ func (e *Executor) executeCommand(action *HookAction, ctx *ExecutionContext, var
 	timeout := time.Duration(action.Timeout) * time.Second
 	start := time.Now()
 
-	if err := runCommand(command, workDir, timeout); err != nil {
+	w := e.Output
+	if w == nil {
+		w = os.Stdout
+	}
+	if err := runCommand(command, workDir, timeout, w, w); err != nil {
 		return fmt.Errorf("command '%s': %w", command, err)
 	}
 
