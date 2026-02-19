@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
@@ -216,13 +215,12 @@ Examples:
 		}
 		_ = ctx.State.AddWorktree(name, wsState)
 
-		// Load config for hooks
-		cfg, _ := config.Load()
-
 		// Fire post-create hook
 		hookCtx := &hooks.Context{
-			Worktree: name,
-			Config:   cfg,
+			Worktree:     name,
+			Config:       ctx.Config,
+			WorktreePath: newTree.Path,
+			MainPath:     ctx.ProjectRoot,
 		}
 		if err := hooks.Fire(hooks.EventPostCreate, hookCtx); err != nil {
 			fmt.Printf("⚠ Post-create hook failed: %v\n", err)

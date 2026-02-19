@@ -165,6 +165,19 @@ Examples:
 			}
 		}
 
+		// Fire global registry post-create hook (for plugins like docker external)
+		globalHookCtx := &hooks.Context{
+			Worktree:     name,
+			Config:       ctx.Config,
+			WorktreePath: wt.Path,
+			MainPath:     ctx.ProjectRoot,
+		}
+		if err := hooks.Fire(hooks.EventPostCreate, globalHookCtx); err != nil {
+			if !newJSON {
+				fmt.Printf("⚠ Post-create plugin hook failed: %v\n", err)
+			}
+		}
+
 		// JSON output mode
 		if newJSON {
 			result := output.NewWorktreeResult{

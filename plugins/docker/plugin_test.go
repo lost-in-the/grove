@@ -44,6 +44,56 @@ func TestPlugin_Init(t *testing.T) {
 	}
 }
 
+func TestPlugin_InitLocalStrategy(t *testing.T) {
+	plugin := New()
+	cfg := &config.Config{
+		ProjectsDir: "/tmp/projects",
+	}
+
+	_ = plugin.Init(cfg)
+
+	if plugin.strategy == nil && plugin.enabled {
+		t.Error("Strategy should be set when plugin is enabled")
+	}
+
+	if plugin.enabled {
+		if _, ok := plugin.strategy.(*localStrategy); !ok {
+			t.Error("Default strategy should be localStrategy")
+		}
+	}
+}
+
+func TestPlugin_InitExternalStrategy(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	plugin := New()
+	cfg := &config.Config{
+		ProjectsDir: "/tmp/projects",
+		Plugins: config.PluginsConfig{
+			Docker: config.DockerPluginConfig{
+				Mode: "external",
+				External: &config.ExternalComposeConfig{
+					Path:     tmpDir,
+					EnvVar:   "ADMIN_DIR",
+					Services: []string{"admin"},
+				},
+			},
+		},
+	}
+
+	_ = plugin.Init(cfg)
+
+	if plugin.strategy == nil && plugin.enabled {
+		t.Error("Strategy should be set when plugin is enabled")
+	}
+
+	if plugin.enabled {
+		if _, ok := plugin.strategy.(*externalStrategy); !ok {
+			t.Errorf("External mode should use externalStrategy, got %T", plugin.strategy)
+		}
+	}
+}
+
 func TestPlugin_Enabled(t *testing.T) {
 	plugin := New()
 	plugin.enabled = true
@@ -79,12 +129,10 @@ func TestPlugin_RegisterHooks(t *testing.T) {
 	// because the plugin checks for docker-compose files first
 	_ = registry.Fire(hooks.EventPostSwitch, ctx)
 	_ = registry.Fire(hooks.EventPreSwitch, ctx)
+	_ = registry.Fire(hooks.EventPostCreate, ctx)
 }
 
-func TestPlugin_HasDockerCompose(t *testing.T) {
-	plugin := New()
-
-	// Create temp directory for testing
+func TestHasDockerCompose(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "grove-docker-test-*")
 	if err != nil {
 		t.Fatal(err)
@@ -96,31 +144,11 @@ func TestPlugin_HasDockerCompose(t *testing.T) {
 		filename string
 		want     bool
 	}{
-		{
-			name:     "docker-compose.yml exists",
-			filename: "docker-compose.yml",
-			want:     true,
-		},
-		{
-			name:     "docker-compose.yaml exists",
-			filename: "docker-compose.yaml",
-			want:     true,
-		},
-		{
-			name:     "compose.yml exists",
-			filename: "compose.yml",
-			want:     true,
-		},
-		{
-			name:     "compose.yaml exists",
-			filename: "compose.yaml",
-			want:     true,
-		},
-		{
-			name:     "no compose file",
-			filename: "",
-			want:     false,
-		},
+		{name: "docker-compose.yml exists", filename: "docker-compose.yml", want: true},
+		{name: "docker-compose.yaml exists", filename: "docker-compose.yaml", want: true},
+		{name: "compose.yml exists", filename: "compose.yml", want: true},
+		{name: "compose.yaml exists", filename: "compose.yaml", want: true},
+		{name: "no compose file", filename: "", want: false},
 	}
 
 	for _, tt := range tests {
@@ -137,7 +165,7 @@ func TestPlugin_HasDockerCompose(t *testing.T) {
 				}
 			}
 
-			got := plugin.hasDockerCompose(testDir)
+			got := hasDockerCompose(testDir)
 			if got != tt.want {
 				t.Errorf("hasDockerCompose() = %v, want %v", got, tt.want)
 			}
@@ -145,7 +173,7 @@ func TestPlugin_HasDockerCompose(t *testing.T) {
 	}
 }
 
-func TestPlugin_GetWorktreePath(t *testing.T) {
+func TestLocalStrategy_GetWorktreePath(t *testing.T) {
 	tests := []struct {
 		name        string
 		config      *config.Config
@@ -153,26 +181,20 @@ func TestPlugin_GetWorktreePath(t *testing.T) {
 		wantContain string
 	}{
 		{
-			name: "absolute path",
-			config: &config.Config{
-				ProjectsDir: "/tmp/projects",
-			},
+			name:        "absolute path",
+			config:      &config.Config{ProjectsDir: "/tmp/projects"},
 			worktree:    "/absolute/path/to/worktree",
 			wantContain: "/absolute/path/to/worktree",
 		},
 		{
-			name: "relative with projects dir",
-			config: &config.Config{
-				ProjectsDir: "/tmp/projects",
-			},
+			name:        "relative with projects dir",
+			config:      &config.Config{ProjectsDir: "/tmp/projects"},
 			worktree:    "my-worktree",
 			wantContain: "my-worktree",
 		},
 		{
-			name: "empty worktree",
-			config: &config.Config{
-				ProjectsDir: "/tmp/projects",
-			},
+			name:        "empty worktree",
+			config:      &config.Config{ProjectsDir: "/tmp/projects"},
 			worktree:    "",
 			wantContain: "",
 		},
@@ -180,10 +202,8 @@ func TestPlugin_GetWorktreePath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plugin := New()
-			plugin.cfg = tt.config
-
-			got := plugin.getWorktreePath(tt.worktree)
+			s := newLocalStrategy(tt.config)
+			got := s.getWorktreePath(tt.worktree)
 			if tt.wantContain != "" && got == "" {
 				t.Errorf("getWorktreePath() returned empty string")
 			}
@@ -194,57 +214,53 @@ func TestPlugin_GetWorktreePath(t *testing.T) {
 	}
 }
 
-func TestPlugin_GetAutoStart(t *testing.T) {
-	plugin := New()
-	// Should default to true
-	if !plugin.getAutoStart() {
+func TestLocalStrategy_GetAutoStart(t *testing.T) {
+	s := newLocalStrategy(nil)
+	if !s.getAutoStart() {
 		t.Error("getAutoStart() should default to true")
 	}
 }
 
-func TestPlugin_GetAutoStop(t *testing.T) {
-	plugin := New()
-	// Should default to false
-	if plugin.getAutoStop() {
-		t.Error("getAutoStop() should default to false")
+func TestLocalStrategy_GetAutoStop(t *testing.T) {
+	s := newLocalStrategy(nil)
+	if s.getAutoStop() {
+		t.Error("getAutoStop() should default to false for local mode")
 	}
 }
 
-func TestPlugin_ComposeCommand(t *testing.T) {
-	plugin := New()
-
-	tests := []struct {
-		name         string
-		worktreePath string
-		args         []string
-	}{
-		{
-			name:         "up command",
-			worktreePath: "/tmp/test",
-			args:         []string{"up", "-d"},
+func TestExternalStrategy_GetAutoStop(t *testing.T) {
+	s := newExternalStrategy(&config.Config{
+		Plugins: config.PluginsConfig{
+			Docker: config.DockerPluginConfig{
+				Mode: "external",
+				External: &config.ExternalComposeConfig{
+					Path:     "/tmp/shared-compose",
+					EnvVar:   "ADMIN_DIR",
+					Services: []string{"admin"},
+				},
+			},
 		},
-		{
-			name:         "down command",
-			worktreePath: "/tmp/test",
-			args:         []string{"down"},
-		},
-		{
-			name:         "logs command",
-			worktreePath: "/tmp/test",
-			args:         []string{"logs", "-f", "web"},
-		},
+	})
+	if !s.getAutoStop() {
+		t.Error("getAutoStop() should default to true for external mode")
 	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cmd := plugin.composeCommand(tt.worktreePath, tt.args...)
-			if cmd == nil {
-				t.Fatal("composeCommand() returned nil")
-			}
-			if cmd.Dir != tt.worktreePath {
-				t.Errorf("Command Dir = %s, want %s", cmd.Dir, tt.worktreePath)
-			}
-		})
+func TestExternalStrategy_GetAutoStart(t *testing.T) {
+	s := newExternalStrategy(&config.Config{
+		Plugins: config.PluginsConfig{
+			Docker: config.DockerPluginConfig{
+				Mode: "external",
+				External: &config.ExternalComposeConfig{
+					Path:     "/tmp/shared-compose",
+					EnvVar:   "ADMIN_DIR",
+					Services: []string{"admin"},
+				},
+			},
+		},
+	})
+	if !s.getAutoStart() {
+		t.Error("getAutoStart() should default to true for external mode")
 	}
 }
 
@@ -289,7 +305,6 @@ func TestPlugin_OnPreSwitch(t *testing.T) {
 func TestPlugin_Up(t *testing.T) {
 	plugin := New()
 
-	// Create temp directory for testing
 	tmpDir, err := os.MkdirTemp("", "grove-docker-up-test-*")
 	if err != nil {
 		t.Fatal(err)
@@ -311,7 +326,7 @@ func TestPlugin_Up(t *testing.T) {
 		{
 			name:       "with compose file",
 			createFile: true,
-			wantErr:    false, // Will fail to run docker but won't error on validation
+			wantErr:    false,
 		},
 	}
 
@@ -329,6 +344,9 @@ func TestPlugin_Up(t *testing.T) {
 				}
 			}
 
+			cfg := &config.Config{ProjectsDir: "/tmp/projects"}
+			_ = plugin.Init(cfg)
+
 			err := plugin.Up(testDir, true)
 			if tt.wantErr {
 				if err == nil {
@@ -337,7 +355,6 @@ func TestPlugin_Up(t *testing.T) {
 					t.Errorf("Up() error = %v, want error containing %s", err, tt.errContains)
 				}
 			}
-			// Note: We don't check for success case as it would require docker to be installed
 		})
 	}
 }
@@ -345,7 +362,6 @@ func TestPlugin_Up(t *testing.T) {
 func TestPlugin_Down(t *testing.T) {
 	plugin := New()
 
-	// Create temp directory for testing
 	tmpDir, err := os.MkdirTemp("", "grove-docker-down-test-*")
 	if err != nil {
 		t.Fatal(err)
@@ -367,7 +383,7 @@ func TestPlugin_Down(t *testing.T) {
 		{
 			name:       "with compose file",
 			createFile: true,
-			wantErr:    false, // Will fail to run docker but won't error on validation
+			wantErr:    false,
 		},
 	}
 
@@ -385,6 +401,9 @@ func TestPlugin_Down(t *testing.T) {
 				}
 			}
 
+			cfg := &config.Config{ProjectsDir: "/tmp/projects"}
+			_ = plugin.Init(cfg)
+
 			err := plugin.Down(testDir)
 			if tt.wantErr {
 				if err == nil {
@@ -393,7 +412,316 @@ func TestPlugin_Down(t *testing.T) {
 					t.Errorf("Down() error = %v, want error containing %s", err, tt.errContains)
 				}
 			}
-			// Note: We don't check for success case as it would require docker to be installed
 		})
+	}
+}
+
+func TestComposeCommand(t *testing.T) {
+	tests := []struct {
+		name         string
+		worktreePath string
+		env          []string
+		args         []string
+	}{
+		{
+			name:         "up command",
+			worktreePath: "/tmp/test",
+			args:         []string{"up", "-d"},
+		},
+		{
+			name:         "down command",
+			worktreePath: "/tmp/test",
+			args:         []string{"down"},
+		},
+		{
+			name:         "logs command",
+			worktreePath: "/tmp/test",
+			args:         []string{"logs", "-f", "web"},
+		},
+		{
+			name:         "with env vars",
+			worktreePath: "/tmp/test",
+			env:          []string{"ADMIN_DIR=./admin-feature"},
+			args:         []string{"up", "-d", "admin"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := composeCommand(tt.worktreePath, tt.env, tt.args...)
+			if cmd == nil {
+				t.Fatal("composeCommand() returned nil")
+			}
+			if cmd.Dir != tt.worktreePath {
+				t.Errorf("Command Dir = %s, want %s", cmd.Dir, tt.worktreePath)
+			}
+			if len(tt.env) > 0 && len(cmd.Env) == 0 {
+				t.Error("Expected env vars to be set")
+			}
+		})
+	}
+}
+
+func TestExternalStrategy_RelativeWorktreePath(t *testing.T) {
+	s := newExternalStrategy(&config.Config{
+		Plugins: config.PluginsConfig{
+			Docker: config.DockerPluginConfig{
+				Mode: "external",
+				External: &config.ExternalComposeConfig{
+					Path:     "/home/dev/shared-compose",
+					EnvVar:   "ADMIN_DIR",
+					Services: []string{"admin"},
+				},
+			},
+		},
+	})
+
+	tests := []struct {
+		name    string
+		absPath string
+		want    string
+	}{
+		{
+			name:    "sibling directory",
+			absPath: "/home/dev/shared-compose/admin-feature-x",
+			want:    "./admin-feature-x",
+		},
+		{
+			name:    "subdirectory",
+			absPath: "/home/dev/shared-compose/admin",
+			want:    "./admin",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := s.relativeWorktreePath(tt.absPath)
+			if got != tt.want {
+				t.Errorf("relativeWorktreePath(%q) = %q, want %q", tt.absPath, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExternalStrategy_EnvForWorktree(t *testing.T) {
+	s := newExternalStrategy(&config.Config{
+		Plugins: config.PluginsConfig{
+			Docker: config.DockerPluginConfig{
+				Mode: "external",
+				External: &config.ExternalComposeConfig{
+					Path:     "/home/dev/shared-compose",
+					EnvVar:   "ADMIN_DIR",
+					Services: []string{"admin"},
+				},
+			},
+		},
+	})
+
+	env := s.envForWorktree("/home/dev/shared-compose/admin-feature-x")
+	if len(env) != 1 {
+		t.Fatalf("Expected 1 env var, got %d", len(env))
+	}
+	if env[0] != "ADMIN_DIR=./admin-feature-x" {
+		t.Errorf("Expected ADMIN_DIR=./admin-feature-x, got %s", env[0])
+	}
+}
+
+func TestCopyFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create source file
+	srcDir := filepath.Join(tmpDir, "src")
+	os.MkdirAll(srcDir, 0755)
+	srcFile := filepath.Join(srcDir, "test.key")
+	os.WriteFile(srcFile, []byte("secret-key"), 0600)
+
+	// Copy to destination (with nested directory)
+	dstFile := filepath.Join(tmpDir, "dst", "config", "test.key")
+	err := copyFile(srcFile, dstFile)
+	if err != nil {
+		t.Fatalf("copyFile() error = %v", err)
+	}
+
+	// Verify content
+	data, err := os.ReadFile(dstFile)
+	if err != nil {
+		t.Fatalf("Failed to read copied file: %v", err)
+	}
+	if string(data) != "secret-key" {
+		t.Errorf("Expected 'secret-key', got %q", string(data))
+	}
+}
+
+func TestCopyFile_SourceNotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := copyFile(filepath.Join(tmpDir, "nonexistent"), filepath.Join(tmpDir, "dst"))
+	if err == nil {
+		t.Error("Expected error for nonexistent source")
+	}
+}
+
+func TestCreateSymlink(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create source directory
+	srcDir := filepath.Join(tmpDir, "src", "vendor", "bundle")
+	os.MkdirAll(srcDir, 0755)
+	os.WriteFile(filepath.Join(srcDir, "marker"), []byte("here"), 0644)
+
+	// Create symlink
+	dstLink := filepath.Join(tmpDir, "dst", "vendor", "bundle")
+	err := createSymlink(srcDir, dstLink)
+	if err != nil {
+		t.Fatalf("createSymlink() error = %v", err)
+	}
+
+	// Verify it's a symlink
+	info, err := os.Lstat(dstLink)
+	if err != nil {
+		t.Fatalf("Failed to stat symlink: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Error("Expected symlink, got regular file/dir")
+	}
+
+	// Verify content is accessible through symlink
+	data, err := os.ReadFile(filepath.Join(dstLink, "marker"))
+	if err != nil {
+		t.Fatalf("Failed to read through symlink: %v", err)
+	}
+	if string(data) != "here" {
+		t.Errorf("Expected 'here', got %q", string(data))
+	}
+}
+
+func TestCreateSymlink_ReplaceExisting(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	srcDir := filepath.Join(tmpDir, "src")
+	os.MkdirAll(srcDir, 0755)
+
+	dstLink := filepath.Join(tmpDir, "link")
+
+	// Create initial symlink
+	os.Symlink(srcDir, dstLink)
+
+	// Replace with new symlink
+	newSrc := filepath.Join(tmpDir, "newsrc")
+	os.MkdirAll(newSrc, 0755)
+
+	err := createSymlink(newSrc, dstLink)
+	if err != nil {
+		t.Fatalf("createSymlink() replace error = %v", err)
+	}
+
+	// Verify it points to new target
+	target, err := os.Readlink(dstLink)
+	if err != nil {
+		t.Fatalf("Failed to readlink: %v", err)
+	}
+	if target != newSrc {
+		t.Errorf("Expected symlink to %q, got %q", newSrc, target)
+	}
+}
+
+func TestExternalStrategy_SetupWorktree(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create main worktree with files to copy/symlink
+	mainPath := filepath.Join(tmpDir, "admin")
+	os.MkdirAll(filepath.Join(mainPath, "config", "credentials"), 0755)
+	os.WriteFile(filepath.Join(mainPath, "config", "credentials", "development.key"), []byte("dev-key"), 0600)
+
+	os.MkdirAll(filepath.Join(mainPath, "vendor", "bundle"), 0755)
+	os.WriteFile(filepath.Join(mainPath, "vendor", "bundle", "marker"), []byte("gems"), 0644)
+
+	// Create new worktree directory
+	newPath := filepath.Join(tmpDir, "admin-feature-x")
+	os.MkdirAll(newPath, 0755)
+
+	s := newExternalStrategy(&config.Config{
+		Plugins: config.PluginsConfig{
+			Docker: config.DockerPluginConfig{
+				Mode: "external",
+				External: &config.ExternalComposeConfig{
+					Path:        tmpDir,
+					EnvVar:      "ADMIN_DIR",
+					Services:    []string{"admin"},
+					CopyFiles:   []string{"config/credentials/development.key"},
+					SymlinkDirs: []string{"vendor/bundle"},
+				},
+			},
+		},
+	})
+
+	err := s.setupWorktree(newPath, mainPath)
+	if err != nil {
+		t.Fatalf("setupWorktree() error = %v", err)
+	}
+
+	// Verify copied file
+	data, err := os.ReadFile(filepath.Join(newPath, "config", "credentials", "development.key"))
+	if err != nil {
+		t.Fatalf("Failed to read copied file: %v", err)
+	}
+	if string(data) != "dev-key" {
+		t.Errorf("Expected 'dev-key', got %q", string(data))
+	}
+
+	// Verify symlink
+	info, err := os.Lstat(filepath.Join(newPath, "vendor", "bundle"))
+	if err != nil {
+		t.Fatalf("Failed to stat symlink: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Error("Expected vendor/bundle to be a symlink")
+	}
+}
+
+func TestPlugin_OnPostCreate_External(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	mainPath := filepath.Join(tmpDir, "admin")
+	os.MkdirAll(filepath.Join(mainPath, "config"), 0755)
+	os.WriteFile(filepath.Join(mainPath, "config", "master.key"), []byte("key"), 0600)
+
+	newPath := filepath.Join(tmpDir, "admin-feature")
+	os.MkdirAll(newPath, 0755)
+
+	plugin := New()
+	cfg := &config.Config{
+		Plugins: config.PluginsConfig{
+			Docker: config.DockerPluginConfig{
+				Mode: "external",
+				External: &config.ExternalComposeConfig{
+					Path:      tmpDir,
+					EnvVar:    "ADMIN_DIR",
+					Services:  []string{"admin"},
+					CopyFiles: []string{"config/master.key"},
+				},
+			},
+		},
+	}
+	_ = plugin.Init(cfg)
+
+	ctx := &hooks.Context{
+		Worktree:     "feature",
+		Config:       cfg,
+		WorktreePath: newPath,
+		MainPath:     mainPath,
+	}
+
+	err := plugin.onPostCreate(ctx)
+	if err != nil {
+		t.Fatalf("onPostCreate() error = %v", err)
+	}
+
+	// Verify file was copied
+	data, err := os.ReadFile(filepath.Join(newPath, "config", "master.key"))
+	if err != nil {
+		t.Fatalf("Failed to read copied file: %v", err)
+	}
+	if string(data) != "key" {
+		t.Errorf("Expected 'key', got %q", string(data))
 	}
 }

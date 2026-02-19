@@ -59,9 +59,21 @@ type PluginsConfig struct {
 
 // DockerPluginConfig controls docker plugin behavior
 type DockerPluginConfig struct {
-	Enabled   *bool `toml:"enabled"`
-	AutoStart *bool `toml:"auto_start"`
-	AutoStop  *bool `toml:"auto_stop"`
+	Enabled   *bool  `toml:"enabled"`
+	AutoStart *bool  `toml:"auto_start"`
+	AutoStop  *bool  `toml:"auto_stop"`
+	Mode      string `toml:"mode"` // "" or "local" = local compose, "external" = external compose
+	External  *ExternalComposeConfig `toml:"external"`
+}
+
+// ExternalComposeConfig configures external Docker Compose mode where services
+// are defined in a shared compose setup outside the project directory.
+type ExternalComposeConfig struct {
+	Path        string   `toml:"path"`         // Path to external compose directory
+	EnvVar      string   `toml:"env_var"`      // Environment variable name (e.g., "ADMIN_DIR")
+	Services    []string `toml:"services"`     // Service names to manage
+	CopyFiles   []string `toml:"copy_files"`   // Files to copy from main on worktree create
+	SymlinkDirs []string `toml:"symlink_dirs"` // Directories to symlink from main on create
 }
 
 // GetConfigPaths returns the paths to check for config files
@@ -178,6 +190,12 @@ func mergeConfigs(base, override *Config) *Config {
 	}
 	if override.Plugins.Docker.AutoStop != nil {
 		result.Plugins.Docker.AutoStop = override.Plugins.Docker.AutoStop
+	}
+	if override.Plugins.Docker.Mode != "" {
+		result.Plugins.Docker.Mode = override.Plugins.Docker.Mode
+	}
+	if override.Plugins.Docker.External != nil {
+		result.Plugins.Docker.External = override.Plugins.Docker.External
 	}
 
 	// Merge TUI config
@@ -329,6 +347,11 @@ func setValueInLines(lines []string, section, field, value string) []string {
 	inserted = append(inserted, formattedLine)
 	inserted = append(inserted, lines[sectionStart+1:]...)
 	return inserted
+}
+
+// IsExternalDockerMode returns true if the docker plugin is configured for external compose mode.
+func (c *Config) IsExternalDockerMode() bool {
+	return c.Plugins.Docker.Mode == "external"
 }
 
 // IsImmutable checks if a worktree is in the immutable list

@@ -38,8 +38,7 @@ Examples:
 
 		// Create docker plugin
 		plugin := docker.New()
-		cfg, _ := loadConfig()
-		if err := plugin.Init(cfg); err != nil {
+		if err := plugin.Init(ctx.Config); err != nil {
 			return fmt.Errorf("failed to initialize docker plugin: %w", err)
 		}
 

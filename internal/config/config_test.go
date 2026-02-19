@@ -554,3 +554,243 @@ func TestValidate(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadExternalDockerConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	composePath := filepath.Join(tmpDir, "shared-compose")
+	if err := os.MkdirAll(composePath, 0755); err != nil {
+		t.Fatalf("Failed to create compose dir: %v", err)
+	}
+
+	configData := `
+[plugins.docker]
+enabled = true
+mode = "external"
+
+[plugins.docker.external]
+path = "` + composePath + `"
+env_var = "ADMIN_DIR"
+services = ["admin", "admin_sidekiq"]
+copy_files = ["config/credentials/development.key"]
+symlink_dirs = ["vendor/bundle"]
+`
+	configPath := filepath.Join(tmpDir, "config.toml")
+	if err := os.WriteFile(configPath, []byte(configData), 0644); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
+
+	cfg, err := LoadConfigFromPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfigFromPath() error = %v", err)
+	}
+
+	if cfg.Plugins.Docker.Mode != "external" {
+		t.Errorf("Expected mode 'external', got %q", cfg.Plugins.Docker.Mode)
+	}
+	if cfg.Plugins.Docker.External == nil {
+		t.Fatal("Expected External config to be non-nil")
+	}
+	ext := cfg.Plugins.Docker.External
+	if ext.Path != composePath {
+		t.Errorf("Expected path %q, got %q", composePath, ext.Path)
+	}
+	if ext.EnvVar != "ADMIN_DIR" {
+		t.Errorf("Expected env_var 'ADMIN_DIR', got %q", ext.EnvVar)
+	}
+	if len(ext.Services) != 2 {
+		t.Errorf("Expected 2 services, got %d", len(ext.Services))
+	}
+	if len(ext.CopyFiles) != 1 {
+		t.Errorf("Expected 1 copy_files entry, got %d", len(ext.CopyFiles))
+	}
+	if len(ext.SymlinkDirs) != 1 {
+		t.Errorf("Expected 1 symlink_dirs entry, got %d", len(ext.SymlinkDirs))
+	}
+}
+
+func TestMergeConfigsExternalDocker(t *testing.T) {
+	boolTrue := true
+
+	base := &Config{
+		Alias:         "w",
+		DefaultBranch: "main",
+		Switch:        SwitchConfig{DirtyHandling: "prompt"},
+		Plugins: PluginsConfig{
+			Docker: DockerPluginConfig{
+				Enabled:   &boolTrue,
+				AutoStart: &boolTrue,
+			},
+		},
+	}
+
+	override := &Config{
+		Plugins: PluginsConfig{
+			Docker: DockerPluginConfig{
+				Mode: "external",
+				External: &ExternalComposeConfig{
+					Path:     "/tmp/shared-compose",
+					EnvVar:   "ADMIN_DIR",
+					Services: []string{"admin"},
+				},
+			},
+		},
+	}
+
+	result := mergeConfigs(base, override)
+
+	if result.Plugins.Docker.Mode != "external" {
+		t.Errorf("Expected mode 'external', got %q", result.Plugins.Docker.Mode)
+	}
+	if result.Plugins.Docker.External == nil {
+		t.Fatal("Expected External config to be preserved from override")
+	}
+	if result.Plugins.Docker.External.EnvVar != "ADMIN_DIR" {
+		t.Errorf("Expected env_var 'ADMIN_DIR', got %q", result.Plugins.Docker.External.EnvVar)
+	}
+	// Base values should be preserved
+	if result.Plugins.Docker.Enabled == nil || !*result.Plugins.Docker.Enabled {
+		t.Error("Expected Enabled to remain true from base")
+	}
+	if result.Plugins.Docker.AutoStart == nil || !*result.Plugins.Docker.AutoStart {
+		t.Error("Expected AutoStart to remain true from base")
+	}
+}
+
+func TestValidateDockerPlugin(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	validBase := func() *Config {
+		return &Config{
+			Alias:         "w",
+			DefaultBranch: "main",
+			Switch:        SwitchConfig{DirtyHandling: "prompt"},
+		}
+	}
+
+	tests := []struct {
+		name    string
+		modify  func(*Config)
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name:    "local mode (empty) is valid",
+			modify:  func(c *Config) {},
+			wantErr: false,
+		},
+		{
+			name:    "explicit local mode is valid",
+			modify:  func(c *Config) { c.Plugins.Docker.Mode = "local" },
+			wantErr: false,
+		},
+		{
+			name:    "invalid mode",
+			modify:  func(c *Config) { c.Plugins.Docker.Mode = "invalid" },
+			wantErr: true,
+			errMsg:  "plugins.docker.mode",
+		},
+		{
+			name: "external mode without external config",
+			modify: func(c *Config) {
+				c.Plugins.Docker.Mode = "external"
+			},
+			wantErr: true,
+			errMsg:  "plugins.docker.external is required",
+		},
+		{
+			name: "external mode without path",
+			modify: func(c *Config) {
+				c.Plugins.Docker.Mode = "external"
+				c.Plugins.Docker.External = &ExternalComposeConfig{
+					EnvVar:   "ADMIN_DIR",
+					Services: []string{"admin"},
+				}
+			},
+			wantErr: true,
+			errMsg:  "path is required",
+		},
+		{
+			name: "external mode without env_var",
+			modify: func(c *Config) {
+				c.Plugins.Docker.Mode = "external"
+				c.Plugins.Docker.External = &ExternalComposeConfig{
+					Path:     tmpDir,
+					Services: []string{"admin"},
+				}
+			},
+			wantErr: true,
+			errMsg:  "env_var is required",
+		},
+		{
+			name: "external mode without services",
+			modify: func(c *Config) {
+				c.Plugins.Docker.Mode = "external"
+				c.Plugins.Docker.External = &ExternalComposeConfig{
+					Path:   tmpDir,
+					EnvVar: "ADMIN_DIR",
+				}
+			},
+			wantErr: true,
+			errMsg:  "services is required",
+		},
+		{
+			name: "external mode with nonexistent path",
+			modify: func(c *Config) {
+				c.Plugins.Docker.Mode = "external"
+				c.Plugins.Docker.External = &ExternalComposeConfig{
+					Path:     "/nonexistent/path",
+					EnvVar:   "ADMIN_DIR",
+					Services: []string{"admin"},
+				}
+			},
+			wantErr: true,
+			errMsg:  "does not exist",
+		},
+		{
+			name: "valid external mode",
+			modify: func(c *Config) {
+				c.Plugins.Docker.Mode = "external"
+				c.Plugins.Docker.External = &ExternalComposeConfig{
+					Path:     tmpDir,
+					EnvVar:   "ADMIN_DIR",
+					Services: []string{"admin", "admin_sidekiq"},
+				}
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := validBase()
+			tt.modify(cfg)
+			err := Validate(cfg)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr && tt.errMsg != "" && err != nil {
+				if !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("Expected error containing %q, got %q", tt.errMsg, err.Error())
+				}
+			}
+		})
+	}
+}
+
+func TestIsExternalDockerMode(t *testing.T) {
+	cfg := &Config{}
+	if cfg.IsExternalDockerMode() {
+		t.Error("empty mode should not be external")
+	}
+
+	cfg.Plugins.Docker.Mode = "local"
+	if cfg.IsExternalDockerMode() {
+		t.Error("local mode should not be external")
+	}
+
+	cfg.Plugins.Docker.Mode = "external"
+	if !cfg.IsExternalDockerMode() {
+		t.Error("external mode should be external")
+	}
+}

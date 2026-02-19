@@ -12,10 +12,13 @@ type Hook func(ctx *Context) error
 
 // Context contains information passed to hooks
 type Context struct {
-	Worktree     string                 // Current worktree name
-	PrevWorktree string                 // Previous worktree name
-	Config       *config.Config         // Grove configuration
-	Data         map[string]interface{} // Additional data for plugins
+	Worktree         string                 // Current worktree name
+	PrevWorktree     string                 // Previous worktree name
+	Config           *config.Config         // Grove configuration
+	Data             map[string]interface{} // Additional data for plugins
+	WorktreePath     string                 // Absolute path to current/new worktree
+	PrevWorktreePath string                 // Absolute path to previous worktree
+	MainPath         string                 // Absolute path to main worktree (project root)
 }
 
 // Registry manages hook registration and execution
@@ -112,6 +115,11 @@ func ValidateEvent(event string) error {
 
 // Global registry instance (can be replaced with DI in future)
 var globalRegistry = NewRegistry()
+
+// GlobalRegistry returns the global hook registry for plugin registration.
+func GlobalRegistry() *Registry {
+	return globalRegistry
+}
 
 // Register adds a hook to the global registry
 func Register(event string, hook Hook) {

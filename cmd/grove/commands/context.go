@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
 	"github.com/LeahArmstrong/grove-cli/internal/grove"
+	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
+	"github.com/LeahArmstrong/grove-cli/plugins/docker"
 	"github.com/spf13/cobra"
 )
 
@@ -15,6 +18,7 @@ type GroveContext struct {
 	GroveDir    string          // Path to .grove directory
 	ProjectRoot string          // Path to project root (parent of .grove)
 	State       *state.Manager  // State manager instance
+	Config      *config.Config  // Loaded configuration
 }
 
 // RequireGroveContext wraps a command function to require grove project context.
@@ -41,14 +45,45 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 			return fmt.Errorf("failed to initialize state: %w", err)
 		}
 
+		// Load config
+		cfg, err := config.Load()
+		if err != nil {
+			// Fall back to defaults if config loading fails
+			cfg = config.LoadDefaults()
+		}
+
+		// Register plugins with the global hook registry
+		registerPlugins(cfg)
+
 		ctx := &GroveContext{
 			GroveDir:    groveDir,
 			ProjectRoot: grove.MustProjectRoot(groveDir),
 			State:       stateMgr,
+			Config:      cfg,
 		}
 
 		return fn(cmd, args, ctx)
 	}
+}
+
+var pluginsRegistered bool
+
+// registerPlugins initializes and registers plugin hooks with the global registry.
+func registerPlugins(cfg *config.Config) {
+	if pluginsRegistered {
+		return
+	}
+	pluginsRegistered = true
+
+	dockerPlugin := docker.New()
+	if err := dockerPlugin.Init(cfg); err != nil {
+		// Docker not available — silently skip
+		return
+	}
+	if !dockerPlugin.Enabled() {
+		return
+	}
+	dockerPlugin.RegisterHooks(hooks.GlobalRegistry())
 }
 
 // ExitWithCode exits the program with the given exit code.

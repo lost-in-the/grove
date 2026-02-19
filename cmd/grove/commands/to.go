@@ -51,16 +51,22 @@ When using shell integration, this will also change your current directory.`,
 		// Get current worktree for hook context and state update
 		currentTree, _ := mgr.GetCurrent()
 		var prevWorktree string
+		var prevWorktreePath string
 		if currentTree != nil {
 			prevWorktree = currentTree.DisplayName()
+			prevWorktreePath = currentTree.Path
 			// Update last_worktree in state before switching
 			_ = ctx.State.SetLastWorktree(prevWorktree)
 		}
 
 		// Fire pre-switch hooks
 		hookCtx := &hooks.Context{
-			Worktree:     name,
-			PrevWorktree: prevWorktree,
+			Worktree:         name,
+			PrevWorktree:     prevWorktree,
+			Config:           ctx.Config,
+			WorktreePath:     targetTree.Path,
+			PrevWorktreePath: prevWorktreePath,
+			MainPath:         ctx.ProjectRoot,
 		}
 		if err := hooks.Fire(hooks.EventPreSwitch, hookCtx); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: pre-switch hooks failed: %v\n", err)

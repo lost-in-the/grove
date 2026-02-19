@@ -1,6 +1,6 @@
 # Docker Plugin
 
-The Docker plugin provides automatic container lifecycle management for Grove worktrees.
+The Docker plugin provides automatic container lifecycle management for Grove worktrees. It supports two modes: **local** (each project has its own compose file) and **external** (services defined in a shared, central compose setup).
 
 ## Features
 
@@ -9,6 +9,7 @@ The Docker plugin provides automatic container lifecycle management for Grove wo
 - **Service-level control**: Manage individual services or all at once
 - **Log streaming**: Tail logs from running containers
 - **Modern Docker Compose**: Works with both `docker compose` and `docker-compose`
+- **External compose mode**: Manage projects whose Docker services live in a shared orchestrator directory
 
 ## Commands
 
@@ -58,44 +59,120 @@ grove restart web    # Restart 'web' service only
 w restart db         # Using alias
 ```
 
+## Modes
+
+### Local Mode (default)
+
+Each worktree has its own `docker-compose.yml`. Commands run in the worktree directory. This is the default behavior when no `mode` is specified.
+
+### External Mode
+
+For projects whose Docker services are defined in a shared, external compose setup (e.g., a central `shared-compose` directory that orchestrates multiple apps). In this mode:
+
+- Commands run in the **external compose directory**, not the worktree
+- An **environment variable** (e.g., `ADMIN_DIR`) points the compose config to the active worktree
+- Only the **configured services** are managed (shared infra like MySQL/Redis is untouched)
+- `grove down` uses `docker compose stop` (not `down`) to preserve the shared network
+- `grove new` **copies credentials** and **creates symlinks** from the main worktree
+- `auto_stop` defaults to **true** (prevents stale services pointing to the wrong worktree)
+
 ## Hook Integration
 
 The Docker plugin integrates with Grove's hook system to automatically manage containers:
 
 ### Post-Switch Hook (Auto-Start)
 
-When you switch to a worktree, the plugin automatically starts containers if:
-- A docker-compose file exists in the worktree
-- Auto-start is enabled in configuration (default: true)
+**Local mode**: Starts containers if a docker-compose file exists in the worktree and auto-start is enabled (default: true).
+
+**External mode**: Runs `docker compose up -d <services>` in the external compose directory with the env var pointing to the new worktree.
 
 ### Pre-Switch Hook (Auto-Stop)
 
-When you switch away from a worktree, the plugin can optionally stop containers if:
-- A docker-compose file exists in the worktree
-- Auto-stop is enabled in configuration (default: false)
+**Local mode**: Optionally stops containers (default: false).
+
+**External mode**: Runs `docker compose stop <services>` to stop the app services (default: true).
+
+### Post-Create Hook
+
+**Local mode**: No-op.
+
+**External mode**: Copies configured credential files and creates symlinks from the main worktree into the new worktree.
 
 ## Configuration
 
-The Docker plugin can be configured in your `~/.config/grove/config.toml`:
+### Local Mode
+
+Configure in `~/.config/grove/config.toml` or `.grove/config.toml`:
 
 ```toml
 [plugins.docker]
-# Enable/disable the plugin
 enabled = true
-
-# Auto-start containers when switching to a worktree
 auto_start = true
-
-# Auto-stop containers when switching away from a worktree
 auto_stop = false
 ```
 
+### External Mode
+
+Configure in your project's `.grove/config.toml`:
+
+```toml
+[plugins.docker]
+enabled = true
+auto_start = true
+auto_stop = true
+mode = "external"
+
+[plugins.docker.external]
+# Path to the shared compose directory
+path = "~/work/shared-compose"
+
+# Environment variable that the compose YAML reads to find this app
+env_var = "ADMIN_DIR"
+
+# Services to start/stop/restart (only these, not shared infra)
+services = [
+  "admin", "admin_sidekiq", "admin_esbuild", "admin_riot",
+  "admin_sass", "admin_tailwind", "kiln_tailwind",
+  "admin_stencil", "admin_stencil_ui_codegen",
+]
+
+# Files to copy from main worktree on grove new (credentials, config)
+copy_files = [
+  "config/credentials/development.key",
+  "config/credentials/test.key",
+  "config/master.key",
+  "config/settings.local.yml",
+  "config/sidekiq.yml",
+]
+
+# Directories to symlink from main worktree on grove new
+symlink_dirs = [
+  "vendor/bundle",
+  "node_modules",
+]
+```
+
+### External Mode Config Reference
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `path` | Yes | Absolute path to the external compose directory (supports `~`) |
+| `env_var` | Yes | Environment variable name the compose YAML reads |
+| `services` | Yes | List of service names to manage |
+| `copy_files` | No | Files to copy from main worktree on `grove new` |
+| `symlink_dirs` | No | Directories to symlink from main worktree on `grove new` |
+
 ### Defaults
 
-If not specified in your configuration file, these defaults are used:
+**Local mode:**
 - `enabled`: true (if docker is available)
 - `auto_start`: true
 - `auto_stop`: false
+
+**External mode:**
+- `enabled`: true (if docker is available)
+- `auto_start`: true
+- `auto_stop`: true
 
 ## Requirements
 
@@ -108,11 +185,20 @@ The plugin automatically detects which version is available and uses the appropr
 
 ## How It Works
 
+### Local Mode
+
 1. **Detection**: The plugin looks for docker-compose files in your worktree directory
 2. **Command Execution**: Runs docker-compose commands in the worktree directory
 3. **Hook Integration**: Registers hooks to run at appropriate lifecycle events
 
-## Supported Compose Files
+### External Mode
+
+1. **Configuration**: Reads `mode = "external"` and the `[plugins.docker.external]` table
+2. **Command Execution**: Runs docker-compose in the external compose directory with the env var set
+3. **Service Scoping**: Only manages the configured services, leaving shared infrastructure running
+4. **Worktree Setup**: On `grove new`, copies credentials and creates symlinks from the main worktree
+
+## Supported Compose Files (Local Mode)
 
 The plugin looks for these files (in order):
 - `docker-compose.yml`
@@ -120,9 +206,11 @@ The plugin looks for these files (in order):
 - `compose.yml`
 - `compose.yaml`
 
+In external mode, the compose file is expected to exist in the external compose directory.
+
 ## Examples
 
-### Basic Workflow
+### Local Mode: Basic Workflow
 
 ```bash
 # Create a new worktree with a docker-compose.yml
@@ -145,7 +233,30 @@ cd ~/projects/feature-api
 w down
 ```
 
-### Development Workflow
+### External Mode: Multi-App Development
+
+```bash
+# Create a new worktree — credentials are copied, symlinks created
+w new feature-x
+#   copied config/credentials/development.key
+#   copied config/master.key
+#   symlinked vendor/bundle
+#   symlinked node_modules
+
+# Switch to it — stops admin services, restarts with ADMIN_DIR=./admin-feature-x
+w to feature-x
+
+# Check admin logs from the external compose
+w logs admin
+
+# Switch back to main — stops services, restarts with ADMIN_DIR=./admin
+w to main
+
+# Manually stop admin services
+w down
+```
+
+### Local Mode: Development Workflow
 
 ```bash
 # Start working on a feature
@@ -179,9 +290,9 @@ The plugin is automatically disabled if neither `docker` nor `docker-compose` is
 
 ### "no docker-compose file found"
 
-The plugin requires a docker-compose file in the worktree directory.
+In local mode, the plugin requires a docker-compose file in the worktree directory.
 
-**Solution**: Add a `docker-compose.yml` file to your worktree.
+**Solution**: Add a `docker-compose.yml` file to your worktree, or configure external mode if services are defined elsewhere.
 
 ### Containers don't start automatically
 
@@ -212,6 +323,8 @@ When working with multiple worktrees that run containers, you may encounter port
 
 ## Planned Features
 
+- [ ] `grove test` command: Run tests from a worktree without switching the active dev stack
+- [ ] Multi-app external mode: Extend external compose support to additional apps (storefront, asset-upload)
 - [ ] Port conflict detection and automatic prevention
 - [ ] Environment variable generation via direnv integration
 - [ ] Status command to show running containers per worktree
