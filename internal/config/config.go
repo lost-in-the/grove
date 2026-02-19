@@ -49,6 +49,7 @@ type NamingConfig struct {
 
 // TmuxConfig controls tmux session behavior
 type TmuxConfig struct {
+	Mode   string `toml:"mode"`   // auto, manual, off
 	Prefix string `toml:"prefix"` // Prefix for tmux session names
 }
 
@@ -106,6 +107,28 @@ func Load() (*Config, error) {
 	if err != nil {
 		return cfg, err
 	}
+
+	return loadFromPaths(cfg, globalPath, projectPath)
+}
+
+// LoadFromGroveDir loads config using an explicit .grove directory path
+// instead of discovering it from cwd. This is needed when running from
+// a secondary worktree where .grove/ doesn't exist locally.
+func LoadFromGroveDir(groveDir string) (*Config, error) {
+	cfg := LoadDefaults()
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return cfg, err
+	}
+	globalPath := filepath.Join(homeDir, ".config", "grove", "config.toml")
+	projectPath := filepath.Join(groveDir, "config.toml")
+
+	return loadFromPaths(cfg, globalPath, projectPath)
+}
+
+// loadFromPaths is the shared config loading logic.
+func loadFromPaths(cfg *Config, globalPath, projectPath string) (*Config, error) {
 
 	// GROVE_CONFIG overrides the global config path
 	if envConfig := os.Getenv("GROVE_CONFIG"); envConfig != "" {
@@ -177,6 +200,9 @@ func mergeConfigs(base, override *Config) *Config {
 	}
 	if override.Naming.Pattern != "" {
 		result.Naming.Pattern = override.Naming.Pattern
+	}
+	if override.Tmux.Mode != "" {
+		result.Tmux.Mode = override.Tmux.Mode
 	}
 	if override.Tmux.Prefix != "" {
 		result.Tmux.Prefix = override.Tmux.Prefix

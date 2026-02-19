@@ -115,7 +115,7 @@ var lsCmd = &cobra.Command{
 
 				tmuxStatus := "none"
 				if tmuxAvailable && sessions != nil {
-					sessionName := worktree.TmuxSessionName(projectName, tree.ShortName)
+					sessionName := worktree.TmuxSessionName(projectName, tree.DisplayName())
 					if session, ok := sessions[sessionName]; ok {
 						if session.Attached {
 							tmuxStatus = "attached"
@@ -177,7 +177,7 @@ var lsCmd = &cobra.Command{
 			tmuxStatus := "none"
 			if tmuxAvailable && sessions != nil {
 				// Session name follows the {project}-{shortname} pattern
-				sessionName := worktree.TmuxSessionName(projectName, tree.ShortName)
+				sessionName := worktree.TmuxSessionName(projectName, tree.DisplayName())
 				if session, ok := sessions[sessionName]; ok {
 					if session.Attached {
 						tmuxStatus = "attached"

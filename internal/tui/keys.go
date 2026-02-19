@@ -34,6 +34,9 @@ type KeyMap struct {
 	Toggle  key.Binding
 	All     key.Binding
 
+	// Navigation
+	ShiftTab key.Binding
+
 	// Fork/Sync/Config
 	Fork   key.Binding
 	Sync   key.Binding
@@ -104,6 +107,10 @@ func DefaultKeyMap() KeyMap {
 		Tab: key.NewBinding(
 			key.WithKeys("tab"),
 			key.WithHelp("tab", "detail"),
+		),
+		ShiftTab: key.NewBinding(
+			key.WithKeys("shift+tab"),
+			key.WithHelp("shift+tab", "prev tab"),
 		),
 
 		Sort: key.NewBinding(

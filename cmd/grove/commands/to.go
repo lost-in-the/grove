@@ -81,10 +81,16 @@ When using shell integration, this will also change your current directory.`,
 		}
 
 		projectName := mgr.GetProjectName()
+		cfg := ctx.Config
+		tmuxMode := cfg.Tmux.Mode
+		if tmuxMode == "" {
+			tmuxMode = "auto"
+		}
 
-		// Handle tmux session
-		if tmux.IsTmuxAvailable() {
-			sessionName := worktree.TmuxSessionName(projectName, name)
+		// Handle tmux session (unless mode is "off")
+		var sessionName string
+		if tmuxMode != "off" && tmux.IsTmuxAvailable() {
+			sessionName = worktree.TmuxSessionName(projectName, targetTree.DisplayName())
 			exists, err := tmux.SessionExists(sessionName)
 			if err != nil {
 				return fmt.Errorf("failed to check session: %w", err)
@@ -100,13 +106,15 @@ When using shell integration, this will also change your current directory.`,
 			}
 
 			if tmux.IsInsideTmux() {
+				// Inside tmux: always switch-client regardless of mode
 				if err := tmux.SwitchSession(sessionName); err != nil {
 					return fmt.Errorf("failed to switch session: %w", err)
 				}
-			} else if !toJSON {
+			} else if tmuxMode == "manual" && !toJSON {
 				fmt.Printf("✓ Tmux session '%s' ready\n", sessionName)
 				fmt.Printf("Run: tmux attach -t %s\n", sessionName)
 			}
+			// auto mode outside tmux: handled below via shell directive or direct attach
 		}
 
 		// Update last_accessed_at for target worktree
@@ -128,9 +136,19 @@ When using shell integration, this will also change your current directory.`,
 		// Output directory change command for shell integration
 		hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
 
+		// Fire post-switch hooks before shell directives / tmux attach
+		// so docker services start before the user arrives in the new session
+		if err := hooks.Fire(hooks.EventPostSwitch, hookCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: post-switch hooks failed: %v\n", err)
+		}
+
 		if hasShellIntegration {
 			// Shell wrapper will parse this and execute cd
 			fmt.Printf("cd:%s\n", targetTree.Path)
+			// In auto mode outside tmux, emit tmux-attach directive for shell wrapper
+			if tmuxMode == "auto" && !tmux.IsInsideTmux() && sessionName != "" {
+				fmt.Printf("tmux-attach:%s\n", sessionName)
+			}
 		} else {
 			fmt.Fprintf(os.Stderr, "\nNote: Directory switching requires shell integration.\n")
 			fmt.Fprintf(os.Stderr, "Add this to your shell config (~/.zshrc or ~/.bashrc):\n\n")
@@ -138,11 +156,12 @@ When using shell integration, this will also change your current directory.`,
 			fmt.Fprintf(os.Stderr, "  eval \"$(grove install bash)\"  # for bash\n\n")
 			fmt.Fprintf(os.Stderr, "To change directory manually:\n")
 			fmt.Fprintf(os.Stderr, "  cd %s\n", targetTree.Path)
-		}
-
-		// Fire post-switch hooks
-		if err := hooks.Fire(hooks.EventPostSwitch, hookCtx); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: post-switch hooks failed: %v\n", err)
+			// In auto mode outside tmux without shell wrapper, attach directly
+			if tmuxMode == "auto" && !tmux.IsInsideTmux() && sessionName != "" {
+				if err := tmux.AttachSession(sessionName); err != nil {
+					return fmt.Errorf("failed to attach session: %w", err)
+				}
+			}
 		}
 
 		return nil

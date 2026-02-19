@@ -32,6 +32,16 @@ func Validate(cfg *Config) error {
 		return fmt.Errorf("dirty_handling must be one of: auto-stash, prompt, refuse")
 	}
 
+	// Validate tmux mode
+	validTmuxMode := map[string]bool{
+		"auto":   true,
+		"manual": true,
+		"off":    true,
+	}
+	if cfg.Tmux.Mode != "" && !validTmuxMode[cfg.Tmux.Mode] {
+		return fmt.Errorf("tmux.mode must be one of: auto, manual, off (got %q)", cfg.Tmux.Mode)
+	}
+
 	// Validate docker plugin mode
 	if err := validateDockerPlugin(cfg); err != nil {
 		return err

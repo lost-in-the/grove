@@ -119,6 +119,7 @@ Examples:
 		fmt.Printf("  pattern: %s\n", cfg.Naming.Pattern)
 
 		fmt.Printf("\n[tmux]:\n")
+		fmt.Printf("  mode: %s\n", cfg.Tmux.Mode)
 		fmt.Printf("  prefix: %s\n", cfg.Tmux.Prefix)
 
 		fmt.Printf("\n[plugins.docker]:\n")

@@ -8,4 +8,5 @@ dirty_handling = "prompt"  # auto-stash, prompt, refuse
 pattern = "{project}-{name}"
 
 [tmux]
+mode = "auto"
 prefix = ""  # Optional prefix for tmux session names

@@ -21,8 +21,9 @@ grove() {
     # Parse output line by line for directives
     local should_cd=0
     local cd_target=""
+    local tmux_session=""
     local other_lines=""
-    
+
     while IFS= read -r line; do
         if [[ "$line" == GROVE_CD:* ]]; then
             # Extract directory path from GROVE_CD: directive (V2)
@@ -32,6 +33,9 @@ grove() {
             # Extract directory path from cd: directive (legacy)
             cd_target="${line#cd:}"
             should_cd=1
+        elif [[ "$line" == tmux-attach:* ]]; then
+            # Extract tmux session name for auto-attach
+            tmux_session="${line#tmux-attach:}"
         else
             # Collect non-directive output
             if [[ -n "$other_lines" ]]; then
@@ -41,7 +45,7 @@ grove() {
             fi
         fi
     done <<< "$output"
-    
+
     # Execute directory change if directive was found
     if [[ $should_cd -eq 1 && -n "$cd_target" ]]; then
         cd "$cd_target" || return 1
@@ -51,7 +55,12 @@ grove() {
     if [[ -n "$other_lines" ]]; then
         echo "$other_lines"
     fi
-    
+
+    # Auto-attach to tmux session if directive was found
+    if [[ -n "$tmux_session" ]]; then
+        tmux attach -t "$tmux_session"
+    fi
+
     return $exit_code
 }
 
