@@ -56,6 +56,7 @@ clean: ## Clean build artifacts
 
 install: build ## Install the binary to $GOPATH/bin
 	@echo "Installing $(BINARY_NAME) to $$(go env GOPATH)/bin..."
+	@mkdir -p "$$(go env GOPATH)/bin"
 	@cp $(BUILD_DIR)/$(BINARY_NAME) "$$(go env GOPATH)/bin/$(BINARY_NAME)"
 	@echo "$(BINARY_NAME) installed to $$(go env GOPATH)/bin/$(BINARY_NAME)"
 
