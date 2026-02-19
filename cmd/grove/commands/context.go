@@ -45,8 +45,9 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 			return fmt.Errorf("failed to initialize state: %w", err)
 		}
 
-		// Load config
-		cfg, err := config.Load()
+		// Load config from the resolved .grove directory (not cwd)
+		// so that secondary worktrees use the main worktree's config
+		cfg, err := config.LoadFromGroveDir(groveDir)
 		if err != nil {
 			// Fall back to defaults if config loading fails
 			cfg = config.LoadDefaults()
