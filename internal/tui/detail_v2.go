@@ -210,4 +210,3 @@ func injectBorderTitle(rendered, title string) string {
 
 	return strings.Join(lines, "\n")
 }
-

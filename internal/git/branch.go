@@ -187,7 +187,7 @@ func (b *BranchManager) countUnpushedCommits(branch string) (int, error) {
 	}
 
 	count := 0
-	fmt.Sscanf(strings.TrimSpace(string(output)), "%d", &count)
+	_, _ = fmt.Sscanf(strings.TrimSpace(string(output)), "%d", &count)
 	return count, nil
 }
 

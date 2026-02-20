@@ -51,12 +51,12 @@ type CreateState struct {
 	Creating bool
 
 	// Huh form integration
-	NameForm       *huh.Form // Huh form for name input step
-	BranchForm     *huh.Form // Huh form for branch strategy selection
-	BranchPickForm *huh.Form // Huh form for branch picker
-	BranchChoiceStr string   // value bound to Huh branch strategy select
-	SelectedBranch  string   // value bound to Huh branch picker select
-	UseHuhForms    bool      // whether to use Huh forms (can be toggled)
+	NameForm        *huh.Form // Huh form for name input step
+	BranchForm      *huh.Form // Huh form for branch strategy selection
+	BranchPickForm  *huh.Form // Huh form for branch picker
+	BranchChoiceStr string    // value bound to Huh branch strategy select
+	SelectedBranch  string    // value bound to Huh branch picker select
+	UseHuhForms     bool      // whether to use Huh forms (can be toggled)
 }
 
 func renderCreate(s *CreateState, width int, spinnerView string) string {
@@ -83,12 +83,12 @@ func renderCreateConfirm(s *CreateState) string {
 
 	fmt.Fprintf(&b, "Step 3 of 3: Confirm\n\n")
 
-	b.WriteString(fmt.Sprintf("  Name:     %s\n", s.Name))
+	fmt.Fprintf(&b, "  Name:     %s\n", s.Name)
 	if s.ProjectName != "" {
-		b.WriteString(fmt.Sprintf("  Full:     %s-%s\n", s.ProjectName, s.Name))
+		fmt.Fprintf(&b, "  Full:     %s-%s\n", s.ProjectName, s.Name)
 	}
 	if s.BaseBranch != "" {
-		b.WriteString(fmt.Sprintf("  Branch:   from %s\n", s.BaseBranch))
+		fmt.Fprintf(&b, "  Branch:   from %s\n", s.BaseBranch)
 	} else {
 		b.WriteString("  Branch:   new branch\n")
 	}

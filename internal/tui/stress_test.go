@@ -446,9 +446,9 @@ func TestStressSortCycling(t *testing.T) {
 
 func TestStressResizeDuringOverlay(t *testing.T) {
 	tests := []struct {
-		name     string
-		setupFn  func(m Model) Model
-		view     ActiveView
+		name    string
+		setupFn func(m Model) Model
+		view    ActiveView
 	}{
 		{
 			"resize during help overlay",

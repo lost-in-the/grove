@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 	"github.com/LeahArmstrong/grove-cli/internal/output"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
-	"github.com/spf13/cobra"
 )
 
 var toJSON bool
@@ -76,7 +77,7 @@ When using shell integration, this will also change your current directory.`,
 		if tmux.IsInsideTmux() {
 			currentSession, err := tmux.GetCurrentSession()
 			if err == nil {
-				tmux.StoreLastSession(currentSession)
+				_ = tmux.StoreLastSession(currentSession)
 			}
 		}
 

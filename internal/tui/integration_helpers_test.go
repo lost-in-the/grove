@@ -72,7 +72,7 @@ func setupRailsFixture(t *testing.T) string {
 		"Gemfile":    "source 'https://rubygems.org'\ngem 'rails', '~> 8.0'\n",
 		"Gemfile.lock": "GEM\n  remote: https://rubygems.org/\n  specs:\n    rails (8.0.0)\n\n" +
 			"PLATFORMS\n  ruby\n\nDEPENDENCIES\n  rails (~> 8.0)\n",
-		"README.md": "# Rails App\nTest fixture for grove integration tests.\n",
+		"README.md":          "# Rails App\nTest fixture for grove integration tests.\n",
 		"app/models/user.rb": "class User < ApplicationRecord\n  validates :email, presence: true\nend\n",
 		"app/controllers/application_controller.rb": "class ApplicationController < ActionController::Base\nend\n",
 		"config/database.yml":                       "default: &default\n  adapter: postgresql\n  pool: 5\n\ndevelopment:\n  <<: *default\n  database: app_development\n",
@@ -80,11 +80,11 @@ func setupRailsFixture(t *testing.T) string {
 		"config/environments/production.rb":         "Rails.application.configure do\n  config.eager_load = true\nend\n",
 		"config/credentials.yml.enc":                "encrypted-content-placeholder",
 		"db/migrate/001_create_users.rb":            "class CreateUsers < ActiveRecord::Migration[8.0]\n  def change\n    create_table :users do |t|\n      t.string :email\n      t.timestamps\n    end\n  end\nend\n",
-		".env.example":       "DATABASE_URL=postgres://localhost/app_development\nSECRET_KEY_BASE=changeme\n",
-		"docker-compose.yml": "services:\n  web:\n    build:\n      context: .\n      dockerfile: Dockerfile\n    ports:\n      - \"3000:3000\"\n    depends_on:\n      - db\n    environment:\n      DATABASE_URL: postgres://postgres:password@db:5432/app_development\n\n  db:\n    image: postgres:16-alpine\n    environment:\n      POSTGRES_PASSWORD: password\n    volumes:\n      - pgdata:/var/lib/postgresql/data\n\nvolumes:\n  pgdata:\n",
-		"Dockerfile":         "FROM ruby:3.3-slim\nWORKDIR /app\nCOPY Gemfile* ./\nRUN echo \"gem install skipped in test fixture\"\nCOPY . .\nCMD [\"echo\", \"Rails test fixture\"]\n",
-		".grove/config.toml": "project_name = \"rails-app\"\n\n[plugins.docker]\nenabled = true\nauto_start = false\nauto_stop = false\n",
-		".grove/state.json":  `{"version":1,"project":"rails-app","worktrees":{}}`,
+		".env.example":                              "DATABASE_URL=postgres://localhost/app_development\nSECRET_KEY_BASE=changeme\n",
+		"docker-compose.yml":                        "services:\n  web:\n    build:\n      context: .\n      dockerfile: Dockerfile\n    ports:\n      - \"3000:3000\"\n    depends_on:\n      - db\n    environment:\n      DATABASE_URL: postgres://postgres:password@db:5432/app_development\n\n  db:\n    image: postgres:16-alpine\n    environment:\n      POSTGRES_PASSWORD: password\n    volumes:\n      - pgdata:/var/lib/postgresql/data\n\nvolumes:\n  pgdata:\n",
+		"Dockerfile":                                "FROM ruby:3.3-slim\nWORKDIR /app\nCOPY Gemfile* ./\nRUN echo \"gem install skipped in test fixture\"\nCOPY . .\nCMD [\"echo\", \"Rails test fixture\"]\n",
+		".grove/config.toml":                        "project_name = \"rails-app\"\n\n[plugins.docker]\nenabled = true\nauto_start = false\nauto_stop = false\n",
+		".grove/state.json":                         `{"version":1,"project":"rails-app","worktrees":{}}`,
 	}
 
 	for name, content := range files {

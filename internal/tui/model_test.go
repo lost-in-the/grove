@@ -253,13 +253,12 @@ func TestHelpFooterToggleFromDashboard(t *testing.T) {
 	}
 }
 
-
 func TestQuickSwitch(t *testing.T) {
 	t.Run("1 switches to first item", func(t *testing.T) {
 		m := newTestModel(withItems(5), withSize(80, 24))
 		// Item 0 is current (main), so pressing "1" should quit (current worktree)
 		result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}})
-		m = result.(Model)
+		_ = result.(Model)
 		// It's the current worktree, so it should just quit
 		if cmd == nil {
 			t.Error("expected quit command for current worktree")
@@ -690,9 +689,9 @@ func TestDetailContent(t *testing.T) {
 
 func TestGatherDeleteWarnings(t *testing.T) {
 	tests := []struct {
-		name     string
-		item     WorktreeItem
-		wantLen  int
+		name    string
+		item    WorktreeItem
+		wantLen int
 	}{
 		{"no warnings", WorktreeItem{}, 0},
 		{"protected", WorktreeItem{IsProtected: true}, 1},
@@ -868,7 +867,6 @@ func TestDeleteOnProtectedItem(t *testing.T) {
 		t.Errorf("expected ViewDashboard for protected item, got %d", m.activeView)
 	}
 }
-
 
 func TestWorktreesFetchedWithSort(t *testing.T) {
 	m := newTestModel(withSize(80, 24))
@@ -1124,7 +1122,6 @@ func TestBulkSelectedItems(t *testing.T) {
 		t.Errorf("expected 2 selected, got %d", len(selected))
 	}
 }
-
 
 func TestCreateWizardEscFromPickBranch(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))

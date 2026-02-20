@@ -5,31 +5,32 @@ import (
 	"os"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
 	"github.com/LeahArmstrong/grove-cli/internal/git"
 	"github.com/LeahArmstrong/grove-cli/internal/prompt"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
-	"github.com/spf13/cobra"
 )
 
 var (
-	cleanOlderThan    int
-	cleanIncludeDirty bool
-	cleanDryRun       bool
-	cleanKeepBranches bool
+	cleanOlderThan      int
+	cleanIncludeDirty   bool
+	cleanDryRun         bool
+	cleanKeepBranches   bool
 	cleanDeleteBranches bool
 )
 
 // CleanCandidate represents a worktree that may be cleaned
 type CleanCandidate struct {
-	Name        string
-	Path        string
-	Branch      string
-	LastAccess  time.Time
-	DaysSince   int
-	IsDirty     bool
+	Name          string
+	Path          string
+	Branch        string
+	LastAccess    time.Time
+	DaysSince     int
+	IsDirty       bool
 	ExcludeReason string // If set, worktree cannot be cleaned
 }
 
@@ -162,7 +163,7 @@ Examples:
 		fmt.Print("Type 'yes' to confirm: ")
 
 		var response string
-		fmt.Scanln(&response)
+		_, _ = fmt.Scanln(&response)
 		if response != "yes" {
 			fmt.Println("Cancelled")
 			os.Exit(exitcode.UserCancelled)

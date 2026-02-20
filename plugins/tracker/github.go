@@ -98,10 +98,10 @@ func (g *GitHubAdapter) FetchPR(number int) (*PullRequest, error) {
 		Labels []struct {
 			Name string `json:"name"`
 		} `json:"labels"`
-		HeadRefName    string `json:"headRefName"`
-		BaseRefName    string `json:"baseRefName"`
-		IsDraft        bool   `json:"isDraft"`
-		Commits        []struct {
+		HeadRefName string `json:"headRefName"`
+		BaseRefName string `json:"baseRefName"`
+		IsDraft     bool   `json:"isDraft"`
+		Commits     []struct {
 			Oid string `json:"oid"`
 		} `json:"commits"`
 		Additions      int       `json:"additions"`
@@ -259,10 +259,10 @@ func (g *GitHubAdapter) ListPRs(opts ListOptions) ([]*PullRequest, error) {
 		Labels []struct {
 			Name string `json:"name"`
 		} `json:"labels"`
-		HeadRefName    string `json:"headRefName"`
-		BaseRefName    string `json:"baseRefName"`
-		IsDraft        bool   `json:"isDraft"`
-		Commits        []struct {
+		HeadRefName string `json:"headRefName"`
+		BaseRefName string `json:"baseRefName"`
+		IsDraft     bool   `json:"isDraft"`
+		Commits     []struct {
 			Oid string `json:"oid"`
 		} `json:"commits"`
 		Additions      int       `json:"additions"`

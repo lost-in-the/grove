@@ -6,8 +6,9 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 	"github.com/spf13/cobra"
+
+	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 )
 
 var (
@@ -19,12 +20,12 @@ var (
 
 // CompareResult represents the JSON output for grove compare.
 type CompareResult struct {
-	Current   string        `json:"current"`
-	Target    string        `json:"target"`
-	Commits   []CommitDiff  `json:"commits,omitempty"`
-	WIP       *WIPDiff      `json:"wip,omitempty"`
-	Stats     *DiffStats    `json:"stats,omitempty"`
-	HasDiff   bool          `json:"has_diff"`
+	Current string       `json:"current"`
+	Target  string       `json:"target"`
+	Commits []CommitDiff `json:"commits,omitempty"`
+	WIP     *WIPDiff     `json:"wip,omitempty"`
+	Stats   *DiffStats   `json:"stats,omitempty"`
+	HasDiff bool         `json:"has_diff"`
 }
 
 type CommitDiff struct {
@@ -278,16 +279,16 @@ func getDiffStats(repoPath, targetBranch string) (*DiffStats, error) {
 		}
 		// Format: "N files changed, M insertions(+), K deletions(-)"
 		if strings.Contains(line, "file") && strings.Contains(line, "changed") {
-			fmt.Sscanf(line, "%d file", &stats.FilesChanged)
+			_, _ = fmt.Sscanf(line, "%d file", &stats.FilesChanged)
 			if idx := strings.Index(line, "insertion"); idx > 0 {
-				fmt.Sscanf(line[strings.LastIndex(line[:idx], " "):idx], "%d", &stats.Insertions)
+				_, _ = fmt.Sscanf(line[strings.LastIndex(line[:idx], " "):idx], "%d", &stats.Insertions)
 			}
 			if idx := strings.Index(line, "deletion"); idx > 0 {
 				start := strings.LastIndex(line[:idx], ",")
 				if start < 0 {
 					start = strings.LastIndex(line[:idx], " ")
 				}
-				fmt.Sscanf(line[start:idx], "%d", &stats.Deletions)
+				_, _ = fmt.Sscanf(line[start:idx], "%d", &stats.Deletions)
 			}
 			break
 		}

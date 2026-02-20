@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/LeahArmstrong/grove-cli/plugins/docker"
 	"github.com/spf13/cobra"
+
+	"github.com/LeahArmstrong/grove-cli/plugins/docker"
 )
 
 func init() {

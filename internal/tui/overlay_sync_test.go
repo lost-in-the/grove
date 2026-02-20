@@ -20,8 +20,8 @@ func TestNewSyncState(t *testing.T) {
 		t.Errorf("expected 3 stepper steps, got %d", len(s.Stepper.Steps))
 	}
 	// Target should be the current worktree (item 0 is current in test data)
-	if s.Target.ShortName != "main" {
-		t.Errorf("expected target 'main', got %q", s.Target.ShortName)
+	if s.Target.ShortName != "root" {
+		t.Errorf("expected target 'root', got %q", s.Target.ShortName)
 	}
 }
 
@@ -122,8 +122,8 @@ func TestSyncOverlay_PreviewBackAndForward(t *testing.T) {
 	m := newTestModel(withItems(5), withSize(80, 30))
 	m.activeView = ViewSync
 	m.syncState = &SyncState{
-		Step:    SyncStepPreview,
-		Target:  WorktreeItem{ShortName: "main"},
+		Step:   SyncStepPreview,
+		Target: WorktreeItem{ShortName: "main"},
 		Sources: []WorktreeWIPInfo{
 			{Item: WorktreeItem{ShortName: "feature-auth"}, HasWIP: true, Files: []string{"file.go"}},
 		},
@@ -142,8 +142,8 @@ func TestSyncOverlay_ConfirmBack(t *testing.T) {
 	m := newTestModel(withItems(5), withSize(80, 30))
 	m.activeView = ViewSync
 	m.syncState = &SyncState{
-		Step:    SyncStepConfirm,
-		Target:  WorktreeItem{ShortName: "main"},
+		Step:   SyncStepConfirm,
+		Target: WorktreeItem{ShortName: "main"},
 		Sources: []WorktreeWIPInfo{
 			{Item: WorktreeItem{ShortName: "feature-auth"}, HasWIP: true, Files: []string{"file.go"}},
 		},

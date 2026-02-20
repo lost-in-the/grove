@@ -38,10 +38,10 @@ func TestDelegateColumnsV2_NarrowTerminal(t *testing.T) {
 
 func TestNarrowLayoutBreakpoints(t *testing.T) {
 	tests := []struct {
-		name          string
-		width         int
+		name           string
+		width          int
 		wantSideBySide bool
-		wantCompact   bool
+		wantCompact    bool
 	}{
 		{"very narrow", 40, false, true},
 		{"narrow", 60, false, true},

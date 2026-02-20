@@ -9,11 +9,11 @@ import (
 
 func TestHeaderView(t *testing.T) {
 	tests := []struct {
-		name       string
-		header     Header
-		width      int
-		wantParts  []string
-		dontWant   []string
+		name      string
+		header    Header
+		width     int
+		wantParts []string
+		dontWant  []string
 	}{
 		{
 			name: "shows project name and worktree count",

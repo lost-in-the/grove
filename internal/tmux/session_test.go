@@ -10,9 +10,9 @@ func TestIsInsideTmux(t *testing.T) {
 	originalTmux := os.Getenv("TMUX")
 	defer func() {
 		if originalTmux != "" {
-			os.Setenv("TMUX", originalTmux)
+			_ = os.Setenv("TMUX", originalTmux)
 		} else {
-			os.Unsetenv("TMUX")
+			_ = os.Unsetenv("TMUX")
 		}
 	}()
 
@@ -36,9 +36,9 @@ func TestIsInsideTmux(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.tmuxEnv != "" {
-				os.Setenv("TMUX", tt.tmuxEnv)
+				_ = os.Setenv("TMUX", tt.tmuxEnv)
 			} else {
-				os.Unsetenv("TMUX")
+				_ = os.Unsetenv("TMUX")
 			}
 
 			result := IsInsideTmux()
@@ -79,7 +79,7 @@ func TestSessionCreate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Clean up any existing session
 			if tt.session != "" {
-				KillSession(tt.session)
+				_ = KillSession(tt.session)
 			}
 
 			err := CreateSession(tt.session, tt.path)
@@ -98,7 +98,7 @@ func TestSessionCreate(t *testing.T) {
 				}
 
 				// Clean up
-				KillSession(tt.session)
+				_ = KillSession(tt.session)
 			}
 		})
 	}
@@ -115,7 +115,7 @@ func TestListSessions(t *testing.T) {
 	if err := CreateSession(testSession, "/tmp"); err != nil {
 		t.Fatalf("Failed to create test session: %v", err)
 	}
-	defer KillSession(testSession)
+	defer func() { _ = KillSession(testSession) }()
 
 	sessions, err := ListSessions()
 	if err != nil {

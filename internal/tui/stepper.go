@@ -125,12 +125,13 @@ func (s *Stepper) View(width int) string {
 
 		// Center of this step's column
 		var colStart int
-		if i == 0 {
+		switch i {
+		case 0:
 			colStart = 0
-		} else if i == n-1 {
+		case n - 1:
 			// Last label: right-align so it doesn't overshoot
 			colStart = totalWidth - styledWidth
-		} else {
+		default:
 			// Center under the dot at position i*(connWidth+1)
 			dotPos := i * (connWidth + 1)
 			colStart = dotPos - styledWidth/2

@@ -57,7 +57,7 @@ func (e *Executor) printf(format string, args ...any) {
 	if w == nil {
 		w = os.Stdout
 	}
-	fmt.Fprintf(w, format, args...)
+	_, _ = fmt.Fprintf(w, format, args...)
 }
 
 // Execute runs all configured hooks for an event

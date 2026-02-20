@@ -85,5 +85,5 @@ func (d WorktreeDelegate) Render(w io.Writer, m list.Model, index int, listItem 
 
 	// Truncate to width to avoid wrapping
 	rendered := lipgloss.NewStyle().MaxWidth(width).Render(line)
-	fmt.Fprint(w, rendered)
+	_, _ = fmt.Fprint(w, rendered)
 }

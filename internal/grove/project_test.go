@@ -80,12 +80,12 @@ func TestFindRoot_FromWorktree(t *testing.T) {
 
 	// Create .grove in main worktree
 	groveDir := filepath.Join(mainDir, ".grove")
-	os.MkdirAll(groveDir, 0755)
+	_ = os.MkdirAll(groveDir, 0755)
 
 	// Create a sibling worktree
 	wtDir := mainDir + "-wt"
 	run(mainDir, "git", "worktree", "add", wtDir, "-b", "test-branch")
-	defer os.RemoveAll(wtDir)
+	defer func() { _ = os.RemoveAll(wtDir) }()
 
 	// FindRoot from the worktree should find main's .grove
 	found, err := FindRoot(wtDir)
@@ -126,8 +126,8 @@ func TestIsInsideWorktree(t *testing.T) {
 
 		// Change to the temp dir
 		oldWd, _ := os.Getwd()
-		defer os.Chdir(oldWd)
-		os.Chdir(tmpDir)
+		defer func() { _ = os.Chdir(oldWd) }()
+		_ = os.Chdir(tmpDir)
 
 		isWT, err := IsInsideWorktree()
 		if err != nil {
@@ -147,8 +147,8 @@ func TestIsInsideWorktree(t *testing.T) {
 		}
 
 		oldWd, _ := os.Getwd()
-		defer os.Chdir(oldWd)
-		os.Chdir(tmpDir)
+		defer func() { _ = os.Chdir(oldWd) }()
+		_ = os.Chdir(tmpDir)
 
 		isWT, err := IsInsideWorktree()
 		if err != nil {
@@ -172,8 +172,8 @@ func TestProjectRoot(t *testing.T) {
 		}
 
 		oldWd, _ := os.Getwd()
-		defer os.Chdir(oldWd)
-		os.Chdir(tmpDir)
+		defer func() { _ = os.Chdir(oldWd) }()
+		_ = os.Chdir(tmpDir)
 
 		root, err := ProjectRoot()
 		if err != nil {
@@ -188,8 +188,8 @@ func TestProjectRoot(t *testing.T) {
 		tmpDir := t.TempDir()
 
 		oldWd, _ := os.Getwd()
-		defer os.Chdir(oldWd)
-		os.Chdir(tmpDir)
+		defer func() { _ = os.Chdir(oldWd) }()
+		_ = os.Chdir(tmpDir)
 
 		root, err := ProjectRoot()
 		if err != nil {

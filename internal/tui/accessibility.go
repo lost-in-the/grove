@@ -17,7 +17,7 @@ func hexToRGB(hex string) (r, g, b uint8) {
 		return 0, 0, 0
 	}
 	var ri, gi, bi int
-	fmt.Sscanf(hex, "%02x%02x%02x", &ri, &gi, &bi)
+	_, _ = fmt.Sscanf(hex, "%02x%02x%02x", &ri, &gi, &bi)
 	return uint8(ri), uint8(gi), uint8(bi)
 }
 

@@ -8,9 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -26,11 +27,11 @@ type SyncResult struct {
 
 // SyncedWorktree represents a successfully synced worktree
 type SyncedWorktree struct {
-	Name       string `json:"name"`
-	Mirror     string `json:"mirror"`
-	OldCommit  string `json:"old_commit"`
-	NewCommit  string `json:"new_commit"`
-	CommitsAhead int  `json:"commits_ahead"`
+	Name         string `json:"name"`
+	Mirror       string `json:"mirror"`
+	OldCommit    string `json:"old_commit"`
+	NewCommit    string `json:"new_commit"`
+	CommitsAhead int    `json:"commits_ahead"`
 }
 
 // SkippedSync represents a worktree that was skipped
@@ -172,7 +173,7 @@ Examples:
 			if oldCommit != newCommit {
 				countCmd := exec.Command("git", "-C", ws.Path, "rev-list", "--count", oldCommit+".."+newCommit)
 				if output, err := countCmd.Output(); err == nil {
-					fmt.Sscanf(strings.TrimSpace(string(output)), "%d", &commitsAhead)
+					_, _ = fmt.Sscanf(strings.TrimSpace(string(output)), "%d", &commitsAhead)
 				}
 			}
 

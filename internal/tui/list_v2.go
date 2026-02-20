@@ -182,7 +182,7 @@ func (d WorktreeDelegateV2) Render(w io.Writer, m list.Model, index int, listIte
 		line2 = lipgloss.NewStyle().MaxWidth(width).Render(line2)
 	}
 
-	fmt.Fprint(w, line1+"\n"+line2)
+	_, _ = fmt.Fprint(w, line1+"\n"+line2)
 }
 
 // padToWidth pads a string with spaces to reach the target width.

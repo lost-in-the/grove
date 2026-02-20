@@ -3,8 +3,9 @@ package commands
 import (
 	"fmt"
 
-	"github.com/LeahArmstrong/grove-cli/internal/shell"
 	"github.com/spf13/cobra"
+
+	"github.com/LeahArmstrong/grove-cli/internal/shell"
 )
 
 var installCmd = &cobra.Command{

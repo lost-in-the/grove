@@ -85,8 +85,8 @@ func TestColorScheme_TextColors(t *testing.T) {
 
 func TestColorScheme_NOCOLORRespected(t *testing.T) {
 	// Set NO_COLOR
-	os.Setenv("NO_COLOR", "1")
-	defer os.Unsetenv("NO_COLOR")
+	_ = os.Setenv("NO_COLOR", "1")
+	defer func() { _ = os.Unsetenv("NO_COLOR") }()
 
 	scheme := NewColorScheme()
 	// When NO_COLOR is set, all colors should be empty AdaptiveColor

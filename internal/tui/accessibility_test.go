@@ -10,11 +10,11 @@ import (
 // TestContrastRatio verifies the WCAG contrast ratio calculation.
 func TestContrastRatio(t *testing.T) {
 	tests := []struct {
-		name     string
-		fg       string
-		bg       string
-		wantMin  float64
-		wantMax  float64
+		name    string
+		fg      string
+		bg      string
+		wantMin float64
+		wantMax float64
 	}{
 		{"Black on white", "#000000", "#FFFFFF", 20.9, 21.1},
 		{"White on black", "#FFFFFF", "#000000", 20.9, 21.1},
@@ -136,8 +136,8 @@ func TestHighContrastColorScheme(t *testing.T) {
 
 // TestHighContrastEnvVar verifies GROVE_HIGH_CONTRAST triggers the high-contrast scheme.
 func TestHighContrastEnvVar(t *testing.T) {
-	os.Setenv("GROVE_HIGH_CONTRAST", "1")
-	defer os.Unsetenv("GROVE_HIGH_CONTRAST")
+	_ = os.Setenv("GROVE_HIGH_CONTRAST", "1")
+	defer func() { _ = os.Unsetenv("GROVE_HIGH_CONTRAST") }()
 
 	scheme := NewColorScheme()
 	hc := highContrastColorScheme()
@@ -150,9 +150,9 @@ func TestHighContrastEnvVar(t *testing.T) {
 
 // TestHighContrastNotSetUsesDefault verifies default scheme is used normally.
 func TestHighContrastNotSetUsesDefault(t *testing.T) {
-	os.Unsetenv("GROVE_HIGH_CONTRAST")
-	os.Unsetenv("NO_COLOR")
-	os.Unsetenv("GROVE_NO_COLOR")
+	_ = os.Unsetenv("GROVE_HIGH_CONTRAST")
+	_ = os.Unsetenv("NO_COLOR")
+	_ = os.Unsetenv("GROVE_NO_COLOR")
 
 	scheme := NewColorScheme()
 	def := defaultColorScheme()
@@ -165,13 +165,13 @@ func TestHighContrastNotSetUsesDefault(t *testing.T) {
 
 // TestIsHighContrast checks the detection function.
 func TestIsHighContrast(t *testing.T) {
-	os.Unsetenv("GROVE_HIGH_CONTRAST")
+	_ = os.Unsetenv("GROVE_HIGH_CONTRAST")
 	if isHighContrast() {
 		t.Error("expected false when GROVE_HIGH_CONTRAST not set")
 	}
 
-	os.Setenv("GROVE_HIGH_CONTRAST", "1")
-	defer os.Unsetenv("GROVE_HIGH_CONTRAST")
+	_ = os.Setenv("GROVE_HIGH_CONTRAST", "1")
+	defer func() { _ = os.Unsetenv("GROVE_HIGH_CONTRAST") }()
 	if !isHighContrast() {
 		t.Error("expected true when GROVE_HIGH_CONTRAST=1")
 	}
@@ -179,8 +179,8 @@ func TestIsHighContrast(t *testing.T) {
 
 // TestHuhFormsUseAccessibleMode verifies Huh forms respect accessible mode.
 func TestHuhFormsUseAccessibleMode(t *testing.T) {
-	os.Setenv("GROVE_HIGH_CONTRAST", "1")
-	defer os.Unsetenv("GROVE_HIGH_CONTRAST")
+	_ = os.Setenv("GROVE_HIGH_CONTRAST", "1")
+	defer func() { _ = os.Unsetenv("GROVE_HIGH_CONTRAST") }()
 
 	name := ""
 	form := NewAccessibleCreateNameForm(&name, "test-project", nil)
@@ -212,4 +212,3 @@ func TestHexToRGB(t *testing.T) {
 		})
 	}
 }
-

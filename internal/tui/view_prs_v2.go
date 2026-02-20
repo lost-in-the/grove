@@ -84,7 +84,7 @@ func renderPRViewV2(s *PRViewState, width int, spinnerView string) string {
 			}
 			titleStr = truncate(titleStr, contentWidth-30)
 			branch := Styles.DetailDim.Render(truncate(pr.Branch, 20))
-			b.WriteString(fmt.Sprintf("%s%s %s  %s\n", cursor, number, titleStr, branch))
+			fmt.Fprintf(&b, "%s%s %s  %s\n", cursor, number, titleStr, branch)
 
 			// Line 2: metadata indent + author + commits + diff stats + worktree badge
 			indent := "         " // align with title after cursor+number
@@ -97,7 +97,7 @@ func renderPRViewV2(s *PRViewState, width int, spinnerView string) string {
 				badge = "  " + Styles.SuccessText.Render("✓ worktree")
 			}
 
-			b.WriteString(fmt.Sprintf("%s%s · %s · %s%s\n", indent, author, commits, diffStats, badge))
+			fmt.Fprintf(&b, "%s%s · %s · %s%s\n", indent, author, commits, diffStats, badge)
 
 			// Blank line between items (except last)
 			if i < end-1 {

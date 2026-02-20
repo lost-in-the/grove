@@ -274,9 +274,9 @@ func TestManagerWorktreeOperations(t *testing.T) {
 	t.Run("list worktrees returns sorted names", func(t *testing.T) {
 		mgr := setupTestManager(t)
 
-		mgr.AddWorktree("zebra", &WorktreeState{Path: "/z"})
-		mgr.AddWorktree("alpha", &WorktreeState{Path: "/a"})
-		mgr.AddWorktree("middle", &WorktreeState{Path: "/m"})
+		_ = mgr.AddWorktree("zebra", &WorktreeState{Path: "/z"})
+		_ = mgr.AddWorktree("alpha", &WorktreeState{Path: "/a"})
+		_ = mgr.AddWorktree("middle", &WorktreeState{Path: "/m"})
 
 		names := mgr.ListWorktrees()
 		expected := []string{"alpha", "middle", "zebra"}

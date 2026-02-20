@@ -186,7 +186,7 @@ func (h *HelpFooter) RenderExpanded(width int) string {
 	content := Styles.OverlayTitle.Render("Quick Reference") + "\n\n" + body + "\n\n" + footer
 
 	return Styles.RoundedBorder.
-		Width(width - 4).
+		Width(width-4).
 		Padding(1, 2).
 		BorderForeground(Colors.SurfaceBorder).
 		Render(content)

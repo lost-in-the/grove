@@ -529,4 +529,3 @@ func TestUpdate_BulkDeleteDoneMsg(t *testing.T) {
 		t.Error("expected non-empty status message after bulk delete")
 	}
 }
-

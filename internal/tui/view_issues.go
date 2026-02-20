@@ -240,7 +240,7 @@ func renderIssueView(s *IssueViewState, width int, spinnerView string) string {
 			// Line 1: cursor + #number + title
 			number := Styles.DetailDim.Render(fmt.Sprintf("#%-5d", issue.Number))
 			titleStr := truncate(issue.Title, contentWidth-20)
-			b.WriteString(fmt.Sprintf("%s%s %s\n", cursor, number, titleStr))
+			fmt.Fprintf(&b, "%s%s %s\n", cursor, number, titleStr)
 
 			// Line 2: metadata indent + author + age + labels
 			indent := "         "
@@ -256,7 +256,7 @@ func renderIssueView(s *IssueViewState, width int, spinnerView string) string {
 				labels = "  " + strings.Join(labelParts, ", ")
 			}
 
-			b.WriteString(fmt.Sprintf("%s%s · %s%s\n", indent, author, age, labels))
+			fmt.Fprintf(&b, "%s%s · %s%s\n", indent, author, age, labels)
 
 			// Blank line between items (except last)
 			if i < end-1 {

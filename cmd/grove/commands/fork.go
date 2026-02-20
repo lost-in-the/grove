@@ -7,12 +7,13 @@ import (
 	"os/exec"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -130,7 +131,7 @@ Examples:
 				fmt.Print("\nChoice [1-4]: ")
 
 				var choice string
-				fmt.Scanln(&choice)
+				_, _ = fmt.Scanln(&choice)
 
 				switch choice {
 				case "1":
@@ -178,7 +179,7 @@ Examples:
 		// Create worktree
 		if err := mgr.CreateFromBranch(name, newBranchName); err != nil {
 			// Cleanup: delete the branch we just created
-			exec.Command("git", "-C", currentTree.Path, "branch", "-D", newBranchName).Run()
+			_ = exec.Command("git", "-C", currentTree.Path, "branch", "-D", newBranchName).Run()
 			return fmt.Errorf("failed to create worktree: %w", err)
 		}
 
@@ -264,7 +265,7 @@ Examples:
 			if tmux.IsInsideTmux() {
 				currentSession, err := tmux.GetCurrentSession()
 				if err == nil {
-					tmux.StoreLastSession(currentSession)
+					_ = tmux.StoreLastSession(currentSession)
 				}
 			}
 

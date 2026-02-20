@@ -8,11 +8,12 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/spf13/cobra"
+	"golang.org/x/term"
+
 	"github.com/LeahArmstrong/grove-cli/internal/tui"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 	"github.com/LeahArmstrong/grove-cli/plugins/tracker"
-	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 var issuesCmd = &cobra.Command{
@@ -154,10 +155,10 @@ func browseIssuesFzf(cmd *cobra.Command, ctx *GroveContext) error {
 			issue.State,
 			issue.Author,
 		)
-		writer.WriteString(line)
+		_, _ = writer.WriteString(line)
 	}
-	writer.Flush()
-	stdin.Close()
+	_ = writer.Flush()
+	_ = stdin.Close()
 
 	scanner := bufio.NewScanner(stdout)
 	var selection string
@@ -267,10 +268,10 @@ func browsePRsFzf(cmd *cobra.Command, ctx *GroveContext) error {
 			pr.State,
 			pr.Author,
 		)
-		writer.WriteString(line)
+		_, _ = writer.WriteString(line)
 	}
-	writer.Flush()
-	stdin.Close()
+	_ = writer.Flush()
+	_ = stdin.Close()
 
 	scanner := bufio.NewScanner(stdout)
 	var selection string

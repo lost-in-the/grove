@@ -6,10 +6,11 @@ import (
 	"os"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/LeahArmstrong/grove-cli/internal/output"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
-	"github.com/spf13/cobra"
 )
 
 var lastJSON bool
@@ -67,7 +68,7 @@ var lastCmd = &cobra.Command{
 		if tmux.IsInsideTmux() {
 			currentSession, err := tmux.GetCurrentSession()
 			if err == nil {
-				tmux.StoreLastSession(currentSession)
+				_ = tmux.StoreLastSession(currentSession)
 			}
 		}
 

@@ -61,10 +61,10 @@ func TestCheckDuplicateWorktreeReturnsCorrectItem(t *testing.T) {
 
 func TestRenderCreateNameV2WithDuplicate(t *testing.T) {
 	tests := []struct {
-		name       string
-		state      *CreateState
-		wantStrs   []string
-		dontWant   []string
+		name     string
+		state    *CreateState
+		wantStrs []string
+		dontWant []string
 	}{
 		{
 			name: "duplicate found shows warning and details",
@@ -73,10 +73,10 @@ func TestRenderCreateNameV2WithDuplicate(t *testing.T) {
 				Name:        "feature-auth",
 				ProjectName: "acupoll",
 				ExistingWorktree: &WorktreeItem{
-					ShortName: "feature-auth",
-					Path:      "/home/user/acupoll-feature-auth",
-					Branch:    "feature/authentication",
-					IsDirty:   true,
+					ShortName:  "feature-auth",
+					Path:       "/home/user/acupoll-feature-auth",
+					Branch:     "feature/authentication",
+					IsDirty:    true,
 					DirtyFiles: []string{"main.go", "auth.go"},
 				},
 			},

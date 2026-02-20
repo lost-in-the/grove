@@ -406,9 +406,9 @@ func TestNewManagerAutoDetect(t *testing.T) {
 
 	// Save and restore working directory
 	origDir, _ := os.Getwd()
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 
-	os.Chdir(tmpDir)
+	_ = os.Chdir(tmpDir)
 
 	// Test with empty path (auto-detect)
 	m, err := NewManager("")
@@ -425,9 +425,9 @@ func TestNewManagerNotGitRepo(t *testing.T) {
 	tmpDir := t.TempDir() // Not a git repo
 
 	origDir, _ := os.Getwd()
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 
-	os.Chdir(tmpDir)
+	_ = os.Chdir(tmpDir)
 
 	_, err := NewManager("")
 	if err == nil {
@@ -561,7 +561,7 @@ func TestCreateFromExisting(t *testing.T) {
 	if err := os.MkdirAll(existingDir, 0755); err != nil {
 		t.Fatalf("Failed to create existing dir: %v", err)
 	}
-	defer os.RemoveAll(existingDir)
+	defer func() { _ = os.RemoveAll(existingDir) }()
 
 	m := &Manager{repoRoot: tmpDir}
 
@@ -578,9 +578,9 @@ func TestGetCurrent(t *testing.T) {
 
 	// Save and restore working directory
 	origDir, _ := os.Getwd()
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 
-	os.Chdir(tmpDir)
+	_ = os.Chdir(tmpDir)
 
 	m := &Manager{repoRoot: tmpDir}
 

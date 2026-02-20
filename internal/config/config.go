@@ -34,8 +34,8 @@ type Config struct {
 
 // TUIConfig controls TUI behavior preferences
 type TUIConfig struct {
-	SkipBranchNotice    *bool  `toml:"skip_branch_notice"`     // Don't show "branch exists" notice
-	DefaultBranchAction string `toml:"default_branch_action"`  // "split" or "fork" — used when notice is skipped
+	SkipBranchNotice    *bool  `toml:"skip_branch_notice"`    // Don't show "branch exists" notice
+	DefaultBranchAction string `toml:"default_branch_action"` // "split" or "fork" — used when notice is skipped
 }
 
 // ProtectionConfig controls worktree protection settings
@@ -67,10 +67,10 @@ type PluginsConfig struct {
 
 // DockerPluginConfig controls docker plugin behavior
 type DockerPluginConfig struct {
-	Enabled   *bool  `toml:"enabled"`
-	AutoStart *bool  `toml:"auto_start"`
-	AutoStop  *bool  `toml:"auto_stop"`
-	Mode      string `toml:"mode"` // "" or "local" = local compose, "external" = external compose
+	Enabled   *bool                  `toml:"enabled"`
+	AutoStart *bool                  `toml:"auto_start"`
+	AutoStop  *bool                  `toml:"auto_stop"`
+	Mode      string                 `toml:"mode"` // "" or "local" = local compose, "external" = external compose
 	External  *ExternalComposeConfig `toml:"external"`
 }
 

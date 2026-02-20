@@ -45,8 +45,8 @@ type Model struct {
 	stateMgr    *state.Manager
 	projectRoot string
 	projectName string
-	cfg        *config.Config
-	cfgLoadErr error // non-nil if config failed to load at startup
+	cfg         *config.Config
+	cfgLoadErr  error // non-nil if config failed to load at startup
 
 	// Child components (bubbles)
 	list    list.Model
@@ -122,8 +122,8 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		stateMgr:    stateMgr,
 		projectRoot: projectRoot,
 		projectName: mgr.GetProjectName(),
-		cfg:        cfg,
-		cfgLoadErr: cfgErr,
+		cfg:         cfg,
+		cfgLoadErr:  cfgErr,
 		keys:        keys,
 		list:        l,
 		spinner:     s,
@@ -528,7 +528,7 @@ func (m *Model) updateLayout() {
 	} else {
 		// Stacked: cap list height at item count * row height + padding
 		itemCount := len(m.list.Items())
-		rowHeight := 2 // delegate Height()
+		rowHeight := 2                             // delegate Height()
 		idealListHeight := itemCount*rowHeight + 2 // +2 for padding
 		maxListHeight := available * 6 / 10
 		listHeight := idealListHeight
@@ -1004,6 +1004,11 @@ func (m Model) handleCreateKeyHuh(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch s.Step {
 	case CreateStepName:
+		if key.Matches(msg, m.keys.Escape) {
+			m.activeView = ViewDashboard
+			m.createState = nil
+			return m, nil
+		}
 		if s.NameForm == nil {
 			return m, nil
 		}
@@ -1018,6 +1023,11 @@ func (m Model) handleCreateKeyHuh(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.checkCreateFormCompletion(cmd)
 
 	case CreateStepBranch:
+		if key.Matches(msg, m.keys.Escape) {
+			m.activeView = ViewDashboard
+			m.createState = nil
+			return m, nil
+		}
 		// Intercept backspace to go back to Name step before Huh consumes it
 		if key.Matches(msg, m.keys.Back) {
 			s.Step = CreateStepName
@@ -1038,6 +1048,11 @@ func (m Model) handleCreateKeyHuh(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.checkCreateFormCompletion(cmd)
 
 	case CreateStepPickBranch:
+		if key.Matches(msg, m.keys.Escape) {
+			m.activeView = ViewDashboard
+			m.createState = nil
+			return m, nil
+		}
 		// Intercept backspace to go back to Branch step before Huh consumes it
 		if key.Matches(msg, m.keys.Back) {
 			s.Step = CreateStepBranch

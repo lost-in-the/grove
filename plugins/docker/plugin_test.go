@@ -137,7 +137,7 @@ func TestHasDockerCompose(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	tests := []struct {
 		name     string
@@ -309,7 +309,7 @@ func TestPlugin_Up(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	tests := []struct {
 		name        string
@@ -366,7 +366,7 @@ func TestPlugin_Down(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	tests := []struct {
 		name        string
@@ -531,9 +531,9 @@ func TestCopyFile(t *testing.T) {
 
 	// Create source file
 	srcDir := filepath.Join(tmpDir, "src")
-	os.MkdirAll(srcDir, 0755)
+	_ = os.MkdirAll(srcDir, 0755)
 	srcFile := filepath.Join(srcDir, "test.key")
-	os.WriteFile(srcFile, []byte("secret-key"), 0600)
+	_ = os.WriteFile(srcFile, []byte("secret-key"), 0600)
 
 	// Copy to destination (with nested directory)
 	dstFile := filepath.Join(tmpDir, "dst", "config", "test.key")
@@ -565,8 +565,8 @@ func TestCreateSymlink(t *testing.T) {
 
 	// Create source directory
 	srcDir := filepath.Join(tmpDir, "src", "vendor", "bundle")
-	os.MkdirAll(srcDir, 0755)
-	os.WriteFile(filepath.Join(srcDir, "marker"), []byte("here"), 0644)
+	_ = os.MkdirAll(srcDir, 0755)
+	_ = os.WriteFile(filepath.Join(srcDir, "marker"), []byte("here"), 0644)
 
 	// Create symlink
 	dstLink := filepath.Join(tmpDir, "dst", "vendor", "bundle")
@@ -598,16 +598,16 @@ func TestCreateSymlink_ReplaceExisting(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	srcDir := filepath.Join(tmpDir, "src")
-	os.MkdirAll(srcDir, 0755)
+	_ = os.MkdirAll(srcDir, 0755)
 
 	dstLink := filepath.Join(tmpDir, "link")
 
 	// Create initial symlink
-	os.Symlink(srcDir, dstLink)
+	_ = os.Symlink(srcDir, dstLink)
 
 	// Replace with new symlink
 	newSrc := filepath.Join(tmpDir, "newsrc")
-	os.MkdirAll(newSrc, 0755)
+	_ = os.MkdirAll(newSrc, 0755)
 
 	err := createSymlink(newSrc, dstLink)
 	if err != nil {
@@ -629,15 +629,15 @@ func TestExternalStrategy_SetupWorktree(t *testing.T) {
 
 	// Create main worktree with files to copy/symlink
 	mainPath := filepath.Join(tmpDir, "admin")
-	os.MkdirAll(filepath.Join(mainPath, "config", "credentials"), 0755)
-	os.WriteFile(filepath.Join(mainPath, "config", "credentials", "development.key"), []byte("dev-key"), 0600)
+	_ = os.MkdirAll(filepath.Join(mainPath, "config", "credentials"), 0755)
+	_ = os.WriteFile(filepath.Join(mainPath, "config", "credentials", "development.key"), []byte("dev-key"), 0600)
 
-	os.MkdirAll(filepath.Join(mainPath, "vendor", "bundle"), 0755)
-	os.WriteFile(filepath.Join(mainPath, "vendor", "bundle", "marker"), []byte("gems"), 0644)
+	_ = os.MkdirAll(filepath.Join(mainPath, "vendor", "bundle"), 0755)
+	_ = os.WriteFile(filepath.Join(mainPath, "vendor", "bundle", "marker"), []byte("gems"), 0644)
 
 	// Create new worktree directory
 	newPath := filepath.Join(tmpDir, "admin-feature-x")
-	os.MkdirAll(newPath, 0755)
+	_ = os.MkdirAll(newPath, 0755)
 
 	s := newExternalStrategy(&config.Config{
 		Plugins: config.PluginsConfig{
@@ -682,11 +682,11 @@ func TestPlugin_OnPostCreate_External(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	mainPath := filepath.Join(tmpDir, "admin")
-	os.MkdirAll(filepath.Join(mainPath, "config"), 0755)
-	os.WriteFile(filepath.Join(mainPath, "config", "master.key"), []byte("key"), 0600)
+	_ = os.MkdirAll(filepath.Join(mainPath, "config"), 0755)
+	_ = os.WriteFile(filepath.Join(mainPath, "config", "master.key"), []byte("key"), 0600)
 
 	newPath := filepath.Join(tmpDir, "admin-feature")
-	os.MkdirAll(newPath, 0755)
+	_ = os.MkdirAll(newPath, 0755)
 
 	plugin := New()
 	cfg := &config.Config{

@@ -16,7 +16,7 @@ import (
 type ConfigTab int
 
 const (
-	ConfigTabGeneral    ConfigTab = iota
+	ConfigTabGeneral ConfigTab = iota
 	ConfigTabBehavior
 	ConfigTabPlugins
 	ConfigTabProtection
@@ -35,13 +35,13 @@ const (
 
 // ConfigField represents a single editable config field.
 type ConfigField struct {
-	Key         string          // TOML key path, e.g. "tui.skip_branch_notice"
-	Label       string          // display name
-	Value       string          // current value as string
-	Default     string          // default value for display
+	Key         string // TOML key path, e.g. "tui.skip_branch_notice"
+	Label       string // display name
+	Value       string // current value as string
+	Default     string // default value for display
 	Type        ConfigFieldType
-	Options     []string        // for Enum type
-	Description string          // help text
+	Options     []string // for Enum type
+	Description string   // help text
 }
 
 // ConfigState holds the state for the config overlay.
@@ -370,6 +370,17 @@ func (m Model) handleConfigEditKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	s := m.configState
 	if s.EditForm == nil {
 		s.Editing = false
+		return m, nil
+	}
+
+	if key.Matches(msg, m.keys.Escape) {
+		// Restore original value — Huh modifies field.Value through pointer binding
+		tabFields := s.Fields[s.Tab]
+		if s.Cursor < len(tabFields) {
+			tabFields[s.Cursor].Value = s.EditOriginalValue
+		}
+		s.Editing = false
+		s.EditForm = nil
 		return m, nil
 	}
 

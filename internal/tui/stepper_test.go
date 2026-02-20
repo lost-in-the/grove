@@ -103,11 +103,11 @@ func TestStepperIsCurrent(t *testing.T) {
 
 func TestStepperView(t *testing.T) {
 	tests := []struct {
-		name        string
-		steps       []string
-		current     int
-		width       int
-		wantLabels  []string
+		name       string
+		steps      []string
+		current    int
+		width      int
+		wantLabels []string
 	}{
 		{
 			name:       "three steps at start",

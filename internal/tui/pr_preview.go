@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/glamour"
+
 	"github.com/LeahArmstrong/grove-cli/plugins/tracker"
 )
 

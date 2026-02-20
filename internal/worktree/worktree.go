@@ -240,12 +240,12 @@ func (m *Manager) Remove(name string) error {
 	cmd := exec.Command("git", "worktree", "remove", targetTree.Path)
 	cmd.Dir = m.repoRoot
 
-	output, err := cmd.CombinedOutput()
+	_, err = cmd.CombinedOutput()
 	if err != nil {
 		// Try force remove if regular remove fails
 		cmd = exec.Command("git", "worktree", "remove", "--force", targetTree.Path)
 		cmd.Dir = m.repoRoot
-		output, err = cmd.CombinedOutput()
+		output, err := cmd.CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("failed to remove worktree: %s: %w", string(output), err)
 		}
@@ -415,10 +415,10 @@ func parseWorktreeList(output, mainPath, projectName string) []*Worktree {
 }
 
 // DisplayName returns the display name for a worktree
-// Main worktree returns "main", others return short name without project prefix
+// Root worktree returns "root", others return short name without project prefix
 func (w *Worktree) DisplayName() string {
 	if w.IsMain {
-		return "main"
+		return "root"
 	}
 	return w.ShortName
 }

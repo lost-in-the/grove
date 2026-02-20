@@ -53,7 +53,7 @@ func Init() {
 	enabled = true
 
 	ts := time.Now().Format("15:04:05.000")
-	fmt.Fprintf(logFile, "%s  === grove TUI session started at %s ===\n", ts, time.Now().Format(time.RFC3339))
+	_, _ = fmt.Fprintf(logFile, "%s  === grove TUI session started at %s ===\n", ts, time.Now().Format(time.RFC3339))
 }
 
 // Close flushes and closes the log file.
@@ -62,7 +62,7 @@ func Close() {
 	defer mu.Unlock()
 
 	if logFile != nil {
-		logFile.Close()
+		_ = logFile.Close()
 		logFile = nil
 		enabled = false
 	}
@@ -79,7 +79,7 @@ func Printf(format string, args ...any) {
 
 	ts := time.Now().Format("15:04:05.000")
 	msg := fmt.Sprintf(format, args...)
-	fmt.Fprintf(logFile, "%s  %s\n", ts, msg)
+	_, _ = fmt.Fprintf(logFile, "%s  %s\n", ts, msg)
 }
 
 // Enabled returns true when debug logging is active.

@@ -3,8 +3,9 @@ package commands
 import (
 	"fmt"
 
-	"github.com/LeahArmstrong/grove-cli/internal/version"
 	"github.com/spf13/cobra"
+
+	"github.com/LeahArmstrong/grove-cli/internal/version"
 )
 
 var versionCmd = &cobra.Command{

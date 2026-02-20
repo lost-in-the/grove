@@ -6,12 +6,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/detect"
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
 	"github.com/LeahArmstrong/grove-cli/internal/grove"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -290,23 +291,23 @@ func generateHooksToml(profile *detect.ProjectProfile) string {
 	for _, f := range profile.Copy {
 		b.WriteString("[[hooks.post_create]]\n")
 		b.WriteString("type = \"copy\"\n")
-		b.WriteString(fmt.Sprintf("from = %q\n", f))
-		b.WriteString(fmt.Sprintf("to = %q\n", f))
+		fmt.Fprintf(&b, "from = %q\n", f)
+		fmt.Fprintf(&b, "to = %q\n", f)
 		b.WriteString("required = false\n\n")
 	}
 
 	for _, s := range profile.Symlinks {
 		b.WriteString("[[hooks.post_create]]\n")
 		b.WriteString("type = \"symlink\"\n")
-		b.WriteString(fmt.Sprintf("from = %q\n", s))
-		b.WriteString(fmt.Sprintf("to = %q\n", s))
+		fmt.Fprintf(&b, "from = %q\n", s)
+		fmt.Fprintf(&b, "to = %q\n", s)
 		b.WriteString("\n")
 	}
 
 	for _, c := range profile.Commands {
 		b.WriteString("[[hooks.post_create]]\n")
 		b.WriteString("type = \"command\"\n")
-		b.WriteString(fmt.Sprintf("command = %q\n", c))
+		fmt.Fprintf(&b, "command = %q\n", c)
 		b.WriteString("timeout = 300\n")
 		b.WriteString("on_failure = \"warn\"\n\n")
 	}

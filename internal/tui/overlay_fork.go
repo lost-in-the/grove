@@ -20,8 +20,8 @@ import (
 type ForkStep int
 
 const (
-	ForkStepName    ForkStep = iota
-	ForkStepWIP              // WIP strategy selection (skipped if no WIP)
+	ForkStepName ForkStep = iota
+	ForkStepWIP           // WIP strategy selection (skipped if no WIP)
 	ForkStepConfirm
 )
 
@@ -267,6 +267,11 @@ func (m Model) handleForkKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case ForkStepWIP:
+		if key.Matches(msg, m.keys.Escape) {
+			m.activeView = ViewDashboard
+			m.forkState = nil
+			return m, nil
+		}
 		if key.Matches(msg, m.keys.Back) {
 			s.Step = ForkStepName
 			s.Stepper.Current = 0

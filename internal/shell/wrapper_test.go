@@ -102,8 +102,8 @@ func TestWrapper_SubcommandLs_CapturesOutput(t *testing.T) {
 	}
 
 	// ls output should pass through (no cd: directives)
-	if !strings.Contains(stdout, "main") {
-		t.Errorf("expected 'main' in ls output, got: %q", stdout)
+	if !strings.Contains(stdout, "root") {
+		t.Errorf("expected 'root' in ls output, got: %q", stdout)
 	}
 	if !strings.Contains(stdout, "feature-auth") {
 		t.Errorf("expected 'feature-auth' in ls output, got: %q", stdout)
@@ -120,8 +120,8 @@ func TestWrapper_ToCommand_ParsesCdDirective(t *testing.T) {
 
 	// Create the target directory so cd succeeds
 	targetDir := "/tmp/fakegrove-testing"
-	os.MkdirAll(targetDir, 0755)
-	defer os.RemoveAll(targetDir)
+	_ = os.MkdirAll(targetDir, 0755)
+	defer func() { _ = os.RemoveAll(targetDir) }()
 
 	// Don't use GROVE_DEBUG here — debug stderr gets merged into captured
 	// output by the wrapper's 2>&1, which would contain "cd:" in log lines.
@@ -143,8 +143,8 @@ func TestWrapper_MixedOutput_SeparatesDirectivesFromText(t *testing.T) {
 	binPath := buildFakeGrove(t)
 
 	targetDir := "/tmp/fakegrove-mixed"
-	os.MkdirAll(targetDir, 0755)
-	defer os.RemoveAll(targetDir)
+	_ = os.MkdirAll(targetDir, 0755)
+	defer func() { _ = os.RemoveAll(targetDir) }()
 
 	stdout, _, exitCode := runZshWrapper(t, binPath, "mixed")
 
@@ -173,13 +173,13 @@ func TestWrapper_BareInvocation_WritesCdFile(t *testing.T) {
 
 	// Create a target directory for the cd
 	targetDir := filepath.Join(t.TempDir(), "cd-target")
-	os.MkdirAll(targetDir, 0755)
+	_ = os.MkdirAll(targetDir, 0755)
 
 	// The wrapper creates its own cd file, but fakegrove needs FAKEGROVE_CD_TARGET
 	// to simulate a TUI selection writing to the cd file.
 	// We test the full flow: wrapper creates temp file, passes via GROVE_CD_FILE,
 	// fakegrove writes target to it, wrapper reads and cd's.
-	stdout, stderr, exitCode := runZshWrapper(t, binPath, "" /* no args */,
+	stdout, stderr, exitCode := runZshWrapper(t, binPath, "", /* no args */
 		"GROVE_DEBUG=1",
 		"FAKEGROVE_CD_TARGET="+targetDir,
 	)

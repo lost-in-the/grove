@@ -73,7 +73,7 @@ func updateGitignore(dir string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	_, err = f.WriteString(entry)
 	return err

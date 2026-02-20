@@ -21,18 +21,18 @@ const (
 
 // WorktreeWIPInfo pairs a worktree item with its WIP status.
 type WorktreeWIPInfo struct {
-	Item    WorktreeItem
-	HasWIP  bool
-	Files   []string
+	Item     WorktreeItem
+	HasWIP   bool
+	Files    []string
 	CheckErr error // non-nil if WIP check failed
 }
 
 // SyncState holds the state for the sync overlay.
 type SyncState struct {
 	Step     SyncStep
-	Target   WorktreeItem     // current worktree (receiving changes)
+	Target   WorktreeItem      // current worktree (receiving changes)
 	Sources  []WorktreeWIPInfo // other worktrees with WIP info
-	Selected int              // cursor in source list
+	Selected int               // cursor in source list
 	Err      error
 	Syncing  bool
 	Stepper  *Stepper

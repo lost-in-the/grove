@@ -4,21 +4,22 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
 	"github.com/LeahArmstrong/grove-cli/internal/grove"
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
 	"github.com/LeahArmstrong/grove-cli/plugins/docker"
-	"github.com/spf13/cobra"
 )
 
 // GroveContext holds the resolved grove project context
 type GroveContext struct {
-	GroveDir    string          // Path to .grove directory
-	ProjectRoot string          // Path to project root (parent of .grove)
-	State       *state.Manager  // State manager instance
-	Config      *config.Config  // Loaded configuration
+	GroveDir    string         // Path to .grove directory
+	ProjectRoot string         // Path to project root (parent of .grove)
+	State       *state.Manager // State manager instance
+	Config      *config.Config // Loaded configuration
 }
 
 // RequireGroveContext wraps a command function to require grove project context.
@@ -84,7 +85,7 @@ func registerPlugins(cfg *config.Config) {
 	if !dockerPlugin.Enabled() {
 		return
 	}
-	dockerPlugin.RegisterHooks(hooks.GlobalRegistry())
+	_ = dockerPlugin.RegisterHooks(hooks.GlobalRegistry())
 }
 
 // ExitWithCode exits the program with the given exit code.

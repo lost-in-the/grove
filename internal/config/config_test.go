@@ -218,7 +218,7 @@ func TestLoad(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get working directory: %v", err)
 	}
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 
 	// Create temp directory structure
 	tmpDir := t.TempDir()
@@ -270,7 +270,7 @@ func TestLoadWithInvalidProjectConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get working directory: %v", err)
 	}
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 
 	// Create temp directory structure
 	tmpDir := t.TempDir()
@@ -304,7 +304,7 @@ func TestLoadWithInvalidValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get working directory: %v", err)
 	}
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 
 	// Create temp directory structure
 	tmpDir := t.TempDir()
@@ -343,7 +343,7 @@ func TestSetProjectConfigValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get working directory: %v", err)
 	}
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 
 	tests := []struct {
 		name     string
