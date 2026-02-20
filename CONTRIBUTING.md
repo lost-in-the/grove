@@ -227,13 +227,18 @@ grove-cli/
 │       └── commands/         # Command implementations
 ├── internal/
 │   ├── config/              # Configuration loading
-│   ├── worktree/            # Git worktree operations
-│   ├── tmux/                # Tmux session management
-│   ├── shell/               # Shell integration
+│   ├── git/                 # Git operations
 │   ├── hooks/               # Hook system
+│   ├── shell/               # Shell integration
+│   ├── tmux/                # Tmux session management
+│   ├── tui/                 # Terminal UI (interactive mode)
+│   ├── worktree/            # Git worktree operations
 │   └── version/             # Version info
-├── shell/                   # Shell scripts (deprecated)
-├── testdata/                # Test fixtures
+├── plugins/
+│   ├── docker/              # Docker container lifecycle plugin
+│   └── tracker/             # Issue tracker integration plugin
+├── docs/                    # Extended documentation
+├── shell/                   # Shell integration scripts
 ├── Makefile                 # Build automation
 ├── go.mod                   # Go module definition
 └── README.md                # Documentation
@@ -244,15 +249,14 @@ grove-cli/
 ### For Core Features
 
 1. Discuss in an issue first
-2. Update the implementation plan if needed
-3. Follow TDD: tests → implementation → refactor
-4. Update documentation
-5. Add to CHANGELOG.md
+2. Follow TDD: tests → implementation → refactor
+3. Update documentation
+4. Add to CHANGELOG.md
 
-### For Plugins (Future)
+### For Plugins
 
 1. Create plugin in `plugins/` directory
-2. Implement hook interfaces
+2. Implement the Plugin interface (`Name()`, `Init()`, `RegisterHooks()`, `Enabled()`)
 3. Add README.md in plugin directory
 4. Register hooks in plugin init
 5. Add tests

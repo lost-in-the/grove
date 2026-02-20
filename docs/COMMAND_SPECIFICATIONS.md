@@ -25,14 +25,20 @@ This document provides exhaustive specifications for each grove command. Every b
    - [grove down](#grove-down)
    - [grove logs](#grove-logs)
    - [grove restart](#grove-restart)
-6. [Utility Commands](#utility-commands)
+6. [Worktree Flow Commands](#worktree-flow-commands)
+   - [grove fork](#grove-fork)
+   - [grove sync](#grove-sync)
+   - [grove compare](#grove-compare)
+   - [grove apply](#grove-apply)
+   - [grove test](#grove-test)
+7. [Utility Commands](#utility-commands)
    - [grove config](#grove-config)
    - [grove init](#grove-init)
    - [grove repair](#grove-repair)
    - [grove clean](#grove-clean)
    - [grove doctor](#grove-doctor)
-7. [Exit Codes](#exit-codes)
-8. [Output Formatting](#output-formatting)
+8. [Exit Codes](#exit-codes)
+9. [Output Formatting](#output-formatting)
 
 ---
 
@@ -954,6 +960,473 @@ Arguments:
 
 ---
 
+## Worktree Flow Commands
+
+### grove fork
+
+**Purpose:** Fork the current worktree into a new one, branching from the current HEAD.
+
+**Aliases:** `split`
+
+**Usage:**
+```
+grove fork <name> [flags]
+
+Arguments:
+  name    Name for the new forked worktree (required)
+
+Flags:
+      --branch-name <name>    Override the generated branch name
+      --move-wip              Move uncommitted changes to fork (current becomes clean)
+      --copy-wip              Copy uncommitted changes to both worktrees
+      --no-wip                Fork starts clean (leave changes in current)
+  -n, --no-switch             Stay in current worktree after forking
+  -j, --json                  Output as JSON
+```
+
+**Behavior:**
+
+1. **Determine branch name:**
+   - Default: `{current-branch}-{name}`
+   - If `--branch-name` specified: use that name
+   - Error if branch already exists
+
+2. **Handle uncommitted changes (WIP):**
+   - If WIP exists and no WIP flag provided: prompt user (interactive only)
+   - `--move-wip`: capture patch, reset current, apply patch to fork
+   - `--copy-wip`: capture patch, apply to fork without touching current
+   - `--no-wip`: fork starts from clean HEAD
+   - Non-interactive mode without WIP flag: error
+
+3. **Create worktree** from current HEAD (or mirror ref for environment worktrees)
+
+4. **Register in state** with parent worktree tracked
+
+5. **Fire `post-create` hook**
+
+6. **Create tmux session** with session name `{project}-{name}`
+
+7. **Switch to fork** (unless `--no-switch`):
+   - Update last_worktree before switching
+   - Output `cd:` directive if shell integration present
+
+**WIP Prompt (interactive):**
+```
+⚠ Uncommitted changes detected (3 files):
+  M  src/auth.go
+  ?? src/new_file.go
+  M  src/user.go
+
+How do you want to handle them?
+  1. Move to fork (fork starts with changes, current becomes clean)
+  2. Copy to fork (both have changes)
+  3. Leave in current (fork starts clean)
+  4. Cancel
+
+Choice [1-4]:
+```
+
+**Output (Success):**
+```
+✓ Created worktree 'hotfix' with branch 'main-hotfix'
+✓ Moved uncommitted changes to fork
+✓ Created tmux session 'grove-cli-hotfix'
+cd:/Users/egg/Work/grove-cli-hotfix
+```
+
+**Output (--json):**
+```json
+{
+  "name": "hotfix",
+  "branch": "main-hotfix",
+  "path": "/Users/egg/Work/grove-cli-hotfix",
+  "parent": "main",
+  "created": true,
+  "switch_to": "/Users/egg/Work/grove-cli-hotfix"
+}
+```
+
+**Edge Cases:**
+
+| Scenario | Behavior |
+|----------|----------|
+| Branch name already exists | Error: "branch 'X' already exists" (exit ResourceExists) |
+| Non-interactive with WIP | Error: "uncommitted changes detected; use --move-wip, --copy-wip, or --no-wip" |
+| Environment worktree as parent | Forks from mirror branch HEAD, not current HEAD |
+| `--move-wip` + `--copy-wip` | Error: flags are mutually exclusive |
+| `--no-switch` | Print "To switch to the new worktree: grove to <name>" |
+
+**Exit Codes:**
+- 0: Success
+- 1: User cancelled (WIP prompt)
+- 2: Branch already exists
+- 3: Git operation failed
+
+---
+
+### grove sync
+
+**Purpose:** Sync environment worktrees with their remote tracking branches (mirrors).
+
+**Usage:**
+```
+grove sync [name] [flags]
+
+Arguments:
+  name    Environment worktree to sync (default: current worktree)
+
+Flags:
+      --all    Sync all environment worktrees
+  -j, --json   Output as JSON
+```
+
+**Behavior:**
+
+1. **Determine targets:**
+   - If `--all`: sync all worktrees marked as environment worktrees in state
+   - If `<name>` given: sync that specific worktree
+   - If neither: sync current worktree (must be an environment worktree)
+
+2. **For each target:**
+   - Verify it is an environment worktree with a mirror configured
+   - Capture current HEAD commit
+   - Run `git fetch --prune`
+   - Run `git merge --ff-only <mirror>` (fast-forward only — no merges)
+   - Capture new HEAD commit
+   - Count commits synced
+   - Update `last_synced_at` in state
+
+3. **Output results** (or skip if --json)
+
+**Output (Up to date):**
+```
+✓ 'production' is up to date with origin/main
+```
+
+**Output (Updated):**
+```
+✓ Synced 'production' (origin/main) - 3 new commit(s)
+```
+
+**Output (--json):**
+```json
+{
+  "synced": [
+    {
+      "name": "production",
+      "mirror": "origin/main",
+      "old_commit": "abc1234",
+      "new_commit": "def5678",
+      "commits_ahead": 3
+    }
+  ],
+  "skipped": []
+}
+```
+
+**Edge Cases:**
+
+| Scenario | Behavior |
+|----------|----------|
+| Current worktree is not an environment worktree | Error with suggestion to use `grove sync <name>` or `--all` |
+| Named worktree is not an environment worktree | Error: "not an environment worktree" |
+| Worktree has local commits (fast-forward fails) | Skip with warning: "fast-forward failed (may have local changes)" |
+| Fetch fails (network error) | Skip with warning, continue with other targets |
+| No environment worktrees with `--all` | Message: "No environment worktrees found." |
+
+**Exit Codes:**
+- 0: Success
+- 1: Not an environment worktree (ConstraintViolated)
+- 2: Git operation failed
+
+---
+
+### grove compare
+
+**Purpose:** Compare the current worktree with another, showing commit and WIP differences.
+
+**Usage:**
+```
+grove compare <name> [flags]
+
+Arguments:
+  name    Target worktree to compare against (required)
+
+Flags:
+      --stat        Show diffstat summary
+      --committed   Show only committed differences (commits ahead)
+      --wip         Show only uncommitted differences
+  -j, --json        Output as JSON
+```
+
+**Behavior:**
+
+1. Get current worktree and find target worktree by name
+2. Determine what to show:
+   - Default (no flags): show both commits and WIP
+   - `--committed`: commits only
+   - `--wip`: uncommitted changes only
+   - `--stat`: also include diffstat
+3. **Commits:** `git log {target-branch}..HEAD` — commits in current not in target
+4. **WIP:** staged, unstaged, and untracked files in current worktree
+5. **Stats:** `git diff --stat {target-branch}` for file/line counts
+
+**Output (Default):**
+```
+Comparing main → testing
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Commits ahead of testing (2):
+  abc1234 feat: add user authentication (2 hours ago)
+  def5678 fix: handle edge case in login (1 hour ago)
+
+Uncommitted changes:
+  Staged (1):
+    + src/new_feature.go
+  Unstaged (2):
+    M src/auth.go
+    M src/user.go
+  Untracked (1):
+    ? tmp/debug.log
+```
+
+**Output (No differences):**
+```
+Comparing main → feature
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+No differences found
+```
+
+**Output (--json):**
+```json
+{
+  "current": "main",
+  "target": "feature",
+  "commits": [
+    {
+      "sha": "abc1234...",
+      "message": "feat: add user authentication",
+      "author": "Dev User",
+      "age": "2 hours ago"
+    }
+  ],
+  "wip": {
+    "staged": ["src/new_feature.go"],
+    "unstaged": ["src/auth.go"],
+    "untracked": ["tmp/debug.log"]
+  },
+  "stats": null,
+  "has_diff": true
+}
+```
+
+**Edge Cases:**
+
+| Scenario | Behavior |
+|----------|----------|
+| Target worktree not found | Error: "worktree 'X' not found" |
+| `--committed` and `--wip` together | Error: flags are mutually exclusive |
+| Diverged branches (no common ancestor) | Commits section may be empty with no error |
+
+**Exit Codes:**
+- 0: Success (differences found or not)
+- 1: Worktree not found or error
+
+---
+
+### grove apply
+
+**Purpose:** Apply commits or uncommitted changes from another worktree to the current one.
+
+**Usage:**
+```
+grove apply <name> [flags]
+
+Arguments:
+  name    Source worktree to apply changes from (required)
+
+Flags:
+      --commits         Apply only committed changes (cherry-pick)
+      --wip             Apply only uncommitted changes (patch)
+      --pick <sha,...>  Apply specific commit(s) by SHA
+      --dry-run         Show what would be applied without making changes
+  -j, --json            Output as JSON
+```
+
+**Behavior:**
+
+1. **Validate target (current worktree):**
+   - Check if target is immutable (configured in `.grove/config.toml` under `[protection]`)
+   - Error if immutable
+
+2. **Find source worktree** by name
+
+3. **Determine what to apply:**
+   - Default (no flags): apply both commits and WIP
+   - `--commits`: cherry-pick commits since common ancestor
+   - `--wip`: apply uncommitted changes as patch
+   - `--pick <sha>`: cherry-pick specific commits by SHA (comma-separated)
+   - `--pick` implies `--commits` only (no WIP)
+
+4. **Apply commits:**
+   - Find merge base between current and source branch
+   - `git cherry-pick` each commit from source since merge base
+   - On conflict: error with instructions to resolve or abort
+
+5. **Apply WIP:**
+   - Create patch from source's uncommitted changes
+   - Apply with `git apply` to current worktree
+
+**Output (Default):**
+```
+Applying changes from feature-auth → main
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Commits to apply (2):
+  abc1234 feat: add user authentication
+  def5678 fix: handle edge case in login
+
+Applying commits...
+  ✓ abc1234
+  ✓ def5678
+
+Uncommitted changes to apply (1 files):
+  M src/work-in-progress.go
+
+✓ Uncommitted changes applied
+
+✓ Changes applied successfully
+```
+
+**Output (--dry-run):**
+```
+Applying changes from feature-auth → main
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Commits to apply (2):
+  abc1234 feat: add user authentication
+  def5678 fix: handle edge case in login
+
+Uncommitted changes to apply (1 files):
+  M src/work-in-progress.go
+
+[Dry run - no changes were made]
+```
+
+**Output (Cherry-pick conflict):**
+```
+✗ Conflict applying abc1234
+
+[git output]
+
+To resolve:
+  1. Fix conflicts in the affected files
+  2. git add <resolved-files>
+  3. git cherry-pick --continue
+
+Or to abort:
+  git cherry-pick --abort
+```
+**Exit code: GitOperationFailed**
+
+**Edge Cases:**
+
+| Scenario | Behavior |
+|----------|----------|
+| Target is immutable | Error: "worktree 'X' is immutable and cannot receive changes" |
+| Source not found | Error: "worktree 'X' not found" |
+| No commits to apply | Message: "No commits to apply" |
+| No WIP in source | Message: "No uncommitted changes to apply" |
+| `--commits` and `--wip` together | Error: flags are mutually exclusive |
+| Cherry-pick conflict | Error with instructions; exit GitOperationFailed |
+
+**Exit Codes:**
+- 0: Success
+- 1: Target is immutable (ConstraintViolated)
+- 2: Source worktree not found (ResourceNotFound)
+- 3: Git operation failed (cherry-pick conflict, patch failure)
+
+---
+
+### grove test
+
+**Purpose:** Run the configured test command in a worktree's directory.
+
+**Usage:**
+```
+grove test <name> [args...] [flags]
+
+Arguments:
+  name      Name of worktree to run tests in (required)
+  args...   Extra arguments appended to the configured test command
+```
+
+**Configuration:**
+
+The test command is configured in `.grove/config.toml`:
+
+```toml
+[test]
+command = "bin/rails test"
+
+# Optional: run in a Docker service container
+service = "app"
+```
+
+**Behavior:**
+
+1. Verify `[test] command` is configured — error if missing
+2. Find target worktree by name
+3. Append extra `args` to the configured command
+4. **Local mode** (no `service` configured):
+   - Run command directly in the worktree directory via `sh -c`
+   - stdout/stderr/stdin pass through
+5. **Docker mode** (`service` configured):
+   - Use Docker plugin's `Run()` to execute in an ephemeral container
+   - The container mounts the worktree directory
+6. Exit with the same exit code as the test command
+
+**Examples:**
+```bash
+# Run all tests in another worktree
+grove test my-feature
+
+# Run specific test file (appended to configured command)
+grove test my-feature spec/models/user_spec.rb
+
+# Run with glob (expanded in worktree context)
+grove test my-feature 'spec/**/*_spec.rb'
+```
+
+**Output:**
+Test output passes through directly (stdout/stderr passthrough). No grove-specific output is added.
+
+**Error (no test command configured):**
+```
+no test command configured
+
+Add a [test] section to .grove/config.toml:
+
+  [test]
+  command = "bin/rails test"
+```
+
+**Edge Cases:**
+
+| Scenario | Behavior |
+|----------|----------|
+| No `[test] command` in config | Error with instructions to configure |
+| Worktree not found | Error: "worktree 'X' not found" |
+| Test command exits non-zero | grove exits with same exit code |
+| Docker mode, docker unavailable | Docker plugin initialization error |
+
+**Exit Codes:**
+- 0: Tests pass
+- N: Same exit code as the test command
+- 1: Configuration or worktree not found error
+
+---
+
 ## Utility Commands
 
 ### grove config
@@ -1096,33 +1569,74 @@ Repaired 1 issue.
 
 ### grove clean
 
-**Purpose:** Remove old or orphaned worktrees.
+**Purpose:** Remove worktrees that haven't been accessed recently.
 
 **Usage:**
 ```
 grove clean [flags]
 
 Flags:
-      --dry-run     Show what would be removed
-      --older N     Remove worktrees not used in N days
-  -f, --force       Don't prompt for confirmation
+      --older-than N      Remove worktrees not accessed in N days (default: 30)
+      --include-dirty     Include dirty worktrees (default: excluded)
+      --dry-run           Show what would be cleaned without making changes
+      --keep-branches     Do not delete associated branches
+      --delete-branches   Delete associated branches without prompting
 ```
+
+**Always excluded from cleanup:**
+- Root/main worktree
+- Current worktree
+- Protected worktrees (configured in `config.toml`)
+- Environment worktrees (created with `--mirror`)
+- Dirty worktrees (unless `--include-dirty`)
+
+**Behavior:**
+
+1. List all worktrees; apply exclusion rules
+2. Display eligible worktrees
+3. If `--dry-run`: show list and exit (no changes)
+4. **Always prompt** for confirmation (type `yes` to proceed — required even in non-interactive mode)
+5. For each cleanable worktree:
+   - Run `grove rm`-equivalent (removes worktree + state entry)
+   - Kill tmux session if exists
+6. After removal: prompt to delete associated branches
+   - `--delete-branches`: delete without prompting
+   - `--keep-branches`: skip branch deletion
+   - Default: interactive prompt showing branch merge status
 
 **Output:**
 ```
-Found 3 worktrees to clean:
+Found 2 worktree(s) eligible for cleanup:
 
-  old-feature     last used 45 days ago    dirty
-  experiment      last used 30 days ago    clean
-  temp            directory missing        -
+  old-feature (feature/auth) - 45 days since last access [dirty]
+  experiment (experiment) - 32 days since last access
 
-Remove these worktrees? [y/N]: y
+This will permanently remove 2 worktree(s) and their associated tmux sessions.
+Type 'yes' to confirm: yes
 
-  ⚠ Skipped 'old-feature' (has uncommitted changes, use --force)
-  ✓ Removed 'experiment'
-  ✓ Cleaned up 'temp' reference
+  Removed 'old-feature'
+  Removed 'experiment'
 
-Cleaned 2 of 3 worktrees.
+Cleanup complete: 2 removed, 0 failed
+
+Associated branches:
+  ⚠ feature/auth (2 unpushed commits)
+  • experiment (merged, safe to delete)
+
+Delete 2 associated branch(es)? [Y/n]: y
+  Deleted branch 'feature/auth'
+  Deleted branch 'experiment'
+Deleted 2 branch(es)
+```
+
+**Output (Nothing eligible):**
+```
+No worktrees eligible for cleanup.
+
+Excluded worktrees:
+  main - root worktree
+  testing - accessed 5 days ago (threshold: 30)
+  production - environment worktree
 ```
 
 ---

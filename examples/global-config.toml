@@ -1,0 +1,49 @@
+# Grove Global User Configuration
+#
+# Place this file at ~/.config/grove/config.toml
+# These settings apply to all projects and are overridden by any
+# project-level .grove/config.toml values.
+#
+# This file is optional. Grove ships with sensible defaults.
+
+# Shell alias for the grove command. Default: "w"
+# Run `grove install` to add the alias to your shell profile.
+alias = "w"
+
+# Parent directory where all worktrees are created. Default: ~/projects
+projects_dir = "~/projects"
+
+# Default base branch when none is specified. Default: "main"
+default_base_branch = "main"
+
+# =============================================================================
+# Switch Behavior
+# =============================================================================
+
+[switch]
+# Default: "prompt"
+# Options: prompt, auto-stash, refuse
+dirty_handling = "auto-stash"
+
+# =============================================================================
+# Tmux Integration
+# =============================================================================
+
+[tmux]
+# Default: "auto"
+# Options: auto, manual, off
+mode = "auto"
+
+# =============================================================================
+# Docker Plugin
+# =============================================================================
+
+[plugins.docker]
+# Default: true
+enabled = true
+
+# Default: true
+auto_start = true
+
+# Default: false
+auto_stop = false

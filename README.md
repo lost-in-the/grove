@@ -4,12 +4,14 @@ Zero-friction worktree management for developers.
 
 ## Features
 
-- **Interactive TUI Dashboard**: Run `grove` with no arguments to launch a full-screen terminal UI for browsing, creating, and deleting worktrees
-- **Fast Context Switching**: Switch between git worktrees in <500ms
-- **Automatic Tmux Integration**: Create and manage tmux sessions for each worktree
-- **Simple Commands**: Just 6 core commands to learn
-- **Shell Integration**: Directory changing works seamlessly with zsh and bash
-- **Configurable**: TOML-based configuration with sensible defaults
+- **Interactive TUI Dashboard** — run `grove` with no args to browse, create, and manage worktrees in a full-screen terminal UI
+- **Fast Context Switching** — switch between git worktrees in <500ms with automatic directory changes
+- **Tmux Integration** — each worktree gets its own tmux session, created and attached automatically
+- **Docker Support** — start, stop, and tail containers scoped to each worktree
+- **GitHub Integration** — create worktrees from issues and PRs; browse with an interactive TUI or fzf
+- **Worktree Lifecycle Hooks** — auto-copy files, run setup commands, or trigger custom scripts on create/switch
+- **Shell Integration** — `grove to <name>` actually changes your directory, with tab completion and a `w` alias
+- **Configurable** — TOML-based config with global and per-project overrides, tmux mode control, and protection rules
 
 ## Installation
 
@@ -20,7 +22,7 @@ brew tap LeahArmstrong/tap
 brew install grove
 ```
 
-This is the recommended installation method. It includes automatic updates and shell completions.
+Recommended — includes automatic updates and shell completions.
 
 ### Go Install
 
@@ -33,7 +35,7 @@ go install github.com/LeahArmstrong/grove-cli/cmd/grove@latest
 Download the latest release for your platform from the [releases page](https://github.com/LeahArmstrong/grove-cli/releases).
 
 ```bash
-# Example for macOS (arm64)
+# macOS (arm64)
 curl -L https://github.com/LeahArmstrong/grove-cli/releases/latest/download/grove-cli_v1.0.0_Darwin_arm64.tar.gz | tar xz
 sudo mv grove /usr/local/bin/
 ```
@@ -49,64 +51,205 @@ sudo make install
 
 ## Quick Start
 
-### 1. Set up shell integration
+**1. Set up shell integration**
 
 Add this to your `~/.zshrc` or `~/.bashrc`:
 
 ```bash
-# For zsh
-eval "$(grove init zsh)"
+# zsh
+eval "$(grove install zsh)"
 
-# For bash
-eval "$(grove init bash)"
+# bash
+eval "$(grove install bash)"
 ```
 
-Then reload your shell:
-```bash
-source ~/.zshrc  # or ~/.bashrc
-```
+Reload your shell: `source ~/.zshrc` (or `~/.bashrc`)
 
-### 2. Create your first worktree
+This enables directory switching, tab completion, and the `w` alias.
 
-```bash
-# Create a new worktree called "feature-login"
-grove new feature-login
-
-# Or use the alias
-w new feature-login
-```
-
-### 3. Switch between worktrees
+**2. Initialize a project**
 
 ```bash
-# Switch to a worktree
-grove to feature-login
-
-# Your directory changes automatically!
-# A tmux session is created/attached automatically
+cd my-project
+grove init
 ```
 
-### 4. List all worktrees
+Auto-detects project type (Rails, Node, Go, Python, Docker) and generates `.grove/hooks.toml` with sensible defaults.
+
+**3. Create and switch worktrees**
 
 ```bash
-grove ls
+grove new feature-login    # Create worktree + tmux session
+grove to feature-login     # Switch (changes directory automatically)
+grove ls                   # List all worktrees
+grove here                 # Show current worktree info
 ```
 
-### 5. See where you are
+**4. Launch the TUI**
 
 ```bash
-grove here
+grove    # Opens interactive dashboard (inside a grove project)
 ```
 
-### 6. Remove a worktree
+## Commands
+
+### Core
+
+| Command | Description |
+|---------|-------------|
+| `grove ls` | List all worktrees with status |
+| `grove new <name>` | Create a worktree and tmux session |
+| `grove new <name> --mirror origin/main` | Create an environment worktree tracking a remote branch |
+| `grove to <name>` | Switch to a worktree (changes directory, attaches tmux) |
+| `grove rm <name>` | Remove a worktree and kill its tmux session |
+| `grove here` | Show current worktree info (branch, SHA, age, status) |
+| `grove last` | Switch to the previous worktree |
+| `grove fork <name>` | Fork the current worktree into a new one (optionally move/copy WIP) |
+| `grove compare <name>` | Compare current worktree with another (commits and WIP) |
+| `grove apply <name>` | Cherry-pick commits or apply WIP from another worktree |
+| `grove sync [name]` | Fast-forward environment worktrees from their remote mirrors |
+| `grove clean` | Remove worktrees not accessed in N days (default: 30) |
+| `grove test <name> [args]` | Run the configured test command in a specific worktree |
+
+### GitHub / Issue Tracker
+
+Requires `gh` CLI. See [Tracker Plugin](plugins/tracker/README.md) for details.
+
+| Command | Description |
+|---------|-------------|
+| `grove fetch pr/<number>` | Create a worktree from a GitHub PR |
+| `grove fetch issue/<number>` | Create a worktree from a GitHub issue |
+| `grove issues` | Browse open issues in TUI (or `--fzf`) and create a worktree |
+| `grove prs` | Browse open PRs in TUI (or `--fzf`) and create a worktree |
+
+### Docker
+
+Requires a `docker-compose.yml` in the worktree. See [Docker Plugin](plugins/docker/README.md) for details.
+
+| Command | Description |
+|---------|-------------|
+| `grove up` | Start Docker containers for the current worktree |
+| `grove down` | Stop Docker containers for the current worktree |
+| `grove logs [service]` | Tail container logs |
+| `grove restart [service]` | Restart container(s) |
+
+### Utility
+
+| Command | Description |
+|---------|-------------|
+| `grove config` | Show merged configuration |
+| `grove config --edit` | Open project config in `$EDITOR` |
+| `grove config --global` | Show or edit global config |
+| `grove config --hooks` | Show or edit hooks configuration |
+| `grove init` | Initialize a grove project in the current git repo |
+| `grove install <shell>` | Print shell integration code (eval this in your rc file) |
+| `grove repair` | Detect and fix state/worktree inconsistencies |
+| `grove version` | Show version information |
+
+## Configuration
+
+Grove uses TOML configuration files loaded in this order (later overrides earlier):
+
+1. Global: `~/.config/grove/config.toml`
+2. Project: `.grove/config.toml`
+
+```toml
+# .grove/config.toml
+
+project_name = "my-project"
+
+[switch]
+# How to handle dirty worktrees when switching: "auto-stash", "prompt", or "refuse"
+dirty_handling = "prompt"
+
+[naming]
+# Pattern for worktree directory names
+pattern = "{project}-{name}"
+
+[tmux]
+# Tmux integration mode: "auto" (default), "manual", or "off"
+mode = "auto"
+
+[test]
+# Command to run via 'grove test <worktree>'
+command = "bin/rails test"
+# Optional: run in a Docker service instead of locally
+# service = "app"
+
+[plugins.docker]
+enabled = true
+auto_start = true   # Start containers when switching to a worktree
+auto_stop = false   # Stop containers when switching away
+
+[protection]
+# Worktrees that cannot receive changes via 'grove apply'
+immutable = ["main", "production"]
+```
+
+**Tmux modes:**
+- `auto` — grove creates and attaches tmux sessions automatically
+- `manual` — grove creates sessions but does not auto-attach
+- `off` — no tmux integration
+
+**Environment variables:**
+- `GROVE_TUI=0` — disable TUI; bare `grove` shows help instead
+- `GROVE_SHELL=1` — set by shell integration to enable directory switching
+
+## Plugins
+
+### Docker Plugin
+
+Manages Docker Compose containers scoped to each worktree. Supports auto-start/stop on switch, per-worktree container isolation, and an "external compose" mode for monorepos where the compose file lives outside the worktree.
+
+See [plugins/docker/README.md](plugins/docker/README.md) for full configuration.
+
+### Tracker Plugin
+
+GitHub integration for creating worktrees from issues and PRs. Worktree names are auto-generated from issue/PR metadata.
+
+See [plugins/tracker/README.md](plugins/tracker/README.md) for full configuration.
+
+### Hooks
+
+Grove runs hooks at lifecycle events to automate per-worktree setup. Configure in `.grove/hooks.toml` (auto-generated by `grove init`):
+
+```toml
+[[hooks.post_create]]
+type = "copy"
+from = ".env.example"
+to = ".env"
+required = false
+
+[[hooks.post_create]]
+type = "symlink"
+from = "vendor/bundle"
+to = "vendor/bundle"
+
+[[hooks.post_create]]
+type = "command"
+command = "bundle install"
+timeout = 300
+on_failure = "warn"
+```
+
+Supported events: `post_create`, `pre_switch`, `post_switch`, `pre_remove`, `post_remove`.
+
+See [docs/PLUGIN_DEVELOPMENT.md](docs/PLUGIN_DEVELOPMENT.md) for writing custom plugins.
+
+## Shell Integration
+
+Shell integration enables directory switching, tab completion, and the `w` alias.
 
 ```bash
-grove rm feature-login
+# Add to ~/.zshrc or ~/.bashrc:
+eval "$(grove install zsh)"   # or bash
 ```
+
+See [docs/SHELL_INTEGRATION.md](docs/SHELL_INTEGRATION.md) for details on how the integration works and advanced configuration.
 
 ## TUI Dashboard
 
-Run `grove` with no arguments inside a grove project to launch the interactive dashboard:
+Run `grove` with no arguments inside a grove project:
 
 ```
  grove
@@ -122,258 +265,30 @@ Run `grove` with no arguments inside a grove project to launch the interactive d
  [enter] switch  [n] new  [d] delete  [/] filter  [?] help  [q] quit
 ```
 
-**Navigation**: `j`/`k` or arrow keys to move, `enter` to switch to a worktree, `/` to filter by name or branch.
+Navigation: `j`/`k` or arrow keys. `/` to filter. `?` for full keybindings.
 
-**Actions**: `n` opens a guided worktree creation wizard, `d` opens a delete confirmation with safety warnings.
-
-**Disable**: Set `GROVE_TUI=0` to make bare `grove` show help instead. The TUI also only launches when a TTY is detected; piped/scripted usage falls through to help automatically.
-
-## Commands
-
-### Core Commands
-
-- `grove ls` (or `w ls`) - List all worktrees with status
-- `grove new <name>` - Create worktree + tmux session
-- `grove to <name>` - Switch to worktree (creates tmux session if needed)
-- `grove rm <name>` - Remove worktree + kill tmux session
-- `grove here` - Show current worktree info
-- `grove last` - Switch to previous worktree
-
-### State Management
-
-- `grove freeze [name]` - Freeze worktree (stops Docker containers)
-- `grove freeze --all` - Freeze all worktrees except current
-- `grove resume <name>` - Resume frozen worktree
-
-### Time Tracking
-
-- `grove time` - Show time spent in current worktree
-- `grove time --all` - Show time for all worktrees
-- `grove time week` - Show weekly summary across all worktrees
-- `grove time --json` - Output in JSON format
-
-Time tracking is automatic and passive - it records time whenever you switch between worktrees.
-
-### Issue/PR Integration
-
-- `grove fetch pr/<number>` - Create worktree from GitHub PR
-- `grove fetch issue/<number>` - Create worktree from GitHub issue
-- `grove issues` - Browse and select issues with fzf
-- `grove prs` - Browse and select PRs with fzf
-
-Requires `gh` CLI and `fzf` to be installed. See [Tracker Plugin Documentation](plugins/tracker/README.md) for details.
-
-### Docker Integration
-
-- `grove up` - Start Docker containers for current worktree
-- `grove down` - Stop Docker containers for current worktree
-- `grove logs [service]` - View container logs
-- `grove restart [service]` - Restart container(s)
-
-See [Docker Plugin Documentation](plugins/docker/README.md) for details.
-
-### Configuration
-
-- `grove config` - Show current configuration
-- `grove version` - Show version information
-- `grove init <shell>` - Generate shell integration code
-
-## Configuration
-
-Grove uses TOML configuration files. Configuration is loaded from:
-
-1. Global: `~/.config/grove/config.toml`
-2. Project: `.grove/config.toml` (overrides global)
-
-### Example Configuration
-
-```toml
-# ~/.config/grove/config.toml
-
-# Command alias (default: "w")
-alias = "w"
-
-# Directory where projects are stored
-projects_dir = "~/projects"
-
-# Default branch to base new worktrees on
-default_base_branch = "main"
-
-[switch]
-# How to handle dirty worktrees: "auto-stash", "prompt", or "refuse"
-dirty_handling = "prompt"
-
-[naming]
-# Pattern for naming worktrees
-pattern = "{type}/{description}"
-
-[tmux]
-# Prefix for tmux session names
-prefix = "grove-"
-```
-
-### Defaults
-
-If no configuration file exists, Grove uses these defaults:
-
-- `alias`: "w"
-- `projects_dir`: "~/projects"
-- `default_base_branch`: "main"
-- `dirty_handling`: "prompt"
-- `pattern`: "{type}/{description}"
-- `tmux.prefix`: "grove-"
-
-## How It Works
-
-1. **Worktrees**: Grove uses git worktrees to create separate working directories for different branches
-2. **Tmux Sessions**: Each worktree gets its own tmux session for state management
-3. **Shell Integration**: The shell wrapper intercepts directory change commands
-4. **Hook System**: Extensible plugin system for custom workflows (Phase 1+)
-
-## Plugins
-
-Grove supports plugins to extend functionality. Plugins can hook into worktree lifecycle events to provide custom behavior.
-
-### Available Plugins
-
-#### Docker Plugin
-
-Automatically manages Docker containers for your worktrees.
-
-**Features:**
-- Auto-start containers when switching to a worktree
-- Manual container control with `grove up`, `grove down`, `grove logs`, `grove restart`
-- Works with docker-compose.yml files
-- Support for both `docker compose` and `docker-compose` commands
-
-**Quick Start:**
-```bash
-# Navigate to a worktree with docker-compose.yml
-cd ~/projects/my-worktree
-
-# Start containers
-grove up
-
-# View logs
-grove logs
-
-# Restart a service
-grove restart web
-
-# Stop containers
-grove down
-```
-
-See [Docker Plugin Documentation](plugins/docker/README.md) for full details.
-
-### Creating Custom Plugins
-
-Plugins implement the `Plugin` interface and can register hooks to run at lifecycle events:
-
-- `pre-create` / `post-create` - Before/after worktree creation
-- `pre-switch` / `post-switch` - Before/after switching worktrees
-- `pre-freeze` / `post-resume` - Before freezing/after resuming (Phase 2)
-- `pre-remove` / `post-remove` - Before/after worktree removal
-
-See the [Plugin Development Guide](docs/PLUGIN_DEVELOPMENT.md) for more information.
+See [docs/TUI.md](docs/TUI.md) for the full reference.
 
 ## Requirements
 
-- Go 1.21 or later (for building)
-- Git 2.30 or later (for worktree support)
+- Git 2.30 or later
+- Go 1.21 or later (for building from source)
 - Tmux 3.0 or later (optional, for session management)
 - zsh or bash (for shell integration)
+- `gh` CLI (optional, for GitHub integration)
 
 ## Development
 
 ```bash
-# Run tests
-make test
-
-# Run linter
-make lint
-
-# Format code
-make fmt
-
-# Build binary
-make build
-
-# Install locally
-make install
+make build    # Build binary
+make test     # Run tests
+make lint     # Run linter
+make fmt      # Format code
+make install  # Install locally
 ```
-
-## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 
 ## License
 
-Apache 2.0 - see [LICENSE](LICENSE)
-
-## Roadmap
-
-### Phase 0: Foundation ✅
-- Core commands (ls, new, to, rm, here, last)
-- Shell integration (zsh, bash)
-- Configuration system
-- Tmux integration
-- Hook system foundation
-
-### Phase 1: Docker Plugin ✅
-- Container lifecycle tied to worktrees
-- Service management commands (up, down, logs, restart)
-- Auto-start/stop integration with hooks
-- Plugin system infrastructure
-
-### Phase 2: State Management ✅
-- Freeze/resume functionality
-- Dirty worktree handling
-- State persistence
-- Docker integration with freeze/resume
-
-### Phase 3: Time Tracking ✅
-- Passive time tracking per worktree
-- Weekly summaries
-- JSON output format
-- Notification system
-
-### Phase 4: Issue Integration ✅
-- GitHub PR/issue integration (via `gh` CLI)
-- Smart worktree naming from metadata
-- Interactive browsing with `fzf`
-- Filtering by state, labels, assignee, author
-
-### Phase 5: Polish ✅
-- Release automation (GoReleaser)
-- Homebrew formula
-- Comprehensive documentation
-- Shell completions (zsh, bash)
-
-### Phase 6: TUI Dashboard ✅
-- Full-screen interactive dashboard (`grove` with no args)
-- Worktree list with git status, branch, age, tmux indicators
-- Detail panel with commit info, upstream tracking, dirty files
-- Guided create/delete workflows with inline validation
-- Substring filter, vim keybindings, responsive layout
-- Opt-out via `GROVE_TUI=0` or non-TTY detection
-
-## FAQ
-
-**Q: Why worktrees instead of branches?**
-A: Worktrees let you work on multiple branches simultaneously without stashing or losing context.
-
-**Q: Do I need tmux?**
-A: No, but it's recommended. Grove works without tmux, but you'll miss out on session management.
-
-**Q: Can I use a different command alias?**
-A: Yes! Set `alias = "myalias"` in your config file.
-
-**Q: How do I uninstall?**
-A: Remove the binary (`rm $(which grove)`), remove shell integration from your rc file, and delete `~/.config/grove/`.
-
-## Support
-
-- 🐛 [Report a bug](https://github.com/LeahArmstrong/grove-cli/issues/new?template=bug_report.md)
-- 💡 [Request a feature](https://github.com/LeahArmstrong/grove-cli/issues/new?template=feature_request.md)
-- 📚 [Documentation](https://github.com/LeahArmstrong/grove-cli/tree/main/docs)
+Apache 2.0 — see [LICENSE](LICENSE)

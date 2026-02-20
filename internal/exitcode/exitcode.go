@@ -1,5 +1,5 @@
 // Package exitcode defines standard exit codes for Grove CLI commands.
-// These codes follow the V2-SPEC.md specification for consistent error handling.
+// These codes provide consistent error handling across all Grove commands.
 package exitcode
 
 const (

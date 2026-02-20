@@ -321,10 +321,21 @@ When working with multiple worktrees that run containers, you may encounter port
    auto_stop = true
    ```
 
+## grove test Integration
+
+The Docker plugin integrates with `grove test` to run test commands in an ephemeral container without switching your active dev stack. Configure a service name in `.grove/config.toml`:
+
+```toml
+[test]
+command = "bin/rails test"
+service = "app"   # Docker service to run tests in
+```
+
+When `service` is set, `grove test <worktree>` spawns a fresh container in the target worktree's Docker environment. This lets you run tests against a feature branch while your current worktree's containers remain active.
+
 ## Planned Features
 
-- [ ] `grove test` command: Run tests from a worktree without switching the active dev stack
-- [ ] Multi-app external mode: Extend external compose support to additional apps (storefront, asset-upload)
+- [ ] Multi-app external mode: Extend external compose support to additional apps
 - [ ] Port conflict detection and automatic prevention
 - [ ] Environment variable generation via direnv integration
 - [ ] Status command to show running containers per worktree
@@ -343,7 +354,7 @@ type Plugin interface {
 }
 ```
 
-See the [Plugin Development Guide](../../docs/plugins.md) for more information on creating plugins.
+See the [Plugin Development Guide](../../docs/PLUGIN_DEVELOPMENT.md) for more information on creating plugins.
 
 ## License
 

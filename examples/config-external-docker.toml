@@ -1,0 +1,69 @@
+# Grove External Docker Compose Configuration
+#
+# Use this pattern when your project's Docker services are defined in a shared
+# compose setup that lives outside the project directory — for example, a
+# central "infra" or "shared-compose" repository that manages services for many
+# projects at once.
+#
+# In external mode, grove does not manage a local docker-compose.yml. Instead,
+# it tells the external compose stack which worktree directory to point at by
+# setting an environment variable, then restarts the affected services.
+#
+# Place this file at .grove/config.toml in your project's main worktree.
+
+project_name = "my-project"
+default_base_branch = "main"
+
+# =============================================================================
+# Docker Plugin — External Compose Mode
+# =============================================================================
+
+[plugins.docker]
+# Enable the docker plugin.
+enabled = true
+
+# Restart external services when switching worktrees.
+auto_start = true
+
+# Stop services when switching away (useful if you want clean context switches).
+auto_stop = true
+
+# Use the external compose stack instead of a local docker-compose.yml.
+mode = "external"
+
+# =============================================================================
+# External Compose Configuration
+# =============================================================================
+#
+# Required when mode = "external". Describes where the shared compose stack
+# lives and how grove should communicate the active worktree path to it.
+
+[plugins.docker.external]
+# Absolute or ~-relative path to the external Docker Compose directory.
+# This directory must exist and contain a docker-compose.yml (or equivalent).
+# Required.
+path = "~/work/shared-compose"
+
+# Name of the environment variable that the external compose stack reads to
+# locate the project directory. Grove sets this to the active worktree's
+# absolute path before restarting services.
+# Required.
+env_var = "MY_PROJECT_DIR"
+
+# Names of the Docker Compose services to restart when switching worktrees.
+# Only these services are stopped/started — other services in the compose
+# stack are left running.
+# Required. At least one service must be listed.
+services = ["app", "worker", "vite"]
+
+# Files to copy from the main worktree into each new worktree on `grove new`.
+# Useful for secrets or local overrides that are not committed to git.
+# Paths are relative to the worktree root.
+# Optional.
+copy_files = [".env", "config/master.key"]
+
+# Directories to symlink from the main worktree into each new worktree on
+# `grove new`. Saves disk space for large directories like node_modules or
+# vendor/bundle. Paths are relative to the worktree root.
+# Optional.
+symlink_dirs = ["node_modules", "vendor/bundle"]

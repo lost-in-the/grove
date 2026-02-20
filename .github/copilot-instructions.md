@@ -14,8 +14,9 @@ Grove is a Go CLI tool for managing git worktrees with tmux integration. It prov
 Before making changes, review these specifications:
 
 - **[docs/COMMAND_SPECIFICATIONS.md](../docs/COMMAND_SPECIFICATIONS.md)** — Complete behavior specs for every command
-- **[docs/VALIDATION_CHECKLIST.md](../docs/VALIDATION_CHECKLIST.md)** — Test cases for implementation verification
-- **[grove-implementation-plan.md](../grove-implementation-plan.md)** — Architecture decisions and phase breakdown
+- **[docs/TUI.md](../docs/TUI.md)** — TUI dashboard documentation
+- **[docs/SHELL_INTEGRATION.md](../docs/SHELL_INTEGRATION.md)** — Shell integration deep dive
+- **[docs/PLUGIN_DEVELOPMENT.md](../docs/PLUGIN_DEVELOPMENT.md)** — Plugin development guide
 - **[CLAUDE.md](../CLAUDE.md)** — AI assistant context (also useful for Copilot)
 
 ## Critical Implementation Rules
@@ -136,7 +137,7 @@ func TestCreate(t *testing.T) {
 
 1. Check `internal/worktree/` for existing patterns
 2. Update `docs/COMMAND_SPECIFICATIONS.md` with new behavior
-3. Add test cases to `docs/VALIDATION_CHECKLIST.md`
+3. Add test cases for the new behavior
 4. Implement with TDD
 
 ### Working with shell integration

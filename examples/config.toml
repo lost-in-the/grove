@@ -1,0 +1,147 @@
+# Grove Project Configuration
+#
+# Place this file at .grove/config.toml in your project's main worktree.
+# Project config is merged with global config (~/.config/grove/config.toml),
+# with project values taking precedence.
+#
+# Fields marked with a default show the built-in value used when omitted.
+
+# =============================================================================
+# Project Identity
+# =============================================================================
+
+# The canonical name for this project, used in worktree directory names and
+# tmux session names. Derived automatically from the git remote or directory
+# name if not set.
+project_name = "my-project"
+
+# Shell alias for the grove command. Default: "w"
+# Set in your global config; rarely needed in project config.
+alias = "w"
+
+# Parent directory where worktrees are created. Default: ~/projects
+# Worktrees are placed at {projects_dir}/{project_name}-{name}
+projects_dir = "~/projects"
+
+# The base branch used when creating new worktrees. Default: "main"
+default_base_branch = "main"
+
+# =============================================================================
+# Switch Behavior
+# =============================================================================
+
+[switch]
+# What to do when switching to a worktree with uncommitted changes.
+# Default: "prompt"
+#
+# Options:
+#   prompt     - Ask the user what to do (default)
+#   auto-stash - Automatically stash and restore changes
+#   refuse     - Refuse to switch until changes are committed or stashed
+dirty_handling = "prompt"
+
+# =============================================================================
+# Worktree Naming
+# =============================================================================
+
+[naming]
+# Pattern used to generate worktree directory names.
+# Default: "{type}/{description}"
+#
+# Available variables:
+#   {project}     - The project_name value
+#   {name}        - The short name given to `grove new`
+#   {type}        - Conventional commit type (feat, fix, etc.)
+#   {description} - The description portion of the name
+#
+# Examples:
+#   "{project}-{name}"     -> my-project-auth-feature
+#   "{type}/{description}" -> feat/auth-feature
+pattern = "{project}-{name}"
+
+# =============================================================================
+# Tmux Integration
+# =============================================================================
+
+[tmux]
+# Controls how grove interacts with tmux sessions.
+# Default: "auto"
+#
+# Options:
+#   auto   - Auto-attach to tmux when switching worktrees (if tmux is running)
+#   manual - Create/manage sessions but don't auto-attach
+#   off    - Disable tmux integration entirely
+mode = "auto"
+
+# Optional prefix prepended to tmux session names.
+# Default: "" (no prefix; sessions are named after the worktree)
+# Example: prefix = "dev-" -> session named "dev-my-project-auth"
+prefix = ""
+
+# =============================================================================
+# Docker Plugin
+# =============================================================================
+
+[plugins.docker]
+# Enable or disable the docker plugin. Default: true
+enabled = true
+
+# Automatically start Docker Compose services when switching to a worktree.
+# Default: true
+auto_start = true
+
+# Automatically stop Docker Compose services when switching away.
+# Default: false
+auto_stop = false
+
+# Docker mode controls how compose is managed for this project.
+# Default: "" (same as "local")
+#
+# Options:
+#   ""         - Same as "local"
+#   "local"    - Each worktree runs its own docker compose stack
+#   "external" - All worktrees share a single compose stack defined outside
+#                the project (requires [plugins.docker.external] section)
+mode = "local"
+
+# =============================================================================
+# Worktree Protection
+# =============================================================================
+
+[protection]
+# Worktrees that cannot be removed without --force --unprotect.
+# List short worktree names (not full directory names).
+protected = ["main", "staging"]
+
+# Worktrees that changes cannot be applied to.
+# These are read-only — grove refuses to write config changes targeting them.
+immutable = ["production"]
+
+# =============================================================================
+# TUI Preferences
+# =============================================================================
+
+[tui]
+# Skip the "branch already exists" notice when creating worktrees.
+# When true, grove uses default_branch_action without prompting.
+# Default: not set (notice is shown)
+skip_branch_notice = false
+
+# Action to take when skip_branch_notice is true and a branch already exists.
+# Options: "split" (create new branch from base), "fork" (use existing branch)
+# Default: not set
+default_branch_action = "fork"
+
+# =============================================================================
+# Test Command
+# =============================================================================
+
+[test]
+# The command to run for `grove test`. Runs in the current worktree directory.
+# Default: not set
+command = "make test"
+
+# If set, the test command is run inside this Docker Compose service instead
+# of directly on the host.
+# Default: not set
+service = "app"

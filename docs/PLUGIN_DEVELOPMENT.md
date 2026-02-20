@@ -8,8 +8,22 @@ All plugins must implement the `Plugin` interface:
 
 ```go
 type Plugin interface {
+    // Name returns the plugin identifier (e.g., "docker", "tracker").
     Name() string
-    Initialize() error
+
+    // Init initializes the plugin with grove configuration.
+    // Called once at startup. Return an error to signal the plugin
+    // is unavailable (e.g., required tool not found).
+    Init(cfg *config.Config) error
+
+    // RegisterHooks registers the plugin's hook handlers with the registry.
+    // Called after Init succeeds.
+    RegisterHooks(registry *hooks.Registry) error
+
+    // Enabled returns whether the plugin is currently active.
+    // Plugins may disable themselves when tools are missing or
+    // the feature is turned off in config.
+    Enabled() bool
 }
 ```
 
@@ -58,26 +72,36 @@ cd plugins/myplugin
 package myplugin
 
 import (
+    "github.com/LeahArmstrong/grove-cli/internal/config"
     "github.com/LeahArmstrong/grove-cli/internal/hooks"
-    "github.com/LeahArmstrong/grove-cli/internal/plugins"
 )
 
 type MyPlugin struct {
-    // Plugin state
+    cfg     *config.Config
+    enabled bool
 }
 
 func New() *MyPlugin {
-    return &MyPlugin{}
+    return &MyPlugin{enabled: true}
 }
 
 func (p *MyPlugin) Name() string {
     return "myplugin"
 }
 
-func (p *MyPlugin) Initialize() error {
-    // Register hooks
-    hooks.Register(hooks.EventPostSwitch, p.onPostSwitch)
+func (p *MyPlugin) Init(cfg *config.Config) error {
+    p.cfg = cfg
+    // Check prerequisites, set p.enabled = false if unavailable
     return nil
+}
+
+func (p *MyPlugin) RegisterHooks(registry *hooks.Registry) error {
+    registry.Register(hooks.EventPostSwitch, p.onPostSwitch)
+    return nil
+}
+
+func (p *MyPlugin) Enabled() bool {
+    return p.enabled
 }
 
 func (p *MyPlugin) onPostSwitch(ctx *hooks.Context) error {
@@ -95,10 +119,15 @@ import (
     myplugin "github.com/LeahArmstrong/grove-cli/plugins/myplugin"
 )
 
-func initializePlugins() error {
-    // Initialize your plugin
-    if err := myplugin.New().Initialize(); err != nil {
+func initializePlugins(cfg *config.Config, registry *hooks.Registry) error {
+    p := myplugin.New()
+    if err := p.Init(cfg); err != nil {
         return fmt.Errorf("myplugin: %w", err)
+    }
+    if p.Enabled() {
+        if err := p.RegisterHooks(registry); err != nil {
+            return fmt.Errorf("myplugin hooks: %w", err)
+        }
     }
     return nil
 }
@@ -124,11 +153,19 @@ func TestPluginName(t *testing.T) {
     }
 }
 
-func TestInitialize(t *testing.T) {
+func TestInit(t *testing.T) {
     p := New()
-    err := p.Initialize()
+    err := p.Init(nil)
     if err != nil {
-        t.Errorf("Initialize() failed: %v", err)
+        t.Errorf("Init() failed: %v", err)
+    }
+}
+
+func TestEnabled(t *testing.T) {
+    p := New()
+    _ = p.Init(nil)
+    if !p.Enabled() {
+        t.Error("expected plugin to be enabled")
     }
 }
 ```
@@ -164,17 +201,9 @@ The Docker plugin demonstrates:
 - Managing external services (Docker containers)
 - Graceful degradation when tools are missing
 - Configuration via compose files
+- Multiple mode strategies (local vs external)
 
 See: `plugins/docker/`
-
-### Time Tracking Plugin
-
-The time tracking plugin demonstrates:
-- Persistent state management
-- Hook-driven automation
-- JSON data storage
-
-See: `plugins/time/`
 
 ### Tracker Plugin
 
@@ -233,7 +262,7 @@ See: `plugins/tracker/`
 
 Before submitting a plugin:
 
-- [ ] Implements Plugin interface
+- [ ] Implements Plugin interface (`Name()`, `Init()`, `RegisterHooks()`, `Enabled()`)
 - [ ] Has comprehensive tests (>60% coverage)
 - [ ] Has README.md with examples
 - [ ] Handles errors gracefully

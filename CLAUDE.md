@@ -6,8 +6,10 @@ Target: developers who context-switch frequently between tasks.
 
 ## Key Documentation
 - **[Command Specifications](docs/COMMAND_SPECIFICATIONS.md)** — Exhaustive behavior specs for every command including naming conventions, shell integration protocol, and expected outputs
-- **[Validation Checklist](docs/VALIDATION_CHECKLIST.md)** — Test cases to verify implementation correctness
-- **[Implementation Plan](docs/IMPLEMENTATION_PLAN.md)** — Phase breakdown, task specs, architecture decisions
+- **[TUI Dashboard](docs/TUI.md)** — TUI layout, components, and interaction model
+- **[Shell Integration](docs/SHELL_INTEGRATION.md)** — Shell wrapper protocol and environment setup
+- **[Plugin Development](docs/PLUGIN_DEVELOPMENT.md)** — Hook interfaces and plugin authoring guide
+- **[Example Configs](examples/)** — Example grove configurations
 
 ## Critical Implementation Rules
 

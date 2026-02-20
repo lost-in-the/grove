@@ -321,15 +321,6 @@ grove rm pr-456-add-user-api
 - Relies on git remote URL for repo detection
 - PRs must be fetchable (public or have access)
 
-## Future Enhancements
-
-- Linear adapter
-- Jira adapter  
-- GitLab support
-- Configurable naming patterns
-- Preview pane with issue/PR details in fzf
-- Automatic PR checkout from URL
-- Issue/PR metadata in worktree git config
 
 ## Testing
 
@@ -347,19 +338,6 @@ Note: Integration tests require:
 - `gh` CLI authenticated
 - Access to a GitHub repository
 - Internet connection
-
-## Configuration
-
-Future: Add tracker configuration to `~/.config/grove/config.toml`:
-
-```toml
-[tracker]
-default = "github"  # Default tracker to use
-naming_pattern = "{type}-{number}-{slug}"
-
-[tracker.github]
-enabled = true
-```
 
 ## Troubleshooting
 

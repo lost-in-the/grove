@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `grove test` command: Run the configured test command in a worktree, with optional Docker service support for running tests in an ephemeral container
+- Config resolution from `.grove` directory for secondary worktrees, so non-main worktrees correctly inherit project configuration
+- Tmux mode setting (`auto`/`manual`/`off`) with shell auto-attach support, giving finer control over tmux session behavior
+- Config overlay save confirmation and changed-field indicators in the TUI, making it clear which fields have been modified before saving
+- External compose mode with plugin hook registry, enabling Docker services defined in a shared external directory to be managed per-worktree
+
+### Previously Added
 - **Phase 5: Polish & Production Readiness**
   - GoReleaser configuration for automated releases
   - Homebrew formula for easy installation
