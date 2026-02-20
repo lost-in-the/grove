@@ -6,6 +6,12 @@ import (
 	"strings"
 )
 
+// TestConfig controls test command behavior
+type TestConfig struct {
+	Command string `toml:"command"`
+	Service string `toml:"service"`
+}
+
 // Config represents the complete grove configuration
 type Config struct {
 	ProjectName   string           `toml:"project_name"`
@@ -18,6 +24,7 @@ type Config struct {
 	Plugins       PluginsConfig    `toml:"plugins"`
 	Protection    ProtectionConfig `toml:"protection"`
 	TUI           TUIConfig        `toml:"tui"`
+	Test          TestConfig       `toml:"test"`
 
 	// Runtime settings (from env vars, not persisted)
 	NoColor        bool `toml:"-"` // GROVE_NO_COLOR - disable colored output
@@ -238,6 +245,14 @@ func mergeConfigs(base, override *Config) *Config {
 	}
 	if len(override.Protection.Immutable) > 0 {
 		result.Protection.Immutable = override.Protection.Immutable
+	}
+
+	// Merge test config
+	if override.Test.Command != "" {
+		result.Test.Command = override.Test.Command
+	}
+	if override.Test.Service != "" {
+		result.Test.Service = override.Test.Service
 	}
 
 	return &result

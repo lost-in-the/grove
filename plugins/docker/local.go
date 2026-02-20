@@ -98,6 +98,18 @@ func (s *localStrategy) Logs(worktreePath string, service string, follow bool) e
 	return cmd.Run()
 }
 
+func (s *localStrategy) Run(worktreePath string, service string, command string) error {
+	if !hasDockerCompose(worktreePath) {
+		return ErrNoComposeFile
+	}
+
+	cmd := composeCommand(worktreePath, nil, "run", "--rm", service, "bash", "-cil", command)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	return cmd.Run()
+}
+
 func (s *localStrategy) Restart(worktreePath string, service string) error {
 	if !hasDockerCompose(worktreePath) {
 		return fmt.Errorf("no docker-compose file found in %s", worktreePath)

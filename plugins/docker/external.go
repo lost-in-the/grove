@@ -89,6 +89,14 @@ func (s *externalStrategy) Logs(_ string, service string, follow bool) error {
 	return cmd.Run()
 }
 
+func (s *externalStrategy) Run(worktreePath string, service string, command string) error {
+	cmd := composeCommand(s.composePath(), s.envForWorktree(worktreePath), "run", "--rm", service, "bash", "-cil", command)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	return cmd.Run()
+}
+
 func (s *externalStrategy) Restart(_ string, service string) error {
 	args := []string{"restart"}
 	if service != "" {
