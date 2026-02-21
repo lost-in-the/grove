@@ -526,6 +526,134 @@ func TestExternalStrategy_EnvForWorktree(t *testing.T) {
 	}
 }
 
+func TestExternalStrategy_PersistEnvVar(t *testing.T) {
+	tests := []struct {
+		name        string
+		existing    string // existing .env content ("" means no file)
+		worktree    string // relative to tmpDir (compose path)
+		wantContain string
+		wantLines   int // expected non-empty line count (0 = don't check)
+	}{
+		{
+			name:        "no existing .env file",
+			worktree:    "admin-feature-x",
+			wantContain: "ADMIN_DIR=./admin-feature-x",
+		},
+		{
+			name:        "existing .env without env var",
+			existing:    "USER\nDEPLOYER\n",
+			worktree:    "admin-feature-x",
+			wantContain: "ADMIN_DIR=./admin-feature-x",
+			wantLines:   3,
+		},
+		{
+			name:        "existing .env with env var updates in place",
+			existing:    "USER\nADMIN_DIR=./admin\nDEPLOYER\n",
+			worktree:    "admin-feature-x",
+			wantContain: "ADMIN_DIR=./admin-feature-x",
+			wantLines:   3,
+		},
+		{
+			name:        "preserves other variables",
+			existing:    "USER\nKNIFE_HOME=/app/.chef\n",
+			worktree:    "admin",
+			wantContain: "KNIFE_HOME=/app/.chef",
+		},
+		{
+			name:        "switching back to main",
+			existing:    "ADMIN_DIR=./admin-feature-x\n",
+			worktree:    "admin",
+			wantContain: "ADMIN_DIR=./admin",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			envFile := filepath.Join(tmpDir, ".env")
+
+			if tt.existing != "" {
+				if err := os.WriteFile(envFile, []byte(tt.existing), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			s := newExternalStrategy(&config.Config{
+				Plugins: config.PluginsConfig{
+					Docker: config.DockerPluginConfig{
+						Mode: "external",
+						External: &config.ExternalComposeConfig{
+							Path:     tmpDir,
+							EnvVar:   "ADMIN_DIR",
+							Services: []string{"admin"},
+						},
+					},
+				},
+			})
+
+			worktreePath := filepath.Join(tmpDir, tt.worktree)
+			err := s.persistEnvVar(worktreePath)
+			if err != nil {
+				t.Fatalf("persistEnvVar() error = %v", err)
+			}
+
+			data, err := os.ReadFile(envFile)
+			if err != nil {
+				t.Fatalf("Failed to read .env: %v", err)
+			}
+
+			content := string(data)
+			if !strings.Contains(content, tt.wantContain) {
+				t.Errorf(".env content = %q, want to contain %q", content, tt.wantContain)
+			}
+
+			if tt.wantLines > 0 {
+				nonEmpty := 0
+				for _, line := range strings.Split(content, "\n") {
+					if line != "" {
+						nonEmpty++
+					}
+				}
+				if nonEmpty != tt.wantLines {
+					t.Errorf("Expected %d non-empty lines, got %d in:\n%s", tt.wantLines, nonEmpty, content)
+				}
+			}
+		})
+	}
+}
+
+func TestExternalStrategy_PersistEnvVar_NoDoubleEntry(t *testing.T) {
+	tmpDir := t.TempDir()
+	envFile := filepath.Join(tmpDir, ".env")
+
+	s := newExternalStrategy(&config.Config{
+		Plugins: config.PluginsConfig{
+			Docker: config.DockerPluginConfig{
+				Mode: "external",
+				External: &config.ExternalComposeConfig{
+					Path:     tmpDir,
+					EnvVar:   "ADMIN_DIR",
+					Services: []string{"admin"},
+				},
+			},
+		},
+	})
+
+	// Persist twice — should not duplicate
+	_ = s.persistEnvVar(filepath.Join(tmpDir, "admin-feature-x"))
+	_ = s.persistEnvVar(filepath.Join(tmpDir, "admin-feature-y"))
+
+	data, _ := os.ReadFile(envFile)
+	count := strings.Count(string(data), "ADMIN_DIR=")
+	if count != 1 {
+		t.Errorf("Expected exactly 1 ADMIN_DIR entry, got %d in:\n%s", count, string(data))
+	}
+
+	if !strings.Contains(string(data), "ADMIN_DIR=./admin-feature-y") {
+		t.Errorf("Expected final value to be admin-feature-y, got:\n%s", string(data))
+	}
+}
+
 func TestCopyFile(t *testing.T) {
 	tmpDir := t.TempDir()
 

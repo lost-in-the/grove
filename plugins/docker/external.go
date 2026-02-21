@@ -34,13 +34,19 @@ func (s *externalStrategy) OnPreSwitch(ctx *hooks.Context) error {
 }
 
 func (s *externalStrategy) OnPostSwitch(ctx *hooks.Context) error {
-	if !s.getAutoStart() {
-		return nil
-	}
-
 	worktreePath := ctx.WorktreePath
 	if worktreePath == "" {
 		return fmt.Errorf("worktree path not available in hook context")
+	}
+
+	// Always persist the env var so manual docker compose commands use the right directory.
+	// This runs even when auto_start is disabled — the .env must stay in sync.
+	if err := s.persistEnvVar(worktreePath); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to persist %s to .env: %v\n", s.ext.EnvVar, err)
+	}
+
+	if !s.getAutoStart() {
+		return nil
 	}
 
 	return s.startServices(worktreePath)
@@ -55,6 +61,11 @@ func (s *externalStrategy) OnPostCreate(ctx *hooks.Context) error {
 }
 
 func (s *externalStrategy) Up(worktreePath string, detach bool) error {
+	// Persist so manual docker compose commands also resolve to this worktree
+	if err := s.persistEnvVar(worktreePath); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to persist %s to .env: %v\n", s.ext.EnvVar, err)
+	}
+
 	args := []string{"up"}
 	if detach {
 		args = append(args, "-d")
@@ -90,6 +101,11 @@ func (s *externalStrategy) Logs(_ string, service string, follow bool) error {
 }
 
 func (s *externalStrategy) Run(worktreePath string, service string, command string) error {
+	// Persist so the .env stays consistent with what we're running against
+	if err := s.persistEnvVar(worktreePath); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to persist %s to .env: %v\n", s.ext.EnvVar, err)
+	}
+
 	cmd := composeCommand(s.composePath(), s.envForWorktree(worktreePath), "run", "--rm", service, "bash", "-cil", command)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -176,6 +192,45 @@ func (s *externalStrategy) composePath() string {
 		}
 	}
 	return path
+}
+
+// persistEnvVar writes the env_var (e.g., ADMIN_DIR) to the .env file in the compose
+// directory so that subsequent docker compose commands outside grove use the correct value.
+func (s *externalStrategy) persistEnvVar(worktreePath string) error {
+	envFile := filepath.Join(s.composePath(), ".env")
+	key := s.ext.EnvVar
+	rel := s.relativeWorktreePath(worktreePath)
+	line := key + "=" + rel
+
+	content, err := os.ReadFile(envFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return os.WriteFile(envFile, []byte(line+"\n"), 0644)
+		}
+		return fmt.Errorf("failed to read .env: %w", err)
+	}
+
+	lines := strings.Split(string(content), "\n")
+	prefix := key + "="
+	found := false
+	for i, l := range lines {
+		if strings.HasPrefix(l, prefix) {
+			lines[i] = line
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		// Insert before trailing empty line (preserving final newline)
+		if len(lines) > 0 && lines[len(lines)-1] == "" {
+			lines = append(lines[:len(lines)-1], line, "")
+		} else {
+			lines = append(lines, line)
+		}
+	}
+
+	return os.WriteFile(envFile, []byte(strings.Join(lines, "\n")), 0644)
 }
 
 // envForWorktree returns the environment variable setting for the given worktree path.
