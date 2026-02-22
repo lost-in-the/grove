@@ -20,7 +20,7 @@ func TestNewCreateNameForm(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var nameValue string
-			form := NewCreateNameForm(&nameValue, tt.projectName, nil)
+			form := NewCreateNameForm(&nameValue, tt.projectName, nil, "")
 			if form == nil {
 				t.Fatal("NewCreateNameForm returned nil")
 			}
@@ -28,43 +28,15 @@ func TestNewCreateNameForm(t *testing.T) {
 	}
 }
 
-func TestNewCreateBranchForm(t *testing.T) {
-	tests := []struct {
-		name    string
-		wantNil bool
-	}{
-		{"creates branch selection form", false},
+func TestNewCreateNameFormWithPlaceholder(t *testing.T) {
+	var nameValue string
+	form := NewCreateNameForm(&nameValue, "proj", nil, "agent-slot-db")
+	if form == nil {
+		t.Fatal("NewCreateNameForm returned nil")
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var choice string
-			form := NewCreateBranchForm(&choice)
-			if (form == nil) != tt.wantNil {
-				t.Errorf("NewCreateBranchForm() nil = %v, want nil = %v", form == nil, tt.wantNil)
-			}
-		})
-	}
-}
-
-func TestNewBranchPickerForm(t *testing.T) {
-	tests := []struct {
-		name     string
-		branches []string
-		wantNil  bool
-	}{
-		{"creates picker with branches", []string{"main", "develop", "feature/auth"}, false},
-		{"creates picker with empty branches", []string{}, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var selected string
-			form := NewBranchPickerForm(&selected, tt.branches)
-			if (form == nil) != tt.wantNil {
-				t.Errorf("NewBranchPickerForm() nil = %v, want nil = %v", form == nil, tt.wantNil)
-			}
-		})
+	view := form.View()
+	if view == "" {
+		t.Error("form View() returned empty string")
 	}
 }
 
@@ -83,7 +55,7 @@ func TestCreateNameValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			validator := createNameValidator(nil)
+			validator := createNameValidator(nil, "")
 			err := validator(tt.input)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createNameValidator(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
@@ -92,12 +64,28 @@ func TestCreateNameValidation(t *testing.T) {
 	}
 }
 
+func TestCreateNameValidationWithSuggestion(t *testing.T) {
+	// Empty input is valid when there's a real suggestion
+	validator := createNameValidator(nil, "agent-slot-db")
+	err := validator("")
+	if err != nil {
+		t.Errorf("expected nil error for empty input with suggestion, got: %v", err)
+	}
+
+	// Empty input is still invalid when suggestion is the default placeholder
+	validator = createNameValidator(nil, "feature-name")
+	err = validator("")
+	if err == nil {
+		t.Error("expected error for empty input with default placeholder")
+	}
+}
+
 func TestCreateNameValidationDetectsDuplicate(t *testing.T) {
 	existing := []WorktreeItem{
 		{ShortName: "feature-auth", Path: "/work/proj-feature-auth", Branch: "feature/auth"},
 	}
 
-	validator := createNameValidator(existing)
+	validator := createNameValidator(existing, "")
 
 	err := validator("feature-auth")
 	if err == nil {
@@ -115,7 +103,7 @@ func TestCreateNameValidationDetectsDuplicate(t *testing.T) {
 
 func TestCreateFormUsesCharmTheme(t *testing.T) {
 	var nameValue string
-	form := NewCreateNameForm(&nameValue, "proj", nil)
+	form := NewCreateNameForm(&nameValue, "proj", nil, "")
 
 	// The form should render without panicking - basic smoke test
 	view := form.View()
@@ -126,7 +114,7 @@ func TestCreateFormUsesCharmTheme(t *testing.T) {
 
 func TestCreateFormAccessibleMode(t *testing.T) {
 	var nameValue string
-	form := NewCreateNameForm(&nameValue, "proj", nil)
+	form := NewCreateNameForm(&nameValue, "proj", nil, "")
 	accessibleForm := form.WithAccessible(true)
 	if accessibleForm == nil {
 		t.Error("WithAccessible returned nil")

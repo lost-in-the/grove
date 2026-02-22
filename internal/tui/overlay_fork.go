@@ -192,7 +192,7 @@ func NewForkNameForm(nameValue *string, projectName string, existingItems []Work
 			huh.NewInput().
 				Title("Fork Name").
 				Placeholder("feature-name").
-				Validate(createNameValidator(existingItems)).
+				Validate(createNameValidator(existingItems, "")).
 				Value(nameValue),
 		),
 	).WithTheme(huh.ThemeCharm()).WithShowHelp(false).WithAccessible(isHighContrast())

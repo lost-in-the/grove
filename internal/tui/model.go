@@ -661,18 +661,15 @@ func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, m.keys.New):
 		m.activeView = ViewCreate
+		branches, branchErr := git.ListLocalBranches(m.projectRoot)
+		if branchErr != nil {
+			tuilog.Printf("warning: failed to list branches: %v", branchErr)
+		}
 		m.createState = &CreateState{
-			Step:        CreateStepName,
+			Step:        CreateStepBranch,
 			ProjectName: m.projectName,
 			UseHuhForms: true,
-		}
-		if m.createState.UseHuhForms {
-			m.createState.NameForm = NewCreateNameForm(
-				&m.createState.Name,
-				m.projectName,
-				m.existingWorktreeItems(),
-			)
-			return m, m.createState.NameForm.Init()
+			Branches:    branches,
 		}
 		return m, nil
 
@@ -805,192 +802,12 @@ func (m Model) handleCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch s.Step {
-	case CreateStepName:
-		switch {
-		case key.Matches(msg, m.keys.Escape):
-			m.activeView = ViewDashboard
-			m.createState = nil
-			return m, nil
-
-		case key.Matches(msg, m.keys.Enter):
-			if s.Name == "" {
-				s.Error = "name cannot be empty"
-				return m, nil
-			}
-			if errMsg := ValidateWorktreeName(s.Name); errMsg != "" {
-				s.Error = errMsg
-				return m, nil
-			}
-			// If duplicate exists, switch to it
-			if s.ExistingWorktree != nil {
-				m.switchTo = s.ExistingWorktree.Path
-				m.activeView = ViewDashboard
-				m.createState = nil
-				return m, tea.Quit
-			}
-			s.Error = ""
-			s.Step = CreateStepBranch
-			return m, nil
-
-		case msg.Type == tea.KeyBackspace:
-			if len(s.Name) > 0 {
-				s.Name = s.Name[:len(s.Name)-1]
-				s.Error = ""
-				s.ExistingWorktree = checkDuplicateWorktree(s.Name, m.existingWorktreeItems())
-			}
-			return m, nil
-
-		case msg.Type == tea.KeyRunes:
-			s.Name += string(msg.Runes)
-			if errMsg := ValidateWorktreeName(s.Name); errMsg != "" {
-				s.Error = errMsg
-			} else {
-				s.Error = ""
-			}
-			s.ExistingWorktree = checkDuplicateWorktree(s.Name, m.existingWorktreeItems())
-			return m, nil
-		}
-
 	case CreateStepBranch:
-		switch {
-		case key.Matches(msg, m.keys.Escape):
-			m.activeView = ViewDashboard
-			m.createState = nil
-			return m, nil
-
-		case key.Matches(msg, m.keys.Back):
-			s.Step = CreateStepName
-			return m, nil
-
-		case key.Matches(msg, m.keys.Up):
-			if s.BranchChoice > 0 {
-				s.BranchChoice--
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.Down):
-			if s.BranchChoice < BranchFromExisting {
-				s.BranchChoice++
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.Enter):
-			if s.BranchChoice == BranchFromExisting {
-				branches, err := git.ListLocalBranches(m.projectRoot)
-				if err != nil {
-					s.Error = fmt.Sprintf("failed to list branches: %v", err)
-					return m, nil
-				}
-				s.Branches = branches
-				s.BranchCursor = 0
-				s.BranchFilter = ""
-				s.Step = CreateStepPickBranch
-				return m, nil
-			}
-			s.BaseBranch = ""
-			s.Step = CreateStepConfirm
-			return m, nil
-		}
-
-	case CreateStepPickBranch:
-		filtered := filteredBranches(s.Branches, s.BranchFilter)
-		switch {
-		case key.Matches(msg, m.keys.Escape):
-			m.activeView = ViewDashboard
-			m.createState = nil
-			return m, nil
-
-		case key.Matches(msg, m.keys.Up):
-			if s.BranchCursor > 0 {
-				s.BranchCursor--
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.Down):
-			if s.BranchCursor < len(filtered)-1 {
-				s.BranchCursor++
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.Enter):
-			if len(filtered) > 0 && s.BranchCursor < len(filtered) {
-				s.BaseBranch = filtered[s.BranchCursor]
-				if m.cfg != nil && m.cfg.TUI.SkipBranchNotice != nil && *m.cfg.TUI.SkipBranchNotice {
-					action := m.cfg.TUI.DefaultBranchAction
-					if action == "fork" {
-						return m.startCreate(s.Name, "")
-					}
-					return m.startCreate(s.Name, s.BaseBranch)
-				}
-				s.ActionChoice = 0
-				s.DontShowAgain = false
-				s.Step = CreateStepBranchAction
-			}
-			return m, nil
-
-		case msg.Type == tea.KeyBackspace:
-			if len(s.BranchFilter) > 0 {
-				s.BranchFilter = s.BranchFilter[:len(s.BranchFilter)-1]
-				s.BranchCursor = 0
-			} else {
-				s.Step = CreateStepBranch
-			}
-			return m, nil
-
-		case msg.Type == tea.KeyRunes:
-			s.BranchFilter += string(msg.Runes)
-			s.BranchCursor = 0
-			return m, nil
-		}
-
+		return m.handleBranchSelectorKey(msg)
 	case CreateStepBranchAction:
-		switch {
-		case key.Matches(msg, m.keys.Escape):
-			m.activeView = ViewDashboard
-			m.createState = nil
-			return m, nil
-
-		case key.Matches(msg, m.keys.Back):
-			s.Step = CreateStepPickBranch
-			return m, nil
-
-		case key.Matches(msg, m.keys.Up):
-			if s.ActionChoice > 0 {
-				s.ActionChoice--
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.Down):
-			if s.ActionChoice < 1 {
-				s.ActionChoice++
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.Toggle):
-			s.DontShowAgain = !s.DontShowAgain
-			return m, nil
-
-		case key.Matches(msg, m.keys.Enter):
-			if s.DontShowAgain && m.cfg != nil {
-				action := "fork"
-				if s.ActionChoice == 0 {
-					action = "split"
-				}
-				if err := config.SetProjectConfigValues(map[string]string{
-					"tui.skip_branch_notice":    "true",
-					"tui.default_branch_action": `"` + action + `"`,
-				}); err != nil {
-					m.toast.Show(NewToast("Failed to save preference: "+err.Error(), ToastWarning))
-				}
-			}
-
-			if s.ActionChoice == 1 {
-				s.BaseBranch = ""
-			}
-			s.Step = CreateStepConfirm
-			return m, nil
-		}
-
+		return m.handleBranchActionKey(msg)
+	case CreateStepName:
+		return m.handleNameKey(msg)
 	case CreateStepConfirm:
 		return m.handleConfirmKey(msg)
 	}
@@ -1003,10 +820,21 @@ func (m Model) handleCreateKeyHuh(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	s := m.createState
 
 	switch s.Step {
+	case CreateStepBranch:
+		return m.handleBranchSelectorKey(msg)
+
+	case CreateStepBranchAction:
+		return m.handleBranchActionKey(msg)
+
 	case CreateStepName:
 		if key.Matches(msg, m.keys.Escape) {
 			m.activeView = ViewDashboard
 			m.createState = nil
+			return m, nil
+		}
+		// Intercept backspace to go back to Branch step before Huh consumes it
+		if key.Matches(msg, m.keys.Back) {
+			s.Step = CreateStepBranch
 			return m, nil
 		}
 		if s.NameForm == nil {
@@ -1022,59 +850,6 @@ func (m Model) handleCreateKeyHuh(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m.checkCreateFormCompletion(cmd)
 
-	case CreateStepBranch:
-		if key.Matches(msg, m.keys.Escape) {
-			m.activeView = ViewDashboard
-			m.createState = nil
-			return m, nil
-		}
-		// Intercept backspace to go back to Name step before Huh consumes it
-		if key.Matches(msg, m.keys.Back) {
-			s.Step = CreateStepName
-			s.NameForm = NewCreateNameForm(&s.Name, s.ProjectName, m.existingWorktreeItems())
-			return m, s.NameForm.Init()
-		}
-		if s.BranchForm == nil {
-			return m, nil
-		}
-		model, cmd := s.BranchForm.Update(msg)
-		s.BranchForm = model.(*huh.Form)
-
-		if s.BranchForm.State == huh.StateAborted {
-			m.activeView = ViewDashboard
-			m.createState = nil
-			return m, nil
-		}
-		return m.checkCreateFormCompletion(cmd)
-
-	case CreateStepPickBranch:
-		if key.Matches(msg, m.keys.Escape) {
-			m.activeView = ViewDashboard
-			m.createState = nil
-			return m, nil
-		}
-		// Intercept backspace to go back to Branch step before Huh consumes it
-		if key.Matches(msg, m.keys.Back) {
-			s.Step = CreateStepBranch
-			s.BranchForm = NewCreateBranchForm(&s.BranchChoiceStr)
-			return m, s.BranchForm.Init()
-		}
-		if s.BranchPickForm == nil {
-			return m, nil
-		}
-		model, cmd := s.BranchPickForm.Update(msg)
-		s.BranchPickForm = model.(*huh.Form)
-
-		if s.BranchPickForm.State == huh.StateAborted {
-			m.activeView = ViewDashboard
-			m.createState = nil
-			return m, nil
-		}
-		return m.checkCreateFormCompletion(cmd)
-
-	case CreateStepBranchAction:
-		return m.handleBranchActionKey(msg)
-
 	case CreateStepConfirm:
 		return m.handleConfirmKey(msg)
 	}
@@ -1085,22 +860,11 @@ func (m Model) handleCreateKeyHuh(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // forwardToActiveHuhForm forwards non-key messages to the active Huh form.
 func (m Model) forwardToActiveHuhForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 	s := m.createState
-	var activeForm **huh.Form
-	switch s.Step {
-	case CreateStepName:
-		activeForm = &s.NameForm
-	case CreateStepBranch:
-		activeForm = &s.BranchForm
-	case CreateStepPickBranch:
-		activeForm = &s.BranchPickForm
-	default:
+	if s.Step != CreateStepName || s.NameForm == nil {
 		return m, nil
 	}
-	if *activeForm == nil {
-		return m, nil
-	}
-	model, cmd := (*activeForm).Update(msg)
-	*activeForm = model.(*huh.Form)
+	model, cmd := s.NameForm.Update(msg)
+	s.NameForm = model.(*huh.Form)
 
 	// Check if the async update completed the form (e.g. Enter key result)
 	return m.checkCreateFormCompletion(cmd)
@@ -1111,49 +875,14 @@ func (m Model) forwardToActiveHuhForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) checkCreateFormCompletion(cmd tea.Cmd) (tea.Model, tea.Cmd) {
 	s := m.createState
 
-	switch s.Step {
-	case CreateStepName:
-		if s.NameForm != nil && s.NameForm.State == huh.StateCompleted {
-			s.Error = ""
-			s.Step = CreateStepBranch
-			s.BranchForm = NewCreateBranchForm(&s.BranchChoiceStr)
-			return m, s.BranchForm.Init()
+	if s.Step == CreateStepName && s.NameForm != nil && s.NameForm.State == huh.StateCompleted {
+		// Use suggestion if name is empty
+		if s.Name == "" && s.NameSuggestion != "" {
+			s.Name = s.NameSuggestion
 		}
-
-	case CreateStepBranch:
-		if s.BranchForm != nil && s.BranchForm.State == huh.StateCompleted {
-			if s.BranchChoiceStr == "existing" {
-				branches, err := git.ListLocalBranches(m.projectRoot)
-				if err != nil {
-					s.Error = fmt.Sprintf("failed to list branches: %v", err)
-					return m, nil
-				}
-				s.Branches = branches
-				s.BranchPickForm = NewBranchPickerForm(&s.SelectedBranch, branches)
-				s.Step = CreateStepPickBranch
-				return m, s.BranchPickForm.Init()
-			}
-			s.BaseBranch = ""
-			s.Step = CreateStepConfirm
-			return m, nil
-		}
-
-	case CreateStepPickBranch:
-		if s.BranchPickForm != nil && s.BranchPickForm.State == huh.StateCompleted {
-			s.BaseBranch = s.SelectedBranch
-			if m.cfg != nil && m.cfg.TUI.SkipBranchNotice != nil && *m.cfg.TUI.SkipBranchNotice {
-				action := m.cfg.TUI.DefaultBranchAction
-				if action == "fork" {
-					s.BaseBranch = ""
-				}
-				s.Step = CreateStepConfirm
-				return m, nil
-			}
-			s.ActionChoice = 0
-			s.DontShowAgain = false
-			s.Step = CreateStepBranchAction
-			return m, nil
-		}
+		s.Error = ""
+		s.Step = CreateStepConfirm
+		return m, nil
 	}
 
 	return m, cmd
@@ -1169,10 +898,7 @@ func (m Model) handleBranchActionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.keys.Back):
-		s.Step = CreateStepPickBranch
-		if s.BranchPickForm != nil {
-			return m, s.BranchPickForm.Init()
-		}
+		s.Step = CreateStepBranch
 		return m, nil
 
 	case key.Matches(msg, m.keys.Up):
@@ -1209,7 +935,12 @@ func (m Model) handleBranchActionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// fork: new branch, don't use existing
 			s.BaseBranch = ""
 		}
-		s.Step = CreateStepConfirm
+		// Proceed to Name step
+		s.Step = CreateStepName
+		if s.UseHuhForms {
+			s.NameForm = NewCreateNameForm(&s.Name, s.ProjectName, m.existingWorktreeItems(), s.NameSuggestion)
+			return m, s.NameForm.Init()
+		}
 		return m, nil
 	}
 	return m, nil
@@ -1225,10 +956,10 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.keys.Back):
-		s.Step = CreateStepBranch
+		s.Step = CreateStepName
 		if s.UseHuhForms {
-			s.BranchForm = NewCreateBranchForm(&s.BranchChoiceStr)
-			return m, s.BranchForm.Init()
+			s.NameForm = NewCreateNameForm(&s.Name, s.ProjectName, m.existingWorktreeItems(), s.NameSuggestion)
+			return m, s.NameForm.Init()
 		}
 		return m, nil
 
@@ -1242,8 +973,163 @@ func (m *Model) startCreate(name, baseBranch string) (tea.Model, tea.Cmd) {
 	if m.createState.Creating {
 		return m, nil
 	}
+	m.createState.Error = ""
 	m.createState.Creating = true
 	return m, tea.Batch(m.spinner.Tick, createWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, name, baseBranch))
+}
+
+// handleBranchSelectorKey handles the unified branch selector step.
+func (m Model) handleBranchSelectorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	s := m.createState
+
+	filtered := filteredBranches(s.Branches, s.BranchFilter)
+	showCreateNew := s.BranchFilter != "" && !exactBranchMatch(s.Branches, s.BranchFilter)
+	totalItems := len(filtered)
+	if showCreateNew {
+		totalItems++
+	}
+
+	switch {
+	case key.Matches(msg, m.keys.Escape):
+		m.activeView = ViewDashboard
+		m.createState = nil
+		return m, nil
+
+	case key.Matches(msg, m.keys.Up):
+		if s.BranchCursor > 0 {
+			s.BranchCursor--
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.Down):
+		if totalItems > 0 && s.BranchCursor < totalItems-1 {
+			s.BranchCursor++
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.Enter):
+		if totalItems == 0 {
+			return m, nil
+		}
+		if s.BranchCursor < len(filtered) {
+			// Selected an existing branch
+			selected := filtered[s.BranchCursor]
+			s.BaseBranch = selected
+			s.NewBranchName = ""
+			// Derive name suggestion
+			strategy := ""
+			if m.cfg != nil {
+				strategy = m.cfg.TUI.WorktreeNameFromBranch
+			}
+			s.NameSuggestion = worktree.DeriveWorktreeName(selected, strategy)
+
+			// Check if branch action should be skipped
+			if m.cfg != nil && m.cfg.TUI.SkipBranchNotice != nil && *m.cfg.TUI.SkipBranchNotice {
+				action := m.cfg.TUI.DefaultBranchAction
+				if action == "fork" {
+					s.BaseBranch = ""
+				}
+				s.Step = CreateStepName
+				if s.UseHuhForms {
+					s.NameForm = NewCreateNameForm(&s.Name, s.ProjectName, m.existingWorktreeItems(), s.NameSuggestion)
+					return m, s.NameForm.Init()
+				}
+				return m, nil
+			}
+
+			s.ActionChoice = 0
+			s.DontShowAgain = false
+			s.Step = CreateStepBranchAction
+			return m, nil
+		} else if showCreateNew {
+			// Selected "Create new branch"
+			s.BaseBranch = ""
+			s.NewBranchName = s.BranchFilter
+			s.NameSuggestion = s.BranchFilter
+			s.Step = CreateStepName
+			if s.UseHuhForms {
+				s.NameForm = NewCreateNameForm(&s.Name, s.ProjectName, m.existingWorktreeItems(), s.NameSuggestion)
+				return m, s.NameForm.Init()
+			}
+			return m, nil
+		}
+		return m, nil
+
+	case msg.Type == tea.KeyBackspace:
+		if len(s.BranchFilter) > 0 {
+			s.BranchFilter = s.BranchFilter[:len(s.BranchFilter)-1]
+			s.BranchCursor = 0
+		}
+		return m, nil
+
+	case msg.Type == tea.KeyRunes:
+		s.BranchFilter += string(msg.Runes)
+		s.BranchCursor = 0
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// handleNameKey handles the name step key input (non-Huh path).
+func (m Model) handleNameKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	s := m.createState
+
+	switch {
+	case key.Matches(msg, m.keys.Escape):
+		m.activeView = ViewDashboard
+		m.createState = nil
+		return m, nil
+
+	case key.Matches(msg, m.keys.Back):
+		s.Step = CreateStepBranch
+		return m, nil
+
+	case key.Matches(msg, m.keys.Enter):
+		effectiveName := s.Name
+		if effectiveName == "" && s.NameSuggestion != "" {
+			effectiveName = s.NameSuggestion
+			s.Name = effectiveName
+		}
+		if effectiveName == "" {
+			s.Error = "name cannot be empty"
+			return m, nil
+		}
+		if errMsg := ValidateWorktreeName(effectiveName); errMsg != "" {
+			s.Error = errMsg
+			return m, nil
+		}
+		// If duplicate exists, switch to it
+		if s.ExistingWorktree != nil {
+			m.switchTo = s.ExistingWorktree.Path
+			m.activeView = ViewDashboard
+			m.createState = nil
+			return m, tea.Quit
+		}
+		s.Error = ""
+		s.Step = CreateStepConfirm
+		return m, nil
+
+	case msg.Type == tea.KeyBackspace:
+		if len(s.Name) > 0 {
+			s.Name = s.Name[:len(s.Name)-1]
+			s.Error = ""
+			s.ExistingWorktree = checkDuplicateWorktree(s.Name, m.existingWorktreeItems())
+		}
+		return m, nil
+
+	case msg.Type == tea.KeyRunes:
+		s.Name += string(msg.Runes)
+		if errMsg := ValidateWorktreeName(s.Name); errMsg != "" {
+			s.Error = errMsg
+		} else {
+			s.Error = ""
+		}
+		s.ExistingWorktree = checkDuplicateWorktree(s.Name, m.existingWorktreeItems())
+		return m, nil
+	}
+
+	return m, nil
 }
 
 func (m *Model) applySortToList() {

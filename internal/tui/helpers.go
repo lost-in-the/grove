@@ -82,6 +82,16 @@ func ValidateWorktreeName(name string) string {
 	return ""
 }
 
+// exactBranchMatch returns true if any branch exactly matches the given name.
+func exactBranchMatch(branches []string, name string) bool {
+	for _, b := range branches {
+		if b == name {
+			return true
+		}
+	}
+	return false
+}
+
 func padRight(s string, n int) string {
 	if len(s) >= n {
 		return s

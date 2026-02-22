@@ -92,11 +92,12 @@ func deleteWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRo
 
 func createWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot, name, baseBranch string) tea.Cmd {
 	return func() tea.Msg {
-		branchArg := name
+		var err error
 		if baseBranch != "" {
-			branchArg = baseBranch
+			err = mgr.CreateFromExisting(name, baseBranch)
+		} else {
+			err = mgr.Create(name, name)
 		}
-		err := mgr.Create(name, branchArg)
 		if err != nil {
 			return worktreeCreatedMsg{name: name, err: err}
 		}

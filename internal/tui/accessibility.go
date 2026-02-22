@@ -99,7 +99,7 @@ func NewAccessibleCreateNameForm(nameValue *string, projectName string, existing
 				Title("Worktree Name").
 				Description(description).
 				Placeholder("feature-name").
-				Validate(createNameValidator(existingItems)).
+				Validate(createNameValidator(existingItems, "")).
 				Value(nameValue),
 		),
 	).WithTheme(huh.ThemeCharm()).WithAccessible(true)

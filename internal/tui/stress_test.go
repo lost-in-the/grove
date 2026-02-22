@@ -600,6 +600,8 @@ func TestStressCreateWithSpecialCharacters(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			m := newTestModel(withItems(1), withSize(80, 24))
 			m = enterCreateManual(m)
+			// Set to name step where validation applies
+			m.createState.Step = CreateStepName
 			m = sendKey(m, tt.input)
 
 			// Should show validation error
@@ -613,6 +615,8 @@ func TestStressCreateWithSpecialCharacters(t *testing.T) {
 func TestStressCreateEmptySubmit(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
 	m = enterCreateManual(m)
+	// Set to name step to test empty name validation
+	m.createState.Step = CreateStepName
 
 	// Submit empty name
 	m = sendKey(m, "enter")

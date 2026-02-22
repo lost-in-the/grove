@@ -146,6 +146,7 @@ func enterCreateManual(m Model) Model {
 	m = sendKey(m, "n")
 	if m.createState != nil {
 		m.createState.UseHuhForms = false
+		m.createState.Branches = []string{"main", "develop", "feature/auth"}
 	}
 	return m
 }

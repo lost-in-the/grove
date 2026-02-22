@@ -54,7 +54,7 @@ func TestRenderContextSummary(t *testing.T) {
 	}
 }
 
-func TestRenderCreateBranchV2(t *testing.T) {
+func TestRenderCreateBranchSelectorV2(t *testing.T) {
 	tests := []struct {
 		name     string
 		state    *CreateState
@@ -62,38 +62,49 @@ func TestRenderCreateBranchV2(t *testing.T) {
 		wantStrs []string
 	}{
 		{
-			name: "branch step shows context summary from step 1",
+			name: "branch selector shows branches",
 			state: &CreateState{
-				Step:        CreateStepBranch,
-				Name:        "feature-auth",
-				ProjectName: "acupoll",
+				Step:     CreateStepBranch,
+				Branches: []string{"main", "develop", "feature/auth"},
 			},
 			width: 80,
 			wantStrs: []string{
-				"feature-auth",
-				"acupoll-feature-auth",
-				"Create new branch",
-				"From existing branch",
+				"main",
+				"develop",
+				"Branch",
 			},
 		},
 		{
-			name: "branch step shows stepper labels",
+			name: "branch selector with filter shows create new",
 			state: &CreateState{
-				Step:        CreateStepBranch,
-				Name:        "my-feature",
-				ProjectName: "grove-cli",
+				Step:         CreateStepBranch,
+				Branches:     []string{"main", "develop"},
+				BranchFilter: "my-feat",
+			},
+			width: 80,
+			wantStrs: []string{
+				"Create new branch",
+				"my-feat",
+				"Filter",
+			},
+		},
+		{
+			name: "branch selector shows stepper labels",
+			state: &CreateState{
+				Step:     CreateStepBranch,
+				Branches: []string{"main"},
 			},
 			width:    80,
-			wantStrs: []string{"Name", "Branch"},
+			wantStrs: []string{"Branch", "Name"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := renderCreateBranchV2(tt.state, tt.width)
+			got := renderCreateBranchSelectorV2(tt.state, tt.width)
 			for _, want := range tt.wantStrs {
 				if !strings.Contains(got, want) {
-					t.Errorf("renderCreateBranchV2() missing %q in output:\n%s", want, got)
+					t.Errorf("renderCreateBranchSelectorV2() missing %q in output:\n%s", want, got)
 				}
 			}
 		})
@@ -157,13 +168,12 @@ func TestRenderCreateV2Dispatch(t *testing.T) {
 			wantStrs: []string{"Name"},
 		},
 		{
-			name: "dispatches to branch step with context",
+			name: "dispatches to branch step",
 			state: &CreateState{
-				Step:        CreateStepBranch,
-				Name:        "feat",
-				ProjectName: "proj",
+				Step:     CreateStepBranch,
+				Branches: []string{"main", "develop"},
 			},
-			wantStrs: []string{"feat", "proj-feat"},
+			wantStrs: []string{"Branch", "main"},
 		},
 		{
 			name: "dispatches to creating spinner",
@@ -189,13 +199,14 @@ func TestRenderCreateV2Dispatch(t *testing.T) {
 
 func TestBackspacePreservesValues(t *testing.T) {
 	s := &CreateState{
-		Step:        CreateStepBranch,
+		Step:        CreateStepName,
 		Name:        "my-feature",
 		ProjectName: "acupoll",
+		BaseBranch:  "develop",
 	}
 
-	// Simulate going back
-	s.Step = CreateStepName
+	// Simulate going back to branch step
+	s.Step = CreateStepBranch
 
 	if s.Name != "my-feature" {
 		t.Errorf("Name not preserved: got %q, want %q", s.Name, "my-feature")
@@ -203,7 +214,12 @@ func TestBackspacePreservesValues(t *testing.T) {
 	if s.ProjectName != "acupoll" {
 		t.Errorf("ProjectName not preserved: got %q, want %q", s.ProjectName, "acupoll")
 	}
+	if s.BaseBranch != "develop" {
+		t.Errorf("BaseBranch not preserved: got %q, want %q", s.BaseBranch, "develop")
+	}
 
+	// Navigate forward again — values should still be there
+	s.Step = CreateStepName
 	view := renderCreateNameV2(s, 80)
 	if !strings.Contains(view, "my-feature") {
 		t.Errorf("name step should show preserved name, got:\n%s", view)

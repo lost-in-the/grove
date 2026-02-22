@@ -110,6 +110,19 @@ func extractProjectNameFromRemote(remoteURL string) string {
 	return filepath.Base(remoteURL)
 }
 
+// DeriveWorktreeName derives a suggested worktree name from a branch name.
+// Strategy "last_segment" (default) takes the part after the last "/".
+// E.g., "feat/agent-slot-db" → "agent-slot-db", "main" → "main".
+func DeriveWorktreeName(branch, strategy string) string {
+	if strategy == "" || strategy == "last_segment" {
+		if idx := strings.LastIndex(branch, "/"); idx >= 0 {
+			return branch[idx+1:]
+		}
+		return branch
+	}
+	return branch
+}
+
 // FullName returns the full worktree name with project prefix.
 // Format: {project}-{name}
 // Example: grove-cli-testing
