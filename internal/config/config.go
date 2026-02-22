@@ -77,11 +77,22 @@ type DockerPluginConfig struct {
 // ExternalComposeConfig configures external Docker Compose mode where services
 // are defined in a shared compose setup outside the project directory.
 type ExternalComposeConfig struct {
-	Path        string   `toml:"path"`         // Path to external compose directory
-	EnvVar      string   `toml:"env_var"`      // Environment variable name (e.g., "ADMIN_DIR")
-	Services    []string `toml:"services"`     // Service names to manage
-	CopyFiles   []string `toml:"copy_files"`   // Files to copy from main on worktree create
-	SymlinkDirs []string `toml:"symlink_dirs"` // Directories to symlink from main on create
+	Path        string            `toml:"path"`         // Path to external compose directory
+	EnvVar      string            `toml:"env_var"`      // Environment variable name (e.g., "ADMIN_DIR")
+	Services    []string          `toml:"services"`     // Service names to manage
+	CopyFiles   []string          `toml:"copy_files"`   // Files to copy from main on worktree create
+	SymlinkDirs []string          `toml:"symlink_dirs"` // Directories to symlink from main on create
+	Agent       *AgentStackConfig `toml:"agent"`        // Optional agent stack configuration
+}
+
+// AgentStackConfig configures agent stack support for external compose mode.
+type AgentStackConfig struct {
+	Enabled      *bool    `toml:"enabled"`
+	MaxSlots     int      `toml:"max_slots"`
+	Services     []string `toml:"services"`
+	TemplatePath string   `toml:"template_path"`
+	URLPattern   string   `toml:"url_pattern"`
+	Network      string   `toml:"network"` // External Docker network that must exist for agent stacks
 }
 
 // GetConfigPaths returns the paths to check for config files

@@ -58,6 +58,9 @@ Extra arguments are appended to the configured command:
 		if ctx.Config.Test.Service != "" {
 			// Docker mode: run in an ephemeral container
 			plugin := docker.New()
+			if docker.HasActiveAgentSlot(ctx.Config, targetTree.Path) {
+				plugin.SetIsolated(true)
+			}
 			if err := plugin.Init(ctx.Config); err != nil {
 				return fmt.Errorf("failed to initialize docker plugin: %w", err)
 			}

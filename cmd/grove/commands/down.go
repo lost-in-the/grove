@@ -21,6 +21,9 @@ var downCmd = &cobra.Command{
 This command looks for a docker-compose.yml file in the current directory
 and stops all services defined in it.
 
+If the worktree has an isolated stack running (started with grove up --isolated),
+it is automatically detected and torn down.
+
 Examples:
   grove down   # Stop all containers
   w down       # Using alias`,
@@ -31,8 +34,11 @@ Examples:
 			return fmt.Errorf("failed to get current directory: %w", err)
 		}
 
-		// Create docker plugin
+		// Create docker plugin — auto-detect isolated stacks
 		plugin := docker.New()
+		if docker.HasActiveAgentSlot(ctx.Config, cwd) {
+			plugin.SetIsolated(true)
+		}
 		if err := plugin.Init(ctx.Config); err != nil {
 			return fmt.Errorf("failed to initialize docker plugin: %w", err)
 		}

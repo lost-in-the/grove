@@ -778,6 +778,218 @@ func TestValidateDockerPlugin(t *testing.T) {
 	}
 }
 
+func TestLoadAgentStackConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	composePath := filepath.Join(tmpDir, "shared-compose")
+	if err := os.MkdirAll(composePath, 0755); err != nil {
+		t.Fatalf("Failed to create compose dir: %v", err)
+	}
+
+	configData := `
+[plugins.docker]
+enabled = true
+mode = "external"
+
+[plugins.docker.external]
+path = "` + composePath + `"
+env_var = "ADMIN_DIR"
+services = ["admin"]
+
+[plugins.docker.external.agent]
+enabled = true
+max_slots = 3
+services = ["agent"]
+template_path = "/tmp/agent-template"
+url_pattern = "http://localhost:{port}"
+`
+	configPath := filepath.Join(tmpDir, "config.toml")
+	if err := os.WriteFile(configPath, []byte(configData), 0644); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
+
+	cfg, err := LoadConfigFromPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfigFromPath() error = %v", err)
+	}
+
+	ext := cfg.Plugins.Docker.External
+	if ext == nil {
+		t.Fatal("Expected External config to be non-nil")
+	}
+	if ext.Agent == nil {
+		t.Fatal("Expected Agent config to be non-nil")
+	}
+	agent := ext.Agent
+	if agent.Enabled == nil || !*agent.Enabled {
+		t.Error("Expected agent enabled to be true")
+	}
+	if agent.MaxSlots != 3 {
+		t.Errorf("Expected max_slots 3, got %d", agent.MaxSlots)
+	}
+	if len(agent.Services) != 1 || agent.Services[0] != "agent" {
+		t.Errorf("Expected services [agent], got %v", agent.Services)
+	}
+	if agent.TemplatePath != "/tmp/agent-template" {
+		t.Errorf("Expected template_path '/tmp/agent-template', got %q", agent.TemplatePath)
+	}
+	if agent.URLPattern != "http://localhost:{port}" {
+		t.Errorf("Expected url_pattern 'http://localhost:{port}', got %q", agent.URLPattern)
+	}
+}
+
+func TestValidateAgentConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	boolTrue := true
+	boolFalse := false
+
+	validBase := func() *Config {
+		return &Config{
+			Alias:         "w",
+			DefaultBranch: "main",
+			Switch:        SwitchConfig{DirtyHandling: "prompt"},
+			Plugins: PluginsConfig{
+				Docker: DockerPluginConfig{
+					Mode: "external",
+					External: &ExternalComposeConfig{
+						Path:     tmpDir,
+						EnvVar:   "ADMIN_DIR",
+						Services: []string{"admin"},
+					},
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name    string
+		modify  func(*Config)
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name:    "nil agent config is valid",
+			modify:  func(c *Config) {},
+			wantErr: false,
+		},
+		{
+			name: "agent present but disabled is valid",
+			modify: func(c *Config) {
+				c.Plugins.Docker.External.Agent = &AgentStackConfig{
+					Enabled: &boolFalse,
+				}
+			},
+			wantErr: false,
+		},
+		{
+			name: "agent enabled with nil enabled pointer is valid",
+			modify: func(c *Config) {
+				c.Plugins.Docker.External.Agent = &AgentStackConfig{
+					// Enabled is nil — treated as not enabled
+					Services:     []string{"agent"},
+					TemplatePath: "/tmp/tpl",
+				}
+			},
+			wantErr: false,
+		},
+		{
+			name: "agent enabled missing services",
+			modify: func(c *Config) {
+				c.Plugins.Docker.External.Agent = &AgentStackConfig{
+					Enabled:      &boolTrue,
+					TemplatePath: "/tmp/tpl",
+				}
+			},
+			wantErr: true,
+			errMsg:  "agent.services is required",
+		},
+		{
+			name: "agent enabled missing template_path",
+			modify: func(c *Config) {
+				c.Plugins.Docker.External.Agent = &AgentStackConfig{
+					Enabled:  &boolTrue,
+					Services: []string{"agent"},
+				}
+			},
+			wantErr: true,
+			errMsg:  "agent.template_path is required",
+		},
+		{
+			name: "agent enabled with all required fields is valid",
+			modify: func(c *Config) {
+				c.Plugins.Docker.External.Agent = &AgentStackConfig{
+					Enabled:      &boolTrue,
+					Services:     []string{"agent"},
+					TemplatePath: "/tmp/tpl",
+				}
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := validBase()
+			tt.modify(cfg)
+			err := Validate(cfg)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr && tt.errMsg != "" && err != nil {
+				if !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("Expected error containing %q, got %q", tt.errMsg, err.Error())
+				}
+			}
+		})
+	}
+}
+
+func TestMergeConfigsPreservesAgent(t *testing.T) {
+	boolTrue := true
+
+	base := &Config{
+		Alias:         "w",
+		DefaultBranch: "main",
+		Switch:        SwitchConfig{DirtyHandling: "prompt"},
+	}
+
+	override := &Config{
+		Plugins: PluginsConfig{
+			Docker: DockerPluginConfig{
+				Mode: "external",
+				External: &ExternalComposeConfig{
+					Path:     "/tmp/compose",
+					EnvVar:   "ADMIN_DIR",
+					Services: []string{"admin"},
+					Agent: &AgentStackConfig{
+						Enabled:      &boolTrue,
+						MaxSlots:     5,
+						Services:     []string{"agent"},
+						TemplatePath: "/tmp/tpl",
+					},
+				},
+			},
+		},
+	}
+
+	result := mergeConfigs(base, override)
+
+	if result.Plugins.Docker.External == nil {
+		t.Fatal("Expected External config to be preserved")
+	}
+	if result.Plugins.Docker.External.Agent == nil {
+		t.Fatal("Expected Agent config to be preserved through merge")
+	}
+	agent := result.Plugins.Docker.External.Agent
+	if agent.MaxSlots != 5 {
+		t.Errorf("Expected max_slots 5, got %d", agent.MaxSlots)
+	}
+	if len(agent.Services) != 1 || agent.Services[0] != "agent" {
+		t.Errorf("Expected agent services [agent], got %v", agent.Services)
+	}
+}
+
 func TestIsExternalDockerMode(t *testing.T) {
 	cfg := &Config{}
 	if cfg.IsExternalDockerMode() {

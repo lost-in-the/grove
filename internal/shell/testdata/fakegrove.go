@@ -44,7 +44,7 @@ func main() {
 
 	switch cmd {
 	case "ls":
-		fmt.Println("main")
+		fmt.Println("root")
 		fmt.Println("feature-auth")
 		fmt.Println("testing")
 

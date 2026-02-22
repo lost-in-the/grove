@@ -34,6 +34,7 @@ type WorktreeState struct {
 	Environment    bool       `json:"environment,omitempty"`
 	Mirror         string     `json:"mirror,omitempty"`
 	LastSyncedAt   *time.Time `json:"last_synced_at,omitempty"`
+	AgentSlot      int        `json:"agent_slot,omitempty"` // 0 = no agent stack running
 }
 
 // Manager handles state management for Grove

@@ -10,11 +10,13 @@ import (
 )
 
 var (
-	upDetach bool
+	upDetach   bool
+	upIsolated bool
 )
 
 func init() {
 	upCmd.Flags().BoolVarP(&upDetach, "detach", "d", true, "Run containers in the background")
+	upCmd.Flags().BoolVar(&upIsolated, "isolated", false, "Start an independent stack with its own containers and database")
 	rootCmd.AddCommand(upCmd)
 }
 
@@ -27,10 +29,14 @@ This command looks for a docker-compose.yml file in the current directory
 and starts all services defined in it. By default, containers run in detached
 mode (background).
 
+Use --isolated to start a fully independent stack with its own containers,
+database, and routing. Useful when you need multiple stacks running simultaneously.
+
 Examples:
-  grove up              # Start containers in detached mode
+  grove up                 # Start containers in detached mode
   grove up --detach=false  # Start containers in foreground
-  w up                  # Using alias`,
+  grove up --isolated      # Start an independent stack (allocates a slot)
+  w up                     # Using alias`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		// Get current directory (docker-compose works in cwd)
 		cwd, err := os.Getwd()
@@ -40,8 +46,15 @@ Examples:
 
 		// Create docker plugin
 		plugin := docker.New()
+		if upIsolated {
+			plugin.SetIsolated(true)
+		}
 		if err := plugin.Init(ctx.Config); err != nil {
 			return fmt.Errorf("failed to initialize docker plugin: %w", err)
+		}
+
+		if upIsolated && !plugin.IsIsolated() {
+			return fmt.Errorf("--isolated requires agent stack configuration\n\nAdd to .grove/config.toml:\n\n  [plugins.docker.external.agent]\n  enabled = true\n  services = [\"app\"]\n  template_path = \"agent-stacks/template.yml\"")
 		}
 
 		// Start containers
@@ -49,7 +62,7 @@ Examples:
 			return fmt.Errorf("failed to start containers: %w", err)
 		}
 
-		if upDetach {
+		if upDetach && !upIsolated {
 			fmt.Println("Containers started in detached mode")
 		}
 		return nil

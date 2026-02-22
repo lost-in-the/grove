@@ -86,7 +86,7 @@ func withLoading() testOpt {
 
 // makeTestItems generates n WorktreeItem values for testing.
 func makeTestItems(n int) []WorktreeItem {
-	names := []string{"main", "feature-auth", "fix-bug", "testing", "refactor", "docs", "perf", "ci", "staging", "dev"}
+	names := []string{"root", "feature-auth", "fix-bug", "testing", "refactor", "docs", "perf", "ci", "staging", "dev"}
 	items := make([]WorktreeItem, n)
 	for i := 0; i < n; i++ {
 		name := names[i%len(names)]

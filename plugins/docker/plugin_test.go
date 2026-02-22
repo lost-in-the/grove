@@ -782,7 +782,7 @@ func TestExternalStrategy_SetupWorktree(t *testing.T) {
 		},
 	})
 
-	err := s.setupWorktree(newPath, mainPath)
+	err := setupWorktreeFiles(s.ext, newPath, mainPath)
 	if err != nil {
 		t.Fatalf("setupWorktree() error = %v", err)
 	}

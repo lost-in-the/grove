@@ -26,6 +26,9 @@ var logsCmd = &cobra.Command{
 If no service is specified, shows logs from all services.
 By default, follows log output (like tail -f).
 
+If the worktree has an isolated stack running, logs are automatically
+shown from that stack's containers.
+
 Examples:
   grove logs           # Show logs from all services
   grove logs web       # Show logs from 'web' service only
@@ -44,8 +47,11 @@ Examples:
 			service = args[0]
 		}
 
-		// Create docker plugin
+		// Create docker plugin — auto-detect isolated stacks
 		plugin := docker.New()
+		if docker.HasActiveAgentSlot(ctx.Config, cwd) {
+			plugin.SetIsolated(true)
+		}
 		if err := plugin.Init(ctx.Config); err != nil {
 			return fmt.Errorf("failed to initialize docker plugin: %w", err)
 		}

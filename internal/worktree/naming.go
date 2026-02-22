@@ -1,6 +1,8 @@
 package worktree
 
 import (
+	"crypto/md5"
+	"encoding/binary"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -8,6 +10,14 @@ import (
 
 	"github.com/BurntSushi/toml"
 )
+
+// TestEnvNumber derives a stable TEST_ENV_NUMBER in range [50, 99] from a worktree name.
+// The same name always produces the same number (deterministic via MD5 hash).
+func TestEnvNumber(name string) int {
+	h := md5.Sum([]byte(name))
+	num := binary.BigEndian.Uint32(h[:4])
+	return int(num%50) + 50
+}
 
 // projectConfig represents the project-level configuration
 type projectConfig struct {

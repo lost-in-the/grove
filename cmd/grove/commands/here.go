@@ -10,6 +10,7 @@ import (
 
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
+	"github.com/LeahArmstrong/grove-cli/plugins/docker"
 )
 
 const (
@@ -35,6 +36,8 @@ type hereOutput struct {
 	Tmux        tmuxInfo   `json:"tmux"`
 	Environment bool       `json:"environment,omitempty"`
 	Mirror      string     `json:"mirror,omitempty"`
+	AgentSlot   int        `json:"agentSlot,omitempty"`
+	AgentURL    string     `json:"agentURL,omitempty"`
 }
 
 type commitInfo struct {
@@ -94,6 +97,13 @@ var hereCmd = &cobra.Command{
 			}
 		}
 
+		// Check for active agent stack
+		agentSlot := docker.FindWorktreeSlot(ctx.Config, tree.Path)
+		agentURL := ""
+		if agentSlot > 0 {
+			agentURL = docker.AgentURL(ctx.Config, agentSlot)
+		}
+
 		// JSON mode
 		if hereJSON {
 			status := "clean"
@@ -133,6 +143,8 @@ var hereCmd = &cobra.Command{
 				},
 				Environment: isEnv,
 				Mirror:      mirror,
+				AgentSlot:   agentSlot,
+				AgentURL:    agentURL,
 			}
 
 			jsonBytes, err := json.MarshalIndent(output, "", "  ")
@@ -187,6 +199,14 @@ var hereCmd = &cobra.Command{
 				fmt.Printf(" (mirror: %s)", mirror)
 			}
 			fmt.Println()
+		}
+
+		// Show agent stack info
+		if agentSlot > 0 {
+			fmt.Printf("Stack:   isolated (slot %d)\n", agentSlot)
+			if agentURL != "" {
+				fmt.Printf("URL:     %s\n", agentURL)
+			}
 		}
 
 		// Show tmux status

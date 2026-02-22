@@ -20,6 +20,9 @@ var restartCmd = &cobra.Command{
 
 If no service is specified, restarts all services.
 
+If the worktree has an isolated stack running, the restart targets
+that stack's containers automatically.
+
 Examples:
   grove restart        # Restart all services
   grove restart web    # Restart 'web' service only
@@ -37,8 +40,11 @@ Examples:
 			service = args[0]
 		}
 
-		// Create docker plugin
+		// Create docker plugin — auto-detect isolated stacks
 		plugin := docker.New()
+		if docker.HasActiveAgentSlot(ctx.Config, cwd) {
+			plugin.SetIsolated(true)
+		}
 		if err := plugin.Init(ctx.Config); err != nil {
 			return fmt.Errorf("failed to initialize docker plugin: %w", err)
 		}

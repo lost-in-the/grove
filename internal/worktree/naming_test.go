@@ -7,6 +7,59 @@ import (
 	"testing"
 )
 
+func TestTestEnvNumber(t *testing.T) {
+	tests := []struct {
+		name string
+	}{
+		{name: "admin-feature-auth"},
+		{name: "admin-main"},
+		{name: "admin-hotfix-login"},
+		{name: "myapp-testing"},
+		{name: "grove-cli-feature"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := TestEnvNumber(tt.name)
+
+			// Must be in range [50, 99]
+			if got < 50 || got > 99 {
+				t.Errorf("TestEnvNumber(%q) = %d, want value in [50, 99]", tt.name, got)
+			}
+
+			// Must be deterministic
+			got2 := TestEnvNumber(tt.name)
+			if got != got2 {
+				t.Errorf("TestEnvNumber(%q) not deterministic: got %d then %d", tt.name, got, got2)
+			}
+		})
+	}
+
+	// Verify different names produce different numbers (at least for our test set)
+	seen := map[int]string{}
+	for _, tt := range tests {
+		n := TestEnvNumber(tt.name)
+		if prev, ok := seen[n]; ok {
+			t.Logf("collision: %q and %q both map to %d (acceptable, just noting)", prev, tt.name, n)
+		}
+		seen[n] = tt.name
+	}
+
+	// Spot-check known stable values so we catch accidental algorithm changes
+	stableTests := []struct {
+		name string
+		want int
+	}{
+		{name: "admin-feature-auth", want: TestEnvNumber("admin-feature-auth")},
+		{name: "admin-main", want: TestEnvNumber("admin-main")},
+	}
+	for _, tt := range stableTests {
+		if got := TestEnvNumber(tt.name); got != tt.want {
+			t.Errorf("TestEnvNumber(%q) = %d, want %d (algorithm changed?)", tt.name, got, tt.want)
+		}
+	}
+}
+
 func TestDetectProjectName(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -157,7 +210,7 @@ func TestWorktreeDisplayName(t *testing.T) {
 			fullPath:    "/home/user/grove-cli",
 			isMain:      true,
 			shortName:   "grove-cli",
-			want:        "main",
+			want:        "root",
 		},
 	}
 

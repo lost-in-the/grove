@@ -86,6 +86,16 @@ func validateDockerPlugin(cfg *Config) error {
 		} else if !info.IsDir() {
 			return fmt.Errorf("plugins.docker.external.path: %q is not a directory", ext.Path)
 		}
+
+		// Validate agent config when present and enabled
+		if ext.Agent != nil && ext.Agent.Enabled != nil && *ext.Agent.Enabled {
+			if len(ext.Agent.Services) == 0 {
+				return fmt.Errorf("plugins.docker.external.agent.services is required when agent mode is enabled")
+			}
+			if ext.Agent.TemplatePath == "" {
+				return fmt.Errorf("plugins.docker.external.agent.template_path is required when agent mode is enabled")
+			}
+		}
 	}
 
 	return nil

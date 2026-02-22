@@ -141,7 +141,7 @@ Examples:
 			branchName = wt.Branch
 		}
 
-		// Execute pre-remove hooks
+		// Execute pre-remove hooks (user hooks from hooks.toml)
 		hookExecutor, hookErr := hooks.NewExecutor()
 		if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPreRemove) {
 			hookCtx := &hooks.ExecutionContext{
@@ -161,6 +161,21 @@ Examples:
 			}
 		}
 
+		// Fire plugin pre-remove hook (e.g., stop agent stacks)
+		var wtPath string
+		if wt != nil {
+			wtPath = wt.Path
+		}
+		pluginHookCtx := &hooks.Context{
+			Worktree:     name,
+			Config:       cfg,
+			WorktreePath: wtPath,
+			MainPath:     ctx.ProjectRoot,
+		}
+		if err := hooks.Fire(hooks.EventPreRemove, pluginHookCtx); err != nil {
+			fmt.Printf("⚠ Pre-remove plugin hook failed: %v\n", err)
+		}
+
 		// Remove worktree
 		if err := mgr.Remove(name); err != nil {
 			return fmt.Errorf("failed to remove worktree: %w", err)
@@ -178,7 +193,7 @@ Examples:
 			}
 		}
 
-		// Execute post-remove hooks
+		// Execute post-remove hooks (user hooks from hooks.toml)
 		if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPostRemove) {
 			hookCtx := &hooks.ExecutionContext{
 				Event:    hooks.EventPostRemove,
@@ -189,6 +204,11 @@ Examples:
 			}
 			fmt.Println("\nRunning post-remove hooks...")
 			_ = hookExecutor.Execute(hooks.EventPostRemove, hookCtx)
+		}
+
+		// Fire plugin post-remove hook
+		if err := hooks.Fire(hooks.EventPostRemove, pluginHookCtx); err != nil {
+			fmt.Printf("⚠ Post-remove plugin hook failed: %v\n", err)
 		}
 
 		return nil

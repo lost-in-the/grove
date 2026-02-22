@@ -9,6 +9,7 @@ import (
 
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
+	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 )
 
 // externalStrategy implements the docker mode for projects whose services are defined
@@ -57,7 +58,7 @@ func (s *externalStrategy) OnPostCreate(ctx *hooks.Context) error {
 		return nil
 	}
 
-	return s.setupWorktree(ctx.WorktreePath, ctx.MainPath)
+	return setupWorktreeFiles(s.ext, ctx.WorktreePath, ctx.MainPath)
 }
 
 func (s *externalStrategy) Up(worktreePath string, detach bool) error {
@@ -106,11 +107,39 @@ func (s *externalStrategy) Run(worktreePath string, service string, command stri
 		fmt.Fprintf(os.Stderr, "warning: failed to persist %s to .env: %v\n", s.ext.EnvVar, err)
 	}
 
-	cmd := composeCommand(s.composePath(), s.envForWorktree(worktreePath), "run", "--rm", service, "bash", "-cil", command)
+	env := s.envForWorktree(worktreePath)
+
+	// Add TEST_ENV_NUMBER for test commands so parallel test runs use isolated DB slots
+	if isTestCommand(command) {
+		wtName := filepath.Base(worktreePath)
+		envNum := worktree.TestEnvNumber(wtName)
+		env = append(env, fmt.Sprintf("TEST_ENV_NUMBER=%d", envNum))
+	}
+
+	cmd := composeCommand(s.composePath(), env, "run", "--rm", service, "bash", "-cil", command)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	return cmd.Run()
+}
+
+// isTestCommand reports whether the given command string looks like a test invocation.
+func isTestCommand(cmd string) bool {
+	testPatterns := []string{
+		"rspec",
+		"rails test",
+		"bin/rails test",
+		"rake test",
+		"minitest",
+		"bin/rspec",
+		"bundle exec rspec",
+	}
+	for _, pattern := range testPatterns {
+		if strings.Contains(cmd, pattern) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *externalStrategy) Restart(_ string, service string) error {
@@ -145,53 +174,9 @@ func (s *externalStrategy) startServices(worktreePath string) error {
 	return cmd.Run()
 }
 
-// setupWorktree copies credentials and creates symlinks in a newly created worktree.
-func (s *externalStrategy) setupWorktree(newPath, mainPath string) error {
-	var firstErr error
-
-	// Copy files from main worktree
-	for _, relPath := range s.ext.CopyFiles {
-		src := filepath.Join(mainPath, relPath)
-		dst := filepath.Join(newPath, relPath)
-
-		if err := copyFile(src, dst); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to copy %s: %v\n", relPath, err)
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
-		fmt.Printf("  copied %s\n", relPath)
-	}
-
-	// Create symlinks to main worktree directories
-	for _, relPath := range s.ext.SymlinkDirs {
-		src := filepath.Join(mainPath, relPath)
-		dst := filepath.Join(newPath, relPath)
-
-		if err := createSymlink(src, dst); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to symlink %s: %v\n", relPath, err)
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
-		fmt.Printf("  symlinked %s\n", relPath)
-	}
-
-	return firstErr
-}
-
 // composePath returns the resolved absolute path to the external compose directory.
 func (s *externalStrategy) composePath() string {
-	path := s.ext.Path
-	if strings.HasPrefix(path, "~/") {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			path = filepath.Join(home, path[2:])
-		}
-	}
-	return path
+	return resolveComposePath(s.ext.Path)
 }
 
 // persistEnvVar writes the env_var (e.g., ADMIN_DIR) to the .env file in the compose
