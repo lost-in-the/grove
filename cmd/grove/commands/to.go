@@ -90,6 +90,7 @@ When using shell integration, this will also change your current directory.`,
 
 		// Handle tmux session (unless mode is "off")
 		var sessionName string
+		var tmuxSwitched bool
 		if tmuxMode != "off" && tmux.IsTmuxAvailable() {
 			sessionName = worktree.TmuxSessionName(projectName, targetTree.DisplayName())
 			exists, err := tmux.SessionExists(sessionName)
@@ -111,6 +112,7 @@ When using shell integration, this will also change your current directory.`,
 				if err := tmux.SwitchSession(sessionName); err != nil {
 					return fmt.Errorf("failed to switch session: %w", err)
 				}
+				tmuxSwitched = true
 			} else if tmuxMode == "manual" && !toJSON {
 				fmt.Printf("✓ Tmux session '%s' ready\n", sessionName)
 				fmt.Printf("Run: tmux attach -t %s\n", sessionName)
@@ -143,24 +145,29 @@ When using shell integration, this will also change your current directory.`,
 			fmt.Fprintf(os.Stderr, "warning: post-switch hooks failed: %v\n", err)
 		}
 
-		if hasShellIntegration {
-			// Shell wrapper will parse this and execute cd
-			fmt.Printf("cd:%s\n", targetTree.Path)
-			// In auto mode outside tmux, emit tmux-attach directive for shell wrapper
-			if tmuxMode == "auto" && !tmux.IsInsideTmux() && sessionName != "" {
-				fmt.Printf("tmux-attach:%s\n", sessionName)
-			}
-		} else {
-			fmt.Fprintf(os.Stderr, "\nNote: Directory switching requires shell integration.\n")
-			fmt.Fprintf(os.Stderr, "Add this to your shell config (~/.zshrc or ~/.bashrc):\n\n")
-			fmt.Fprintf(os.Stderr, "  eval \"$(grove install zsh)\"   # for zsh\n")
-			fmt.Fprintf(os.Stderr, "  eval \"$(grove install bash)\"  # for bash\n\n")
-			fmt.Fprintf(os.Stderr, "To change directory manually:\n")
-			fmt.Fprintf(os.Stderr, "  cd %s\n", targetTree.Path)
-			// In auto mode outside tmux without shell wrapper, attach directly
-			if tmuxMode == "auto" && !tmux.IsInsideTmux() && sessionName != "" {
-				if err := tmux.AttachSession(sessionName); err != nil {
-					return fmt.Errorf("failed to attach session: %w", err)
+		// Skip cd directive when tmux switch already moved the user to the
+		// target session — emitting cd: here would change the OLD session's
+		// directory, not the one the user is now viewing.
+		if !tmuxSwitched {
+			if hasShellIntegration {
+				// Shell wrapper will parse this and execute cd
+				fmt.Printf("cd:%s\n", targetTree.Path)
+				// In auto mode outside tmux, emit tmux-attach directive for shell wrapper
+				if tmuxMode == "auto" && sessionName != "" {
+					fmt.Printf("tmux-attach:%s\n", sessionName)
+				}
+			} else {
+				fmt.Fprintf(os.Stderr, "\nNote: Directory switching requires shell integration.\n")
+				fmt.Fprintf(os.Stderr, "Add this to your shell config (~/.zshrc or ~/.bashrc):\n\n")
+				fmt.Fprintf(os.Stderr, "  eval \"$(grove install zsh)\"   # for zsh\n")
+				fmt.Fprintf(os.Stderr, "  eval \"$(grove install bash)\"  # for bash\n\n")
+				fmt.Fprintf(os.Stderr, "To change directory manually:\n")
+				fmt.Fprintf(os.Stderr, "  cd %s\n", targetTree.Path)
+				// In auto mode outside tmux without shell wrapper, attach directly
+				if tmuxMode == "auto" && sessionName != "" {
+					if err := tmux.AttachSession(sessionName); err != nil {
+						return fmt.Errorf("failed to attach session: %w", err)
+					}
 				}
 			}
 		}

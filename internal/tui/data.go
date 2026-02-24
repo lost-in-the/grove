@@ -45,6 +45,15 @@ func (w WorktreeItem) Title() string       { return w.ShortName }
 func (w WorktreeItem) Description() string { return w.Branch }
 func (w WorktreeItem) FilterValue() string { return w.ShortName + " " + w.Branch }
 
+// displayName returns the name used for tmux session naming.
+// Matches worktree.Worktree.DisplayName() logic.
+func (w WorktreeItem) displayName() string {
+	if w.IsMain {
+		return "root"
+	}
+	return w.ShortName
+}
+
 // StatusText returns a display string for git status.
 func (w *WorktreeItem) StatusText() string {
 	if w.IsPrunable {

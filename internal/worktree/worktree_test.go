@@ -370,12 +370,17 @@ func TestTmuxSessionName(t *testing.T) {
 			worktree:    "feature-auth",
 			wantSession: "my-app-feature-auth",
 		},
+		{
+			name:        "root worktree uses project name only",
+			project:     "admin",
+			worktree:    "root",
+			wantSession: "admin",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			w := &Worktree{Name: tt.worktree}
-			got := TmuxSessionName(tt.project, w.Name)
+			got := TmuxSessionName(tt.project, tt.worktree)
 			if got != tt.wantSession {
 				t.Errorf("TmuxSessionName() = %q, want %q", got, tt.wantSession)
 			}

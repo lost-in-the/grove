@@ -44,6 +44,14 @@ type ForkResult struct {
 	Parent   string `json:"parent"`
 }
 
+// AttachResult represents the result of attaching to a tmux session.
+type AttachResult struct {
+	Name    string `json:"name"`
+	Session string `json:"session"`
+	Path    string `json:"path"`
+	Created bool   `json:"created"`
+}
+
 // PrintJSON marshals the given value to JSON and prints it to stdout.
 func PrintJSON(v any) error {
 	data, err := json.MarshalIndent(v, "", "  ")

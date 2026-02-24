@@ -433,9 +433,13 @@ func (m *Manager) GetProjectName() string {
 	return m.projectName
 }
 
-// TmuxSessionName returns the tmux session name for a worktree
-// Format: {project}-{worktree-name}
+// TmuxSessionName returns the tmux session name for a worktree.
+// The main/root worktree uses just the project name (e.g. "admin"),
+// while branch worktrees use project-name (e.g. "admin-testing").
 func TmuxSessionName(project, worktreeName string) string {
+	if worktreeName == "root" {
+		return project
+	}
 	return fmt.Sprintf("%s-%s", project, worktreeName)
 }
 

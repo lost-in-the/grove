@@ -16,7 +16,7 @@ grove() {
     # Only directive-producing commands need output capture.
     # All other commands run directly for streaming support.
     case "$1" in
-        to|last|fork|fetch)
+        to|last|fork|fetch|attach)
             # Capture output and parse for cd:/tmux-attach: directives
             local output exit_code
             output=$(GROVE_SHELL=1 "$__GROVE_BIN" "$@" 2>&1)
@@ -89,6 +89,7 @@ _grove_completion() {
         'repair:Repair state inconsistencies'
         'init:Initialize grove project'
         'setup:Initialize grove project (alias for init)'
+        'attach:Attach to tmux session for a worktree'
         'fetch:Create worktree from issue/PR'
         'issues:Browse GitHub issues'
         'prs:Browse GitHub PRs'
@@ -108,7 +109,7 @@ _grove_completion() {
         _describe 'command' commands
     elif (( CURRENT == 3 )); then
         case "${words[2]}" in
-            to|rm|compare|sync|test|apply)
+            to|rm|compare|sync|test|apply|attach)
                 _describe 'worktree' worktrees
                 ;;
             install)

@@ -19,6 +19,7 @@ import (
 	"github.com/LeahArmstrong/grove-cli/internal/git"
 	"github.com/LeahArmstrong/grove-cli/internal/plugins"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
+	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/tuilog"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 )
@@ -89,8 +90,9 @@ type Model struct {
 	pendingSelectPath string
 
 	// Output
-	switchTo string
-	err      error
+	switchTo            string
+	switchToDisplayName string // display name for tmux session naming
+	err                 error
 
 	// Layout
 	width, height int
@@ -687,6 +689,7 @@ func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 			m.switchTo = item.Path
+			m.switchToDisplayName = item.displayName()
 			return m, tea.Quit
 		}
 
@@ -737,6 +740,7 @@ func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 						return m, tea.Quit
 					}
 					m.switchTo = item.Path
+					m.switchToDisplayName = item.displayName()
 					return m, tea.Quit
 				}
 			}
@@ -1097,6 +1101,7 @@ func (m Model) handleNameKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// If duplicate exists, switch to it
 		if s.ExistingWorktree != nil {
 			m.switchTo = s.ExistingWorktree.Path
+			m.switchToDisplayName = s.ExistingWorktree.displayName()
 			m.activeView = ViewDashboard
 			m.createState = nil
 			return m, tea.Quit
@@ -1600,6 +1605,57 @@ func Run(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, plu
 	return runModel(model)
 }
 
+// handleTmuxSwitch creates/switches to the tmux session for the target worktree.
+// Returns true if a tmux session switch happened (caller should skip cd).
+func (m *Model) handleTmuxSwitch(switchPath string) bool {
+	tmuxMode := "auto"
+	if m.cfg != nil && m.cfg.Tmux.Mode != "" {
+		tmuxMode = m.cfg.Tmux.Mode
+	}
+
+	if tmuxMode == "off" || !tmux.IsTmuxAvailable() || m.switchToDisplayName == "" {
+		return false
+	}
+
+	sessionName := worktree.TmuxSessionName(m.projectName, m.switchToDisplayName)
+	tuilog.Printf("handleTmuxSwitch: session=%q displayName=%q", sessionName, m.switchToDisplayName)
+
+	// Store current session as last before switching
+	if tmux.IsInsideTmux() {
+		if currentSession, err := tmux.GetCurrentSession(); err == nil {
+			_ = tmux.StoreLastSession(currentSession)
+		}
+	}
+
+	// Create session if it doesn't exist
+	exists, err := tmux.SessionExists(sessionName)
+	if err != nil {
+		tuilog.Printf("warning: failed to check tmux session %q: %v", sessionName, err)
+		return false
+	}
+	if !exists {
+		if err := tmux.CreateSession(sessionName, switchPath); err != nil {
+			tuilog.Printf("warning: failed to create tmux session %q: %v", sessionName, err)
+			return false
+		}
+	}
+
+	// Switch or attach
+	if tmux.IsInsideTmux() {
+		if err := tmux.SwitchSession(sessionName); err != nil {
+			tuilog.Printf("warning: failed to switch tmux session: %v", err)
+			return false
+		}
+		return true
+	}
+
+	if err := tmux.AttachSession(sessionName); err != nil {
+		tuilog.Printf("warning: failed to attach tmux session: %v", err)
+		return false
+	}
+	return true
+}
+
 func runModel(model Model) (string, error) {
 	tuilog.Printf("runModel: projectRoot=%s activeView=%d", model.projectRoot, model.activeView)
 
@@ -1621,19 +1677,25 @@ func runModel(model Model) (string, error) {
 
 	switchPath := m.SwitchTo()
 	if switchPath != "" {
-		if cdFile := os.Getenv("GROVE_CD_FILE"); cdFile != "" {
-			tuilog.Printf("runModel: writing switchTo=%q to GROVE_CD_FILE=%q", switchPath, cdFile)
-			if err := os.WriteFile(cdFile, []byte(switchPath), 0600); err != nil {
-				return "", fmt.Errorf("failed to write cd file: %w", err)
+		// Handle tmux session switching first — if it succeeds, skip cd
+		// to avoid changing the OLD session's directory
+		tmuxSwitched := m.handleTmuxSwitch(switchPath)
+
+		if !tmuxSwitched {
+			if cdFile := os.Getenv("GROVE_CD_FILE"); cdFile != "" {
+				tuilog.Printf("runModel: writing switchTo=%q to GROVE_CD_FILE=%q", switchPath, cdFile)
+				if err := os.WriteFile(cdFile, []byte(switchPath), 0600); err != nil {
+					return "", fmt.Errorf("failed to write cd file: %w", err)
+				}
+			} else if os.Getenv("GROVE_SHELL") == "1" {
+				tuilog.Printf("runModel: printing cd directive for switchTo=%q", switchPath)
+				// Leading newline ensures cd: directive is on its own line,
+				// separated from any bubbletea alt-screen exit escape codes
+				// that may precede it on stdout.
+				fmt.Printf("\ncd:%s\n", switchPath)
+			} else {
+				tuilog.Printf("runModel: switchTo=%q but no GROVE_CD_FILE or GROVE_SHELL set — cannot switch", switchPath)
 			}
-		} else if os.Getenv("GROVE_SHELL") == "1" {
-			tuilog.Printf("runModel: printing cd directive for switchTo=%q", switchPath)
-			// Leading newline ensures cd: directive is on its own line,
-			// separated from any bubbletea alt-screen exit escape codes
-			// that may precede it on stdout.
-			fmt.Printf("\ncd:%s\n", switchPath)
-		} else {
-			tuilog.Printf("runModel: switchTo=%q but no GROVE_CD_FILE or GROVE_SHELL set — cannot switch", switchPath)
 		}
 	}
 

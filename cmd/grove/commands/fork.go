@@ -274,24 +274,29 @@ Examples:
 			}
 
 			// Switch tmux session
+			var tmuxSwitched bool
 			if tmux.IsTmuxAvailable() && tmux.IsInsideTmux() {
 				sessionName := worktree.TmuxSessionName(projectName, name)
 				if err := tmux.SwitchSession(sessionName); err != nil {
 					fmt.Printf("⚠ Failed to switch session: %v\n", err)
+				} else {
+					tmuxSwitched = true
 				}
 			}
 
 			// Update last_accessed_at for target worktree
 			_ = ctx.State.TouchWorktree(name)
 
-			// Output directory change for shell integration
-			hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
-			if hasShellIntegration {
-				fmt.Printf("cd:%s\n", newTree.Path)
-			} else {
-				fmt.Fprintf(os.Stderr, "\nNote: Directory switching requires shell integration.\n")
-				fmt.Fprintf(os.Stderr, "To change directory manually:\n")
-				fmt.Fprintf(os.Stderr, "  cd %s\n", newTree.Path)
+			// Skip cd directive when tmux switch already moved the user
+			if !tmuxSwitched {
+				hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
+				if hasShellIntegration {
+					fmt.Printf("cd:%s\n", newTree.Path)
+				} else {
+					fmt.Fprintf(os.Stderr, "\nNote: Directory switching requires shell integration.\n")
+					fmt.Fprintf(os.Stderr, "To change directory manually:\n")
+					fmt.Fprintf(os.Stderr, "  cd %s\n", newTree.Path)
+				}
 			}
 		} else {
 			fmt.Printf("\nTo switch to the new worktree:\n  grove to %s\n", name)

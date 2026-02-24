@@ -75,11 +75,13 @@ var lastCmd = &cobra.Command{
 		projectName := mgr.GetProjectName()
 
 		// Switch to session
+		var tmuxSwitched bool
 		if tmux.IsTmuxAvailable() && tmux.IsInsideTmux() {
 			sessionName := worktree.TmuxSessionName(projectName, lastWorktree)
 			if err := tmux.SwitchSession(sessionName); err != nil {
 				return fmt.Errorf("failed to switch session: %w", err)
 			}
+			tmuxSwitched = true
 		}
 
 		// Update last_accessed_at for target worktree
@@ -98,18 +100,20 @@ var lastCmd = &cobra.Command{
 			return nil
 		}
 
-		// Output directory change command for shell integration
-		hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
+		// Skip cd directive when tmux switch already moved the user
+		if !tmuxSwitched {
+			hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
 
-		if hasShellIntegration {
-			fmt.Printf("cd:%s\n", targetTree.Path)
-		} else {
-			fmt.Fprintf(os.Stderr, "\nNote: Directory switching requires shell integration.\n")
-			fmt.Fprintf(os.Stderr, "Add this to your shell config (~/.zshrc or ~/.bashrc):\n\n")
-			fmt.Fprintf(os.Stderr, "  eval \"$(grove install zsh)\"   # for zsh\n")
-			fmt.Fprintf(os.Stderr, "  eval \"$(grove install bash)\"  # for bash\n\n")
-			fmt.Fprintf(os.Stderr, "To change directory manually:\n")
-			fmt.Fprintf(os.Stderr, "  cd %s\n", targetTree.Path)
+			if hasShellIntegration {
+				fmt.Printf("cd:%s\n", targetTree.Path)
+			} else {
+				fmt.Fprintf(os.Stderr, "\nNote: Directory switching requires shell integration.\n")
+				fmt.Fprintf(os.Stderr, "Add this to your shell config (~/.zshrc or ~/.bashrc):\n\n")
+				fmt.Fprintf(os.Stderr, "  eval \"$(grove install zsh)\"   # for zsh\n")
+				fmt.Fprintf(os.Stderr, "  eval \"$(grove install bash)\"  # for bash\n\n")
+				fmt.Fprintf(os.Stderr, "To change directory manually:\n")
+				fmt.Fprintf(os.Stderr, "  cd %s\n", targetTree.Path)
+			}
 		}
 
 		return nil

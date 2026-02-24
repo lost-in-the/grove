@@ -30,8 +30,8 @@ func GenerateZshIntegration() (string, error) {
 #
 # WHAT THIS DOES:
 #   1. Creates a 'grove' shell function that wraps the binary
-#      - Directive commands (to, last, fork, fetch): output is captured and
-#        parsed for cd:/tmux-attach: directives
+#      - Directive commands (to, last, fork, fetch, attach): output is captured
+#        and parsed for cd:/tmux-attach: directives
 #      - All other commands: run directly (streaming-safe for logs, test, etc.)
 #   2. Registers tab completion for grove commands and worktree names
 #   3. Creates 'w' as an alias for 'grove'
@@ -63,8 +63,8 @@ func GenerateBashIntegration() (string, error) {
 #
 # WHAT THIS DOES:
 #   1. Creates a 'grove' shell function that wraps the binary
-#      - Directive commands (to, last, fork, fetch): output is captured and
-#        parsed for cd:/tmux-attach: directives
+#      - Directive commands (to, last, fork, fetch, attach): output is captured
+#        and parsed for cd:/tmux-attach: directives
 #      - All other commands: run directly (streaming-safe for logs, test, etc.)
 #   2. Registers tab completion for grove commands and worktree names
 #   3. Creates 'w' as an alias for 'grove'
