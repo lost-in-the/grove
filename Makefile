@@ -58,6 +58,7 @@ install: build ## Install the binary to $GOPATH/bin
 	@echo "Installing $(BINARY_NAME) to $$(go env GOPATH)/bin..."
 	@mkdir -p "$$(go env GOPATH)/bin"
 	@cp $(BUILD_DIR)/$(BINARY_NAME) "$$(go env GOPATH)/bin/$(BINARY_NAME)"
+	@codesign -s - "$$(go env GOPATH)/bin/$(BINARY_NAME)" 2>/dev/null || true
 	@echo "$(BINARY_NAME) installed to $$(go env GOPATH)/bin/$(BINARY_NAME)"
 
 test-integration: ## Run integration tests (requires git, slower)
