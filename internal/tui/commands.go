@@ -16,7 +16,7 @@ import (
 )
 
 func (m Model) fetchWorktrees() tea.Msg {
-	items, err := FetchWorktrees(m.worktreeMgr, m.stateMgr)
+	items, err := FetchWorktrees(m.worktreeMgr, m.stateMgr, m.pluginMgr)
 	return worktreesFetchedMsg{items: items, err: err}
 }
 

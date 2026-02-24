@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/LeahArmstrong/grove-cli/internal/plugins"
 )
 
 var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*m`)
@@ -104,6 +106,13 @@ func renderMetadataGrid(item *WorktreeItem, width int) string {
 		rows = append(rows, label("Tmux")+tmuxVal)
 	}
 
+	// Plugin statuses (containers, etc.)
+	for _, s := range item.PluginStatuses {
+		if s.Detail != "" {
+			rows = append(rows, label("Docker")+renderContainerValue(&s))
+		}
+	}
+
 	return strings.Join(rows, "\n")
 }
 
@@ -136,6 +145,20 @@ func renderSyncValue(item *WorktreeItem) string {
 		parts = append(parts, Styles.StatusWarning.Render(fmt.Sprintf("↓%d", item.BehindCount)))
 	}
 	return strings.Join(parts, " ")
+}
+
+// renderContainerValue returns styled container/plugin status for the detail panel.
+func renderContainerValue(s *plugins.StatusEntry) string {
+	switch s.Level {
+	case plugins.StatusActive:
+		return Styles.StatusSuccess.Render("● " + s.Detail)
+	case plugins.StatusWarning:
+		return Styles.StatusWarning.Render("○ " + s.Detail)
+	case plugins.StatusInfo:
+		return Styles.StatusInfo.Render("○ " + s.Detail)
+	default:
+		return Styles.TextMuted.Render(s.Detail)
+	}
 }
 
 // renderTmuxValue returns styled tmux session indicator.

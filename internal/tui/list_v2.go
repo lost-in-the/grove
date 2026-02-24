@@ -8,6 +8,8 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/LeahArmstrong/grove-cli/internal/plugins"
 )
 
 // delegateColumns holds responsive column widths for list rendering.
@@ -71,15 +73,37 @@ func worktreeStatusTextV2(item WorktreeItem) string {
 }
 
 // worktreeTmuxBadgeV2 returns a tmux badge if a session exists.
+// Uses ⬢ (filled) for attached, ⬡ (unfilled) for detached — consistent
+// with the symbol convention in the table-style list delegate.
 func worktreeTmuxBadgeV2(item WorktreeItem) string {
 	switch item.TmuxStatus {
 	case "attached":
-		return Styles.TmuxBadgeActive.Render("⬡ tmux●")
+		return Styles.TmuxBadge.Render("⬢ tmux")
 	case "detached":
-		return Styles.TmuxBadge.Render("⬡ tmux○")
+		return Styles.TmuxBadge.Render("⬡ tmux")
 	default:
 		return ""
 	}
+}
+
+// worktreeContainerBadgeV2 returns a container status badge from plugin statuses.
+func worktreeContainerBadgeV2(item WorktreeItem) string {
+	for _, s := range item.PluginStatuses {
+		if s.Short == "" {
+			continue
+		}
+		switch s.Level {
+		case plugins.StatusActive:
+			return Styles.ContainerBadgeActive.Render("◆ " + s.Short)
+		case plugins.StatusWarning:
+			return Styles.ContainerBadgeWarn.Render("◆ " + s.Short)
+		case plugins.StatusInfo:
+			return Styles.ContainerBadge.Render("◇ " + s.Short)
+		default:
+			return Styles.TextMuted.Render("◇ " + s.Short)
+		}
+	}
+	return ""
 }
 
 // worktreeSyncBadgeV2 returns a compact sync status badge for the list.
@@ -95,7 +119,7 @@ func worktreeSyncBadgeV2(item WorktreeItem) string {
 		parts = append(parts, Styles.StatusSuccess.Render(fmt.Sprintf("↑%d", item.AheadCount)))
 	}
 	if item.BehindCount > 0 {
-		parts = append(parts, Styles.StatusWarning.Render(fmt.Sprintf("↓%d", item.BehindCount)))
+		parts = append(parts, Styles.StatusDanger.Render(fmt.Sprintf("↓%d", item.BehindCount)))
 	}
 	return strings.Join(parts, "")
 }
@@ -167,6 +191,10 @@ func (d WorktreeDelegateV2) Render(w io.Writer, m list.Model, index int, listIte
 	tmuxBadge := worktreeTmuxBadgeV2(item)
 	if tmuxBadge != "" {
 		metaParts = append(metaParts, cleanAnsi(tmuxBadge))
+	}
+	containerBadge := worktreeContainerBadgeV2(item)
+	if containerBadge != "" {
+		metaParts = append(metaParts, cleanAnsi(containerBadge))
 	}
 
 	line2 := prefixPad + Styles.TextMuted.Render(strings.Join(metaParts, " · "))

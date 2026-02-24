@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/grove"
 	"github.com/LeahArmstrong/grove-cli/internal/log"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
@@ -66,7 +67,14 @@ Use 'grove install --help' for details.`,
 			return fmt.Errorf("failed to initialize state: %w", err)
 		}
 
-		_, err = tui.Run(mgr, stateMgr, projectRoot)
+		cfg, cfgErr := config.LoadFromGroveDir(groveDir)
+		if cfgErr != nil {
+			log.Printf("config load failed, using defaults: %v", cfgErr)
+			cfg = config.LoadDefaults()
+		}
+		pluginMgr := registerPlugins(cfg)
+
+		_, err = tui.Run(mgr, stateMgr, projectRoot, pluginMgr)
 		return err
 	},
 }

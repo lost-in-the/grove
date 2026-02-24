@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/LeahArmstrong/grove-cli/internal/config"
+	"github.com/LeahArmstrong/grove-cli/internal/plugins"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/tuilog"
@@ -17,25 +18,26 @@ import (
 
 // WorktreeItem holds enriched worktree data for the TUI.
 type WorktreeItem struct {
-	ShortName     string
-	FullName      string
-	Path          string
-	Branch        string
-	Commit        string
-	CommitMessage string
-	CommitAge     string
-	IsDirty       bool
-	DirtyFiles    []string
-	IsMain        bool
-	IsCurrent     bool
-	IsEnvironment bool
-	IsProtected   bool
-	IsPrunable    bool
-	TmuxStatus    string // "attached", "detached", "none"
-	HasRemote     bool   // true if branch has upstream tracking
-	AheadCount    int    // commits ahead of upstream
-	BehindCount   int    // commits behind upstream
-	LastAccessed  time.Time
+	ShortName      string
+	FullName       string
+	Path           string
+	Branch         string
+	Commit         string
+	CommitMessage  string
+	CommitAge      string
+	IsDirty        bool
+	DirtyFiles     []string
+	IsMain         bool
+	IsCurrent      bool
+	IsEnvironment  bool
+	IsProtected    bool
+	IsPrunable     bool
+	TmuxStatus     string // "attached", "detached", "none"
+	HasRemote      bool   // true if branch has upstream tracking
+	AheadCount     int    // commits ahead of upstream
+	BehindCount    int    // commits behind upstream
+	LastAccessed   time.Time
+	PluginStatuses []plugins.StatusEntry // status entries from plugins
 }
 
 // list.Item interface implementation for bubbles/list.
@@ -102,7 +104,8 @@ func hasUpstream(worktreePath string) bool {
 }
 
 // FetchWorktrees gathers all enriched worktree data for display.
-func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager) ([]WorktreeItem, error) {
+// pluginMgr is optional — pass nil to skip plugin status collection.
+func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager, pluginMgr ...*plugins.Manager) ([]WorktreeItem, error) {
 	trees, err := mgr.List()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list worktrees: %w", err)
@@ -230,7 +233,35 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager) ([]WorktreeI
 			}(item, tree.Path, tree.IsDirty, item.IsCurrent)
 		}
 	}
+
+	// Plugin statuses — run in parallel with git enrichment
+	var pluginStatuses map[string][]plugins.StatusEntry
+	var pm *plugins.Manager
+	if len(pluginMgr) > 0 {
+		pm = pluginMgr[0]
+	}
+	if pm != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			paths := make([]string, len(trees))
+			for i, t := range trees {
+				paths[i] = t.Path
+			}
+			pluginStatuses = pm.CollectStatuses(paths)
+		}()
+	}
+
 	wg.Wait()
+
+	// Attach plugin statuses to items
+	if pluginStatuses != nil {
+		for i := range items {
+			if entries, ok := pluginStatuses[items[i].Path]; ok {
+				items[i].PluginStatuses = entries
+			}
+		}
+	}
 
 	return items, nil
 }

@@ -11,16 +11,18 @@ import (
 	"github.com/LeahArmstrong/grove-cli/internal/grove"
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 	"github.com/LeahArmstrong/grove-cli/internal/log"
+	"github.com/LeahArmstrong/grove-cli/internal/plugins"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
 	"github.com/LeahArmstrong/grove-cli/plugins/docker"
 )
 
 // GroveContext holds the resolved grove project context
 type GroveContext struct {
-	GroveDir    string         // Path to .grove directory
-	ProjectRoot string         // Path to project root (parent of .grove)
-	State       *state.Manager // State manager instance
-	Config      *config.Config // Loaded configuration
+	GroveDir      string           // Path to .grove directory
+	ProjectRoot   string           // Path to project root (parent of .grove)
+	State         *state.Manager   // State manager instance
+	Config        *config.Config   // Loaded configuration
+	PluginManager *plugins.Manager // Plugin manager for status queries
 }
 
 // RequireGroveContext wraps a command function to require grove project context.
@@ -61,14 +63,15 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 		}
 
 		// Register plugins with the global hook registry
-		registerPlugins(cfg)
+		pluginMgr := registerPlugins(cfg)
 		log.Printf("plugins registered")
 
 		ctx := &GroveContext{
-			GroveDir:    groveDir,
-			ProjectRoot: grove.MustProjectRoot(groveDir),
-			State:       stateMgr,
-			Config:      cfg,
+			GroveDir:      groveDir,
+			ProjectRoot:   grove.MustProjectRoot(groveDir),
+			State:         stateMgr,
+			Config:        cfg,
+			PluginManager: pluginMgr,
 		}
 
 		return fn(cmd, args, ctx)
@@ -76,23 +79,29 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 }
 
 var pluginsRegistered bool
+var globalPluginManager *plugins.Manager
 
 // registerPlugins initializes and registers plugin hooks with the global registry.
-func registerPlugins(cfg *config.Config) {
+// Returns the plugin manager for status queries.
+func registerPlugins(cfg *config.Config) *plugins.Manager {
 	if pluginsRegistered {
-		return
+		return globalPluginManager
 	}
 	pluginsRegistered = true
 
+	mgr := plugins.NewManager(cfg)
+	globalPluginManager = mgr
+
 	dockerPlugin := docker.New()
-	if err := dockerPlugin.Init(cfg); err != nil {
+	if err := mgr.Register(dockerPlugin); err != nil {
 		// Docker not available — silently skip
-		return
+		return mgr
 	}
 	if !dockerPlugin.Enabled() {
-		return
+		return mgr
 	}
 	_ = dockerPlugin.RegisterHooks(hooks.GlobalRegistry())
+	return mgr
 }
 
 // ExitWithCode exits the program with the given exit code.

@@ -37,7 +37,7 @@ Examples:
 			if err != nil {
 				return fmt.Errorf("failed to initialize worktree manager: %w", err)
 			}
-			_, err = tui.RunIssues(mgr, ctx.State, ctx.ProjectRoot)
+			_, err = tui.RunIssues(mgr, ctx.State, ctx.ProjectRoot, ctx.PluginManager)
 			return err
 		}
 
@@ -66,7 +66,7 @@ Examples:
 			if err != nil {
 				return fmt.Errorf("failed to initialize worktree manager: %w", err)
 			}
-			_, err = tui.RunPRs(mgr, ctx.State, ctx.ProjectRoot)
+			_, err = tui.RunPRs(mgr, ctx.State, ctx.ProjectRoot, ctx.PluginManager)
 			return err
 		}
 

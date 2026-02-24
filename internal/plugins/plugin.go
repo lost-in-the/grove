@@ -1,6 +1,8 @@
 package plugins
 
 import (
+	"sync"
+
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 )
@@ -18,6 +20,41 @@ type Plugin interface {
 
 	// Enabled returns whether the plugin is enabled
 	Enabled() bool
+}
+
+// StatusLevel represents the severity/type of a plugin status.
+type StatusLevel int
+
+const (
+	StatusNone    StatusLevel = iota // not applicable
+	StatusInfo                       // configured but inactive
+	StatusActive                     // running / healthy
+	StatusWarning                    // degraded / needs attention
+	StatusError                      // down / broken
+)
+
+// StatusEntry represents a single status contribution from a plugin.
+type StatusEntry struct {
+	// ProviderName identifies which plugin produced this (e.g. "docker").
+	ProviderName string
+
+	// Level indicates the status severity for display styling.
+	Level StatusLevel
+
+	// Short is a compact label for CLI table columns (e.g. "up", "down", "slot 3").
+	Short string
+
+	// Detail is a longer description for the TUI detail pane.
+	Detail string
+}
+
+// StatusProvider is an optional interface that plugins can implement
+// to contribute status information to grove ls and the TUI dashboard.
+type StatusProvider interface {
+	// WorktreeStatuses returns status entries keyed by absolute worktree path.
+	// Accepts all worktree paths at once so implementations can batch queries.
+	// Only return entries for worktrees the plugin has information about.
+	WorktreeStatuses(worktreePaths []string) map[string]StatusEntry
 }
 
 // Manager manages plugin lifecycle
@@ -69,4 +106,42 @@ func (m *Manager) GetPlugin(name string) Plugin {
 // ListPlugins returns all registered plugins
 func (m *Manager) ListPlugins() []Plugin {
 	return m.plugins
+}
+
+// CollectStatuses gathers status entries from all StatusProvider plugins.
+// Returns a map of worktree path -> slice of StatusEntry.
+func (m *Manager) CollectStatuses(worktreePaths []string) map[string][]StatusEntry {
+	var providers []StatusProvider
+	for _, p := range m.plugins {
+		if !p.Enabled() {
+			continue
+		}
+		if sp, ok := p.(StatusProvider); ok {
+			providers = append(providers, sp)
+		}
+	}
+
+	if len(providers) == 0 {
+		return nil
+	}
+
+	result := make(map[string][]StatusEntry)
+	var mu sync.Mutex
+
+	var wg sync.WaitGroup
+	for _, sp := range providers {
+		wg.Add(1)
+		go func(sp StatusProvider) {
+			defer wg.Done()
+			statuses := sp.WorktreeStatuses(worktreePaths)
+			mu.Lock()
+			for path, entry := range statuses {
+				result[path] = append(result[path], entry)
+			}
+			mu.Unlock()
+		}(sp)
+	}
+	wg.Wait()
+
+	return result
 }

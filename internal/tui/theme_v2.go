@@ -126,12 +126,15 @@ type StyleSet struct {
 	SelectionRow lipgloss.Style
 
 	// Status badges
-	StatusClean     lipgloss.Style
-	StatusDirty     lipgloss.Style
-	StatusStale     lipgloss.Style
-	TmuxBadge       lipgloss.Style
-	TmuxBadgeActive lipgloss.Style
-	EnvBadge        lipgloss.Style
+	StatusClean          lipgloss.Style
+	StatusDirty          lipgloss.Style
+	StatusStale          lipgloss.Style
+	TmuxBadge            lipgloss.Style
+	TmuxBadgeActive      lipgloss.Style
+	EnvBadge             lipgloss.Style
+	ContainerBadge       lipgloss.Style
+	ContainerBadgeActive lipgloss.Style
+	ContainerBadgeWarn   lipgloss.Style
 
 	// Detail panel
 	DetailTitle   lipgloss.Style
@@ -213,12 +216,15 @@ func NewStyleSet(cs ColorScheme) StyleSet {
 		ListCursorDim: lipgloss.NewStyle().SetString("  "),
 
 		// Status badges
-		StatusClean:     lipgloss.NewStyle().Foreground(cs.Success),
-		StatusDirty:     lipgloss.NewStyle().Foreground(cs.Warning),
-		StatusStale:     lipgloss.NewStyle().Foreground(cs.Danger),
-		TmuxBadge:       lipgloss.NewStyle().Foreground(cs.Primary),
-		TmuxBadgeActive: lipgloss.NewStyle().Foreground(cs.Success),
-		EnvBadge:        lipgloss.NewStyle().Foreground(cs.Info),
+		StatusClean:          lipgloss.NewStyle().Foreground(cs.Success),
+		StatusDirty:          lipgloss.NewStyle().Foreground(cs.Warning),
+		StatusStale:          lipgloss.NewStyle().Foreground(cs.Danger),
+		TmuxBadge:            lipgloss.NewStyle().Foreground(cs.Primary),
+		TmuxBadgeActive:      lipgloss.NewStyle().Foreground(cs.Success),
+		EnvBadge:             lipgloss.NewStyle().Foreground(cs.Info),
+		ContainerBadge:       lipgloss.NewStyle().Foreground(cs.Info),
+		ContainerBadgeActive: lipgloss.NewStyle().Foreground(cs.Secondary),
+		ContainerBadgeWarn:   lipgloss.NewStyle().Foreground(cs.Warning),
 
 		// Detail panel
 		DetailTitle:   lipgloss.NewStyle().Bold(true).Foreground(cs.TextBright),

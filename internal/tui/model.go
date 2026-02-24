@@ -17,6 +17,7 @@ import (
 
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/git"
+	"github.com/LeahArmstrong/grove-cli/internal/plugins"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
 	"github.com/LeahArmstrong/grove-cli/internal/tuilog"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
@@ -43,6 +44,7 @@ type Model struct {
 	// Data
 	worktreeMgr *worktree.Manager
 	stateMgr    *state.Manager
+	pluginMgr   *plugins.Manager
 	projectRoot string
 	projectName string
 	cfg         *config.Config
@@ -92,10 +94,13 @@ type Model struct {
 
 	// Layout
 	width, height int
+
+	// List delegate (stored for header rendering — list.Model doesn't export it)
+	listDelegate WorktreeDelegate
 }
 
 // NewModel creates a new TUI model.
-func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string) Model {
+func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, pluginMgr ...*plugins.Manager) Model {
 	cfg, cfgErr := config.Load()
 	if cfgErr != nil {
 		tuilog.Printf("warning: failed to load config: %v", cfgErr)
@@ -117,21 +122,28 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 
 	h := help.New()
 
+	var pm *plugins.Manager
+	if len(pluginMgr) > 0 {
+		pm = pluginMgr[0]
+	}
+
 	return Model{
-		worktreeMgr: mgr,
-		stateMgr:    stateMgr,
-		projectRoot: projectRoot,
-		projectName: mgr.GetProjectName(),
-		cfg:         cfg,
-		cfgLoadErr:  cfgErr,
-		keys:        keys,
-		list:        l,
-		spinner:     s,
-		help:        h,
-		toast:       NewToastModel(),
-		helpFooter:  NewHelpFooter(),
-		activeView:  ViewDashboard,
-		loading:     true,
+		worktreeMgr:  mgr,
+		stateMgr:     stateMgr,
+		pluginMgr:    pm,
+		projectRoot:  projectRoot,
+		projectName:  mgr.GetProjectName(),
+		cfg:          cfg,
+		cfgLoadErr:   cfgErr,
+		keys:         keys,
+		list:         l,
+		listDelegate: delegate,
+		spinner:      s,
+		help:         h,
+		toast:        NewToastModel(),
+		helpFooter:   NewHelpFooter(),
+		activeView:   ViewDashboard,
+		loading:      true,
 	}
 }
 
@@ -187,6 +199,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			listItems = sortWorktreeItems(listItems, m.sortMode)
 		}
 		m.list.SetItems(listItems)
+		m.computeColumnWidths()
 		m.loading = false
 
 		// Select newly created worktree if pending (highlight it in the list)
@@ -512,25 +525,25 @@ func (m *Model) updateLayout() {
 
 	contentWidth := m.width - 2 // body padding (1 char each side)
 
+	// The list header (column labels + separator) is 2 lines rendered outside
+	// the list component, so subtract from available height.
+	listHeaderHeight := 2
+
 	useSideBySide := m.width > 120
 	if useSideBySide {
-		// Adaptive list width: based on content, clamped to [40, 55% of terminal]
-		listWidth := m.adaptiveListWidth()
-		maxListWidth := contentWidth * 55 / 100
-		if listWidth > maxListWidth {
-			listWidth = maxListWidth
-		}
+		// List gets 60% of content width, detail gets the remainder
+		listWidth := contentWidth * 60 / 100
 		dividerWidth := 3 // " │ "
 		detailWidth := contentWidth - listWidth - dividerWidth
-		m.list.SetSize(listWidth, available)
+		m.list.SetSize(listWidth, available-listHeaderHeight)
 		m.detail.Width = detailWidth
 		m.detail.Height = available
 	} else {
 		// Stacked: cap list height at item count * row height + padding
 		itemCount := len(m.list.Items())
-		rowHeight := 2                             // delegate Height()
+		rowHeight := 1                             // delegate Height()
 		idealListHeight := itemCount*rowHeight + 2 // +2 for padding
-		maxListHeight := available * 6 / 10
+		maxListHeight := (available - listHeaderHeight) * 6 / 10
 		listHeight := idealListHeight
 		if listHeight > maxListHeight {
 			listHeight = maxListHeight
@@ -538,7 +551,7 @@ func (m *Model) updateLayout() {
 		if listHeight < 3 {
 			listHeight = 3
 		}
-		detailHeight := available - listHeight - 1
+		detailHeight := available - listHeaderHeight - listHeight - 1
 		if detailHeight < 3 {
 			detailHeight = 3
 		}
@@ -547,41 +560,23 @@ func (m *Model) updateLayout() {
 		m.detail.Height = detailHeight
 	}
 
+	m.computeColumnWidths()
+
 	m.help.Width = contentWidth
 }
 
-// adaptiveListWidth calculates list panel width based on the widest rendered row.
-func (m *Model) adaptiveListWidth() int {
-	// Floor: 45% of terminal in side-by-side mode
-	minWidth := m.width * 45 / 100
-	if minWidth < 40 {
-		minWidth = 40
+// computeColumnWidths scans list items to find max name/branch lengths,
+// then distributes available width proportionally. Stores the result in
+// the delegate and re-sets it on the list.
+func (m *Model) computeColumnWidths() {
+	listWidth := m.list.Width()
+	if listWidth <= 0 {
+		return
 	}
-	maxRendered := minWidth
-	for _, li := range m.list.Items() {
-		item, ok := li.(WorktreeItem)
-		if !ok {
-			continue
-		}
-		// Match delegate Render(): num(2) + cursor(2) + name(padded) + gap(2) + branch(padded) + gap(2) + age(8) + gap(2) + status(8) + gap(2) + tmux(12)
-		nameWidth := 16
-		branchWidth := 12
-		if m.width > 100 {
-			nameWidth = 24
-			branchWidth = 20
-		} else if m.width > 80 {
-			nameWidth = 20
-			branchWidth = 16
-		}
-		w := 2 + 2 + nameWidth + 2 + branchWidth + 2 + 8 + 2 + 8
-		if item.TmuxStatus != "none" {
-			w += 2 + 12
-		}
-		if w > maxRendered {
-			maxRendered = w
-		}
-	}
-	return maxRendered
+
+	d := ComputeDelegateWidths(m.list.Items(), listWidth)
+	m.listDelegate = d
+	m.list.SetDelegate(d)
 }
 
 func (m *Model) updateDetailContent() {
@@ -1135,6 +1130,7 @@ func (m Model) handleNameKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *Model) applySortToList() {
 	sorted := sortWorktreeItems(m.list.Items(), m.sortMode)
 	m.list.SetItems(sorted)
+	m.computeColumnWidths()
 	m.updateDetailContent()
 }
 
@@ -1368,12 +1364,17 @@ func (m Model) renderDashboard() string {
 
 	var body string
 	if useSideBySide {
-		listView := m.list.View()
-		divider := renderVerticalDivider(m.list.Height(), Colors.SurfaceDim)
+		// Force list view to its allocated width so JoinHorizontal
+		// measures it correctly (list lines may be shorter than the panel).
+		listWidth := m.list.Width()
+		header := renderListHeader(m.listDelegate, listWidth)
+		listContent := lipgloss.NewStyle().Width(listWidth).Render(header + "\n" + m.list.View())
+		divider := renderVerticalDivider(m.list.Height()+2, Colors.SurfaceDim)
 		detailView := m.renderDetailPanel()
-		body = lipgloss.JoinHorizontal(lipgloss.Top, listView, divider, detailView)
+		body = lipgloss.JoinHorizontal(lipgloss.Top, listContent, divider, detailView)
 	} else {
-		listView := m.list.View()
+		header := renderListHeader(m.listDelegate, bodyWidth)
+		listView := header + "\n" + m.list.View()
 		// Named separator showing selected worktree
 		separator := renderNamedSeparator(m.selectedItemName(), bodyWidth)
 		detailView := m.renderDetailPanel()
@@ -1573,29 +1574,29 @@ func (m Model) ConfigureForIssues() Model {
 }
 
 // RunPRs starts the TUI directly in the PR browser view.
-func RunPRs(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string) (string, error) {
+func RunPRs(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, pluginMgr ...*plugins.Manager) (string, error) {
 	tuilog.Init()
 	defer tuilog.Close()
 
-	model := NewModel(mgr, stateMgr, projectRoot).ConfigureForPRs()
+	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...).ConfigureForPRs()
 	return runModel(model)
 }
 
 // RunIssues starts the TUI directly in the issue browser view.
-func RunIssues(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string) (string, error) {
+func RunIssues(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, pluginMgr ...*plugins.Manager) (string, error) {
 	tuilog.Init()
 	defer tuilog.Close()
 
-	model := NewModel(mgr, stateMgr, projectRoot).ConfigureForIssues()
+	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...).ConfigureForIssues()
 	return runModel(model)
 }
 
 // Run starts the TUI and returns the path to switch to (if any).
-func Run(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string) (string, error) {
+func Run(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, pluginMgr ...*plugins.Manager) (string, error) {
 	tuilog.Init()
 	defer tuilog.Close()
 
-	model := NewModel(mgr, stateMgr, projectRoot)
+	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...)
 	return runModel(model)
 }
 

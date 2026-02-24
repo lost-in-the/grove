@@ -3,9 +3,11 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/LeahArmstrong/grove-cli/internal/plugins"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 )
@@ -18,14 +20,24 @@ var (
 
 // lsWorktreeOutput represents a worktree in JSON output
 type lsWorktreeOutput struct {
-	Name        string `json:"name"`
-	FullName    string `json:"fullName"`
-	Branch      string `json:"branch"`
-	Path        string `json:"path"`
-	Status      string `json:"status"`
-	Tmux        string `json:"tmux"`
-	Current     bool   `json:"current"`
-	Environment bool   `json:"environment,omitempty"`
+	Name        string            `json:"name"`
+	FullName    string            `json:"fullName"`
+	Branch      string            `json:"branch"`
+	Path        string            `json:"path"`
+	Status      string            `json:"status"`
+	Tmux        string            `json:"tmux"`
+	Containers  string            `json:"containers,omitempty"`
+	Current     bool              `json:"current"`
+	Environment bool              `json:"environment,omitempty"`
+	Services    []lsServiceStatus `json:"services,omitempty"`
+}
+
+// lsServiceStatus represents a plugin's status in JSON output.
+type lsServiceStatus struct {
+	Provider string `json:"provider"`
+	Status   string `json:"status"`
+	Level    string `json:"level"`
+	Detail   string `json:"detail,omitempty"`
 }
 
 // lsOutput represents the JSON output structure for grove ls
@@ -75,6 +87,16 @@ var lsCmd = &cobra.Command{
 					sessions[s.Name] = s
 				}
 			}
+		}
+
+		// Collect plugin statuses
+		var pluginStatuses map[string][]plugins.StatusEntry
+		if ctx.PluginManager != nil {
+			paths := make([]string, len(trees))
+			for i, t := range trees {
+				paths[i] = t.Path
+			}
+			pluginStatuses = ctx.PluginManager.CollectStatuses(paths)
 		}
 
 		// Paths only mode
@@ -135,7 +157,7 @@ var lsCmd = &cobra.Command{
 				isEnv, _ := ctx.State.IsEnvironment(tree.ShortName)
 				isCurrent := currentTree != nil && tree.Path == currentTree.Path
 
-				output.Worktrees = append(output.Worktrees, lsWorktreeOutput{
+				wo := lsWorktreeOutput{
 					Name:        tree.DisplayName(),
 					FullName:    tree.Name,
 					Branch:      tree.Branch,
@@ -144,7 +166,21 @@ var lsCmd = &cobra.Command{
 					Tmux:        tmuxStatus,
 					Current:     isCurrent,
 					Environment: isEnv,
-				})
+				}
+
+				if entries, ok := pluginStatuses[tree.Path]; ok {
+					for _, e := range entries {
+						wo.Containers = e.Short
+						wo.Services = append(wo.Services, lsServiceStatus{
+							Provider: e.ProviderName,
+							Status:   e.Short,
+							Level:    statusLevelString(e.Level),
+							Detail:   e.Detail,
+						})
+					}
+				}
+
+				output.Worktrees = append(output.Worktrees, wo)
 			}
 
 			jsonBytes, err := json.MarshalIndent(output, "", "  ")
@@ -155,65 +191,142 @@ var lsCmd = &cobra.Command{
 			return nil
 		}
 
-		// Default: formatted table output
-		fmt.Printf("%-3s %-12s %-15s %-10s %-12s %s\n", "", "NAME", "BRANCH", "STATUS", "TMUX", "PATH")
-		fmt.Println("──────────────────────────────────────────────────────────────────────────────────────────")
+		// Build row data and compute dynamic column widths
+		type lsRow struct {
+			indicator  string
+			name       string
+			branch     string
+			status     string
+			tmux       string
+			containers string
+			path       string
+			env        string
+		}
+
+		rows := make([]lsRow, 0, len(trees))
+		nameW, branchW, containerW := len("NAME"), len("BRANCH"), 0
 
 		for _, tree := range trees {
-			// Current indicator
-			indicator := "  "
+			r := lsRow{
+				indicator: "  ",
+				name:      tree.DisplayName(),
+				branch:    tree.Branch,
+				path:      tree.Path,
+			}
 			if currentTree != nil && tree.Path == currentTree.Path {
-				indicator = "● "
+				r.indicator = "● "
 			}
-
-			// Git status
-			status := "clean"
 			if tree.IsPrunable {
-				status = "stale"
+				r.status = "stale"
 			} else if tree.IsDirty {
-				status = "dirty"
+				r.status = "dirty"
+			} else {
+				r.status = "clean"
 			}
-
-			// Tmux status - use consistent session naming: {project}-{name}
-			tmuxStatus := "none"
+			r.tmux = "none"
 			if tmuxAvailable && sessions != nil {
-				// Session name follows the {project}-{shortname} pattern
 				sessionName := worktree.TmuxSessionName(projectName, tree.DisplayName())
 				if session, ok := sessions[sessionName]; ok {
 					if session.Attached {
-						tmuxStatus = "attached"
+						r.tmux = "attached"
 					} else {
-						tmuxStatus = "detached"
+						r.tmux = "detached"
 					}
 				} else if session, ok := sessions[tree.Name]; ok {
-					// Fallback: check if session exists with full directory name
 					if session.Attached {
-						tmuxStatus = "attached"
+						r.tmux = "attached"
 					} else {
-						tmuxStatus = "detached"
+						r.tmux = "detached"
 					}
 				}
 			}
-
-			// Check environment status
-			isEnv, _ := ctx.State.IsEnvironment(tree.ShortName)
-			envIndicator := ""
-			if isEnv {
-				envIndicator = " (env)"
+			if entries, ok := pluginStatuses[tree.Path]; ok {
+				var parts []string
+				for _, e := range entries {
+					if e.Short != "" {
+						parts = append(parts, e.Short)
+					}
+				}
+				r.containers = strings.Join(parts, ",")
+			}
+			if isEnv, _ := ctx.State.IsEnvironment(tree.ShortName); isEnv {
+				r.env = " (env)"
 			}
 
-			fmt.Printf("%s %-12s %-15s %-10s %-12s %s%s\n",
-				indicator,
-				tree.DisplayName(),
-				tree.Branch,
-				status,
-				tmuxStatus,
-				tree.Path,
-				envIndicator)
+			if len(r.name) > nameW {
+				nameW = len(r.name)
+			}
+			if len(r.branch) > branchW {
+				branchW = len(r.branch)
+			}
+			if len(r.containers) > containerW {
+				containerW = len(r.containers)
+			}
+			rows = append(rows, r)
+		}
+
+		// Cap column widths for readability
+		if nameW > 30 {
+			nameW = 30
+		}
+		if branchW > 25 {
+			branchW = 25
+		}
+
+		hasContainers := containerW > 0
+		if hasContainers && containerW < len("CONTAINERS") {
+			containerW = len("CONTAINERS")
+		}
+
+		// Default: formatted table output
+		if hasContainers {
+			fmtStr := fmt.Sprintf("%%s %%-%ds %%-%ds %%-10s %%-12s %%-%ds %%s\n", nameW, branchW, containerW)
+			fmt.Printf(fmtStr, "", "NAME", "BRANCH", "STATUS", "TMUX", "CONTAINERS", "PATH")
+		} else {
+			fmtStr := fmt.Sprintf("%%s %%-%ds %%-%ds %%-10s %%-12s %%s\n", nameW, branchW)
+			fmt.Printf(fmtStr, "", "NAME", "BRANCH", "STATUS", "TMUX", "PATH")
+		}
+		totalW := 3 + nameW + 1 + branchW + 1 + 10 + 1 + 12 + 1 + 40
+		if hasContainers {
+			totalW += containerW + 1
+		}
+		fmt.Println(strings.Repeat("─", totalW))
+
+		for _, r := range rows {
+			name := r.name
+			if len(name) > nameW {
+				name = name[:nameW-1] + "…"
+			}
+			branch := r.branch
+			if len(branch) > branchW {
+				branch = branch[:branchW-1] + "…"
+			}
+			if hasContainers {
+				fmtStr := fmt.Sprintf("%%s %%-%ds %%-%ds %%-10s %%-12s %%-%ds %%s\n", nameW, branchW, containerW)
+				fmt.Printf(fmtStr, r.indicator, name, branch, r.status, r.tmux, r.containers, r.path+r.env)
+			} else {
+				fmtStr := fmt.Sprintf("%%s %%-%ds %%-%ds %%-10s %%-12s %%s\n", nameW, branchW)
+				fmt.Printf(fmtStr, r.indicator, name, branch, r.status, r.tmux, r.path+r.env)
+			}
 		}
 
 		return nil
 	}),
+}
+
+func statusLevelString(level plugins.StatusLevel) string {
+	switch level {
+	case plugins.StatusActive:
+		return "active"
+	case plugins.StatusInfo:
+		return "info"
+	case plugins.StatusWarning:
+		return "warning"
+	case plugins.StatusError:
+		return "error"
+	default:
+		return "none"
+	}
 }
 
 func init() {
