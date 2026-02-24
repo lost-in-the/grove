@@ -48,9 +48,9 @@ Running `eval "$(grove install <shell>)"` installs three things:
 
 The wrapper uses a **directives protocol** — the grove binary writes special lines to stdout that the shell function intercepts and acts on.
 
-### Non-TUI Commands (`grove to`, `grove new`, etc.)
+### Directive Commands (`grove to`, `grove last`, `grove fork`, `grove fetch`)
 
-For commands that produce output, the wrapper captures the full stdout, scans it line-by-line, separates directives from normal output, and then:
+These four commands can emit `cd:` or `tmux-attach:` directives. The wrapper captures their full stdout+stderr, scans it line-by-line, separates directives from normal output, and then:
 
 1. Executes any directory change
 2. Prints normal output
@@ -83,6 +83,19 @@ fi
 rm -f "$cd_file"
 ```
 
+### All Other Commands (passthrough)
+
+Commands that never emit directives — `grove ls`, `grove logs`, `grove test`, `grove up`, `grove here`, etc. — run the binary directly without output capture:
+
+```bash
+GROVE_SHELL=1 "$__GROVE_BIN" "$@"
+```
+
+This means:
+- **Streaming works correctly** — `grove logs -f` output appears in real time
+- **Stderr stays separate** — error messages don't get mixed into stdout
+- **Exit codes propagate directly** — no intermediate capture logic
+
 ## Directives Reference
 
 The grove binary communicates with the shell wrapper through directive lines — special prefixes on stdout lines.
@@ -107,6 +120,7 @@ When `GROVE_CD_FILE` is set, the TUI writes the target path to the file instead 
 | `GROVE_CD_FILE` | Path to a temp file where the TUI writes a directory to switch to. Set by the wrapper for bare `grove` invocations. |
 | `GROVE_TUI` | Set to `0` to disable the TUI. When disabled, bare `grove` prints usage instead of launching the dashboard. |
 | `GROVE_HIGH_CONTRAST` | Set to `1` to enable high-contrast mode in the TUI's form elements. |
+| `GROVE_LOG` | Set to `1` to enable debug logging to `~/.grove/grove.log`. Set to a path to log to a custom file. |
 
 ## Tab Completion
 

@@ -30,14 +30,16 @@ func GenerateZshIntegration() (string, error) {
 #
 # WHAT THIS DOES:
 #   1. Creates a 'grove' shell function that wraps the binary
-#      - Intercepts 'cd:/path' output from commands like 'grove to'
-#      - Actually changes your working directory (binaries can't do this)
+#      - Directive commands (to, last, fork, fetch): output is captured and
+#        parsed for cd:/tmux-attach: directives
+#      - All other commands: run directly (streaming-safe for logs, test, etc.)
 #   2. Registers tab completion for grove commands and worktree names
 #   3. Creates 'w' as an alias for 'grove'
 #
 # WHY A WRAPPER: Subprocesses cannot change the parent shell's directory.
-# The wrapper captures grove's output, detects 'cd:' directives, and
-# executes the directory change in your current shell.
+# The wrapper captures directive-producing commands, detects 'cd:' directives,
+# and executes the directory change in your current shell. Non-directive
+# commands run directly for proper streaming output.
 # ─────────────────────────────────────────────────────────────────────────────
 
 `
@@ -61,14 +63,16 @@ func GenerateBashIntegration() (string, error) {
 #
 # WHAT THIS DOES:
 #   1. Creates a 'grove' shell function that wraps the binary
-#      - Intercepts 'cd:/path' output from commands like 'grove to'
-#      - Actually changes your working directory (binaries can't do this)
+#      - Directive commands (to, last, fork, fetch): output is captured and
+#        parsed for cd:/tmux-attach: directives
+#      - All other commands: run directly (streaming-safe for logs, test, etc.)
 #   2. Registers tab completion for grove commands and worktree names
 #   3. Creates 'w' as an alias for 'grove'
 #
 # WHY A WRAPPER: Subprocesses cannot change the parent shell's directory.
-# The wrapper captures grove's output, detects 'cd:' directives, and
-# executes the directory change in your current shell.
+# The wrapper captures directive-producing commands, detects 'cd:' directives,
+# and executes the directory change in your current shell. Non-directive
+# commands run directly for proper streaming output.
 # ─────────────────────────────────────────────────────────────────────────────
 
 `

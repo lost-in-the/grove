@@ -76,6 +76,79 @@ For projects whose Docker services are defined in a shared, external compose set
 - `grove new` **copies credentials** and **creates symlinks** from the main worktree
 - `auto_stop` defaults to **true** (prevents stale services pointing to the wrong worktree)
 
+### Isolated Stack Mode
+
+Isolated stacks allow multiple independent Docker environments to run simultaneously for the same worktree. This is designed for AI agent workflows where several agents need their own database and service instances without conflicting with each other or the developer's active stack.
+
+**Starting an isolated stack:**
+
+```bash
+grove up --isolated          # Allocate a slot and start services
+grove up --isolated --slot 3 # Use a specific slot number
+```
+
+Each isolated stack gets:
+- A unique compose project name (`{project}-{worktree}-slot-{N}`)
+- Its own set of containers with port offsets based on the slot number
+- An isolated database volume
+
+**Checking active stacks:**
+
+```bash
+grove agent-status           # Human-readable table of active isolated stacks
+grove agent-status --json    # Machine-readable JSON output
+```
+
+**Stopping an isolated stack:**
+
+```bash
+grove down --slot 3          # Stop a specific isolated stack
+grove down                   # Auto-detects and stops the current stack
+```
+
+#### Configuration
+
+Configure isolated stacks in `.grove/config.toml`:
+
+```toml
+[plugins.docker.agent]
+max_slots = 5           # Maximum concurrent isolated stacks (default: 5)
+network = "shared"      # Docker network for isolated stacks
+url_pattern = "http://localhost:{port}"  # URL template for service discovery
+```
+
+#### Agent Config Reference
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `max_slots` | `5` | Maximum number of concurrent isolated stacks |
+| `network` | `"shared"` | Docker network name for inter-service communication |
+| `url_pattern` | `"http://localhost:{port}"` | URL template; `{port}` is replaced with the allocated port |
+
+#### Example Workflow
+
+```bash
+# Developer is working normally
+grove to feature-x
+grove up                     # Start dev stack
+
+# Agent 1 needs its own environment
+grove up --isolated          # Gets slot 1, starts services on offset ports
+
+# Agent 2 also needs an environment
+grove up --isolated          # Gets slot 2, different ports
+
+# Check what's running
+grove agent-status
+# SLOT  PROJECT                    STATUS   PORTS
+# 1     myapp-feature-x-slot-1     running  3101, 3111
+# 2     myapp-feature-x-slot-2     running  3102, 3112
+
+# Clean up
+grove down --slot 1
+grove down --slot 2
+```
+
 ## Hook Integration
 
 The Docker plugin integrates with Grove's hook system to automatically manage containers:

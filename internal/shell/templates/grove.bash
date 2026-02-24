@@ -13,55 +13,58 @@ grove() {
         return $exit_code
     fi
 
-    # All other commands: capture output and parse for cd: directives
-    local output exit_code
-    output=$(GROVE_SHELL=1 "$__GROVE_BIN" "$@" 2>&1)
-    exit_code=$?
-    
-    # Parse output line by line for directives
-    local should_cd=0
-    local cd_target=""
-    local tmux_session=""
-    local other_lines=""
+    # Only directive-producing commands need output capture.
+    # All other commands run directly for streaming support.
+    case "$1" in
+        to|last|fork|fetch)
+            # Capture output and parse for cd:/tmux-attach: directives
+            local output exit_code
+            output=$(GROVE_SHELL=1 "$__GROVE_BIN" "$@" 2>&1)
+            exit_code=$?
 
-    while IFS= read -r line; do
-        if [[ "$line" == GROVE_CD:* ]]; then
-            # Extract directory path from GROVE_CD: directive (V2)
-            cd_target="${line#GROVE_CD:}"
-            should_cd=1
-        elif [[ "$line" == cd:* ]]; then
-            # Extract directory path from cd: directive (legacy)
-            cd_target="${line#cd:}"
-            should_cd=1
-        elif [[ "$line" == tmux-attach:* ]]; then
-            # Extract tmux session name for auto-attach
-            tmux_session="${line#tmux-attach:}"
-        else
-            # Collect non-directive output
-            if [[ -n "$other_lines" ]]; then
-                other_lines="${other_lines}"$'\n'"${line}"
-            else
-                other_lines="$line"
+            local should_cd=0
+            local cd_target=""
+            local tmux_session=""
+            local other_lines=""
+
+            while IFS= read -r line; do
+                if [[ "$line" == GROVE_CD:* ]]; then
+                    cd_target="${line#GROVE_CD:}"
+                    should_cd=1
+                elif [[ "$line" == cd:* ]]; then
+                    cd_target="${line#cd:}"
+                    should_cd=1
+                elif [[ "$line" == tmux-attach:* ]]; then
+                    tmux_session="${line#tmux-attach:}"
+                else
+                    if [[ -n "$other_lines" ]]; then
+                        other_lines="${other_lines}"$'\n'"${line}"
+                    else
+                        other_lines="$line"
+                    fi
+                fi
+            done <<< "$output"
+
+            if [[ $should_cd -eq 1 && -n "$cd_target" ]]; then
+                cd "$cd_target" || return 1
             fi
-        fi
-    done <<< "$output"
 
-    # Execute directory change if directive was found
-    if [[ $should_cd -eq 1 && -n "$cd_target" ]]; then
-        cd "$cd_target" || return 1
-    fi
-    
-    # Print any non-directive output
-    if [[ -n "$other_lines" ]]; then
-        echo "$other_lines"
-    fi
+            if [[ -n "$other_lines" ]]; then
+                echo "$other_lines"
+            fi
 
-    # Auto-attach to tmux session if directive was found
-    if [[ -n "$tmux_session" ]]; then
-        tmux attach -t "$tmux_session"
-    fi
+            if [[ -n "$tmux_session" ]]; then
+                tmux attach -t "$tmux_session"
+            fi
 
-    return $exit_code
+            return $exit_code
+            ;;
+        *)
+            # All other commands: run directly (streaming-safe)
+            GROVE_SHELL=1 "$__GROVE_BIN" "$@"
+            return $?
+            ;;
+    esac
 }
 
 # Tab completion for grove
@@ -78,7 +81,7 @@ _grove_completion() {
         cword=$COMP_CWORD
     fi
 
-    local commands="ls new to rm here last fork compare apply sync clean repair init setup fetch issues prs up down logs restart config version install"
+    local commands="ls new to rm here last fork compare apply sync clean repair init setup fetch issues prs up down logs restart test config doctor agent-status version install"
 
     if [[ $cword -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$commands" -- "$cur"))
@@ -86,7 +89,7 @@ _grove_completion() {
     fi
 
     case "${words[1]}" in
-        to|rm|compare|sync)
+        to|rm|compare|sync|test|apply)
             # Complete with worktree short names (using grove ls -q for consistency)
             local worktrees=$(GROVE_SHELL=1 "$__GROVE_BIN" ls -q 2>/dev/null)
             COMPREPLY=($(compgen -W "$worktrees" -- "$cur"))

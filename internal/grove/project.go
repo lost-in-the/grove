@@ -25,12 +25,26 @@ func FindRoot(startDir string) (string, error) {
 		return "", err
 	}
 
-	// Walk up the directory tree looking for .grove
+	// Determine git repo root to limit search scope.
+	// Without this boundary, the walk can escape the repo and find
+	// unrelated .grove directories (e.g., ~/.grove from debug logging).
+	var gitRoot string
+	gitCmd := exec.Command("git", "-C", absDir, "rev-parse", "--show-toplevel")
+	if out, err := gitCmd.Output(); err == nil {
+		gitRoot = strings.TrimSpace(string(out))
+	}
+
+	// Walk up the directory tree looking for .grove, stopping at git root
 	current := absDir
 	for {
 		groveDir := filepath.Join(current, ".grove")
 		if info, err := os.Stat(groveDir); err == nil && info.IsDir() {
 			return groveDir, nil
+		}
+
+		// Stop at git root — don't walk above the repository
+		if gitRoot != "" && current == gitRoot {
+			break
 		}
 
 		// Move to parent directory

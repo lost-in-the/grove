@@ -25,6 +25,7 @@ This document provides exhaustive specifications for each grove command. Every b
    - [grove down](#grove-down)
    - [grove logs](#grove-logs)
    - [grove restart](#grove-restart)
+   - [grove agent-status](#grove-agent-status)
 6. [Worktree Flow Commands](#worktree-flow-commands)
    - [grove fork](#grove-fork)
    - [grove sync](#grove-sync)
@@ -868,6 +869,8 @@ Arguments:
 Flags:
   -d, --detach    Run in background (default: true)
       --build     Build images before starting
+      --isolated  Start an isolated stack (for parallel agents)
+      --slot N    Use a specific slot number (implies --isolated)
 ```
 
 **Behavior:**
@@ -957,6 +960,67 @@ grove restart [services...] [flags]
 Arguments:
   services    Services to restart (default: all)
 ```
+
+---
+
+### grove agent-status
+
+**Purpose:** Show active isolated Docker stacks.
+
+**Usage:**
+```
+grove agent-status [flags]
+
+Flags:
+  -j, --json    Output as JSON
+```
+
+**Behavior:**
+
+1. Read isolated stack state from `.grove/agent-slots/`
+2. For each active slot, check container status via Docker
+3. Display results
+
+**Output (Default):**
+```
+SLOT  PROJECT                    STATUS   PORTS
+1     myapp-feature-x-slot-1     running  3101, 3111
+2     myapp-feature-x-slot-2     running  3102, 3112
+```
+
+**Output (No active stacks):**
+```
+No active isolated stacks.
+
+Start one with: grove up --isolated
+```
+
+**Output (--json):**
+```json
+{
+  "slots": [
+    {
+      "slot": 1,
+      "project": "myapp-feature-x-slot-1",
+      "status": "running",
+      "ports": [3101, 3111],
+      "created_at": "2025-01-15T10:30:00Z"
+    }
+  ]
+}
+```
+
+**Edge Cases:**
+
+| Scenario | Behavior |
+|----------|----------|
+| Docker plugin not configured | Error: "docker plugin not enabled" |
+| Agent slots not configured | Error: "isolated stacks not configured. Add [plugins.docker.agent] to config" |
+| Stale slot (containers gone) | Show with status: `stale` and suggest `grove down --slot N` |
+
+**Exit Codes:**
+- 0: Success
+- 1: Not configured
 
 ---
 

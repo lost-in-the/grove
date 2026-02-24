@@ -132,6 +132,8 @@ Requires a `docker-compose.yml` in the worktree. See [Docker Plugin](plugins/doc
 | `grove down` | Stop Docker containers for the current worktree |
 | `grove logs [service]` | Tail container logs |
 | `grove restart [service]` | Restart container(s) |
+| `grove up --isolated` | Start an isolated Docker stack (for parallel agents) |
+| `grove agent-status` | Show active isolated stacks |
 
 ### Utility
 
@@ -144,6 +146,7 @@ Requires a `docker-compose.yml` in the worktree. See [Docker Plugin](plugins/doc
 | `grove init` | Initialize a grove project in the current git repo |
 | `grove install <shell>` | Print shell integration code (eval this in your rc file) |
 | `grove repair` | Detect and fix state/worktree inconsistencies |
+| `grove doctor` | Check system health and configuration |
 | `grove version` | Show version information |
 
 ## Configuration

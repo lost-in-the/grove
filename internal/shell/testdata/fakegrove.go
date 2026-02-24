@@ -60,11 +60,33 @@ func main() {
 			fmt.Fprintf(os.Stderr, "[fakegrove] emitted cd:/tmp/fakegrove-%s\n", name)
 		}
 
+	case "fork":
+		// Simulates fork output: regular lines mixed with a cd: directive
+		if len(os.Args) < 3 {
+			fmt.Fprintln(os.Stderr, "usage: grove fork <name>")
+			os.Exit(1)
+		}
+		name := os.Args[2]
+		fmt.Println("some output before")
+		fmt.Printf("cd:/tmp/fakegrove-%s\n", name)
+		fmt.Println("some output after")
+
 	case "mixed":
-		// Output with both directives and regular lines
+		// Legacy test case — mixed output with directives (no longer a directive command)
 		fmt.Println("some output before")
 		fmt.Println("cd:/tmp/fakegrove-mixed")
 		fmt.Println("some output after")
+
+	case "version":
+		// Simple output command — used to test passthrough (no directives)
+		fmt.Println("grove v1.0.0-test")
+
+	case "logs":
+		// Streaming-style output — used to test direct passthrough
+		fmt.Println("line1: starting up")
+		fmt.Println("line2: ready")
+		fmt.Fprintln(os.Stderr, "stderr: debug info")
+		fmt.Println("line3: listening")
 
 	default:
 		if len(cmd) >= 4 && cmd[:4] == "fail" {

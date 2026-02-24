@@ -90,7 +90,7 @@ func TestWrapper_BareInvocation_RunsDirectly(t *testing.T) {
 	}
 }
 
-func TestWrapper_SubcommandLs_CapturesOutput(t *testing.T) {
+func TestWrapper_SubcommandLs_Passthrough(t *testing.T) {
 	binPath := buildFakeGrove(t)
 
 	stdout, _, exitCode := runZshWrapper(t, binPath, "ls")
@@ -101,12 +101,56 @@ func TestWrapper_SubcommandLs_CapturesOutput(t *testing.T) {
 		t.Errorf("expected exit code 0, got %d", exitCode)
 	}
 
-	// ls output should pass through (no cd: directives)
+	// ls runs as passthrough (not captured), output appears directly
 	if !strings.Contains(stdout, "root") {
 		t.Errorf("expected 'root' in ls output, got: %q", stdout)
 	}
 	if !strings.Contains(stdout, "feature-auth") {
 		t.Errorf("expected 'feature-auth' in ls output, got: %q", stdout)
+	}
+}
+
+func TestWrapper_Passthrough_RunsDirectly(t *testing.T) {
+	binPath := buildFakeGrove(t)
+
+	// "version" is a non-directive command — should run directly (passthrough)
+	stdout, _, exitCode := runZshWrapper(t, binPath, "version")
+
+	t.Logf("stdout: %q", stdout)
+
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+
+	if !strings.Contains(stdout, "grove v1.0.0-test") {
+		t.Errorf("expected 'grove v1.0.0-test' in passthrough output, got: %q", stdout)
+	}
+}
+
+func TestWrapper_Passthrough_StderrSeparate(t *testing.T) {
+	binPath := buildFakeGrove(t)
+
+	// "logs" produces both stdout and stderr — passthrough should keep them separate
+	stdout, stderr, exitCode := runZshWrapper(t, binPath, "logs")
+
+	t.Logf("stdout: %q", stdout)
+	t.Logf("stderr: %q", stderr)
+
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+
+	// stdout should have the log lines
+	if !strings.Contains(stdout, "line1: starting up") {
+		t.Errorf("expected 'line1: starting up' in stdout, got: %q", stdout)
+	}
+
+	// stderr should be separate (not merged into stdout like the old 2>&1 behavior)
+	if !strings.Contains(stderr, "stderr: debug info") {
+		t.Errorf("expected 'stderr: debug info' in stderr, got: %q", stderr)
+	}
+	if strings.Contains(stdout, "stderr: debug info") {
+		t.Errorf("stderr content should NOT appear in stdout for passthrough commands, got: %q", stdout)
 	}
 }
 
@@ -139,14 +183,15 @@ func TestWrapper_ToCommand_ParsesCdDirective(t *testing.T) {
 	}
 }
 
-func TestWrapper_MixedOutput_SeparatesDirectivesFromText(t *testing.T) {
+func TestWrapper_ForkCommand_SeparatesDirectivesFromText(t *testing.T) {
 	binPath := buildFakeGrove(t)
 
 	targetDir := "/tmp/fakegrove-mixed"
 	_ = os.MkdirAll(targetDir, 0755)
 	defer func() { _ = os.RemoveAll(targetDir) }()
 
-	stdout, _, exitCode := runZshWrapper(t, binPath, "mixed")
+	// fork is a directive command — mixed output should have cd: parsed out
+	stdout, _, exitCode := runZshWrapper(t, binPath, "fork mixed")
 
 	t.Logf("stdout: %q", stdout)
 
@@ -162,7 +207,7 @@ func TestWrapper_MixedOutput_SeparatesDirectivesFromText(t *testing.T) {
 		t.Errorf("expected 'some output after' in output, got: %q", stdout)
 	}
 
-	// cd: directive should be consumed
+	// cd: directive should be consumed (not leaked to stdout)
 	if strings.Contains(stdout, "cd:/tmp") {
 		t.Errorf("cd: directive leaked to stdout: %q", stdout)
 	}
