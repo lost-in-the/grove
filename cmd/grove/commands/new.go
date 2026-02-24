@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
+	"github.com/LeahArmstrong/grove-cli/internal/grove"
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 	"github.com/LeahArmstrong/grove-cli/internal/output"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
@@ -105,6 +106,9 @@ Examples:
 		if err != nil || wt == nil {
 			return fmt.Errorf("failed to find created worktree: %w", err)
 		}
+
+		// Symlink config.toml from main worktree
+		_ = grove.EnsureConfigSymlink(ctx.ProjectRoot, wt.Path)
 
 		// Register worktree in state
 		now := time.Now()

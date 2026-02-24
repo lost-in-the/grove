@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
+	"github.com/LeahArmstrong/grove-cli/internal/grove"
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
@@ -190,6 +191,9 @@ Examples:
 		}
 
 		fmt.Printf("✓ Created worktree '%s' with branch '%s'\n", name, newBranchName)
+
+		// Symlink config.toml from main worktree
+		_ = grove.EnsureConfigSymlink(ctx.ProjectRoot, newTree.Path)
 
 		// Apply WIP patch to new worktree if needed
 		if len(wipPatch) > 0 && (forkMoveWIP || forkCopyWIP) {

@@ -160,6 +160,104 @@ func TestIsInsideWorktree(t *testing.T) {
 	})
 }
 
+func TestEnsureConfigSymlink(t *testing.T) {
+	t.Run("creates symlink when main has config", func(t *testing.T) {
+		mainDir := t.TempDir()
+		newDir := t.TempDir()
+
+		// Create main's config.toml
+		mainGrove := filepath.Join(mainDir, ".grove")
+		_ = os.MkdirAll(mainGrove, 0755)
+		configContent := []byte("[plugins.docker]\nenabled = true\n")
+		_ = os.WriteFile(filepath.Join(mainGrove, "config.toml"), configContent, 0644)
+
+		err := EnsureConfigSymlink(mainDir, newDir)
+		if err != nil {
+			t.Fatalf("EnsureConfigSymlink() error = %v", err)
+		}
+
+		dst := filepath.Join(newDir, ".grove", "config.toml")
+		info, err := os.Lstat(dst)
+		if err != nil {
+			t.Fatalf("symlink not created: %v", err)
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			t.Error("expected symlink, got regular file")
+		}
+
+		// Verify readable and correct content
+		data, err := os.ReadFile(dst)
+		if err != nil {
+			t.Fatalf("failed to read symlink: %v", err)
+		}
+		if string(data) != string(configContent) {
+			t.Errorf("content = %q, want %q", data, configContent)
+		}
+	})
+
+	t.Run("no-op when main has no config", func(t *testing.T) {
+		mainDir := t.TempDir()
+		newDir := t.TempDir()
+
+		err := EnsureConfigSymlink(mainDir, newDir)
+		if err != nil {
+			t.Fatalf("EnsureConfigSymlink() error = %v", err)
+		}
+
+		dst := filepath.Join(newDir, ".grove", "config.toml")
+		if _, err := os.Stat(dst); !os.IsNotExist(err) {
+			t.Error("expected no file created when main has no config")
+		}
+	})
+
+	t.Run("does not overwrite existing config", func(t *testing.T) {
+		mainDir := t.TempDir()
+		newDir := t.TempDir()
+
+		// Create main config
+		mainGrove := filepath.Join(mainDir, ".grove")
+		_ = os.MkdirAll(mainGrove, 0755)
+		_ = os.WriteFile(filepath.Join(mainGrove, "config.toml"), []byte("main"), 0644)
+
+		// Create existing config in new worktree
+		newGrove := filepath.Join(newDir, ".grove")
+		_ = os.MkdirAll(newGrove, 0755)
+		_ = os.WriteFile(filepath.Join(newGrove, "config.toml"), []byte("existing"), 0644)
+
+		err := EnsureConfigSymlink(mainDir, newDir)
+		if err != nil {
+			t.Fatalf("EnsureConfigSymlink() error = %v", err)
+		}
+
+		// Should still have original content
+		data, _ := os.ReadFile(filepath.Join(newGrove, "config.toml"))
+		if string(data) != "existing" {
+			t.Errorf("existing config was overwritten, got %q", data)
+		}
+	})
+
+	t.Run("symlink target is correct", func(t *testing.T) {
+		mainDir := t.TempDir()
+		newDir := t.TempDir()
+
+		mainGrove := filepath.Join(mainDir, ".grove")
+		_ = os.MkdirAll(mainGrove, 0755)
+		_ = os.WriteFile(filepath.Join(mainGrove, "config.toml"), []byte("test"), 0644)
+
+		_ = EnsureConfigSymlink(mainDir, newDir)
+
+		dst := filepath.Join(newDir, ".grove", "config.toml")
+		target, err := os.Readlink(dst)
+		if err != nil {
+			t.Fatalf("Readlink() error = %v", err)
+		}
+		expected := filepath.Join(mainDir, ".grove", "config.toml")
+		if target != expected {
+			t.Errorf("symlink target = %q, want %q", target, expected)
+		}
+	})
+}
+
 func TestProjectRoot(t *testing.T) {
 	t.Run("returns parent of .grove directory", func(t *testing.T) {
 		tmpDir := t.TempDir()

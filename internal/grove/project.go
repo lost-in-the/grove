@@ -138,6 +138,28 @@ func MustProjectRoot(groveDir string) string {
 	return filepath.Dir(groveDir)
 }
 
+// EnsureConfigSymlink creates a symlink to the main worktree's config.toml
+// in the new worktree's .grove directory. Creates .grove/ if needed.
+// No-op if main has no config.toml or target already exists.
+func EnsureConfigSymlink(mainPath, newWorktreePath string) error {
+	src := filepath.Join(mainPath, ".grove", "config.toml")
+	if _, err := os.Stat(src); err != nil {
+		return nil
+	}
+
+	dstDir := filepath.Join(newWorktreePath, ".grove")
+	if err := os.MkdirAll(dstDir, 0755); err != nil {
+		return err
+	}
+
+	dst := filepath.Join(dstDir, "config.toml")
+	if _, err := os.Lstat(dst); err == nil {
+		return nil
+	}
+
+	return os.Symlink(src, dst)
+}
+
 // getMainWorktreePath returns the path of the main worktree by parsing
 // the first entry from `git worktree list --porcelain`.
 func getMainWorktreePath(fromDir string) (string, error) {
