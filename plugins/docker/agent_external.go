@@ -84,11 +84,11 @@ func (s *agentExternalStrategy) Up(worktreePath string, detach bool) error {
 
 	// Show slot usage
 	active, _ := s.slots.ListActive()
-	fmt.Printf("Using slot %d/%d", slot, s.slots.maxSlots)
+	fmt.Fprintf(os.Stderr, "Using slot %d/%d", slot, s.slots.maxSlots)
 	if len(active) > 1 {
-		fmt.Printf(" (%d active)", len(active))
+		fmt.Fprintf(os.Stderr, " (%d active)", len(active))
 	}
-	fmt.Println()
+	fmt.Fprintln(os.Stderr)
 
 	// Warn about memory if possible
 	warnMemoryUsage(len(active))
@@ -102,16 +102,16 @@ func (s *agentExternalStrategy) Up(worktreePath string, detach bool) error {
 	args = append(args, s.agent.Services...)
 
 	cmd := agentComposeCommand(composePath, templatePath, projectName, env, args...)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to start agent stack: %w", err)
 	}
 
-	fmt.Printf("Agent stack started (slot %d)\n", slot)
+	fmt.Fprintf(os.Stderr, "Agent stack started (slot %d)\n", slot)
 	if s.agent.URLPattern != "" {
 		url := strings.ReplaceAll(s.agent.URLPattern, "{slot}", fmt.Sprintf("%d", slot))
-		fmt.Printf("Available at: %s\n", url)
+		fmt.Fprintf(os.Stderr, "Available at: %s\n", url)
 	}
 
 	return nil
@@ -136,7 +136,7 @@ func (s *agentExternalStrategy) Down(worktreePath string) error {
 	env := s.agentEnv(worktreePath, slot)
 
 	cmd := agentComposeCommand(composePath, templatePath, projectName, env, "down")
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to stop agent stack: %w", err)
@@ -146,7 +146,7 @@ func (s *agentExternalStrategy) Down(worktreePath string) error {
 		return fmt.Errorf("failed to release agent slot: %w", err)
 	}
 
-	fmt.Printf("Agent stack stopped (slot %d)\n", slot)
+	fmt.Fprintf(os.Stderr, "Agent stack stopped (slot %d)\n", slot)
 	return nil
 }
 
@@ -170,7 +170,7 @@ func (s *agentExternalStrategy) Run(worktreePath string, service string, command
 	}
 
 	cmd := agentComposeCommand(composePath, templatePath, projectName, env, "run", "--rm", service, "bash", "-cil", command)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	return cmd.Run()
@@ -199,7 +199,7 @@ func (s *agentExternalStrategy) Logs(worktreePath string, service string, follow
 	}
 
 	cmd := agentComposeCommand(composePath, templatePath, projectName, env, args...)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	return cmd.Run()
@@ -225,7 +225,7 @@ func (s *agentExternalStrategy) Restart(worktreePath string, service string) err
 	}
 
 	cmd := agentComposeCommand(composePath, templatePath, projectName, env, args...)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
@@ -296,7 +296,7 @@ func setupWorktreeFiles(ext *config.ExternalComposeConfig, newPath, mainPath str
 			}
 			continue
 		}
-		fmt.Printf("  copied %s\n", relPath)
+		fmt.Fprintf(os.Stderr, "  copied %s\n", relPath)
 	}
 
 	for _, relPath := range ext.SymlinkDirs {
@@ -310,7 +310,7 @@ func setupWorktreeFiles(ext *config.ExternalComposeConfig, newPath, mainPath str
 			}
 			continue
 		}
-		fmt.Printf("  symlinked %s\n", relPath)
+		fmt.Fprintf(os.Stderr, "  symlinked %s\n", relPath)
 	}
 
 	return firstErr

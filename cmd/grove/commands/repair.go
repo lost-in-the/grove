@@ -121,34 +121,34 @@ Examples:
 			}
 		}
 
-		// Display findings
+		// Display findings — use stderr so output is visible through shell wrapper
 		if len(issues) == 0 {
-			fmt.Println("No issues found. State is consistent with worktrees.")
+			fmt.Fprintln(os.Stderr, "No issues found. State is consistent with worktrees.")
 			return nil
 		}
 
-		fmt.Printf("Found %d issue(s):\n\n", len(issues))
+		fmt.Fprintf(os.Stderr, "Found %d issue(s):\n\n", len(issues))
 		for i, issue := range issues {
-			fmt.Printf("  %d. [%s] %s\n", i+1, issue.Type, issue.Description)
-			fmt.Printf("     Action: %s\n\n", issue.Action)
+			fmt.Fprintf(os.Stderr, "  %d. [%s] %s\n", i+1, issue.Type, issue.Description)
+			fmt.Fprintf(os.Stderr, "     Action: %s\n\n", issue.Action)
 		}
 
 		if repairDryRun {
-			fmt.Println("Dry run - no changes made.")
+			fmt.Fprintln(os.Stderr, "Dry run - no changes made.")
 			return nil
 		}
 
 		// Prompt for confirmation
 		if !isInteractive() {
-			fmt.Println("Non-interactive mode: use --dry-run to preview or run interactively to repair")
+			fmt.Fprintln(os.Stderr, "Non-interactive mode: use --dry-run to preview or run interactively to repair")
 			return nil
 		}
 
-		fmt.Print("Proceed with repairs? [y/N]: ")
+		fmt.Fprint(os.Stderr, "Proceed with repairs? [y/N]: ")
 		var response string
 		_, _ = fmt.Scanln(&response)
 		if response != "y" && response != "Y" {
-			fmt.Println("Cancelled")
+			fmt.Fprintln(os.Stderr, "Cancelled")
 			os.Exit(exitcode.UserCancelled)
 		}
 
@@ -163,10 +163,10 @@ Examples:
 				// Extract name from description (hacky but works)
 				name := extractWorktreeName(issue.Description)
 				if err := ctx.State.RemoveWorktree(name); err != nil {
-					fmt.Printf("  Failed to remove '%s' from state: %v\n", name, err)
+					fmt.Fprintf(os.Stderr, "  Failed to remove '%s' from state: %v\n", name, err)
 					failed++
 				} else {
-					fmt.Printf("  Removed '%s' from state\n", name)
+					fmt.Fprintf(os.Stderr, "  Removed '%s' from state\n", name)
 					issue.Resolved = true
 					repaired++
 				}
@@ -183,10 +183,10 @@ Examples:
 						LastAccessedAt: now,
 					}
 					if err := ctx.State.AddWorktree(name, ws); err != nil {
-						fmt.Printf("  Failed to add '%s' to state: %v\n", name, err)
+						fmt.Fprintf(os.Stderr, "  Failed to add '%s' to state: %v\n", name, err)
 						failed++
 					} else {
-						fmt.Printf("  Added '%s' to state\n", name)
+						fmt.Fprintf(os.Stderr, "  Added '%s' to state\n", name)
 						issue.Resolved = true
 						repaired++
 					}
@@ -197,10 +197,10 @@ Examples:
 				sessionName := extractSessionName(issue.Description)
 				if sessionName != "" {
 					if err := tmux.KillSession(sessionName); err != nil {
-						fmt.Printf("  Failed to kill session '%s': %v\n", sessionName, err)
+						fmt.Fprintf(os.Stderr, "  Failed to kill session '%s': %v\n", sessionName, err)
 						failed++
 					} else {
-						fmt.Printf("  Killed tmux session '%s'\n", sessionName)
+						fmt.Fprintf(os.Stderr, "  Killed tmux session '%s'\n", sessionName)
 						issue.Resolved = true
 						repaired++
 					}
@@ -208,7 +208,7 @@ Examples:
 			}
 		}
 
-		fmt.Printf("\nRepairs complete: %d fixed, %d failed\n", repaired, failed)
+		fmt.Fprintf(os.Stderr, "\nRepairs complete: %d fixed, %d failed\n", repaired, failed)
 
 		if failed > 0 {
 			os.Exit(exitcode.WorktreeMissing)

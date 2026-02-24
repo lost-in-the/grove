@@ -146,7 +146,7 @@ func (p *Plugin) onPreRemove(ctx *hooks.Context) error {
 	if slot == 0 {
 		return nil
 	}
-	fmt.Printf("Stopping agent stack for '%s'...\n", ctx.Worktree)
+	fmt.Fprintf(os.Stderr, "Stopping agent stack for '%s'...\n", ctx.Worktree)
 	return p.strategy.Down(ctx.WorktreePath)
 }
 

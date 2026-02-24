@@ -74,7 +74,7 @@ func (s *externalStrategy) Up(worktreePath string, detach bool) error {
 	args = append(args, s.ext.Services...)
 
 	cmd := composeCommand(s.composePath(), s.envForWorktree(worktreePath), args...)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
@@ -95,7 +95,7 @@ func (s *externalStrategy) Logs(_ string, service string, follow bool) error {
 	}
 
 	cmd := composeCommand(s.composePath(), nil, args...)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	return cmd.Run()
@@ -117,7 +117,7 @@ func (s *externalStrategy) Run(worktreePath string, service string, command stri
 	}
 
 	cmd := composeCommand(s.composePath(), env, "run", "--rm", service, "bash", "-cil", command)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	return cmd.Run()
@@ -151,7 +151,7 @@ func (s *externalStrategy) Restart(_ string, service string) error {
 	}
 
 	cmd := composeCommand(s.composePath(), nil, args...)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
@@ -160,7 +160,7 @@ func (s *externalStrategy) Restart(_ string, service string) error {
 func (s *externalStrategy) stopServices() error {
 	args := append([]string{"stop"}, s.ext.Services...)
 	cmd := composeCommand(s.composePath(), nil, args...)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
@@ -169,7 +169,7 @@ func (s *externalStrategy) stopServices() error {
 func (s *externalStrategy) startServices(worktreePath string) error {
 	args := append([]string{"up", "-d"}, s.ext.Services...)
 	cmd := composeCommand(s.composePath(), s.envForWorktree(worktreePath), args...)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }

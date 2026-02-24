@@ -62,7 +62,7 @@ func (s *localStrategy) Up(worktreePath string, detach bool) error {
 	}
 
 	cmd := composeCommand(worktreePath, nil, args...)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
@@ -73,7 +73,7 @@ func (s *localStrategy) Down(worktreePath string) error {
 	}
 
 	cmd := composeCommand(worktreePath, nil, "down")
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
@@ -92,7 +92,7 @@ func (s *localStrategy) Logs(worktreePath string, service string, follow bool) e
 	}
 
 	cmd := composeCommand(worktreePath, nil, args...)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	return cmd.Run()
@@ -104,7 +104,7 @@ func (s *localStrategy) Run(worktreePath string, service string, command string)
 	}
 
 	cmd := composeCommand(worktreePath, nil, "run", "--rm", service, "bash", "-cil", command)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	return cmd.Run()
@@ -121,7 +121,7 @@ func (s *localStrategy) Restart(worktreePath string, service string) error {
 	}
 
 	cmd := composeCommand(worktreePath, nil, args...)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
@@ -132,7 +132,7 @@ func (s *localStrategy) down(worktreePath string) error {
 	}
 
 	cmd := composeCommand(worktreePath, nil, "down")
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
@@ -148,7 +148,7 @@ func (s *localStrategy) up(worktreePath string, detach bool) error {
 	}
 
 	cmd := composeCommand(worktreePath, nil, args...)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
