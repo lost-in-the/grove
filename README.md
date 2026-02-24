@@ -194,6 +194,8 @@ immutable = ["main", "production"]
 **Environment variables:**
 - `GROVE_TUI=0` — disable TUI; bare `grove` shows help instead
 - `GROVE_SHELL=1` — set by shell integration to enable directory switching
+- `GROVE_LOG=1` — enable debug logging to `~/.grove/grove.log`
+- `GROVE_LOG=/path/to/file` — enable debug logging to a custom path
 
 ## Plugins
 

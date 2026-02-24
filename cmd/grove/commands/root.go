@@ -8,6 +8,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/LeahArmstrong/grove-cli/internal/grove"
+	"github.com/LeahArmstrong/grove-cli/internal/log"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
 	"github.com/LeahArmstrong/grove-cli/internal/tui"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
@@ -28,6 +29,9 @@ This enables directory switching, tab completion, and the 'w' alias.
 Use 'grove install --help' for details.`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		log.Printf("command: %s, args: %v", cmd.Name(), args)
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Only launch TUI when:
 		// 1. No subcommand was invoked (this RunE only fires for bare "grove")
