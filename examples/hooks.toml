@@ -58,6 +58,74 @@ to = ".env"
 vars = { PORT = "{{.port}}", DB_NAME = "{{.worktree}}_development" }
 
 # =============================================================================
+# AI Coding Tools - Share project config across worktrees
+# =============================================================================
+
+# Claude Code project settings (settings.local.json, context/, etc.)
+[[hooks.post_create]]
+type = "symlink"
+from = ".claude"
+to = ".claude"
+
+# Cursor project settings
+[[hooks.post_create]]
+type = "symlink"
+from = ".cursor"
+to = ".cursor"
+
+# Windsurf project settings
+[[hooks.post_create]]
+type = "symlink"
+from = ".windsurf"
+to = ".windsurf"
+
+# Aider project settings
+[[hooks.post_create]]
+type = "copy"
+from = ".aider.conf.yml"
+to = ".aider.conf.yml"
+required = false
+
+# =============================================================================
+# Build Artifacts - Symlink to save disk and build time
+# =============================================================================
+
+# Go build cache (if using vendor/)
+# [[hooks.post_create]]
+# type = "symlink"
+# from = "vendor"
+# to = "vendor"
+
+# Rust target directory
+# [[hooks.post_create]]
+# type = "symlink"
+# from = "target"
+# to = "target"
+
+# Python virtual environment
+# [[hooks.post_create]]
+# type = "symlink"
+# from = ".venv"
+# to = ".venv"
+
+# =============================================================================
+# Version Managers & Environment
+# =============================================================================
+
+# direnv local env (copy, not symlink — may differ per worktree)
+# [[hooks.post_create]]
+# type = "copy"
+# from = ".envrc"
+# to = ".envrc"
+# required = false
+
+# mise/asdf tool versions (symlink to keep versions in sync)
+# [[hooks.post_create]]
+# type = "symlink"
+# from = ".tool-versions"
+# to = ".tool-versions"
+
+# =============================================================================
 # Pre-Remove Hooks - Run before 'grove rm <name>'
 # =============================================================================
 

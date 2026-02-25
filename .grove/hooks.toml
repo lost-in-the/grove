@@ -10,3 +10,9 @@ from = ".env"
 to = ".env"
 required = false
 
+# Share Claude Code project config across worktrees
+[[hooks.post_create]]
+type = "symlink"
+from = ".claude"
+to = ".claude"
+
