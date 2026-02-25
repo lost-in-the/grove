@@ -1,0 +1,24 @@
+ test-project  ·  3 worktrees  ·  on root                                ● root 
+     NAME BRANCH AGE     ± ↕  ⬡ ◆                                               
+            ╭─────────────────────────────────────────────────────╮
+            │                                                     │
+            │  Delete Worktree                                    │
+            │                                                     │
+            │  Delete "feature-auth"?                             │
+            │                                                     │
+            │  ⚠ Worktree has uncommitted changes                 │
+            │  ⚠ Branch not merged                                │
+            │                                                     │
+            │  Path      /tmp/test-project-feature-auth           │
+            │  Branch    feature-auth                             │
+            │  Commit    abc1234 · 2 hours ago                    │
+            │  Status    ✓ clean                                  │
+            │                                                     │
+            │  [ ] Also delete branch feature-auth                │
+            │                                                     │
+            │  y confirm  n cancel  space toggle branch           │
+            │                                                     │
+            ╰─────────────────────────────────────────────────────╯
+                                                                                
+                                                                                
+                                                                                

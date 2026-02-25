@@ -10,6 +10,7 @@ Target: developers who context-switch frequently between tasks.
 - **[Shell Integration](docs/SHELL_INTEGRATION.md)** — Shell wrapper protocol and environment setup
 - **[Plugin Development](docs/PLUGIN_DEVELOPMENT.md)** — Hook interfaces and plugin authoring guide
 - **[Example Configs](examples/)** — Example grove configurations
+- **[Visual Testing](docs/VISUAL_TESTING.md)** — Golden files, tmux capture, VHS tapes for TUI visual iteration
 
 ## Critical Implementation Rules
 
@@ -61,6 +62,21 @@ Commands that change directories output `cd:/path/to/dir` which the shell wrappe
 - Test file next to source: `foo.go` → `foo_test.go`
 - Minimum 80% coverage for core packages
 - Integration tests in `_test.go` files with build tag `//go:build integration`
+
+## Visual Iteration
+
+Golden files are the primary tool for visual feedback on TUI changes:
+- `make golden-diff` — update golden files and show what changed
+- `make golden-view TEST=TestGolden_Dashboard` — print specific golden output
+- `make tui-capture` — capture live TUI state via tmux
+- `make tui-capture-keys KEYS="j j Enter"` — capture after key sequence
+
+**When to use what**:
+- Golden files: regression detection, design iteration, CI validation
+- tmux capture: live interaction, key sequences, agent visual feedback
+- VHS: demo recordings, documentation GIFs
+
+See [docs/VISUAL_TESTING.md](docs/VISUAL_TESTING.md) for the full guide.
 
 ## Git Workflow
 - Conventional commits: `type(scope): description`

@@ -1,4 +1,4 @@
-.PHONY: build test test-integration test-all lint fmt clean install help test-fixture
+.PHONY: build test test-integration test-all lint fmt clean install help test-fixture test-update-golden demo golden-diff golden-view tui-capture tui-capture-keys
 
 # Variables
 BINARY_NAME=grove
@@ -74,3 +74,41 @@ tidy: ## Tidy go.mod
 	@echo "Tidying go.mod..."
 	@go mod tidy
 	@echo "go.mod tidied"
+
+test-update-golden: ## Update golden test files after intentional visual changes
+	@echo "Updating golden files..."
+	@go test ./internal/tui/ -run TestGolden -update
+	@echo "Golden files updated. Review with: git diff internal/tui/testdata/"
+
+demo: build ## Record VHS demo GIFs (requires vhs: brew install vhs)
+	@command -v vhs > /dev/null || (echo "Install vhs: brew install vhs" && exit 1)
+	@for tape in tapes/*.tape; do echo "Recording $$tape..."; vhs $$tape; done
+
+golden-diff: ## Update golden files and show what changed
+	@echo "Updating golden files..."
+	@go test ./internal/tui/ -run TestGolden -update
+	@echo ""
+	@git diff internal/tui/testdata/
+
+golden-view: ## Run one golden test and print output (TEST=TestGolden_Dashboard)
+	@if [ -z "$(TEST)" ]; then echo "Usage: make golden-view TEST=TestGolden_Dashboard"; exit 1; fi
+	@go test ./internal/tui/ -run $(TEST) -update -v 2>&1 | tail -1
+	@echo ""
+	@for f in internal/tui/testdata/$(TEST)*.golden; do \
+		if [ -f "$$f" ]; then \
+			echo "=== $$(basename $$f) ==="; \
+			cat "$$f"; \
+			echo ""; \
+		fi; \
+	done
+
+tui-capture: build ## Capture default TUI state via tmux (requires test fixture)
+	@mkdir -p tmp
+	@./scripts/tui-capture.sh -o tmp/tui-capture.txt
+	@cat tmp/tui-capture.txt
+
+tui-capture-keys: build ## Capture TUI after key sequence (KEYS="j j Enter")
+	@if [ -z "$(KEYS)" ]; then echo "Usage: make tui-capture-keys KEYS=\"j j Enter\""; exit 1; fi
+	@mkdir -p tmp
+	@./scripts/tui-capture.sh -k "$(KEYS)" -o tmp/tui-capture.txt
+	@cat tmp/tui-capture.txt

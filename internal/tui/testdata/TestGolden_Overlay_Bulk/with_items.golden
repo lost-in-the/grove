@@ -1,0 +1,24 @@
+ test-project  ·  5 worktrees  ·  on root                                ● root 
+     NAME BRANCH AGE     ± ↕  ⬡ ◆                                               
+ ────────────────────────────────────────────────────────────────────────────── 
+                                                                                
+ 1 ●   2h ago  ●                                                                
+          ╭─────────────────────────────────────────────────────────╮
+          │                                                         │
+          │  Bulk Delete                                            │
+          │                                                         │
+          │  Select merged worktrees to delete (2/4 selected)       │
+          │                                                         │
+          │  ❯ [x] feature-auth (feature-auth)                      │
+          │    [ ] fix-bug (fix-bug)                                │
+          │    [x] testing (testing)                                │
+          │    [ ] refactor (refactor)                              │
+          │                                                         │
+          │  [space] toggle  [enter] delete selected  [esc] cancel  │
+          │                                                         │
+          ╰─────────────────────────────────────────────────────────╯
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                

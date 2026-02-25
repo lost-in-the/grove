@@ -1,0 +1,24 @@
+ test-project  ·  5 worktrees  ·  on root                                ● root 
+     NAME BRANCH AGE     ± ↕  ⬡ ◆                                               
+ ────────────────────────────────────────────────────────────────────────────── 
+              ╭──────────────────────────────────────────────────╮
+              │                                                  │
+              │  Sync Changes                                    │
+              │                                                  │
+              │    ●━━━━━━━━━━━━━━━━━━○━━━━━━━━━━━━━━━━━━○       │
+              │    Source          Preview         Confirm       │
+              │                                                  │
+              │    Pull uncommitted changes from another         │
+              │  worktree                                        │
+              │    into root.                                    │
+              │                                                  │
+              │    ❯ feature-auth    2 files changed             │
+              │      fix-bug    clean                            │
+              │      testing    1 files changed                  │
+              │                                                  │
+              │    ↑↓ navigate  enter select  esc cancel         │
+              │                                                  │
+              ╰──────────────────────────────────────────────────╯
+                                                                                
+                                                                                
+                                                                                

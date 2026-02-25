@@ -1,0 +1,24 @@
+ test-project  ·  3 worktrees  ·  on root                                ● root 
+     NAME BRANCH AGE     ± ↕  ⬡ ◆                                               
+ ────────────────────────────────────────────────────────────────────────────── 
+              ╭──────────────────────────────────────────────────╮
+              │                                                  │
+              │  New Worktree                                    │
+              │                                                  │
+              │    ●━━━━━━━━━━━━━━━━━━○━━━━━━━━━━━━━━━━━━○       │
+              │    Branch           Name           Confirm       │
+              │                                                  │
+              │    Select a branch or type to create new         │
+              │                                                  │
+              │    ❯ main                                        │
+              │      develop                                     │
+              │      feature/auth                                │
+              │      fix/login-bug                               │
+              │      release/v2                                  │
+              │                                                  │
+              │    [enter] select  [esc] cancel  type to filter  │
+              │                                                  │
+              ╰──────────────────────────────────────────────────╯
+                                                                                
+                                                                                
+                                                                                

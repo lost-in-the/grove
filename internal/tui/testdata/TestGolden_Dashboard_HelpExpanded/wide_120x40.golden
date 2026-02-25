@@ -1,0 +1,40 @@
+ test-project  ·  5 worktrees  ·  on root                                                                        ● root 
+     NAME BRANCH AGE     ± ↕  ⬡ ◆                                                                                       
+ ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+                                                                                                                        
+ 1 ●   2h ago  ●                                                                                                        
+                                                                                                                        
+   •••••                                                                                                                
+ ── root ────────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+                                                                                                                        
+                                                                                                                        
+ ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+ │                                                                                                                    │
+ │  Quick Reference                                                                                                   │
+ │                                                                                                                    │
+ │  Navigation                           Actions                              Views                                   │
+ │                                                                                                                    │
+ │    ↑/k     move up                      n         new worktree               1-9       quick-switch                │
+ │    ↓/j     move down                    d         delete                     /         filter                      │
+ │    enter     switch                     f         fork worktree              ?         toggle help                 │
+ │    esc       back/close                 s         sync changes               q         quit                        │
+ │                                         c         configure                                                        │
+ │                                         p         browse PRs                                                       │
+ │                                         i         browse issues                                                    │
+ │                                         a         bulk delete                                                      │
+ │                                         o         cycle sort                                                       │
+ │                                         r         refresh                                                          │
+ │                                                                                                                    │
+ │  Press ? again to close                                                                                            │
+ │                                                                                                                    │
+ ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        

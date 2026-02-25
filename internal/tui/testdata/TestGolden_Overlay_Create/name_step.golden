@@ -1,0 +1,24 @@
+ test-project  ·  3 worktrees  ·  on root                                ● root 
+     NAME BRANCH AGE     ± ↕  ⬡ ◆                                               
+              ╭──────────────────────────────────────────────────╮
+              │                                                  │
+              │  New Worktree                                    │
+              │                                                  │
+              │    ●━━━━━━━━━━━━━━━━━━●━━━━━━━━━━━━━━━━━━○       │
+              │    Branch ✓         Name           Confirm       │
+              │                                                  │
+              │    ╭──────────────────────────────────────╮      │
+              │    │ Summary                              │      │
+              │    │ Branch:   feature/auth (existing)    │      │
+              │    ╰──────────────────────────────────────╯      │
+              │                                                  │
+              │    Name: auth                                    │
+              │    → test-project-auth                           │
+              │                                                  │
+              │    ✓ valid name                                  │
+              │                                                  │
+              │    [enter] next  [backspace] back  [esc] cancel  │
+              │                                                  │
+              ╰──────────────────────────────────────────────────╯
+                                                                                
+                                                                                

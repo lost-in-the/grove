@@ -1,0 +1,24 @@
+ test-project  ·  3 worktrees  ·  on root                                ● root 
+     NAME BRANCH AGE     ± ↕  ⬡ ◆                                               
+ ────────────────────────────────────────────────────────────────────────────── 
+         ╭────────────────────────────────────────────────────────────╮
+         │                                                            │
+         │  Configuration                                             │
+         │                                                            │
+         │    General  Behavior  Plugins  Protection                  │
+         │    ──────────────────────────────────────────────────────  │
+         │                                                            │
+         │    ❯ project_name    grove-cli                             │
+         │        Project name                                        │
+         │      alias           (empty)                               │
+         │      projects_dir    /Users/dev/projects                   │
+         │      default_branch  main                                  │
+         │                                                            │
+         │    tab/shift+tab sections  ↑↓ navigate  enter edit  esc    │
+         │  close                                                     │
+         │                                                            │
+         ╰────────────────────────────────────────────────────────────╯
+                                                                                
+                                                                                
+                                                                                
+                                                                                

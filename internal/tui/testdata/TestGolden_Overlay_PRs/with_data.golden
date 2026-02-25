@@ -1,0 +1,24 @@
+ test-project  ·  3 worktrees  ·  on root                                ● root 
+     NAME BRANCH AGE     ± ↕  ⬡ ◆                                               
+ ────────────────────────────────────────────────────────────────────────────── 
+   ╭───────────────────────────────────────────────────────────────────────╮
+   │                                                                       │
+   │  Pull Requests                                                        │
+   │                                                                       │
+   │  3 open                                                               │
+   │                                                                       │
+   │  ❯ #42    Add user authentication flow  feature/auth                  │
+   │           @alice · 3 commits · +245 -12  ✓ worktree                   │
+   │                                                                       │
+   │    #38    [DRAFT] Fix login redirect loop  fix/login                  │
+   │           @bob · 1 commit · +8 -3                                     │
+   │                                                                       │
+   │    #35    Refactor database connection pooling  refactor/db-pool      │
+   │           @carol · 7 commits · +1,203 -456                            │
+   │                                                                       │
+   │  [enter] create worktree  [tab] preview  [esc] close  type to filter  │
+   │                                                                       │
+   ╰───────────────────────────────────────────────────────────────────────╯
+                                                                                
+                                                                                
+                                                                                

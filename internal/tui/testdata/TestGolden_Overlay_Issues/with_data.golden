@@ -1,0 +1,24 @@
+ test-project  ·  3 worktrees  ·  on root                                ● root 
+     NAME BRANCH AGE     ± ↕  ⬡ ◆                                               
+ ────────────────────────────────────────────────────────────────────────────── 
+   ╭───────────────────────────────────────────────────────────────────────╮
+   │                                                                       │
+   │  Issues                                                               │
+   │                                                                       │
+   │  3 open                                                               │
+   │                                                                       │
+   │  ❯ #101   Login page crashes on mobile                                │
+   │           @alice · 2d ago  bug, high-priority                         │
+   │                                                                       │
+   │    #95    Add dark mode support                                       │
+   │           @bob · 1w ago  enhancement                                  │
+   │                                                                       │
+   │    #88    Update README with setup instructions                       │
+   │           @carol · 2w ago  docs                                       │
+   │                                                                       │
+   │  [enter] create worktree  [tab] preview  [esc] close  type to filter  │
+   │                                                                       │
+   ╰───────────────────────────────────────────────────────────────────────╯
+                                                                                
+                                                                                
+                                                                                
