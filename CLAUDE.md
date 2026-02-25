@@ -96,3 +96,16 @@ See [docs/VISUAL_TESTING.md](docs/VISUAL_TESTING.md) for the full guide.
 - Shell integration must work in both zsh and bash
 - Test tmux operations with mock when possible
 - Document all public functions
+
+## Documentation Review
+
+Before committing, check if any documentation files need updating:
+- If command behavior changed → update `docs/COMMAND_SPECIFICATIONS.md`
+- If TUI layout/keybindings changed → update `docs/TUI.md`
+- If shell integration changed → update `docs/SHELL_INTEGRATION.md`
+- If plugin interfaces changed → update `docs/PLUGIN_DEVELOPMENT.md`
+- If golden test patterns changed → update `docs/VISUAL_TESTING.md`
+- If build/test/CI process changed → update `CONTRIBUTING.md`
+- If public API or config changed → update `README.md`
+
+Cross-reference doc content against the actual code for accuracy before committing.

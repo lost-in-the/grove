@@ -277,7 +277,7 @@ See [docs/TUI.md](docs/TUI.md) for the full reference.
 ## Requirements
 
 - Git 2.30 or later
-- Go 1.21 or later (for building from source)
+- Go 1.24 or later (for building from source)
 - Tmux 3.0 or later (optional, for session management)
 - zsh or bash (for shell integration)
 - `gh` CLI (optional, for GitHub integration)
@@ -285,14 +285,23 @@ See [docs/TUI.md](docs/TUI.md) for the full reference.
 ## Development
 
 ```bash
-make build    # Build binary
-make test     # Run tests
-make lint     # Run linter
+make build    # Build binary to bin/grove
+make test     # Run tests with race detection and coverage
+make lint     # Run golangci-lint + go vet + gofmt check
 make fmt      # Format code
-make install  # Install locally
+make install  # Install to $GOPATH/bin
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
+### Testing
+
+```bash
+make test-integration   # Integration tests (requires git)
+make test-coverage      # Generate coverage.html
+make golden-diff        # Update golden files and show visual changes
+make test-fixture       # Create test fixture for live TUI testing
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development guide including CI pipeline, release process, and test infrastructure details.
 
 ## License
 

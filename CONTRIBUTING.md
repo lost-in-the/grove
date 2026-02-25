@@ -10,7 +10,7 @@ Be respectful, inclusive, and professional. We're all here to build something gr
 
 ### Prerequisites
 
-- Go 1.21 or later
+- Go 1.24 or later
 - Git 2.30 or later
 - Tmux 3.0 or later (for testing tmux features)
 - Make
@@ -198,11 +198,11 @@ Before submitting, ensure:
 
 - [ ] Tests added/updated and passing
 - [ ] Documentation updated (README, code comments)
-- [ ] CHANGELOG.md updated (for features/fixes)
 - [ ] Code formatted (`make fmt`)
 - [ ] Linter passes (`make lint`)
 - [ ] Conventional commit message used
 - [ ] No merge conflicts with `main`
+- [ ] Golden files reviewed (`make golden-diff`) — no unintended visual regressions
 
 ## Development Commands
 
@@ -211,11 +211,63 @@ make build          # Build the binary
 make test           # Run all tests
 make test-verbose   # Run tests with verbose output
 make test-coverage  # Generate coverage report
+make test-integration  # Run integration tests (requires git)
 make lint           # Run linters
 make fmt            # Format code
 make clean          # Clean build artifacts
 make install        # Install locally
+make golden-diff    # Update golden files and show visual changes
+make golden-view TEST=TestGolden_Dashboard  # Print specific golden output
+make test-fixture   # Create test fixture for live TUI testing
+make tui-capture    # Capture live TUI state via tmux
 ```
+
+## Development Guide
+
+### Building Locally
+
+`make build` produces the binary at `bin/grove`. `make install` copies it to `$GOPATH/bin` and codesigns it on macOS.
+
+Release builds use `CGO_ENABLED=0` (via GoReleaser). Version information (`internal/version.Version`, `.Commit`, `.BuildDate`) is injected by ldflags at release time; dev builds show defaults from `internal/version/version.go`.
+
+### Test Infrastructure
+
+**Unit tests**: `make test` runs `go test -race -cover ./...` — the same command CI uses.
+
+**Integration tests**: `make test-integration` runs tests tagged with `//go:build integration`. These require git and test real git operations. They're slower and not included in the default `make test`.
+
+**Golden file tests**: Visual regression tests for the TUI. Golden files capture expected terminal output and fail when the output changes unexpectedly.
+- `make golden-diff` — update golden files and show what changed (via `git diff`)
+- `make golden-view TEST=TestGolden_Dashboard` — print a specific golden file's output
+- See [docs/VISUAL_TESTING.md](docs/VISUAL_TESTING.md) for the full guide
+
+**Test fixtures**: `make test-fixture` creates `/tmp/grove-test-fixture/` — a multi-worktree git repo for live TUI testing and tmux capture.
+
+**Coverage**: `make test-coverage` generates `coverage.html`. Core packages (`internal/`) target 80% minimum.
+
+### CI Pipeline
+
+CI runs on push to `main` (and `copilot/**` branches) and on PRs to `main`. Three jobs run in parallel:
+
+| Job | What it does |
+|-----|-------------|
+| **Test** | `go test -race -cover ./...` |
+| **Lint** | golangci-lint (version pinned in CI) + `go vet` + `gofmt -s` check |
+| **Build** | `make build` (binary compilation) |
+
+All three use Go 1.24 with module cache keyed by `go.sum`. All three must pass for a PR to merge.
+
+### Releases & Distribution
+
+[GoReleaser](https://goreleaser.com) handles releases, triggered by pushing a `v*.*.*` tag.
+
+**Platforms**: Linux (amd64/arm64), macOS (amd64/arm64), Windows (amd64)
+
+**Distribution**:
+- GitHub Releases — binary archives with LICENSE, README, CHANGELOG, CONTRIBUTING, and shell integration scripts
+- Homebrew tap — `LeahArmstrong/homebrew-tap` (`brew tap LeahArmstrong/tap && brew install grove`)
+
+**Test-only dependencies** (`teatest`, `golden`, etc.) are safe in `go.mod`. Go only compiles `_test.go` imports into test binaries, never into release builds. No action needed to exclude them.
 
 ## Project Structure
 
@@ -260,30 +312,6 @@ grove-cli/
 3. Add README.md in plugin directory
 4. Register hooks in plugin init
 5. Add tests
-
-## Testing
-
-### Unit Tests
-
-Run with:
-```bash
-go test ./...
-```
-
-### Integration Tests
-
-These test real git and tmux operations:
-```bash
-go test -tags=integration ./...
-```
-
-### Coverage
-
-Generate coverage report:
-```bash
-make test-coverage
-open coverage.html
-```
 
 ## Documentation
 
