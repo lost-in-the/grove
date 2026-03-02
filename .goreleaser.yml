@@ -136,6 +136,7 @@ homebrew_casks:
   - repository:
       owner: LeahArmstrong
       name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
     homepage: https://github.com/LeahArmstrong/grove-cli
     description: Zero-friction worktree management for developers
     skip_upload: false
