@@ -1,21 +1,19 @@
- test-project  ·  5 worktrees  ·  on root                                                                                                                ● root 
-     NAME BRANCH AGE     ± ↕  ⬡ ◆                                                               │                                                               
- ────────────────────────────────────────────────────────────────────────────────────────────── │                                                               
+ [1m[1mtest-project[m  ·  5 worktrees  ·  on root                                                                                                                ● root[m 
                                                                                                 │                                                               
- 1 ●   2h ago  ●                                                                                │                                                               
- 2     2h ago  ✓                                                                                │                                                               
- 3     2h ago  ✓                                                                                │                                                               
- 4 ●   2h ago  ●                                                                                │                                                               
- 5     2h ago  ✓                                                                                │                                                               
+ 1 ❯ root ────────────────────────────────────────────────────────────────────────────── 2h ago │                                                               
+       test commit for root                                                                     │                                                               
                                                                                                 │                                                               
+ 2 ○ feature-a… ──────────────────────────────────────────────────────────────────────── 2h ago │                                                               
+       test commit for feature-auth                                                             │                                                               
                                                                                                 │                                                               
+ 3 ○ fix-bug ─────────────────────────────────────────────────────────────────────────── 2h ago │                                                               
+       test commit for fix-bug                                                                  │                                                               
                                                                                                 │                                                               
+ 4 ● testing ─────────────────────────────────────────────────────────────────────────── 2h ago │                                                               
+       test commit for testing                                                                  │                                                               
                                                                                                 │                                                               
-                                                                                                │                                                               
-                                                                                                │                                                               
-                                                                                                │                                                               
-                                                                                                │                                                               
-                                                                                                │                                                               
+ 5 ○ refactor ────────────────────────────────────────────────────────────────────────── 2h ago │                                                               
+       test commit for refactor                                                                 │                                                               
                                                                                                 │                                                               
                                                                                                 │                                                               
                                                                                                 │                                                               
@@ -37,4 +35,6 @@
                                                                                                 │                                                               
                                                                                                 │                                                               
                                                                                                 │                                                               
-  ↑↓ navigate ·   · enter switch ·   · n new ·   · d delete ·   · f fork ·   · s sync ·   · c config ·   · o sort ·   · / filter ·   · p PRs ·   · i issues
+                                                                                                │                                                               
+                                                                                                │                                                               
+  [1m↑↓[m navigate · [1menter[m switch · [1mn[m new · [1md[m delete · [1mf[m fork · [1ms[m sync · [1mc[m config · [1mo[m sort · [1mv[m compact · [1m/[m filter · [1mp[m PRs · [1mi[m issues · [1m?[m more                        

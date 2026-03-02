@@ -2,31 +2,7 @@ package tui
 
 import (
 	"fmt"
-
-	"github.com/charmbracelet/huh"
 )
-
-// NewCreateNameForm creates a Huh form for the worktree name input step.
-// The nameValue pointer will be populated with the user's input.
-// existingItems is used for duplicate detection validation.
-// placeholder is shown as dimmed hint text when input is empty (e.g. a name derived from the branch).
-func NewCreateNameForm(nameValue *string, projectName string, existingItems []WorktreeItem, placeholder string) *huh.Form {
-	if placeholder == "" {
-		placeholder = "feature-name"
-	}
-
-	form := huh.NewForm(
-		huh.NewGroup(
-			huh.NewInput().
-				Title("Worktree Name").
-				Placeholder(placeholder).
-				Validate(createNameValidator(existingItems, placeholder)).
-				Value(nameValue),
-		),
-	).WithTheme(huh.ThemeCharm()).WithShowHelp(false).WithAccessible(isHighContrast())
-
-	return form
-}
 
 // createNameValidator returns a validation function for worktree names.
 // It checks format validity and duplicate detection against existing worktrees.

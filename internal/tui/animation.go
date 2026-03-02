@@ -3,8 +3,8 @@ package tui
 import (
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/lipgloss/v2"
 )
 
 // GroveSpinner returns a spinner configured with smooth animation and brand colors.

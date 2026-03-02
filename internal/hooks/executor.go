@@ -36,9 +36,10 @@ type Executor struct {
 	Output io.Writer // destination for status messages; defaults to os.Stdout
 }
 
-// NewExecutor creates a new hook executor with loaded configuration
-func NewExecutor() (*Executor, error) {
-	cfg, err := LoadHooksConfig()
+// NewExecutor creates a new hook executor with loaded configuration.
+// If groveDir is provided, it is forwarded to LoadHooksConfig for project hook discovery.
+func NewExecutor(groveDir ...string) (*Executor, error) {
+	cfg, err := LoadHooksConfig(groveDir...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load hooks config: %w", err)
 	}

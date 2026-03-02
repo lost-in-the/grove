@@ -116,7 +116,7 @@ func agentStatuses(s *agentExternalStrategy, paths []string) map[string]plugins.
 			continue
 		}
 
-		detail := fmt.Sprintf("Isolated stack (slot %d)", slot)
+		detail := fmt.Sprintf("Stack #%d", slot)
 		if s.agent.URLPattern != "" {
 			url := strings.ReplaceAll(s.agent.URLPattern, "{slot}", fmt.Sprintf("%d", slot))
 			detail += " at " + url
@@ -125,7 +125,7 @@ func agentStatuses(s *agentExternalStrategy, paths []string) map[string]plugins.
 		result[path] = plugins.StatusEntry{
 			ProviderName: "docker",
 			Level:        plugins.StatusActive,
-			Short:        fmt.Sprintf("slot %d", slot),
+			Short:        fmt.Sprintf("#%d", slot),
 			Detail:       detail,
 		}
 	}
@@ -151,7 +151,7 @@ func readEnvVar(composePath, key string) string {
 }
 
 // pathMatchesEnv checks whether a worktree path matches the env var value.
-// The env value may be a relative path from composePath (e.g., "./admin-feature-x")
+// The env value may be a relative path from composePath (e.g., "./myapp-feature-x")
 // or an absolute path.
 func pathMatchesEnv(worktreePath, envValue, composePath string) bool {
 	if envValue == "" {

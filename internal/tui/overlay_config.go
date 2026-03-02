@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 )
@@ -50,8 +50,10 @@ type ConfigState struct {
 	Fields            [][]ConfigField // fields per tab
 	Cursor            int             // field cursor within current tab
 	Editing           bool            // inline edit active
-	EditForm          *huh.Form       // active Huh form for editing
-	EditOriginalValue string          // value before form opened (Huh binds directly)
+	EditBuffer        string          // current edit value (manual input)
+	EditCursorPos     int             // cursor position within EditBuffer
+	EditOptionCursor  int             // cursor for enum/bool option selection
+	EditOriginalValue string          // value before edit started
 	Err               error
 	Dirty             bool           // unsaved changes exist
 	Confirming        bool           // save confirmation prompt active
@@ -287,7 +289,7 @@ func tabName(tab ConfigTab) string {
 }
 
 // handleConfigKey handles key input for the config overlay.
-func (m Model) handleConfigKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleConfigKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.configState == nil {
 		m.activeView = ViewDashboard
 		return m, nil
@@ -354,10 +356,25 @@ func (m Model) handleConfigKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		tabFields := s.Fields[s.Tab]
 		if s.Cursor < len(tabFields) {
 			field := &tabFields[s.Cursor]
-			s.EditOriginalValue = field.Value // save before Huh binds to pointer
+			s.EditOriginalValue = field.Value
+			s.EditBuffer = field.Value
+			s.EditCursorPos = len(field.Value)
+			s.EditOptionCursor = 0
 			s.Editing = true
-			s.EditForm = newConfigEditForm(field)
-			return m, s.EditForm.Init()
+
+			// For enum/bool, set cursor to current value
+			if field.Type == ConfigBool {
+				if field.Value == "false" {
+					s.EditOptionCursor = 1
+				}
+			} else if field.Type == ConfigEnum {
+				for i, opt := range field.Options {
+					if opt == field.Value {
+						s.EditOptionCursor = i
+						break
+					}
+				}
+			}
 		}
 		return m, nil
 	}
@@ -366,134 +383,85 @@ func (m Model) handleConfigKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleConfigEditKey handles key input while editing a config field.
-func (m Model) handleConfigEditKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleConfigEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := m.configState
-	if s.EditForm == nil {
+	tabFields := s.Fields[s.Tab]
+	if s.Cursor >= len(tabFields) {
 		s.Editing = false
 		return m, nil
 	}
+	field := &tabFields[s.Cursor]
 
 	if key.Matches(msg, m.keys.Escape) {
-		// Restore original value — Huh modifies field.Value through pointer binding
-		tabFields := s.Fields[s.Tab]
-		if s.Cursor < len(tabFields) {
-			tabFields[s.Cursor].Value = s.EditOriginalValue
-		}
+		// Restore original value
+		field.Value = s.EditOriginalValue
 		s.Editing = false
-		s.EditForm = nil
 		return m, nil
 	}
 
-	model, cmd := s.EditForm.Update(msg)
-	s.EditForm = model.(*huh.Form)
-
-	if s.EditForm.State == huh.StateAborted {
-		// Restore original value — Huh modifies field.Value through pointer binding
-		tabFields := s.Fields[s.Tab]
-		if s.Cursor < len(tabFields) {
-			tabFields[s.Cursor].Value = s.EditOriginalValue
-		}
-		s.Editing = false
-		s.EditForm = nil
-		return m, nil
-	}
-
-	if s.EditForm.State == huh.StateCompleted {
-		// Huh already updated field.Value through pointer binding,
-		// so compare against saved original to detect changes
-		tabFields := s.Fields[s.Tab]
-		if s.Cursor < len(tabFields) {
-			if tabFields[s.Cursor].Value != s.EditOriginalValue {
-				s.Dirty = true
-			}
-		}
-		s.Editing = false
-		s.EditForm = nil
-		return m, nil
-	}
-
-	return m, cmd
-}
-
-// forwardToConfigHuhForm forwards non-key messages to the active config edit form.
-func (m Model) forwardToConfigHuhForm(msg tea.Msg) (tea.Model, tea.Cmd) {
-	s := m.configState
-	if s.EditForm == nil {
-		return m, nil
-	}
-	model, cmd := s.EditForm.Update(msg)
-	s.EditForm = model.(*huh.Form)
-
-	// Check if the form completed or aborted via an internal message
-	if s.EditForm.State == huh.StateAborted {
-		tabFields := s.Fields[s.Tab]
-		if s.Cursor < len(tabFields) {
-			tabFields[s.Cursor].Value = s.EditOriginalValue
-		}
-		s.Editing = false
-		s.EditForm = nil
-		return m, nil
-	}
-	if s.EditForm.State == huh.StateCompleted {
-		tabFields := s.Fields[s.Tab]
-		if s.Cursor < len(tabFields) {
-			if tabFields[s.Cursor].Value != s.EditOriginalValue {
-				s.Dirty = true
-			}
-		}
-		s.Editing = false
-		s.EditForm = nil
-		return m, nil
-	}
-
-	return m, cmd
-}
-
-// newConfigEditForm creates a Huh form for editing a config field.
-func newConfigEditForm(field *ConfigField) *huh.Form {
 	switch field.Type {
 	case ConfigBool:
-		return huh.NewForm(
-			huh.NewGroup(
-				huh.NewSelect[string]().
-					Title(field.Label).
-					Description(field.Description).
-					Options(
-						huh.NewOption("true", "true"),
-						huh.NewOption("false", "false"),
-					).
-					Value(&field.Value).
-					Key("value"),
-			),
-		).WithTheme(huh.ThemeCharm()).WithShowHelp(false).WithAccessible(isHighContrast())
+		switch {
+		case key.Matches(msg, m.keys.Up):
+			if s.EditOptionCursor > 0 {
+				s.EditOptionCursor--
+			}
+		case key.Matches(msg, m.keys.Down):
+			if s.EditOptionCursor < 1 {
+				s.EditOptionCursor++
+			}
+		case key.Matches(msg, m.keys.Enter):
+			if s.EditOptionCursor == 0 {
+				field.Value = "true"
+			} else {
+				field.Value = "false"
+			}
+			if field.Value != s.EditOriginalValue {
+				s.Dirty = true
+			}
+			s.Editing = false
+		}
+		return m, nil
 
 	case ConfigEnum:
-		opts := make([]huh.Option[string], len(field.Options))
-		for i, o := range field.Options {
-			opts[i] = huh.NewOption(o, o)
+		switch {
+		case key.Matches(msg, m.keys.Up):
+			if s.EditOptionCursor > 0 {
+				s.EditOptionCursor--
+			}
+		case key.Matches(msg, m.keys.Down):
+			if s.EditOptionCursor < len(field.Options)-1 {
+				s.EditOptionCursor++
+			}
+		case key.Matches(msg, m.keys.Enter):
+			if len(field.Options) == 0 {
+				s.Editing = false
+				return m, nil
+			}
+			field.Value = field.Options[s.EditOptionCursor]
+			if field.Value != s.EditOriginalValue {
+				s.Dirty = true
+			}
+			s.Editing = false
 		}
-		return huh.NewForm(
-			huh.NewGroup(
-				huh.NewSelect[string]().
-					Title(field.Label).
-					Description(field.Description).
-					Options(opts...).
-					Value(&field.Value).
-					Key("value"),
-			),
-		).WithTheme(huh.ThemeCharm()).WithShowHelp(false).WithAccessible(isHighContrast())
+		return m, nil
 
 	default: // ConfigString, ConfigList
-		return huh.NewForm(
-			huh.NewGroup(
-				huh.NewInput().
-					Title(field.Label).
-					Placeholder(field.Default).
-					Description(field.Description).
-					Value(&field.Value).
-					Key("value"),
-			),
-		).WithTheme(huh.ThemeCharm()).WithShowHelp(false).WithAccessible(isHighContrast())
+		switch {
+		case key.Matches(msg, m.keys.Enter):
+			field.Value = s.EditBuffer
+			if field.Value != s.EditOriginalValue {
+				s.Dirty = true
+			}
+			s.Editing = false
+		case msg.Code == tea.KeyBackspace:
+			if len(s.EditBuffer) > 0 {
+				s.EditBuffer = s.EditBuffer[:len(s.EditBuffer)-1]
+			}
+		case isPrintableText(msg.Text):
+			s.EditBuffer += msg.Text
+		}
+		return m, nil
 	}
 }
 
@@ -507,7 +475,7 @@ func renderConfig(s *ConfigState, width int) string {
 		overlayWidth = 80
 	}
 	contentWidth := overlayWidth - 6
-	indent := huhOverlayIndent
+	indent := overlayIndent
 
 	var b strings.Builder
 
@@ -529,9 +497,39 @@ func renderConfig(s *ConfigState, width int) string {
 		b.WriteString(indent + Styles.ErrorText.Render("Error: "+s.Err.Error()) + "\n\n")
 	}
 
-	// If editing, show the edit form
-	if s.Editing && s.EditForm != nil {
-		b.WriteString(s.EditForm.View())
+	// If editing, show the manual edit UI
+	if s.Editing {
+		tabFields := s.Fields[s.Tab]
+		if s.Cursor < len(tabFields) {
+			field := tabFields[s.Cursor]
+			b.WriteString(indent + Styles.DetailLabel.Render(field.Label) + "\n")
+			if field.Description != "" {
+				b.WriteString(indent + Styles.DetailDim.Render(field.Description) + "\n")
+			}
+			b.WriteString("\n")
+
+			switch field.Type {
+			case ConfigBool:
+				options := []string{"true", "false"}
+				for i, opt := range options {
+					cursor := "  "
+					if i == s.EditOptionCursor {
+						cursor = Styles.ListCursor.Render("❯ ")
+					}
+					b.WriteString(indent + cursor + opt + "\n")
+				}
+			case ConfigEnum:
+				for i, opt := range field.Options {
+					cursor := "  "
+					if i == s.EditOptionCursor {
+						cursor = Styles.ListCursor.Render("❯ ")
+					}
+					b.WriteString(indent + cursor + opt + "\n")
+				}
+			default: // ConfigString, ConfigList
+				b.WriteString(indent + fmt.Sprintf("%s█\n", s.EditBuffer))
+			}
+		}
 		b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] save  [esc] cancel"))
 		return Styles.OverlayBorder.Width(overlayWidth).Render(
 			Styles.OverlayTitle.Render("Configuration") + "\n\n" + b.String(),
@@ -563,7 +561,7 @@ func renderConfig(s *ConfigState, width int) string {
 		for i, field := range tabFields {
 			cursor := "  "
 			if i == s.Cursor {
-				cursor = Styles.ListCursor.String()
+				cursor = Styles.ListCursor.Render("❯ ")
 			}
 
 			label := padRight(field.Label, labelWidth)
@@ -577,8 +575,8 @@ func renderConfig(s *ConfigState, width int) string {
 			if maxValWidth < 10 {
 				maxValWidth = 10
 			}
-			if len(value) > maxValWidth {
-				value = value[:maxValWidth-3] + "..."
+			if lipgloss.Width(value) > maxValWidth {
+				value = truncate(value, maxValWidth)
 			}
 
 			// Use warning color for changed fields

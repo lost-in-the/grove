@@ -16,10 +16,10 @@ grove() {
     # Only directive-producing commands need output capture.
     # All other commands run directly for streaming support.
     case "$1" in
-        to|last|fork|fetch|attach)
+        to|last|fork|fetch|attach|open)
             # Capture output and parse for cd:/tmux-attach: directives
             local output exit_code
-            output=$(GROVE_SHELL=1 "$__GROVE_BIN" "$@" 2>&1)
+            output=$(GROVE_SHELL=1 "$__GROVE_BIN" "$@")
             exit_code=$?
 
             local should_cd=0
@@ -28,10 +28,7 @@ grove() {
             local other_lines=""
 
             while IFS= read -r line; do
-                if [[ "$line" == GROVE_CD:* ]]; then
-                    cd_target="${line#GROVE_CD:}"
-                    should_cd=1
-                elif [[ "$line" == cd:* ]]; then
+                if [[ "$line" == cd:* ]]; then
                     cd_target="${line#cd:}"
                     should_cd=1
                 elif [[ "$line" == tmux-attach:* ]]; then
@@ -100,6 +97,8 @@ _grove_completion() {
         'test:Run tests in a worktree'
         'config:Show configuration'
         'doctor:Check system health and configuration'
+        'open:Open a worktree session'
+        'ps:Show active stacks'
         'agent-status:Show active isolated stacks'
         'version:Show version'
         'install:Generate shell integration'
@@ -109,7 +108,7 @@ _grove_completion() {
         _describe 'command' commands
     elif (( CURRENT == 3 )); then
         case "${words[2]}" in
-            to|rm|compare|sync|test|apply|attach)
+            to|rm|compare|sync|test|apply|attach|open)
                 _describe 'worktree' worktrees
                 ;;
             install)

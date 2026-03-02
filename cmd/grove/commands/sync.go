@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,7 +9,10 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/LeahArmstrong/grove-cli/internal/cli"
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
+	"github.com/LeahArmstrong/grove-cli/internal/log"
+	"github.com/LeahArmstrong/grove-cli/internal/output"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 )
 
@@ -57,6 +59,9 @@ Examples:
   grove sync --all        # Sync all environment worktrees`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
+		w := cli.NewStdout()
+		stderr := cli.NewStderr()
+
 		mgr, err := worktree.NewManager(ctx.ProjectRoot)
 		if err != nil {
 			return fmt.Errorf("failed to initialize worktree manager: %w", err)
@@ -138,14 +143,20 @@ Examples:
 			oldCommit, _ := getCurrentCommit(ws.Path)
 
 			// Fetch from remote
-			fetchCmd := exec.Command("git", "-C", ws.Path, "fetch", "--prune")
-			if output, err := fetchCmd.CombinedOutput(); err != nil {
+			fetchErr := cli.Spin(fmt.Sprintf("Fetching '%s'", name), func() error {
+				fetchCmd := exec.Command("git", "-C", ws.Path, "fetch", "--prune")
+				if output, err := fetchCmd.CombinedOutput(); err != nil {
+					return fmt.Errorf("%v\n%s", err, output)
+				}
+				return nil
+			})
+			if fetchErr != nil {
 				if !syncJSON {
-					fmt.Printf("  ⚠ Failed to fetch for '%s': %v\n%s", name, err, output)
+					cli.Warning(stderr, "Failed to fetch for '%s': %v", name, fetchErr)
 				}
 				result.Skipped = append(result.Skipped, SkippedSync{
 					Name:   name,
-					Reason: fmt.Sprintf("fetch failed: %v", err),
+					Reason: fmt.Sprintf("fetch failed: %v", fetchErr),
 				})
 				continue
 			}
@@ -180,7 +191,9 @@ Examples:
 			// Update last_synced_at
 			now := time.Now()
 			ws.LastSyncedAt = &now
-			_ = ctx.State.AddWorktree(name, ws)
+			if err := ctx.State.AddWorktree(name, ws); err != nil {
+				log.Printf("failed to update worktree %q state: %v", name, err)
+			}
 
 			result.Synced = append(result.Synced, SyncedWorktree{
 				Name:         name,
@@ -193,25 +206,23 @@ Examples:
 
 		// Output
 		if syncJSON {
-			data, _ := json.MarshalIndent(result, "", "  ")
-			fmt.Println(string(data))
-			return nil
+			return output.PrintJSON(result)
 		}
 
 		// Human-readable output
 		if len(result.Synced) > 0 {
 			for _, s := range result.Synced {
 				if s.CommitsAhead > 0 {
-					fmt.Printf("✓ Synced '%s' (%s) - %d new commit(s)\n", s.Name, s.Mirror, s.CommitsAhead)
+					cli.Success(w, "Synced '%s' (%s) - %d new commit(s)", s.Name, s.Mirror, s.CommitsAhead)
 				} else {
-					fmt.Printf("✓ '%s' is up to date with %s\n", s.Name, s.Mirror)
+					cli.Success(w, "'%s' is up to date with %s", s.Name, s.Mirror)
 				}
 			}
 		}
 
 		if len(result.Skipped) > 0 && !syncAll {
 			for _, s := range result.Skipped {
-				fmt.Printf("⚠ Skipped '%s': %s\n", s.Name, s.Reason)
+				cli.Warning(w, "Skipped '%s': %s", s.Name, s.Reason)
 			}
 		}
 

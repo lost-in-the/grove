@@ -74,8 +74,8 @@ func TestPlugin_InitExternalStrategy(t *testing.T) {
 				Mode: "external",
 				External: &config.ExternalComposeConfig{
 					Path:     tmpDir,
-					EnvVar:   "ADMIN_DIR",
-					Services: []string{"admin"},
+					EnvVar:   "APP_DIR",
+					Services: []string{"app"},
 				},
 			},
 		},
@@ -234,9 +234,9 @@ func TestExternalStrategy_GetAutoStop(t *testing.T) {
 			Docker: config.DockerPluginConfig{
 				Mode: "external",
 				External: &config.ExternalComposeConfig{
-					Path:     "/tmp/shared-compose",
-					EnvVar:   "ADMIN_DIR",
-					Services: []string{"admin"},
+					Path:     "/tmp/shared-infra",
+					EnvVar:   "APP_DIR",
+					Services: []string{"app"},
 				},
 			},
 		},
@@ -252,9 +252,9 @@ func TestExternalStrategy_GetAutoStart(t *testing.T) {
 			Docker: config.DockerPluginConfig{
 				Mode: "external",
 				External: &config.ExternalComposeConfig{
-					Path:     "/tmp/shared-compose",
-					EnvVar:   "ADMIN_DIR",
-					Services: []string{"admin"},
+					Path:     "/tmp/shared-infra",
+					EnvVar:   "APP_DIR",
+					Services: []string{"app"},
 				},
 			},
 		},
@@ -441,8 +441,8 @@ func TestComposeCommand(t *testing.T) {
 		{
 			name:         "with env vars",
 			worktreePath: "/tmp/test",
-			env:          []string{"ADMIN_DIR=./admin-feature"},
-			args:         []string{"up", "-d", "admin"},
+			env:          []string{"APP_DIR=./myapp-feature"},
+			args:         []string{"up", "-d", "app"},
 		},
 	}
 
@@ -468,9 +468,9 @@ func TestExternalStrategy_RelativeWorktreePath(t *testing.T) {
 			Docker: config.DockerPluginConfig{
 				Mode: "external",
 				External: &config.ExternalComposeConfig{
-					Path:     "/home/dev/shared-compose",
-					EnvVar:   "ADMIN_DIR",
-					Services: []string{"admin"},
+					Path:     "/home/dev/shared-infra",
+					EnvVar:   "APP_DIR",
+					Services: []string{"app"},
 				},
 			},
 		},
@@ -483,13 +483,13 @@ func TestExternalStrategy_RelativeWorktreePath(t *testing.T) {
 	}{
 		{
 			name:    "sibling directory",
-			absPath: "/home/dev/shared-compose/admin-feature-x",
-			want:    "./admin-feature-x",
+			absPath: "/home/dev/shared-infra/myapp-feature-x",
+			want:    "./myapp-feature-x",
 		},
 		{
 			name:    "subdirectory",
-			absPath: "/home/dev/shared-compose/admin",
-			want:    "./admin",
+			absPath: "/home/dev/shared-infra/myapp",
+			want:    "./myapp",
 		},
 	}
 
@@ -509,20 +509,20 @@ func TestExternalStrategy_EnvForWorktree(t *testing.T) {
 			Docker: config.DockerPluginConfig{
 				Mode: "external",
 				External: &config.ExternalComposeConfig{
-					Path:     "/home/dev/shared-compose",
-					EnvVar:   "ADMIN_DIR",
-					Services: []string{"admin"},
+					Path:     "/home/dev/shared-infra",
+					EnvVar:   "APP_DIR",
+					Services: []string{"app"},
 				},
 			},
 		},
 	})
 
-	env := s.envForWorktree("/home/dev/shared-compose/admin-feature-x")
+	env := s.envForWorktree("/home/dev/shared-infra/myapp-feature-x")
 	if len(env) != 1 {
 		t.Fatalf("Expected 1 env var, got %d", len(env))
 	}
-	if env[0] != "ADMIN_DIR=./admin-feature-x" {
-		t.Errorf("Expected ADMIN_DIR=./admin-feature-x, got %s", env[0])
+	if env[0] != "APP_DIR=./myapp-feature-x" {
+		t.Errorf("Expected APP_DIR=./myapp-feature-x, got %s", env[0])
 	}
 }
 
@@ -536,34 +536,34 @@ func TestExternalStrategy_PersistEnvVar(t *testing.T) {
 	}{
 		{
 			name:        "no existing .env file",
-			worktree:    "admin-feature-x",
-			wantContain: "ADMIN_DIR=./admin-feature-x",
+			worktree:    "myapp-feature-x",
+			wantContain: "APP_DIR=./myapp-feature-x",
 		},
 		{
 			name:        "existing .env without env var",
 			existing:    "USER\nDEPLOYER\n",
-			worktree:    "admin-feature-x",
-			wantContain: "ADMIN_DIR=./admin-feature-x",
+			worktree:    "myapp-feature-x",
+			wantContain: "APP_DIR=./myapp-feature-x",
 			wantLines:   3,
 		},
 		{
 			name:        "existing .env with env var updates in place",
-			existing:    "USER\nADMIN_DIR=./admin\nDEPLOYER\n",
-			worktree:    "admin-feature-x",
-			wantContain: "ADMIN_DIR=./admin-feature-x",
+			existing:    "USER\nAPP_DIR=./myapp\nDEPLOYER\n",
+			worktree:    "myapp-feature-x",
+			wantContain: "APP_DIR=./myapp-feature-x",
 			wantLines:   3,
 		},
 		{
 			name:        "preserves other variables",
 			existing:    "USER\nKNIFE_HOME=/app/.chef\n",
-			worktree:    "admin",
+			worktree:    "myapp",
 			wantContain: "KNIFE_HOME=/app/.chef",
 		},
 		{
 			name:        "switching back to main",
-			existing:    "ADMIN_DIR=./admin-feature-x\n",
-			worktree:    "admin",
-			wantContain: "ADMIN_DIR=./admin",
+			existing:    "APP_DIR=./myapp-feature-x\n",
+			worktree:    "myapp",
+			wantContain: "APP_DIR=./myapp",
 		},
 	}
 
@@ -584,8 +584,8 @@ func TestExternalStrategy_PersistEnvVar(t *testing.T) {
 						Mode: "external",
 						External: &config.ExternalComposeConfig{
 							Path:     tmpDir,
-							EnvVar:   "ADMIN_DIR",
-							Services: []string{"admin"},
+							EnvVar:   "APP_DIR",
+							Services: []string{"app"},
 						},
 					},
 				},
@@ -632,25 +632,25 @@ func TestExternalStrategy_PersistEnvVar_NoDoubleEntry(t *testing.T) {
 				Mode: "external",
 				External: &config.ExternalComposeConfig{
 					Path:     tmpDir,
-					EnvVar:   "ADMIN_DIR",
-					Services: []string{"admin"},
+					EnvVar:   "APP_DIR",
+					Services: []string{"app"},
 				},
 			},
 		},
 	})
 
 	// Persist twice — should not duplicate
-	_ = s.persistEnvVar(filepath.Join(tmpDir, "admin-feature-x"))
-	_ = s.persistEnvVar(filepath.Join(tmpDir, "admin-feature-y"))
+	_ = s.persistEnvVar(filepath.Join(tmpDir, "myapp-feature-x"))
+	_ = s.persistEnvVar(filepath.Join(tmpDir, "myapp-feature-y"))
 
 	data, _ := os.ReadFile(envFile)
-	count := strings.Count(string(data), "ADMIN_DIR=")
+	count := strings.Count(string(data), "APP_DIR=")
 	if count != 1 {
-		t.Errorf("Expected exactly 1 ADMIN_DIR entry, got %d in:\n%s", count, string(data))
+		t.Errorf("Expected exactly 1 APP_DIR entry, got %d in:\n%s", count, string(data))
 	}
 
-	if !strings.Contains(string(data), "ADMIN_DIR=./admin-feature-y") {
-		t.Errorf("Expected final value to be admin-feature-y, got:\n%s", string(data))
+	if !strings.Contains(string(data), "APP_DIR=./myapp-feature-y") {
+		t.Errorf("Expected final value to be myapp-feature-y, got:\n%s", string(data))
 	}
 }
 
@@ -756,7 +756,7 @@ func TestExternalStrategy_SetupWorktree(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create main worktree with files to copy/symlink
-	mainPath := filepath.Join(tmpDir, "admin")
+	mainPath := filepath.Join(tmpDir, "myapp")
 	_ = os.MkdirAll(filepath.Join(mainPath, "config", "credentials"), 0755)
 	_ = os.WriteFile(filepath.Join(mainPath, "config", "credentials", "development.key"), []byte("dev-key"), 0600)
 
@@ -764,7 +764,7 @@ func TestExternalStrategy_SetupWorktree(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(mainPath, "vendor", "bundle", "marker"), []byte("gems"), 0644)
 
 	// Create new worktree directory
-	newPath := filepath.Join(tmpDir, "admin-feature-x")
+	newPath := filepath.Join(tmpDir, "myapp-feature-x")
 	_ = os.MkdirAll(newPath, 0755)
 
 	s := newExternalStrategy(&config.Config{
@@ -773,8 +773,8 @@ func TestExternalStrategy_SetupWorktree(t *testing.T) {
 				Mode: "external",
 				External: &config.ExternalComposeConfig{
 					Path:        tmpDir,
-					EnvVar:      "ADMIN_DIR",
-					Services:    []string{"admin"},
+					EnvVar:      "APP_DIR",
+					Services:    []string{"app"},
 					CopyFiles:   []string{"config/credentials/development.key"},
 					SymlinkDirs: []string{"vendor/bundle"},
 				},
@@ -809,11 +809,11 @@ func TestExternalStrategy_SetupWorktree(t *testing.T) {
 func TestPlugin_OnPostCreate_External(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	mainPath := filepath.Join(tmpDir, "admin")
+	mainPath := filepath.Join(tmpDir, "myapp")
 	_ = os.MkdirAll(filepath.Join(mainPath, "config"), 0755)
 	_ = os.WriteFile(filepath.Join(mainPath, "config", "master.key"), []byte("key"), 0600)
 
-	newPath := filepath.Join(tmpDir, "admin-feature")
+	newPath := filepath.Join(tmpDir, "myapp-feature")
 	_ = os.MkdirAll(newPath, 0755)
 
 	plugin := New()
@@ -823,8 +823,8 @@ func TestPlugin_OnPostCreate_External(t *testing.T) {
 				Mode: "external",
 				External: &config.ExternalComposeConfig{
 					Path:      tmpDir,
-					EnvVar:    "ADMIN_DIR",
-					Services:  []string{"admin"},
+					EnvVar:    "APP_DIR",
+					Services:  []string{"app"},
 					CopyFiles: []string{"config/master.key"},
 				},
 			},

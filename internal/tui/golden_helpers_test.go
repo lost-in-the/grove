@@ -8,6 +8,10 @@ import (
 	"github.com/LeahArmstrong/grove-cli/plugins/tracker"
 )
 
+// viewString extracts the View() output as a string.
+// In v2, View() returns tea.View, so we extract the content string.
+func (m Model) viewString() string { return m.viewContent() }
+
 // goldenMu serializes golden tests that mutate the global Colors/Styles vars.
 // Golden tests must NOT use t.Parallel().
 var goldenMu sync.Mutex
@@ -53,7 +57,7 @@ func goldenModel(t *testing.T, size termSize, opts ...testOpt) Model {
 }
 
 // goldenModelThemed creates a test model with full color output for themed golden tests.
-// Uses defaultColorScheme() directly to avoid terminal-dependent AdaptiveColor resolution.
+// Uses defaultColorScheme() directly for deterministic color output.
 func goldenModelThemed(t *testing.T, size termSize, opts ...testOpt) Model {
 	t.Helper()
 
@@ -91,20 +95,24 @@ func withCreateStep(step CreateStep) testOpt {
 	return func(m *Model) {
 		m.activeView = ViewCreate
 		m.createState = &CreateState{
-			Step:        step,
-			UseHuhForms: false,
-			Branches:    []string{"main", "develop", "feature/auth", "fix/login-bug", "release/v2"},
-			ProjectName: m.projectName,
+			Step:              step,
+			Branches:          []string{"main", "develop", "feature/auth", "fix/login-bug", "release/v2"},
+			ProjectName:       m.projectName,
+			BranchFilterInput: newBranchFilterInput(),
 		}
 		switch step {
 		case CreateStepName:
 			m.createState.BaseBranch = "feature/auth"
 			m.createState.NameSuggestion = "auth"
+			m.createState.NameInput = newNameInput("auth")
 		case CreateStepBranchAction:
 			m.createState.BaseBranch = "feature/auth"
 		case CreateStepConfirm:
 			m.createState.BaseBranch = "feature/auth"
 			m.createState.Name = "auth-work"
+			ni := newNameInput("")
+			ni.SetValue("auth-work")
+			m.createState.NameInput = ni
 		}
 	}
 }
@@ -139,7 +147,9 @@ func withBulkOverlay(n int) testOpt {
 func withPRData() testOpt {
 	return func(m *Model) {
 		m.activeView = ViewPRs
+		fi := newPRFilterInput()
 		m.prState = &PRViewState{
+			FilterInput: fi,
 			PRs: []*tracker.PullRequest{
 				{Number: 42, Title: "Add user authentication flow", Author: "alice", Branch: "feature/auth", BaseBranch: "main", CommitCount: 3, Additions: 245, Deletions: 12},
 				{Number: 38, Title: "Fix login redirect loop", Author: "bob", Branch: "fix/login", BaseBranch: "main", IsDraft: true, CommitCount: 1, Additions: 8, Deletions: 3},
@@ -156,7 +166,9 @@ func withPRData() testOpt {
 func withIssueData() testOpt {
 	return func(m *Model) {
 		m.activeView = ViewIssues
+		ifi := newIssueFilterInput()
 		m.issueState = &IssueViewState{
+			FilterInput: ifi,
 			Issues: []*tracker.Issue{
 				{Number: 101, Title: "Login page crashes on mobile", Author: "alice", Labels: []string{"bug", "high-priority"}, CreatedAt: time.Now().Add(-48 * time.Hour)},
 				{Number: 95, Title: "Add dark mode support", Author: "bob", Labels: []string{"enhancement"}, CreatedAt: time.Now().Add(-7 * 24 * time.Hour)},
@@ -170,12 +182,15 @@ func withIssueData() testOpt {
 func withForkOverlay() testOpt {
 	return func(m *Model) {
 		source := makeTestItems(3)[1]
+		ni := newForkNameInput()
+		ni.SetValue("experiment")
 		m.activeView = ViewFork
 		m.forkState = &ForkState{
-			Step:    ForkStepConfirm,
-			Source:  source,
-			Name:    "experiment",
-			Stepper: NewStepper("Name", "WIP", "Confirm"),
+			Step:      ForkStepConfirm,
+			Source:    source,
+			Name:      "experiment",
+			NameInput: ni,
+			Stepper:   NewStepper("Name", "WIP", "Confirm"),
 		}
 		m.forkState.Stepper.Current = 2
 	}
@@ -207,7 +222,7 @@ func withConfigOverlay() testOpt {
 		cs.Fields[ConfigTabGeneral] = []ConfigField{
 			{Key: "project_name", Label: "project_name", Value: "grove-cli", Default: "grove-cli", Type: ConfigString, Description: "Project name"},
 			{Key: "alias", Label: "alias", Value: "", Default: "", Type: ConfigString, Description: "Short name for display"},
-			{Key: "projects_dir", Label: "projects_dir", Value: "/Users/dev/projects", Default: "/Users/dev/projects", Type: ConfigString, Description: "Where worktrees are created"},
+			{Key: "projects_dir", Label: "projects_dir", Value: "/home/dev/projects", Default: "/home/dev/projects", Type: ConfigString, Description: "Where worktrees are created"},
 			{Key: "default_base_branch", Label: "default_branch", Value: "main", Default: "main", Type: ConfigString, Description: "Base branch for new worktrees"},
 		}
 		cs.Fields[ConfigTabBehavior] = []ConfigField{
@@ -247,5 +262,16 @@ func withHelpExpanded() testOpt {
 func withSortMode(mode SortMode) testOpt {
 	return func(m *Model) {
 		m.sortMode = mode
+	}
+}
+
+// withCompactMode switches the model to compact (V1) delegate.
+func withCompactMode() testOpt {
+	return func(m *Model) {
+		m.compactMode = true
+		d := ComputeDelegateWidths(m.list.Items(), m.list.Width())
+		m.listDelegate = d
+		m.list.SetDelegate(d)
+		m.updateLayout()
 	}
 }

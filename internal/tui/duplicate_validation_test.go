@@ -68,18 +68,17 @@ func TestRenderCreateNameV2WithDuplicate(t *testing.T) {
 	}{
 		{
 			name: "duplicate found shows warning and details",
-			state: &CreateState{
-				Step:        CreateStepName,
-				Name:        "feature-auth",
-				ProjectName: "acupoll",
-				ExistingWorktree: &WorktreeItem{
+			state: func() *CreateState {
+				s := createStateWithName("feature-auth", "acupoll")
+				s.ExistingWorktree = &WorktreeItem{
 					ShortName:  "feature-auth",
 					Path:       "/home/user/acupoll-feature-auth",
 					Branch:     "feature/authentication",
 					IsDirty:    true,
 					DirtyFiles: []string{"main.go", "auth.go"},
-				},
-			},
+				}
+				return s
+			}(),
 			wantStrs: []string{
 				"already exists",
 				"feature/authentication",
@@ -90,13 +89,8 @@ func TestRenderCreateNameV2WithDuplicate(t *testing.T) {
 			},
 		},
 		{
-			name: "no duplicate shows valid name",
-			state: &CreateState{
-				Step:             CreateStepName,
-				Name:             "new-feature",
-				ProjectName:      "acupoll",
-				ExistingWorktree: nil,
-			},
+			name:  "no duplicate shows valid name",
+			state: createStateWithName("new-feature", "acupoll"),
 			wantStrs: []string{
 				"✓ valid name",
 			},
@@ -106,17 +100,16 @@ func TestRenderCreateNameV2WithDuplicate(t *testing.T) {
 		},
 		{
 			name: "duplicate with clean worktree",
-			state: &CreateState{
-				Step:        CreateStepName,
-				Name:        "testing",
-				ProjectName: "acupoll",
-				ExistingWorktree: &WorktreeItem{
+			state: func() *CreateState {
+				s := createStateWithName("testing", "acupoll")
+				s.ExistingWorktree = &WorktreeItem{
 					ShortName: "testing",
 					Path:      "/home/user/acupoll-testing",
 					Branch:    "testing",
 					IsDirty:   false,
-				},
-			},
+				}
+				return s
+			}(),
 			wantStrs: []string{
 				"already exists",
 				"testing",
@@ -126,7 +119,7 @@ func TestRenderCreateNameV2WithDuplicate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := renderCreateNameV2(tt.state, 80)
+			got := renderCreateNameV2(tt.state, 120)
 			for _, want := range tt.wantStrs {
 				if !strings.Contains(got, want) {
 					t.Errorf("missing %q in output:\n%s", want, got)
@@ -142,13 +135,9 @@ func TestRenderCreateNameV2WithDuplicate(t *testing.T) {
 }
 
 func TestRenderDuplicateFooterHints(t *testing.T) {
-	state := &CreateState{
-		Step:        CreateStepName,
-		Name:        "feature-auth",
-		ProjectName: "acupoll",
-		ExistingWorktree: &WorktreeItem{
-			ShortName: "feature-auth",
-		},
+	state := createStateWithName("feature-auth", "acupoll")
+	state.ExistingWorktree = &WorktreeItem{
+		ShortName: "feature-auth",
 	}
 
 	got := renderCreateNameV2(state, 80)

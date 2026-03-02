@@ -1,45 +1,56 @@
 package commands
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/LeahArmstrong/grove-cli/internal/cli"
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
-	"github.com/LeahArmstrong/grove-cli/internal/grove"
-	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 	"github.com/LeahArmstrong/grove-cli/internal/output"
-	"github.com/LeahArmstrong/grove-cli/internal/state"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 )
 
 var (
-	newJSON   bool
-	newMirror string // Remote branch to mirror (e.g., "origin/main")
+	newJSON     bool
+	newMirror   string // Remote branch to mirror (e.g., "origin/main")
+	newNoDocker bool   // Skip auto-starting Docker
 )
 
 var newCmd = &cobra.Command{
-	Use:   "new <name>",
-	Short: "Create a new worktree and tmux session",
+	Use:     "new <name>",
+	Aliases: []string{"spawn"},
+	Short:   "Create a new worktree and tmux session",
 	Long: `Create a new git worktree with the specified name and create a tmux session for it.
 
 The worktree will be created in the parent directory of the current repository.
 A new branch with the same name will be created automatically.
 
+When Docker agent stacks are configured, containers start automatically.
+Use --no-docker to skip Docker auto-start.
+
 Use --mirror to create an environment worktree that tracks a remote branch.
 Environment worktrees are read-only and can be synced with 'grove sync'.
 
 Examples:
-  grove new feature-auth          # Create new worktree with branch feature-auth
-  grove new staging --mirror origin/main  # Create environment worktree tracking origin/main`,
+  grove new feature-auth                  # Create worktree + tmux + Docker
+  grove new feature-auth --no-docker      # Skip Docker auto-start
+  grove spawn feature-x                   # Alias (implies --json output)
+  grove new staging --mirror origin/main  # Environment worktree tracking origin/main`,
 	Args: cobra.ExactArgs(1),
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
+		// spawn alias implies JSON output
+		if cmd.CalledAs() == "spawn" {
+			newJSON = true
+		}
+
+		w := cli.NewStdout()
+		stderr := cli.NewStderr()
+
 		name := args[0]
 		if name == "" {
 			return fmt.Errorf("worktree name cannot be empty")
@@ -73,8 +84,8 @@ Examples:
 			// Verify the remote branch exists
 			verifyCmd := exec.Command("git", "-C", ctx.ProjectRoot, "rev-parse", "--verify", newMirror)
 			if err := verifyCmd.Run(); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: remote branch '%s' not found\n", newMirror)
-				fmt.Fprintf(os.Stderr, "Run 'git fetch' and verify the branch exists\n")
+				cli.Error(stderr, "remote branch '%s' not found", newMirror)
+				cli.Faint(stderr, "Run 'git fetch' and verify the branch exists")
 				os.Exit(exitcode.ResourceNotFound)
 			}
 
@@ -87,7 +98,7 @@ Examples:
 			}
 
 			if !newJSON {
-				fmt.Printf("✓ Created environment worktree '%s' tracking %s\n", name, newMirror)
+				cli.Success(w, "Created environment worktree '%s' tracking %s", name, newMirror)
 			}
 		} else {
 			// Regular worktree - use name as branch name
@@ -97,36 +108,20 @@ Examples:
 			}
 
 			if !newJSON {
-				fmt.Printf("✓ Created worktree '%s'\n", name)
+				cli.Success(w, "Created worktree '%s'", name)
 			}
 		}
 
-		// Find the newly created worktree to get its path
-		wt, err := mgr.Find(name)
-		if err != nil || wt == nil {
-			return fmt.Errorf("failed to find created worktree: %w", err)
+		// Post-create setup: find, symlink, state, hooks, docker
+		wt, err := setupCreatedWorktree(ctx, mgr, name, branchName, worktreeSetupOpts{
+			IsEnvironment: isEnvironment,
+			Mirror:        newMirror,
+			NoDocker:      newNoDocker,
+			JSONOutput:    newJSON,
+		}, w)
+		if err != nil {
+			return err
 		}
-
-		// Symlink config.toml from main worktree
-		_ = grove.EnsureConfigSymlink(ctx.ProjectRoot, wt.Path)
-
-		// Register worktree in state
-		now := time.Now()
-		wsState := &state.WorktreeState{
-			Path:           wt.Path,
-			Branch:         branchName,
-			Root:           false,
-			CreatedAt:      now,
-			LastAccessedAt: now,
-			Environment:    isEnvironment,
-		}
-
-		if isEnvironment {
-			wsState.Mirror = newMirror
-			wsState.LastSyncedAt = &now
-		}
-
-		_ = ctx.State.AddWorktree(name, wsState)
 
 		projectName := mgr.GetProjectName()
 
@@ -135,51 +130,10 @@ Examples:
 			sessionName := worktree.TmuxSessionName(projectName, name)
 			if err := tmux.CreateSession(sessionName, wt.Path); err != nil {
 				if !newJSON {
-					fmt.Printf("⚠ Failed to create tmux session: %v\n", err)
+					cli.Warning(w, "Failed to create tmux session: %v", err)
 				}
 			} else if !newJSON {
-				fmt.Printf("✓ Created tmux session '%s'\n", sessionName)
-			}
-		}
-
-		// Execute post-create hooks
-		hookExecutor, err := hooks.NewExecutor()
-		if err != nil {
-			if !newJSON {
-				fmt.Printf("⚠ Failed to load hooks config: %v\n", err)
-			}
-		} else if hookExecutor.HasHooksForEvent(hooks.EventPostCreate) {
-			hookCtx := &hooks.ExecutionContext{
-				Event:        hooks.EventPostCreate,
-				Worktree:     name,
-				WorktreeFull: projectName + "-" + name,
-				Branch:       branchName,
-				Project:      projectName,
-				MainPath:     ctx.ProjectRoot,
-				NewPath:      wt.Path,
-			}
-
-			if !newJSON {
-				fmt.Println("\nRunning post-create hooks...")
-			}
-
-			if err := hookExecutor.Execute(hooks.EventPostCreate, hookCtx); err != nil {
-				if !newJSON {
-					fmt.Printf("⚠ Hook execution had errors: %v\n", err)
-				}
-			}
-		}
-
-		// Fire global registry post-create hook (for plugins like docker external)
-		globalHookCtx := &hooks.Context{
-			Worktree:     name,
-			Config:       ctx.Config,
-			WorktreePath: wt.Path,
-			MainPath:     ctx.ProjectRoot,
-		}
-		if err := hooks.Fire(hooks.EventPostCreate, globalHookCtx); err != nil {
-			if !newJSON {
-				fmt.Printf("⚠ Post-create plugin hook failed: %v\n", err)
+				cli.Success(w, "Created tmux session '%s'", sessionName)
 			}
 		}
 
@@ -192,8 +146,9 @@ Examples:
 				Path:     wt.Path,
 				Created:  true,
 			}
-			data, _ := json.MarshalIndent(result, "", "  ")
-			fmt.Println(string(data))
+			if err := output.PrintJSON(result); err != nil {
+				return err
+			}
 		}
 
 		return nil
@@ -203,5 +158,6 @@ Examples:
 func init() {
 	newCmd.Flags().BoolVarP(&newJSON, "json", "j", false, "Output as JSON with switch_to field")
 	newCmd.Flags().StringVar(&newMirror, "mirror", "", "Create environment worktree tracking a remote branch (e.g., origin/main)")
+	newCmd.Flags().BoolVar(&newNoDocker, "no-docker", false, "Skip Docker auto-start")
 	rootCmd.AddCommand(newCmd)
 }

@@ -64,8 +64,9 @@ func TestRenderCreateBranchSelectorV2(t *testing.T) {
 		{
 			name: "branch selector shows branches",
 			state: &CreateState{
-				Step:     CreateStepBranch,
-				Branches: []string{"main", "develop", "feature/auth"},
+				Step:              CreateStepBranch,
+				Branches:          []string{"main", "develop", "feature/auth"},
+				BranchFilterInput: newBranchFilterInput(),
 			},
 			width: 80,
 			wantStrs: []string{
@@ -75,12 +76,8 @@ func TestRenderCreateBranchSelectorV2(t *testing.T) {
 			},
 		},
 		{
-			name: "branch selector with filter shows create new",
-			state: &CreateState{
-				Step:         CreateStepBranch,
-				Branches:     []string{"main", "develop"},
-				BranchFilter: "my-feat",
-			},
+			name:  "branch selector with filter shows create new",
+			state: createStateWithBranchFilter([]string{"main", "develop"}, "my-feat"),
 			width: 80,
 			wantStrs: []string{
 				"Create new branch",
@@ -91,8 +88,9 @@ func TestRenderCreateBranchSelectorV2(t *testing.T) {
 		{
 			name: "branch selector shows stepper labels",
 			state: &CreateState{
-				Step:     CreateStepBranch,
-				Branches: []string{"main"},
+				Step:              CreateStepBranch,
+				Branches:          []string{"main"},
+				BranchFilterInput: newBranchFilterInput(),
 			},
 			width:    80,
 			wantStrs: []string{"Branch", "Name"},
@@ -119,23 +117,18 @@ func TestRenderCreateNameV2(t *testing.T) {
 		wantStrs []string
 	}{
 		{
-			name: "name step shows stepper and input",
-			state: &CreateState{
-				Step:        CreateStepName,
-				Name:        "test",
-				ProjectName: "acupoll",
-			},
+			name:     "name step shows stepper and input",
+			state:    createStateWithName("test", "acupoll"),
 			width:    80,
 			wantStrs: []string{"Name", "test", "acupoll-test"},
 		},
 		{
 			name: "name step shows error",
-			state: &CreateState{
-				Step:        CreateStepName,
-				Name:        "bad name!",
-				ProjectName: "acupoll",
-				Error:       "invalid characters",
-			},
+			state: func() *CreateState {
+				s := createStateWithName("bad name!", "acupoll")
+				s.Error = "invalid characters"
+				return s
+			}(),
 			width:    80,
 			wantStrs: []string{"invalid characters"},
 		},
@@ -161,17 +154,18 @@ func TestRenderCreateV2Dispatch(t *testing.T) {
 	}{
 		{
 			name: "dispatches to name step",
-			state: &CreateState{
-				Step:        CreateStepName,
-				ProjectName: "proj",
-			},
+			state: func() *CreateState {
+				s := createStateWithName("", "proj")
+				return s
+			}(),
 			wantStrs: []string{"Name"},
 		},
 		{
 			name: "dispatches to branch step",
 			state: &CreateState{
-				Step:     CreateStepBranch,
-				Branches: []string{"main", "develop"},
+				Step:              CreateStepBranch,
+				Branches:          []string{"main", "develop"},
+				BranchFilterInput: newBranchFilterInput(),
 			},
 			wantStrs: []string{"Branch", "main"},
 		},
@@ -198,12 +192,8 @@ func TestRenderCreateV2Dispatch(t *testing.T) {
 }
 
 func TestBackspacePreservesValues(t *testing.T) {
-	s := &CreateState{
-		Step:        CreateStepName,
-		Name:        "my-feature",
-		ProjectName: "acupoll",
-		BaseBranch:  "develop",
-	}
+	s := createStateWithName("my-feature", "acupoll")
+	s.BaseBranch = "develop"
 
 	// Simulate going back to branch step
 	s.Step = CreateStepBranch
@@ -223,5 +213,29 @@ func TestBackspacePreservesValues(t *testing.T) {
 	view := renderCreateNameV2(s, 80)
 	if !strings.Contains(view, "my-feature") {
 		t.Errorf("name step should show preserved name, got:\n%s", view)
+	}
+}
+
+// createStateWithBranchFilter creates a CreateState with a pre-set branch filter.
+func createStateWithBranchFilter(branches []string, filter string) *CreateState {
+	bfi := newBranchFilterInput()
+	bfi.SetValue(filter)
+	return &CreateState{
+		Step:              CreateStepBranch,
+		Branches:          branches,
+		BranchFilter:      filter,
+		BranchFilterInput: bfi,
+	}
+}
+
+// createStateWithName creates a CreateState at the name step with a pre-set name.
+func createStateWithName(name, projectName string) *CreateState {
+	ni := newNameInput("")
+	ni.SetValue(name)
+	return &CreateState{
+		Step:        CreateStepName,
+		Name:        name,
+		ProjectName: projectName,
+		NameInput:   ni,
 	}
 }

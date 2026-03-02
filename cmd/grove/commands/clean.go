@@ -7,10 +7,11 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/LeahArmstrong/grove-cli/internal/cli"
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
 	"github.com/LeahArmstrong/grove-cli/internal/git"
-	"github.com/LeahArmstrong/grove-cli/internal/prompt"
+	"github.com/LeahArmstrong/grove-cli/internal/log"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 )
@@ -59,6 +60,8 @@ Examples:
   grove clean --keep-branches      # Keep all branches
   grove clean --dry-run            # Show what would be cleaned`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
+		w := cli.NewStdout()
+
 		mgr, err := worktree.NewManager(ctx.ProjectRoot)
 		if err != nil {
 			return fmt.Errorf("failed to initialize worktree manager: %w", err)
@@ -130,12 +133,13 @@ Examples:
 		}
 
 		if len(cleanable) == 0 {
-			fmt.Println("No worktrees eligible for cleanup.")
+			cli.Info(w, "No worktrees eligible for cleanup.")
 			if len(candidates) > 0 {
-				fmt.Println("\nExcluded worktrees:")
+				_, _ = fmt.Fprintln(w)
+				cli.Header(w, "Excluded worktrees")
 				for _, c := range candidates {
 					if c.ExcludeReason != "" {
-						fmt.Printf("  %s - %s\n", c.Name, c.ExcludeReason)
+						cli.Faint(w, "  %s - %s", c.Name, c.ExcludeReason)
 					}
 				}
 			}
@@ -143,29 +147,31 @@ Examples:
 		}
 
 		// Display candidates
-		fmt.Printf("Found %d worktree(s) eligible for cleanup:\n\n", len(cleanable))
+		cli.Header(w, "Found %d worktree(s) eligible for cleanup", len(cleanable))
 		for _, c := range cleanable {
 			dirtyMark := ""
 			if c.IsDirty {
 				dirtyMark = " [dirty]"
 			}
-			fmt.Printf("  %s (%s) - %d days since last access%s\n", c.Name, c.Branch, c.DaysSince, dirtyMark)
+			_, _ = fmt.Fprintf(w, "  %s ", c.Name)
+			cli.Faint(w, "  (%s) - %d days since last access%s", c.Branch, c.DaysSince, dirtyMark)
 		}
 
 		if cleanDryRun {
-			fmt.Println("\nDry run - no changes made.")
+			_, _ = fmt.Fprintln(w)
+			cli.Info(w, "Dry run - no changes made.")
 			return nil
 		}
 
 		// ALWAYS prompt - mandatory confirmation
-		fmt.Println()
-		fmt.Printf("This will permanently remove %d worktree(s) and their associated tmux sessions.\n", len(cleanable))
+		_, _ = fmt.Fprintln(w)
+		cli.Warning(w, "This will permanently remove %d worktree(s) and their associated tmux sessions.", len(cleanable))
 		fmt.Print("Type 'yes' to confirm: ")
 
 		var response string
 		_, _ = fmt.Scanln(&response)
 		if response != "yes" {
-			fmt.Println("Cancelled")
+			fmt.Println("Canceled")
 			os.Exit(exitcode.UserCancelled)
 		}
 
@@ -177,13 +183,15 @@ Examples:
 		for _, c := range cleanable {
 			// Remove worktree
 			if err := mgr.Remove(c.Name); err != nil {
-				fmt.Printf("  Failed to remove '%s': %v\n", c.Name, err)
+				cli.Warning(w, "Failed to remove '%s': %v", c.Name, err)
 				failed++
 				continue
 			}
 
 			// Remove from state
-			_ = ctx.State.RemoveWorktree(c.Name)
+			if err := ctx.State.RemoveWorktree(c.Name); err != nil {
+				log.Printf("failed to remove worktree %q from state: %v", c.Name, err)
+			}
 
 			// Kill tmux session if exists
 			sessionName := worktree.TmuxSessionName(projectName, c.Name)
@@ -194,7 +202,7 @@ Examples:
 				}
 			}
 
-			fmt.Printf("  Removed '%s'\n", c.Name)
+			cli.Success(w, "Removed '%s'", c.Name)
 			removed++
 
 			// Track branch for later deletion
@@ -203,12 +211,13 @@ Examples:
 			}
 		}
 
-		fmt.Printf("\nCleanup complete: %d removed, %d failed\n", removed, failed)
+		_, _ = fmt.Fprintln(w)
+		cli.Info(w, "Cleanup complete: %d removed, %d failed", removed, failed)
 
 		// Handle branch deletion
 		if len(removedBranches) > 0 && !cleanKeepBranches {
 			if err := handleBatchBranchDeletion(ctx.ProjectRoot, removedBranches, cleanDeleteBranches); err != nil {
-				fmt.Printf("⚠ Branch cleanup: %v\n", err)
+				cli.Warning(w, "Branch cleanup: %v", err)
 			}
 		}
 
@@ -226,6 +235,8 @@ type BranchInfo struct {
 
 // handleBatchBranchDeletion handles batch deletion of branches after grove clean
 func handleBatchBranchDeletion(repoPath string, branches []string, forceDelete bool) error {
+	w := cli.NewStdout()
+
 	branchMgr, err := git.NewBranchManager(repoPath)
 	if err != nil {
 		return fmt.Errorf("failed to initialize branch manager: %w", err)
@@ -273,40 +284,43 @@ func handleBatchBranchDeletion(repoPath string, branches []string, forceDelete b
 		deleted := 0
 		for _, info := range branchInfos {
 			if err := branchMgr.Delete(info.Name, true); err != nil {
-				fmt.Printf("  Failed to delete branch '%s': %v\n", info.Name, err)
+				cli.Warning(w, "Failed to delete branch '%s': %v", info.Name, err)
 			} else {
-				fmt.Printf("  Deleted branch '%s'\n", info.Name)
+				cli.Success(w, "Deleted branch '%s'", info.Name)
 				deleted++
 			}
 		}
 		if deleted > 0 {
-			fmt.Printf("Deleted %d branch(es)\n", deleted)
+			cli.Info(w, "Deleted %d branch(es)", deleted)
 		}
 		return nil
 	}
 
 	// Interactive mode - show summary and prompt
-	fmt.Println("\nAssociated branches:")
+	_, _ = fmt.Fprintln(w)
+	cli.Header(w, "Associated branches")
 	hasUnsafe := false
 	for _, info := range branchInfos {
-		marker := "•"
 		if !info.SafeToDelete {
-			marker = "⚠"
 			hasUnsafe = true
+			cli.Warning(w, "%s (%s)", info.Name, info.StatusSummary)
+		} else {
+			_, _ = fmt.Fprintf(w, "  • %s ", info.Name)
+			cli.Faint(w, "  (%s)", info.StatusSummary)
 		}
-		fmt.Printf("  %s %s (%s)\n", marker, info.Name, info.StatusSummary)
 	}
 
 	if hasUnsafe {
-		fmt.Println("\n⚠ Some branches have unpushed commits or are not merged")
+		_, _ = fmt.Fprintln(w)
+		cli.Warning(w, "Some branches have unpushed commits or are not merged")
 	}
 
 	// Ask for confirmation
-	question := fmt.Sprintf("\nDelete %d associated branch(es)?", len(branchInfos))
-	confirmed, err := prompt.Confirm(question, true)
+	question := fmt.Sprintf("Delete %d associated branch(es)?", len(branchInfos))
+	confirmed, err := cli.Confirm(question, false)
 	if err != nil {
 		// Non-interactive
-		fmt.Printf("ℹ Branches not deleted (use --delete-branches or --keep-branches)\n")
+		cli.Info(w, "Branches not deleted (use --delete-branches or --keep-branches)")
 		return nil
 	}
 
@@ -315,17 +329,17 @@ func handleBatchBranchDeletion(repoPath string, branches []string, forceDelete b
 		for _, info := range branchInfos {
 			// Force delete if not safe (user confirmed)
 			if err := branchMgr.Delete(info.Name, !info.SafeToDelete); err != nil {
-				fmt.Printf("  Failed to delete branch '%s': %v\n", info.Name, err)
+				cli.Warning(w, "Failed to delete branch '%s': %v", info.Name, err)
 			} else {
-				fmt.Printf("  Deleted branch '%s'\n", info.Name)
+				cli.Success(w, "Deleted branch '%s'", info.Name)
 				deleted++
 			}
 		}
 		if deleted > 0 {
-			fmt.Printf("Deleted %d branch(es)\n", deleted)
+			cli.Info(w, "Deleted %d branch(es)", deleted)
 		}
 	} else {
-		fmt.Println("Kept all branches")
+		cli.Info(w, "Kept all branches")
 	}
 
 	return nil

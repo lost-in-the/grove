@@ -67,10 +67,10 @@ Each worktree has its own `docker-compose.yml`. Commands run in the worktree dir
 
 ### External Mode
 
-For projects whose Docker services are defined in a shared, external compose setup (e.g., a central `shared-compose` directory that orchestrates multiple apps). In this mode:
+For projects whose Docker services are defined in a shared, external compose setup (e.g., a central `shared-infra` directory that orchestrates multiple apps). In this mode:
 
 - Commands run in the **external compose directory**, not the worktree
-- An **environment variable** (e.g., `ADMIN_DIR`) points the compose config to the active worktree
+- An **environment variable** (e.g., `APP_DIR`) points the compose config to the active worktree
 - Only the **configured services** are managed (shared infra like MySQL/Redis is untouched)
 - `grove down` uses `docker compose stop` (not `down`) to preserve the shared network
 - `grove new` **copies credentials** and **creates symlinks** from the main worktree
@@ -197,16 +197,14 @@ mode = "external"
 
 [plugins.docker.external]
 # Path to the shared compose directory
-path = "~/work/shared-compose"
+path = "~/projects/shared-infra"
 
 # Environment variable that the compose YAML reads to find this app
-env_var = "ADMIN_DIR"
+env_var = "APP_DIR"
 
 # Services to start/stop/restart (only these, not shared infra)
 services = [
-  "admin", "admin_sidekiq", "admin_esbuild", "admin_riot",
-  "admin_sass", "admin_tailwind", "kiln_tailwind",
-  "admin_stencil", "admin_stencil_ui_codegen",
+  "app", "app_worker", "app_esbuild",
 ]
 
 # Files to copy from main worktree on grove new (credentials, config)
@@ -215,7 +213,6 @@ copy_files = [
   "config/credentials/test.key",
   "config/master.key",
   "config/settings.local.yml",
-  "config/sidekiq.yml",
 ]
 
 # Directories to symlink from main worktree on grove new
@@ -316,16 +313,16 @@ w new feature-x
 #   symlinked vendor/bundle
 #   symlinked node_modules
 
-# Switch to it — stops admin services, restarts with ADMIN_DIR=./admin-feature-x
+# Switch to it — stops app services, restarts with APP_DIR=./app-feature-x
 w to feature-x
 
-# Check admin logs from the external compose
-w logs admin
+# Check app logs from the external compose
+w logs app
 
-# Switch back to main — stops services, restarts with ADMIN_DIR=./admin
+# Switch back to main — stops services, restarts with APP_DIR=./app
 w to main
 
-# Manually stop admin services
+# Manually stop app services
 w down
 ```
 

@@ -1,6 +1,10 @@
 package tui
 
-import "strings"
+import (
+	"strings"
+
+	lipgloss "charm.land/lipgloss/v2"
+)
 
 func filterItems(items []WorktreeItem, query string) []WorktreeItem {
 	query = strings.ToLower(query)
@@ -92,9 +96,43 @@ func exactBranchMatch(branches []string, name string) bool {
 	return false
 }
 
+// isPrintableText returns true if s is non-empty and contains only printable
+// characters (no control codes). Used to filter tea.KeyPressMsg.Text so that
+// control key combinations don't leak into input buffers.
+func isPrintableText(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
+// scrollWindow computes the visible start/end indices for a cursor-following
+// scroll window. Given a total item count, the current cursor position, and the
+// max number of items to display, it returns (start, end) such that the cursor
+// is always visible within the window.
+func scrollWindow(total, cursor, maxVisible int) (start, end int) {
+	if total == 0 || maxVisible <= 0 {
+		return 0, 0
+	}
+	if cursor >= maxVisible {
+		start = cursor - maxVisible + 1
+	}
+	end = start + maxVisible
+	if end > total {
+		end = total
+	}
+	return start, end
+}
+
 func padRight(s string, n int) string {
-	if len(s) >= n {
+	w := lipgloss.Width(s)
+	if w >= n {
 		return s
 	}
-	return s + strings.Repeat(" ", n-len(s))
+	return s + strings.Repeat(" ", n-w)
 }

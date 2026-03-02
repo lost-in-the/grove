@@ -13,7 +13,7 @@ import (
 // CurrentVersion is the current state schema version
 const CurrentVersion = 1
 
-// State represents the persisted state (V2 schema)
+// State represents the persisted state (schema version 1)
 type State struct {
 	Version      int                       `json:"version"`
 	Project      string                    `json:"project"`
@@ -41,6 +41,7 @@ type WorktreeState struct {
 type Manager struct {
 	groveDir  string // Path to .grove directory
 	stateFile string
+	lockFile  string // .grove/state.lock
 	mu        sync.RWMutex
 	state     *State
 }
@@ -58,10 +59,12 @@ func NewManager(groveDir string) (*Manager, error) {
 	}
 
 	stateFile := filepath.Join(groveDir, "state.json")
+	lockFile := filepath.Join(groveDir, "state.lock")
 
 	mgr := &Manager{
 		groveDir:  groveDir,
 		stateFile: stateFile,
+		lockFile:  lockFile,
 		state:     newEmptyState(),
 	}
 
@@ -243,14 +246,19 @@ func (m *Manager) load() error {
 	return nil
 }
 
-// save writes the state to disk
+// save writes the state to disk with file locking and atomic rename.
 func (m *Manager) save() error {
+	f, err := m.fileLock()
+	if err != nil {
+		return fmt.Errorf("failed to lock state: %w", err)
+	}
+	defer m.fileUnlock(f)
+
 	data, err := json.MarshalIndent(m.state, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal state: %w", err)
 	}
 
-	// Write atomically by writing to temp file and renaming
 	tmpFile := m.stateFile + ".tmp"
 	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
 		return fmt.Errorf("failed to write state file: %w", err)

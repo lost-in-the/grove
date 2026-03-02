@@ -36,6 +36,10 @@ func LoadDefaults() *Config {
 				AutoStop:  &falseVal,
 			},
 		},
+		Session: SessionConfig{
+			PopupWidth:  "80%",
+			PopupHeight: "80%",
+		},
 	}
 }
 

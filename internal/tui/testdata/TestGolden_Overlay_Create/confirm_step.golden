@@ -1,24 +1,24 @@
- test-project  ·  3 worktrees  ·  on root                                ● root 
-              ╭──────────────────────────────────────────────────╮
-              │                                                  │
-              │  New Worktree                                    │
-              │                                                  │
-              │    ●━━━━━━━━━━━━━━━━━━●━━━━━━━━━━━━━━━━━━●       │
-              │    Branch ✓        Name ✓          Confirm       │
-              │                                                  │
-              │    ╭──────────────────────────────────────╮      │
-              │    │ Summary                              │      │
-              │    │ Name:     auth-work                  │      │
-              │    │ Full:     test-project-auth-work     │      │
-              │    │ Branch:   feature/auth (existing)    │      │
-              │    ╰──────────────────────────────────────╯      │
-              │                                                  │
-              │    Strategy: from existing branch                │
-              │                                                  │
-              │    Ready to create worktree.                     │
-              │                                                  │
-              │    [enter] create  [backspace] back  [esc]       │
-              │  cancel                                          │
-              │                                                  │
-              ╰──────────────────────────────────────────────────╯
-                                                                                
+[2m [1m[1mtest-project[m  ·  3 worktrees  ·  on root                                ● root[m [m
+               ╭────────────────────────────────────────────────╮
+               │                                                │
+               │  [1mNew Worktree[m                                  │
+               │                                                │
+               │    ●━━━━━━━━━━━━━━━━━━●━━━━━━━━━━━━━━━━━━●     │
+               │    Branch ✓        Name ✓          [1mConfirm[m     │
+               │                                                │
+               │    ╭────────────────────────────────────╮      │
+               │    │ Summary                            │      │
+               │    │ Name:     auth-work                │      │
+               │    │ Full:     test-project-auth-work   │      │
+               │    │ Branch:   feature/auth (existing)  │      │
+               │    ╰────────────────────────────────────╯      │
+               │                                                │
+               │    Strategy: from existing branch              │
+               │                                                │
+               │    Ready to create worktree.                   │
+               │                                                │
+               │    [enter] create  [backspace] back  [esc]     │
+               │  cancel                                        │
+               │                                                │
+               ╰────────────────────────────────────────────────╯
+[2m  [1menter[m continue · [1mesc[m cancel                                                   [m

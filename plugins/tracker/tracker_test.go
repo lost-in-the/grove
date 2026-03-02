@@ -234,8 +234,26 @@ func TestIssueStruct(t *testing.T) {
 	if issue.Title != "Test Issue" {
 		t.Errorf("Issue.Title = %v, want Test Issue", issue.Title)
 	}
+	if issue.Body != "Test body" {
+		t.Errorf("Issue.Body = %v, want Test body", issue.Body)
+	}
+	if issue.State != "open" {
+		t.Errorf("Issue.State = %v, want open", issue.State)
+	}
+	if issue.Author != "testuser" {
+		t.Errorf("Issue.Author = %v, want testuser", issue.Author)
+	}
 	if len(issue.Labels) != 2 {
 		t.Errorf("len(Issue.Labels) = %v, want 2", len(issue.Labels))
+	}
+	if issue.CreatedAt != now {
+		t.Errorf("Issue.CreatedAt = %v, want %v", issue.CreatedAt, now)
+	}
+	if issue.UpdatedAt != now {
+		t.Errorf("Issue.UpdatedAt = %v, want %v", issue.UpdatedAt, now)
+	}
+	if issue.URL != "https://example.com/issues/123" {
+		t.Errorf("Issue.URL = %v, want https://example.com/issues/123", issue.URL)
 	}
 }
 
@@ -258,11 +276,35 @@ func TestPullRequestStruct(t *testing.T) {
 	if pr.Number != 456 {
 		t.Errorf("PullRequest.Number = %v, want 456", pr.Number)
 	}
+	if pr.Title != "Test PR" {
+		t.Errorf("PullRequest.Title = %v, want Test PR", pr.Title)
+	}
+	if pr.Body != "Test body" {
+		t.Errorf("PullRequest.Body = %v, want Test body", pr.Body)
+	}
+	if pr.State != "open" {
+		t.Errorf("PullRequest.State = %v, want open", pr.State)
+	}
+	if pr.Author != "testuser" {
+		t.Errorf("PullRequest.Author = %v, want testuser", pr.Author)
+	}
+	if len(pr.Labels) != 1 {
+		t.Errorf("len(PullRequest.Labels) = %v, want 1", len(pr.Labels))
+	}
 	if pr.Branch != "feature-branch" {
 		t.Errorf("PullRequest.Branch = %v, want feature-branch", pr.Branch)
 	}
 	if pr.BaseBranch != "main" {
 		t.Errorf("PullRequest.BaseBranch = %v, want main", pr.BaseBranch)
+	}
+	if pr.CreatedAt != now {
+		t.Errorf("PullRequest.CreatedAt = %v, want %v", pr.CreatedAt, now)
+	}
+	if pr.UpdatedAt != now {
+		t.Errorf("PullRequest.UpdatedAt = %v, want %v", pr.UpdatedAt, now)
+	}
+	if pr.URL != "https://example.com/pulls/456" {
+		t.Errorf("PullRequest.URL = %v, want https://example.com/pulls/456", pr.URL)
 	}
 }
 
@@ -364,6 +406,12 @@ func TestListOptions(t *testing.T) {
 	}
 	if len(opts.Labels) != 2 {
 		t.Errorf("len(ListOptions.Labels) = %v, want 2", len(opts.Labels))
+	}
+	if opts.Assignee != "user1" {
+		t.Errorf("ListOptions.Assignee = %v, want user1", opts.Assignee)
+	}
+	if opts.Author != "user2" {
+		t.Errorf("ListOptions.Author = %v, want user2", opts.Author)
 	}
 	if opts.Limit != 50 {
 		t.Errorf("ListOptions.Limit = %v, want 50", opts.Limit)

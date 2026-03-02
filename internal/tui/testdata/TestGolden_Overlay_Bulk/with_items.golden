@@ -1,11 +1,11 @@
- test-project  ·  5 worktrees  ·  on root                                ● root 
-     NAME BRANCH AGE     ± ↕  ⬡ ◆                                               
- ────────────────────────────────────────────────────────────────────────────── 
-                                                                                
- 1 ●   2h ago  ●                                                                
+[2m [1m[1mtest-project[m  ·  5 worktrees  ·  on root                                ● root[m [m
+[2m                                                                                [m
+[2m 1 ❯ root ────────────────────────────────────────────────────────────── 2h ago [m
+[2m       test commit for root                                                     [m
+[2m   [38;2;151;151;151m•[m[38;2;60;60;60m•[m[38;2;60;60;60m•[m[38;2;60;60;60m•[m[38;2;60;60;60m•[m                                                                        [m
           ╭─────────────────────────────────────────────────────────╮
           │                                                         │
-          │  Bulk Delete                                            │
+          │  [1mBulk Delete[m                                            │
           │                                                         │
           │  Select merged worktrees to delete (2/4 selected)       │
           │                                                         │
@@ -17,8 +17,8 @@
           │  [space] toggle  [enter] delete selected  [esc] cancel  │
           │                                                         │
           ╰─────────────────────────────────────────────────────────╯
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
+[2m                                                                                [m
+[2m                                                                                [m
+[2m                                                                                [m
+[2m                                                                                [m
+[2m  [1m↑↓[m navigate · [1mspace[m toggle · [1menter[m delete selected · [1mesc[m cancel               [m

@@ -249,8 +249,8 @@ func detectDefaultBranch(repoPath string) (string, error) {
 
 	// Fall back to checking common default branch names
 	for _, candidate := range []string{"main", "master"} {
-		cmd := exec.Command("git", "-C", repoPath, "rev-parse", "--verify", candidate)
-		if err := cmd.Run(); err == nil {
+		verify := exec.Command("git", "-C", repoPath, "rev-parse", "--verify", candidate)
+		if err := verify.Run(); err == nil {
 			return candidate, nil
 		}
 	}

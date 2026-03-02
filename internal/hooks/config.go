@@ -125,9 +125,11 @@ type HookAction struct {
 	OnFailure string `toml:"on_failure"` // "warn" (default), "fail", "ignore"
 }
 
-// GetHooksConfigPaths returns the paths for hooks configuration files
-// Returns (globalPath, projectPath, error)
-func GetHooksConfigPaths() (string, string, error) {
+// GetHooksConfigPaths returns the paths for hooks configuration files.
+// Returns (globalPath, projectPath, error).
+// If groveDir is provided, it is used as the .grove directory path for project
+// hooks instead of discovering from cwd. This fixes lookups in secondary worktrees.
+func GetHooksConfigPaths(groveDir ...string) (string, string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", "", err
@@ -135,19 +137,25 @@ func GetHooksConfigPaths() (string, string, error) {
 
 	globalHooks := filepath.Join(homeDir, ".config", "grove", "hooks.toml")
 
-	cwd, err := os.Getwd()
-	if err != nil {
-		return globalHooks, "", err
+	var projectHooks string
+	if len(groveDir) > 0 && groveDir[0] != "" {
+		projectHooks = filepath.Join(groveDir[0], "hooks.toml")
+	} else {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return globalHooks, "", err
+		}
+		projectHooks = filepath.Join(cwd, ".grove", "hooks.toml")
 	}
-	projectHooks := filepath.Join(cwd, ".grove", "hooks.toml")
 
 	return globalHooks, projectHooks, nil
 }
 
-// LoadHooksConfig loads hooks configuration from global and project paths
-// Project config is merged over global config (or overrides if override flags are set)
-func LoadHooksConfig() (*HooksConfig, error) {
-	globalPath, projectPath, err := GetHooksConfigPaths()
+// LoadHooksConfig loads hooks configuration from global and project paths.
+// Project config is merged over global config (or overrides if override flags are set).
+// If groveDir is provided, it is forwarded to GetHooksConfigPaths.
+func LoadHooksConfig(groveDir ...string) (*HooksConfig, error) {
+	globalPath, projectPath, err := GetHooksConfigPaths(groveDir...)
 	if err != nil {
 		return nil, err
 	}

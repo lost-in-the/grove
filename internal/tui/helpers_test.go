@@ -3,10 +3,10 @@ package tui
 import (
 	"time"
 
-	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 )
 
 // testOpt is a functional option for configuring a test model.
@@ -19,7 +19,7 @@ func newTestModel(opts ...testOpt) Model {
 
 	s := GroveSpinner()
 
-	delegate := NewWorktreeDelegate()
+	delegate := NewWorktreeDelegateV2()
 	l := list.New(nil, delegate, 0, 0)
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
@@ -40,7 +40,7 @@ func newTestModel(opts ...testOpt) Model {
 		help:        h,
 		toast:       NewToastModel(),
 		helpFooter:  NewHelpFooter(),
-		detail:      viewport.New(80, 20),
+		detail:      viewport.New(viewport.WithWidth(80), viewport.WithHeight(20)),
 		activeView:  ViewDashboard,
 		loading:     false,
 		ready:       true,
@@ -108,29 +108,35 @@ func makeTestItems(n int) []WorktreeItem {
 	return items
 }
 
-// sendKey sends a key message through Update and returns the resulting model.
-func sendKey(m Model, keyStr string) Model {
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(keyStr)}
-
-	// Handle special keys
+// makeKeyMsg constructs a tea.KeyPressMsg for the given key string.
+// Central point for key message construction — v2 uses KeyPressMsg with Code and Text fields.
+func makeKeyMsg(keyStr string) tea.KeyPressMsg {
 	switch keyStr {
 	case "enter":
-		msg = tea.KeyMsg{Type: tea.KeyEnter}
+		return tea.KeyPressMsg{Code: tea.KeyEnter}
 	case "esc":
-		msg = tea.KeyMsg{Type: tea.KeyEscape}
+		return tea.KeyPressMsg{Code: tea.KeyEscape}
 	case "tab":
-		msg = tea.KeyMsg{Type: tea.KeyTab}
+		return tea.KeyPressMsg{Code: tea.KeyTab}
 	case "backspace":
-		msg = tea.KeyMsg{Type: tea.KeyBackspace}
+		return tea.KeyPressMsg{Code: tea.KeyBackspace}
 	case "up":
-		msg = tea.KeyMsg{Type: tea.KeyUp}
+		return tea.KeyPressMsg{Code: tea.KeyUp}
 	case "down":
-		msg = tea.KeyMsg{Type: tea.KeyDown}
-	case " ":
-		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}}
+		return tea.KeyPressMsg{Code: tea.KeyDown}
+	default:
+		// Printable character(s)
+		runes := []rune(keyStr)
+		if len(runes) == 1 {
+			return tea.KeyPressMsg{Code: runes[0], Text: keyStr}
+		}
+		return tea.KeyPressMsg{Code: runes[0], Text: keyStr}
 	}
+}
 
-	result, _ := m.Update(msg)
+// sendKey sends a key message through Update and returns the resulting model.
+func sendKey(m Model, keyStr string) Model {
+	result, _ := m.Update(makeKeyMsg(keyStr))
 	return result.(Model)
 }
 
@@ -140,13 +146,26 @@ func sendMsg(m Model, msg tea.Msg) Model {
 	return result.(Model)
 }
 
-// enterCreateManual enters the create wizard and disables Huh forms so that
-// manual key handling tests continue to work.
+// enterCreateManual enters the create wizard for manual key handling tests.
 func enterCreateManual(m Model) Model {
 	m = sendKey(m, "n")
 	if m.createState != nil {
-		m.createState.UseHuhForms = false
 		m.createState.Branches = []string{"main", "develop", "feature/auth"}
+		// Focus the branch filter input (sendKey discards the Focus cmd)
+		m.createState.BranchFilterInput.Focus()
+	}
+	return m
+}
+
+// enterNameStep transitions the create wizard to the name step with a properly
+// initialized NameInput textinput.
+func enterNameStep(m Model) Model {
+	if m.createState != nil {
+		ni := newNameInput("")
+		m.createState.NameInput = ni
+		m.createState.Step = CreateStepName
+		// Focus the input synchronously for tests (ignore the cmd)
+		m.createState.NameInput.Focus()
 	}
 	return m
 }

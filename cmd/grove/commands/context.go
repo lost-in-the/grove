@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/LeahArmstrong/grove-cli/internal/cli"
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
 	"github.com/LeahArmstrong/grove-cli/internal/grove"
@@ -38,10 +39,11 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 		log.Printf("grove dir resolved to: %s", groveDir)
 
 		if groveDir == "" {
-			fmt.Fprintln(os.Stderr, "Error: not a grove project")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Run 'grove setup' to initialize a new grove project,")
-			fmt.Fprintln(os.Stderr, "or change to a directory containing a .grove folder.")
+			stderr := cli.NewStderr()
+			cli.Error(stderr, "not a grove project")
+			fmt.Fprintln(os.Stderr)
+			cli.Faint(stderr, "Run 'grove setup' to initialize a new grove project,")
+			cli.Faint(stderr, "or change to a directory containing a .grove folder.")
 			os.Exit(exitcode.NotGroveProject)
 			return nil // unreachable
 		}
@@ -57,6 +59,8 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 		cfg, err := config.LoadFromGroveDir(groveDir)
 		if err != nil {
 			log.Printf("config load failed, using defaults: %v", err)
+			stderr := cli.NewStderr()
+			cli.Warning(stderr, "Failed to load config, using defaults: %v", err)
 			cfg = config.LoadDefaults()
 		} else {
 			log.Printf("config loaded, docker mode: %v", cfg.IsExternalDockerMode())
@@ -100,7 +104,9 @@ func registerPlugins(cfg *config.Config) *plugins.Manager {
 	if !dockerPlugin.Enabled() {
 		return mgr
 	}
-	_ = dockerPlugin.RegisterHooks(hooks.GlobalRegistry())
+	if err := dockerPlugin.RegisterHooks(hooks.GlobalRegistry()); err != nil {
+		log.Printf("failed to register docker hooks: %v", err)
+	}
 	return mgr
 }
 
@@ -110,12 +116,12 @@ func ExitWithCode(code int) {
 	os.Exit(code)
 }
 
-// PrintError prints an error message to stderr with the standard format.
+// PrintError prints a styled error message to stderr.
 func PrintError(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
+	cli.Error(cli.NewStderr(), format, args...)
 }
 
-// PrintSuggestion prints a suggestion to stderr.
+// PrintSuggestion prints a styled suggestion to stderr.
 func PrintSuggestion(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, "Suggestion: "+format+"\n", args...)
+	cli.Info(cli.NewStderr(), format, args...)
 }

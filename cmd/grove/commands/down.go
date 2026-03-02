@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/LeahArmstrong/grove-cli/internal/cli"
 	"github.com/LeahArmstrong/grove-cli/plugins/docker"
 )
 
@@ -28,6 +29,8 @@ Examples:
   grove down   # Stop all containers
   w down       # Using alias`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
+		w := cli.NewStdout()
+
 		// Get current directory (docker-compose works in cwd)
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -43,12 +46,14 @@ Examples:
 			return fmt.Errorf("failed to initialize docker plugin: %w", err)
 		}
 
-		// Stop containers
+		// Stop containers — no spinner: docker compose writes its own progress
+		stderr := cli.NewStderr()
+		cli.Step(stderr, "Stopping containers...")
 		if err := plugin.Down(cwd); err != nil {
 			return fmt.Errorf("failed to stop containers: %w", err)
 		}
 
-		fmt.Println("Containers stopped")
+		cli.Success(w, "Containers stopped")
 		return nil
 	}),
 }

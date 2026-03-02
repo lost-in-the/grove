@@ -1,12 +1,13 @@
 package commands
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/LeahArmstrong/grove-cli/internal/cli"
+	"github.com/LeahArmstrong/grove-cli/internal/output"
 	"github.com/LeahArmstrong/grove-cli/internal/plugins"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
@@ -122,7 +123,7 @@ var lsCmd = &cobra.Command{
 				currentName = currentTree.DisplayName()
 			}
 
-			output := lsOutput{
+			result := lsOutput{
 				Project:   projectName,
 				Current:   currentName,
 				Worktrees: make([]lsWorktreeOutput, 0, len(trees)),
@@ -180,66 +181,92 @@ var lsCmd = &cobra.Command{
 					}
 				}
 
-				output.Worktrees = append(output.Worktrees, wo)
+				result.Worktrees = append(result.Worktrees, wo)
 			}
 
-			jsonBytes, err := json.MarshalIndent(output, "", "  ")
-			if err != nil {
-				return fmt.Errorf("failed to marshal JSON: %w", err)
+			return output.PrintJSON(result)
+		}
+
+		// Default: formatted table output using cli.Table
+		w := cli.NewStdout()
+
+		// Check if any worktree has container status
+		hasContainers := false
+		for _, tree := range trees {
+			if entries, ok := pluginStatuses[tree.Path]; ok {
+				for _, e := range entries {
+					if e.Short != "" {
+						hasContainers = true
+						break
+					}
+				}
 			}
-			fmt.Println(string(jsonBytes))
-			return nil
+			if hasContainers {
+				break
+			}
 		}
 
-		// Build row data and compute dynamic column widths
-		type lsRow struct {
-			indicator  string
-			name       string
-			branch     string
-			status     string
-			tmux       string
-			containers string
-			path       string
-			env        string
+		// Build column definitions
+		statusColorFn := func(value string) string {
+			return cli.StatusText(w, cli.StatusLevel(value), value)
+		}
+		tmuxColorFn := func(value string) string {
+			return cli.StatusText(w, cli.StatusLevel(value), value)
 		}
 
-		rows := make([]lsRow, 0, len(trees))
-		nameW, branchW, containerW := len("NAME"), len("BRANCH"), 0
+		indicatorColorFn := func(value string) string {
+			if value != "" {
+				return cli.Accent(w, value)
+			}
+			return value
+		}
+
+		columns := []cli.Column{
+			{Title: "", MinWidth: 2, MaxWidth: 2, ColorFn: indicatorColorFn},
+			{Title: "NAME", MaxWidth: 30},
+			{Title: "BRANCH", MaxWidth: 25},
+			{Title: "STATUS", MinWidth: 10, ColorFn: statusColorFn},
+			{Title: "TMUX", MinWidth: 12, ColorFn: tmuxColorFn},
+		}
+		if hasContainers {
+			columns = append(columns, cli.Column{Title: "CONTAINERS"})
+		}
+		columns = append(columns, cli.Column{Title: "PATH"})
+
+		tbl := cli.NewTable(w, columns...)
 
 		for _, tree := range trees {
-			r := lsRow{
-				indicator: "  ",
-				name:      tree.DisplayName(),
-				branch:    tree.Branch,
-				path:      tree.Path,
-			}
+			indicator := ""
 			if currentTree != nil && tree.Path == currentTree.Path {
-				r.indicator = "● "
+				indicator = "●"
 			}
+
+			status := "clean"
 			if tree.IsPrunable {
-				r.status = "stale"
+				status = "stale"
 			} else if tree.IsDirty {
-				r.status = "dirty"
-			} else {
-				r.status = "clean"
+				status = "dirty"
 			}
-			r.tmux = "none"
+
+			tmuxStatus := "none"
 			if tmuxAvailable && sessions != nil {
 				sessionName := worktree.TmuxSessionName(projectName, tree.DisplayName())
 				if session, ok := sessions[sessionName]; ok {
 					if session.Attached {
-						r.tmux = "attached"
+						tmuxStatus = "attached"
 					} else {
-						r.tmux = "detached"
+						tmuxStatus = "detached"
 					}
 				} else if session, ok := sessions[tree.Name]; ok {
 					if session.Attached {
-						r.tmux = "attached"
+						tmuxStatus = "attached"
 					} else {
-						r.tmux = "detached"
+						tmuxStatus = "detached"
 					}
 				}
 			}
+
+			containers := ""
 			if entries, ok := pluginStatuses[tree.Path]; ok {
 				var parts []string
 				for _, e := range entries {
@@ -247,68 +274,22 @@ var lsCmd = &cobra.Command{
 						parts = append(parts, e.Short)
 					}
 				}
-				r.containers = strings.Join(parts, ",")
+				containers = strings.Join(parts, ",")
 			}
+
+			pathStr := tree.Path
 			if isEnv, _ := ctx.State.IsEnvironment(tree.ShortName); isEnv {
-				r.env = " (env)"
+				pathStr += " (env)"
 			}
 
-			if len(r.name) > nameW {
-				nameW = len(r.name)
-			}
-			if len(r.branch) > branchW {
-				branchW = len(r.branch)
-			}
-			if len(r.containers) > containerW {
-				containerW = len(r.containers)
-			}
-			rows = append(rows, r)
-		}
-
-		// Cap column widths for readability
-		if nameW > 30 {
-			nameW = 30
-		}
-		if branchW > 25 {
-			branchW = 25
-		}
-
-		hasContainers := containerW > 0
-		if hasContainers && containerW < len("CONTAINERS") {
-			containerW = len("CONTAINERS")
-		}
-
-		// Default: formatted table output
-		if hasContainers {
-			fmtStr := fmt.Sprintf("%%s %%-%ds %%-%ds %%-10s %%-12s %%-%ds %%s\n", nameW, branchW, containerW)
-			fmt.Printf(fmtStr, "", "NAME", "BRANCH", "STATUS", "TMUX", "CONTAINERS", "PATH")
-		} else {
-			fmtStr := fmt.Sprintf("%%s %%-%ds %%-%ds %%-10s %%-12s %%s\n", nameW, branchW)
-			fmt.Printf(fmtStr, "", "NAME", "BRANCH", "STATUS", "TMUX", "PATH")
-		}
-		totalW := 3 + nameW + 1 + branchW + 1 + 10 + 1 + 12 + 1 + 40
-		if hasContainers {
-			totalW += containerW + 1
-		}
-		fmt.Println(strings.Repeat("─", totalW))
-
-		for _, r := range rows {
-			name := r.name
-			if len(name) > nameW {
-				name = name[:nameW-1] + "…"
-			}
-			branch := r.branch
-			if len(branch) > branchW {
-				branch = branch[:branchW-1] + "…"
-			}
 			if hasContainers {
-				fmtStr := fmt.Sprintf("%%s %%-%ds %%-%ds %%-10s %%-12s %%-%ds %%s\n", nameW, branchW, containerW)
-				fmt.Printf(fmtStr, r.indicator, name, branch, r.status, r.tmux, r.containers, r.path+r.env)
+				tbl.AddRow(indicator, tree.DisplayName(), tree.Branch, status, tmuxStatus, containers, pathStr)
 			} else {
-				fmtStr := fmt.Sprintf("%%s %%-%ds %%-%ds %%-10s %%-12s %%s\n", nameW, branchW)
-				fmt.Printf(fmtStr, r.indicator, name, branch, r.status, r.tmux, r.path+r.env)
+				tbl.AddRow(indicator, tree.DisplayName(), tree.Branch, status, tmuxStatus, pathStr)
 			}
 		}
+
+		tbl.Render()
 
 		return nil
 	}),

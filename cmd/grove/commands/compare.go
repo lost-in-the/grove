@@ -1,13 +1,14 @@
 package commands
 
 import (
-	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/LeahArmstrong/grove-cli/internal/cli"
+	"github.com/LeahArmstrong/grove-cli/internal/output"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 )
 
@@ -138,54 +139,57 @@ Examples:
 
 		// JSON output
 		if compareJSON {
-			data, _ := json.MarshalIndent(result, "", "  ")
-			fmt.Println(string(data))
-			return nil
+			return output.PrintJSON(result)
 		}
 
 		// Human-readable output
-		fmt.Printf("Comparing %s → %s\n", result.Current, result.Target)
-		fmt.Println(strings.Repeat("━", 50))
+		w := cli.NewStdout()
+		cli.Header(w, "Comparing %s → %s", result.Current, result.Target)
 
 		if !result.HasDiff {
-			fmt.Println("No differences found")
+			cli.Info(w, "No differences found")
 			return nil
 		}
 
 		// Show commits
 		if len(result.Commits) > 0 {
-			fmt.Printf("\nCommits ahead of %s (%d):\n", result.Target, len(result.Commits))
+			_, _ = fmt.Fprintln(w)
+			cli.Bold(w, "Commits ahead of %s (%d):", result.Target, len(result.Commits))
 			for _, commit := range result.Commits {
-				fmt.Printf("  %s %s (%s)\n", commit.SHA[:7], commit.Message, commit.Age)
+				sha := cli.StatusText(w, cli.StatusInfo, commit.SHA[:7])
+				age := cli.StatusText(w, cli.StatusInfo, "("+commit.Age+")")
+				_, _ = fmt.Fprintf(w, "  %s %s %s\n", sha, commit.Message, age)
 			}
 		}
 
 		// Show WIP
 		if result.WIP != nil {
-			fmt.Println("\nUncommitted changes:")
+			_, _ = fmt.Fprintln(w)
+			cli.Bold(w, "Uncommitted changes:")
 			if len(result.WIP.Staged) > 0 {
-				fmt.Printf("  Staged (%d):\n", len(result.WIP.Staged))
+				_, _ = fmt.Fprintf(w, "  Staged (%d):\n", len(result.WIP.Staged))
 				for _, f := range result.WIP.Staged {
-					fmt.Printf("    + %s\n", f)
+					_, _ = fmt.Fprintf(w, "    %s\n", cli.StatusText(w, cli.StatusOK, "+ "+f))
 				}
 			}
 			if len(result.WIP.Unstaged) > 0 {
-				fmt.Printf("  Unstaged (%d):\n", len(result.WIP.Unstaged))
+				_, _ = fmt.Fprintf(w, "  Unstaged (%d):\n", len(result.WIP.Unstaged))
 				for _, f := range result.WIP.Unstaged {
-					fmt.Printf("    M %s\n", f)
+					_, _ = fmt.Fprintf(w, "    %s\n", cli.StatusText(w, cli.StatusDirty, "M "+f))
 				}
 			}
 			if len(result.WIP.Untracked) > 0 {
-				fmt.Printf("  Untracked (%d):\n", len(result.WIP.Untracked))
+				_, _ = fmt.Fprintf(w, "  Untracked (%d):\n", len(result.WIP.Untracked))
 				for _, f := range result.WIP.Untracked {
-					fmt.Printf("    ? %s\n", f)
+					_, _ = fmt.Fprintf(w, "    %s\n", cli.StatusText(w, cli.StatusInfo, "? "+f))
 				}
 			}
 		}
 
 		// Show stats
 		if result.Stats != nil {
-			fmt.Printf("\nDiffstat: %d files changed, %d insertions(+), %d deletions(-)\n",
+			_, _ = fmt.Fprintln(w)
+			cli.Faint(w, "Diffstat: %d files changed, %d insertions(+), %d deletions(-)",
 				result.Stats.FilesChanged, result.Stats.Insertions, result.Stats.Deletions)
 		}
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/LeahArmstrong/grove-cli/internal/cli"
 	"github.com/LeahArmstrong/grove-cli/plugins/docker"
 )
 
@@ -26,13 +27,13 @@ agent stack readiness, and network connectivity.
 Examples:
   grove doctor`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
-		fmt.Println("grove doctor")
-		fmt.Println(strings.Repeat("━", 40))
+		w := cli.NewStdout()
+		cli.Header(w, "grove doctor")
 
 		allPassed := true
 
 		// Check: Docker available
-		allPassed = runCheck("Docker available", func() (string, error) {
+		allPassed = runCheck(w, "Docker available", func() (string, error) {
 			if _, err := exec.LookPath("docker"); err != nil {
 				return "", fmt.Errorf("docker not found in PATH")
 			}
@@ -40,7 +41,7 @@ Examples:
 		}) && allPassed
 
 		// Check: Docker daemon running
-		allPassed = runCheck("Docker running", func() (string, error) {
+		allPassed = runCheck(w, "Docker running", func() (string, error) {
 			cmd := exec.Command("docker", "info", "--format", "{{.ServerVersion}}")
 			out, err := cmd.Output()
 			if err != nil {
@@ -52,10 +53,10 @@ Examples:
 		// Check: External compose mode
 		cfg := ctx.Config
 		if cfg == nil || !cfg.IsExternalDockerMode() {
-			runInfo("External mode", "not configured (using local compose)")
+			runInfo(w, "External mode", "not configured (using local compose)")
 		} else {
 			ext := cfg.Plugins.Docker.External
-			allPassed = runCheck("External compose path", func() (string, error) {
+			allPassed = runCheck(w, "External compose path", func() (string, error) {
 				if ext.Path == "" {
 					return "", fmt.Errorf("plugins.docker.external.path not set")
 				}
@@ -64,9 +65,9 @@ Examples:
 
 			// Check: Agent stack config
 			if ext.Agent == nil || ext.Agent.Enabled == nil || !*ext.Agent.Enabled {
-				runInfo("Agent stacks", "not enabled")
+				runInfo(w, "Agent stacks", "not enabled")
 			} else {
-				allPassed = runCheck("Agent config", func() (string, error) {
+				allPassed = runCheck(w, "Agent config", func() (string, error) {
 					if len(ext.Agent.Services) == 0 {
 						return "", fmt.Errorf("agent.services is empty")
 					}
@@ -78,7 +79,7 @@ Examples:
 
 				// Check: Network exists (if configured)
 				if ext.Agent.Network != "" {
-					allPassed = runCheck("Docker network '"+ext.Agent.Network+"'", func() (string, error) {
+					allPassed = runCheck(w, "Docker network '"+ext.Agent.Network+"'", func() (string, error) {
 						cmd := exec.Command("docker", "network", "ls", "--format", "{{.Name}}")
 						out, err := cmd.Output()
 						if err != nil {
@@ -100,36 +101,36 @@ Examples:
 					if maxSlots <= 0 {
 						maxSlots = 5
 					}
-					runInfo("Active stacks", fmt.Sprintf("%d/%d slots in use", len(slots), maxSlots))
+					runInfo(w, "Active stacks", fmt.Sprintf("%d/%d slots in use", len(slots), maxSlots))
 				}
 			}
 		}
 
-		fmt.Println()
+		_, _ = fmt.Fprintln(w)
 		if allPassed {
-			fmt.Println("All checks passed")
+			cli.Success(w, "All checks passed")
 		} else {
-			fmt.Println("Some checks failed — see above for details")
+			cli.Warning(w, "Some checks failed — see above for details")
 		}
 
 		return nil
 	}),
 }
 
-func runCheck(name string, check func() (string, error)) bool {
+func runCheck(w *cli.Writer, name string, check func() (string, error)) bool {
 	detail, err := check()
 	if err != nil {
-		fmt.Printf("  FAIL  %s: %v\n", name, err)
+		cli.Error(w, "%s: %v", name, err)
 		return false
 	}
-	fmt.Printf("  OK    %s", name)
 	if detail != "" {
-		fmt.Printf(" (%s)", detail)
+		cli.Success(w, "%s (%s)", name, detail)
+	} else {
+		cli.Success(w, "%s", name)
 	}
-	fmt.Println()
 	return true
 }
 
-func runInfo(name string, detail string) {
-	fmt.Printf("  ---   %s: %s\n", name, detail)
+func runInfo(w *cli.Writer, name string, detail string) {
+	cli.Info(w, "%s: %s", name, detail)
 }

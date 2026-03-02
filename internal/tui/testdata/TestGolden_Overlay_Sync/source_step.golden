@@ -1,24 +1,24 @@
- test-project  ·  5 worktrees  ·  on root                                ● root 
-     NAME BRANCH AGE     ± ↕  ⬡ ◆                                               
- ────────────────────────────────────────────────────────────────────────────── 
-              ╭──────────────────────────────────────────────────╮
-              │                                                  │
-              │  Sync Changes                                    │
-              │                                                  │
-              │    ●━━━━━━━━━━━━━━━━━━○━━━━━━━━━━━━━━━━━━○       │
-              │    Source          Preview         Confirm       │
-              │                                                  │
-              │    Pull uncommitted changes from another         │
-              │  worktree                                        │
-              │    into root.                                    │
-              │                                                  │
-              │    ❯ feature-auth    2 files changed             │
-              │      fix-bug    clean                            │
-              │      testing    1 files changed                  │
-              │                                                  │
-              │    ↑↓ navigate  enter select  esc cancel         │
-              │                                                  │
-              ╰──────────────────────────────────────────────────╯
-                                                                                
-                                                                                
-                                                                                
+[2m [1m[1mtest-project[m  ·  5 worktrees  ·  on root                                ● root[m [m
+[2m                                                                                [m
+[2m 1 ❯ root ────────────────────────────────────────────────────────────── 2h ago [m
+               ╭────────────────────────────────────────────────╮
+               │                                                │
+               │  [1mSync Changes[m                                  │
+               │                                                │
+               │    ●━━━━━━━━━━━━━━━━━━○━━━━━━━━━━━━━━━━━━○     │
+               │    [1mSource[m          Preview         Confirm     │
+               │                                                │
+               │    Pull uncommitted changes from another       │
+               │  worktree                                      │
+               │    into root.                                  │
+               │                                                │
+               │    ❯ feature-auth    2 files changed           │
+               │      fix-bug    clean                          │
+               │      testing    1 files changed                │
+               │                                                │
+               │    ↑↓ navigate  enter select  esc cancel       │
+               │                                                │
+               ╰────────────────────────────────────────────────╯
+[2m                                                                                [m
+[2m                                                                                [m
+[2m  [1m↑↓[m navigate · [1menter[m select · [1mesc[m cancel                                       [m

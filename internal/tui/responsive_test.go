@@ -4,33 +4,41 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/list"
+	"charm.land/lipgloss/v2"
 )
 
-func TestDelegateColumnsV2_NarrowTerminal(t *testing.T) {
+func TestComputeDelegateWidthsV2_NarrowTerminal(t *testing.T) {
+	items := []list.Item{
+		WorktreeItem{ShortName: "my-feature-branch", Branch: "feature/my-feature"},
+		WorktreeItem{ShortName: "main", Branch: "main"},
+	}
+
 	tests := []struct {
-		name      string
-		width     int
-		wantName  int
-		wantSmall bool // expect smaller columns than default
+		name          string
+		width         int
+		wantDirHidden bool // expect directory (NameWidth) hidden at very narrow
 	}{
-		{"very narrow 40 chars", 40, 0, true},
-		{"narrow 60 chars", 60, 0, true},
-		{"default 80 chars", 80, 16, false},
-		{"medium 100 chars", 100, 20, false},
-		{"wide 130 chars", 130, 24, false},
+		{"very narrow 40 chars", 40, true},
+		{"narrow 55 chars", 55, true},
+		{"default 80 chars", 80, false},
+		{"medium 100 chars", 100, false},
+		{"wide 130 chars", 130, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cols := delegateColumnsV2(tt.width)
-			if tt.wantSmall {
-				if cols.Name >= 16 {
-					t.Errorf("width=%d: expected Name < 16, got %d", tt.width, cols.Name)
-				}
+			d := ComputeDelegateWidthsV2(items, tt.width)
+			// Branch is always shown (primary identifier)
+			if d.BranchWidth == 0 {
+				t.Errorf("width=%d: expected BranchWidth > 0, got 0", tt.width)
 			}
-			if tt.wantName > 0 && cols.Name != tt.wantName {
-				t.Errorf("width=%d: expected Name=%d, got %d", tt.width, tt.wantName, cols.Name)
+			// Directory is hidden at narrow widths
+			if tt.wantDirHidden && d.NameWidth > 0 {
+				t.Errorf("width=%d: expected NameWidth=0 (hidden), got %d", tt.width, d.NameWidth)
+			}
+			if !tt.wantDirHidden && d.NameWidth == 0 {
+				t.Errorf("width=%d: expected NameWidth > 0, got 0", tt.width)
 			}
 		})
 	}
@@ -47,7 +55,8 @@ func TestNarrowLayoutBreakpoints(t *testing.T) {
 		{"narrow", 60, false, true},
 		{"medium stacked", 80, false, false},
 		{"medium stacked 100", 100, false, false},
-		{"wide side-by-side", 130, true, false},
+		{"wide side-by-side", 110, true, false},
+		{"wide side-by-side 130", 130, true, false},
 	}
 
 	for _, tt := range tests {
@@ -130,27 +139,28 @@ func TestRenderDetailV2_NarrowNoOverflow(t *testing.T) {
 	}
 }
 
-func TestNarrowDelegateHidesBranchColumn(t *testing.T) {
-	cols := delegateColumnsV2(40)
-	// At very narrow widths, branch column should be 0 (hidden)
-	if cols.Branch > 0 {
-		t.Errorf("at width=40, expected Branch=0 (hidden), got %d", cols.Branch)
+func TestComputeDelegateWidthsV2_HidesDirectoryNarrow(t *testing.T) {
+	items := []list.Item{
+		WorktreeItem{ShortName: "feature", Branch: "feature/test"},
+	}
+	d := ComputeDelegateWidthsV2(items, 40)
+	if d.NameWidth > 0 {
+		t.Errorf("at width=40, expected NameWidth=0 (hidden), got %d", d.NameWidth)
+	}
+	if d.BranchWidth == 0 {
+		t.Errorf("at width=40, expected BranchWidth > 0 (always shown), got 0")
 	}
 }
 
-func TestNarrowDelegateHidesAge(t *testing.T) {
-	cols := delegateColumnsV2(40)
-	if cols.Age > 0 {
-		t.Errorf("at width=40, expected Age=0 (hidden), got %d", cols.Age)
+func TestComputeDelegateWidthsV2_ShowsBothAtWidth60(t *testing.T) {
+	items := []list.Item{
+		WorktreeItem{ShortName: "feature", Branch: "feature/test"},
 	}
-}
-
-func TestDelegateColumnsV2_NarrowShowsBranch(t *testing.T) {
-	cols := delegateColumnsV2(60)
-	if cols.Branch == 0 {
-		t.Error("at width=60, expected Branch > 0")
+	d := ComputeDelegateWidthsV2(items, 60)
+	if d.BranchWidth == 0 {
+		t.Error("at width=60, expected BranchWidth > 0")
 	}
-	if cols.Name == 0 {
-		t.Error("at width=60, expected Name > 0")
+	if d.NameWidth == 0 {
+		t.Error("at width=60, expected NameWidth > 0")
 	}
 }

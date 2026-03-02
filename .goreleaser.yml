@@ -1,5 +1,6 @@
 # GoReleaser configuration for Grove
 # Documentation: https://goreleaser.com
+version: 2
 
 before:
   hooks:
@@ -33,7 +34,8 @@ builds:
 
 archives:
   - id: grove
-    format: tar.gz
+    formats:
+      - tar.gz
     name_template: >-
       {{ .ProjectName }}_
       {{- .Version }}_
@@ -41,7 +43,8 @@ archives:
       {{- .Arch }}
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
     files:
       - LICENSE
       - README.md
@@ -53,7 +56,7 @@ checksum:
   name_template: 'checksums.txt'
 
 snapshot:
-  name_template: "{{ incpatch .Version }}-next"
+  version_template: "{{ incpatch .Version }}-next"
 
 changelog:
   sort: asc
@@ -129,28 +132,15 @@ release:
     See the [README](https://github.com/LeahArmstrong/grove-cli#readme) for full documentation.
 
 # Homebrew tap configuration
-brews:
+homebrew_casks:
   - repository:
       owner: LeahArmstrong
       name: homebrew-tap
     homepage: https://github.com/LeahArmstrong/grove-cli
     description: Zero-friction worktree management for developers
-    license: Apache-2.0
     skip_upload: false
-    install: |
-      bin.install "grove"
-      
-      # Install shell integration files
-      (share/"grove").install "shell/grove.zsh"
-      (share/"grove").install "shell/grove.bash"
-      
-      # Install completion files
-      bash_completion.install "shell/completions/grove.bash" => "grove"
-      zsh_completion.install "shell/completions/_grove.zsh" => "_grove"
-    
-    test: |
-      system "#{bin}/grove", "version"
-    
+    binaries:
+      - grove
     caveats: |
       To enable grove, add this to your shell configuration:
 
@@ -163,29 +153,6 @@ brews:
       Then reload your shell:
         source ~/.zshrc  # or ~/.bashrc
 
-# Docker image configuration (optional, for future container deployment)
-dockers:
-  - skip_push: true
-    dockerfile: Dockerfile
-    image_templates:
-      - "ghcr.io/leaharmstrong/grove-cli:{{ .Tag }}"
-      - "ghcr.io/leaharmstrong/grove-cli:latest"
-
-# Snapcraft configuration (for Linux snap package)
-# Disabled for initial release, can be enabled later
-# snapcrafts:
-#   - skip_push: false
-
-# AUR (Arch User Repository) configuration
-# Disabled for initial release, can be enabled later  
-# aurs:
-#   - skip_push: false
-
 # Announcement configuration
 announce:
   skip: true
-  # Can be configured later for automated announcements to:
-  # - Twitter
-  # - Mastodon
-  # - Discord
-  # - Slack

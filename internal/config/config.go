@@ -12,6 +12,14 @@ type TestConfig struct {
 	Service string `toml:"service"`
 }
 
+// SessionConfig controls session command behavior for grove open
+type SessionConfig struct {
+	Command     string `toml:"command"`
+	Popup       *bool  `toml:"popup"`
+	PopupWidth  string `toml:"popup_width"`
+	PopupHeight string `toml:"popup_height"`
+}
+
 // Config represents the complete grove configuration
 type Config struct {
 	ProjectName   string           `toml:"project_name"`
@@ -25,11 +33,13 @@ type Config struct {
 	Protection    ProtectionConfig `toml:"protection"`
 	TUI           TUIConfig        `toml:"tui"`
 	Test          TestConfig       `toml:"test"`
+	Session       SessionConfig    `toml:"session"`
 
 	// Runtime settings (from env vars, not persisted)
 	NoColor        bool `toml:"-"` // GROVE_NO_COLOR - disable colored output
 	Debug          bool `toml:"-"` // GROVE_DEBUG - enable debug logging
 	NonInteractive bool `toml:"-"` // GROVE_NONINTERACTIVE - disable prompts
+	AgentMode      bool `toml:"-"` // GROVE_AGENT_MODE - agent isolation mode
 }
 
 // TUIConfig controls TUI behavior preferences
@@ -37,6 +47,7 @@ type TUIConfig struct {
 	SkipBranchNotice       *bool  `toml:"skip_branch_notice"`        // Don't show "branch exists" notice
 	DefaultBranchAction    string `toml:"default_branch_action"`     // "split" or "fork" — used when notice is skipped
 	WorktreeNameFromBranch string `toml:"worktree_name_from_branch"` // "last_segment" (default) — how to derive name from branch
+	CompactList            *bool  `toml:"compact_list"`              // Use single-line list items (V1 delegate)
 }
 
 // ProtectionConfig controls worktree protection settings
@@ -57,8 +68,9 @@ type NamingConfig struct {
 
 // TmuxConfig controls tmux session behavior
 type TmuxConfig struct {
-	Mode   string `toml:"mode"`   // auto, manual, off
-	Prefix string `toml:"prefix"` // Prefix for tmux session names
+	Mode     string `toml:"mode"`      // auto, manual, off
+	Prefix   string `toml:"prefix"`    // Prefix for tmux session names
+	OnSwitch string `toml:"on_switch"` // reset (default), warn, ignore — directory drift behavior
 }
 
 // PluginsConfig controls plugin behavior
@@ -71,6 +83,7 @@ type DockerPluginConfig struct {
 	Enabled   *bool                  `toml:"enabled"`
 	AutoStart *bool                  `toml:"auto_start"`
 	AutoStop  *bool                  `toml:"auto_stop"`
+	AutoUp    *bool                  `toml:"auto_up"`
 	Mode      string                 `toml:"mode"` // "" or "local" = local compose, "external" = external compose
 	External  *ExternalComposeConfig `toml:"external"`
 }
@@ -79,7 +92,7 @@ type DockerPluginConfig struct {
 // are defined in a shared compose setup outside the project directory.
 type ExternalComposeConfig struct {
 	Path        string            `toml:"path"`         // Path to external compose directory
-	EnvVar      string            `toml:"env_var"`      // Environment variable name (e.g., "ADMIN_DIR")
+	EnvVar      string            `toml:"env_var"`      // Environment variable name (e.g., "APP_DIR")
 	Services    []string          `toml:"services"`     // Service names to manage
 	CopyFiles   []string          `toml:"copy_files"`   // Files to copy from main on worktree create
 	SymlinkDirs []string          `toml:"symlink_dirs"` // Directories to symlink from main on create
@@ -155,20 +168,20 @@ func loadFromPaths(cfg *Config, globalPath, projectPath string) (*Config, error)
 	}
 
 	// Load global config if it exists
-	if _, err := os.Stat(globalPath); err == nil {
-		globalCfg, err := LoadConfigFromPath(globalPath)
-		if err != nil {
-			return nil, err
-		}
+	globalCfg, err := LoadConfigFromPath(globalPath)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	if globalCfg != nil {
 		cfg = mergeConfigs(cfg, globalCfg)
 	}
 
 	// Load project config if it exists (overrides global)
-	if _, err := os.Stat(projectPath); err == nil {
-		projectCfg, err := LoadConfigFromPath(projectPath)
-		if err != nil {
-			return nil, err
-		}
+	projectCfg, err := LoadConfigFromPath(projectPath)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	if projectCfg != nil {
 		cfg = mergeConfigs(cfg, projectCfg)
 	}
 
@@ -176,6 +189,7 @@ func loadFromPaths(cfg *Config, globalPath, projectPath string) (*Config, error)
 	cfg.NoColor = envBool("GROVE_NO_COLOR")
 	cfg.Debug = envBool("GROVE_DEBUG")
 	cfg.NonInteractive = envBool("GROVE_NONINTERACTIVE")
+	cfg.AgentMode = envBool("GROVE_AGENT_MODE")
 
 	// Validate the final configuration
 	if err := Validate(cfg); err != nil {
@@ -226,6 +240,9 @@ func mergeConfigs(base, override *Config) *Config {
 	if override.Tmux.Prefix != "" {
 		result.Tmux.Prefix = override.Tmux.Prefix
 	}
+	if override.Tmux.OnSwitch != "" {
+		result.Tmux.OnSwitch = override.Tmux.OnSwitch
+	}
 	// Merge plugin configs - only override if explicitly set (non-nil)
 	if override.Plugins.Docker.Enabled != nil {
 		result.Plugins.Docker.Enabled = override.Plugins.Docker.Enabled
@@ -235,6 +252,9 @@ func mergeConfigs(base, override *Config) *Config {
 	}
 	if override.Plugins.Docker.AutoStop != nil {
 		result.Plugins.Docker.AutoStop = override.Plugins.Docker.AutoStop
+	}
+	if override.Plugins.Docker.AutoUp != nil {
+		result.Plugins.Docker.AutoUp = override.Plugins.Docker.AutoUp
 	}
 	if override.Plugins.Docker.Mode != "" {
 		result.Plugins.Docker.Mode = override.Plugins.Docker.Mode
@@ -253,13 +273,22 @@ func mergeConfigs(base, override *Config) *Config {
 	if override.TUI.WorktreeNameFromBranch != "" {
 		result.TUI.WorktreeNameFromBranch = override.TUI.WorktreeNameFromBranch
 	}
+	if override.TUI.CompactList != nil {
+		result.TUI.CompactList = override.TUI.CompactList
+	}
 
-	// Merge protection config
+	// Merge protection config - union semantics (global protections always apply)
 	if len(override.Protection.Protected) > 0 {
-		result.Protection.Protected = override.Protection.Protected
+		result.Protection.Protected = deduplicatedUnion(
+			result.Protection.Protected,
+			override.Protection.Protected,
+		)
 	}
 	if len(override.Protection.Immutable) > 0 {
-		result.Protection.Immutable = override.Protection.Immutable
+		result.Protection.Immutable = deduplicatedUnion(
+			result.Protection.Immutable,
+			override.Protection.Immutable,
+		)
 	}
 
 	// Merge test config
@@ -270,7 +299,40 @@ func mergeConfigs(base, override *Config) *Config {
 		result.Test.Service = override.Test.Service
 	}
 
+	// Merge session config
+	if override.Session.Command != "" {
+		result.Session.Command = override.Session.Command
+	}
+	if override.Session.Popup != nil {
+		result.Session.Popup = override.Session.Popup
+	}
+	if override.Session.PopupWidth != "" {
+		result.Session.PopupWidth = override.Session.PopupWidth
+	}
+	if override.Session.PopupHeight != "" {
+		result.Session.PopupHeight = override.Session.PopupHeight
+	}
+
 	return &result
+}
+
+// deduplicatedUnion merges two string slices, preserving order and removing duplicates.
+func deduplicatedUnion(base, override []string) []string {
+	seen := make(map[string]bool, len(base))
+	result := make([]string, 0, len(base)+len(override))
+	for _, s := range base {
+		if !seen[s] {
+			seen[s] = true
+			result = append(result, s)
+		}
+	}
+	for _, s := range override {
+		if !seen[s] {
+			seen[s] = true
+			result = append(result, s)
+		}
+	}
+	return result
 }
 
 // IsProtected checks if a worktree is in the protected list

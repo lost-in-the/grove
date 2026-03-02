@@ -180,7 +180,7 @@ func browseIssuesFzf(cmd *cobra.Command, ctx *GroveContext) error {
 	}
 
 	parts := strings.Split(selection, "|")
-	if len(parts) == 0 {
+	if len(parts) < 2 {
 		return fmt.Errorf("invalid selection format")
 	}
 
@@ -293,7 +293,7 @@ func browsePRsFzf(cmd *cobra.Command, ctx *GroveContext) error {
 	}
 
 	parts := strings.Split(selection, "|")
-	if len(parts) == 0 {
+	if len(parts) < 2 {
 		return fmt.Errorf("invalid selection format")
 	}
 

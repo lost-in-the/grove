@@ -13,6 +13,7 @@ This document provides exhaustive specifications for each grove command. Every b
 3. [Core Commands](#core-commands)
    - [grove ls](#grove-ls)
    - [grove new](#grove-new)
+   - [grove open](#grove-open)
    - [grove to](#grove-to)
    - [grove rm](#grove-rm)
    - [grove here](#grove-here)
@@ -25,7 +26,7 @@ This document provides exhaustive specifications for each grove command. Every b
    - [grove down](#grove-down)
    - [grove logs](#grove-logs)
    - [grove restart](#grove-restart)
-   - [grove agent-status](#grove-agent-status)
+   - [grove ps](#grove-ps)
 6. [Worktree Flow Commands](#worktree-flow-commands)
    - [grove fork](#grove-fork)
    - [grove sync](#grove-sync)
@@ -61,6 +62,9 @@ Grove must detect its execution context:
 | Outside tmux | `$TMUX` not set | Use `tmux attach-session` or spawn new terminal |
 | Inside grove shell wrapper | `$GROVE_SHELL` set | Can output `cd:` directives |
 | Direct binary execution | `$GROVE_SHELL` not set | Cannot change directory, print instructions instead |
+| TUI mode | `$GROVE_CD_FILE` set | TUI writes target path to file; shell wrapper reads and applies cd |
+
+**`GROVE_CD_FILE`:** For TUI invocations (`grove` with no args), the shell wrapper creates a temp file via `mktemp`, sets `GROVE_CD_FILE` to its path, and reads it after the TUI exits to perform the directory change. This is necessary because the TUI runs in alt-screen mode where stdout is not suitable for directive parsing.
 
 ### Project Context Detection
 
@@ -79,8 +83,8 @@ Priority 3: Root directory name
 
 **Example:**
 ```
-/Users/egg/Work/grove-cli/.git  →  project = "grove-cli"
-/Users/egg/Work/my-app/.grove/  →  project = (from config or "my-app")
+~/projects/grove-cli/.git  →  project = "grove-cli"
+~/projects/my-app/.grove/  →  project = (from config or "my-app")
 ```
 
 ### Worktree Naming Convention
@@ -161,7 +165,7 @@ Examples:
 Worktrees are created as **siblings** to the main project directory:
 
 ```
-/Users/egg/Work/
+~/projects/
 ├── grove-cli/              ← main project (where you run commands)
 ├── grove-cli-testing/      ← worktree created by `w new testing`
 ├── grove-cli-feature-auth/ ← worktree created by `w new feature-auth`
@@ -188,7 +192,6 @@ location = "sibling"  # default: sibling to project
 grove ls [flags]
 
 Flags:
-  -a, --all       Include frozen worktrees
   -p, --paths     Show full paths only (scriptable output)
   -j, --json      Output as JSON
   -q, --quiet     Names only, one per line
@@ -211,10 +214,10 @@ Flags:
 ```
 NAME            BRANCH          STATUS     TMUX        PATH
 ────────────────────────────────────────────────────────────────────────
-• main          main            clean      attached    /Users/egg/Work/grove-cli
-  testing       testing         clean      detached    /Users/egg/Work/grove-cli-testing
-  feature-auth  feature/auth    dirty      none        /Users/egg/Work/grove-cli-feature-auth
-  hotfix        main            clean      frozen      /Users/egg/Work/grove-cli-hotfix
+• main          main            clean      attached    ~/projects/grove-cli
+  testing       testing         clean      detached    ~/projects/grove-cli-testing
+  feature-auth  feature/auth    dirty      none        ~/projects/grove-cli-feature-auth
+  hotfix        main            clean      frozen      ~/projects/grove-cli-hotfix
 ```
 
 **Column Definitions:**
@@ -227,9 +230,9 @@ NAME            BRANCH          STATUS     TMUX        PATH
 
 **Output Format (--paths):**
 ```
-/Users/egg/Work/grove-cli
-/Users/egg/Work/grove-cli-testing
-/Users/egg/Work/grove-cli-feature-auth
+~/projects/grove-cli
+~/projects/grove-cli-testing
+~/projects/grove-cli-feature-auth
 ```
 
 **Output Format (--json):**
@@ -242,7 +245,7 @@ NAME            BRANCH          STATUS     TMUX        PATH
       "name": "main",
       "fullName": "grove-cli",
       "branch": "main",
-      "path": "/Users/egg/Work/grove-cli",
+      "path": "~/projects/grove-cli",
       "status": "clean",
       "tmux": "attached",
       "frozen": false,
@@ -269,7 +272,9 @@ NAME            BRANCH          STATUS     TMUX        PATH
 
 ### grove new
 
-**Purpose:** Create a new worktree with associated tmux session.
+**Purpose:** Create a new worktree with associated tmux session and Docker stack.
+
+**Aliases:** `spawn` (implies `--json` output)
 
 **Usage:**
 ```
@@ -279,11 +284,9 @@ Arguments:
   name    Name for the new worktree (required)
 
 Flags:
-  -b, --branch <branch>    Branch to checkout (default: create new branch matching name)
-  -f, --from <ref>         Create branch from this ref (default: main/master)
-  -t, --template <name>    Use worktree template
-  -n, --no-switch          Don't switch to new worktree after creation
-      --no-tmux            Don't create tmux session
+  -j, --json           Output as JSON with switch_to field
+      --mirror <ref>   Create environment worktree tracking a remote branch (e.g., origin/main)
+      --no-docker      Skip Docker auto-start
 ```
 
 **Behavior:**
@@ -292,44 +295,39 @@ Flags:
    - Apply naming transformations
    - Check for existing worktree with same name
    
-2. **Determine branch:**
-   - If `--branch` specified: use that branch
-   - If branch exists: checkout existing branch
-   - If branch doesn't exist: create from `--from` or default branch
-   
-3. **Create worktree:**
+2. **Create worktree:**
+   - If `--mirror` specified: verify remote branch exists, create environment worktree tracking it
+   - Otherwise: create new worktree with branch matching the name
    ```bash
    git worktree add <path> <branch>
-   # or
-   git worktree add -b <new-branch> <path> <from-ref>
    ```
 
-4. **Create tmux session** (unless `--no-tmux`):
+3. **Symlink config** from main worktree to new worktree directory.
+
+4. **Register in state** (`AddWorktree`) with path, branch, created/accessed timestamps.
+
+5. **Create tmux session:**
    - Session name = `{project}-{name}`
    - Start in worktree directory
-   - Apply default window layout
-   
-5. **Generate .envrc** (if direnv plugin enabled):
-   - Set PORT based on allocation
-   - Set DATABASE_URL if configured
-   
-6. **Switch to new worktree** (unless `--no-switch`):
-   - If inside tmux: `tmux switch-client`
-   - If outside tmux: output `cd:` directive or instructions
+
+6. **Execute post-create hooks** (user-configured and plugin hooks).
+
+7. **Auto-start Docker** (unless `--no-docker`):
+   - Only runs when `shouldAutoDocker()` returns true: agent stacks configured (`plugins.docker.external.agent.enabled = true`) or `plugins.docker.auto_up = true`
+   - Calls `docker.Up()` for the new worktree path
 
 **Output (Success):**
 ```
-✓ Created worktree 'testing' at /Users/egg/Work/grove-cli-testing
-✓ Created branch 'testing' from 'main'
+✓ Created worktree 'testing'
 ✓ Created tmux session 'grove-cli-testing'
-✓ Switched to 'testing'
+✓ Docker stack started
 ```
 
 **Output (Already Exists):**
 ```
 ✗ Worktree 'testing' already exists
 
-  Path:   /Users/egg/Work/grove-cli-testing
+  Path:   ~/projects/grove-cli-testing
   Branch: testing
   Status: clean
 
@@ -340,7 +338,7 @@ To remove it:    grove rm testing
 
 **Output (Branch Exists, No Worktree):**
 ```
-✓ Created worktree 'feature-auth' at /Users/egg/Work/grove-cli-feature-auth
+✓ Created worktree 'feature-auth' at ~/projects/grove-cli-feature-auth
 ✓ Checked out existing branch 'feature/auth'
 ✓ Created tmux session 'grove-cli-feature-auth'
 ```
@@ -367,6 +365,82 @@ To remove it:    grove rm testing
 
 ---
 
+### grove open
+
+**Purpose:** Open a worktree session — create if needed, launch configured command, attach.
+
+**Usage:**
+```
+grove open <name> [flags]
+
+Arguments:
+  name    Name of worktree to open (required)
+
+Flags:
+      --no-create     Only attach to existing worktree, error if not found
+      --command <cmd>  Override session command
+      --no-popup       Skip popup, use tmux switch/attach instead
+  -j, --json           Output as JSON
+```
+
+**Behavior:**
+
+1. **Ensure worktree exists:**
+   - If worktree found: proceed
+   - If not found and `--no-create` not set: create worktree (same as `grove new`)
+   - If not found and `--no-create` set: error
+
+2. **Ensure tmux session exists:**
+   - Create session with configured command (from `[session]` config or `--command`)
+   - If session already exists: check if command is running
+
+3. **Launch configured command:**
+   - If session has a shell and command not running: `tmux send-keys` the command
+   - If command already running: skip (idempotent)
+
+4. **Attach:**
+   - If `popup = true` in config and inside tmux: `tmux display-popup`
+   - If inside tmux: `tmux switch-client`
+   - If outside tmux: `tmux attach-session`
+
+**Configuration:**
+```toml
+[session]
+command = "claude"     # What to run in sessions (default: "" = $SHELL)
+popup = true           # Use tmux display-popup for grove open
+popup_width = "80%"
+popup_height = "80%"
+```
+
+**Output (New worktree):**
+```
+✓ Created worktree 'feature-x'
+✓ Created session 'grove-cli-feature-x' running 'claude'
+```
+
+**Output (Existing worktree, reattach):**
+```
+✓ Launched 'claude' in existing session
+```
+*Popup opens or session switches*
+
+**Edge Cases:**
+
+| Scenario | Behavior |
+|----------|----------|
+| Worktree exists, session exists, command running | Reattach only (fully idempotent) |
+| Worktree exists, no tmux session | Create session and launch |
+| No `[session]` config | Opens shell session (same as `grove to`) |
+| `--no-create` and worktree missing | Error with suggestion |
+| Tmux not available | Emit cd directive, skip session management |
+| Popup outside tmux | Fall back to tmux attach |
+
+**Exit Codes:**
+- 0: Success
+- 1: Worktree not found (with `--no-create`)
+
+---
+
 ### grove to
 
 **Purpose:** Switch to an existing worktree, activating its tmux session.
@@ -379,7 +453,8 @@ Arguments:
   name    Name of worktree to switch to (required)
 
 Flags:
-  -f, --force    Switch even if current worktree is dirty (stash changes)
+  -j, --json   Output as JSON with switch_to field
+      --peek   Lightweight switch: skip hooks (no Docker side effects)
 ```
 
 **Behavior:**
@@ -387,27 +462,25 @@ Flags:
 1. **Find worktree:**
    - Search by short name first (within current project)
    - Fall back to full name match
-   - Support partial matching if unambiguous
+   - Error if worktree is stale (directory missing)
 
-2. **Check current worktree status:**
-   - If dirty and `dirty_handling = prompt`: Ask user
-   - If dirty and `dirty_handling = auto-stash`: Stash automatically
-   - If dirty and `dirty_handling = refuse`: Error unless `--force`
-
-3. **Handle tmux session:**
+2. **Handle tmux session:**
    - If session exists and inside tmux: `tmux switch-client -t {session}`
    - If session exists and outside tmux: `tmux attach -t {session}`
    - If session doesn't exist: Create it, then attach/switch
 
-4. **Change directory:**
-   - If inside grove shell wrapper: Output `cd:{path}` directive
-   - If direct execution: Include cd instruction in output
+3. **Fire pre-switch hooks** (unless `--peek`).
 
-5. **Fire hooks:**
-   - `pre-switch` on current worktree
-   - `post-switch` on target worktree
+4. **Switch tmux session** (if inside tmux): `tmux switch-client -t {session}`
 
-6. **Update "last" tracking:**
+5. **Fire post-switch hooks** (Docker start, etc.) before tmux switch so progress is visible in current session (unless `--peek`).
+
+6. **Change directory:**
+   - If inside tmux: session switch handles navigation
+   - If shell integration active: Output `cd:{path}` directive, and `tmux-attach:` directive in auto mode
+   - If direct execution: Print cd instructions
+
+7. **Update "last" tracking:**
    - Store current worktree as "last" for `grove last` command
 
 **Output (Inside tmux, via shell wrapper):**
@@ -425,7 +498,7 @@ Flags:
 **Output (Outside tmux, via shell wrapper):**
 ```
 ✓ Attached to tmux session 'grove-cli-testing'
-cd:/Users/egg/Work/grove-cli-testing
+cd:~/projects/grove-cli-testing
 ```
 *New tmux client opens, shell changes directory after*
 
@@ -434,23 +507,7 @@ cd:/Users/egg/Work/grove-cli-testing
 ✓ Tmux session 'grove-cli-testing' ready
 
 To attach: tmux attach -t grove-cli-testing
-To enter directory: cd /Users/egg/Work/grove-cli-testing
-```
-
-**Output (Dirty worktree, prompt mode):**
-```
-⚠ Current worktree has uncommitted changes:
-
-  M  src/main.go
-  ?? src/new_file.go
-
-What would you like to do?
-  [s] Stash changes and switch
-  [c] Commit changes first (opens editor)
-  [a] Abort switch
-  [f] Force switch (leave changes)
-
-Choice [s/c/a/f]: 
+To enter directory: cd ~/projects/grove-cli-testing
 ```
 
 **Output (Worktree not found):**
@@ -491,13 +548,24 @@ Please be more specific.
 | Partial name matches one | Switch to it (e.g., `w to test` → `testing` if unambiguous) |
 | Partial name matches multiple | Error with list of matches |
 | Frozen worktree | Auto-resume, then switch |
-| Session exists but wrong directory | Update session directory, then switch |
+| Session exists but wrong directory | Detect drift and correct per `tmux.on_switch` setting |
+
+**Directory Drift Detection:**
+
+When switching to a worktree whose tmux session already exists (inside tmux), grove detects if the session's active pane has drifted from the worktree root. Behavior is controlled by `tmux.on_switch` config:
+
+| `tmux.on_switch` | Behavior |
+|------------------|----------|
+| `"reset"` (default) | Send `cd "<worktree-path>"` to the session pane |
+| `"warn"` | Print a warning about the drift, leave directory unchanged |
+| `"ignore"` | Do nothing, leave directory unchanged |
+
+Drift is only corrected when the pane is a shell (not running a program).
 
 **Exit Codes:**
 - 0: Success
 - 1: Worktree not found
-- 2: Aborted by user (dirty handling)
-- 3: Other error
+- 2: Other error
 
 ---
 
@@ -630,7 +698,7 @@ Flags:
 Worktree: testing
 Project:  grove-cli
 Branch:   testing
-Path:     /Users/egg/Work/grove-cli-testing
+Path:     ~/projects/grove-cli-testing
 Commit:   abc1234 (2 hours ago) Fix authentication bug
 Status:   clean
 Tmux:     attached (grove-cli-testing)
@@ -642,7 +710,7 @@ Docker:   running (3 containers)
 Worktree: testing
 Project:  grove-cli
 Branch:   testing
-Path:     /Users/egg/Work/grove-cli-testing
+Path:     ~/projects/grove-cli-testing
 Commit:   abc1234 (2 hours ago) Fix authentication bug
 Status:   dirty
           M  src/auth.go
@@ -663,7 +731,7 @@ testing
   "fullName": "grove-cli-testing",
   "project": "grove-cli",
   "branch": "testing",
-  "path": "/Users/egg/Work/grove-cli-testing",
+  "path": "~/projects/grove-cli-testing",
   "commit": {
     "hash": "abc1234def5678",
     "shortHash": "abc1234",
@@ -687,7 +755,7 @@ testing
 ```
 Not in a grove-managed worktree
 
-Current directory: /Users/egg/Downloads
+Current directory: ~/Downloads
 
 To see available worktrees: grove ls
 To create a new worktree: grove new <name>
@@ -723,14 +791,16 @@ Flags:
 
 **Behavior:**
 
-1. Read last worktree from state file (`~/.local/state/grove/last`)
+1. Read last worktree from `.grove/state.json` (`State.LastWorktree` field)
 2. If exists: equivalent to `grove to <last>`
 3. If not exists: error
 
 **State File Format:**
-```
-# ~/.local/state/grove/{project}/last
-grove-cli-testing
+```json
+// .grove/state.json (last_worktree field)
+{
+  "last_worktree": "testing"
+}
 ```
 
 **Output (Success):**
@@ -963,64 +1033,71 @@ Arguments:
 
 ---
 
-### grove agent-status
+### grove ps
 
-**Purpose:** Show active isolated Docker stacks.
+**Purpose:** Show active Docker stacks.
+
+**Aliases:** `agent-status` (hidden, backward compatibility)
 
 **Usage:**
 ```
-grove agent-status [flags]
+grove ps [flags]
 
 Flags:
-  -j, --json    Output as JSON
+  -j, --json    Output as JSON (includes compose project names)
 ```
 
 **Behavior:**
 
-1. Read isolated stack state from `.grove/agent-slots/`
-2. For each active slot, check container status via Docker
-3. Display results
+1. Read stack state from slot manager
+2. Display results with `#N` reference IDs and URLs
 
 **Output (Default):**
 ```
-SLOT  PROJECT                    STATUS   PORTS
-1     myapp-feature-x-slot-1     running  3101, 3111
-2     myapp-feature-x-slot-2     running  3102, 3112
+STACKS (2/5)
+
+  #1  feature-x      http://localhost:3101
+  #2  bugfix-y       http://localhost:3102
 ```
 
 **Output (No active stacks):**
 ```
-No active isolated stacks.
+ℹ No active stacks
+```
 
-Start one with: grove up --isolated
+**Output (Not configured):**
+```
+Stacks not configured for this project
+
+To enable, add to .grove/config.toml:
+
+  [plugins.docker.external.agent]
+  enabled = true
+  services = ["app"]
+  template_path = "agent-stacks/template.yml"
 ```
 
 **Output (--json):**
 ```json
-{
-  "slots": [
-    {
-      "slot": 1,
-      "project": "myapp-feature-x-slot-1",
-      "status": "running",
-      "ports": [3101, 3111],
-      "created_at": "2025-01-15T10:30:00Z"
-    }
-  ]
-}
+[
+  {
+    "slot": 1,
+    "worktree": "feature-x",
+    "composeProject": "myapp-agent-1",
+    "url": "http://localhost:3101"
+  }
+]
 ```
 
 **Edge Cases:**
 
 | Scenario | Behavior |
 |----------|----------|
-| Docker plugin not configured | Error: "docker plugin not enabled" |
-| Agent slots not configured | Error: "isolated stacks not configured. Add [plugins.docker.agent] to config" |
-| Stale slot (containers gone) | Show with status: `stale` and suggest `grove down --slot N` |
+| Stacks not configured | Help text with config example |
+| No active stacks | Info message |
 
 **Exit Codes:**
 - 0: Success
-- 1: Not configured
 
 ---
 
@@ -1095,7 +1172,7 @@ Choice [1-4]:
 ✓ Created worktree 'hotfix' with branch 'main-hotfix'
 ✓ Moved uncommitted changes to fork
 ✓ Created tmux session 'grove-cli-hotfix'
-cd:/Users/egg/Work/grove-cli-hotfix
+cd:~/projects/grove-cli-hotfix
 ```
 
 **Output (--json):**
@@ -1103,10 +1180,10 @@ cd:/Users/egg/Work/grove-cli-hotfix
 {
   "name": "hotfix",
   "branch": "main-hotfix",
-  "path": "/Users/egg/Work/grove-cli-hotfix",
+  "path": "~/projects/grove-cli-hotfix",
   "parent": "main",
   "created": true,
-  "switch_to": "/Users/egg/Work/grove-cli-hotfix"
+  "switch_to": "~/projects/grove-cli-hotfix"
 }
 ```
 
@@ -1122,7 +1199,7 @@ cd:/Users/egg/Work/grove-cli-hotfix
 
 **Exit Codes:**
 - 0: Success
-- 1: User cancelled (WIP prompt)
+- 1: User canceled (WIP prompt)
 - 2: Branch already exists
 - 3: Git operation failed
 
@@ -1270,7 +1347,7 @@ No differences found
     {
       "sha": "abc1234...",
       "message": "feat: add user authentication",
-      "author": "Dev User",
+      "author": "Jane Dev",
       "age": "2 hours ago"
     }
   ],
@@ -1512,7 +1589,7 @@ Flags:
 Configuration for 'grove-cli'
 
 Global: ~/.config/grove/config.toml
-Local:  /Users/egg/Work/grove-cli/.grove/config.toml (not found)
+Local:  ~/projects/grove-cli/.grove/config.toml (not found)
 
 Settings:
   alias:            w
@@ -1523,7 +1600,7 @@ Switch:
   dirty_handling:   prompt
 
 Naming:
-  pattern:          {project}-{name}
+  pattern:          {type}/{description}
   max_length:       50
 
 Tmux:
@@ -1841,38 +1918,3 @@ func hasShellIntegration() bool {
 
 ---
 
-## State Storage
-
-### Locations
-
-| Data | Location | Format |
-|------|----------|--------|
-| Global config | `~/.config/grove/config.toml` | TOML |
-| Project config | `.grove/config.toml` | TOML |
-| Last worktree | `~/.local/state/grove/{project}/last` | Plain text |
-| Worktree metadata | `.grove/worktrees/{name}.toml` | TOML |
-| Freeze state | Tmux session variable `@grove_frozen` | Boolean |
-
-### State File: last
-
-```
-# ~/.local/state/grove/grove-cli/last
-grove-cli-testing
-```
-
-Updated on every `grove to` or `grove last` (before switch).
-
-### State File: worktree metadata
-
-```toml
-# .grove/worktrees/testing.toml
-[worktree]
-name = "testing"
-created = 2024-01-15T10:30:00Z
-branch = "testing"
-from = "main"
-
-[time]
-total_seconds = 14523
-last_active = 2024-01-16T15:45:00Z
-```

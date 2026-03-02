@@ -16,10 +16,10 @@ grove() {
     # Only directive-producing commands need output capture.
     # All other commands run directly for streaming support.
     case "$1" in
-        to|last|fork|fetch|attach)
+        to|last|fork|fetch|attach|open)
             # Capture output and parse for cd:/tmux-attach: directives
             local output exit_code
-            output=$(GROVE_SHELL=1 "$__GROVE_BIN" "$@" 2>&1)
+            output=$(GROVE_SHELL=1 "$__GROVE_BIN" "$@")
             exit_code=$?
 
             local should_cd=0
@@ -28,10 +28,7 @@ grove() {
             local other_lines=""
 
             while IFS= read -r line; do
-                if [[ "$line" == GROVE_CD:* ]]; then
-                    cd_target="${line#GROVE_CD:}"
-                    should_cd=1
-                elif [[ "$line" == cd:* ]]; then
+                if [[ "$line" == cd:* ]]; then
                     cd_target="${line#cd:}"
                     should_cd=1
                 elif [[ "$line" == tmux-attach:* ]]; then
@@ -81,7 +78,7 @@ _grove_completion() {
         cword=$COMP_CWORD
     fi
 
-    local commands="ls new to rm here last fork compare apply sync clean repair init setup fetch attach issues prs up down logs restart test config doctor agent-status version install"
+    local commands="ls new to rm here last fork compare apply sync clean repair init setup fetch attach open issues prs up down logs restart test config doctor ps agent-status version install"
 
     if [[ $cword -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$commands" -- "$cur"))
@@ -89,7 +86,7 @@ _grove_completion() {
     fi
 
     case "${words[1]}" in
-        to|rm|compare|sync|test|apply|attach)
+        to|rm|compare|sync|test|apply|attach|open)
             # Complete with worktree short names (using grove ls -q for consistency)
             local worktrees=$(GROVE_SHELL=1 "$__GROVE_BIN" ls -q 2>/dev/null)
             COMPREPLY=($(compgen -W "$worktrees" -- "$cur"))

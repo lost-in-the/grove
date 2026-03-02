@@ -127,30 +127,11 @@ func (s *localStrategy) Restart(worktreePath string, service string) error {
 }
 
 func (s *localStrategy) down(worktreePath string) error {
-	if !hasDockerCompose(worktreePath) {
-		return ErrNoComposeFile
-	}
-
-	cmd := composeCommand(worktreePath, nil, "down")
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return s.Down(worktreePath)
 }
 
 func (s *localStrategy) up(worktreePath string, detach bool) error {
-	if !hasDockerCompose(worktreePath) {
-		return ErrNoComposeFile
-	}
-
-	args := []string{"up"}
-	if detach {
-		args = append(args, "-d")
-	}
-
-	cmd := composeCommand(worktreePath, nil, args...)
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return s.Up(worktreePath, detach)
 }
 
 func (s *localStrategy) getAutoStart() bool {

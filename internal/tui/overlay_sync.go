@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 )
@@ -134,7 +134,7 @@ func (s *SyncState) selectedSource() *WorktreeWIPInfo {
 }
 
 // handleSyncKey handles key input for the sync overlay.
-func (m Model) handleSyncKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleSyncKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.syncState == nil {
 		m.activeView = ViewDashboard
 		return m, nil
@@ -238,7 +238,7 @@ func renderSync(s *SyncState, width int) string {
 		overlayWidth = 70
 	}
 	contentWidth := overlayWidth - 6
-	indent := huhOverlayIndent
+	indent := overlayIndent
 	innerWidth := contentWidth - len(indent)*2
 
 	var b strings.Builder
@@ -272,7 +272,7 @@ func renderSync(s *SyncState, width int) string {
 			for i, src := range s.Sources {
 				cursor := "  "
 				if i == s.Selected {
-					cursor = Styles.ListCursor.String()
+					cursor = Styles.ListCursor.Render("❯ ")
 				}
 
 				name := src.Item.ShortName

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
 )
 
 // --- Stress tests for edge-case scenarios ---
@@ -41,7 +41,7 @@ func TestStressLargeDataset(t *testing.T) {
 			}
 
 			// View should render without panic
-			v := m.View()
+			v := m.viewString()
 			if v == "" {
 				t.Error("expected non-empty view for large dataset")
 			}
@@ -51,7 +51,7 @@ func TestStressLargeDataset(t *testing.T) {
 
 func TestStressLargeDatasetView(t *testing.T) {
 	m := newTestModel(withItems(1000), withSize(120, 40))
-	v := m.View()
+	v := m.viewString()
 	if v == "" {
 		t.Error("expected non-empty view for 1000 items")
 	}
@@ -114,7 +114,7 @@ func TestStressRapidResize(t *testing.T) {
 			}
 
 			// View must render without panic
-			v := m.View()
+			v := m.viewString()
 			if v == "" {
 				t.Error("expected non-empty view after rapid resize")
 			}
@@ -141,7 +141,7 @@ func TestStressRapidResizeSequence(t *testing.T) {
 		t.Errorf("expected final size 120x40, got %dx%d", m.width, m.height)
 	}
 
-	v := m.View()
+	v := m.viewString()
 	if v == "" {
 		t.Error("expected non-empty view after resize sequence")
 	}
@@ -182,7 +182,7 @@ func TestStressOverlayCycling(t *testing.T) {
 			}
 
 			// Should render fine
-			v := m.View()
+			v := m.viewString()
 			if v == "" {
 				t.Error("expected non-empty view after overlay cycling")
 			}
@@ -244,7 +244,7 @@ func TestStressCreateCancelCycling(t *testing.T) {
 	}
 
 	// Verify clean dashboard state
-	v := m.View()
+	v := m.viewString()
 	if v == "" {
 		t.Error("expected non-empty view after create cancel cycling")
 	}
@@ -275,7 +275,7 @@ func TestStressCreateCancelCyclingHuh(t *testing.T) {
 		}
 	}
 
-	v := m.View()
+	v := m.viewString()
 	if v == "" {
 		t.Error("expected non-empty view after Huh create cancel cycling")
 	}
@@ -329,7 +329,7 @@ func TestStressEmptyCreateEscape(t *testing.T) {
 	}
 
 	// Verify dashboard renders cleanly
-	v := m.View()
+	v := m.viewString()
 	if !strings.Contains(v, "test-project") {
 		t.Error("expected project name in dashboard after clean escape")
 	}
@@ -352,7 +352,7 @@ func TestStressUnicodeItems(t *testing.T) {
 	m.list.SetItems(listItems)
 
 	// View should render without panic
-	v := m.View()
+	v := m.viewString()
 	if v == "" {
 		t.Error("expected non-empty view with unicode items")
 	}
@@ -387,7 +387,7 @@ func TestStressLongNames(t *testing.T) {
 	m.list.SetItems(listItems)
 
 	// View should render without panic
-	v := m.View()
+	v := m.viewString()
 	if v == "" {
 		t.Error("expected non-empty view with long names")
 	}
@@ -499,7 +499,7 @@ func TestStressResizeDuringOverlay(t *testing.T) {
 			}
 
 			// View should render without panic
-			v := m.View()
+			v := m.viewString()
 			if v == "" {
 				t.Error("expected non-empty view after resize during overlay")
 			}
@@ -540,7 +540,7 @@ func TestStressZeroWidthHeight(t *testing.T) {
 			m = sendMsg(m, tea.WindowSizeMsg{Width: tt.width, Height: tt.height})
 
 			// Should not panic on View()
-			v := m.View()
+			v := m.viewString()
 			_ = v // we just care it doesn't panic
 		})
 	}
@@ -562,7 +562,7 @@ func TestStressEmptyList(t *testing.T) {
 	}
 
 	// View should render
-	v := m.View()
+	v := m.viewString()
 	if v == "" {
 		t.Error("expected non-empty view for empty list")
 	}
@@ -600,8 +600,7 @@ func TestStressCreateWithSpecialCharacters(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			m := newTestModel(withItems(1), withSize(80, 24))
 			m = enterCreateManual(m)
-			// Set to name step where validation applies
-			m.createState.Step = CreateStepName
+			m = enterNameStep(m)
 			m = sendKey(m, tt.input)
 
 			// Should show validation error
@@ -615,8 +614,7 @@ func TestStressCreateWithSpecialCharacters(t *testing.T) {
 func TestStressCreateEmptySubmit(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
 	m = enterCreateManual(m)
-	// Set to name step to test empty name validation
-	m.createState.Step = CreateStepName
+	m = enterNameStep(m)
 
 	// Submit empty name
 	m = sendKey(m, "enter")
@@ -637,7 +635,7 @@ func TestStressQuickSwitchAllNumbers(t *testing.T) {
 	// Press all number keys 1-9
 	for r := '1'; r <= '9'; r++ {
 		testM := m // copy model for each test
-		result, _ := testM.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		result, _ := testM.Update(makeKeyMsg(string(r)))
 		testM = result.(Model)
 
 		idx := int(r - '1')
@@ -688,7 +686,7 @@ func TestStressViewRenderAllStates(t *testing.T) {
 			}
 
 			// Should not panic
-			v := m.View()
+			v := m.viewString()
 			if v == "" {
 				t.Errorf("expected non-empty view for %s", tt.name)
 			}
@@ -762,7 +760,7 @@ func TestStressMixedOverlaySequence(t *testing.T) {
 		t.Error("bulkState should be nil")
 	}
 
-	v := m.View()
+	v := m.viewString()
 	if v == "" {
 		t.Error("expected non-empty view after mixed sequence")
 	}

@@ -18,7 +18,7 @@ const (
 	// InvalidInput indicates invalid arguments or flags were provided.
 	InvalidInput = 4
 
-	// UserCancelled indicates the user cancelled an interactive operation.
+	// UserCancelled indicates the user canceled an interactive operation.
 	UserCancelled = 5
 
 	// ExternalCommandFailed indicates an external command (docker, tmux, etc.) failed.
@@ -53,7 +53,7 @@ func Message(code int) string {
 	case InvalidInput:
 		return "invalid input"
 	case UserCancelled:
-		return "operation cancelled"
+		return "operation canceled"
 	case ExternalCommandFailed:
 		return "external command failed"
 	case CannotRemove:

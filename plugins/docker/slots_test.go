@@ -18,7 +18,7 @@ func newTestSlotManager(t *testing.T, maxSlots int) (*SlotManager, string) {
 func TestSlotManager_AllocateFirstSlot(t *testing.T) {
 	sm, _ := newTestSlotManager(t, 5)
 
-	slot, err := sm.Allocate("admin-fix-auth")
+	slot, err := sm.Allocate("myapp-fix-auth")
 	if err != nil {
 		t.Fatalf("Allocate() error = %v", err)
 	}
@@ -34,9 +34,9 @@ func TestSlotManager_AllocateFillsSequentially(t *testing.T) {
 		worktree string
 		wantSlot int
 	}{
-		{"admin-feature-a", 1},
-		{"admin-feature-b", 2},
-		{"admin-feature-c", 3},
+		{"myapp-feature-a", 1},
+		{"myapp-feature-b", 2},
+		{"myapp-feature-c", 3},
 	}
 
 	for _, tt := range tests {
@@ -53,12 +53,12 @@ func TestSlotManager_AllocateFillsSequentially(t *testing.T) {
 func TestSlotManager_AllocateIdempotent(t *testing.T) {
 	sm, _ := newTestSlotManager(t, 5)
 
-	first, err := sm.Allocate("admin-fix-auth")
+	first, err := sm.Allocate("myapp-fix-auth")
 	if err != nil {
 		t.Fatalf("first Allocate() error = %v", err)
 	}
 
-	second, err := sm.Allocate("admin-fix-auth")
+	second, err := sm.Allocate("myapp-fix-auth")
 	if err != nil {
 		t.Fatalf("second Allocate() error = %v", err)
 	}
@@ -71,10 +71,10 @@ func TestSlotManager_AllocateIdempotent(t *testing.T) {
 func TestSlotManager_AllocateErrorWhenFull(t *testing.T) {
 	sm, _ := newTestSlotManager(t, 2)
 
-	_, _ = sm.Allocate("admin-feature-a")
-	_, _ = sm.Allocate("admin-feature-b")
+	_, _ = sm.Allocate("myapp-feature-a")
+	_, _ = sm.Allocate("myapp-feature-b")
 
-	_, err := sm.Allocate("admin-feature-c")
+	_, err := sm.Allocate("myapp-feature-c")
 	if err == nil {
 		t.Error("Allocate() expected error when all slots full, got nil")
 	}
@@ -83,14 +83,14 @@ func TestSlotManager_AllocateErrorWhenFull(t *testing.T) {
 func TestSlotManager_ReleaseFreesSlot(t *testing.T) {
 	sm, _ := newTestSlotManager(t, 2)
 
-	_, _ = sm.Allocate("admin-feature-a")
-	_, _ = sm.Allocate("admin-feature-b")
+	_, _ = sm.Allocate("myapp-feature-a")
+	_, _ = sm.Allocate("myapp-feature-b")
 
-	if err := sm.Release("admin-feature-a"); err != nil {
+	if err := sm.Release("myapp-feature-a"); err != nil {
 		t.Fatalf("Release() error = %v", err)
 	}
 
-	slot, err := sm.Allocate("admin-feature-c")
+	slot, err := sm.Allocate("myapp-feature-c")
 	if err != nil {
 		t.Fatalf("Allocate() after release error = %v", err)
 	}
@@ -102,14 +102,14 @@ func TestSlotManager_ReleaseFreesSlot(t *testing.T) {
 func TestSlotManager_AllocateReusesLowestFreedSlot(t *testing.T) {
 	sm, _ := newTestSlotManager(t, 3)
 
-	_, _ = sm.Allocate("admin-feature-a") // slot 1
-	_, _ = sm.Allocate("admin-feature-b") // slot 2
-	_, _ = sm.Allocate("admin-feature-c") // slot 3
+	_, _ = sm.Allocate("myapp-feature-a") // slot 1
+	_, _ = sm.Allocate("myapp-feature-b") // slot 2
+	_, _ = sm.Allocate("myapp-feature-c") // slot 3
 
-	_ = sm.Release("admin-feature-a") // free slot 1
-	_ = sm.Release("admin-feature-b") // free slot 2
+	_ = sm.Release("myapp-feature-a") // free slot 1
+	_ = sm.Release("myapp-feature-b") // free slot 2
 
-	slot, err := sm.Allocate("admin-feature-d")
+	slot, err := sm.Allocate("myapp-feature-d")
 	if err != nil {
 		t.Fatalf("Allocate() error = %v", err)
 	}
@@ -121,10 +121,10 @@ func TestSlotManager_AllocateReusesLowestFreedSlot(t *testing.T) {
 func TestSlotManager_FindSlotReturnsCorrectSlot(t *testing.T) {
 	sm, _ := newTestSlotManager(t, 5)
 
-	_, _ = sm.Allocate("admin-feature-a") // slot 1
-	_, _ = sm.Allocate("admin-feature-b") // slot 2
+	_, _ = sm.Allocate("myapp-feature-a") // slot 1
+	_, _ = sm.Allocate("myapp-feature-b") // slot 2
 
-	slot, err := sm.FindSlot("admin-feature-b")
+	slot, err := sm.FindSlot("myapp-feature-b")
 	if err != nil {
 		t.Fatalf("FindSlot() error = %v", err)
 	}
@@ -136,7 +136,7 @@ func TestSlotManager_FindSlotReturnsCorrectSlot(t *testing.T) {
 func TestSlotManager_FindSlotReturnsZeroForUnknown(t *testing.T) {
 	sm, _ := newTestSlotManager(t, 5)
 
-	_, _ = sm.Allocate("admin-feature-a")
+	_, _ = sm.Allocate("myapp-feature-a")
 
 	slot, err := sm.FindSlot("nonexistent-worktree")
 	if err != nil {
@@ -150,8 +150,8 @@ func TestSlotManager_FindSlotReturnsZeroForUnknown(t *testing.T) {
 func TestSlotManager_ListActive(t *testing.T) {
 	sm, _ := newTestSlotManager(t, 5)
 
-	_, _ = sm.Allocate("admin-feature-a")
-	_, _ = sm.Allocate("admin-feature-b")
+	_, _ = sm.Allocate("myapp-feature-a")
+	_, _ = sm.Allocate("myapp-feature-b")
 
 	active, err := sm.ListActive()
 	if err != nil {
@@ -165,11 +165,11 @@ func TestSlotManager_ListActive(t *testing.T) {
 	for _, s := range active {
 		found[s.Worktree] = s.Slot
 	}
-	if found["admin-feature-a"] != 1 {
-		t.Errorf("admin-feature-a slot = %d, want 1", found["admin-feature-a"])
+	if found["myapp-feature-a"] != 1 {
+		t.Errorf("myapp-feature-a slot = %d, want 1", found["myapp-feature-a"])
 	}
-	if found["admin-feature-b"] != 2 {
-		t.Errorf("admin-feature-b slot = %d, want 2", found["admin-feature-b"])
+	if found["myapp-feature-b"] != 2 {
+		t.Errorf("myapp-feature-b slot = %d, want 2", found["myapp-feature-b"])
 	}
 }
 
@@ -181,7 +181,7 @@ func TestSlotManager_MissingFileCreatedOnFirstWrite(t *testing.T) {
 		t.Fatal("slots file should not exist before first allocation")
 	}
 
-	_, err := sm.Allocate("admin-feature-a")
+	_, err := sm.Allocate("myapp-feature-a")
 	if err != nil {
 		t.Fatalf("Allocate() error = %v", err)
 	}
@@ -202,7 +202,7 @@ func TestSlotManager_HandlesEmptySlotsFile(t *testing.T) {
 
 	sm := NewSlotManager(slotsFile, 5)
 
-	slot, err := sm.Allocate("admin-feature-a")
+	slot, err := sm.Allocate("myapp-feature-a")
 	if err != nil {
 		t.Fatalf("Allocate() with empty file error = %v", err)
 	}
@@ -224,7 +224,7 @@ func TestSlotManager_ConcurrentAccess(t *testing.T) {
 	for i := 0; i < goroutines; i++ {
 		go func(idx int) {
 			defer wg.Done()
-			worktree := fmt.Sprintf("admin-worker-%d", idx)
+			worktree := fmt.Sprintf("myapp-worker-%d", idx)
 			slot, err := sm.Allocate(worktree)
 			slots[idx] = slot
 			errs[idx] = err

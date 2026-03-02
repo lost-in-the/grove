@@ -34,12 +34,14 @@ func TestRenderPRViewV2_EmptyPRs(t *testing.T) {
 }
 
 func TestRenderPRViewV2_FilterCount(t *testing.T) {
+	fi := newPRFilterInput()
+	fi.SetValue("alpha")
 	s := &PRViewState{
 		PRs: []*tracker.PullRequest{
 			{Number: 1, Title: "Alpha", Branch: "alpha", Author: "user"},
 			{Number: 2, Title: "Beta", Branch: "beta", Author: "user"},
 		},
-		Filter: "alpha",
+		FilterInput: fi,
 	}
 	view := renderPRViewV2(s, 100, "")
 	assertContains(t, view, "alpha")

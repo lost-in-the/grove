@@ -1,4 +1,5 @@
 # Grove - Worktree Flow Manager
+**This application is unreleased. Do not hesitate to make changes or completely refactor logic if it can be improved**
 
 ## Project Context
 Grove is a Go CLI tool for managing git worktrees with tmux integration.
@@ -23,7 +24,7 @@ Worktrees MUST follow the `{project}-{name}` pattern:
 ### Shell Integration Protocol
 Commands that change directories output `cd:/path/to/dir` which the shell wrapper intercepts:
 ```bash
-# Binary outputs: cd:/Users/egg/Work/grove-cli-testing
+# Binary outputs: cd:~/projects/grove-cli-testing
 # Shell wrapper detects GROVE_SHELL=1 and executes the cd
 ```
 
@@ -41,6 +42,22 @@ Commands that change directories output `cd:/path/to/dir` which the shell wrappe
 - `make fmt` - Format code
 - `make clean` - Clean build artifacts
 - `make install` - Install locally
+
+## TUI Stack
+
+The TUI is built on **Bubbletea v2** (Elm Architecture) with the Charm ecosystem:
+- `charm.land/bubbletea/v2` — framework (Model/Update/View)
+- `charm.land/lipgloss/v2` — styling (ANSI-aware widths, colors, borders)
+- `charm.land/bubbles/v2` — components (list, textinput, viewport)
+
+Key patterns:
+- **ANSI-aware string measurement** — always use `lipgloss.Width(s)` not `len(s)` for visible width of styled text
+- **Style.Render()** for applying styles to text, not `Style.SetString()` + `Style.String()`
+- `internal/theme/colors.go` — centralized `ColorScheme` with semantic colors
+- `internal/tui/theme_v2.go` — `StyleSet` with lipgloss styles built from the color scheme
+- `internal/tui/list_v2.go` — **default** two-line delegate with indicator/status columns (`NewWorktreeDelegateV2`)
+- `internal/tui/list.go` — compact single-line V1 delegate with column headers (`NewWorktreeDelegate`)
+- The `v` key toggles between V2 (default) and V1 compact modes at runtime; can also be set permanently via `tui.compact_list = true` in config
 
 ## Code Style
 - Follow standard Go formatting (gofmt)

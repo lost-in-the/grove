@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/bubbles/list"
+	"charm.land/bubbles/v2/list"
 )
 
 func TestWorktreeDelegateV2_Indicators(t *testing.T) {
@@ -33,22 +33,22 @@ func TestWorktreeDelegateV2_Indicators(t *testing.T) {
 			wantIndicator: "❯",
 		},
 		{
-			name:          "Normal shows space",
+			name:          "Normal shows circle",
 			item:          WorktreeItem{ShortName: "other", Branch: "other"},
 			selected:      false,
-			wantIndicator: " ",
+			wantIndicator: "○",
 		},
 		{
-			name:          "Current and selected shows green dot",
+			name:          "Current and selected shows cursor",
 			item:          WorktreeItem{IsCurrent: true, ShortName: "main", Branch: "main"},
 			selected:      true,
-			wantIndicator: "●",
+			wantIndicator: "❯",
 		},
 		{
-			name:          "Dirty and selected shows yellow dot",
+			name:          "Dirty and selected shows cursor",
 			item:          WorktreeItem{IsDirty: true, ShortName: "feature", Branch: "feat"},
 			selected:      true,
-			wantIndicator: "●",
+			wantIndicator: "❯",
 		},
 		{
 			name:          "Stale worktree shows stale indicator",
@@ -61,7 +61,6 @@ func TestWorktreeDelegateV2_Indicators(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			indicator := worktreeIndicator(tt.item, tt.selected)
-			// The indicator string contains styling, but must include the expected rune
 			if !strings.Contains(indicator, tt.wantIndicator) {
 				t.Errorf("worktreeIndicator() = %q, want to contain %q", indicator, tt.wantIndicator)
 			}
@@ -69,95 +68,80 @@ func TestWorktreeDelegateV2_Indicators(t *testing.T) {
 	}
 }
 
-func TestWorktreeDelegateV2_StatusText(t *testing.T) {
+func TestCompactIndicators(t *testing.T) {
 	tests := []struct {
 		name string
 		item WorktreeItem
 		want string
 	}{
-		{"Clean", WorktreeItem{}, "clean"},
-		{"Dirty with files", WorktreeItem{IsDirty: true, DirtyFiles: []string{"a.go", "b.go"}}, "dirty"},
-		{"Stale", WorktreeItem{IsPrunable: true}, "stale"},
+		{"Clean", WorktreeItem{}, ""},
+		{"Dirty", WorktreeItem{IsDirty: true, DirtyFiles: []string{"a.go", "b.go"}}, "~2"},
+		{"Stale", WorktreeItem{IsPrunable: true}, "✗"},
+		{"Ahead", WorktreeItem{HasRemote: true, AheadCount: 3}, "↑3"},
+		{"Behind", WorktreeItem{HasRemote: true, BehindCount: 2}, "↓2"},
+		{"Ahead and dirty", WorktreeItem{HasRemote: true, AheadCount: 1, DirtyFiles: []string{"x"}, IsDirty: true}, "↑1"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			text := worktreeStatusTextV2(tt.item)
-			if !strings.Contains(text, tt.want) {
-				t.Errorf("worktreeStatusTextV2() = %q, want to contain %q", text, tt.want)
+			result := compactIndicators(tt.item)
+			if tt.want == "" && result != "" {
+				t.Errorf("compactIndicators() = %q, want empty", result)
+			}
+			if tt.want != "" && !strings.Contains(result, tt.want) {
+				t.Errorf("compactIndicators() = %q, want to contain %q", result, tt.want)
 			}
 		})
 	}
 }
 
-func TestWorktreeDelegateV2_TmuxBadge(t *testing.T) {
+func TestRenderBadgesV2(t *testing.T) {
 	tests := []struct {
 		name string
 		item WorktreeItem
 		want string
 	}{
-		{"No tmux", WorktreeItem{TmuxStatus: "none"}, ""},
-		{"Attached", WorktreeItem{TmuxStatus: "attached"}, "tmux"},
-		{"Detached", WorktreeItem{TmuxStatus: "detached"}, "tmux"},
+		{"No badges", WorktreeItem{TmuxStatus: "none"}, ""},
+		{"Attached tmux", WorktreeItem{TmuxStatus: "attached"}, "tmux"},
+		{"Detached tmux", WorktreeItem{TmuxStatus: "detached"}, "tmux"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			badge := worktreeTmuxBadgeV2(tt.item)
+			badge := renderBadgesV2(tt.item)
 			if tt.want == "" && badge != "" {
-				t.Errorf("worktreeTmuxBadgeV2() = %q, want empty", badge)
+				t.Errorf("renderBadgesV2() = %q, want empty", badge)
 			}
 			if tt.want != "" && !strings.Contains(badge, tt.want) {
-				t.Errorf("worktreeTmuxBadgeV2() = %q, want to contain %q", badge, tt.want)
+				t.Errorf("renderBadgesV2() = %q, want to contain %q", badge, tt.want)
 			}
 		})
 	}
 }
 
-func TestWorktreeDelegateV2_ResponsiveColumns(t *testing.T) {
+func TestComputeDelegateWidthsV2_ContentAdaptive(t *testing.T) {
+	items := []list.Item{
+		WorktreeItem{ShortName: "pr-13093-fix-disabled", Branch: "fix/disable-feature"},
+		WorktreeItem{ShortName: "main", Branch: "main"},
+	}
+
 	tests := []struct {
 		name        string
 		width       int
 		wantNameMin int
 		wantNameMax int
 	}{
-		{"Narrow (80)", 80, 14, 18},
-		{"Medium (100)", 100, 18, 22},
-		{"Wide (140)", 140, 22, 28},
+		{"Narrow (80)", 80, 10, 40},
+		{"Medium (100)", 100, 10, 45},
+		{"Wide (140)", 140, 10, 55},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cols := delegateColumnsV2(tt.width)
-			if cols.Name < tt.wantNameMin || cols.Name > tt.wantNameMax {
-				t.Errorf("delegateColumnsV2(%d).Name = %d, want in [%d, %d]",
-					tt.width, cols.Name, tt.wantNameMin, tt.wantNameMax)
-			}
-		})
-	}
-}
-
-func TestWorktreeSyncBadgeV2(t *testing.T) {
-	tests := []struct {
-		name string
-		item WorktreeItem
-		want string
-	}{
-		{"No remote", WorktreeItem{HasRemote: false}, ""},
-		{"Synced", WorktreeItem{HasRemote: true}, ""},
-		{"Ahead", WorktreeItem{HasRemote: true, AheadCount: 3}, "↑3"},
-		{"Behind", WorktreeItem{HasRemote: true, BehindCount: 2}, "↓2"},
-		{"Diverged", WorktreeItem{HasRemote: true, AheadCount: 1, BehindCount: 4}, "↑1"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			badge := worktreeSyncBadgeV2(tt.item)
-			if tt.want == "" && badge != "" {
-				t.Errorf("worktreeSyncBadgeV2() = %q, want empty", badge)
-			}
-			if tt.want != "" && !strings.Contains(badge, tt.want) {
-				t.Errorf("worktreeSyncBadgeV2() = %q, want to contain %q", badge, tt.want)
+			d := ComputeDelegateWidthsV2(items, tt.width)
+			if d.NameWidth < tt.wantNameMin || d.NameWidth > tt.wantNameMax {
+				t.Errorf("ComputeDelegateWidthsV2(%d).NameWidth = %d, want in [%d, %d]",
+					tt.width, d.NameWidth, tt.wantNameMin, tt.wantNameMax)
 			}
 		})
 	}
@@ -172,8 +156,8 @@ func TestWorktreeDelegateV2_Height(t *testing.T) {
 
 func TestWorktreeDelegateV2_Spacing(t *testing.T) {
 	d := NewWorktreeDelegateV2()
-	if d.Spacing() != 0 {
-		t.Errorf("Spacing() = %d, want 0", d.Spacing())
+	if d.Spacing() != 1 {
+		t.Errorf("Spacing() = %d, want 1", d.Spacing())
 	}
 }
 

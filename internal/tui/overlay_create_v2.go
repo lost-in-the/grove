@@ -4,19 +4,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // renderCreateV2 is the V2 dispatcher for the create wizard overlay.
 // It integrates the Stepper component and context summary for multi-step flows.
-// When UseHuhForms is true, it delegates rendering to Huh forms for applicable steps.
 func renderCreateV2(s *CreateState, width int, spinnerView string) string {
 	if s.Creating {
 		return renderCreateSpinnerV2(s, spinnerView)
-	}
-
-	if s.UseHuhForms {
-		return renderCreateHuh(s, width)
 	}
 
 	switch s.Step {
@@ -32,8 +27,8 @@ func renderCreateV2(s *CreateState, width int, spinnerView string) string {
 	return ""
 }
 
-// huhOverlayIndent is the consistent left-padding for all content inside the create overlay.
-const huhOverlayIndent = "  "
+// overlayIndent is the consistent left-padding for all content inside overlays.
+const overlayIndent = "  "
 
 // indentBlock prepends indent to every line of a multi-line string.
 func indentBlock(s, indent string) string {
@@ -51,53 +46,6 @@ func calcOverlayWidth(width int) int {
 		w = 70
 	}
 	return w
-}
-
-// renderCreateHuh renders the create wizard using Huh forms for applicable steps.
-func renderCreateHuh(s *CreateState, width int) string {
-	// Steps that don't use Huh forms delegate to their manual V2 renderers
-	switch s.Step {
-	case CreateStepBranch:
-		return renderCreateBranchSelectorV2(s, width)
-	case CreateStepBranchAction:
-		return renderCreateBranchActionV2(s, width)
-	case CreateStepConfirm:
-		return renderCreateConfirmV2(s, width)
-	}
-
-	// Name step uses Huh form
-	overlayWidth := calcOverlayWidth(width)
-	contentWidth := overlayWidth - 6 // border + padding
-	indent := huhOverlayIndent
-	innerWidth := contentWidth - len(indent)*2
-
-	var b strings.Builder
-
-	// Stepper
-	stepLabels := []string{"Branch", "Name", "Confirm"}
-	stepper := NewStepper(stepLabels...)
-	stepper.Current = 1
-	b.WriteString(indentBlock(stepper.View(innerWidth), indent) + "\n\n")
-
-	// Context summary
-	b.WriteString(indentBlock(renderContextSummary(s, innerWidth), indent) + "\n\n")
-
-	// Render the Huh form for name input
-	if s.NameForm != nil {
-		b.WriteString(s.NameForm.View())
-		effectiveName := s.Name
-		if effectiveName == "" {
-			effectiveName = s.NameSuggestion
-		}
-		if effectiveName != "" && s.ProjectName != "" {
-			b.WriteString("\n" + Styles.DetailDim.Render(indent+"Will create: "+s.ProjectName+"-"+effectiveName))
-		}
-	}
-	b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] next  [backspace] back  [esc] cancel"))
-
-	return Styles.OverlayBorderSuccess.Width(overlayWidth).Render(
-		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + b.String(),
-	)
 }
 
 func renderCreateSpinnerV2(s *CreateState, spinnerView string) string {
@@ -133,7 +81,7 @@ func renderCreateSpinnerV2(s *CreateState, spinnerView string) string {
 func renderCreateBranchSelectorV2(s *CreateState, width int) string {
 	overlayWidth := calcOverlayWidth(width)
 	contentWidth := overlayWidth - 6
-	indent := huhOverlayIndent
+	indent := overlayIndent
 	innerWidth := contentWidth - len(indent)*2
 
 	var b strings.Builder
@@ -144,15 +92,16 @@ func renderCreateBranchSelectorV2(s *CreateState, width int) string {
 	b.WriteString(indentBlock(stepper.View(innerWidth), indent) + "\n\n")
 
 	// Filter input
-	if s.BranchFilter != "" {
-		b.WriteString(indent + fmt.Sprintf("Filter: %s█\n\n", s.BranchFilter))
+	filter := s.BranchFilterInput.Value()
+	if filter != "" {
+		b.WriteString(indent + s.BranchFilterInput.View() + "\n\n")
 	} else {
 		b.WriteString(indent + "Select a branch or type to create new\n\n")
 	}
 
 	// Build visible items
-	filtered := filteredBranches(s.Branches, s.BranchFilter)
-	showCreateNew := s.BranchFilter != "" && !exactBranchMatch(s.Branches, s.BranchFilter)
+	filtered := filteredBranches(s.Branches, filter)
+	showCreateNew := filter != "" && !exactBranchMatch(s.Branches, filter)
 	totalItems := len(filtered)
 	if showCreateNew {
 		totalItems++
@@ -161,24 +110,16 @@ func renderCreateBranchSelectorV2(s *CreateState, width int) string {
 	if totalItems == 0 {
 		b.WriteString(indent + Styles.DetailDim.Render("(no branches found)") + "\n")
 	} else {
-		maxShow := 10
-		start := 0
-		if s.BranchCursor >= maxShow {
-			start = s.BranchCursor - maxShow + 1
-		}
-		end := start + maxShow
-		if end > totalItems {
-			end = totalItems
-		}
+		start, end := scrollWindow(totalItems, s.BranchCursor, 10)
 		for i := start; i < end; i++ {
 			cursor := "  "
 			if i == s.BranchCursor {
-				cursor = Styles.ListCursor.String()
+				cursor = Styles.ListCursor.Render("❯ ")
 			}
 			if i < len(filtered) {
 				b.WriteString(indent + cursor + filtered[i] + "\n")
 			} else {
-				b.WriteString(indent + cursor + Styles.DetailValue.Render("Create new branch: \""+s.BranchFilter+"\"") + "\n")
+				b.WriteString(indent + cursor + Styles.DetailValue.Render("Create new branch: \""+filter+"\"") + "\n")
 			}
 		}
 		if end < totalItems {
@@ -196,7 +137,7 @@ func renderCreateBranchSelectorV2(s *CreateState, width int) string {
 func renderCreateNameV2(s *CreateState, width int) string {
 	overlayWidth := calcOverlayWidth(width)
 	contentWidth := overlayWidth - 6
-	indent := huhOverlayIndent
+	indent := overlayIndent
 	innerWidth := contentWidth - len(indent)*2
 
 	var b strings.Builder
@@ -209,14 +150,10 @@ func renderCreateNameV2(s *CreateState, width int) string {
 	// Context summary from previous steps
 	b.WriteString(indentBlock(renderContextSummary(s, innerWidth), indent) + "\n\n")
 
-	// Input with placeholder
-	if s.Name == "" && s.NameSuggestion != "" {
-		b.WriteString(indent + "Name: " + Styles.DetailDim.Render(s.NameSuggestion) + "\n")
-	} else {
-		b.WriteString(indent + fmt.Sprintf("Name: %s█\n", s.Name))
-	}
+	// Input with textinput component
+	b.WriteString(indent + s.NameInput.View() + "\n")
 
-	effectiveName := s.Name
+	effectiveName := s.NameInput.Value()
 	if effectiveName == "" {
 		effectiveName = s.NameSuggestion
 	}
@@ -255,7 +192,7 @@ func renderCreateNameV2(s *CreateState, width int) string {
 func renderCreateBranchActionV2(s *CreateState, width int) string {
 	overlayWidth := calcOverlayWidth(width)
 	contentWidth := overlayWidth - 6
-	indent := huhOverlayIndent
+	indent := overlayIndent
 	innerWidth := contentWidth - len(indent)*2
 
 	var b strings.Builder
@@ -277,7 +214,7 @@ func renderCreateBranchActionV2(s *CreateState, width int) string {
 	for i, opt := range options {
 		cursor := "  "
 		if i == s.ActionChoice {
-			cursor = Styles.ListCursor.String()
+			cursor = Styles.ListCursor.Render("❯ ")
 		}
 		b.WriteString(indent + cursor + opt + "\n")
 	}
@@ -332,7 +269,7 @@ func renderContextSummary(s *CreateState, width int) string {
 func renderCreateConfirmV2(s *CreateState, width int) string {
 	overlayWidth := calcOverlayWidth(width)
 	contentWidth := overlayWidth - 6
-	indent := huhOverlayIndent
+	indent := overlayIndent
 	innerWidth := contentWidth - len(indent)*2
 
 	var b strings.Builder

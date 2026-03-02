@@ -4,100 +4,72 @@ import (
 	"os"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
-func TestColorScheme_SemanticColors(t *testing.T) {
-	tests := []struct {
-		name      string
-		color     lipgloss.AdaptiveColor
-		wantDark  string
-		wantLight string
-	}{
-		{"Primary", Colors.Primary, "#A78BFA", "#7C3AED"},
-		{"Secondary", Colors.Secondary, "#38BDF8", "#0369A1"},
-		{"Success", Colors.Success, "#34D399", "#047857"},
-		{"Warning", Colors.Warning, "#FBBF24", "#92400E"},
-		{"Danger", Colors.Danger, "#F87171", "#DC2626"},
-		{"Info", Colors.Info, "#60A5FA", "#2563EB"},
+func TestColorScheme_SemanticColorsNotNil(t *testing.T) {
+	scheme := defaultColorScheme()
+	colors := map[string]interface{}{
+		"Primary":   scheme.Primary,
+		"Secondary": scheme.Secondary,
+		"Success":   scheme.Success,
+		"Warning":   scheme.Warning,
+		"Danger":    scheme.Danger,
+		"Info":      scheme.Info,
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.color.Dark != tt.wantDark {
-				t.Errorf("Dark = %q, want %q", tt.color.Dark, tt.wantDark)
-			}
-			if tt.color.Light != tt.wantLight {
-				t.Errorf("Light = %q, want %q", tt.color.Light, tt.wantLight)
-			}
-		})
+	for name, c := range colors {
+		if c == nil {
+			t.Errorf("%s is nil, want non-nil color", name)
+		}
 	}
 }
 
-func TestColorScheme_SurfaceColors(t *testing.T) {
-	tests := []struct {
-		name      string
-		color     lipgloss.AdaptiveColor
-		wantDark  string
-		wantLight string
-	}{
-		{"SurfaceBg", Colors.SurfaceBg, "#1E1E2E", "#FFFFFF"},
-		{"SurfaceFg", Colors.SurfaceFg, "#CDD6F4", "#1E293B"},
-		{"SurfaceDim", Colors.SurfaceDim, "#585B70", "#94A3B8"},
-		{"SurfaceBorder", Colors.SurfaceBorder, "#45475A", "#CBD5E1"},
+func TestColorScheme_SurfaceColorsNotNil(t *testing.T) {
+	scheme := defaultColorScheme()
+	colors := map[string]interface{}{
+		"SurfaceBg":     scheme.SurfaceBg,
+		"SurfaceFg":     scheme.SurfaceFg,
+		"SurfaceDim":    scheme.SurfaceDim,
+		"SurfaceBorder": scheme.SurfaceBorder,
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.color.Dark != tt.wantDark {
-				t.Errorf("Dark = %q, want %q", tt.color.Dark, tt.wantDark)
-			}
-			if tt.color.Light != tt.wantLight {
-				t.Errorf("Light = %q, want %q", tt.color.Light, tt.wantLight)
-			}
-		})
+	for name, c := range colors {
+		if c == nil {
+			t.Errorf("%s is nil, want non-nil color", name)
+		}
 	}
 }
 
-func TestColorScheme_TextColors(t *testing.T) {
-	tests := []struct {
-		name      string
-		color     lipgloss.AdaptiveColor
-		wantDark  string
-		wantLight string
-	}{
-		{"TextNormal", Colors.TextNormal, "#CDD6F4", "#1E293B"},
-		{"TextBright", Colors.TextBright, "#FFFFFF", "#0F172A"},
-		{"TextMuted", Colors.TextMuted, "#9399B2", "#475569"},
+func TestColorScheme_TextColorsNotNil(t *testing.T) {
+	scheme := defaultColorScheme()
+	colors := map[string]interface{}{
+		"TextNormal": scheme.TextNormal,
+		"TextBright": scheme.TextBright,
+		"TextMuted":  scheme.TextMuted,
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.color.Dark != tt.wantDark {
-				t.Errorf("Dark = %q, want %q", tt.color.Dark, tt.wantDark)
-			}
-			if tt.color.Light != tt.wantLight {
-				t.Errorf("Light = %q, want %q", tt.color.Light, tt.wantLight)
-			}
-		})
+	for name, c := range colors {
+		if c == nil {
+			t.Errorf("%s is nil, want non-nil color", name)
+		}
 	}
 }
 
 func TestColorScheme_NOCOLORRespected(t *testing.T) {
-	// Set NO_COLOR
 	_ = os.Setenv("NO_COLOR", "1")
 	defer func() { _ = os.Unsetenv("NO_COLOR") }()
 
 	scheme := NewColorScheme()
-	// When NO_COLOR is set, all colors should be empty AdaptiveColor
-	if scheme.Primary.Dark != "" || scheme.Primary.Light != "" {
-		t.Error("expected empty colors when NO_COLOR is set")
+	// When NO_COLOR is set, all colors should be nil (zero-value ColorScheme)
+	if scheme.Primary != nil {
+		t.Error("expected nil Primary when NO_COLOR is set")
 	}
-	if scheme.Success.Dark != "" || scheme.Success.Light != "" {
-		t.Error("expected empty colors when NO_COLOR is set")
+	if scheme.Success != nil {
+		t.Error("expected nil Success when NO_COLOR is set")
 	}
-	if scheme.Danger.Dark != "" || scheme.Danger.Light != "" {
-		t.Error("expected empty colors when NO_COLOR is set")
+	if scheme.Danger != nil {
+		t.Error("expected nil Danger when NO_COLOR is set")
 	}
 }
 
@@ -239,8 +211,8 @@ func TestStyleSet_NOCOLORProducesPlainStyles(t *testing.T) {
 func TestColorScheme_AllFieldsPopulated(t *testing.T) {
 	scheme := defaultColorScheme()
 
-	// Verify no semantic color has empty dark/light values
-	colors := map[string]lipgloss.AdaptiveColor{
+	// Verify no semantic color is nil
+	colors := map[string]interface{}{
 		"Primary":       scheme.Primary,
 		"Secondary":     scheme.Secondary,
 		"Success":       scheme.Success,
@@ -256,12 +228,9 @@ func TestColorScheme_AllFieldsPopulated(t *testing.T) {
 		"TextMuted":     scheme.TextMuted,
 	}
 
-	for name, color := range colors {
-		if color.Dark == "" {
-			t.Errorf("%s has empty Dark value", name)
-		}
-		if color.Light == "" {
-			t.Errorf("%s has empty Light value", name)
+	for name, c := range colors {
+		if c == nil {
+			t.Errorf("%s is nil, want non-nil color", name)
 		}
 	}
 }

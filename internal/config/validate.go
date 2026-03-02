@@ -42,6 +42,17 @@ func Validate(cfg *Config) error {
 		return fmt.Errorf("tmux.mode must be one of: auto, manual, off (got %q)", cfg.Tmux.Mode)
 	}
 
+	// Validate tmux on_switch behavior
+	validOnSwitch := map[string]bool{
+		"":       true,
+		"reset":  true,
+		"warn":   true,
+		"ignore": true,
+	}
+	if !validOnSwitch[cfg.Tmux.OnSwitch] {
+		return fmt.Errorf("tmux.on_switch must be one of: reset, warn, ignore (got %q)", cfg.Tmux.OnSwitch)
+	}
+
 	// Validate docker plugin mode
 	if err := validateDockerPlugin(cfg); err != nil {
 		return err

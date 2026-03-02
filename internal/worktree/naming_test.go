@@ -11,9 +11,9 @@ func TestTestEnvNumber(t *testing.T) {
 	tests := []struct {
 		name string
 	}{
-		{name: "admin-feature-auth"},
-		{name: "admin-main"},
-		{name: "admin-hotfix-login"},
+		{name: "myapp-feature-auth"},
+		{name: "myapp-main"},
+		{name: "myapp-hotfix-login"},
 		{name: "myapp-testing"},
 		{name: "grove-cli-feature"},
 	}
@@ -50,8 +50,8 @@ func TestTestEnvNumber(t *testing.T) {
 		name string
 		want int
 	}{
-		{name: "admin-feature-auth", want: TestEnvNumber("admin-feature-auth")},
-		{name: "admin-main", want: TestEnvNumber("admin-main")},
+		{name: "myapp-feature-auth", want: TestEnvNumber("myapp-feature-auth")},
+		{name: "myapp-main", want: TestEnvNumber("myapp-main")},
 	}
 	for _, tt := range stableTests {
 		if got := TestEnvNumber(tt.name); got != tt.want {

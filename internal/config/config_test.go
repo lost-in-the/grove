@@ -557,7 +557,7 @@ func TestValidate(t *testing.T) {
 
 func TestLoadExternalDockerConfig(t *testing.T) {
 	tmpDir := t.TempDir()
-	composePath := filepath.Join(tmpDir, "shared-compose")
+	composePath := filepath.Join(tmpDir, "shared-infra")
 	if err := os.MkdirAll(composePath, 0755); err != nil {
 		t.Fatalf("Failed to create compose dir: %v", err)
 	}
@@ -569,8 +569,8 @@ mode = "external"
 
 [plugins.docker.external]
 path = "` + composePath + `"
-env_var = "ADMIN_DIR"
-services = ["admin", "admin_sidekiq"]
+env_var = "APP_DIR"
+services = ["app", "app_worker"]
 copy_files = ["config/credentials/development.key"]
 symlink_dirs = ["vendor/bundle"]
 `
@@ -594,8 +594,8 @@ symlink_dirs = ["vendor/bundle"]
 	if ext.Path != composePath {
 		t.Errorf("Expected path %q, got %q", composePath, ext.Path)
 	}
-	if ext.EnvVar != "ADMIN_DIR" {
-		t.Errorf("Expected env_var 'ADMIN_DIR', got %q", ext.EnvVar)
+	if ext.EnvVar != "APP_DIR" {
+		t.Errorf("Expected env_var 'APP_DIR', got %q", ext.EnvVar)
 	}
 	if len(ext.Services) != 2 {
 		t.Errorf("Expected 2 services, got %d", len(ext.Services))
@@ -628,9 +628,9 @@ func TestMergeConfigsExternalDocker(t *testing.T) {
 			Docker: DockerPluginConfig{
 				Mode: "external",
 				External: &ExternalComposeConfig{
-					Path:     "/tmp/shared-compose",
-					EnvVar:   "ADMIN_DIR",
-					Services: []string{"admin"},
+					Path:     "/tmp/shared-infra",
+					EnvVar:   "APP_DIR",
+					Services: []string{"app"},
 				},
 			},
 		},
@@ -644,8 +644,8 @@ func TestMergeConfigsExternalDocker(t *testing.T) {
 	if result.Plugins.Docker.External == nil {
 		t.Fatal("Expected External config to be preserved from override")
 	}
-	if result.Plugins.Docker.External.EnvVar != "ADMIN_DIR" {
-		t.Errorf("Expected env_var 'ADMIN_DIR', got %q", result.Plugins.Docker.External.EnvVar)
+	if result.Plugins.Docker.External.EnvVar != "APP_DIR" {
+		t.Errorf("Expected env_var 'APP_DIR', got %q", result.Plugins.Docker.External.EnvVar)
 	}
 	// Base values should be preserved
 	if result.Plugins.Docker.Enabled == nil || !*result.Plugins.Docker.Enabled {
@@ -702,8 +702,8 @@ func TestValidateDockerPlugin(t *testing.T) {
 			modify: func(c *Config) {
 				c.Plugins.Docker.Mode = "external"
 				c.Plugins.Docker.External = &ExternalComposeConfig{
-					EnvVar:   "ADMIN_DIR",
-					Services: []string{"admin"},
+					EnvVar:   "APP_DIR",
+					Services: []string{"app"},
 				}
 			},
 			wantErr: true,
@@ -715,7 +715,7 @@ func TestValidateDockerPlugin(t *testing.T) {
 				c.Plugins.Docker.Mode = "external"
 				c.Plugins.Docker.External = &ExternalComposeConfig{
 					Path:     tmpDir,
-					Services: []string{"admin"},
+					Services: []string{"app"},
 				}
 			},
 			wantErr: true,
@@ -727,7 +727,7 @@ func TestValidateDockerPlugin(t *testing.T) {
 				c.Plugins.Docker.Mode = "external"
 				c.Plugins.Docker.External = &ExternalComposeConfig{
 					Path:   tmpDir,
-					EnvVar: "ADMIN_DIR",
+					EnvVar: "APP_DIR",
 				}
 			},
 			wantErr: true,
@@ -739,8 +739,8 @@ func TestValidateDockerPlugin(t *testing.T) {
 				c.Plugins.Docker.Mode = "external"
 				c.Plugins.Docker.External = &ExternalComposeConfig{
 					Path:     "/nonexistent/path",
-					EnvVar:   "ADMIN_DIR",
-					Services: []string{"admin"},
+					EnvVar:   "APP_DIR",
+					Services: []string{"app"},
 				}
 			},
 			wantErr: true,
@@ -752,8 +752,8 @@ func TestValidateDockerPlugin(t *testing.T) {
 				c.Plugins.Docker.Mode = "external"
 				c.Plugins.Docker.External = &ExternalComposeConfig{
 					Path:     tmpDir,
-					EnvVar:   "ADMIN_DIR",
-					Services: []string{"admin", "admin_sidekiq"},
+					EnvVar:   "APP_DIR",
+					Services: []string{"app", "app_worker"},
 				}
 			},
 			wantErr: false,
@@ -780,7 +780,7 @@ func TestValidateDockerPlugin(t *testing.T) {
 
 func TestLoadAgentStackConfig(t *testing.T) {
 	tmpDir := t.TempDir()
-	composePath := filepath.Join(tmpDir, "shared-compose")
+	composePath := filepath.Join(tmpDir, "shared-infra")
 	if err := os.MkdirAll(composePath, 0755); err != nil {
 		t.Fatalf("Failed to create compose dir: %v", err)
 	}
@@ -792,8 +792,8 @@ mode = "external"
 
 [plugins.docker.external]
 path = "` + composePath + `"
-env_var = "ADMIN_DIR"
-services = ["admin"]
+env_var = "APP_DIR"
+services = ["app"]
 
 [plugins.docker.external.agent]
 enabled = true
@@ -853,8 +853,8 @@ func TestValidateAgentConfig(t *testing.T) {
 					Mode: "external",
 					External: &ExternalComposeConfig{
 						Path:     tmpDir,
-						EnvVar:   "ADMIN_DIR",
-						Services: []string{"admin"},
+						EnvVar:   "APP_DIR",
+						Services: []string{"app"},
 					},
 				},
 			},
@@ -960,8 +960,8 @@ func TestMergeConfigsPreservesAgent(t *testing.T) {
 				Mode: "external",
 				External: &ExternalComposeConfig{
 					Path:     "/tmp/compose",
-					EnvVar:   "ADMIN_DIR",
-					Services: []string{"admin"},
+					EnvVar:   "APP_DIR",
+					Services: []string{"app"},
 					Agent: &AgentStackConfig{
 						Enabled:      &boolTrue,
 						MaxSlots:     5,
@@ -987,6 +987,101 @@ func TestMergeConfigsPreservesAgent(t *testing.T) {
 	}
 	if len(agent.Services) != 1 || agent.Services[0] != "agent" {
 		t.Errorf("Expected agent services [agent], got %v", agent.Services)
+	}
+}
+
+func TestMergeConfigsProtectionUnion(t *testing.T) {
+	tests := []struct {
+		name          string
+		baseProtected []string
+		baseImmutable []string
+		overProtected []string
+		overImmutable []string
+		wantProtected []string
+		wantImmutable []string
+	}{
+		{
+			name:          "global and project union",
+			baseProtected: []string{"main"},
+			overProtected: []string{"staging"},
+			wantProtected: []string{"main", "staging"},
+		},
+		{
+			name:          "deduplication",
+			baseProtected: []string{"main"},
+			overProtected: []string{"main", "staging"},
+			wantProtected: []string{"main", "staging"},
+		},
+		{
+			name:          "empty override preserves base",
+			baseProtected: []string{"main"},
+			overProtected: []string{},
+			wantProtected: []string{"main"},
+		},
+		{
+			name:          "empty base with override",
+			baseProtected: []string{},
+			overProtected: []string{"staging"},
+			wantProtected: []string{"staging"},
+		},
+		{
+			name:          "immutable union",
+			baseImmutable: []string{"production"},
+			overImmutable: []string{"staging"},
+			wantImmutable: []string{"production", "staging"},
+		},
+		{
+			name:          "both protected and immutable merge",
+			baseProtected: []string{"main"},
+			baseImmutable: []string{"production"},
+			overProtected: []string{"develop"},
+			overImmutable: []string{"staging"},
+			wantProtected: []string{"main", "develop"},
+			wantImmutable: []string{"production", "staging"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			base := &Config{
+				Protection: ProtectionConfig{
+					Protected: tt.baseProtected,
+					Immutable: tt.baseImmutable,
+				},
+			}
+			override := &Config{
+				Protection: ProtectionConfig{
+					Protected: tt.overProtected,
+					Immutable: tt.overImmutable,
+				},
+			}
+
+			result := mergeConfigs(base, override)
+
+			if tt.wantProtected != nil {
+				if len(result.Protection.Protected) != len(tt.wantProtected) {
+					t.Errorf("Protected: got %v, want %v", result.Protection.Protected, tt.wantProtected)
+				} else {
+					for i, v := range tt.wantProtected {
+						if result.Protection.Protected[i] != v {
+							t.Errorf("Protected[%d]: got %q, want %q", i, result.Protection.Protected[i], v)
+						}
+					}
+				}
+			}
+
+			if tt.wantImmutable != nil {
+				if len(result.Protection.Immutable) != len(tt.wantImmutable) {
+					t.Errorf("Immutable: got %v, want %v", result.Protection.Immutable, tt.wantImmutable)
+				} else {
+					for i, v := range tt.wantImmutable {
+						if result.Protection.Immutable[i] != v {
+							t.Errorf("Immutable[%d]: got %q, want %q", i, result.Protection.Immutable[i], v)
+						}
+					}
+				}
+			}
+		})
 	}
 }
 

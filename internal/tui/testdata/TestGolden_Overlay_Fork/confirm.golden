@@ -1,24 +1,24 @@
- test-project  ·  3 worktrees  ·  on root                                ● root 
-     NAME BRANCH AGE     ± ↕  ⬡ ◆                                               
- ────────────────────────────────────────────────────────────────────────────── 
-                                                                                
-              ╭──────────────────────────────────────────────────╮
-              │                                                  │
-              │  Fork Worktree                                   │
-              │                                                  │
-              │    ●━━━━━━━━━━━━━━━━━━●━━━━━━━━━━━━━━━━━━●       │
-              │    Name ✓           WIP ✓          Confirm       │
-              │                                                  │
-              │    Source:  feature-auth                         │
-              │    Name:    experiment                           │
-              │    Branch:  feature-auth-experiment              │
-              │                                                  │
-              │    Ready to fork.                                │
-              │                                                  │
-              │    [enter] fork  [backspace] back  [esc] cancel  │
-              │                                                  │
-              ╰──────────────────────────────────────────────────╯
-                                                                                
-                                                                                
-                                                                                
-                                                                                
+[2m [1m[1mtest-project[m  ·  3 worktrees  ·  on root                                ● root[m [m
+[2m                                                                                [m
+[2m 1 ❯ root ────────────────────────────────────────────────────────────── 2h ago [m
+               ╭────────────────────────────────────────────────╮
+               │                                                │
+               │  [1mFork Worktree[m                                 │
+               │                                                │
+               │    ●━━━━━━━━━━━━━━━━━━●━━━━━━━━━━━━━━━━━━●     │
+               │    Name ✓           WIP ✓          [1mConfirm[m     │
+               │                                                │
+               │    Source:  feature-auth                       │
+               │    Name:    experiment                         │
+               │    Branch:  feature-auth-experiment            │
+               │                                                │
+               │    Ready to fork.                              │
+               │                                                │
+               │    [enter] fork  [backspace] back  [esc]       │
+               │  cancel                                        │
+               │                                                │
+               ╰────────────────────────────────────────────────╯
+[2m                                                                                [m
+[2m                                                                                [m
+[2m                                                                                [m
+[2m  [1menter[m continue · [1mesc[m cancel                                                   [m

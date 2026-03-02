@@ -133,6 +133,37 @@ func TestFilteredBranches(t *testing.T) {
 	})
 }
 
+func TestScrollWindow(t *testing.T) {
+	tests := []struct {
+		name       string
+		total      int
+		cursor     int
+		maxVisible int
+		wantStart  int
+		wantEnd    int
+	}{
+		{"empty list", 0, 0, 10, 0, 0},
+		{"cursor at start", 5, 0, 10, 0, 5},
+		{"cursor in middle, fits", 5, 2, 10, 0, 5},
+		{"cursor at end, fits", 5, 4, 10, 0, 5},
+		{"cursor scrolls window", 15, 12, 10, 3, 13},
+		{"cursor at end of long list", 20, 19, 10, 10, 20},
+		{"cursor at max boundary", 15, 9, 10, 0, 10},
+		{"cursor just past max", 15, 10, 10, 1, 11},
+		{"max zero", 5, 0, 0, 0, 0},
+		{"single item", 1, 0, 10, 0, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			start, end := scrollWindow(tt.total, tt.cursor, tt.maxVisible)
+			if start != tt.wantStart || end != tt.wantEnd {
+				t.Errorf("scrollWindow(%d, %d, %d) = (%d, %d), want (%d, %d)",
+					tt.total, tt.cursor, tt.maxVisible, start, end, tt.wantStart, tt.wantEnd)
+			}
+		})
+	}
+}
+
 func TestPadRight(t *testing.T) {
 	tests := []struct {
 		s    string

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // Session represents a tmux session
@@ -22,28 +23,36 @@ func IsInsideTmux() bool {
 	return os.Getenv("TMUX") != ""
 }
 
-// IsTmuxAvailable checks if tmux is installed
+var (
+	tmuxAvailableOnce   sync.Once
+	tmuxAvailableResult bool
+)
+
+// IsTmuxAvailable checks if tmux is installed. The result is cached for the
+// lifetime of the process since tmux availability doesn't change at runtime.
 func IsTmuxAvailable() bool {
-	_, err := exec.LookPath("tmux")
-	return err == nil
+	tmuxAvailableOnce.Do(func() {
+		_, err := exec.LookPath("tmux")
+		tmuxAvailableResult = err == nil
+	})
+	return tmuxAvailableResult
 }
 
-// CreateSession creates a new tmux session
+// CreateSession creates a new detached tmux session.
+// If the session already exists, this is a no-op (idempotent).
 func CreateSession(name, path string) error {
 	if name == "" {
 		return fmt.Errorf("session name cannot be empty")
 	}
 
-	// Check if session already exists
 	exists, err := SessionExists(name)
 	if err != nil {
-		return err
+		return fmt.Errorf("check session exists: %w", err)
 	}
 	if exists {
-		return fmt.Errorf("session '%s' already exists", name)
+		return nil
 	}
 
-	// Create detached session in the specified path
 	cmd := exec.Command("tmux", "new-session", "-d", "-s", name, "-c", path)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -81,7 +90,8 @@ func AttachSession(name string) error {
 	return cmd.Run()
 }
 
-// SwitchSession switches to a different session from within tmux
+// SwitchSession switches to a different session from within tmux.
+// Callers are responsible for checking SessionExists beforehand if needed.
 func SwitchSession(name string) error {
 	if name == "" {
 		return fmt.Errorf("session name cannot be empty")
@@ -89,14 +99,6 @@ func SwitchSession(name string) error {
 
 	if !IsInsideTmux() {
 		return fmt.Errorf("not inside tmux session")
-	}
-
-	exists, err := SessionExists(name)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		return fmt.Errorf("session '%s' does not exist", name)
 	}
 
 	cmd := exec.Command("tmux", "switch-client", "-t", name)
@@ -108,18 +110,11 @@ func SwitchSession(name string) error {
 	return nil
 }
 
-// KillSession kills a tmux session
+// KillSession kills a tmux session.
+// Callers are responsible for checking SessionExists beforehand if needed.
 func KillSession(name string) error {
 	if name == "" {
 		return fmt.Errorf("session name cannot be empty")
-	}
-
-	exists, err := SessionExists(name)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		return fmt.Errorf("session '%s' does not exist", name)
 	}
 
 	cmd := exec.Command("tmux", "kill-session", "-t", name)
@@ -215,7 +210,15 @@ func StoreLastSession(name string) error {
 	}
 
 	lastSessionFile := filepath.Join(configDir, "last_session")
-	return os.WriteFile(lastSessionFile, []byte(name), 0644)
+	tmpFile := lastSessionFile + ".tmp"
+	if err := os.WriteFile(tmpFile, []byte(name), 0644); err != nil {
+		return fmt.Errorf("write last session: %w", err)
+	}
+	if err := os.Rename(tmpFile, lastSessionFile); err != nil {
+		_ = os.Remove(tmpFile)
+		return fmt.Errorf("save last session: %w", err)
+	}
+	return nil
 }
 
 // GetLastSession retrieves the name of the last session
@@ -261,6 +264,52 @@ func GetSessionStatus(name string) string {
 	return "none"
 }
 
+// PaneInfo holds the current state of a session's active pane
+type PaneInfo struct {
+	CurrentPath    string
+	CurrentCommand string
+}
+
+// GetPaneInfo returns the current path and command for a session's active pane
+func GetPaneInfo(sessionName string) (*PaneInfo, error) {
+	cmd := exec.Command("tmux", "display-message", "-t", sessionName, "-p", "#{pane_current_path}|#{pane_current_command}")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pane info: %w", err)
+	}
+
+	parts := strings.SplitN(strings.TrimSpace(string(output)), "|", 2)
+	if len(parts) < 2 {
+		return nil, fmt.Errorf("unexpected pane info format")
+	}
+
+	return &PaneInfo{
+		CurrentPath:    parts[0],
+		CurrentCommand: parts[1],
+	}, nil
+}
+
+// IsShell returns true if the pane's current command is a known shell
+func (p *PaneInfo) IsShell() bool {
+	shells := map[string]bool{
+		"bash": true,
+		"zsh":  true,
+		"fish": true,
+		"sh":   true,
+	}
+	return shells[p.CurrentCommand]
+}
+
+// SendKeys sends keys to the active pane of a tmux session
+func SendKeys(sessionName string, keys string) error {
+	cmd := exec.Command("tmux", "send-keys", "-t", sessionName, keys, "Enter")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to send keys: %s: %w", string(output), err)
+	}
+	return nil
+}
+
 // parseIntOrZero attempts to parse an integer, returning 0 on error
 func parseIntOrZero(s string) int {
 	i, err := strconv.Atoi(s)
@@ -268,4 +317,74 @@ func parseIntOrZero(s string) int {
 		return 0
 	}
 	return i
+}
+
+// CreateSessionWithCommand creates a new detached tmux session running a specific command.
+// If command is empty, behaves identically to CreateSession (runs default shell).
+// If the session already exists, this is a no-op (idempotent).
+func CreateSessionWithCommand(name, path, command string) error {
+	if name == "" {
+		return fmt.Errorf("session name cannot be empty")
+	}
+
+	exists, err := SessionExists(name)
+	if err != nil {
+		return fmt.Errorf("check session exists: %w", err)
+	}
+	if exists {
+		return nil
+	}
+
+	args := []string{"new-session", "-d", "-s", name, "-c", path}
+	if command != "" {
+		args = append(args, command)
+	}
+
+	cmd := exec.Command("tmux", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to create session: %s: %w", string(output), err)
+	}
+
+	return nil
+}
+
+// DisplayPopup opens a tmux display-popup attached to an existing session.
+// Width and height are tmux percentage strings (e.g., "80%").
+func DisplayPopup(sessionName, width, height string) error {
+	if sessionName == "" {
+		return fmt.Errorf("session name cannot be empty")
+	}
+
+	if !IsInsideTmux() {
+		return fmt.Errorf("display-popup requires being inside tmux")
+	}
+
+	args := []string{"display-popup"}
+	if width != "" {
+		args = append(args, "-w", width)
+	}
+	if height != "" {
+		args = append(args, "-h", height)
+	}
+	// Session name is single-quoted to prevent shell injection. Tmux session
+	// names follow {project}-{name} and cannot contain single quotes.
+	args = append(args, "-E", fmt.Sprintf("tmux attach-session -t '%s'", sessionName))
+
+	cmd := exec.Command("tmux", args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	return cmd.Run()
+}
+
+// IsCommandRunning checks if a session's active pane is running a specific command.
+// Returns false if the session doesn't exist or pane info can't be retrieved.
+func IsCommandRunning(sessionName, command string) bool {
+	pane, err := GetPaneInfo(sessionName)
+	if err != nil {
+		return false
+	}
+	return pane.CurrentCommand == command
 }

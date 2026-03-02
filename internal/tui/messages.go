@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"time"
-
 	"github.com/LeahArmstrong/grove-cli/plugins/tracker"
 )
 
@@ -27,11 +25,6 @@ type worktreeCreatedMsg struct {
 	err        error
 	hookOutput string
 	hookErr    error // non-nil if hook execution failed
-}
-
-// statusClearMsg is sent to clear the status bar toast message.
-type statusClearMsg struct {
-	deadline time.Time
 }
 
 // bulkDeleteDoneMsg is sent when bulk deletion completes.

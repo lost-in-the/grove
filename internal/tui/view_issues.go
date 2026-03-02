@@ -6,8 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/glamour"
 
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
@@ -25,8 +26,17 @@ type IssueViewState struct {
 	Loading     bool
 	Error       string
 	Creating    bool
-	Filter      string
+	FilterInput textinput.Model
 	ShowPreview bool
+}
+
+// newIssueFilterInput creates a configured textinput for issue filtering.
+func newIssueFilterInput() textinput.Model {
+	ti := textinput.New()
+	ti.Prompt = "Filter: "
+	ti.Placeholder = ""
+	ti.CharLimit = 100
+	return ti
 }
 
 func (m Model) fetchIssuesCmd() tea.Msg {
@@ -44,7 +54,7 @@ func (m Model) fetchIssuesCmd() tea.Msg {
 	return issuesFetchedMsg{issues: issues, err: err}
 }
 
-func (m Model) handleIssueKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleIssueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.issueState == nil {
 		m.activeView = ViewDashboard
 		return m, nil
@@ -61,7 +71,7 @@ func (m Model) handleIssueKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	filtered := filteredIssues(s.Issues, s.Filter)
+	filtered := filteredIssues(s.Issues, s.FilterInput.Value())
 
 	switch {
 	case key.Matches(msg, m.keys.Escape):
@@ -95,20 +105,16 @@ func (m Model) handleIssueKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case msg.Type == tea.KeyBackspace:
-		if len(s.Filter) > 0 {
-			s.Filter = s.Filter[:len(s.Filter)-1]
+	default:
+		// Route remaining keys through the filter textinput
+		prevVal := s.FilterInput.Value()
+		var cmd tea.Cmd
+		s.FilterInput, cmd = s.FilterInput.Update(msg)
+		if s.FilterInput.Value() != prevVal {
 			s.Cursor = 0
 		}
-		return m, nil
-
-	case msg.Type == tea.KeyRunes:
-		s.Filter += string(msg.Runes)
-		s.Cursor = 0
-		return m, nil
+		return m, cmd
 	}
-
-	return m, nil
 }
 
 func createIssueWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot, name string) tea.Cmd {
@@ -193,7 +199,8 @@ func renderIssueView(s *IssueViewState, width int, spinnerView string) string {
 		b.WriteString(Styles.ErrorText.Render(s.Error) + "\n\n")
 	}
 
-	filtered := filteredIssues(s.Issues, s.Filter)
+	filter := s.FilterInput.Value()
+	filtered := filteredIssues(s.Issues, filter)
 
 	// If preview mode and we have a selected issue, render preview
 	if s.ShowPreview && len(filtered) > 0 && s.Cursor < len(filtered) {
@@ -203,8 +210,8 @@ func renderIssueView(s *IssueViewState, width int, spinnerView string) string {
 	total := len(s.Issues)
 
 	// Filter bar with count
-	if s.Filter != "" {
-		fmt.Fprintf(&b, "Filter: %s█", s.Filter)
+	if filter != "" {
+		b.WriteString(s.FilterInput.View())
 		fmt.Fprintf(&b, "  %s", Styles.DetailDim.Render(fmt.Sprintf("%d of %d", len(filtered), total)))
 		b.WriteString("\n\n")
 	} else if total > 0 {
@@ -214,15 +221,7 @@ func renderIssueView(s *IssueViewState, width int, spinnerView string) string {
 	if len(filtered) == 0 {
 		b.WriteString(Styles.DetailDim.Render("  (no matching issues)") + "\n")
 	} else {
-		maxShow := 10
-		start := 0
-		if s.Cursor >= maxShow {
-			start = s.Cursor - maxShow + 1
-		}
-		end := start + maxShow
-		if end > len(filtered) {
-			end = len(filtered)
-		}
+		start, end := scrollWindow(len(filtered), s.Cursor, 10)
 
 		contentWidth := width - 8
 		if contentWidth < 40 {
@@ -234,7 +233,7 @@ func renderIssueView(s *IssueViewState, width int, spinnerView string) string {
 
 			cursor := "  "
 			if i == s.Cursor {
-				cursor = Styles.ListCursor.String()
+				cursor = Styles.ListCursor.Render("❯ ")
 			}
 
 			// Line 1: cursor + #number + title

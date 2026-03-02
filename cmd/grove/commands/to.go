@@ -1,19 +1,23 @@
 package commands
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
 
+	"github.com/LeahArmstrong/grove-cli/internal/cli"
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
+	"github.com/LeahArmstrong/grove-cli/internal/log"
 	"github.com/LeahArmstrong/grove-cli/internal/output"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 )
 
-var toJSON bool
+var (
+	toJSON bool
+	toPeek bool
+)
 
 var toCmd = &cobra.Command{
 	Use:     "to <name>",
@@ -22,10 +26,15 @@ var toCmd = &cobra.Command{
 	Long: `Switch to a worktree by name. If a tmux session exists for the worktree, switch to it.
 If no tmux session exists, create one.
 
+Use --peek for a lightweight switch that skips hooks (no Docker side effects).
+Useful for code review or quick file checks.
+
 When using shell integration, this will also change your current directory.`,
 	Args: cobra.ExactArgs(1),
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		name := args[0]
+		stderr := cli.NewStderr()
+
 		if name == "" {
 			return fmt.Errorf("worktree name cannot be empty")
 		}
@@ -57,10 +66,12 @@ When using shell integration, this will also change your current directory.`,
 			prevWorktree = currentTree.DisplayName()
 			prevWorktreePath = currentTree.Path
 			// Update last_worktree in state before switching
-			_ = ctx.State.SetLastWorktree(prevWorktree)
+			if err := ctx.State.SetLastWorktree(prevWorktree); err != nil {
+				log.Printf("failed to set last worktree %q: %v", prevWorktree, err)
+			}
 		}
 
-		// Fire pre-switch hooks
+		// Build hook context (used by pre/post-switch hooks unless --peek)
 		hookCtx := &hooks.Context{
 			Worktree:         name,
 			PrevWorktree:     prevWorktree,
@@ -69,15 +80,24 @@ When using shell integration, this will also change your current directory.`,
 			PrevWorktreePath: prevWorktreePath,
 			MainPath:         ctx.ProjectRoot,
 		}
-		if err := hooks.Fire(hooks.EventPreSwitch, hookCtx); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: pre-switch hooks failed: %v\n", err)
+
+		// Fire pre-switch hooks (skip when --peek)
+		if !toPeek {
+			if !toJSON {
+				cli.Step(stderr, "Switching to '%s'...", name)
+			}
+			if err := hooks.Fire(hooks.EventPreSwitch, hookCtx); err != nil {
+				cli.Warning(stderr, "pre-switch hooks failed: %v", err)
+			}
 		}
 
 		// Store current session as last if inside tmux
 		if tmux.IsInsideTmux() {
 			currentSession, err := tmux.GetCurrentSession()
 			if err == nil {
-				_ = tmux.StoreLastSession(currentSession)
+				if err := tmux.StoreLastSession(currentSession); err != nil {
+					log.Printf("failed to store last session %q: %v", currentSession, err)
+				}
 			}
 		}
 
@@ -103,25 +123,39 @@ When using shell integration, this will also change your current directory.`,
 					return fmt.Errorf("failed to create session: %w", err)
 				}
 				if !toJSON {
-					fmt.Printf("✓ Created tmux session '%s'\n", sessionName)
+					cli.Success(stderr, "Created tmux session '%s'", sessionName)
 				}
 			}
 
 			if tmux.IsInsideTmux() {
-				// Inside tmux: always switch-client regardless of mode
-				if err := tmux.SwitchSession(sessionName); err != nil {
-					return fmt.Errorf("failed to switch session: %w", err)
+				// Detect and correct directory drift before switching
+				if exists {
+					handleDirectoryDrift(sessionName, targetTree.Path, cfg.Tmux.OnSwitch, stderr)
 				}
-				tmuxSwitched = true
 			} else if tmuxMode == "manual" && !toJSON {
-				fmt.Printf("✓ Tmux session '%s' ready\n", sessionName)
-				fmt.Printf("Run: tmux attach -t %s\n", sessionName)
+				cli.Success(stderr, "Tmux session '%s' ready", sessionName)
+				cli.Faint(stderr, "Run: tmux attach -t %s", sessionName)
 			}
 			// auto mode outside tmux: handled below via shell directive or direct attach
 		}
 
 		// Update last_accessed_at for target worktree
-		_ = ctx.State.TouchWorktree(targetTree.DisplayName())
+		if err := ctx.State.TouchWorktree(targetTree.DisplayName()); err != nil {
+			log.Printf("failed to touch worktree %q: %v", targetTree.DisplayName(), err)
+		}
+
+		// Fire post-switch hooks (Docker start, etc.) BEFORE the tmux switch
+		// so the user sees Docker progress in the current session. After the
+		// tmux switch the old session's stderr is no longer visible.
+		// Also fire before the JSON return so machine consumers get hooks too.
+		if !toPeek {
+			if hooks.HasHooks(hooks.EventPostSwitch) {
+				cli.Step(stderr, "Starting services...")
+			}
+			if err := hooks.Fire(hooks.EventPostSwitch, hookCtx); err != nil {
+				cli.Warning(stderr, "post-switch hooks failed: %v", err)
+			}
+		}
 
 		// JSON output mode
 		if toJSON {
@@ -131,18 +165,18 @@ When using shell integration, this will also change your current directory.`,
 				Branch:   targetTree.Branch,
 				Path:     targetTree.Path,
 			}
-			data, _ := json.MarshalIndent(result, "", "  ")
-			fmt.Println(string(data))
-			return nil
+			return output.PrintJSON(result)
 		}
 
 		// Output directory change command for shell integration
 		hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
 
-		// Fire post-switch hooks before shell directives / tmux attach
-		// so docker services start before the user arrives in the new session
-		if err := hooks.Fire(hooks.EventPostSwitch, hookCtx); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: post-switch hooks failed: %v\n", err)
+		// Now perform the tmux session switch (if inside tmux)
+		if tmuxMode != "off" && sessionName != "" && tmux.IsInsideTmux() {
+			if err := tmux.SwitchSession(sessionName); err != nil {
+				return fmt.Errorf("failed to switch session: %w", err)
+			}
+			tmuxSwitched = true
 		}
 
 		// Skip cd directive when tmux switch already moved the user to the
@@ -151,18 +185,20 @@ When using shell integration, this will also change your current directory.`,
 		if !tmuxSwitched {
 			if hasShellIntegration {
 				// Shell wrapper will parse this and execute cd
-				fmt.Printf("cd:%s\n", targetTree.Path)
+				cli.Directive("cd", targetTree.Path)
 				// In auto mode outside tmux, emit tmux-attach directive for shell wrapper
 				if tmuxMode == "auto" && sessionName != "" {
-					fmt.Printf("tmux-attach:%s\n", sessionName)
+					cli.Directive("tmux-attach", sessionName)
 				}
 			} else {
-				fmt.Fprintf(os.Stderr, "\nNote: Directory switching requires shell integration.\n")
-				fmt.Fprintf(os.Stderr, "Add this to your shell config (~/.zshrc or ~/.bashrc):\n\n")
-				fmt.Fprintf(os.Stderr, "  eval \"$(grove install zsh)\"   # for zsh\n")
-				fmt.Fprintf(os.Stderr, "  eval \"$(grove install bash)\"  # for bash\n\n")
-				fmt.Fprintf(os.Stderr, "To change directory manually:\n")
-				fmt.Fprintf(os.Stderr, "  cd %s\n", targetTree.Path)
+				cli.Faint(stderr, "Note: Directory switching requires shell integration.")
+				cli.Faint(stderr, "Add this to your shell config (~/.zshrc or ~/.bashrc):")
+				_, _ = fmt.Fprintf(stderr, "\n")
+				cli.Faint(stderr, "  eval \"$(grove install zsh)\"   # for zsh")
+				cli.Faint(stderr, "  eval \"$(grove install bash)\"  # for bash")
+				_, _ = fmt.Fprintf(stderr, "\n")
+				cli.Faint(stderr, "To change directory manually:")
+				cli.Faint(stderr, "  cd %s", targetTree.Path)
 				// In auto mode outside tmux without shell wrapper, attach directly
 				if tmuxMode == "auto" && sessionName != "" {
 					if err := tmux.AttachSession(sessionName); err != nil {
@@ -176,7 +212,34 @@ When using shell integration, this will also change your current directory.`,
 	}),
 }
 
+// handleDirectoryDrift detects if a tmux session's active pane has drifted
+// from the worktree root and corrects it based on the configured on_switch mode.
+func handleDirectoryDrift(sessionName, worktreePath, onSwitch string, stderr *cli.Writer) {
+	pane, err := tmux.GetPaneInfo(sessionName)
+	if err != nil {
+		return
+	}
+
+	if pane.CurrentPath == worktreePath {
+		return
+	}
+
+	if !pane.IsShell() {
+		return
+	}
+
+	switch onSwitch {
+	case "warn":
+		cli.Warning(stderr, "session directory drifted from %s", worktreePath)
+	case "ignore":
+		// Do nothing
+	default: // "reset" or ""
+		_ = tmux.SendKeys(sessionName, fmt.Sprintf("cd %q", worktreePath))
+	}
+}
+
 func init() {
 	toCmd.Flags().BoolVarP(&toJSON, "json", "j", false, "Output as JSON with switch_to field")
+	toCmd.Flags().BoolVar(&toPeek, "peek", false, "Lightweight switch: skip hooks (no Docker side effects)")
 	rootCmd.AddCommand(toCmd)
 }

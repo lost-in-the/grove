@@ -53,6 +53,7 @@ plan-*.md
 # Grove (worktree manager)
 .grove/state.json
 .grove/state.json.bak
+.grove/state.lock
 .grove/.envrc
 
 # Auto Claude data directory

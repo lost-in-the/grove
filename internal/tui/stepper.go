@@ -3,7 +3,7 @@ package tui
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // Stepper is a visual progress indicator for multi-step wizards.
@@ -62,8 +62,8 @@ func (s *Stepper) View(width int) string {
 	currentDot := lipgloss.NewStyle().Foreground(Colors.Primary).Render("●")
 	futureDot := lipgloss.NewStyle().Foreground(Colors.TextMuted).Render("○")
 
-	completeConn := lipgloss.NewStyle().Foreground(Colors.Success).Render("━")
-	futureConn := lipgloss.NewStyle().Foreground(Colors.TextMuted).Render("━")
+	completeConnStyle := lipgloss.NewStyle().Foreground(Colors.Success)
+	futureConnStyle := lipgloss.NewStyle().Foreground(Colors.TextMuted)
 
 	completeLabel := lipgloss.NewStyle().Foreground(Colors.Success)
 	currentLabel := lipgloss.NewStyle().Foreground(Colors.Primary).Bold(true)
@@ -96,11 +96,11 @@ func (s *Stepper) View(width int) string {
 
 		// Connector (not after last dot)
 		if i < n-1 {
-			conn := futureConn
+			connStyle := futureConnStyle
 			if s.IsComplete(i) {
-				conn = completeConn
+				connStyle = completeConnStyle
 			}
-			dotLine.WriteString(strings.Repeat(conn, connWidth))
+			dotLine.WriteString(connStyle.Render(strings.Repeat("━", connWidth)))
 		}
 	}
 
@@ -157,5 +157,5 @@ func (s *Stepper) View(width int) string {
 		labelPos = colStart + styledWidth
 	}
 
-	return dotLine.String() + "\n" + labelLine.String()
+	return lipgloss.JoinVertical(lipgloss.Left, dotLine.String(), labelLine.String())
 }

@@ -32,7 +32,13 @@ func newAgentExternalStrategy(cfg *config.Config) *agentExternalStrategy {
 		maxSlots = 5
 	}
 
-	slotsFile := filepath.Join(resolveComposePath(ext.Path), filepath.Dir(agent.TemplatePath), ".slots.json")
+	templateDir := filepath.Dir(agent.TemplatePath)
+	var slotsFile string
+	if filepath.IsAbs(agent.TemplatePath) {
+		slotsFile = filepath.Join(templateDir, ".slots.json")
+	} else {
+		slotsFile = filepath.Join(resolveComposePath(ext.Path), templateDir, ".slots.json")
+	}
 
 	return &agentExternalStrategy{
 		cfg:   cfg,

@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,8 +8,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/LeahArmstrong/grove-cli/internal/config"
+	"github.com/LeahArmstrong/grove-cli/internal/cli"
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
+	"github.com/LeahArmstrong/grove-cli/internal/output"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 )
 
@@ -58,12 +58,10 @@ Examples:
 	Args: cobra.ExactArgs(1),
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		sourceName := args[0]
+		w := cli.NewStdout()
+		stderr := cli.NewStderr()
 
-		// Load config to check constraints
-		cfg, err := config.Load()
-		if err != nil {
-			return fmt.Errorf("failed to load config: %w", err)
-		}
+		cfg := ctx.Config
 
 		mgr, err := worktree.NewManager(ctx.ProjectRoot)
 		if err != nil {
@@ -87,9 +85,9 @@ Examples:
 			if applyJSON {
 				printApplyJSONError(exitcode.ConstraintViolated, msg)
 			} else {
-				fmt.Fprintf(os.Stderr, "Error: %s\n", msg)
-				fmt.Fprintln(os.Stderr, "\nImmutable worktrees are protected from modifications.")
-				fmt.Fprintln(os.Stderr, "Configure immutable worktrees in .grove/config.toml under [protection]")
+				cli.Error(stderr, "%s", msg)
+				cli.Faint(stderr, "Immutable worktrees are protected from modifications.")
+				cli.Faint(stderr, "Configure immutable worktrees in .grove/config.toml under [protection]")
 			}
 			os.Exit(exitcode.ConstraintViolated)
 		}
@@ -104,8 +102,8 @@ Examples:
 			if applyJSON {
 				printApplyJSONError(exitcode.ResourceNotFound, msg)
 			} else {
-				fmt.Fprintf(os.Stderr, "Error: %s\n", msg)
-				fmt.Fprintln(os.Stderr, "\nUse 'grove ls' to see available worktrees.")
+				cli.Error(stderr, "%s", msg)
+				cli.Faint(stderr, "Use 'grove ls' to see available worktrees.")
 			}
 			os.Exit(exitcode.ResourceNotFound)
 		}
@@ -127,8 +125,7 @@ Examples:
 		}
 
 		if !applyJSON && !applyDryRun {
-			fmt.Printf("Applying changes from %s → %s\n", result.Source, result.Target)
-			fmt.Println(strings.Repeat("━", 50))
+			cli.Header(w, "Applying changes from %s → %s", result.Source, result.Target)
 		}
 
 		// Apply commits
@@ -138,10 +135,10 @@ Examples:
 
 			if len(applyPick) > 0 {
 				// Apply specific commits
-				commits, err = applySpecificCommits(currentTree.Path, sourceTree.Path, applyPick, applyDryRun, applyJSON)
+				commits, err = applySpecificCommits(w, stderr, currentTree.Path, sourceTree.Path, applyPick, applyDryRun, applyJSON)
 			} else {
 				// Apply all commits since common ancestor
-				commits, err = applyCommitsSinceAncestor(currentTree.Path, sourceTree, applyDryRun, applyJSON)
+				commits, err = applyCommitsSinceAncestor(w, stderr, currentTree.Path, sourceTree, applyDryRun, applyJSON)
 			}
 
 			if err != nil {
@@ -159,7 +156,7 @@ Examples:
 
 		// Apply WIP
 		if doWIP {
-			wipFiles, err := applyWIPChanges(currentTree.Path, sourceTree.Path, applyDryRun, applyJSON)
+			wipFiles, err := applyWIPChanges(w, stderr, currentTree.Path, sourceTree.Path, applyDryRun, applyJSON)
 			if err != nil {
 				result.Success = false
 				if applyJSON {
@@ -183,13 +180,13 @@ Examples:
 
 		// Human-readable summary
 		if applyDryRun {
-			fmt.Println("\n[Dry run - no changes were made]")
+			cli.Faint(w, "[Dry run - no changes were made]")
 		}
 
 		if result.CommitsApplied == 0 && !result.WIPApplied {
-			fmt.Println("\nNo changes to apply")
+			cli.Info(w, "No changes to apply")
 		} else {
-			fmt.Println("\n✓ Changes applied successfully")
+			cli.Success(w, "Changes applied successfully")
 		}
 
 		return nil
@@ -197,13 +194,13 @@ Examples:
 }
 
 // applyCommitsSinceAncestor cherry-picks commits from source that are not in current.
-func applyCommitsSinceAncestor(targetPath string, sourceTree *worktree.Worktree, dryRun, jsonOutput bool) ([]CommitInfo, error) {
+func applyCommitsSinceAncestor(w, stderr *cli.Writer, targetPath string, sourceTree *worktree.Worktree, dryRun, jsonOutput bool) ([]CommitInfo, error) {
 	// Find merge base
 	mergeBaseCmd := exec.Command("git", "-C", targetPath, "merge-base", "HEAD", sourceTree.Branch)
 	baseOutput, err := mergeBaseCmd.Output()
 	if err != nil {
 		if !jsonOutput {
-			fmt.Fprintf(os.Stderr, "Warning: could not find common ancestor with %s\n", sourceTree.Branch)
+			cli.Warning(stderr, "could not find common ancestor with %s", sourceTree.Branch)
 		}
 		return nil, nil
 	}
@@ -220,16 +217,16 @@ func applyCommitsSinceAncestor(targetPath string, sourceTree *worktree.Worktree,
 	shas := strings.Split(strings.TrimSpace(string(revOutput)), "\n")
 	if len(shas) == 0 || (len(shas) == 1 && shas[0] == "") {
 		if !jsonOutput && !dryRun {
-			fmt.Println("\nNo commits to apply")
+			cli.Info(w, "No commits to apply")
 		}
 		return nil, nil
 	}
 
-	return applySpecificCommits(targetPath, sourceTree.Path, shas, dryRun, jsonOutput)
+	return applySpecificCommits(w, stderr, targetPath, sourceTree.Path, shas, dryRun, jsonOutput)
 }
 
 // applySpecificCommits cherry-picks specific commits.
-func applySpecificCommits(targetPath, sourcePath string, shas []string, dryRun, jsonOutput bool) ([]CommitInfo, error) {
+func applySpecificCommits(w, stderr *cli.Writer, targetPath, sourcePath string, shas []string, dryRun, jsonOutput bool) ([]CommitInfo, error) {
 	var commits []CommitInfo
 
 	// Get commit info for each SHA
@@ -251,7 +248,7 @@ func applySpecificCommits(targetPath, sourcePath string, shas []string, dryRun, 
 			msgOutput, err := msgCmd.Output()
 			if err != nil {
 				if !jsonOutput {
-					fmt.Fprintf(os.Stderr, "Warning: commit %s not found in source\n", s)
+					cli.Warning(stderr, "commit %s not found in source", s)
 				}
 				continue
 			}
@@ -268,13 +265,13 @@ func applySpecificCommits(targetPath, sourcePath string, shas []string, dryRun, 
 	}
 
 	if !jsonOutput {
-		fmt.Printf("\nCommits to apply (%d):\n", len(commits))
+		cli.Bold(w, "Commits to apply (%d):", len(commits))
 		for _, c := range commits {
 			shortSHA := c.SHA
 			if len(shortSHA) > 7 {
 				shortSHA = shortSHA[:7]
 			}
-			fmt.Printf("  %s %s\n", shortSHA, c.Message)
+			cli.Faint(w, "  %s %s", shortSHA, c.Message)
 		}
 	}
 
@@ -284,27 +281,27 @@ func applySpecificCommits(targetPath, sourcePath string, shas []string, dryRun, 
 
 	// Cherry-pick each commit
 	if !jsonOutput {
-		fmt.Println("\nApplying commits...")
+		cli.Step(w, "Applying commits...")
 	}
 
 	for _, c := range commits {
 		cherryCmd := exec.Command("git", "-C", targetPath, "cherry-pick", c.SHA)
 		if output, err := cherryCmd.CombinedOutput(); err != nil {
 			if !jsonOutput {
-				fmt.Fprintf(os.Stderr, "\n✗ Conflict applying %s\n", c.SHA[:7])
-				fmt.Fprintf(os.Stderr, "%s\n", output)
-				fmt.Fprintln(os.Stderr, "\nTo resolve:")
-				fmt.Fprintln(os.Stderr, "  1. Fix conflicts in the affected files")
-				fmt.Fprintln(os.Stderr, "  2. git add <resolved-files>")
-				fmt.Fprintln(os.Stderr, "  3. git cherry-pick --continue")
-				fmt.Fprintln(os.Stderr, "\nOr to abort:")
-				fmt.Fprintln(os.Stderr, "  git cherry-pick --abort")
+				cli.Error(stderr, "Conflict applying %s", c.SHA[:7])
+				_, _ = fmt.Fprintf(stderr, "%s\n", output)
+				cli.Faint(stderr, "To resolve:")
+				cli.Faint(stderr, "  1. Fix conflicts in the affected files")
+				cli.Faint(stderr, "  2. git add <resolved-files>")
+				cli.Faint(stderr, "  3. git cherry-pick --continue")
+				cli.Faint(stderr, "Or to abort:")
+				cli.Faint(stderr, "  git cherry-pick --abort")
 			}
 			return commits, fmt.Errorf("cherry-pick failed")
 		}
 
 		if !jsonOutput {
-			fmt.Printf("  ✓ %s\n", c.SHA[:7])
+			cli.Success(w, "%s", c.SHA[:7])
 		}
 	}
 
@@ -312,7 +309,7 @@ func applySpecificCommits(targetPath, sourcePath string, shas []string, dryRun, 
 }
 
 // applyWIPChanges creates a patch from source's uncommitted changes and applies to target.
-func applyWIPChanges(targetPath, sourcePath string, dryRun, jsonOutput bool) ([]string, error) {
+func applyWIPChanges(w, stderr *cli.Writer, targetPath, sourcePath string, dryRun, jsonOutput bool) ([]string, error) {
 	sourceHandler := worktree.NewWIPHandler(sourcePath)
 
 	// Check if source has WIP
@@ -323,7 +320,7 @@ func applyWIPChanges(targetPath, sourcePath string, dryRun, jsonOutput bool) ([]
 
 	if !hasWIP {
 		if !jsonOutput && !dryRun {
-			fmt.Println("\nNo uncommitted changes to apply")
+			cli.Info(w, "No uncommitted changes to apply")
 		}
 		return nil, nil
 	}
@@ -335,13 +332,13 @@ func applyWIPChanges(targetPath, sourcePath string, dryRun, jsonOutput bool) ([]
 	}
 
 	if !jsonOutput {
-		fmt.Printf("\nUncommitted changes to apply (%d files):\n", len(wipFiles))
+		cli.Bold(w, "Uncommitted changes to apply (%d files):", len(wipFiles))
 		for i, f := range wipFiles {
 			if i >= 10 {
-				fmt.Printf("  ... and %d more\n", len(wipFiles)-10)
+				cli.Faint(w, "  ... and %d more", len(wipFiles)-10)
 				break
 			}
-			fmt.Printf("  %s\n", f)
+			cli.Faint(w, "  %s", f)
 		}
 	}
 
@@ -363,16 +360,16 @@ func applyWIPChanges(targetPath, sourcePath string, dryRun, jsonOutput bool) ([]
 	targetHandler := worktree.NewWIPHandler(targetPath)
 	if err := targetHandler.ApplyPatch(patch); err != nil {
 		if !jsonOutput {
-			fmt.Fprintf(os.Stderr, "\n✗ Failed to apply uncommitted changes\n")
-			fmt.Fprintf(os.Stderr, "%v\n", err)
-			fmt.Fprintln(os.Stderr, "\nThe patch may have conflicts with your current changes.")
-			fmt.Fprintln(os.Stderr, "Resolve manually or try 'grove compare' to see differences first.")
+			cli.Error(stderr, "Failed to apply uncommitted changes")
+			_, _ = fmt.Fprintf(stderr, "%v\n", err)
+			cli.Faint(stderr, "The patch may have conflicts with your current changes.")
+			cli.Faint(stderr, "Resolve manually or try 'grove compare' to see differences first.")
 		}
 		return wipFiles, fmt.Errorf("failed to apply WIP patch")
 	}
 
 	if !jsonOutput {
-		fmt.Println("\n✓ Uncommitted changes applied")
+		cli.Success(w, "Uncommitted changes applied")
 	}
 
 	return wipFiles, nil
@@ -380,23 +377,14 @@ func applyWIPChanges(targetPath, sourcePath string, dryRun, jsonOutput bool) ([]
 
 // printApplyResult prints the apply result as JSON.
 func printApplyResult(result ApplyResult) {
-	data, _ := json.MarshalIndent(result, "", "  ")
-	fmt.Println(string(data))
+	if err := output.PrintJSON(result); err != nil {
+		output.PrintJSONError(1, err.Error())
+	}
 }
 
 // printApplyJSONError prints an error in JSON format.
 func printApplyJSONError(code int, message string) {
-	errOutput := struct {
-		Error   bool   `json:"error"`
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-	}{
-		Error:   true,
-		Code:    code,
-		Message: message,
-	}
-	data, _ := json.MarshalIndent(errOutput, "", "  ")
-	fmt.Fprintln(os.Stderr, string(data))
+	output.PrintJSONError(code, message)
 }
 
 func init() {

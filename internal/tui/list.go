@@ -5,9 +5,9 @@ import (
 	"io"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/LeahArmstrong/grove-cli/internal/plugins"
 )
@@ -141,7 +141,7 @@ func renderListHeader(d WorktreeDelegate, width int) string {
 		sepWidth = 0
 	}
 	sep := dim.Render(strings.Repeat("─", sepWidth))
-	return line + "\n" + sep
+	return lipgloss.JoinVertical(lipgloss.Left, line, sep)
 }
 
 // ComputeDelegateWidths computes content-adaptive column widths from a slice

@@ -372,9 +372,9 @@ func TestTmuxSessionName(t *testing.T) {
 		},
 		{
 			name:        "root worktree uses project name only",
-			project:     "admin",
+			project:     "myapp",
 			worktree:    "root",
-			wantSession: "admin",
+			wantSession: "myapp",
 		},
 	}
 

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/exp/teatest"
 )
 
@@ -35,7 +35,7 @@ func TestProgram_DashboardRenders(t *testing.T) {
 		return regexp.MustCompile(`(?i)rails-app`).MatchString(s)
 	}, teatest.WithDuration(5*time.Second))
 
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	tm.Send(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
 }
 
@@ -50,12 +50,12 @@ func TestProgram_CursorNavigation(t *testing.T) {
 	}, teatest.WithDuration(5*time.Second))
 
 	// Press j to move cursor down
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	tm.Send(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	// Press k to move cursor up
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	tm.Send(tea.KeyPressMsg{Code: 'k', Text: "k"})
 
 	// Quit
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	tm.Send(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
 }
 
@@ -70,7 +70,7 @@ func TestProgram_HelpOverlay(t *testing.T) {
 	}, teatest.WithDuration(5*time.Second))
 
 	// Press ? for help
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	tm.Send(tea.KeyPressMsg{Code: '?', Text: "?"})
 
 	// Wait for help overlay text
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
@@ -79,8 +79,8 @@ func TestProgram_HelpOverlay(t *testing.T) {
 	}, teatest.WithDuration(5*time.Second))
 
 	// Any key closes help, then q quits
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(" ")})
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	tm.Send(tea.KeyPressMsg{Code: ' ', Text: " "})
+	tm.Send(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
 }
 
@@ -95,7 +95,7 @@ func TestProgram_CreateWizard(t *testing.T) {
 	}, teatest.WithDuration(5*time.Second))
 
 	// Press n for create wizard
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	tm.Send(tea.KeyPressMsg{Code: 'n', Text: "n"})
 
 	// Wait for the create overlay
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
@@ -104,8 +104,8 @@ func TestProgram_CreateWizard(t *testing.T) {
 	}, teatest.WithDuration(5*time.Second))
 
 	// Escape to cancel
-	tm.Send(tea.KeyMsg{Type: tea.KeyEscape})
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEscape})
+	tm.Send(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
 }
 
@@ -118,7 +118,7 @@ func TestProgram_QuitClean(t *testing.T) {
 		return len(bts) > 0
 	}, teatest.WithDuration(5*time.Second))
 
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	tm.Send(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
 }
 
@@ -134,10 +134,10 @@ func TestProgram_EnterSwitchesWorktree(t *testing.T) {
 
 	// The main worktree is selected first (current), so pressing enter just quits.
 	// Navigate to non-current worktree first.
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	tm.Send(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	time.Sleep(100 * time.Millisecond)
 
 	// Press enter to select/switch
-	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
 	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
 }

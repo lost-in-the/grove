@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/LeahArmstrong/grove-cli/internal/cli"
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
 	"github.com/LeahArmstrong/grove-cli/internal/grove"
@@ -98,35 +99,42 @@ Examples:
 			return fmt.Errorf("failed to load config: %w", err)
 		}
 
-		fmt.Printf("Configuration")
+		w := cli.NewStdout()
+
+		title := "Configuration"
 		if configGlobal {
-			fmt.Printf(" (global)")
+			title += " (global)"
 		}
-		fmt.Printf(":\n")
-		fmt.Printf("  Config file: %s\n\n", configPath)
+		cli.Header(w, "%s", title)
+		cli.Label(w, "  Config file:", configPath)
+		_, _ = fmt.Fprintln(w)
 
-		fmt.Printf("General:\n")
+		cli.Bold(w, "General:")
 		if cfg.ProjectName != "" {
-			fmt.Printf("  project_name: %s\n", cfg.ProjectName)
+			cli.Label(w, "  project_name:", cfg.ProjectName)
 		}
-		fmt.Printf("  alias: %s\n", cfg.Alias)
-		fmt.Printf("  projects_dir: %s\n", cfg.ProjectsDir)
-		fmt.Printf("  default_base_branch: %s\n", cfg.DefaultBranch)
+		cli.Label(w, "  alias:", cfg.Alias)
+		cli.Label(w, "  projects_dir:", cfg.ProjectsDir)
+		cli.Label(w, "  default_base_branch:", cfg.DefaultBranch)
 
-		fmt.Printf("\n[switch]:\n")
-		fmt.Printf("  dirty_handling: %s\n", cfg.Switch.DirtyHandling)
+		_, _ = fmt.Fprintln(w)
+		cli.Bold(w, "[switch]:")
+		cli.Label(w, "  dirty_handling:", cfg.Switch.DirtyHandling)
 
-		fmt.Printf("\n[naming]:\n")
-		fmt.Printf("  pattern: %s\n", cfg.Naming.Pattern)
+		_, _ = fmt.Fprintln(w)
+		cli.Bold(w, "[naming]:")
+		cli.Label(w, "  pattern:", cfg.Naming.Pattern)
 
-		fmt.Printf("\n[tmux]:\n")
-		fmt.Printf("  mode: %s\n", cfg.Tmux.Mode)
-		fmt.Printf("  prefix: %s\n", cfg.Tmux.Prefix)
+		_, _ = fmt.Fprintln(w)
+		cli.Bold(w, "[tmux]:")
+		cli.Label(w, "  mode:", cfg.Tmux.Mode)
+		cli.Label(w, "  prefix:", cfg.Tmux.Prefix)
 
-		fmt.Printf("\n[plugins.docker]:\n")
-		fmt.Printf("  enabled: %v\n", cfg.Plugins.Docker.Enabled)
-		fmt.Printf("  auto_start: %v\n", cfg.Plugins.Docker.AutoStart)
-		fmt.Printf("  auto_stop: %v\n", cfg.Plugins.Docker.AutoStop)
+		_, _ = fmt.Fprintln(w)
+		cli.Bold(w, "[plugins.docker]:")
+		cli.Label(w, "  enabled:", fmt.Sprintf("%v", cfg.Plugins.Docker.Enabled))
+		cli.Label(w, "  auto_start:", fmt.Sprintf("%v", cfg.Plugins.Docker.AutoStart))
+		cli.Label(w, "  auto_stop:", fmt.Sprintf("%v", cfg.Plugins.Docker.AutoStop))
 
 		return nil
 	},

@@ -79,13 +79,13 @@ func TestRenderIssueView(t *testing.T) {
 		},
 		{
 			"filter with count",
-			&IssueViewState{Issues: issues, Filter: "grove"},
+			issueStateWithFilter(issues, "grove"),
 			80,
-			[]string{"Filter: grove", "2 of 2"},
+			[]string{"Filter:", "grove", "2 of 2"},
 		},
 		{
 			"empty filtered results",
-			&IssueViewState{Issues: issues, Filter: "nonexistent"},
+			issueStateWithFilter(issues, "nonexistent"),
 			80,
 			[]string{"no matching issues"},
 		},
@@ -179,12 +179,20 @@ func TestIssueViewState(t *testing.T) {
 			{Number: 1, Title: "first", CreatedAt: now},
 			{Number: 2, Title: "second", CreatedAt: now},
 		}
-		s := &IssueViewState{Issues: issues, Cursor: 1, Filter: "first"}
-		filtered := filteredIssues(s.Issues, s.Filter)
+		s := issueStateWithFilter(issues, "first")
+		s.Cursor = 1
+		filtered := filteredIssues(s.Issues, s.FilterInput.Value())
 		if len(filtered) != 1 {
 			t.Errorf("expected 1 filtered issue, got %d", len(filtered))
 		}
 	})
+}
+
+// issueStateWithFilter creates an IssueViewState with a pre-set filter value.
+func issueStateWithFilter(issues []*tracker.Issue, filter string) *IssueViewState {
+	fi := newIssueFilterInput()
+	fi.SetValue(filter)
+	return &IssueViewState{Issues: issues, FilterInput: fi}
 }
 
 func TestFormatIssueAge(t *testing.T) {

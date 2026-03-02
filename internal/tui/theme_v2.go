@@ -1,95 +1,45 @@
 package tui
 
 import (
-	"os"
+	lipgloss "charm.land/lipgloss/v2"
 
-	"github.com/charmbracelet/lipgloss"
+	"github.com/LeahArmstrong/grove-cli/internal/theme"
 )
 
-// ColorScheme defines semantic colors using AdaptiveColor for automatic
-// dark/light terminal adaptation.
-type ColorScheme struct {
-	// Brand
-	Primary   lipgloss.AdaptiveColor
-	Secondary lipgloss.AdaptiveColor
+// ColorScheme is re-exported from internal/theme for backward compatibility.
+type ColorScheme = theme.ColorScheme
 
-	// Status
-	Success lipgloss.AdaptiveColor
-	Warning lipgloss.AdaptiveColor
-	Danger  lipgloss.AdaptiveColor
-	Info    lipgloss.AdaptiveColor
+// Colors is the global color scheme, delegating to the shared theme package.
+var Colors = theme.Colors
 
-	// Surface
-	SurfaceBg     lipgloss.AdaptiveColor
-	SurfaceFg     lipgloss.AdaptiveColor
-	SurfaceDim    lipgloss.AdaptiveColor
-	SurfaceBorder lipgloss.AdaptiveColor
-
-	// Selection / Header
-	SelectionBg lipgloss.AdaptiveColor
-	HeaderBg    lipgloss.AdaptiveColor
-
-	// Text
-	TextNormal lipgloss.AdaptiveColor
-	TextBright lipgloss.AdaptiveColor
-	TextMuted  lipgloss.AdaptiveColor
-}
-
-// Colors is the global color scheme. Initialized respecting NO_COLOR.
-var Colors = NewColorScheme()
-
-// defaultColorScheme returns the full color palette.
-func defaultColorScheme() ColorScheme {
-	return ColorScheme{
-		// Brand — purple/blue inspired by lazygit/charm aesthetics
-		Primary:   lipgloss.AdaptiveColor{Dark: "#A78BFA", Light: "#7C3AED"},
-		Secondary: lipgloss.AdaptiveColor{Dark: "#38BDF8", Light: "#0369A1"},
-
-		// Status — Tailwind-inspired semantic colors (light adjusted for WCAG AA)
-		Success: lipgloss.AdaptiveColor{Dark: "#34D399", Light: "#047857"},
-		Warning: lipgloss.AdaptiveColor{Dark: "#FBBF24", Light: "#92400E"},
-		Danger:  lipgloss.AdaptiveColor{Dark: "#F87171", Light: "#DC2626"},
-		Info:    lipgloss.AdaptiveColor{Dark: "#60A5FA", Light: "#2563EB"},
-
-		// Surface — Catppuccin Mocha (dark) / Slate (light)
-		SurfaceBg:     lipgloss.AdaptiveColor{Dark: "#1E1E2E", Light: "#FFFFFF"},
-		SurfaceFg:     lipgloss.AdaptiveColor{Dark: "#CDD6F4", Light: "#1E293B"},
-		SurfaceDim:    lipgloss.AdaptiveColor{Dark: "#585B70", Light: "#94A3B8"},
-		SurfaceBorder: lipgloss.AdaptiveColor{Dark: "#45475A", Light: "#CBD5E1"},
-
-		// Selection / Header
-		SelectionBg: lipgloss.AdaptiveColor{Dark: "#313244", Light: "#E2E8F0"},
-		HeaderBg:    lipgloss.AdaptiveColor{Dark: "#181825", Light: "#F1F5F9"},
-
-		// Text
-		TextNormal: lipgloss.AdaptiveColor{Dark: "#CDD6F4", Light: "#1E293B"},
-		TextBright: lipgloss.AdaptiveColor{Dark: "#FFFFFF", Light: "#0F172A"},
-		TextMuted:  lipgloss.AdaptiveColor{Dark: "#9399B2", Light: "#475569"},
-	}
-}
-
-// noColorScheme returns a ColorScheme with all empty colors for NO_COLOR mode.
-func noColorScheme() ColorScheme {
-	return ColorScheme{}
-}
-
-// NewColorScheme creates a ColorScheme, respecting NO_COLOR, GROVE_NO_COLOR,
-// and GROVE_HIGH_CONTRAST environment variables.
+// NewColorScheme delegates to the shared theme package.
 func NewColorScheme() ColorScheme {
-	if isNoColor() {
-		return noColorScheme()
-	}
-	if isHighContrast() {
-		return highContrastColorScheme()
-	}
-	return defaultColorScheme()
+	return theme.NewColorScheme()
 }
 
-// isNoColor checks if color output should be suppressed.
+// isNoColor delegates to the shared theme package.
 func isNoColor() bool {
-	_, nc := os.LookupEnv("NO_COLOR")
-	_, gnc := os.LookupEnv("GROVE_NO_COLOR")
-	return nc || gnc
+	return theme.IsNoColor()
+}
+
+// defaultColorScheme delegates to theme for backward compatibility with tests.
+func defaultColorScheme() ColorScheme {
+	return theme.DefaultColorScheme()
+}
+
+// noColorScheme delegates to theme for backward compatibility with tests.
+func noColorScheme() ColorScheme {
+	return theme.NoColorScheme()
+}
+
+// highContrastColorScheme delegates to theme for backward compatibility with tests.
+func highContrastColorScheme() ColorScheme {
+	return theme.HighContrastColorScheme()
+}
+
+// hexToRGB delegates to theme for backward compatibility with tests.
+func hexToRGB(hex string) (r, g, b uint8, err error) {
+	return theme.HexToRGB(hex)
 }
 
 // StyleSet holds pre-composed lipgloss styles built from a ColorScheme.
@@ -200,7 +150,7 @@ func NewStyleSet(cs ColorScheme) StyleSet {
 		SelectionRow: lipgloss.NewStyle().Background(cs.SelectionBg),
 
 		// Layout
-		Header: lipgloss.NewStyle().Bold(true).Foreground(cs.Primary),
+		Header: lipgloss.NewStyle().Bold(true).Foreground(cs.Info),
 		Footer: lipgloss.NewStyle().Foreground(cs.TextMuted),
 		HeaderBar: lipgloss.NewStyle().
 			Background(cs.HeaderBg).
@@ -211,16 +161,16 @@ func NewStyleSet(cs ColorScheme) StyleSet {
 		SelectedItem:  lipgloss.NewStyle().Bold(true).Foreground(cs.TextBright),
 		NormalItem:    lipgloss.NewStyle().Foreground(cs.TextNormal),
 		CurrentItem:   lipgloss.NewStyle().Foreground(cs.Secondary),
-		DimmedItem:    lipgloss.NewStyle().Foreground(cs.TextMuted),
-		ListCursor:    lipgloss.NewStyle().Foreground(cs.Primary).SetString("❯ "),
-		ListCursorDim: lipgloss.NewStyle().SetString("  "),
+		DimmedItem:    lipgloss.NewStyle().Foreground(cs.TextDim),
+		ListCursor:    lipgloss.NewStyle().Foreground(cs.Info),
+		ListCursorDim: lipgloss.NewStyle(),
 
 		// Status badges
 		StatusClean:          lipgloss.NewStyle().Foreground(cs.Success),
 		StatusDirty:          lipgloss.NewStyle().Foreground(cs.Warning),
 		StatusStale:          lipgloss.NewStyle().Foreground(cs.Danger),
 		TmuxBadge:            lipgloss.NewStyle().Foreground(cs.Primary),
-		TmuxBadgeActive:      lipgloss.NewStyle().Foreground(cs.Success),
+		TmuxBadgeActive:      lipgloss.NewStyle().Foreground(cs.Primary),
 		EnvBadge:             lipgloss.NewStyle().Foreground(cs.Info),
 		ContainerBadge:       lipgloss.NewStyle().Foreground(cs.Info),
 		ContainerBadgeActive: lipgloss.NewStyle().Foreground(cs.Secondary),
@@ -262,7 +212,7 @@ func NewStyleSet(cs ColorScheme) StyleSet {
 		// Help
 		HelpKey:  lipgloss.NewStyle().Foreground(cs.Primary).Bold(true),
 		HelpDesc: lipgloss.NewStyle().Foreground(cs.TextMuted),
-		HelpSep:  lipgloss.NewStyle().Foreground(cs.TextMuted).SetString(" · "),
+		HelpSep:  lipgloss.NewStyle().Foreground(cs.TextMuted),
 
 		// Input
 		InputBorder: lipgloss.NewStyle().

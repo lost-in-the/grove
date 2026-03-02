@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/LeahArmstrong/grove-cli/internal/cli"
 	"github.com/LeahArmstrong/grove-cli/plugins/docker"
 )
 
@@ -38,6 +39,9 @@ Examples:
   grove up --isolated      # Start an independent stack (allocates a slot)
   w up                     # Using alias`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
+		w := cli.NewStdout()
+		stderr := cli.NewStderr()
+
 		// Get current directory (docker-compose works in cwd)
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -57,14 +61,16 @@ Examples:
 			return fmt.Errorf("--isolated requires agent stack configuration\n\nAdd to .grove/config.toml:\n\n  [plugins.docker.external.agent]\n  enabled = true\n  services = [\"app\"]\n  template_path = \"agent-stacks/template.yml\"")
 		}
 
-		// Start containers
+		// Start containers — no spinner here: docker compose writes its own
+		// progress to stderr, and wrapping it in Bubbletea causes flashing.
+		cli.Step(stderr, "Starting containers...")
 		if err := plugin.Up(cwd, upDetach); err != nil {
 			return fmt.Errorf("failed to start containers: %w", err)
 		}
-
 		if upDetach && !upIsolated {
-			fmt.Println("Containers started in detached mode")
+			cli.Success(w, "Containers started")
 		}
+
 		return nil
 	}),
 }

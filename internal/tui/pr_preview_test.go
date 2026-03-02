@@ -136,10 +136,15 @@ func TestRenderPRPreview(t *testing.T) {
 }
 
 func TestPRViewStatePreviewToggle(t *testing.T) {
+	prs := []*tracker.PullRequest{
+		{Number: 1, Title: "Test PR", Branch: "test", Author: "user", Body: "Body"},
+	}
 	s := &PRViewState{
-		PRs: []*tracker.PullRequest{
-			{Number: 1, Title: "Test PR", Branch: "test", Author: "user", Body: "Body"},
-		},
+		PRs: prs,
+	}
+
+	if len(s.PRs) != 1 {
+		t.Errorf("PRs length = %d, want 1", len(s.PRs))
 	}
 
 	// Initially no preview

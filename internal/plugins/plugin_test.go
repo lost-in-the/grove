@@ -206,6 +206,103 @@ func TestManager_GetPlugin(t *testing.T) {
 	}
 }
 
+// mockStatusPlugin implements both Plugin and StatusProvider
+type mockStatusPlugin struct {
+	mockPlugin
+	statuses map[string]StatusEntry
+}
+
+func (m *mockStatusPlugin) WorktreeStatuses(worktreePaths []string) map[string]StatusEntry {
+	return m.statuses
+}
+
+func TestManager_CollectStatuses_NoProviders(t *testing.T) {
+	cfg := &config.Config{}
+	manager := NewManager(cfg)
+
+	// Register a plain plugin (no StatusProvider)
+	_ = manager.Register(&mockPlugin{name: "plain", enabled: true})
+
+	result := manager.CollectStatuses([]string{"/path/a"})
+	if result != nil {
+		t.Errorf("expected nil when no StatusProvider, got %v", result)
+	}
+}
+
+func TestManager_CollectStatuses_WithProvider(t *testing.T) {
+	cfg := &config.Config{}
+	manager := NewManager(cfg)
+
+	sp := &mockStatusPlugin{
+		mockPlugin: mockPlugin{name: "docker", enabled: true},
+		statuses: map[string]StatusEntry{
+			"/path/a": {ProviderName: "docker", Level: StatusActive, Short: "up"},
+			"/path/b": {ProviderName: "docker", Level: StatusError, Short: "down"},
+		},
+	}
+	_ = manager.Register(sp)
+
+	result := manager.CollectStatuses([]string{"/path/a", "/path/b"})
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if len(result["/path/a"]) != 1 {
+		t.Errorf("expected 1 entry for /path/a, got %d", len(result["/path/a"]))
+	}
+	if result["/path/a"][0].Short != "up" {
+		t.Errorf("expected Short='up', got %q", result["/path/a"][0].Short)
+	}
+	if len(result["/path/b"]) != 1 {
+		t.Errorf("expected 1 entry for /path/b, got %d", len(result["/path/b"]))
+	}
+}
+
+func TestManager_CollectStatuses_DisabledProvider(t *testing.T) {
+	cfg := &config.Config{}
+	manager := NewManager(cfg)
+
+	sp := &mockStatusPlugin{
+		mockPlugin: mockPlugin{name: "docker", enabled: false},
+		statuses: map[string]StatusEntry{
+			"/path/a": {ProviderName: "docker", Short: "up"},
+		},
+	}
+	_ = manager.Register(sp)
+
+	result := manager.CollectStatuses([]string{"/path/a"})
+	if result != nil {
+		t.Errorf("expected nil when provider is disabled, got %v", result)
+	}
+}
+
+func TestManager_CollectStatuses_MultipleProviders(t *testing.T) {
+	cfg := &config.Config{}
+	manager := NewManager(cfg)
+
+	sp1 := &mockStatusPlugin{
+		mockPlugin: mockPlugin{name: "docker", enabled: true},
+		statuses: map[string]StatusEntry{
+			"/path/a": {ProviderName: "docker", Short: "up"},
+		},
+	}
+	sp2 := &mockStatusPlugin{
+		mockPlugin: mockPlugin{name: "tracker", enabled: true},
+		statuses: map[string]StatusEntry{
+			"/path/a": {ProviderName: "tracker", Short: "PR #42"},
+		},
+	}
+	_ = manager.Register(sp1)
+	_ = manager.Register(sp2)
+
+	result := manager.CollectStatuses([]string{"/path/a"})
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if len(result["/path/a"]) != 2 {
+		t.Errorf("expected 2 entries for /path/a, got %d", len(result["/path/a"]))
+	}
+}
+
 func TestManager_ListPlugins(t *testing.T) {
 	cfg := &config.Config{}
 	manager := NewManager(cfg)

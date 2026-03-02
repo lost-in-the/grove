@@ -1,24 +1,24 @@
- test-project  ·  5 worktrees  ·  on root                                ● root 
- ╭────────────────────────────────────────────────────────────────────────────╮
- │                                                                            │
- │  Quick Reference                                                           │
- │                                                                            │
- │  Navigation              Actions                 Views                     │
- │                                                                            │
- │    ↑/k     move up         n         new worktree  1-9       quick-switch  │
- │    ↓/j     move down       d         delete        /         filter        │
- │    enter     switch        f         fork          ?         toggle help   │
- │    esc       back/close  worktree                  q         quit          │
- │                            s         sync changes                          │
- │                            c         configure                             │
- │                            p         browse PRs                            │
- │                            i         browse                                │
- │                          issues                                            │
- │                            a         bulk delete                           │
- │                            o         cycle sort                            │
- │                            r         refresh                               │
- │                                                                            │
- │  Press ? again to close                                                    │
- │                                                                            │
- ╰────────────────────────────────────────────────────────────────────────────╯
-                                                                                
+  ╭──────────────────────────────────────────────────────────────────────────╮
+  │                                                                          │
+  │  [1mQuick Reference[m                                                         │
+  │                                                                          │
+  │  [1mNavigation[m              [1mActions[m                 [1mViews[m                   │
+  │                                                                          │
+  │    [1m↑/k       [mmove up       [1mn         [mnew worktree  [1m1-9       [mquick-      │
+  │  switch                                                                  │
+  │    [1m↓/j       [mmove down     [1md         [mdelete        [1m/         [mfilter      │
+  │    [1menter     [mswitch        [1mf         [mfork          [1mv[m                     │
+  │    [1mesc       [mback/close  worktree                [1m[mcompact/expanded        │
+  │                            [1ms         [msync changes  [1m?         [mtoggle      │
+  │  help                                                                    │
+  │                            [1mc         [mconfigure     [1mq         [mquit        │
+  │                            [1mp         [mbrowse PRs                          │
+  │                            [1mi         [mbrowse                              │
+  │                          issues                                          │
+  │                            [1ma         [mbulk delete                         │
+  │                            [1mo         [mcycle sort                          │
+  │                            [1mr         [mrefresh                             │
+  │                                                                          │
+  │  Press ? again to close                                                  │
+  │                                                                          │
+  ╰──────────────────────────────────────────────────────────────────────────╯

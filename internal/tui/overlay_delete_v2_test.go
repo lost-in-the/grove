@@ -9,8 +9,8 @@ func TestRenderDeleteV2_CleanWorktree(t *testing.T) {
 	s := &DeleteState{
 		Item: &WorktreeItem{
 			ShortName: "feature-auth",
-			FullName:  "acupoll-feature-auth",
-			Path:      "/Users/egg/Work/acupoll-feature-auth",
+			FullName:  "myapp-feature-auth",
+			Path:      "/home/dev/projects/myapp-feature-auth",
 			Branch:    "feature/authentication",
 			Commit:    "87f14f7",
 			CommitAge: "2 hours",
@@ -56,8 +56,8 @@ func TestRenderDeleteV2_DirtyWorktree(t *testing.T) {
 	s := &DeleteState{
 		Item: &WorktreeItem{
 			ShortName:  "feature-auth",
-			FullName:   "acupoll-feature-auth",
-			Path:       "/Users/egg/Work/acupoll-feature-auth",
+			FullName:   "myapp-feature-auth",
+			Path:       "/home/dev/projects/myapp-feature-auth",
 			Branch:     "feature/authentication",
 			Commit:     "87f14f7",
 			CommitAge:  "2 hours",
@@ -142,7 +142,7 @@ func TestRenderDeleteV2_NarrowWidth(t *testing.T) {
 	s := &DeleteState{
 		Item: &WorktreeItem{
 			ShortName: "feature-auth",
-			Path:      "/Users/egg/Work/acupoll-feature-auth",
+			Path:      "/home/dev/projects/myapp-feature-auth",
 			Branch:    "feature/authentication",
 			Commit:    "87f14f7",
 		},

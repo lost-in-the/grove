@@ -3,7 +3,7 @@ package tui
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // Hint represents a single key-description pair for the help footer.
@@ -40,6 +40,7 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 			{"s", "sync"},
 			{"c", "config"},
 			{"o", "sort"},
+			{"v", "compact"},
 			{"/", "filter"},
 			{"p", "PRs"},
 			{"i", "issues"},
@@ -95,7 +96,8 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 	}
 }
 
-// RenderCompact renders a single-line footer with key hints.
+// RenderCompact renders a one- or two-line footer with key hints.
+// At narrow widths, hints wrap to a second line instead of being dropped.
 func (h *HelpFooter) RenderCompact(view ActiveView, width int) string {
 	hints := h.CompactHints(view)
 
@@ -108,18 +110,34 @@ func (h *HelpFooter) RenderCompact(view ActiveView, width int) string {
 	sep := Styles.HelpSep.Render(" · ")
 	line := strings.Join(parts, sep)
 
-	// Truncate if wider than available width
-	if lipgloss.Width(line) > width && width > 0 {
-		// Rebuild with fewer hints until it fits
-		for i := len(parts) - 1; i >= 1; i-- {
-			line = strings.Join(parts[:i], sep)
-			if lipgloss.Width(line) <= width {
-				break
-			}
+	// Fits on one line — done
+	if lipgloss.Width(line) <= width || width <= 0 {
+		return "  " + line
+	}
+
+	// Try two lines: split roughly in half
+	for split := len(parts) / 2; split >= 1; split-- {
+		line1 := strings.Join(parts[:split], sep)
+		line2 := strings.Join(parts[split:], sep)
+		if lipgloss.Width(line1) <= width && lipgloss.Width(line2) <= width {
+			return "  " + line1 + "\n  " + line2
 		}
 	}
 
+	// Even two lines overflow — fall back to dropping from right
+	for i := len(parts) - 1; i >= 1; i-- {
+		line = strings.Join(parts[:i], sep)
+		if lipgloss.Width(line) <= width {
+			break
+		}
+	}
 	return "  " + line
+}
+
+// CompactHeight returns the number of lines the compact footer will occupy.
+func (h *HelpFooter) CompactHeight(view ActiveView, width int) int {
+	rendered := h.RenderCompact(view, width)
+	return strings.Count(rendered, "\n") + 1
 }
 
 // RenderExpanded renders a three-column help panel.
@@ -157,6 +175,7 @@ func (h *HelpFooter) RenderExpanded(width int) string {
 			items: []Hint{
 				{"1-9", "quick-switch"},
 				{"/", "filter"},
+				{"v", "compact/expanded"},
 				{"?", "toggle help"},
 				{"q", "quit"},
 			},

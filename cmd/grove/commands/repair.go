@@ -148,7 +148,7 @@ Examples:
 		var response string
 		_, _ = fmt.Scanln(&response)
 		if response != "y" && response != "Y" {
-			fmt.Fprintln(os.Stderr, "Cancelled")
+			fmt.Fprintln(os.Stderr, "Canceled")
 			os.Exit(exitcode.UserCancelled)
 		}
 

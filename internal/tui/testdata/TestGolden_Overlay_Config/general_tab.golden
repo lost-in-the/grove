@@ -1,24 +1,24 @@
- test-project  ·  3 worktrees  ·  on root                                ● root 
-     NAME BRANCH AGE     ± ↕  ⬡ ◆                                               
- ────────────────────────────────────────────────────────────────────────────── 
-         ╭────────────────────────────────────────────────────────────╮
-         │                                                            │
-         │  Configuration                                             │
-         │                                                            │
-         │    General  Behavior  Plugins  Protection                  │
-         │    ──────────────────────────────────────────────────────  │
-         │                                                            │
-         │    ❯ project_name    grove-cli                             │
-         │        Project name                                        │
-         │      alias           (empty)                               │
-         │      projects_dir    /Users/dev/projects                   │
-         │      default_branch  main                                  │
-         │                                                            │
-         │    tab/shift+tab sections  ↑↓ navigate  enter edit  esc    │
-         │  close                                                     │
-         │                                                            │
-         ╰────────────────────────────────────────────────────────────╯
-                                                                                
-                                                                                
-                                                                                
-                                                                                
+[2m [1m[1mtest-project[m  ·  3 worktrees  ·  on root                                ● root[m [m
+[2m                                                                                [m
+[2m 1 ❯ root ────────────────────────────────────────────────────────────── 2h ago [m
+          ╭──────────────────────────────────────────────────────────╮
+          │                                                          │
+          │  [1mConfiguration[m                                           │
+          │                                                          │
+          │    [1;4;4mG[m[1;4;4me[m[1;4;4mn[m[1;4;4me[m[1;4;4mr[m[1;4;4ma[m[1;4;4ml[m  Behavior  Plugins  Protection                │
+          │                                                          │
+          │  ──────────────────────────────────────────────────────  │
+          │                                                          │
+          │    ❯ project_name    grove-cli                           │
+          │        Project name                                      │
+          │      alias           (empty)                             │
+          │      projects_dir    /home/dev/projects                  │
+          │      default_branch  main                                │
+          │                                                          │
+          │    tab/shift+tab sections  ↑↓ navigate  enter edit  esc  │
+          │  close                                                   │
+          │                                                          │
+          ╰──────────────────────────────────────────────────────────╯
+[2m                                                                                [m
+[2m                                                                                [m
+[2m  [1mtab[m next tab · [1m↑↓[m navigate · [1menter[m edit · [1mesc[m close                           [m

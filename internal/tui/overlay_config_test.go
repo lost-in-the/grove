@@ -1,11 +1,14 @@
 package tui
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 )
+
+var ansiStripRE = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 
 func TestNewConfigState(t *testing.T) {
 	s := NewConfigState()
@@ -142,8 +145,8 @@ func TestConfigOverlay_EnterOpensEdit(t *testing.T) {
 	if !m.configState.Editing {
 		t.Error("expected Editing=true after enter")
 	}
-	if m.configState.EditForm == nil {
-		t.Error("expected EditForm to be set")
+	if m.configState.EditBuffer != cfg.ProjectName {
+		t.Errorf("expected EditBuffer=%q, got %q", cfg.ProjectName, m.configState.EditBuffer)
 	}
 }
 
@@ -293,10 +296,13 @@ func TestRenderConfig_AllStates(t *testing.T) {
 
 		v := renderConfig(s, 100)
 		if !strings.Contains(v, "project_name") {
-			t.Error("expected 'project_name' field in render")
+			t.Errorf("expected 'project_name' field in render, got:\n%s", v)
 		}
-		if !strings.Contains(v, "General") {
-			t.Error("expected 'General' tab label")
+		// Strip ANSI codes before checking — lipgloss v2 may wrap each character
+		// individually when applying underline styling.
+		plain := ansiStripRE.ReplaceAllString(v, "")
+		if !strings.Contains(plain, "General") {
+			t.Errorf("expected 'General' tab label, got:\n%s", v)
 		}
 	})
 
@@ -306,7 +312,7 @@ func TestRenderConfig_AllStates(t *testing.T) {
 		s.Config = cfg
 		s.Fields = populateConfigFields(cfg)
 		s.Editing = true
-		s.EditForm = newConfigEditForm(&s.Fields[ConfigTabGeneral][0])
+		s.EditBuffer = s.Fields[ConfigTabGeneral][0].Value
 
 		v := renderConfig(s, 100)
 		if !strings.Contains(v, "save") {
@@ -358,59 +364,28 @@ func TestRenderConfig_AllStates(t *testing.T) {
 	})
 }
 
-func TestNewConfigEditForm(t *testing.T) {
-	t.Run("string field", func(t *testing.T) {
-		field := &ConfigField{
-			Key:   "test",
-			Label: "Test",
-			Value: "hello",
-			Type:  ConfigString,
-		}
-		form := newConfigEditForm(field)
-		if form == nil {
-			t.Fatal("expected non-nil form")
-		}
-	})
+func TestConfigEditManual_BoolToggle(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 30))
+	m = sendKey(m, "c")
 
-	t.Run("bool field", func(t *testing.T) {
-		field := &ConfigField{
-			Key:   "test",
-			Label: "Test",
-			Value: "true",
-			Type:  ConfigBool,
-		}
-		form := newConfigEditForm(field)
-		if form == nil {
-			t.Fatal("expected non-nil form")
-		}
-	})
+	cfg := config.LoadDefaults()
+	m.configState.Fields = populateConfigFields(cfg)
+	m.configState.Config = cfg
 
-	t.Run("enum field", func(t *testing.T) {
-		field := &ConfigField{
-			Key:     "test",
-			Label:   "Test",
-			Value:   "option1",
-			Type:    ConfigEnum,
-			Options: []string{"option1", "option2"},
+	// Navigate to a bool field (Behavior tab, skip_branch_notice)
+	m = sendKey(m, "tab") // switch to Behavior tab
+	// Navigate down to find a bool field
+	for i := 0; i < len(m.configState.Fields[m.configState.Tab]); i++ {
+		if m.configState.Fields[m.configState.Tab][i].Type == ConfigBool {
+			m.configState.Cursor = i
+			break
 		}
-		form := newConfigEditForm(field)
-		if form == nil {
-			t.Fatal("expected non-nil form")
-		}
-	})
+	}
 
-	t.Run("list field", func(t *testing.T) {
-		field := &ConfigField{
-			Key:   "test",
-			Label: "Test",
-			Value: "a, b, c",
-			Type:  ConfigList,
-		}
-		form := newConfigEditForm(field)
-		if form == nil {
-			t.Fatal("expected non-nil form")
-		}
-	})
+	m = sendKey(m, "enter")
+	if !m.configState.Editing {
+		t.Fatal("expected editing mode")
+	}
 }
 
 func TestConfigOverlay_EscDirtyConfirms(t *testing.T) {
@@ -475,16 +450,16 @@ func TestConfigOverlay_ConfirmEscDiscards(t *testing.T) {
 	}
 }
 
-func TestConfigEditKey_NilForm(t *testing.T) {
+func TestConfigEditKey_NoFieldsEditing(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
 	m.activeView = ViewConfig
 	m.configState = NewConfigState()
 	m.configState.Editing = true
-	m.configState.EditForm = nil
+	m.configState.Cursor = 99 // out of bounds
 
 	m = sendKey(m, "enter")
 	if m.configState.Editing {
-		t.Error("expected Editing=false when EditForm is nil")
+		t.Error("expected Editing=false when cursor is out of bounds")
 	}
 }
 

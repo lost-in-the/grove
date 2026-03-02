@@ -4,15 +4,16 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // Header renders the dashboard header with project context.
 type Header struct {
-	ProjectName   string
-	WorktreeCount int
-	CurrentBranch string
-	CurrentName   string
+	ProjectName     string
+	WorktreeCount   int
+	CurrentBranch   string
+	CurrentName     string
+	ContainerTarget string // worktree name that containers are pointed to
 }
 
 // View renders the header at the given width.
@@ -30,6 +31,11 @@ func (h Header) View(width int) string {
 	if h.CurrentBranch != "" {
 		left += Styles.TextMuted.Render("  ·  ")
 		left += Styles.TextMuted.Render("on ") + Styles.TextNormal.Render(h.CurrentBranch)
+	}
+
+	if h.ContainerTarget != "" {
+		left += Styles.TextMuted.Render("  ·  ")
+		left += Styles.ContainerBadgeActive.Render("◆") + Styles.TextMuted.Render(" → ") + Styles.TextNormal.Render(h.ContainerTarget)
 	}
 
 	leftWidth := lipgloss.Width(left)

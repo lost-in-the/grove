@@ -3,8 +3,7 @@ package tui
 import (
 	"testing"
 
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/list"
 )
 
 func TestListFilterActivation(t *testing.T) {
@@ -15,7 +14,7 @@ func TestListFilterActivation(t *testing.T) {
 	}
 
 	// Press / to activate filter
-	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	result, cmd := m.Update(makeKeyMsg("/"))
 	m = result.(Model)
 
 	if m.list.FilterState() != list.Filtering {
@@ -28,7 +27,7 @@ func TestListFilterActivation(t *testing.T) {
 	}
 
 	// Type 'f' — should stay in filtering mode, not trigger any dashboard handler
-	result, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("f")})
+	result, cmd = m.Update(makeKeyMsg("f"))
 	m = result.(Model)
 
 	if m.list.FilterState() != list.Filtering {

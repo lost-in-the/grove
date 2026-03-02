@@ -98,9 +98,10 @@ grove    # Opens interactive dashboard (inside a grove project)
 | Command | Description |
 |---------|-------------|
 | `grove ls` | List all worktrees with status |
-| `grove new <name>` | Create a worktree and tmux session |
-| `grove new <name> --mirror origin/main` | Create an environment worktree tracking a remote branch |
+| `grove new <name>` | Create a worktree + tmux session + Docker stack |
+| `grove open <name>` | Open a worktree session (create if needed, launch configured command) |
 | `grove to <name>` | Switch to a worktree (changes directory, attaches tmux) |
+| `grove to <name> --peek` | Lightweight switch — skip hooks (no Docker side effects) |
 | `grove rm <name>` | Remove a worktree and kill its tmux session |
 | `grove here` | Show current worktree info (branch, SHA, age, status) |
 | `grove last` | Switch to the previous worktree |
@@ -133,7 +134,7 @@ Requires a `docker-compose.yml` in the worktree. See [Docker Plugin](plugins/doc
 | `grove logs [service]` | Tail container logs |
 | `grove restart [service]` | Restart container(s) |
 | `grove up --isolated` | Start an isolated Docker stack (for parallel agents) |
-| `grove agent-status` | Show active isolated stacks |
+| `grove ps` | Show active stacks with reference IDs and URLs |
 
 ### Utility
 
@@ -179,10 +180,18 @@ command = "bin/rails test"
 # Optional: run in a Docker service instead of locally
 # service = "app"
 
+[session]
+# Command to run in sessions opened by 'grove open' (default: $SHELL)
+# command = "claude"
+# popup = true         # Use tmux display-popup
+# popup_width = "80%"
+# popup_height = "80%"
+
 [plugins.docker]
 enabled = true
 auto_start = true   # Start containers when switching to a worktree
 auto_stop = false   # Stop containers when switching away
+# auto_up = true    # Auto-start Docker on 'grove new' (default: true when agent stacks configured)
 
 [protection]
 # Worktrees that cannot receive changes via 'grove apply'
@@ -197,6 +206,7 @@ immutable = ["main", "production"]
 **Environment variables:**
 - `GROVE_TUI=0` — disable TUI; bare `grove` shows help instead
 - `GROVE_SHELL=1` — set by shell integration to enable directory switching
+- `GROVE_AGENT_MODE=1` — agent isolation mode (forces isolated Docker, JSON output)
 - `GROVE_LOG=1` — enable debug logging to `~/.grove/grove.log`
 - `GROVE_LOG=/path/to/file` — enable debug logging to a custom path
 

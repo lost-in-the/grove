@@ -357,19 +357,14 @@ func TestRenderFork_AllSteps(t *testing.T) {
 	})
 }
 
-func TestForkNameForm(t *testing.T) {
-	var name string
-	form := NewForkNameForm(&name, "test-project", nil)
-	if form == nil {
-		t.Fatal("expected non-nil form")
+func TestForkNameValidation(t *testing.T) {
+	// Name validation still works without huh
+	validator := createNameValidator(nil, "")
+	if err := validator("valid-name"); err != nil {
+		t.Errorf("expected valid name to pass, got: %v", err)
 	}
-}
-
-func TestForkWIPForm(t *testing.T) {
-	var choice string
-	form := NewForkWIPForm(&choice)
-	if form == nil {
-		t.Fatal("expected non-nil form")
+	if err := validator(""); err == nil {
+		t.Error("expected empty name to fail")
 	}
 }
 

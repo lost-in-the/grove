@@ -1,13 +1,14 @@
 package commands
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/LeahArmstrong/grove-cli/internal/cli"
+	"github.com/LeahArmstrong/grove-cli/internal/log"
 	"github.com/LeahArmstrong/grove-cli/internal/output"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
@@ -20,6 +21,8 @@ var lastCmd = &cobra.Command{
 	Short: "Switch to the previous worktree",
 	Long:  `Switch to the last worktree you were working in.`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
+		stderr := cli.NewStderr()
+
 		// Try to get last worktree from state first (V2 approach)
 		lastWorktree, err := ctx.State.GetLastWorktree()
 		if err != nil || lastWorktree == "" {
@@ -61,14 +64,18 @@ var lastCmd = &cobra.Command{
 		currentTree, _ := mgr.GetCurrent()
 		if currentTree != nil {
 			// Update last_worktree in state before switching
-			_ = ctx.State.SetLastWorktree(currentTree.DisplayName())
+			if err := ctx.State.SetLastWorktree(currentTree.DisplayName()); err != nil {
+				log.Printf("failed to set last worktree %q: %v", currentTree.DisplayName(), err)
+			}
 		}
 
 		// Store current session as last if inside tmux
 		if tmux.IsInsideTmux() {
 			currentSession, err := tmux.GetCurrentSession()
 			if err == nil {
-				_ = tmux.StoreLastSession(currentSession)
+				if err := tmux.StoreLastSession(currentSession); err != nil {
+					log.Printf("failed to store last session %q: %v", currentSession, err)
+				}
 			}
 		}
 
@@ -85,7 +92,9 @@ var lastCmd = &cobra.Command{
 		}
 
 		// Update last_accessed_at for target worktree
-		_ = ctx.State.TouchWorktree(targetTree.DisplayName())
+		if err := ctx.State.TouchWorktree(targetTree.DisplayName()); err != nil {
+			log.Printf("failed to touch worktree %q: %v", targetTree.DisplayName(), err)
+		}
 
 		// JSON output mode
 		if lastJSON {
@@ -95,9 +104,7 @@ var lastCmd = &cobra.Command{
 				Branch:   targetTree.Branch,
 				Path:     targetTree.Path,
 			}
-			data, _ := json.MarshalIndent(result, "", "  ")
-			fmt.Println(string(data))
-			return nil
+			return output.PrintJSON(result)
 		}
 
 		// Skip cd directive when tmux switch already moved the user
@@ -105,14 +112,16 @@ var lastCmd = &cobra.Command{
 			hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
 
 			if hasShellIntegration {
-				fmt.Printf("cd:%s\n", targetTree.Path)
+				cli.Directive("cd", targetTree.Path)
 			} else {
-				fmt.Fprintf(os.Stderr, "\nNote: Directory switching requires shell integration.\n")
-				fmt.Fprintf(os.Stderr, "Add this to your shell config (~/.zshrc or ~/.bashrc):\n\n")
-				fmt.Fprintf(os.Stderr, "  eval \"$(grove install zsh)\"   # for zsh\n")
-				fmt.Fprintf(os.Stderr, "  eval \"$(grove install bash)\"  # for bash\n\n")
-				fmt.Fprintf(os.Stderr, "To change directory manually:\n")
-				fmt.Fprintf(os.Stderr, "  cd %s\n", targetTree.Path)
+				cli.Faint(stderr, "Note: Directory switching requires shell integration.")
+				cli.Faint(stderr, "Add this to your shell config (~/.zshrc or ~/.bashrc):")
+				_, _ = fmt.Fprintf(stderr, "\n")
+				cli.Faint(stderr, "  eval \"$(grove install zsh)\"   # for zsh")
+				cli.Faint(stderr, "  eval \"$(grove install bash)\"  # for bash")
+				_, _ = fmt.Fprintf(stderr, "\n")
+				cli.Faint(stderr, "To change directory manually:")
+				cli.Faint(stderr, "  cd %s", targetTree.Path)
 			}
 		}
 

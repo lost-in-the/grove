@@ -2,7 +2,7 @@
 #
 # Use this pattern when your project's Docker services are defined in a shared
 # compose setup that lives outside the project directory — for example, a
-# central "infra" or "shared-compose" repository that manages services for many
+# central "infra" or "shared-infra" repository that manages services for many
 # projects at once.
 #
 # In external mode, grove does not manage a local docker-compose.yml. Instead,
@@ -42,7 +42,7 @@ mode = "external"
 # Absolute or ~-relative path to the external Docker Compose directory.
 # This directory must exist and contain a docker-compose.yml (or equivalent).
 # Required.
-path = "~/work/shared-compose"
+path = "~/projects/shared-infra"
 
 # Name of the environment variable that the external compose stack reads to
 # locate the project directory. Grove sets this to the active worktree's

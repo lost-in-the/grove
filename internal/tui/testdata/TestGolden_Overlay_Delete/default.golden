@@ -1,24 +1,24 @@
- test-project  ·  3 worktrees  ·  on root                                ● root 
-     NAME BRANCH AGE     ± ↕  ⬡ ◆                                               
- ────────────────────────────────────────────────────────────────────────────── 
-                                                                                
-            ╭─────────────────────────────────────────────────────╮
-            │                                                     │
-            │  Delete Worktree                                    │
-            │                                                     │
-            │  Delete "feature-auth"?                             │
-            │                                                     │
-            │  Path      /tmp/test-project-feature-auth           │
-            │  Branch    feature-auth                             │
-            │  Commit    abc1234 · 2 hours ago                    │
-            │  Status    ✓ clean                                  │
-            │                                                     │
-            │  [ ] Also delete branch feature-auth                │
-            │                                                     │
-            │  y confirm  n cancel  space toggle branch           │
-            │                                                     │
-            ╰─────────────────────────────────────────────────────╯
-                                                                                
-                                                                                
-                                                                                
-                                                                                
+[2m [1m[1mtest-project[m  ·  3 worktrees  ·  on root                                ● root[m [m
+[2m                                                                                [m
+[2m 1 ❯ root ────────────────────────────────────────────────────────────── 2h ago [m
+[2m       test commit for root                                                     [m
+             ╭───────────────────────────────────────────────────╮
+             │                                                   │
+             │  [1mDelete Worktree[m                                  │
+             │                                                   │
+             │  [1mDelete "feature-auth"?[m                           │
+             │                                                   │
+             │  Path      /tmp/test-project-feature-auth         │
+             │  Branch    feature-auth                           │
+             │  Commit    abc1234 · 2 hours ago                  │
+             │  Status    ● clean                                │
+             │                                                   │
+             │  [ ] Also delete branch feature-auth              │
+             │                                                   │
+             │  [1my[m confirm  [1mn[m cancel  [1mspace[m toggle branch         │
+             │                                                   │
+             ╰───────────────────────────────────────────────────╯
+[2m                                                                                [m
+[2m                                                                                [m
+[2m                                                                                [m
+[2m  [1my[m confirm · [1mn[m cancel · [1mspace[m toggle branch                                    [m

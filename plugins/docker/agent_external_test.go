@@ -15,18 +15,18 @@ func newTestAgentConfig(t *testing.T) *config.Config {
 	tmpDir := t.TempDir()
 	enabled := true
 	return &config.Config{
-		ProjectName: "admin",
+		ProjectName: "myapp",
 		Plugins: config.PluginsConfig{
 			Docker: config.DockerPluginConfig{
 				Mode: "external",
 				External: &config.ExternalComposeConfig{
 					Path:     tmpDir,
-					EnvVar:   "ADMIN_DIR",
-					Services: []string{"admin"},
+					EnvVar:   "APP_DIR",
+					Services: []string{"app"},
 					Agent: &config.AgentStackConfig{
 						Enabled:      &enabled,
 						MaxSlots:     3,
-						Services:     []string{"admin", "admin_sidekiq"},
+						Services:     []string{"app", "app_worker"},
 						TemplatePath: "agent-stacks/template.yml",
 						URLPattern:   "https://agent-{slot}--app.example.com",
 					},
@@ -78,19 +78,19 @@ func TestAgentExternalStrategy_OnPostCreate_CopiesFiles(t *testing.T) {
 
 	enabled := true
 	cfg := &config.Config{
-		ProjectName: "admin",
+		ProjectName: "myapp",
 		Plugins: config.PluginsConfig{
 			Docker: config.DockerPluginConfig{
 				Mode: "external",
 				External: &config.ExternalComposeConfig{
 					Path:      tmpDir,
-					EnvVar:    "ADMIN_DIR",
-					Services:  []string{"admin"},
+					EnvVar:    "APP_DIR",
+					Services:  []string{"app"},
 					CopyFiles: []string{"config/secret.key"},
 					Agent: &config.AgentStackConfig{
 						Enabled:      &enabled,
 						MaxSlots:     3,
-						Services:     []string{"admin"},
+						Services:     []string{"app"},
 						TemplatePath: "agent-stacks/template.yml",
 					},
 				},
@@ -127,9 +127,9 @@ func TestAgentExternalStrategy_ComposeProjectName(t *testing.T) {
 		slot int
 		want string
 	}{
-		{"slot 1", 1, "admin-agent-1"},
-		{"slot 5", 5, "admin-agent-5"},
-		{"slot 0 ephemeral", 0, "admin-agent-ephemeral"},
+		{"slot 1", 1, "myapp-agent-1"},
+		{"slot 5", 5, "myapp-agent-5"},
+		{"slot 0 ephemeral", 0, "myapp-agent-ephemeral"},
 	}
 
 	for _, tt := range tests {
@@ -193,8 +193,8 @@ func TestAgentExternalStrategy_AgentEnv(t *testing.T) {
 			if len(env) != tt.wantLen {
 				t.Errorf("agentEnv() returned %d vars, want %d", len(env), tt.wantLen)
 			}
-			if env[0] != "ADMIN_DIR=/tmp/wt" {
-				t.Errorf("agentEnv()[0] = %q, want ADMIN_DIR=/tmp/wt", env[0])
+			if env[0] != "APP_DIR=/tmp/wt" {
+				t.Errorf("agentEnv()[0] = %q, want APP_DIR=/tmp/wt", env[0])
 			}
 			if tt.wantSlot != "" && len(env) > 1 && env[1] != tt.wantSlot {
 				t.Errorf("agentEnv()[1] = %q, want %q", env[1], tt.wantSlot)
@@ -204,13 +204,13 @@ func TestAgentExternalStrategy_AgentEnv(t *testing.T) {
 }
 
 func TestAgentComposeCommand(t *testing.T) {
-	cmd := agentComposeCommand("/tmp/compose", "/tmp/compose/template.yml", "admin-agent-1", []string{"ADMIN_DIR=/app"}, "up", "-d", "admin")
+	cmd := agentComposeCommand("/tmp/compose", "/tmp/compose/template.yml", "myapp-agent-1", []string{"APP_DIR=/app"}, "up", "-d", "app")
 
 	if cmd.Dir != "/tmp/compose" {
 		t.Errorf("cmd.Dir = %q, want /tmp/compose", cmd.Dir)
 	}
 
-	wantArgs := []string{"docker", "compose", "-f", "/tmp/compose/template.yml", "-p", "admin-agent-1", "up", "-d", "admin"}
+	wantArgs := []string{"docker", "compose", "-f", "/tmp/compose/template.yml", "-p", "myapp-agent-1", "up", "-d", "app"}
 	if len(cmd.Args) != len(wantArgs) {
 		t.Fatalf("cmd.Args length = %d, want %d: %v", len(cmd.Args), len(wantArgs), cmd.Args)
 	}
@@ -240,8 +240,8 @@ func TestResolveComposePath(t *testing.T) {
 		name string
 		path string
 	}{
-		{"absolute path unchanged", "/tmp/shared-compose"},
-		{"tilde path resolved", "~/shared-compose"},
+		{"absolute path unchanged", "/tmp/shared-infra"},
+		{"tilde path resolved", "~/shared-infra"},
 	}
 
 	for _, tt := range tests {
@@ -250,7 +250,7 @@ func TestResolveComposePath(t *testing.T) {
 			if strings.HasPrefix(got, "~") {
 				t.Errorf("resolveComposePath(%q) = %q, should not start with ~", tt.path, got)
 			}
-			if tt.path == "/tmp/shared-compose" && got != "/tmp/shared-compose" {
+			if tt.path == "/tmp/shared-infra" && got != "/tmp/shared-infra" {
 				t.Errorf("resolveComposePath(%q) = %q, want %q", tt.path, got, tt.path)
 			}
 		})
@@ -442,12 +442,12 @@ func TestPlugin_InitAgentExternalStrategy(t *testing.T) {
 				Mode: "external",
 				External: &config.ExternalComposeConfig{
 					Path:     tmpDir,
-					EnvVar:   "ADMIN_DIR",
-					Services: []string{"admin"},
+					EnvVar:   "APP_DIR",
+					Services: []string{"app"},
 					Agent: &config.AgentStackConfig{
 						Enabled:      &enabled,
 						MaxSlots:     3,
-						Services:     []string{"admin"},
+						Services:     []string{"app"},
 						TemplatePath: "agent-stacks/template.yml",
 					},
 				},
@@ -482,12 +482,12 @@ func TestPlugin_InitExternalStrategy_NotAgentMode(t *testing.T) {
 				Mode: "external",
 				External: &config.ExternalComposeConfig{
 					Path:     tmpDir,
-					EnvVar:   "ADMIN_DIR",
-					Services: []string{"admin"},
+					EnvVar:   "APP_DIR",
+					Services: []string{"app"},
 					Agent: &config.AgentStackConfig{
 						Enabled:      &enabled,
 						MaxSlots:     3,
-						Services:     []string{"admin"},
+						Services:     []string{"app"},
 						TemplatePath: "agent-stacks/template.yml",
 					},
 				},
@@ -518,12 +518,12 @@ func TestPlugin_SetIsolated(t *testing.T) {
 				Mode: "external",
 				External: &config.ExternalComposeConfig{
 					Path:     tmpDir,
-					EnvVar:   "ADMIN_DIR",
-					Services: []string{"admin"},
+					EnvVar:   "APP_DIR",
+					Services: []string{"app"},
 					Agent: &config.AgentStackConfig{
 						Enabled:      &enabled,
 						MaxSlots:     3,
-						Services:     []string{"admin"},
+						Services:     []string{"app"},
 						TemplatePath: "agent-stacks/template.yml",
 					},
 				},
@@ -552,8 +552,8 @@ func TestPlugin_IsIsolated_False(t *testing.T) {
 				Mode: "external",
 				External: &config.ExternalComposeConfig{
 					Path:     t.TempDir(),
-					EnvVar:   "ADMIN_DIR",
-					Services: []string{"admin"},
+					EnvVar:   "APP_DIR",
+					Services: []string{"app"},
 				},
 			},
 		},
@@ -575,12 +575,12 @@ func TestHasActiveAgentSlot(t *testing.T) {
 				Mode: "external",
 				External: &config.ExternalComposeConfig{
 					Path:     tmpDir,
-					EnvVar:   "ADMIN_DIR",
-					Services: []string{"admin"},
+					EnvVar:   "APP_DIR",
+					Services: []string{"app"},
 					Agent: &config.AgentStackConfig{
 						Enabled:      &enabled,
 						MaxSlots:     3,
-						Services:     []string{"admin"},
+						Services:     []string{"app"},
 						TemplatePath: "agent-stacks/template.yml",
 					},
 				},
@@ -588,7 +588,7 @@ func TestHasActiveAgentSlot(t *testing.T) {
 		},
 	}
 
-	worktreePath := filepath.Join(tmpDir, "admin-feature")
+	worktreePath := filepath.Join(tmpDir, "myapp-feature")
 
 	// No slot allocated yet
 	if HasActiveAgentSlot(cfg, worktreePath) {
@@ -599,7 +599,7 @@ func TestHasActiveAgentSlot(t *testing.T) {
 	slotsFile := filepath.Join(tmpDir, "agent-stacks", ".slots.json")
 	_ = os.MkdirAll(filepath.Dir(slotsFile), 0755)
 	sm := NewSlotManager(slotsFile, 3)
-	_, err := sm.Allocate("admin-feature")
+	_, err := sm.Allocate("myapp-feature")
 	if err != nil {
 		t.Fatalf("Failed to allocate slot: %v", err)
 	}
@@ -623,8 +623,8 @@ func TestHasActiveAgentSlot_NoAgentConfig(t *testing.T) {
 				Mode: "external",
 				External: &config.ExternalComposeConfig{
 					Path:     t.TempDir(),
-					EnvVar:   "ADMIN_DIR",
-					Services: []string{"admin"},
+					EnvVar:   "APP_DIR",
+					Services: []string{"app"},
 				},
 			},
 		},

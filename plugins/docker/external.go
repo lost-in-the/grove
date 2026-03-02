@@ -13,7 +13,7 @@ import (
 )
 
 // externalStrategy implements the docker mode for projects whose services are defined
-// in an external, shared docker-compose setup (e.g., a central shared-compose directory).
+// in an external, shared docker-compose setup (e.g., a central shared-infra directory).
 type externalStrategy struct {
 	cfg *config.Config
 	ext *config.ExternalComposeConfig
@@ -179,7 +179,7 @@ func (s *externalStrategy) composePath() string {
 	return resolveComposePath(s.ext.Path)
 }
 
-// persistEnvVar writes the env_var (e.g., ADMIN_DIR) to the .env file in the compose
+// persistEnvVar writes the env_var (e.g., APP_DIR) to the .env file in the compose
 // directory so that subsequent docker compose commands outside grove use the correct value.
 func (s *externalStrategy) persistEnvVar(worktreePath string) error {
 	envFile := filepath.Join(s.composePath(), ".env")
@@ -219,14 +219,14 @@ func (s *externalStrategy) persistEnvVar(worktreePath string) error {
 }
 
 // envForWorktree returns the environment variable setting for the given worktree path.
-// The value is the relative path from the compose directory (e.g., "./admin-feature-x").
+// The value is the relative path from the compose directory (e.g., "./myapp-feature-x").
 func (s *externalStrategy) envForWorktree(worktreePath string) []string {
 	rel := s.relativeWorktreePath(worktreePath)
 	return []string{s.ext.EnvVar + "=" + rel}
 }
 
 // relativeWorktreePath converts an absolute worktree path to a relative path from
-// the external compose directory. Returns a ./ prefixed path (e.g., "./admin-feature-x").
+// the external compose directory. Returns a ./ prefixed path (e.g., "./myapp-feature-x").
 func (s *externalStrategy) relativeWorktreePath(absPath string) string {
 	composePath := s.composePath()
 	rel, err := filepath.Rel(composePath, absPath)

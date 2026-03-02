@@ -37,12 +37,17 @@ Each row in the list shows:
 
 | Column | Description |
 |--------|-------------|
-| Number | Position in the list (1–N) |
+| Number | Position in the list (1–N) for quick-switch |
+| Indicator | Selection/status: `❯` selected, `●` current (green) or dirty (yellow), `✗` stale (red), `○` clean (muted) |
 | Name | Short name (e.g., `testing`, not `project-testing`) |
 | Branch | Git branch name |
 | Age | Time since last commit |
-| Status | `clean`, `dirty`, or `stale` |
-| Tmux | Session indicator if a tmux session exists |
+| ± | Git status symbol: `✓` clean, `●` dirty, `✗` stale |
+| ↕ | Sync status: `↑N` ahead, `↓N` behind |
+| ⬡ | Tmux session: `⬢` attached, `⬡` detached |
+| ◆ | Container status from plugins |
+
+The selected row always shows `❯` regardless of worktree status — the indicator column prioritizes selection cursor over status symbols.
 
 The main worktree always sorts to the top. The current worktree is highlighted.
 

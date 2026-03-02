@@ -2,18 +2,17 @@ package tui
 
 import (
 	"fmt"
+	"image/color"
 	"os"
 	"strings"
-	"time"
 
-	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	lipgloss "charm.land/lipgloss/v2"
 
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/git"
@@ -69,8 +68,6 @@ type Model struct {
 	activeView ActiveView
 	ready      bool // true after first WindowSizeMsg
 	loading    bool // true while fetching worktrees
-	statusMsg  string
-	statusTTL  time.Time
 
 	// Sort
 	sortMode SortMode
@@ -86,8 +83,7 @@ type Model struct {
 	configState *ConfigState
 
 	// Post-create selection
-	pendingSelect     string
-	pendingSelectPath string
+	pendingSelect string
 
 	// Output
 	switchTo            string
@@ -96,8 +92,9 @@ type Model struct {
 
 	// Layout
 	width, height int
+	compactMode   bool // true = V1 single-line delegate, false = V2 two-line
 
-	// List delegate (stored for header rendering — list.Model doesn't export it)
+	// List delegate (stored for header rendering in compact mode)
 	listDelegate WorktreeDelegate
 }
 
@@ -111,7 +108,18 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 
 	s := GroveSpinner()
 
-	delegate := NewWorktreeDelegate()
+	// Determine compact mode from config
+	compact := cfg != nil && cfg.TUI.CompactList != nil && *cfg.TUI.CompactList
+
+	var delegate list.ItemDelegate
+	var v1Delegate WorktreeDelegate
+	if compact {
+		v1Delegate = NewWorktreeDelegate()
+		delegate = v1Delegate
+	} else {
+		delegate = NewWorktreeDelegateV2()
+	}
+
 	l := list.New(nil, delegate, 0, 0)
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
@@ -139,7 +147,8 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		cfgLoadErr:   cfgErr,
 		keys:         keys,
 		list:         l,
-		listDelegate: delegate,
+		listDelegate: v1Delegate,
+		compactMode:  compact,
 		spinner:      s,
 		help:         h,
 		toast:        NewToastModel(),
@@ -214,7 +223,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			m.pendingSelect = ""
-			m.pendingSelectPath = ""
 		}
 
 		m.updateDetailContent()
@@ -226,13 +234,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.toast.Show(NewToast(fmt.Sprintf("Delete failed: %s", msg.err), ToastError))
 		} else if msg.branchErr != nil {
-			m.statusMsg = fmt.Sprintf("Deleted %q (branch kept)", msg.name)
-			m.statusTTL = time.Now().Add(3 * time.Second)
 			m.toast.Show(NewToast(fmt.Sprintf("Deleted %q but %s", msg.name, msg.branchErr), ToastWarning))
 			cmds = append(cmds, m.spinner.Tick)
 		} else {
-			m.statusMsg = fmt.Sprintf("Deleted %q", msg.name)
-			m.statusTTL = time.Now().Add(3 * time.Second)
 			m.toast.Show(NewToast(fmt.Sprintf("Deleted %q", msg.name), ToastSuccess))
 			cmds = append(cmds, m.spinner.Tick)
 		}
@@ -250,9 +254,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.activeView = ViewDashboard
 		m.createState = nil
 		m.pendingSelect = msg.name
-		m.pendingSelectPath = msg.path
-		m.statusMsg = fmt.Sprintf("Created %q", msg.name)
-		m.statusTTL = time.Now().Add(3 * time.Second)
+
 		if msg.hookErr != nil {
 			m.toast.Show(NewToast(fmt.Sprintf("Created %q (hook failed: %s)", msg.name, msg.hookErr), ToastWarning))
 		} else {
@@ -263,12 +265,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		cmds = append(cmds, m.spinner.Tick, m.fetchWorktrees)
 		return m, tea.Batch(cmds...)
-
-	case statusClearMsg:
-		if !msg.deadline.Before(m.statusTTL) {
-			m.statusMsg = ""
-		}
-		return m, nil
 
 	case prsFetchedMsg:
 		if m.prState != nil {
@@ -305,9 +301,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.activeView = ViewDashboard
 		m.issueState = nil
 		m.pendingSelect = msg.name
-		m.pendingSelectPath = msg.path
-		m.statusMsg = fmt.Sprintf("Created worktree from issue %q", msg.name)
-		m.statusTTL = time.Now().Add(3 * time.Second)
+
 		if msg.hookErr != nil {
 			m.toast.Show(NewToast(fmt.Sprintf("Created from issue %q (hook failed: %s)", msg.name, msg.hookErr), ToastWarning))
 		} else {
@@ -332,9 +326,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.activeView = ViewDashboard
 		m.prState = nil
 		m.pendingSelect = msg.name
-		m.pendingSelectPath = msg.path
-		m.statusMsg = fmt.Sprintf("Created worktree from PR %q", msg.name)
-		m.statusTTL = time.Now().Add(3 * time.Second)
+
 		if msg.hookErr != nil {
 			m.toast.Show(NewToast(fmt.Sprintf("Created from PR %q (hook failed: %s)", msg.name, msg.hookErr), ToastWarning))
 		} else {
@@ -355,13 +347,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				names = append(names, name)
 				tuilog.Printf("bulk delete failed for %q: %s", name, errMsg)
 			}
-			m.statusMsg = fmt.Sprintf("Deleted %d worktrees (%d failed: %s)", msg.count, len(msg.failed), strings.Join(names, ", "))
 			m.toast.Show(NewToast(fmt.Sprintf("Deleted %d, failed: %s", msg.count, strings.Join(names, ", ")), ToastWarning))
 		} else {
-			m.statusMsg = fmt.Sprintf("Deleted %d worktrees", msg.count)
 			m.toast.Show(NewToast(fmt.Sprintf("Deleted %d worktrees", msg.count), ToastSuccess))
 		}
-		m.statusTTL = time.Now().Add(3 * time.Second)
 		return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
 
 	case forkWIPCheckMsg:
@@ -386,7 +375,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.activeView = ViewDashboard
 				m.forkState = nil
 				m.pendingSelect = msg.name
-				m.pendingSelectPath = msg.path
+
 				m.toast.Show(NewToast(fmt.Sprintf("Forked %q (warning: %s)", msg.name, msg.err), ToastWarning))
 				return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
 			}
@@ -399,7 +388,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.activeView = ViewDashboard
 		m.forkState = nil
 		m.pendingSelect = msg.name
-		m.pendingSelectPath = msg.path
+
 		m.toast.Show(NewToast(fmt.Sprintf("Forked %q", msg.name), ToastSuccess))
 		return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
 
@@ -475,8 +464,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(spinnerCmds...)
 
-	case tea.KeyMsg:
-		tuilog.Printf("KeyMsg: type=%d string=%q runes=%v", msg.Type, msg.String(), msg.Runes)
+	case tea.KeyPressMsg:
+		tuilog.Printf("KeyMsg: code=%d string=%q text=%q", msg.Code, msg.String(), msg.Text)
 		// Overlays capture all input
 		if m.activeView != ViewDashboard {
 			return m.handleKey(msg)
@@ -496,18 +485,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	default:
-		// Forward messages to active Huh form when in create view
-		if m.activeView == ViewCreate && m.createState != nil && m.createState.UseHuhForms {
-			return m.forwardToActiveHuhForm(msg)
-		}
-		// Forward messages to active Huh form when in fork view
-		if m.activeView == ViewFork && m.forkState != nil && m.forkState.Form != nil {
-			return m.forwardToForkHuhForm(msg)
-		}
-		// Forward messages to active Huh form when in config view
-		if m.activeView == ViewConfig && m.configState != nil && m.configState.Editing && m.configState.EditForm != nil {
-			return m.forwardToConfigHuhForm(msg)
-		}
 		// Forward unhandled messages to the list so it can process
 		// internal messages (e.g. filter match results from fuzzy search).
 		var cmd tea.Cmd
@@ -522,30 +499,32 @@ func (m *Model) updateLayout() {
 	}
 
 	headerHeight := 1 // status bar
-	footerHeight := 1 // help
+	footerHeight := m.helpFooter.CompactHeight(m.activeView, m.width-4)
 	available := m.height - headerHeight - footerHeight
 
 	contentWidth := m.width - 2 // body padding (1 char each side)
 
-	// The list header (column labels + separator) is 2 lines rendered outside
-	// the list component, so subtract from available height.
-	listHeaderHeight := 2
+	// Column headers + separator are only shown in compact mode (2 lines).
+	listHeaderHeight := 0
+	if m.compactMode {
+		listHeaderHeight = 2
+	}
 
-	useSideBySide := m.width > 120
+	useSideBySide := m.width > 100
 	if useSideBySide {
 		// List gets 60% of content width, detail gets the remainder
 		listWidth := contentWidth * 60 / 100
 		dividerWidth := 3 // " │ "
 		detailWidth := contentWidth - listWidth - dividerWidth
 		m.list.SetSize(listWidth, available-listHeaderHeight)
-		m.detail.Width = detailWidth
-		m.detail.Height = available
+		m.detail.SetWidth(detailWidth)
+		m.detail.SetHeight(available)
 	} else {
 		// Stacked: cap list height at item count * row height + padding
 		itemCount := len(m.list.Items())
-		rowHeight := 1                             // delegate Height()
+		rowHeight := m.delegateHeight()
 		idealListHeight := itemCount*rowHeight + 2 // +2 for padding
-		maxListHeight := (available - listHeaderHeight) * 6 / 10
+		maxListHeight := (available - listHeaderHeight) * 75 / 100
 		listHeight := idealListHeight
 		if listHeight > maxListHeight {
 			listHeight = maxListHeight
@@ -558,27 +537,54 @@ func (m *Model) updateLayout() {
 			detailHeight = 3
 		}
 		m.list.SetSize(contentWidth, listHeight)
-		m.detail.Width = contentWidth
-		m.detail.Height = detailHeight
+		m.detail.SetWidth(contentWidth)
+		m.detail.SetHeight(detailHeight)
 	}
 
 	m.computeColumnWidths()
 
-	m.help.Width = contentWidth
+	m.help.SetWidth(contentWidth)
+}
+
+// toggleCompactMode switches between V1 (compact) and V2 (two-line) delegates.
+func (m *Model) toggleCompactMode() {
+	m.compactMode = !m.compactMode
+	if m.compactMode {
+		d := ComputeDelegateWidths(m.list.Items(), m.list.Width())
+		m.listDelegate = d
+		m.list.SetDelegate(d)
+	} else {
+		d := ComputeDelegateWidthsV2(m.list.Items(), m.list.Width())
+		m.list.SetDelegate(d)
+	}
+	m.updateLayout()
+	m.updateDetailContent()
+}
+
+// delegateHeight returns the item height for the active delegate.
+func (m *Model) delegateHeight() int {
+	if m.compactMode {
+		return 1
+	}
+	return 2
 }
 
 // computeColumnWidths scans list items to find max name/branch lengths,
-// then distributes available width proportionally. Stores the result in
-// the delegate and re-sets it on the list.
+// then distributes available width proportionally.
 func (m *Model) computeColumnWidths() {
 	listWidth := m.list.Width()
 	if listWidth <= 0 {
 		return
 	}
 
-	d := ComputeDelegateWidths(m.list.Items(), listWidth)
-	m.listDelegate = d
-	m.list.SetDelegate(d)
+	if m.compactMode {
+		d := ComputeDelegateWidths(m.list.Items(), listWidth)
+		m.listDelegate = d
+		m.list.SetDelegate(d)
+	} else {
+		d := ComputeDelegateWidthsV2(m.list.Items(), listWidth)
+		m.list.SetDelegate(d)
+	}
 }
 
 func (m *Model) updateDetailContent() {
@@ -587,7 +593,7 @@ func (m *Model) updateDetailContent() {
 		m.detail.SetContent("")
 		return
 	}
-	content := renderDetailV2(&item, m.detail.Width)
+	content := renderDetailV2(&item, m.detail.Width())
 	m.detail.SetContent(content)
 	m.detail.GotoTop()
 }
@@ -613,7 +619,7 @@ func (m Model) selectedItem() (WorktreeItem, bool) {
 	return item, ok
 }
 
-func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch m.activeView {
 	case ViewHelp:
 		m.activeView = ViewDashboard
@@ -640,12 +646,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.Quit):
 		return m, tea.Quit
 
 	case key.Matches(msg, m.keys.Escape):
+		if m.helpFooter.Expanded {
+			m.helpFooter.Toggle()
+			return m, nil
+		}
 		return m, tea.Quit
 
 	case key.Matches(msg, m.keys.Help):
@@ -663,12 +673,12 @@ func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			tuilog.Printf("warning: failed to list branches: %v", branchErr)
 		}
 		m.createState = &CreateState{
-			Step:        CreateStepBranch,
-			ProjectName: m.projectName,
-			UseHuhForms: true,
-			Branches:    branches,
+			Step:              CreateStepBranch,
+			ProjectName:       m.projectName,
+			Branches:          branches,
+			BranchFilterInput: newBranchFilterInput(),
 		}
-		return m, nil
+		return m, m.createState.BranchFilterInput.Focus()
 
 	case key.Matches(msg, m.keys.Delete):
 		item, ok := m.selectedItem()
@@ -692,6 +702,10 @@ func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.switchToDisplayName = item.displayName()
 			return m, tea.Quit
 		}
+
+	case key.Matches(msg, m.keys.ViewMode):
+		m.toggleCompactMode()
+		return m, nil
 
 	case key.Matches(msg, m.keys.Sort):
 		m.sortMode = m.sortMode.Next()
@@ -729,8 +743,9 @@ func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// Quick-switch: number keys 1-9 jump to nth visible item
 	// Disabled when the list has an active filter to avoid switching to hidden items
-	if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 && m.list.FilterState() == list.Unfiltered {
-		r := msg.Runes[0]
+	runes := []rune(msg.Text)
+	if len(runes) == 1 && m.list.FilterState() == list.Unfiltered {
+		r := runes[0]
 		if r >= '1' && r <= '9' {
 			idx := int(r - '1')
 			items := m.list.Items()
@@ -758,7 +773,7 @@ func (m Model) handleDashboardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) handleDeleteKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleDeleteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.deleteState == nil {
 		m.activeView = ViewDashboard
 		return m, nil
@@ -787,20 +802,13 @@ func (m Model) handleDeleteKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleCreateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.createState == nil {
 		m.activeView = ViewDashboard
 		return m, nil
 	}
 
-	s := m.createState
-
-	// Delegate to Huh forms when enabled
-	if s.UseHuhForms {
-		return m.handleCreateKeyHuh(msg)
-	}
-
-	switch s.Step {
+	switch m.createState.Step {
 	case CreateStepBranch:
 		return m.handleBranchSelectorKey(msg)
 	case CreateStepBranchAction:
@@ -814,81 +822,8 @@ func (m Model) handleCreateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleCreateKeyHuh handles create wizard input using Huh forms.
-func (m Model) handleCreateKeyHuh(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	s := m.createState
-
-	switch s.Step {
-	case CreateStepBranch:
-		return m.handleBranchSelectorKey(msg)
-
-	case CreateStepBranchAction:
-		return m.handleBranchActionKey(msg)
-
-	case CreateStepName:
-		if key.Matches(msg, m.keys.Escape) {
-			m.activeView = ViewDashboard
-			m.createState = nil
-			return m, nil
-		}
-		// Intercept backspace to go back to Branch step before Huh consumes it
-		if key.Matches(msg, m.keys.Back) {
-			s.Step = CreateStepBranch
-			return m, nil
-		}
-		if s.NameForm == nil {
-			return m, nil
-		}
-		model, cmd := s.NameForm.Update(msg)
-		s.NameForm = model.(*huh.Form)
-
-		if s.NameForm.State == huh.StateAborted {
-			m.activeView = ViewDashboard
-			m.createState = nil
-			return m, nil
-		}
-		return m.checkCreateFormCompletion(cmd)
-
-	case CreateStepConfirm:
-		return m.handleConfirmKey(msg)
-	}
-
-	return m, nil
-}
-
-// forwardToActiveHuhForm forwards non-key messages to the active Huh form.
-func (m Model) forwardToActiveHuhForm(msg tea.Msg) (tea.Model, tea.Cmd) {
-	s := m.createState
-	if s.Step != CreateStepName || s.NameForm == nil {
-		return m, nil
-	}
-	model, cmd := s.NameForm.Update(msg)
-	s.NameForm = model.(*huh.Form)
-
-	// Check if the async update completed the form (e.g. Enter key result)
-	return m.checkCreateFormCompletion(cmd)
-}
-
-// checkCreateFormCompletion checks if the current Huh form has completed
-// and transitions to the next step. Called after both key and non-key updates.
-func (m Model) checkCreateFormCompletion(cmd tea.Cmd) (tea.Model, tea.Cmd) {
-	s := m.createState
-
-	if s.Step == CreateStepName && s.NameForm != nil && s.NameForm.State == huh.StateCompleted {
-		// Use suggestion if name is empty
-		if s.Name == "" && s.NameSuggestion != "" {
-			s.Name = s.NameSuggestion
-		}
-		s.Error = ""
-		s.Step = CreateStepConfirm
-		return m, nil
-	}
-
-	return m, cmd
-}
-
 // handleBranchActionKey handles the branch action step (split vs fork).
-func (m Model) handleBranchActionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleBranchActionKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := m.createState
 	switch {
 	case key.Matches(msg, m.keys.Escape):
@@ -934,19 +869,16 @@ func (m Model) handleBranchActionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// fork: new branch, don't use existing
 			s.BaseBranch = ""
 		}
-		// Proceed to Name step
+		// Initialize name input and proceed to Name step
+		s.NameInput = newNameInput(s.NameSuggestion)
 		s.Step = CreateStepName
-		if s.UseHuhForms {
-			s.NameForm = NewCreateNameForm(&s.Name, s.ProjectName, m.existingWorktreeItems(), s.NameSuggestion)
-			return m, s.NameForm.Init()
-		}
-		return m, nil
+		return m, s.NameInput.Focus()
 	}
 	return m, nil
 }
 
 // handleConfirmKey handles the confirmation step key input.
-func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := m.createState
 	switch {
 	case key.Matches(msg, m.keys.Escape):
@@ -956,11 +888,7 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, m.keys.Back):
 		s.Step = CreateStepName
-		if s.UseHuhForms {
-			s.NameForm = NewCreateNameForm(&s.Name, s.ProjectName, m.existingWorktreeItems(), s.NameSuggestion)
-			return m, s.NameForm.Init()
-		}
-		return m, nil
+		return m, s.NameInput.Focus()
 
 	case key.Matches(msg, m.keys.Enter):
 		return m.startCreate(s.Name, s.BaseBranch)
@@ -978,11 +906,12 @@ func (m *Model) startCreate(name, baseBranch string) (tea.Model, tea.Cmd) {
 }
 
 // handleBranchSelectorKey handles the unified branch selector step.
-func (m Model) handleBranchSelectorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleBranchSelectorKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := m.createState
 
-	filtered := filteredBranches(s.Branches, s.BranchFilter)
-	showCreateNew := s.BranchFilter != "" && !exactBranchMatch(s.Branches, s.BranchFilter)
+	filter := s.BranchFilterInput.Value()
+	filtered := filteredBranches(s.Branches, filter)
+	showCreateNew := filter != "" && !exactBranchMatch(s.Branches, filter)
 	totalItems := len(filtered)
 	if showCreateNew {
 		totalItems++
@@ -1022,6 +951,9 @@ func (m Model) handleBranchSelectorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			s.NameSuggestion = worktree.DeriveWorktreeName(selected, strategy)
 
+			// Initialize name input with placeholder
+			s.NameInput = newNameInput(s.NameSuggestion)
+
 			// Check if branch action should be skipped
 			if m.cfg != nil && m.cfg.TUI.SkipBranchNotice != nil && *m.cfg.TUI.SkipBranchNotice {
 				action := m.cfg.TUI.DefaultBranchAction
@@ -1029,11 +961,7 @@ func (m Model) handleBranchSelectorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					s.BaseBranch = ""
 				}
 				s.Step = CreateStepName
-				if s.UseHuhForms {
-					s.NameForm = NewCreateNameForm(&s.Name, s.ProjectName, m.existingWorktreeItems(), s.NameSuggestion)
-					return m, s.NameForm.Init()
-				}
-				return m, nil
+				return m, s.NameInput.Focus()
 			}
 
 			s.ActionChoice = 0
@@ -1043,35 +971,32 @@ func (m Model) handleBranchSelectorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else if showCreateNew {
 			// Selected "Create new branch"
 			s.BaseBranch = ""
-			s.NewBranchName = s.BranchFilter
-			s.NameSuggestion = s.BranchFilter
+			s.NewBranchName = filter
+			s.NameSuggestion = filter
+
+			// Initialize name input with placeholder
+			s.NameInput = newNameInput(s.NameSuggestion)
+
 			s.Step = CreateStepName
-			if s.UseHuhForms {
-				s.NameForm = NewCreateNameForm(&s.Name, s.ProjectName, m.existingWorktreeItems(), s.NameSuggestion)
-				return m, s.NameForm.Init()
-			}
-			return m, nil
+			return m, s.NameInput.Focus()
 		}
 		return m, nil
 
-	case msg.Type == tea.KeyBackspace:
-		if len(s.BranchFilter) > 0 {
-			s.BranchFilter = s.BranchFilter[:len(s.BranchFilter)-1]
+	default:
+		// Route remaining keys through the filter textinput
+		prevVal := s.BranchFilterInput.Value()
+		var cmd tea.Cmd
+		s.BranchFilterInput, cmd = s.BranchFilterInput.Update(msg)
+		if s.BranchFilterInput.Value() != prevVal {
+			s.BranchFilter = s.BranchFilterInput.Value()
 			s.BranchCursor = 0
 		}
-		return m, nil
-
-	case msg.Type == tea.KeyRunes:
-		s.BranchFilter += string(msg.Runes)
-		s.BranchCursor = 0
-		return m, nil
+		return m, cmd
 	}
-
-	return m, nil
 }
 
-// handleNameKey handles the name step key input (non-Huh path).
-func (m Model) handleNameKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+// handleNameKey handles the name step key input.
+func (m Model) handleNameKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := m.createState
 
 	switch {
@@ -1081,15 +1006,29 @@ func (m Model) handleNameKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.keys.Back):
-		s.Step = CreateStepBranch
-		return m, nil
+		// Only go back if the name input is empty
+		if s.NameInput.Value() == "" {
+			s.Step = CreateStepBranch
+			return m, s.BranchFilterInput.Focus()
+		}
+		// Otherwise let textinput handle backspace
+		prevVal := s.NameInput.Value()
+		var cmd tea.Cmd
+		s.NameInput, cmd = s.NameInput.Update(msg)
+		if s.NameInput.Value() != prevVal {
+			s.Name = s.NameInput.Value()
+			s.Error = ""
+			s.ExistingWorktree = checkDuplicateWorktree(s.Name, m.existingWorktreeItems())
+		}
+		return m, cmd
 
 	case key.Matches(msg, m.keys.Enter):
-		effectiveName := s.Name
+		effectiveName := s.NameInput.Value()
 		if effectiveName == "" && s.NameSuggestion != "" {
 			effectiveName = s.NameSuggestion
-			s.Name = effectiveName
+			s.NameInput.SetValue(effectiveName)
 		}
+		s.Name = effectiveName
 		if effectiveName == "" {
 			s.Error = "name cannot be empty"
 			return m, nil
@@ -1110,26 +1049,22 @@ func (m Model) handleNameKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		s.Step = CreateStepConfirm
 		return m, nil
 
-	case msg.Type == tea.KeyBackspace:
-		if len(s.Name) > 0 {
-			s.Name = s.Name[:len(s.Name)-1]
-			s.Error = ""
+	default:
+		// Route remaining keys through the name textinput
+		prevVal := s.NameInput.Value()
+		var cmd tea.Cmd
+		s.NameInput, cmd = s.NameInput.Update(msg)
+		if s.NameInput.Value() != prevVal {
+			s.Name = s.NameInput.Value()
+			if errMsg := ValidateWorktreeName(s.Name); errMsg != "" {
+				s.Error = errMsg
+			} else {
+				s.Error = ""
+			}
 			s.ExistingWorktree = checkDuplicateWorktree(s.Name, m.existingWorktreeItems())
 		}
-		return m, nil
-
-	case msg.Type == tea.KeyRunes:
-		s.Name += string(msg.Runes)
-		if errMsg := ValidateWorktreeName(s.Name); errMsg != "" {
-			s.Error = errMsg
-		} else {
-			s.Error = ""
-		}
-		s.ExistingWorktree = checkDuplicateWorktree(s.Name, m.existingWorktreeItems())
-		return m, nil
+		return m, cmd
 	}
-
-	return m, nil
 }
 
 func (m *Model) applySortToList() {
@@ -1152,16 +1087,18 @@ func (m Model) enterPRView() (tea.Model, tea.Cmd) {
 	m.prState = &PRViewState{
 		Loading:          true,
 		WorktreeBranches: branches,
+		FilterInput:      newPRFilterInput(),
 	}
-	return m, tea.Batch(m.spinner.Tick, m.fetchPRsCmd)
+	return m, tea.Batch(m.spinner.Tick, m.fetchPRsCmd, m.prState.FilterInput.Focus())
 }
 
 func (m Model) enterIssueView() (tea.Model, tea.Cmd) {
 	m.activeView = ViewIssues
 	m.issueState = &IssueViewState{
-		Loading: true,
+		Loading:     true,
+		FilterInput: newIssueFilterInput(),
 	}
-	return m, tea.Batch(m.spinner.Tick, m.fetchIssuesCmd)
+	return m, tea.Batch(m.spinner.Tick, m.fetchIssuesCmd, m.issueState.FilterInput.Focus())
 }
 
 func (m Model) enterBulkMode() (tea.Model, tea.Cmd) {
@@ -1183,7 +1120,7 @@ func (m Model) enterBulkMode() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleBulkKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleBulkKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.bulkState == nil {
 		m.activeView = ViewDashboard
 		return m, nil
@@ -1246,7 +1183,13 @@ func (m Model) bulkDeleteCmd(items []WorktreeItem) tea.Cmd {
 	}
 }
 
-func (m Model) View() string {
+func (m Model) View() tea.View {
+	v := tea.NewView(m.viewContent())
+	v.AltScreen = true
+	return v
+}
+
+func (m Model) viewContent() string {
 	if !m.ready {
 		tuilog.Printf("View: not ready")
 		// For PR/Issue views launched directly, render a loading overlay
@@ -1275,7 +1218,7 @@ func (m Model) View() string {
 		brand := Styles.Header.Render("  grove")
 		msg := Styles.TextMuted.Render("No worktrees found")
 		hint := Styles.HelpKey.Render("n") + " " + Styles.HelpDesc.Render("to create your first worktree")
-		content := brand + "\n\n" + msg + "\n" + hint
+		content := lipgloss.JoinVertical(lipgloss.Center, brand, "", msg, hint)
 		return lipgloss.Place(m.width, m.height,
 			lipgloss.Center, lipgloss.Center,
 			content,
@@ -1354,17 +1297,25 @@ func (m Model) renderDashboard() string {
 		ProjectName:   m.projectName,
 		WorktreeCount: len(m.list.Items()),
 	}
-	// Find current worktree info for header
+	// Find current worktree info and container target for header
 	for _, li := range m.list.Items() {
-		if item, ok := li.(WorktreeItem); ok && item.IsCurrent {
+		item, ok := li.(WorktreeItem)
+		if !ok {
+			continue
+		}
+		if item.IsCurrent {
 			m.header.CurrentBranch = item.Branch
 			m.header.CurrentName = item.ShortName
-			break
+		}
+		for _, ps := range item.PluginStatuses {
+			if strings.Contains(ps.Detail, "pointed") {
+				m.header.ContainerTarget = item.ShortName
+			}
 		}
 	}
 	statusBar := m.header.View(m.width)
 
-	useSideBySide := m.width > 120
+	useSideBySide := m.width > 100
 	bodyWidth := m.width - 2 // 1-char padding each side
 
 	var body string
@@ -1372,22 +1323,33 @@ func (m Model) renderDashboard() string {
 		// Force list view to its allocated width so JoinHorizontal
 		// measures it correctly (list lines may be shorter than the panel).
 		listWidth := m.list.Width()
-		header := renderListHeader(m.listDelegate, listWidth)
-		listContent := lipgloss.NewStyle().Width(listWidth).Render(header + "\n" + m.list.View())
-		divider := renderVerticalDivider(m.list.Height()+2, Colors.SurfaceDim)
+		listContent := m.list.View()
+		if m.compactMode {
+			header := renderListHeader(m.listDelegate, listWidth)
+			listContent = lipgloss.JoinVertical(lipgloss.Left, header, listContent)
+		}
+		listContent = lipgloss.NewStyle().Width(listWidth).Render(listContent)
+		dividerHeight := m.list.Height()
+		if m.compactMode {
+			dividerHeight += 2
+		}
+		divider := renderVerticalDivider(dividerHeight, Colors.SurfaceDim)
 		detailView := m.renderDetailPanel()
 		body = lipgloss.JoinHorizontal(lipgloss.Top, listContent, divider, detailView)
 	} else {
-		header := renderListHeader(m.listDelegate, bodyWidth)
-		listView := header + "\n" + m.list.View()
+		listView := m.list.View()
+		if m.compactMode {
+			header := renderListHeader(m.listDelegate, bodyWidth)
+			listView = lipgloss.JoinVertical(lipgloss.Left, header, listView)
+		}
 		// Named separator showing selected worktree
 		separator := renderNamedSeparator(m.selectedItemName(), bodyWidth)
 		detailView := m.renderDetailPanel()
-		body = listView + "\n" + separator + "\n" + detailView
+		body = lipgloss.JoinVertical(lipgloss.Left, listView, separator, detailView)
 	}
 
 	// Help footer: always show compact hints
-	footer := m.helpFooter.RenderCompact(m.activeView, m.width)
+	footer := m.helpFooter.RenderCompact(m.activeView, m.width-4)
 
 	// Composite toast onto the header line (right-aligned) to avoid layout shift
 	if m.toast != nil && m.toast.Current != nil {
@@ -1400,7 +1362,7 @@ func (m Model) renderDashboard() string {
 	// Wrap body in 1-char horizontal padding for visual framing
 	body = lipgloss.NewStyle().Padding(0, 1).Render(body)
 
-	dashboard := statusBar + "\n" + body + "\n" + footer
+	dashboard := lipgloss.JoinVertical(lipgloss.Left, statusBar, body, footer)
 
 	// Render expanded help as centered overlay
 	if m.helpFooter.Expanded {
@@ -1421,13 +1383,13 @@ func (m Model) selectedItemName() string {
 }
 
 // renderVerticalDivider creates a thin column of │ characters for side-by-side layout.
-func renderVerticalDivider(height int, color lipgloss.AdaptiveColor) string {
+func renderVerticalDivider(height int, color color.Color) string {
 	style := lipgloss.NewStyle().Foreground(color).Padding(0, 1)
 	lines := make([]string, height)
 	for i := range lines {
 		lines[i] = style.Render("│")
 	}
-	return strings.Join(lines, "\n")
+	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
 
 // renderNamedSeparator renders a horizontal rule with the selected worktree name embedded.
@@ -1457,8 +1419,8 @@ func (m Model) renderStatusBar() string {
 		parts = append(parts, Styles.TextMuted.Render("↕ "+m.sortMode.String()))
 	}
 
-	if m.statusMsg != "" {
-		parts = append(parts, " "+Styles.StatusSuccess.Render("✓ "+m.statusMsg))
+	if msg := m.toast.Message(); msg != "" {
+		parts = append(parts, " "+Styles.StatusSuccess.Render("✓ "+msg))
 	}
 
 	return strings.Join(parts, "  ")
@@ -1659,7 +1621,7 @@ func (m *Model) handleTmuxSwitch(switchPath string) bool {
 func runModel(model Model) (string, error) {
 	tuilog.Printf("runModel: projectRoot=%s activeView=%d", model.projectRoot, model.activeView)
 
-	p := tea.NewProgram(model, tea.WithAltScreen())
+	p := tea.NewProgram(model)
 
 	finalModel, err := p.Run()
 	if err != nil {

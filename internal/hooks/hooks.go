@@ -130,3 +130,13 @@ func Register(event string, hook Hook) {
 func Fire(event string, ctx *Context) error {
 	return globalRegistry.Fire(event, ctx)
 }
+
+// HasHooks reports whether any hooks are registered for the given event.
+func HasHooks(event string) bool {
+	return globalRegistry.HasHooks(event)
+}
+
+// HasHooks reports whether any hooks are registered for the given event.
+func (r *Registry) HasHooks(event string) bool {
+	return len(r.hooks[event]) > 0
+}

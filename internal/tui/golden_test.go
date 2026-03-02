@@ -16,24 +16,24 @@ func TestGolden_Dashboard(t *testing.T) {
 	for _, size := range allSizes {
 		t.Run(size.name, func(t *testing.T) {
 			m := goldenModel(t, size, withItems(5))
-			golden.RequireEqual(t, []byte(m.View()))
+			golden.RequireEqual(t, []byte(m.viewString()))
 		})
 	}
 }
 
 func TestGolden_Dashboard_Empty(t *testing.T) {
 	m := goldenModel(t, sizeStandard, withItems(0))
-	golden.RequireEqual(t, []byte(m.View()))
+	golden.RequireEqual(t, []byte(m.viewString()))
 }
 
 func TestGolden_Dashboard_Loading(t *testing.T) {
 	m := goldenModel(t, sizeStandard, withLoading())
-	golden.RequireEqual(t, []byte(m.View()))
+	golden.RequireEqual(t, []byte(m.viewString()))
 }
 
 func TestGolden_Dashboard_WithToast(t *testing.T) {
 	m := goldenModel(t, sizeStandard, withItems(5), withToastVisible("Deleted testing", ToastSuccess))
-	golden.RequireEqual(t, []byte(m.View()))
+	golden.RequireEqual(t, []byte(m.viewString()))
 }
 
 func TestGolden_Dashboard_SortModes(t *testing.T) {
@@ -48,7 +48,16 @@ func TestGolden_Dashboard_SortModes(t *testing.T) {
 	for _, tc := range modes {
 		t.Run(tc.name, func(t *testing.T) {
 			m := goldenModel(t, sizeStandard, withItems(5), withSortMode(tc.mode))
-			golden.RequireEqual(t, []byte(m.View()))
+			golden.RequireEqual(t, []byte(m.viewString()))
+		})
+	}
+}
+
+func TestGolden_Dashboard_CompactMode(t *testing.T) {
+	for _, size := range []termSize{sizeStandard, sizeWide} {
+		t.Run(size.name, func(t *testing.T) {
+			m := goldenModel(t, size, withItems(5), withCompactMode())
+			golden.RequireEqual(t, []byte(m.viewString()))
 		})
 	}
 }
@@ -57,7 +66,7 @@ func TestGolden_Dashboard_HelpExpanded(t *testing.T) {
 	for _, size := range []termSize{sizeStandard, sizeWide} {
 		t.Run(size.name, func(t *testing.T) {
 			m := goldenModel(t, size, withItems(5), withHelpExpanded())
-			golden.RequireEqual(t, []byte(m.View()))
+			golden.RequireEqual(t, []byte(m.viewString()))
 		})
 	}
 }
@@ -69,72 +78,72 @@ func TestGolden_Dashboard_HelpExpanded(t *testing.T) {
 func TestGolden_Overlay_Delete(t *testing.T) {
 	t.Run("default", func(t *testing.T) {
 		m := goldenModel(t, sizeStandard, withItems(3), withDeleteOverlay())
-		golden.RequireEqual(t, []byte(m.View()))
+		golden.RequireEqual(t, []byte(m.viewString()))
 	})
 	t.Run("with_warnings", func(t *testing.T) {
 		m := goldenModel(t, sizeStandard, withItems(3), withDeleteOverlay("Worktree has uncommitted changes", "Branch not merged"))
-		golden.RequireEqual(t, []byte(m.View()))
+		golden.RequireEqual(t, []byte(m.viewString()))
 	})
 }
 
 func TestGolden_Overlay_Create(t *testing.T) {
 	t.Run("branch_step", func(t *testing.T) {
 		m := goldenModel(t, sizeStandard, withItems(3), withCreateStep(CreateStepBranch))
-		golden.RequireEqual(t, []byte(m.View()))
+		golden.RequireEqual(t, []byte(m.viewString()))
 	})
 	t.Run("name_step", func(t *testing.T) {
 		m := goldenModel(t, sizeStandard, withItems(3), withCreateStep(CreateStepName))
-		golden.RequireEqual(t, []byte(m.View()))
+		golden.RequireEqual(t, []byte(m.viewString()))
 	})
 	t.Run("confirm_step", func(t *testing.T) {
 		m := goldenModel(t, sizeStandard, withItems(3), withCreateStep(CreateStepConfirm))
-		golden.RequireEqual(t, []byte(m.View()))
+		golden.RequireEqual(t, []byte(m.viewString()))
 	})
 }
 
 func TestGolden_Overlay_Bulk(t *testing.T) {
 	t.Run("with_items", func(t *testing.T) {
 		m := goldenModel(t, sizeStandard, withItems(5), withBulkOverlay(5))
-		golden.RequireEqual(t, []byte(m.View()))
+		golden.RequireEqual(t, []byte(m.viewString()))
 	})
 	t.Run("empty", func(t *testing.T) {
 		m := goldenModel(t, sizeStandard, withItems(3), withBulkOverlay(0))
-		golden.RequireEqual(t, []byte(m.View()))
+		golden.RequireEqual(t, []byte(m.viewString()))
 	})
 }
 
 func TestGolden_Overlay_PRs(t *testing.T) {
 	t.Run("with_data", func(t *testing.T) {
 		m := goldenModel(t, sizeStandard, withItems(3), withPRData())
-		golden.RequireEqual(t, []byte(m.View()))
+		golden.RequireEqual(t, []byte(m.viewString()))
 	})
 }
 
 func TestGolden_Overlay_Issues(t *testing.T) {
 	t.Run("with_data", func(t *testing.T) {
 		m := goldenModel(t, sizeStandard, withItems(3), withIssueData())
-		golden.RequireEqual(t, []byte(m.View()))
+		golden.RequireEqual(t, []byte(m.viewString()))
 	})
 }
 
 func TestGolden_Overlay_Fork(t *testing.T) {
 	t.Run("confirm", func(t *testing.T) {
 		m := goldenModel(t, sizeStandard, withItems(3), withForkOverlay())
-		golden.RequireEqual(t, []byte(m.View()))
+		golden.RequireEqual(t, []byte(m.viewString()))
 	})
 }
 
 func TestGolden_Overlay_Sync(t *testing.T) {
 	t.Run("source_step", func(t *testing.T) {
 		m := goldenModel(t, sizeStandard, withItems(5), withSyncOverlay())
-		golden.RequireEqual(t, []byte(m.View()))
+		golden.RequireEqual(t, []byte(m.viewString()))
 	})
 }
 
 func TestGolden_Overlay_Config(t *testing.T) {
 	t.Run("general_tab", func(t *testing.T) {
 		m := goldenModel(t, sizeStandard, withItems(3), withConfigOverlay())
-		golden.RequireEqual(t, []byte(m.View()))
+		golden.RequireEqual(t, []byte(m.viewString()))
 	})
 }
 
@@ -261,7 +270,7 @@ func TestGolden_Responsive_Layout(t *testing.T) {
 	for _, w := range widths {
 		t.Run(fmt.Sprintf("width_%d", w), func(t *testing.T) {
 			m := goldenModel(t, termSize{fmt.Sprintf("w%d", w), w, 24}, withItems(5))
-			golden.RequireEqual(t, []byte(m.View()))
+			golden.RequireEqual(t, []byte(m.viewString()))
 		})
 	}
 }
@@ -272,7 +281,7 @@ func TestGolden_Responsive_Layout(t *testing.T) {
 
 func TestGolden_Themed_Dashboard(t *testing.T) {
 	m := goldenModelThemed(t, sizeStandard, withItems(5))
-	golden.RequireEqualEscape(t, []byte(m.View()), true)
+	golden.RequireEqual(t, []byte(m.viewString()))
 }
 
 func TestGolden_Themed_StatusBadges(t *testing.T) {
@@ -290,10 +299,10 @@ func TestGolden_Themed_StatusBadges(t *testing.T) {
 	for _, item := range items {
 		output += item.StatusText() + "  " + item.TmuxText() + "\n"
 	}
-	golden.RequireEqualEscape(t, []byte(output), true)
+	golden.RequireEqual(t, []byte(output))
 }
 
 func TestGolden_Themed_OverlayBorders(t *testing.T) {
 	m := goldenModelThemed(t, sizeStandard, withItems(3), withDeleteOverlay("Worktree has uncommitted changes"))
-	golden.RequireEqualEscape(t, []byte(m.View()), true)
+	golden.RequireEqual(t, []byte(m.viewString()))
 }

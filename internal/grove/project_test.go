@@ -258,6 +258,57 @@ func TestEnsureConfigSymlink(t *testing.T) {
 	})
 }
 
+func TestMustProjectRoot(t *testing.T) {
+	tests := []struct {
+		name     string
+		groveDir string
+		want     string
+	}{
+		{"normal path", "/home/user/project/.grove", "/home/user/project"},
+		{"nested", "/a/b/c/.grove", "/a/b/c"},
+		{"root-level", "/.grove", "/"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := MustProjectRoot(tt.groveDir)
+			if got != tt.want {
+				t.Errorf("MustProjectRoot(%q) = %q, want %q", tt.groveDir, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetMainWorktreePath(t *testing.T) {
+	// Set up a real git repo to test against
+	dir := t.TempDir()
+	dir, _ = filepath.EvalSymlinks(dir)
+
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null",
+			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test",
+			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("command %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	run("git", "init")
+	run("git", "commit", "--allow-empty", "-m", "init")
+
+	got, err := getMainWorktreePath(dir)
+	if err != nil {
+		t.Fatalf("getMainWorktreePath() error = %v", err)
+	}
+	if got != dir {
+		t.Errorf("getMainWorktreePath() = %q, want %q", got, dir)
+	}
+}
+
 func TestProjectRoot(t *testing.T) {
 	t.Run("returns parent of .grove directory", func(t *testing.T) {
 		tmpDir := t.TempDir()

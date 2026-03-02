@@ -7,7 +7,7 @@ import (
 
 func TestViewLoadingState(t *testing.T) {
 	m := newTestModel(withLoading(), withSize(80, 24))
-	v := m.View()
+	v := m.viewString()
 	if !strings.Contains(v, "Loading") {
 		t.Error("expected loading text in view")
 	}
@@ -16,7 +16,7 @@ func TestViewLoadingState(t *testing.T) {
 func TestViewNotReady(t *testing.T) {
 	m := newTestModel()
 	m.ready = false
-	v := m.View()
+	v := m.viewString()
 	if v != "loading..." {
 		t.Errorf("expected 'loading...' when not ready, got %q", v)
 	}
@@ -24,7 +24,7 @@ func TestViewNotReady(t *testing.T) {
 
 func TestViewDashboardWithItems(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
-	v := m.View()
+	v := m.viewString()
 	if v == "" {
 		t.Error("expected non-empty dashboard view")
 	}
@@ -40,7 +40,7 @@ func TestViewDashboardWithItems(t *testing.T) {
 
 func TestViewDashboardEmpty(t *testing.T) {
 	m := newTestModel(withItems(0), withSize(80, 24))
-	v := m.View()
+	v := m.viewString()
 	if v == "" {
 		t.Error("expected non-empty view even with no items")
 	}
@@ -49,7 +49,7 @@ func TestViewDashboardEmpty(t *testing.T) {
 func TestViewHelpExpanded(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
 	m = sendKey(m, "?")
-	v := m.View()
+	v := m.viewString()
 	if !strings.Contains(v, "Quick Reference") {
 		t.Error("expected 'Quick Reference' in expanded help footer")
 	}
@@ -62,7 +62,7 @@ func TestViewDeleteOverlay(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
 	m = sendKey(m, "j") // move to non-main
 	m = sendKey(m, "d")
-	v := m.View()
+	v := m.viewString()
 	if !strings.Contains(v, "Delete Worktree") {
 		t.Error("expected 'Delete Worktree' in delete overlay")
 	}
@@ -71,7 +71,7 @@ func TestViewDeleteOverlay(t *testing.T) {
 func TestViewCreateOverlay(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
 	m = sendKey(m, "n")
-	v := m.View()
+	v := m.viewString()
 	if !strings.Contains(v, "New Worktree") {
 		t.Error("expected 'New Worktree' in create overlay")
 	}
@@ -80,7 +80,7 @@ func TestViewCreateOverlay(t *testing.T) {
 func TestViewBulkOverlay(t *testing.T) {
 	m := newTestModel(withItems(5), withSize(80, 24))
 	m = sendKey(m, "a")
-	v := m.View()
+	v := m.viewString()
 	if !strings.Contains(v, "Bulk Delete") {
 		t.Error("expected 'Bulk Delete' in bulk overlay")
 	}
@@ -88,7 +88,7 @@ func TestViewBulkOverlay(t *testing.T) {
 
 func TestViewSideBySideLayout(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(140, 40))
-	v := m.View()
+	v := m.viewString()
 	if v == "" {
 		t.Error("expected non-empty view for wide terminal")
 	}
@@ -96,7 +96,7 @@ func TestViewSideBySideLayout(t *testing.T) {
 
 func TestViewStackedLayout(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
-	v := m.View()
+	v := m.viewString()
 	// Stacked layout should contain a separator
 	if !strings.Contains(v, "─") {
 		t.Error("expected separator in stacked layout")

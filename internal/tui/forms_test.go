@@ -3,42 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
-
-	"github.com/charmbracelet/huh"
 )
-
-func TestNewCreateNameForm(t *testing.T) {
-	tests := []struct {
-		name        string
-		projectName string
-		wantNotNil  bool
-	}{
-		{"creates form with project name", "acupoll", true},
-		{"creates form with empty project name", "", true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var nameValue string
-			form := NewCreateNameForm(&nameValue, tt.projectName, nil, "")
-			if form == nil {
-				t.Fatal("NewCreateNameForm returned nil")
-			}
-		})
-	}
-}
-
-func TestNewCreateNameFormWithPlaceholder(t *testing.T) {
-	var nameValue string
-	form := NewCreateNameForm(&nameValue, "proj", nil, "agent-slot-db")
-	if form == nil {
-		t.Fatal("NewCreateNameForm returned nil")
-	}
-	view := form.View()
-	if view == "" {
-		t.Error("form View() returned empty string")
-	}
-}
 
 func TestCreateNameValidation(t *testing.T) {
 	tests := []struct {
@@ -99,31 +64,4 @@ func TestCreateNameValidationDetectsDuplicate(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected no error for non-duplicate, got: %v", err)
 	}
-}
-
-func TestCreateFormUsesCharmTheme(t *testing.T) {
-	var nameValue string
-	form := NewCreateNameForm(&nameValue, "proj", nil, "")
-
-	// The form should render without panicking - basic smoke test
-	view := form.View()
-	if view == "" {
-		t.Error("form View() returned empty string")
-	}
-}
-
-func TestCreateFormAccessibleMode(t *testing.T) {
-	var nameValue string
-	form := NewCreateNameForm(&nameValue, "proj", nil, "")
-	accessibleForm := form.WithAccessible(true)
-	if accessibleForm == nil {
-		t.Error("WithAccessible returned nil")
-	}
-}
-
-func TestFormStateValues(t *testing.T) {
-	// Verify that huh.FormState constants exist and are usable
-	_ = huh.StateNormal
-	_ = huh.StateCompleted
-	_ = huh.StateAborted
 }
