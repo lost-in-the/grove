@@ -34,4 +34,46 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Homebrew formula
+        env:
           TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          # Extract version from tag (strip leading 'v')
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          # Download source tarball and compute SHA256
+          TARBALL_URL="https://github.com/LeahArmstrong/grove-cli/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
+          SHA256=$(curl -sL "$TARBALL_URL" | sha256sum | awk '{print $1}')
+
+          # Generate formula from template
+          sed -e "s/VERSION/${VERSION}/g" -e "s/SHA256/${SHA256}/g" .github/formula.rb.tmpl > grove.rb
+
+          # Push to homebrew-tap via GitHub API
+          FORMULA_CONTENT=$(base64 -w 0 grove.rb)
+
+          # Get current file SHA (needed for updates)
+          CURRENT_SHA=$(curl -s \
+            -H "Authorization: token ${TAP_GITHUB_TOKEN}" \
+            "https://api.github.com/repos/LeahArmstrong/homebrew-tap/contents/Formula/grove.rb" \
+            | jq -r '.sha // empty')
+
+          # Build request body
+          if [ -n "$CURRENT_SHA" ]; then
+            BODY=$(jq -n \
+              --arg message "grove ${VERSION}" \
+              --arg content "$FORMULA_CONTENT" \
+              --arg sha "$CURRENT_SHA" \
+              '{message: $message, content: $content, sha: $sha}')
+          else
+            BODY=$(jq -n \
+              --arg message "grove ${VERSION}" \
+              --arg content "$FORMULA_CONTENT" \
+              '{message: $message, content: $content}')
+          fi
+
+          curl -s -X PUT \
+            -H "Authorization: token ${TAP_GITHUB_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$BODY" \
+            "https://api.github.com/repos/LeahArmstrong/homebrew-tap/contents/Formula/grove.rb"

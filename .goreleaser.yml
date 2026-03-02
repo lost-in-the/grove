@@ -131,29 +131,6 @@ release:
 
     See the [README](https://github.com/LeahArmstrong/grove-cli#readme) for full documentation.
 
-# Homebrew tap configuration
-homebrew_casks:
-  - repository:
-      owner: LeahArmstrong
-      name: homebrew-tap
-      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
-    homepage: https://github.com/LeahArmstrong/grove-cli
-    description: Zero-friction worktree management for developers
-    skip_upload: false
-    binaries:
-      - grove
-    caveats: |
-      To enable grove, add this to your shell configuration:
-
-      For zsh (~/.zshrc):
-        eval "$(grove init zsh)"
-
-      For bash (~/.bashrc):
-        eval "$(grove init bash)"
-
-      Then reload your shell:
-        source ~/.zshrc  # or ~/.bashrc
-
 # Announcement configuration
 announce:
   skip: true
