@@ -7,7 +7,7 @@ Set Theme "Catppuccin Mocha"
 Set TypingSpeed 80ms
 
 Hide
-Type "cd /tmp/grove-demo"
+Type "cd /tmp/grove-demo/rails-app"
 Enter
 Sleep 500ms
 Show

@@ -50,6 +50,14 @@ path = "~/projects/shared-infra"
 # Required.
 env_var = "MY_PROJECT_DIR"
 
+# File to write the env_var value to in the compose directory.
+# Default: ".env" (Docker Compose reads this natively).
+# Set to ".env.local" if your compose directory uses direnv with
+# `dotenv_if_exists .env.local` in .envrc — this keeps the tracked .env
+# clean. Run `grove doctor` to verify your direnv setup.
+# Optional.
+# env_file = ".env.local"
+
 # Names of the Docker Compose services to restart when switching worktrees.
 # Only these services are stopped/started — other services in the compose
 # stack are left running.

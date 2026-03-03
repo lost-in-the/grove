@@ -41,9 +41,9 @@ func (s *externalStrategy) OnPostSwitch(ctx *hooks.Context) error {
 	}
 
 	// Always persist the env var so manual docker compose commands use the right directory.
-	// This runs even when auto_start is disabled — the .env must stay in sync.
+	// This runs even when auto_start is disabled — the env file must stay in sync.
 	if err := s.persistEnvVar(worktreePath); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to persist %s to .env: %v\n", s.ext.EnvVar, err)
+		fmt.Fprintf(os.Stderr, "warning: failed to persist %s to %s: %v\n", s.ext.EnvVar, s.ext.EnvFileName(), err)
 	}
 
 	if !s.getAutoStart() {
@@ -64,7 +64,7 @@ func (s *externalStrategy) OnPostCreate(ctx *hooks.Context) error {
 func (s *externalStrategy) Up(worktreePath string, detach bool) error {
 	// Persist so manual docker compose commands also resolve to this worktree
 	if err := s.persistEnvVar(worktreePath); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to persist %s to .env: %v\n", s.ext.EnvVar, err)
+		fmt.Fprintf(os.Stderr, "warning: failed to persist %s to %s: %v\n", s.ext.EnvVar, s.ext.EnvFileName(), err)
 	}
 
 	args := []string{"up"}
@@ -102,9 +102,9 @@ func (s *externalStrategy) Logs(_ string, service string, follow bool) error {
 }
 
 func (s *externalStrategy) Run(worktreePath string, service string, command string) error {
-	// Persist so the .env stays consistent with what we're running against
+	// Persist so the env file stays consistent with what we're running against
 	if err := s.persistEnvVar(worktreePath); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to persist %s to .env: %v\n", s.ext.EnvVar, err)
+		fmt.Fprintf(os.Stderr, "warning: failed to persist %s to %s: %v\n", s.ext.EnvVar, s.ext.EnvFileName(), err)
 	}
 
 	env := s.envForWorktree(worktreePath)
@@ -179,10 +179,15 @@ func (s *externalStrategy) composePath() string {
 	return resolveComposePath(s.ext.Path)
 }
 
-// persistEnvVar writes the env_var (e.g., APP_DIR) to the .env file in the compose
+// envFilePath returns the full path to the env file where the env var is persisted.
+func (s *externalStrategy) envFilePath() string {
+	return filepath.Join(s.composePath(), s.ext.EnvFileName())
+}
+
+// persistEnvVar writes the env_var (e.g., APP_DIR) to the env file in the compose
 // directory so that subsequent docker compose commands outside grove use the correct value.
 func (s *externalStrategy) persistEnvVar(worktreePath string) error {
-	envFile := filepath.Join(s.composePath(), ".env")
+	envFile := s.envFilePath()
 	key := s.ext.EnvVar
 	rel := s.relativeWorktreePath(worktreePath)
 	line := key + "=" + rel
@@ -192,7 +197,7 @@ func (s *externalStrategy) persistEnvVar(worktreePath string) error {
 		if os.IsNotExist(err) {
 			return os.WriteFile(envFile, []byte(line+"\n"), 0644)
 		}
-		return fmt.Errorf("failed to read .env: %w", err)
+		return fmt.Errorf("failed to read %s: %w", s.ext.EnvFileName(), err)
 	}
 
 	lines := strings.Split(string(content), "\n")
@@ -200,6 +205,9 @@ func (s *externalStrategy) persistEnvVar(worktreePath string) error {
 	found := false
 	for i, l := range lines {
 		if strings.HasPrefix(l, prefix) {
+			if lines[i] == line {
+				return nil // skip write — value unchanged
+			}
 			lines[i] = line
 			found = true
 			break
@@ -216,6 +224,44 @@ func (s *externalStrategy) persistEnvVar(worktreePath string) error {
 	}
 
 	return os.WriteFile(envFile, []byte(strings.Join(lines, "\n")), 0644)
+}
+
+// removeEnvVar removes the env_var entry from the env file if its value matches
+// the given worktree. Called on grove rm to clean up stale entries.
+func (s *externalStrategy) removeEnvVar(worktreePath string) error {
+	envFile := s.envFilePath()
+	key := s.ext.EnvVar
+	rel := s.relativeWorktreePath(worktreePath)
+	expected := key + "=" + rel
+
+	content, err := os.ReadFile(envFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to read %s: %w", s.ext.EnvFileName(), err)
+	}
+
+	lines := strings.Split(string(content), "\n")
+	filtered := make([]string, 0, len(lines))
+	removed := false
+	for _, l := range lines {
+		if l == expected {
+			removed = true
+			continue
+		}
+		filtered = append(filtered, l)
+	}
+
+	if !removed {
+		return nil
+	}
+
+	result := strings.Join(filtered, "\n")
+	if result == "" {
+		result = "\n"
+	}
+	return os.WriteFile(envFile, []byte(result), 0644)
 }
 
 // envForWorktree returns the environment variable setting for the given worktree path.

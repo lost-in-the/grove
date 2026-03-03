@@ -654,6 +654,163 @@ func TestExternalStrategy_PersistEnvVar_NoDoubleEntry(t *testing.T) {
 	}
 }
 
+func TestExternalStrategy_PersistEnvVar_CustomEnvFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	s := newExternalStrategy(&config.Config{
+		Plugins: config.PluginsConfig{
+			Docker: config.DockerPluginConfig{
+				Mode: "external",
+				External: &config.ExternalComposeConfig{
+					Path:     tmpDir,
+					EnvVar:   "APP_DIR",
+					EnvFile:  ".env.local",
+					Services: []string{"app"},
+				},
+			},
+		},
+	})
+
+	worktreePath := filepath.Join(tmpDir, "myapp-feature-x")
+	err := s.persistEnvVar(worktreePath)
+	if err != nil {
+		t.Fatalf("persistEnvVar() error = %v", err)
+	}
+
+	// Should write to .env.local, not .env
+	localData, err := os.ReadFile(filepath.Join(tmpDir, ".env.local"))
+	if err != nil {
+		t.Fatalf("Failed to read .env.local: %v", err)
+	}
+	if !strings.Contains(string(localData), "APP_DIR=./myapp-feature-x") {
+		t.Errorf(".env.local content = %q, want APP_DIR=./myapp-feature-x", string(localData))
+	}
+
+	// .env should NOT exist
+	if _, err := os.Stat(filepath.Join(tmpDir, ".env")); !os.IsNotExist(err) {
+		t.Error("Expected .env to not exist when env_file is .env.local")
+	}
+}
+
+func TestExternalStrategy_PersistEnvVar_SkipsUnchanged(t *testing.T) {
+	tmpDir := t.TempDir()
+	envFile := filepath.Join(tmpDir, ".env")
+
+	// Pre-populate with the value we'll persist
+	if err := os.WriteFile(envFile, []byte("APP_DIR=./myapp-feature-x\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Record modification time
+	infoBefore, _ := os.Stat(envFile)
+
+	s := newExternalStrategy(&config.Config{
+		Plugins: config.PluginsConfig{
+			Docker: config.DockerPluginConfig{
+				Mode: "external",
+				External: &config.ExternalComposeConfig{
+					Path:     tmpDir,
+					EnvVar:   "APP_DIR",
+					Services: []string{"app"},
+				},
+			},
+		},
+	})
+
+	err := s.persistEnvVar(filepath.Join(tmpDir, "myapp-feature-x"))
+	if err != nil {
+		t.Fatalf("persistEnvVar() error = %v", err)
+	}
+
+	// File should not have been rewritten
+	infoAfter, _ := os.Stat(envFile)
+	if !infoBefore.ModTime().Equal(infoAfter.ModTime()) {
+		t.Error("Expected file to not be rewritten when value is unchanged")
+	}
+}
+
+func TestExternalStrategy_RemoveEnvVar(t *testing.T) {
+	tests := []struct {
+		name        string
+		existing    string
+		worktree    string
+		wantContent string
+	}{
+		{
+			name:        "removes matching entry",
+			existing:    "OTHER=value\nAPP_DIR=./myapp-feature-x\nMORE=stuff\n",
+			worktree:    "myapp-feature-x",
+			wantContent: "OTHER=value\nMORE=stuff\n",
+		},
+		{
+			name:        "leaves non-matching entry",
+			existing:    "APP_DIR=./myapp-main\n",
+			worktree:    "myapp-feature-x",
+			wantContent: "APP_DIR=./myapp-main\n",
+		},
+		{
+			name:        "handles missing file gracefully",
+			existing:    "", // no file
+			worktree:    "myapp-feature-x",
+			wantContent: "", // still no file
+		},
+		{
+			name:        "removes only entry leaves empty file",
+			existing:    "APP_DIR=./myapp-feature-x\n",
+			worktree:    "myapp-feature-x",
+			wantContent: "\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			envFile := filepath.Join(tmpDir, ".env")
+
+			if tt.existing != "" {
+				if err := os.WriteFile(envFile, []byte(tt.existing), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			s := newExternalStrategy(&config.Config{
+				Plugins: config.PluginsConfig{
+					Docker: config.DockerPluginConfig{
+						Mode: "external",
+						External: &config.ExternalComposeConfig{
+							Path:     tmpDir,
+							EnvVar:   "APP_DIR",
+							Services: []string{"app"},
+						},
+					},
+				},
+			})
+
+			worktreePath := filepath.Join(tmpDir, tt.worktree)
+			err := s.removeEnvVar(worktreePath)
+			if err != nil {
+				t.Fatalf("removeEnvVar() error = %v", err)
+			}
+
+			if tt.wantContent == "" {
+				// File should not exist
+				if _, err := os.Stat(envFile); !os.IsNotExist(err) {
+					t.Error("Expected env file to not exist")
+				}
+				return
+			}
+
+			data, err := os.ReadFile(envFile)
+			if err != nil {
+				t.Fatalf("Failed to read env file: %v", err)
+			}
+			if string(data) != tt.wantContent {
+				t.Errorf("env file content = %q, want %q", string(data), tt.wantContent)
+			}
+		})
+	}
+}
+
 func TestCopyFile(t *testing.T) {
 	tmpDir := t.TempDir()
 

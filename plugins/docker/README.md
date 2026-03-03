@@ -228,6 +228,7 @@ symlink_dirs = [
 |-------|----------|-------------|
 | `path` | Yes | Absolute path to the external compose directory (supports `~`) |
 | `env_var` | Yes | Environment variable name the compose YAML reads |
+| `env_file` | No | File to persist `env_var` in (default: `.env`). Set to `.env.local` with direnv for clean git status. |
 | `services` | Yes | List of service names to manage |
 | `copy_files` | No | Files to copy from main worktree on `grove new` |
 | `symlink_dirs` | No | Directories to symlink from main worktree on `grove new` |

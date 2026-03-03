@@ -1803,6 +1803,9 @@ Environment:
   ✓ Git version 2.40.0 (minimum: 2.30)
   ✓ Tmux version 3.3a (minimum: 3.0)
   ✓ Docker version 24.0.0
+  ✓ Env file target (.env.local)
+  ✓ direnv available (found in PATH)
+  ✓ direnv loads .env.local (.envrc configured)
   ✗ Shell integration not detected
     → Add to ~/.zshrc: eval "$(grove init zsh)"
 

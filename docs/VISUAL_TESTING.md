@@ -370,7 +370,20 @@ tapes/
   dashboard.tape      — Dashboard overview
   create-flow.tape    — Create worktree wizard walkthrough
   overlays.tape       — Overlay panel demonstrations
+  showcase.tape       — Hero GIF for README (full feature sizzle reel)
 ```
+
+### Demo fixture
+
+All tapes depend on a demo fixture at `/tmp/grove-demo`. The `make demo` target
+sets this up automatically via `scripts/create-demo.sh`, which:
+
+1. Calls `scripts/create-fixture.sh /tmp/grove-demo` to create a git repo with
+   four worktrees in varied states (clean, dirty, ahead)
+2. Copies the built `bin/grove` binary into the fixture at
+   `/tmp/grove-demo/rails-app/bin/grove`
+
+Tapes `cd /tmp/grove-demo/rails-app` and run `./bin/grove` to launch the TUI.
 
 ### Recording
 
@@ -378,8 +391,8 @@ tapes/
 make demo
 ```
 
-Requires VHS (`brew install vhs`). Records all `.tape` files in `tapes/` and writes
-output GIFs alongside the tape files.
+Requires VHS (`brew install vhs`). Creates the demo fixture, then records all
+`.tape` files in `tapes/` and writes output GIFs to `docs/`.
 
 ### Creating a new tape
 

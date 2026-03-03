@@ -129,16 +129,27 @@ func (p *Plugin) onPostCreate(ctx *hooks.Context) error {
 	return p.strategy.OnPostCreate(ctx)
 }
 
-// onPreRemove handles the pre-remove hook — tears down agent stacks if running.
+// onPreRemove handles the pre-remove hook — cleans up env vars and tears down agent stacks.
 func (p *Plugin) onPreRemove(ctx *hooks.Context) error {
 	if p.strategy == nil {
 		return nil
 	}
-	agent, ok := p.strategy.(*agentExternalStrategy)
-	if !ok {
+	if ctx.WorktreePath == "" {
 		return nil
 	}
-	if ctx.WorktreePath == "" {
+
+	// Clean up env var entry for external strategy
+	if ext, ok := p.strategy.(*externalStrategy); ok {
+		if err := ext.removeEnvVar(ctx.WorktreePath); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to clean %s from %s: %v\n",
+				ext.ext.EnvVar, ext.ext.EnvFileName(), err)
+		}
+		return nil
+	}
+
+	// Tear down agent stack if running
+	agent, ok := p.strategy.(*agentExternalStrategy)
+	if !ok {
 		return nil
 	}
 	wtName := filepath.Base(ctx.WorktreePath)
@@ -236,6 +247,11 @@ func buildSlotManager(cfg *config.Config) *SlotManager {
 	}
 	slotsFile := filepath.Join(resolveComposePath(ext.Path), filepath.Dir(ext.Agent.TemplatePath), ".slots.json")
 	return NewSlotManager(slotsFile, maxSlots)
+}
+
+// ResolveComposePath resolves a compose path, expanding ~ to home directory.
+func ResolveComposePath(path string) string {
+	return resolveComposePath(path)
 }
 
 // isAgentMode returns true when the agent mode env var is set and the config

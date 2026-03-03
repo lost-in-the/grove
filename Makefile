@@ -82,6 +82,7 @@ test-update-golden: ## Update golden test files after intentional visual changes
 
 demo: build ## Record VHS demo GIFs (requires vhs: brew install vhs)
 	@command -v vhs > /dev/null || (echo "Install vhs: brew install vhs" && exit 1)
+	@./scripts/create-demo.sh
 	@for tape in tapes/*.tape; do echo "Recording $$tape..."; vhs $$tape; done
 
 golden-diff: ## Update golden files and show what changed
