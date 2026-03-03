@@ -581,8 +581,11 @@ Arguments:
   name    Name of worktree to remove (required)
 
 Flags:
-  -f, --force    Remove even if worktree has uncommitted changes
+  -f, --force          Remove dirty worktrees; with --unprotect, remove protected worktrees
+      --unprotect      Allow removing protected worktrees (requires --force)
+      --dry-run        Show what would be removed without making changes
       --keep-branch    Don't delete the associated branch
+      --delete-branch  Delete the associated branch without prompting
 ```
 
 **Behavior:**
@@ -590,9 +593,10 @@ Flags:
 1. **Find worktree** (same matching as `grove to`)
 
 2. **Safety checks:**
+   - Cannot remove main worktree
+   - Cannot remove protected worktrees (unless `--force --unprotect`)
    - Cannot remove current worktree (must switch away first)
    - Cannot remove if dirty (unless `--force`)
-   - Cannot remove main worktree
 
 3. **Kill tmux session** (if exists)
 
@@ -620,31 +624,31 @@ Flags:
 
 **Output (Has uncommitted changes):**
 ```
-✗ Worktree 'testing' has uncommitted changes:
+✗ worktree 'testing' has uncommitted changes
 
   M  src/main.go
 
 To remove anyway: grove rm testing --force
 To switch and commit: grove to testing
 ```
-**Exit code: 1**
+**Exit code: 7**
 
 **Output (Trying to remove current):**
 ```
-✗ Cannot remove current worktree
+✗ cannot remove current worktree
 
 Switch to another worktree first: grove to main
 ```
-**Exit code: 1**
+**Exit code: 7**
 
 **Output (Trying to remove main):**
 ```
-✗ Cannot remove the main worktree
+✗ cannot remove the main worktree
 
 The main worktree is your primary project directory.
 To remove the entire project, delete it manually.
 ```
-**Exit code: 1**
+**Exit code: 7**
 
 **Output (Branch not fully merged):**
 ```
@@ -668,9 +672,8 @@ Delete branch anyway? [y/N]:
 
 **Exit Codes:**
 - 0: Success
-- 1: Worktree not found or protected
-- 2: Has uncommitted changes (without --force)
-- 3: Other error
+- 1: Worktree not found
+- 7: Cannot remove (main, protected, current, or dirty without --force)
 
 ---
 

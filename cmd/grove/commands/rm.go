@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -55,6 +56,24 @@ Examples:
 			return fmt.Errorf("failed to initialize worktree manager: %w", err)
 		}
 
+		// Find worktree early — all checks reuse this
+		wt, err := mgr.Find(name)
+		if err != nil {
+			return fmt.Errorf("failed to find worktree: %w", err)
+		}
+		if wt == nil {
+			cli.Error(stderr, "worktree '%s' not found", name)
+			os.Exit(exitcode.ResourceNotFound)
+		}
+
+		// Cannot remove the main worktree (unconditional — git won't allow it)
+		if wt.IsMain {
+			cli.Error(stderr, "cannot remove the main worktree")
+			cli.Faint(stderr, "The main worktree is your primary project directory.")
+			cli.Faint(stderr, "To remove the entire project, delete it manually.")
+			os.Exit(exitcode.CannotRemove)
+		}
+
 		// Load config for protection settings
 		cfg, _ := config.Load()
 
@@ -85,31 +104,40 @@ Examples:
 
 		// Check if trying to remove the current worktree
 		currentTree, _ := mgr.GetCurrent()
-		if currentTree != nil {
-			wt, _ := mgr.Find(name)
-			if wt != nil && currentTree.Path == wt.Path {
-				cli.Error(stderr, "cannot remove current worktree '%s'", name)
-				cli.Info(stderr, "Switch to another worktree first: grove to <name>")
-				os.Exit(exitcode.CannotRemove)
+		if currentTree != nil && currentTree.Path == wt.Path {
+			cli.Error(stderr, "cannot remove current worktree '%s'", name)
+			cli.Info(stderr, "Switch to another worktree first: grove to <name>")
+			os.Exit(exitcode.CannotRemove)
+		}
+
+		// Cannot remove dirty worktree without --force
+		if wt.IsDirty && !rmForce {
+			cli.Error(stderr, "worktree '%s' has uncommitted changes", name)
+			dirtyFiles, err := mgr.GetDirtyFiles(wt.Path)
+			if err == nil && dirtyFiles != "" {
+				for _, line := range strings.Split(dirtyFiles, "\n") {
+					if line != "" {
+						cli.Faint(stderr, "  %s", line)
+					}
+				}
 			}
+			cli.Info(stderr, "To remove anyway: grove rm %s --force", name)
+			cli.Info(stderr, "To switch and commit: grove to %s", name)
+			os.Exit(exitcode.CannotRemove)
 		}
 
 		// Dry run - just show what would happen
 		if rmDryRun {
 			cli.Info(w, "Would remove worktree '%s'", name)
-			// Get path from worktree manager
-			wt, _ := mgr.Find(name)
-			if wt != nil {
-				cli.Faint(w, "  Path: %s", wt.Path)
-				if wt.Branch != "" {
-					cli.Faint(w, "  Branch: %s", wt.Branch)
-					if rmDeleteBranch {
-						cli.Faint(w, "  Would delete branch: %s", wt.Branch)
-					} else if rmKeepBranch {
-						cli.Faint(w, "  Would keep branch: %s", wt.Branch)
-					} else {
-						cli.Faint(w, "  Would prompt for branch deletion")
-					}
+			cli.Faint(w, "  Path: %s", wt.Path)
+			if wt.Branch != "" {
+				cli.Faint(w, "  Branch: %s", wt.Branch)
+				if rmDeleteBranch {
+					cli.Faint(w, "  Would delete branch: %s", wt.Branch)
+				} else if rmKeepBranch {
+					cli.Faint(w, "  Would keep branch: %s", wt.Branch)
+				} else {
+					cli.Faint(w, "  Would prompt for branch deletion")
 				}
 			}
 			if tmux.IsTmuxAvailable() {
@@ -126,8 +154,7 @@ Examples:
 
 		// Get branch name before removing (need worktree info)
 		var branchName string
-		wt, _ := mgr.Find(name)
-		if wt != nil && wt.Branch != "" {
+		if wt.Branch != "" {
 			branchName = wt.Branch
 		}
 
@@ -135,15 +162,13 @@ Examples:
 		hookExecutor, hookErr := hooks.NewExecutor()
 		if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPreRemove) {
 			hookCtx := &hooks.ExecutionContext{
-				Event:    hooks.EventPreRemove,
-				Worktree: name,
-				Branch:   branchName,
-				Project:  projectName,
-				MainPath: ctx.ProjectRoot,
-			}
-			if wt != nil {
-				hookCtx.NewPath = wt.Path
-				hookCtx.WorktreeFull = projectName + "-" + name
+				Event:        hooks.EventPreRemove,
+				Worktree:     name,
+				Branch:       branchName,
+				Project:      projectName,
+				MainPath:     ctx.ProjectRoot,
+				NewPath:      wt.Path,
+				WorktreeFull: projectName + "-" + name,
 			}
 			cli.Step(w, "Running pre-remove hooks...")
 			if err := hookExecutor.Execute(hooks.EventPreRemove, hookCtx); err != nil {
@@ -152,14 +177,10 @@ Examples:
 		}
 
 		// Fire plugin pre-remove hook (e.g., stop agent stacks)
-		var wtPath string
-		if wt != nil {
-			wtPath = wt.Path
-		}
 		pluginHookCtx := &hooks.Context{
 			Worktree:     name,
 			Config:       cfg,
-			WorktreePath: wtPath,
+			WorktreePath: wt.Path,
 			MainPath:     ctx.ProjectRoot,
 		}
 		if err := hooks.Fire(hooks.EventPreRemove, pluginHookCtx); err != nil {
@@ -301,7 +322,7 @@ func handleBranchDeletion(repoPath, branch string, forceDelete, forceUnmerged bo
 }
 
 func init() {
-	rmCmd.Flags().BoolVarP(&rmForce, "force", "f", false, "Force removal (required with --unprotect for protected worktrees, allows deleting unmerged branches)")
+	rmCmd.Flags().BoolVarP(&rmForce, "force", "f", false, "Force removal of dirty or protected worktrees (also allows deleting unmerged branches)")
 	rmCmd.Flags().BoolVar(&rmUnprotect, "unprotect", false, "Allow removing protected worktrees (requires --force)")
 	rmCmd.Flags().BoolVar(&rmDryRun, "dry-run", false, "Show what would be removed without making changes")
 	rmCmd.Flags().BoolVar(&rmKeepBranch, "keep-branch", false, "Do not delete the associated branch")

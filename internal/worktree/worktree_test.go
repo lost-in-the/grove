@@ -642,6 +642,108 @@ func TestIsDirty(t *testing.T) {
 	}
 }
 
+func TestFindMainWorktreeIsMain(t *testing.T) {
+	tmpDir, _ := setupTestRepo(t)
+
+	m := &Manager{repoRoot: tmpDir}
+
+	// Create a linked worktree so we can test both
+	err := m.Create("feature", "feature-branch")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	// Find via List — the main worktree should have IsMain=true
+	trees, err := m.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+
+	var mainCount, linkedCount int
+	for _, tree := range trees {
+		if tree.IsMain {
+			mainCount++
+		} else {
+			linkedCount++
+		}
+	}
+
+	if mainCount != 1 {
+		t.Errorf("expected exactly 1 main worktree, got %d", mainCount)
+	}
+	if linkedCount < 1 {
+		t.Errorf("expected at least 1 linked worktree, got %d", linkedCount)
+	}
+
+	// Find the linked worktree by name — should NOT be main
+	projectName := m.GetProjectName()
+	fullName := projectName + "-feature"
+	wt, err := m.Find(fullName)
+	if err != nil {
+		t.Fatalf("Find() error = %v", err)
+	}
+	if wt == nil {
+		t.Fatal("Find() returned nil for linked worktree")
+	}
+	if wt.IsMain {
+		t.Error("linked worktree should not have IsMain=true")
+	}
+}
+
+func TestIsDirtyWithWorktree(t *testing.T) {
+	tmpDir, _ := setupTestRepo(t)
+
+	m := &Manager{repoRoot: tmpDir}
+
+	// Create a linked worktree
+	err := m.Create("dirty-test", "dirty-test-branch")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	projectName := m.GetProjectName()
+	fullName := projectName + "-dirty-test"
+
+	// Linked worktree should start clean
+	wt, err := m.Find(fullName)
+	if err != nil {
+		t.Fatalf("Find() error = %v", err)
+	}
+	if wt == nil {
+		t.Fatal("Find() returned nil")
+	}
+	if wt.IsDirty {
+		t.Error("fresh worktree should not be dirty")
+	}
+
+	// Make the linked worktree dirty
+	dirtyFile := filepath.Join(wt.Path, "dirty.txt")
+	if err := os.WriteFile(dirtyFile, []byte("uncommitted"), 0644); err != nil {
+		t.Fatalf("Failed to write dirty file: %v", err)
+	}
+
+	// Re-find — should now be dirty
+	wt, err = m.Find(fullName)
+	if err != nil {
+		t.Fatalf("Find() error = %v", err)
+	}
+	if wt == nil {
+		t.Fatal("Find() returned nil")
+	}
+	if !wt.IsDirty {
+		t.Error("worktree with uncommitted file should be dirty")
+	}
+
+	// GetDirtyFiles should list the file
+	dirtyFiles, err := m.GetDirtyFiles(wt.Path)
+	if err != nil {
+		t.Fatalf("GetDirtyFiles() error = %v", err)
+	}
+	if !strings.Contains(dirtyFiles, "dirty.txt") {
+		t.Errorf("GetDirtyFiles() = %q, want it to contain 'dirty.txt'", dirtyFiles)
+	}
+}
+
 func TestGetCommitInfo(t *testing.T) {
 	tmpDir, _ := setupTestRepo(t)
 
