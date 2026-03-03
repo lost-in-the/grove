@@ -102,7 +102,7 @@ grove    # Opens interactive dashboard (inside a grove project)
 | `grove open <name>` | Open a worktree session (create if needed, launch configured command) |
 | `grove to <name>` | Switch to a worktree (changes directory, attaches tmux) |
 | `grove to <name> --peek` | Lightweight switch — skip hooks (no Docker side effects) |
-| `grove rm <name>` | Remove a worktree and kill its tmux session |
+| `grove rm <name>` | Remove a worktree and kill its tmux session (`--force` to override dirty check) |
 | `grove here` | Show current worktree info (branch, SHA, age, status) |
 | `grove last` | Switch to the previous worktree |
 | `grove fork <name>` | Fork the current worktree into a new one (optionally move/copy WIP) |

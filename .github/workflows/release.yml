@@ -72,8 +72,19 @@ jobs:
               '{message: $message, content: $content}')
           fi
 
-          curl -s -X PUT \
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X PUT \
             -H "Authorization: token ${TAP_GITHUB_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "$BODY" \
-            "https://api.github.com/repos/LeahArmstrong/homebrew-tap/contents/Formula/grove.rb"
+            "https://api.github.com/repos/LeahArmstrong/homebrew-tap/contents/Formula/grove.rb")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY_OUT=$(echo "$RESPONSE" | sed '$d')
+
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "::error::Failed to update Homebrew formula (HTTP $HTTP_CODE)"
+            echo "$BODY_OUT"
+            exit 1
+          fi
+
+          echo "Homebrew formula updated to ${VERSION}"
