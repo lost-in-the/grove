@@ -104,6 +104,7 @@ grove    # Opens interactive dashboard (inside a grove project)
 | `grove to <name> --peek` | Lightweight switch — skip hooks (no Docker side effects) |
 | `grove rm <name>` | Remove a worktree and kill its tmux session (`--force` to override dirty check) |
 | `grove here` | Show current worktree info (branch, SHA, age, status) |
+| `grove attach [name]` | Attach to a tmux session without changing directory (alias: `a`) |
 | `grove last` | Switch to the previous worktree |
 | `grove fork <name>` | Fork the current worktree into a new one (optionally move/copy WIP) |
 | `grove compare <name>` | Compare current worktree with another (commits and WIP) |
@@ -194,8 +195,10 @@ auto_stop = false   # Stop containers when switching away
 # auto_up = true    # Auto-start Docker on 'grove new' (default: true when agent stacks configured)
 
 [protection]
-# Worktrees that cannot receive changes via 'grove apply'
-immutable = ["main", "production"]
+# Protected: prevents deletion (requires --force --unprotect to remove)
+protected = ["production"]
+# Immutable: prevents modifications (apply, sync) AND deletion
+immutable = ["main"]
 ```
 
 **Tmux modes:**
@@ -214,7 +217,13 @@ immutable = ["main", "production"]
 
 ### Docker Plugin
 
-Manages Docker Compose containers scoped to each worktree. Supports auto-start/stop on switch, per-worktree container isolation, and an "external compose" mode for monorepos where the compose file lives outside the worktree.
+Manages Docker Compose containers scoped to each worktree. Three modes:
+
+- **Local** (default): each worktree runs its own Docker Compose stack from the project directory
+- **External** (`mode = "external"`): a shared compose file lives outside the worktrees; grove injects per-worktree environment variables to isolate containers
+- **Agent** (`[plugins.docker.external.agent]`): extends external mode with numbered slot allocation for fully parallel, isolated stacks — designed for multi-agent CI workflows
+
+Supports auto-start/stop on switch in all modes.
 
 See [plugins/docker/README.md](plugins/docker/README.md) for full configuration.
 
@@ -271,7 +280,14 @@ Run `grove` with no arguments inside a grove project:
 
 > **Note:** If the GIF above doesn't render, run `make demo` to generate it locally.
 
-Navigation: `j`/`k` or arrow keys. `/` to filter. `?` for full keybindings.
+From the dashboard you can:
+- **Create** (`n`), **delete** (`d`), and **fork** (`f`) worktrees without leaving the dashboard
+- **Browse GitHub PRs** (`p`) and **Issues** (`i`) and create worktrees directly from them
+- **Bulk delete** multiple worktrees at once (`a`)
+- **Edit config** in-TUI (`c`) — changes take effect immediately
+- **Sort** by name, recently accessed, or dirty status (`o`), **filter** by name or branch (`/`)
+
+Navigation: `j`/`k` or arrow keys. `?` for full keybindings.
 
 <details>
 <summary>Text preview (if GIF not available)</summary>

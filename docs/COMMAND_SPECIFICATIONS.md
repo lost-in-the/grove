@@ -18,6 +18,7 @@ This document provides exhaustive specifications for each grove command. Every b
    - [grove rm](#grove-rm)
    - [grove here](#grove-here)
    - [grove last](#grove-last)
+   - [grove attach](#grove-attach)
 4. [State Commands](#state-commands)
    - [grove freeze](#grove-freeze)
    - [grove resume](#grove-resume)
@@ -41,6 +42,7 @@ This document provides exhaustive specifications for each grove command. Every b
    - [grove doctor](#grove-doctor)
 8. [Exit Codes](#exit-codes)
 9. [Output Formatting](#output-formatting)
+10. [Commands Not Speced](#commands-not-speced)
 
 ---
 
@@ -838,6 +840,51 @@ Use 'grove ls' to see available worktrees.
 **Exit Codes:**
 - 0: Success
 - 1: No previous worktree or it no longer exists
+
+---
+
+### grove attach
+
+**Purpose:** Attach to (or create) a tmux session for a worktree without changing the shell's current directory.
+
+**Usage:**
+```
+grove attach [name] [flags]
+Alias: a
+
+Arguments:
+  name    Worktree to attach to (default: current worktree)
+
+Flags:
+  -j, --json    Output as JSON
+```
+
+**Behavior:**
+
+1. If `name` is given: find that worktree; else use the current worktree
+2. If tmux mode is `off` in config: error
+3. If tmux is not installed: error
+4. If session does not exist: create it at the worktree path
+5. Attach:
+   - Inside tmux: `switch-client` to the session
+   - Outside tmux with shell integration (`GROVE_SHELL=1`): emit `tmux-attach:{session}` directive
+   - Outside tmux without shell integration: `tmux attach-session -t {session}` (blocks terminal)
+
+Does **not** emit a `cd:` directive. Use `grove to` if you want a directory change.
+
+**Output (JSON, `--json`):**
+```json
+{
+  "name": "testing",
+  "session": "grove-cli-testing",
+  "path": "/path/to/grove-cli-testing",
+  "created": false
+}
+```
+
+**Exit Codes:**
+- 0: Success
+- 1: Worktree not found, tmux unavailable, or tmux disabled
 
 ---
 
@@ -1924,3 +1971,19 @@ func hasShellIntegration() bool {
 
 ---
 
+
+## Commands Not Speced
+
+Two command names surfaced during a documentation audit but were confirmed to **not exist** as standalone cobra commands:
+
+### `grove browse` (not implemented)
+
+`cmd/grove/commands/browse.go` exists but registers the `issues` and `prs` subcommands, not a top-level `grove browse` command. The file is named `browse.go` because it implements the browsing UI shared by both. There is no `Use: "browse"` cobra command in the codebase.
+
+If a `grove browse` command is added in the future, it should be documented here and in README.md.
+
+### `grove context` (not implemented)
+
+`cmd/grove/commands/context.go` exists but contains the `GroveContext` struct and `RequireGroveContext` middleware helper — shared infrastructure used by nearly every command. There is no user-facing `grove context` cobra command.
+
+If a `grove context` command is added in the future (e.g., to print current project/worktree context for scripting), it should be documented here and in README.md.
