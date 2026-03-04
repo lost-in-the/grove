@@ -212,6 +212,39 @@ Output: emits `cd:/abs/path/to/myapp-auth` directive — shell wrapper changes d
 
 Hooks fired: `post_create`
 
+### List All Worktrees
+
+```bash
+grove ls
+```
+
+Displays a table of all managed worktrees with their associated branches, status, and tmux state:
+
+```
+  NAME             BRANCH           STATUS     TMUX        PATH
+  ──────────────────────────────────────────────────────────────────
+● main             main             clean      attached    ~/projects/myapp
+  feature-auth     feature/auth     dirty      detached    ~/projects/myapp-feature-auth
+  pr-42            fix/login-bug    clean      none        ~/projects/myapp-pr-42
+```
+
+Columns:
+- **●** — indicates the current worktree
+- **NAME** — short display name (without project prefix)
+- **BRANCH** — the git branch checked out in that worktree
+- **STATUS** — `clean`, `dirty`, or `stale`
+- **TMUX** — `attached`, `detached`, or `none`
+- **PATH** — absolute worktree path
+
+**Output modes:**
+
+| Flag | Output |
+|------|--------|
+| (default) | Table with name, branch, status, tmux, path |
+| `--json` / `-j` | JSON array with all fields (`name`, `branch`, `status`, `tmux`, `path`, `current`, etc.) |
+| `--paths` / `-p` | One absolute path per line |
+| `--quiet` / `-q` | One short name per line |
+
 ### Switch Context Atomically
 
 ```bash

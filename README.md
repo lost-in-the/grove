@@ -136,9 +136,21 @@ Auto-detects project type (Rails, Node, Go, Python, Docker) and generates `.grov
 ```bash
 grove new feature-login    # Create worktree + tmux session
 grove to feature-login     # Switch (changes directory automatically)
-grove ls                   # List all worktrees
+grove ls                   # List all worktrees with branches and status
 grove here                 # Show current worktree info
 ```
+
+Example `grove ls` output — each worktree shows its name, branch, status, and tmux state:
+
+```
+  NAME             BRANCH           STATUS     TMUX        PATH
+  ──────────────────────────────────────────────────────────────────
+● main             main             clean      attached    ~/projects/my-app
+  feature-login    feat/login       dirty      detached    ~/projects/my-app-feature-login
+  hotfix-css       fix/css          clean      none        ~/projects/my-app-hotfix-css
+```
+
+Use `grove ls --json` for machine-readable output, or `grove ls --paths` for paths only.
 
 **4. Launch the TUI**
 
@@ -152,7 +164,7 @@ grove    # Opens interactive dashboard (inside a grove project)
 
 | Command | Description |
 |---------|-------------|
-| `grove ls` | List all worktrees with status |
+| `grove ls` | List all worktrees with their branches, status, and tmux state |
 | `grove new <name>` | Create a worktree + tmux session + Docker stack |
 | `grove to <name>` | Switch to a worktree (changes directory, attaches tmux) |
 | `grove to <name> --peek` | Lightweight switch — skip hooks (no Docker side effects) |
