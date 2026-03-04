@@ -107,6 +107,10 @@ When using shell integration, this will also change your current directory.`,
 		if tmuxMode == "" {
 			tmuxMode = "auto"
 		}
+		// Agent mode: suppress tmux to prevent terminal takeover
+		if cfg.AgentMode {
+			tmuxMode = "off"
+		}
 
 		// Handle tmux session (unless mode is "off")
 		var sessionName string

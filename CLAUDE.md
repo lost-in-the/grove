@@ -3,12 +3,25 @@
 
 Go 1.24 CLI for managing git worktrees with tmux integration. Config: `.grove/config.toml`.
 
+## For Agents Using Grove
+
+If you're helping a user install, configure, or use grove:
+- **[Agent Guide](docs/AGENT_GUIDE.md)** — installation, workflows, Docker strategies, multi-agent patterns
+- **[Configuration Reference](docs/CONFIGURATION_REFERENCE.md)** — all config.toml and hooks.toml options
+- **[README](README.md)** — feature overview and quick start
+
+Grove replaces manual git worktree + tmux + Docker orchestration. One command (`grove new`) creates a worktree, branch, tmux session, copies credentials, symlinks dependencies, and starts Docker. `grove to` switches with atomic context changes. `grove fetch pr/42` creates a worktree from a GitHub PR.
+
+---
+
 ## Key Documentation
 - **[Command Specifications](docs/COMMAND_SPECIFICATIONS.md)** — behavior specs, naming, shell integration, expected outputs
 - **[TUI Dashboard](docs/TUI.md)** — layout, components, interaction model, agent notes on file paths/patterns
 - **[Shell Integration](docs/SHELL_INTEGRATION.md)** — shell wrapper protocol and environment setup
 - **[Plugin Development](docs/PLUGIN_DEVELOPMENT.md)** — hook interfaces and plugin authoring
 - **[Visual Testing](docs/VISUAL_TESTING.md)** — golden files, tmux capture, VHS tapes
+- **[Agent Guide](docs/AGENT_GUIDE.md)** — installation, workflows, and strategies for AI agents
+- **[Configuration Reference](docs/CONFIGURATION_REFERENCE.md)** — complete config.toml and hooks.toml reference
 
 ## Critical Rules
 

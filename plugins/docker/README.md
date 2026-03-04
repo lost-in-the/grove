@@ -111,7 +111,7 @@ grove down                   # Auto-detects and stops the current stack
 Configure isolated stacks in `.grove/config.toml`:
 
 ```toml
-[plugins.docker.agent]
+[plugins.docker.external.agent]
 max_slots = 5           # Maximum concurrent isolated stacks (default: 5)
 network = "shared"      # Docker network for isolated stacks
 url_pattern = "http://localhost:{port}"  # URL template for service discovery
