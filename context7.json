@@ -1,4 +1,26 @@
 {
   "url": "https://context7.com/leaharmstrong/grove-cli",
-  "public_key": "pk_lHvYkoK2DwC8Cbj0p10kg"
+  "public_key": "pk_lHvYkoK2DwC8Cbj0p10kg",
+  "projectTitle": "Grove CLI",
+  "description": "Git worktree flow manager — one-command worktree creation with tmux sessions, Docker isolation, GitHub PR/issue integration, and lifecycle hooks. Replaces 5-10 manual shell commands per context switch.",
+  "folders": ["docs", "plugins/docker", "plugins/tracker", "skills"],
+  "excludeFolders": ["internal", "cmd", ".github", ".claude"],
+  "excludeFiles": [
+    "CODE_OF_CONDUCT.md", "SECURITY.md", "CHANGELOG.md",
+    "CONTRIBUTING.md", "docs/VISUAL_TESTING.md", "docs/DATA_FLOWS.md"
+  ],
+  "rules": [
+    "Grove replaces manual git worktree + tmux + Docker orchestration. Use grove new/to/rm instead of git worktree add/remove + manual setup.",
+    "Shell integration is REQUIRED for directory switching: eval \"$(grove install zsh)\" in ~/.zshrc. Without it, grove prints cd: directives instead of changing directories.",
+    "grove new <name> creates worktree + git branch + tmux session + runs hooks (copy credentials, symlink node_modules, start Docker) — all in one command.",
+    "grove to <name> is an atomic context switch: changes directory, fires pre/post-switch hooks, starts/stops Docker, attaches tmux. Use --peek to switch without side effects.",
+    "grove fetch pr/N and grove fetch issue/N create worktrees directly from GitHub — no manual gh/git commands needed.",
+    "grove fork <name> creates a parallel worktree from current HEAD. Use --move-wip to transfer uncommitted changes, --copy-wip to duplicate them.",
+    "For parallel agents: grove up --isolated gives each agent its own Docker stack with auto port offsets. No port conflicts between agents.",
+    "Config is TOML: project .grove/config.toml overrides global ~/.config/grove/config.toml. Run grove config to see merged config.",
+    "Worktree names follow {project}-{name} pattern. grove ls shows short names, tmux sessions use full names.",
+    "grove test <worktree> runs tests in another worktree without switching — agents can test in parallel without interference.",
+    "AGENT WARNING: grove to can attach tmux sessions, taking over the terminal. Agents should set [tmux] mode = 'manual' or 'off', or use grove to --peek to skip tmux and hooks.",
+    "For external Docker mode with env_file = '.env.local': use mise (.mise.toml with [env] _.file = '.env.local') or direnv (.envrc with dotenv_if_exists .env.local) so manual docker compose commands see the env vars."
+  ]
 }
