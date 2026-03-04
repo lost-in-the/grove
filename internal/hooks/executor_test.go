@@ -56,58 +56,6 @@ func TestVariablesInterpolate(t *testing.T) {
 	}
 }
 
-func TestReplaceAll(t *testing.T) {
-	tests := []struct {
-		name string
-		s    string
-		old  string
-		new  string
-		want string
-	}{
-		{"basic replacement", "hello world", "world", "go", "hello go"},
-		{"empty old string no-op", "hello", "", "x", "hello"},
-		{"multiple occurrences", "aaa", "a", "b", "bbb"},
-		{"no match", "hello", "xyz", "abc", "hello"},
-		{"replace entire string", "foo", "foo", "bar", "bar"},
-		{"empty string", "", "x", "y", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := replaceAll(tt.s, tt.old, tt.new)
-			if got != tt.want {
-				t.Errorf("replaceAll(%q, %q, %q) = %q, want %q", tt.s, tt.old, tt.new, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestIndexOf(t *testing.T) {
-	tests := []struct {
-		name   string
-		s      string
-		substr string
-		want   int
-	}{
-		{"found at start", "hello world", "hello", 0},
-		{"found in middle", "hello world", "world", 6},
-		{"not found", "hello", "xyz", -1},
-		{"empty string", "", "x", -1},
-		{"substr longer than s", "hi", "hello", -1},
-		{"exact match", "exact", "exact", 0},
-		{"overlapping", "aaa", "aa", 0},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := indexOf(tt.s, tt.substr)
-			if got != tt.want {
-				t.Errorf("indexOf(%q, %q) = %d, want %d", tt.s, tt.substr, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestExecute(t *testing.T) {
 	t.Run("nil config returns nil", func(t *testing.T) {
 		e := NewExecutorWithConfig(nil)
@@ -562,29 +510,6 @@ func TestBuildVariables(t *testing.T) {
 	}
 	if vars.Date == "" {
 		t.Error("Date should be non-empty")
-	}
-}
-
-func TestDirOf(t *testing.T) {
-	tests := []struct {
-		name string
-		path string
-		want string
-	}{
-		{"normal path", "/foo/bar/baz.txt", "/foo/bar"},
-		{"single level", "/foo/bar", "/foo"},
-		{"no slash returns empty", "bar", ""},
-		{"root-level file returns empty", "/foo", ""},
-		{"root slash returns empty", "/", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := dirOf(tt.path)
-			if got != tt.want {
-				t.Errorf("dirOf(%q) = %q, want %q", tt.path, got, tt.want)
-			}
-		})
 	}
 }
 

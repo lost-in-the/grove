@@ -30,7 +30,6 @@ type CreateState struct {
 	// Branch selector state (unified)
 	Branches          []string
 	BranchCursor      int
-	BranchFilter      string // kept in sync with BranchFilterInput for business logic
 	BranchFilterInput textinput.Model
 
 	// Name input

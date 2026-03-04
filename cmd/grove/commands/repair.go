@@ -161,7 +161,7 @@ Examples:
 			switch issue.Type {
 			case "orphan_state":
 				// Extract name from description (hacky but works)
-				name := extractWorktreeName(issue.Description)
+				name := extractQuotedName(issue.Description)
 				if err := ctx.State.RemoveWorktree(name); err != nil {
 					fmt.Fprintf(os.Stderr, "  Failed to remove '%s' from state: %v\n", name, err)
 					failed++
@@ -173,7 +173,7 @@ Examples:
 
 			case "missing_state":
 				// Find the worktree and add it to state
-				name := extractWorktreeName(issue.Description)
+				name := extractQuotedName(issue.Description)
 				if wt, exists := gitWorktreeByName[name]; exists {
 					now := time.Now()
 					ws := &state.WorktreeState{
@@ -194,7 +194,7 @@ Examples:
 
 			case "orphan_tmux":
 				// Extract session name
-				sessionName := extractSessionName(issue.Description)
+				sessionName := extractQuotedName(issue.Description)
 				if sessionName != "" {
 					if err := tmux.KillSession(sessionName); err != nil {
 						fmt.Fprintf(os.Stderr, "  Failed to kill session '%s': %v\n", sessionName, err)
@@ -218,23 +218,9 @@ Examples:
 	}),
 }
 
-// extractWorktreeName extracts the worktree name from issue description
-func extractWorktreeName(desc string) string {
-	// Pattern: "State entry 'name' ..." or "Worktree 'name' ..."
-	start := strings.Index(desc, "'")
-	if start < 0 {
-		return ""
-	}
-	end := strings.Index(desc[start+1:], "'")
-	if end < 0 {
-		return ""
-	}
-	return desc[start+1 : start+1+end]
-}
-
-// extractSessionName extracts the tmux session name from issue description
-func extractSessionName(desc string) string {
-	// Pattern: "Tmux session 'name' ..."
+// extractQuotedName extracts the first single-quoted token from a description string.
+// Used for both worktree names ("State entry 'name' ...") and session names ("Tmux session 'name' ...").
+func extractQuotedName(desc string) string {
 	start := strings.Index(desc, "'")
 	if start < 0 {
 		return ""

@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
@@ -158,14 +157,7 @@ func (s *localStrategy) getWorktreePath(name string) string {
 	}
 
 	if s.cfg != nil && s.cfg.ProjectsDir != "" {
-		projectsDir := s.cfg.ProjectsDir
-		if strings.HasPrefix(projectsDir, "~/") {
-			home, err := os.UserHomeDir()
-			if err == nil {
-				projectsDir = filepath.Join(home, projectsDir[2:])
-			}
-		}
-		return filepath.Join(projectsDir, name)
+		return filepath.Join(resolveComposePath(s.cfg.ProjectsDir), name)
 	}
 
 	cwd, _ := os.Getwd()

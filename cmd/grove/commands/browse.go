@@ -81,19 +81,103 @@ func truncate(s string, maxLen int) string {
 	return s[:maxLen-3] + "..."
 }
 
-func browseIssuesFzf(cmd *cobra.Command, ctx *GroveContext) error {
+// fzfSelect runs fzf with the provided lines and returns the selected number parsed
+// from the leading "#<number>" field. Returns -1 with nil error if the user cancels.
+func fzfSelect(header string, lines []string) (int, error) {
+	fzfCmd := exec.Command("fzf",
+		"--ansi",
+		"--header="+header,
+		"--preview=echo {}",
+		"--preview-window=up:3:wrap",
+		"--height=50%",
+		"--border",
+	)
+
+	stdin, err := fzfCmd.StdinPipe()
+	if err != nil {
+		return 0, fmt.Errorf("failed to create fzf stdin pipe: %w", err)
+	}
+
+	stdout, err := fzfCmd.StdoutPipe()
+	if err != nil {
+		return 0, fmt.Errorf("failed to create fzf stdout pipe: %w", err)
+	}
+
+	fzfCmd.Stderr = os.Stderr
+
+	if err := fzfCmd.Start(); err != nil {
+		return 0, fmt.Errorf("failed to start fzf: %w", err)
+	}
+
+	writer := bufio.NewWriter(stdin)
+	for _, line := range lines {
+		_, _ = writer.WriteString(line)
+	}
+	_ = writer.Flush()
+	_ = stdin.Close()
+
+	scanner := bufio.NewScanner(stdout)
+	var selection string
+	if scanner.Scan() {
+		selection = scanner.Text()
+	}
+
+	if err := fzfCmd.Wait(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			if exitErr.ExitCode() == 130 {
+				return -1, nil
+			}
+		}
+		return 0, fmt.Errorf("fzf selection failed: %w", err)
+	}
+
+	if selection == "" {
+		return -1, nil
+	}
+
+	parts := strings.Split(selection, "|")
+	if len(parts) < 2 {
+		return 0, fmt.Errorf("invalid selection format")
+	}
+
+	numberStr := strings.TrimSpace(strings.TrimPrefix(parts[0], "#"))
+	number, err := strconv.Atoi(numberStr)
+	if err != nil {
+		return 0, fmt.Errorf("invalid number in selection: %w", err)
+	}
+	return number, nil
+}
+
+// listOptsFromCmd extracts shared filter flags from a command.
+func listOptsFromCmd(cmd *cobra.Command) tracker.ListOptions {
 	state, _ := cmd.Flags().GetString("state")
 	labels, _ := cmd.Flags().GetStringSlice("label")
 	assignee, _ := cmd.Flags().GetString("assignee")
 	author, _ := cmd.Flags().GetString("author")
 	limit, _ := cmd.Flags().GetInt("limit")
+	return tracker.ListOptions{
+		State:    state,
+		Labels:   labels,
+		Assignee: assignee,
+		Author:   author,
+		Limit:    limit,
+	}
+}
 
+// checkFzfPrereqs verifies that gh and fzf are available.
+func checkFzfPrereqs() error {
 	if !tracker.IsGHInstalled() {
 		return fmt.Errorf("gh CLI not installed or not authenticated\n\nInstall: https://cli.github.com/\nAuthenticate: gh auth login")
 	}
-
 	if _, err := exec.LookPath("fzf"); err != nil {
 		return fmt.Errorf("fzf not installed\n\nInstall: https://github.com/junegunn/fzf#installation")
+	}
+	return nil
+}
+
+func browseIssuesFzf(cmd *cobra.Command, ctx *GroveContext) error {
+	if err := checkFzfPrereqs(); err != nil {
+		return err
 	}
 
 	repo, err := tracker.DetectRepo()
@@ -103,16 +187,8 @@ func browseIssuesFzf(cmd *cobra.Command, ctx *GroveContext) error {
 
 	gh := tracker.NewGitHubAdapter(repo)
 
-	opts := tracker.ListOptions{
-		State:    state,
-		Labels:   labels,
-		Assignee: assignee,
-		Author:   author,
-		Limit:    limit,
-	}
-
 	fmt.Fprintf(os.Stderr, "Fetching issues from %s...\n", repo)
-	issues, err := gh.ListIssues(opts)
+	issues, err := gh.ListIssues(listOptsFromCmd(cmd))
 	if err != nil {
 		return fmt.Errorf("failed to list issues: %w", err)
 	}
@@ -122,90 +198,30 @@ func browseIssuesFzf(cmd *cobra.Command, ctx *GroveContext) error {
 		return nil
 	}
 
-	fzfCmd := exec.Command("fzf",
-		"--ansi",
-		"--header=Select an issue (Ctrl-C to cancel)",
-		"--preview=echo {}",
-		"--preview-window=up:3:wrap",
-		"--height=50%",
-		"--border",
-	)
-
-	stdin, err := fzfCmd.StdinPipe()
-	if err != nil {
-		return fmt.Errorf("failed to create fzf stdin pipe: %w", err)
-	}
-
-	stdout, err := fzfCmd.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("failed to create fzf stdout pipe: %w", err)
-	}
-
-	fzfCmd.Stderr = os.Stderr
-
-	if err := fzfCmd.Start(); err != nil {
-		return fmt.Errorf("failed to start fzf: %w", err)
-	}
-
-	writer := bufio.NewWriter(stdin)
-	for _, issue := range issues {
-		line := fmt.Sprintf("#%-6d | %-60s | %-6s | @%s\n",
+	lines := make([]string, len(issues))
+	for i, issue := range issues {
+		lines[i] = fmt.Sprintf("#%-6d | %-60s | %-6s | @%s\n",
 			issue.Number,
 			truncate(issue.Title, 60),
 			issue.State,
 			issue.Author,
 		)
-		_, _ = writer.WriteString(line)
-	}
-	_ = writer.Flush()
-	_ = stdin.Close()
-
-	scanner := bufio.NewScanner(stdout)
-	var selection string
-	if scanner.Scan() {
-		selection = scanner.Text()
 	}
 
-	if err := fzfCmd.Wait(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			if exitErr.ExitCode() == 130 {
-				return nil
-			}
-		}
-		return fmt.Errorf("fzf selection failed: %w", err)
-	}
-
-	if selection == "" {
-		return nil
-	}
-
-	parts := strings.Split(selection, "|")
-	if len(parts) < 2 {
-		return fmt.Errorf("invalid selection format")
-	}
-
-	numberStr := strings.TrimSpace(strings.TrimPrefix(parts[0], "#"))
-	number, err := strconv.Atoi(numberStr)
+	number, err := fzfSelect("Select an issue (Ctrl-C to cancel)", lines)
 	if err != nil {
-		return fmt.Errorf("invalid issue number: %w", err)
+		return err
+	}
+	if number < 0 {
+		return nil
 	}
 
 	return fetchItem(ctx, "issue", number)
 }
 
 func browsePRsFzf(cmd *cobra.Command, ctx *GroveContext) error {
-	state, _ := cmd.Flags().GetString("state")
-	labels, _ := cmd.Flags().GetStringSlice("label")
-	assignee, _ := cmd.Flags().GetString("assignee")
-	author, _ := cmd.Flags().GetString("author")
-	limit, _ := cmd.Flags().GetInt("limit")
-
-	if !tracker.IsGHInstalled() {
-		return fmt.Errorf("gh CLI not installed or not authenticated\n\nInstall: https://cli.github.com/\nAuthenticate: gh auth login")
-	}
-
-	if _, err := exec.LookPath("fzf"); err != nil {
-		return fmt.Errorf("fzf not installed\n\nInstall: https://github.com/junegunn/fzf#installation")
+	if err := checkFzfPrereqs(); err != nil {
+		return err
 	}
 
 	repo, err := tracker.DetectRepo()
@@ -215,16 +231,8 @@ func browsePRsFzf(cmd *cobra.Command, ctx *GroveContext) error {
 
 	gh := tracker.NewGitHubAdapter(repo)
 
-	opts := tracker.ListOptions{
-		State:    state,
-		Labels:   labels,
-		Assignee: assignee,
-		Author:   author,
-		Limit:    limit,
-	}
-
 	fmt.Fprintf(os.Stderr, "Fetching PRs from %s...\n", repo)
-	prs, err := gh.ListPRs(opts)
+	prs, err := gh.ListPRs(listOptsFromCmd(cmd))
 	if err != nil {
 		return fmt.Errorf("failed to list PRs: %w", err)
 	}
@@ -234,73 +242,23 @@ func browsePRsFzf(cmd *cobra.Command, ctx *GroveContext) error {
 		return nil
 	}
 
-	fzfCmd := exec.Command("fzf",
-		"--ansi",
-		"--header=Select a PR (Ctrl-C to cancel)",
-		"--preview=echo {}",
-		"--preview-window=up:3:wrap",
-		"--height=50%",
-		"--border",
-	)
-
-	stdin, err := fzfCmd.StdinPipe()
-	if err != nil {
-		return fmt.Errorf("failed to create fzf stdin pipe: %w", err)
-	}
-
-	stdout, err := fzfCmd.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("failed to create fzf stdout pipe: %w", err)
-	}
-
-	fzfCmd.Stderr = os.Stderr
-
-	if err := fzfCmd.Start(); err != nil {
-		return fmt.Errorf("failed to start fzf: %w", err)
-	}
-
-	writer := bufio.NewWriter(stdin)
-	for _, pr := range prs {
-		line := fmt.Sprintf("#%-6d | %-50s | %-20s | %-6s | @%s\n",
+	lines := make([]string, len(prs))
+	for i, pr := range prs {
+		lines[i] = fmt.Sprintf("#%-6d | %-50s | %-20s | %-6s | @%s\n",
 			pr.Number,
 			truncate(pr.Title, 50),
 			truncate(pr.Branch, 20),
 			pr.State,
 			pr.Author,
 		)
-		_, _ = writer.WriteString(line)
-	}
-	_ = writer.Flush()
-	_ = stdin.Close()
-
-	scanner := bufio.NewScanner(stdout)
-	var selection string
-	if scanner.Scan() {
-		selection = scanner.Text()
 	}
 
-	if err := fzfCmd.Wait(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			if exitErr.ExitCode() == 130 {
-				return nil
-			}
-		}
-		return fmt.Errorf("fzf selection failed: %w", err)
-	}
-
-	if selection == "" {
-		return nil
-	}
-
-	parts := strings.Split(selection, "|")
-	if len(parts) < 2 {
-		return fmt.Errorf("invalid selection format")
-	}
-
-	numberStr := strings.TrimSpace(strings.TrimPrefix(parts[0], "#"))
-	number, err := strconv.Atoi(numberStr)
+	number, err := fzfSelect("Select a PR (Ctrl-C to cancel)", lines)
 	if err != nil {
-		return fmt.Errorf("invalid PR number: %w", err)
+		return err
+	}
+	if number < 0 {
+		return nil
 	}
 
 	return fetchItem(ctx, "pr", number)

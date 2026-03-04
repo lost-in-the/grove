@@ -230,13 +230,7 @@ func (m Model) handleSyncKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // renderSync renders the sync overlay.
 func renderSync(s *SyncState, width int) string {
-	overlayWidth := width * 50 / 100
-	if overlayWidth < 50 {
-		overlayWidth = 50
-	}
-	if overlayWidth > 70 {
-		overlayWidth = 70
-	}
+	overlayWidth := calcOverlayWidth(width)
 	contentWidth := overlayWidth - 6
 	indent := overlayIndent
 	innerWidth := contentWidth - len(indent)*2

@@ -249,21 +249,8 @@ var lsCmd = &cobra.Command{
 			}
 
 			tmuxStatus := "none"
-			if tmuxAvailable && sessions != nil {
-				sessionName := worktree.TmuxSessionName(projectName, tree.DisplayName())
-				if session, ok := sessions[sessionName]; ok {
-					if session.Attached {
-						tmuxStatus = "attached"
-					} else {
-						tmuxStatus = "detached"
-					}
-				} else if session, ok := sessions[tree.Name]; ok {
-					if session.Attached {
-						tmuxStatus = "attached"
-					} else {
-						tmuxStatus = "detached"
-					}
-				}
+			if tmuxAvailable {
+				tmuxStatus = tmuxStatusFor(tree, projectName, sessions)
 			}
 
 			containers := ""
@@ -293,6 +280,24 @@ var lsCmd = &cobra.Command{
 
 		return nil
 	}),
+}
+
+// tmuxStatusFor returns "attached", "detached", or "none" for a worktree.
+// sessions may be nil (when tmux is not available).
+func tmuxStatusFor(tree *worktree.Worktree, projectName string, sessions map[string]*tmux.Session) string {
+	if sessions == nil {
+		return "none"
+	}
+	sessionName := worktree.TmuxSessionName(projectName, tree.DisplayName())
+	for _, key := range []string{sessionName, tree.Name} {
+		if session, ok := sessions[key]; ok {
+			if session.Attached {
+				return "attached"
+			}
+			return "detached"
+		}
+	}
+	return "none"
 }
 
 func statusLevelString(level plugins.StatusLevel) string {

@@ -206,7 +206,11 @@ func AgentURL(cfg *config.Config, slot int) string {
 	if cfg == nil || cfg.Plugins.Docker.External == nil || cfg.Plugins.Docker.External.Agent == nil {
 		return ""
 	}
-	pattern := cfg.Plugins.Docker.External.Agent.URLPattern
+	return formatAgentURL(cfg.Plugins.Docker.External.Agent.URLPattern, slot)
+}
+
+// formatAgentURL substitutes {slot} in a URL pattern. Returns empty string for empty patterns.
+func formatAgentURL(pattern string, slot int) string {
 	if pattern == "" {
 		return ""
 	}
@@ -215,17 +219,11 @@ func AgentURL(cfg *config.Config, slot int) string {
 
 // AgentComposeProjectName returns the compose project name for a given slot.
 func AgentComposeProjectName(cfg *config.Config, slot int) string {
-	project := ""
+	var projectName string
 	if cfg != nil {
-		project = cfg.ProjectName
+		projectName = cfg.ProjectName
 	}
-	if project == "" {
-		project = "grove"
-	}
-	if slot > 0 {
-		return fmt.Sprintf("%s-agent-%d", project, slot)
-	}
-	return fmt.Sprintf("%s-agent-ephemeral", project)
+	return agentComposeProjectName(projectName, slot)
 }
 
 // buildSlotManager creates a SlotManager from config, or nil if agent mode

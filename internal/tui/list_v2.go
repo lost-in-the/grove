@@ -391,12 +391,3 @@ func (d WorktreeDelegateV2) Render(w io.Writer, m list.Model, index int, listIte
 
 	_, _ = fmt.Fprint(w, lipgloss.JoinVertical(lipgloss.Left, line1, line2))
 }
-
-// padToWidth pads a string with spaces to reach the target width.
-func padToWidth(s string, width int) string {
-	w := lipgloss.Width(s)
-	if w < width {
-		return s + strings.Repeat(" ", width-w)
-	}
-	return s
-}

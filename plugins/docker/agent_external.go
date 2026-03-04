@@ -116,8 +116,7 @@ func (s *agentExternalStrategy) Up(worktreePath string, detach bool) error {
 
 	fmt.Fprintf(os.Stderr, "Agent stack started (slot %d)\n", slot)
 	if s.agent.URLPattern != "" {
-		url := strings.ReplaceAll(s.agent.URLPattern, "{slot}", fmt.Sprintf("%d", slot))
-		fmt.Fprintf(os.Stderr, "Available at: %s\n", url)
+		fmt.Fprintf(os.Stderr, "Available at: %s\n", formatAgentURL(s.agent.URLPattern, slot))
 	}
 
 	return nil
@@ -156,26 +155,41 @@ func (s *agentExternalStrategy) Down(worktreePath string) error {
 	return nil
 }
 
+// agentCtx holds the resolved context needed to run agent compose commands.
+type agentCtx struct {
+	composePath  string
+	templatePath string
+	projectName  string
+	env          []string
+	wtName       string
+}
+
+// agentContext resolves compose paths, project name, and base env for a worktree.
+// Uses an existing slot if allocated; falls back to the ephemeral project name.
+func (s *agentExternalStrategy) agentContext(worktreePath string) agentCtx {
+	wtName := filepath.Base(worktreePath)
+	slot, _ := s.slots.FindSlot(wtName)
+	return agentCtx{
+		composePath:  s.composePath(),
+		templatePath: s.resolveTemplatePath(),
+		projectName:  s.composeProjectName(slot),
+		env:          s.agentEnv(worktreePath, slot),
+		wtName:       wtName,
+	}
+}
+
 // Run executes a command in an ephemeral container using the agent compose project.
 func (s *agentExternalStrategy) Run(worktreePath string, service string, command string) error {
-	wtName := filepath.Base(worktreePath)
+	ac := s.agentContext(worktreePath)
 
-	// Use existing slot if one is allocated, otherwise use a deterministic project name
-	slot, _ := s.slots.FindSlot(wtName)
-	projectName := s.composeProjectName(slot)
-
-	templatePath := s.resolveTemplatePath()
-	composePath := s.composePath()
-
-	env := s.agentEnv(worktreePath, slot)
-
+	env := ac.env
 	// Add TEST_ENV_NUMBER for test commands
 	if isTestCommand(command) {
-		envNum := worktree.TestEnvNumber(wtName)
+		envNum := worktree.TestEnvNumber(ac.wtName)
 		env = append(env, fmt.Sprintf("TEST_ENV_NUMBER=%d", envNum))
 	}
 
-	cmd := agentComposeCommand(composePath, templatePath, projectName, env, "run", "--rm", service, "bash", "-cil", command)
+	cmd := agentComposeCommand(ac.composePath, ac.templatePath, ac.projectName, env, "run", "--rm", service, "bash", "-cil", command)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
@@ -184,15 +198,7 @@ func (s *agentExternalStrategy) Run(worktreePath string, service string, command
 
 // Logs tails logs for agent-specific containers.
 func (s *agentExternalStrategy) Logs(worktreePath string, service string, follow bool) error {
-	wtName := filepath.Base(worktreePath)
-
-	slot, _ := s.slots.FindSlot(wtName)
-	projectName := s.composeProjectName(slot)
-
-	templatePath := s.resolveTemplatePath()
-	composePath := s.composePath()
-
-	env := s.agentEnv(worktreePath, slot)
+	ac := s.agentContext(worktreePath)
 
 	args := []string{"logs"}
 	if follow {
@@ -204,7 +210,7 @@ func (s *agentExternalStrategy) Logs(worktreePath string, service string, follow
 		args = append(args, s.agent.Services...)
 	}
 
-	cmd := agentComposeCommand(composePath, templatePath, projectName, env, args...)
+	cmd := agentComposeCommand(ac.composePath, ac.templatePath, ac.projectName, ac.env, args...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
@@ -213,15 +219,7 @@ func (s *agentExternalStrategy) Logs(worktreePath string, service string, follow
 
 // Restart restarts agent containers.
 func (s *agentExternalStrategy) Restart(worktreePath string, service string) error {
-	wtName := filepath.Base(worktreePath)
-
-	slot, _ := s.slots.FindSlot(wtName)
-	projectName := s.composeProjectName(slot)
-
-	templatePath := s.resolveTemplatePath()
-	composePath := s.composePath()
-
-	env := s.agentEnv(worktreePath, slot)
+	ac := s.agentContext(worktreePath)
 
 	args := []string{"restart"}
 	if service != "" {
@@ -230,24 +228,27 @@ func (s *agentExternalStrategy) Restart(worktreePath string, service string) err
 		args = append(args, s.agent.Services...)
 	}
 
-	cmd := agentComposeCommand(composePath, templatePath, projectName, env, args...)
+	cmd := agentComposeCommand(ac.composePath, ac.templatePath, ac.projectName, ac.env, args...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
 // composeProjectName returns the compose project name for a given slot.
-// Format: {grove_project_name}-agent-{slot}
-// When slot is 0 (no persistent stack), uses worktree-based naming.
 func (s *agentExternalStrategy) composeProjectName(slot int) string {
-	project := s.cfg.ProjectName
-	if project == "" {
-		project = "grove"
+	return agentComposeProjectName(s.cfg.ProjectName, slot)
+}
+
+// agentComposeProjectName is the shared naming logic used by both the strategy
+// and the public AgentComposeProjectName function.
+func agentComposeProjectName(projectName string, slot int) string {
+	if projectName == "" {
+		projectName = "grove"
 	}
 	if slot > 0 {
-		return fmt.Sprintf("%s-agent-%d", project, slot)
+		return fmt.Sprintf("%s-agent-%d", projectName, slot)
 	}
-	return fmt.Sprintf("%s-agent-ephemeral", project)
+	return fmt.Sprintf("%s-agent-ephemeral", projectName)
 }
 
 // composePath returns the resolved absolute path to the external compose directory.

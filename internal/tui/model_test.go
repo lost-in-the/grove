@@ -169,8 +169,8 @@ func TestCreateWizardFlow(t *testing.T) {
 		m = sendKey(m, "d")
 		m = sendKey(m, "e")
 		m = sendKey(m, "v")
-		if m.createState.BranchFilter != "dev" {
-			t.Errorf("expected filter 'dev', got %q", m.createState.BranchFilter)
+		if m.createState.BranchFilterInput.Value() != "dev" {
+			t.Errorf("expected filter 'dev', got %q", m.createState.BranchFilterInput.Value())
 		}
 	})
 
@@ -1056,8 +1056,8 @@ func TestCreateWizardBranchFilterAndNavigation(t *testing.T) {
 		m.createState.Branches = []string{"main", "develop", "feature/auth"}
 
 		m = sendKey(m, "d")
-		if m.createState.BranchFilter != "d" {
-			t.Errorf("expected filter 'd', got %q", m.createState.BranchFilter)
+		if m.createState.BranchFilterInput.Value() != "d" {
+			t.Errorf("expected filter 'd', got %q", m.createState.BranchFilterInput.Value())
 		}
 	})
 
@@ -1067,11 +1067,10 @@ func TestCreateWizardBranchFilterAndNavigation(t *testing.T) {
 		m.createState.Step = CreateStepBranch
 		m.createState.Branches = []string{"main", "develop"}
 		m.createState.BranchFilterInput.SetValue("de")
-		m.createState.BranchFilter = "de"
 
 		m = sendKey(m, "backspace")
-		if m.createState.BranchFilter != "d" {
-			t.Errorf("expected filter 'd', got %q", m.createState.BranchFilter)
+		if m.createState.BranchFilterInput.Value() != "d" {
+			t.Errorf("expected filter 'd', got %q", m.createState.BranchFilterInput.Value())
 		}
 	})
 
@@ -1390,9 +1389,6 @@ func TestCreateBranchFilterTypingThroughUpdate(t *testing.T) {
 		m = sendKey(m, "e")
 		if m.createState.BranchFilterInput.Value() != "de" {
 			t.Errorf("expected filter 'de', got %q", m.createState.BranchFilterInput.Value())
-		}
-		if m.createState.BranchFilter != "de" {
-			t.Errorf("expected BranchFilter 'de', got %q", m.createState.BranchFilter)
 		}
 	})
 }

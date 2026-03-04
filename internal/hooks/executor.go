@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"os/user"
+	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -191,36 +193,10 @@ func (v *Variables) Interpolate(s string) string {
 
 	result := s
 	for pattern, value := range replacements {
-		result = replaceAll(result, pattern, value)
+		result = strings.ReplaceAll(result, pattern, value)
 	}
 
 	return result
-}
-
-// replaceAll is a simple string replacement (avoiding regexp for performance)
-func replaceAll(s, old, new string) string {
-	if old == "" {
-		return s
-	}
-	result := s
-	for {
-		i := indexOf(result, old)
-		if i < 0 {
-			break
-		}
-		result = result[:i] + new + result[i+len(old):]
-	}
-	return result
-}
-
-// indexOf returns the index of substr in s, or -1 if not found
-func indexOf(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
 }
 
 // executeCopy performs a copy action
@@ -346,14 +322,14 @@ func (e *Executor) executeTemplate(action *HookAction, ctx *ExecutionContext, va
 	// Apply action-specific vars first
 	for k, v := range action.Vars {
 		pattern := "{{." + k + "}}"
-		result = replaceAll(result, pattern, vars.Interpolate(v))
+		result = strings.ReplaceAll(result, pattern, vars.Interpolate(v))
 	}
 
 	// Apply standard variables
 	result = extVars.Interpolate(result)
 
 	// Ensure destination directory exists
-	if dir := dirOf(dstPath); dir != "" {
+	if dir := filepath.Dir(dstPath); dir != "" {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return fmt.Errorf("template: cannot create directory: %w", err)
 		}
@@ -366,14 +342,4 @@ func (e *Executor) executeTemplate(action *HookAction, ctx *ExecutionContext, va
 
 	e.printf("✓ Generated %s from template\n", to)
 	return nil
-}
-
-// dirOf returns the directory portion of a path
-func dirOf(path string) string {
-	for i := len(path) - 1; i >= 0; i-- {
-		if path[i] == '/' {
-			return path[:i]
-		}
-	}
-	return ""
 }

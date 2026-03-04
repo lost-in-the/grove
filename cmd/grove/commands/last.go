@@ -23,6 +23,11 @@ var lastCmd = &cobra.Command{
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		stderr := cli.NewStderr()
 
+		mgr, err := worktree.NewManager(ctx.ProjectRoot)
+		if err != nil {
+			return fmt.Errorf("failed to initialize worktree manager: %w", err)
+		}
+
 		// Try to get last worktree from state first (V2 approach)
 		lastWorktree, err := ctx.State.GetLastWorktree()
 		if err != nil || lastWorktree == "" {
@@ -32,11 +37,6 @@ var lastCmd = &cobra.Command{
 				return fmt.Errorf("no last worktree found: %w", err)
 			}
 
-			mgr, err := worktree.NewManager(ctx.ProjectRoot)
-			if err != nil {
-				return fmt.Errorf("failed to initialize worktree manager: %w", err)
-			}
-
 			projectName := mgr.GetProjectName()
 			expectedPrefix := projectName + "-"
 			if trimmed, found := strings.CutPrefix(lastSession, expectedPrefix); found {
@@ -44,11 +44,6 @@ var lastCmd = &cobra.Command{
 			} else {
 				lastWorktree = lastSession
 			}
-		}
-
-		mgr, err := worktree.NewManager(ctx.ProjectRoot)
-		if err != nil {
-			return fmt.Errorf("failed to initialize worktree manager: %w", err)
 		}
 
 		// Find the target worktree

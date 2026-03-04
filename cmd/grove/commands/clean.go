@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/LeahArmstrong/grove-cli/internal/cli"
-	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
 	"github.com/LeahArmstrong/grove-cli/internal/git"
 	"github.com/LeahArmstrong/grove-cli/internal/log"
@@ -67,8 +66,7 @@ Examples:
 			return fmt.Errorf("failed to initialize worktree manager: %w", err)
 		}
 
-		// Load config for protection settings
-		cfg, _ := config.Load()
+		cfg := ctx.Config
 
 		// Get current worktree
 		currentTree, _ := mgr.GetCurrent()

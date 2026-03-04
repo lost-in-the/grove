@@ -17,50 +17,26 @@ var bashTemplate string
 
 // GenerateZshIntegration returns the zsh shell integration code
 func GenerateZshIntegration() (string, error) {
-	binaryPath, err := os.Executable()
-	if err != nil {
-		// Fallback to grove in PATH
-		binaryPath = "grove"
-	}
-
-	header := `# Grove shell integration for zsh
-# ─────────────────────────────────────────────────────────────────────────────
-# SETUP: Add this line to your ~/.zshrc, then restart your shell:
-#   eval "$(grove install zsh)"
-#
-# WHAT THIS DOES:
-#   1. Creates a 'grove' shell function that wraps the binary
-#      - Directive commands (to, last, fork, fetch, attach, open, up, run,
-#        restart): output is captured and parsed for cd:/tmux-attach:/env:
-#        directives
-#      - All other commands: run directly (streaming-safe for logs, test, etc.)
-#   2. Registers tab completion for grove commands and worktree names
-#   3. Creates 'w' as an alias for 'grove'
-#
-# WHY A WRAPPER: Subprocesses cannot change the parent shell's directory.
-# The wrapper captures directive-producing commands, detects 'cd:' directives,
-# and executes the directory change in your current shell. Non-directive
-# commands run directly for proper streaming output.
-# ─────────────────────────────────────────────────────────────────────────────
-
-`
-	output := fmt.Sprintf("%s__GROVE_BIN=\"%s\"\n__GROVE_SHELL_VERSION=%d\n\n%s", header, binaryPath, ShellVersion, zshTemplate)
-
-	return output, nil
+	return generateIntegration("zsh", "~/.zshrc", "grove install zsh", zshTemplate)
 }
 
 // GenerateBashIntegration returns the bash shell integration code
 func GenerateBashIntegration() (string, error) {
+	return generateIntegration("bash", "~/.bashrc", "grove install bash", bashTemplate)
+}
+
+// generateIntegration produces shell integration code for the given shell.
+func generateIntegration(shell, rcFile, installCmd, template string) (string, error) {
 	binaryPath, err := os.Executable()
 	if err != nil {
 		// Fallback to grove in PATH
 		binaryPath = "grove"
 	}
 
-	header := `# Grove shell integration for bash
+	header := fmt.Sprintf(`# Grove shell integration for %s
 # ─────────────────────────────────────────────────────────────────────────────
-# SETUP: Add this line to your ~/.bashrc, then restart your shell:
-#   eval "$(grove install bash)"
+# SETUP: Add this line to your %s, then restart your shell:
+#   eval "$(%s)"
 #
 # WHAT THIS DOES:
 #   1. Creates a 'grove' shell function that wraps the binary
@@ -77,9 +53,9 @@ func GenerateBashIntegration() (string, error) {
 # commands run directly for proper streaming output.
 # ─────────────────────────────────────────────────────────────────────────────
 
-`
-	output := fmt.Sprintf("%s__GROVE_BIN=\"%s\"\n__GROVE_SHELL_VERSION=%d\n\n%s", header, binaryPath, ShellVersion, bashTemplate)
+`, shell, rcFile, installCmd)
 
+	output := fmt.Sprintf("%s__GROVE_BIN=\"%s\"\n__GROVE_SHELL_VERSION=%d\n\n%s", header, binaryPath, ShellVersion, template)
 	return output, nil
 }
 

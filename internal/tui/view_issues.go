@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
 	"time"
@@ -9,12 +8,8 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/glamour"
 
-	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
-	"github.com/LeahArmstrong/grove-cli/internal/tmux"
-	"github.com/LeahArmstrong/grove-cli/internal/tuilog"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 	"github.com/LeahArmstrong/grove-cli/plugins/tracker"
 )
@@ -125,55 +120,11 @@ func createIssueWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, proj
 		}
 		wt, err := mgr.Find(name)
 		if err != nil || wt == nil {
-			return issueWorktreeCreatedMsg{name: name, err: fmt.Errorf("worktree created but not found")}
+			return issueWorktreeCreatedMsg{name: name, err: errWorktreeNotFound}
 		}
 
-		projectName := mgr.GetProjectName()
-
-		// Register in state
-		if stateMgr != nil {
-			now := time.Now()
-			wsState := &state.WorktreeState{
-				Path:           wt.Path,
-				Branch:         wt.Branch,
-				CreatedAt:      now,
-				LastAccessedAt: now,
-			}
-			if err := stateMgr.AddWorktree(name, wsState); err != nil {
-				tuilog.Printf("warning: failed to register issue worktree %q in state: %v", name, err)
-			}
-		}
-
-		// Create tmux session
-		if tmux.IsTmuxAvailable() {
-			sessionName := worktree.TmuxSessionName(projectName, name)
-			if err := tmux.CreateSession(sessionName, wt.Path); err != nil {
-				tuilog.Printf("warning: failed to create tmux session %q: %v", sessionName, err)
-			}
-		}
-
-		// Run post-create hooks
-		var hookBuf bytes.Buffer
-		var hookExecErr error
-		hookExecutor, hookErr := hooks.NewExecutor()
-		if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPostCreate) {
-			hookExecutor.Output = &hookBuf
-			hookCtx := &hooks.ExecutionContext{
-				Event:        hooks.EventPostCreate,
-				Worktree:     name,
-				WorktreeFull: projectName + "-" + name,
-				Branch:       wt.Branch,
-				Project:      projectName,
-				MainPath:     projectRoot,
-				NewPath:      wt.Path,
-			}
-			hookExecErr = hookExecutor.Execute(hooks.EventPostCreate, hookCtx)
-			if hookExecErr != nil {
-				tuilog.Printf("warning: post-create hook failed for issue worktree %q: %v", name, hookExecErr)
-			}
-		}
-
-		return issueWorktreeCreatedMsg{name: name, path: wt.Path, hookOutput: hookBuf.String(), hookErr: hookExecErr}
+		result := runPostCreate(mgr, stateMgr, projectRoot, name, wt)
+		return issueWorktreeCreatedMsg{name: name, path: wt.Path, hookOutput: result.hookOutput, hookErr: result.hookErr}
 	}
 }
 
@@ -308,7 +259,7 @@ func renderIssuePreview(issue *tracker.Issue, width int) string {
 	if issue.Body == "" {
 		b.WriteString(Styles.DetailDim.Render("No description provided."))
 	} else {
-		rendered := renderIssueMarkdown(issue.Body, contentWidth)
+		rendered := renderMarkdown(issue.Body, contentWidth)
 		b.WriteString(rendered)
 	}
 
@@ -316,22 +267,6 @@ func renderIssuePreview(issue *tracker.Issue, width int) string {
 	b.WriteString(Styles.Footer.Render("[enter] Create worktree  [tab] Back  [esc] Close"))
 
 	return Styles.OverlayBorderInfo.Render(b.String())
-}
-
-// renderIssueMarkdown renders markdown to styled terminal output using glamour.
-func renderIssueMarkdown(md string, width int) string {
-	r, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(width),
-	)
-	if err != nil {
-		return md
-	}
-	out, err := r.Render(md)
-	if err != nil {
-		return md
-	}
-	return strings.TrimSpace(out)
 }
 
 func filteredIssues(issues []*tracker.Issue, filter string) []*tracker.Issue {

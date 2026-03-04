@@ -113,7 +113,7 @@ func (d WorktreeDelegate) Render(w io.Writer, m list.Model, index int, listItem 
 
 	// Apply selection background
 	if selected {
-		line = padToWidth(line, width)
+		line = padRight(line, width)
 		line = Styles.SelectionRow.Width(width).Render(line)
 	} else {
 		line = lipgloss.NewStyle().MaxWidth(width).Render(line)

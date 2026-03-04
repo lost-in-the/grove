@@ -148,7 +148,7 @@ func forkWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, forkState *
 		// Find the created worktree
 		newTree, err := mgr.Find(name)
 		if err != nil || newTree == nil {
-			return forkCompleteMsg{err: fmt.Errorf("worktree created but not found")}
+			return forkCompleteMsg{err: errWorktreeNotFound}
 		}
 
 		// Apply WIP patch to new worktree if needed
@@ -320,13 +320,7 @@ func (m Model) handleForkKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // renderFork renders the fork overlay.
 func renderFork(s *ForkState, width int) string {
-	overlayWidth := width * 50 / 100
-	if overlayWidth < 50 {
-		overlayWidth = 50
-	}
-	if overlayWidth > 70 {
-		overlayWidth = 70
-	}
+	overlayWidth := calcOverlayWidth(width)
 	contentWidth := overlayWidth - 6
 	indent := overlayIndent
 	innerWidth := contentWidth - len(indent)*2

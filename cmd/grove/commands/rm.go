@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/LeahArmstrong/grove-cli/internal/cli"
-	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
 	"github.com/LeahArmstrong/grove-cli/internal/git"
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
@@ -74,10 +73,8 @@ Examples:
 			os.Exit(exitcode.CannotRemove)
 		}
 
-		// Load config for protection settings
-		cfg, _ := config.Load()
-
 		// Check protection status
+		cfg := ctx.Config
 		isProtectedByConfig := cfg != nil && cfg.IsProtected(name)
 		isEnvironment := false
 		ws, _ := ctx.State.GetWorktree(name)

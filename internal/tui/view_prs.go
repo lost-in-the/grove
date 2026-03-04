@@ -1,20 +1,16 @@
 package tui
 
 import (
-	"bytes"
 	"fmt"
 	"os/exec"
 	"runtime"
 	"strings"
-	"time"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
-	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/tuilog"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 	"github.com/LeahArmstrong/grove-cli/plugins/tracker"
@@ -171,54 +167,10 @@ func createPRWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, project
 		}
 		wt, err := mgr.Find(name)
 		if err != nil || wt == nil {
-			return prWorktreeCreatedMsg{name: name, err: fmt.Errorf("worktree created but not found")}
+			return prWorktreeCreatedMsg{name: name, err: errWorktreeNotFound}
 		}
 
-		projectName := mgr.GetProjectName()
-
-		// Register in state
-		if stateMgr != nil {
-			now := time.Now()
-			wsState := &state.WorktreeState{
-				Path:           wt.Path,
-				Branch:         wt.Branch,
-				CreatedAt:      now,
-				LastAccessedAt: now,
-			}
-			if err := stateMgr.AddWorktree(name, wsState); err != nil {
-				tuilog.Printf("warning: failed to register PR worktree %q in state: %v", name, err)
-			}
-		}
-
-		// Create tmux session
-		if tmux.IsTmuxAvailable() {
-			sessionName := worktree.TmuxSessionName(projectName, name)
-			if err := tmux.CreateSession(sessionName, wt.Path); err != nil {
-				tuilog.Printf("warning: failed to create tmux session %q: %v", sessionName, err)
-			}
-		}
-
-		// Run post-create hooks
-		var hookBuf bytes.Buffer
-		var hookExecErr error
-		hookExecutor, hookErr := hooks.NewExecutor()
-		if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPostCreate) {
-			hookExecutor.Output = &hookBuf
-			hookCtx := &hooks.ExecutionContext{
-				Event:        hooks.EventPostCreate,
-				Worktree:     name,
-				WorktreeFull: projectName + "-" + name,
-				Branch:       wt.Branch,
-				Project:      projectName,
-				MainPath:     projectRoot,
-				NewPath:      wt.Path,
-			}
-			hookExecErr = hookExecutor.Execute(hooks.EventPostCreate, hookCtx)
-			if hookExecErr != nil {
-				tuilog.Printf("warning: post-create hook failed for PR worktree %q: %v", name, hookExecErr)
-			}
-		}
-
-		return prWorktreeCreatedMsg{name: name, path: wt.Path, hookOutput: hookBuf.String(), hookErr: hookExecErr}
+		result := runPostCreate(mgr, stateMgr, projectRoot, name, wt)
+		return prWorktreeCreatedMsg{name: name, path: wt.Path, hookOutput: result.hookOutput, hookErr: result.hookErr}
 	}
 }

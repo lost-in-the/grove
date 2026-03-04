@@ -117,8 +117,7 @@ func agentStatuses(s *agentExternalStrategy, paths []string) map[string]plugins.
 		}
 
 		detail := fmt.Sprintf("Stack #%d", slot)
-		if s.agent.URLPattern != "" {
-			url := strings.ReplaceAll(s.agent.URLPattern, "{slot}", fmt.Sprintf("%d", slot))
+		if url := formatAgentURL(s.agent.URLPattern, slot); url != "" {
 			detail += " at " + url
 		}
 

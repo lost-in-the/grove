@@ -223,7 +223,6 @@ func createStateWithBranchFilter(branches []string, filter string) *CreateState 
 	return &CreateState{
 		Step:              CreateStepBranch,
 		Branches:          branches,
-		BranchFilter:      filter,
 		BranchFilterInput: bfi,
 	}
 }

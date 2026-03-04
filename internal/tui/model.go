@@ -988,7 +988,6 @@ func (m Model) handleBranchSelectorKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 		var cmd tea.Cmd
 		s.BranchFilterInput, cmd = s.BranchFilterInput.Update(msg)
 		if s.BranchFilterInput.Value() != prevVal {
-			s.BranchFilter = s.BranchFilterInput.Value()
 			s.BranchCursor = 0
 		}
 		return m, cmd
