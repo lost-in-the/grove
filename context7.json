@@ -1,5 +1,7 @@
 {
   "$schema": "https://context7.com/schema/context7.json",
+  "url": "https://context7.com/leaharmstrong/grove-cli",
+  "public_key": "pk_lHvYkoK2DwC8Cbj0p10kg",
   "projectTitle": "Grove CLI",
   "description": "Git worktree flow manager — one-command worktree creation with tmux sessions, Docker isolation, GitHub PR/issue integration, and lifecycle hooks. Replaces 5-10 manual shell commands per context switch.",
   "folders": ["docs", "plugins/docker", "plugins/tracker", "skills"],
