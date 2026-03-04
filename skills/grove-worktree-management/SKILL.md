@@ -42,6 +42,26 @@ Use grove instead of manual git worktree commands when:
 - Config lives in .grove/config.toml (project) and ~/.config/grove/config.toml (global).
 - For external Docker with env_file = ".env.local": set up mise or direnv in the compose directory so manual docker compose commands see the worktree path.
 
+## Hooks (.grove/hooks.toml)
+
+Configure lifecycle hooks in `.grove/hooks.toml`:
+
+| Event | Common use |
+|-------|-----------|
+| `post_create` | Copy .env, symlink node_modules, bundle install |
+| `post_switch` | git pull, run migrations, rebuild assets |
+| `pre_switch` | Stop background processes |
+| `pre_remove` | Docker compose stop |
+
+```toml
+# Example: run migrations after every switch
+[[hooks.post_switch]]
+type        = "command"
+command     = "bin/rails db:migrate"
+working_dir = "new"
+on_failure  = "warn"
+```
+
 ## Docker Modes
 
 - **local**: Each worktree has its own docker-compose.yml

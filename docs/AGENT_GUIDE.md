@@ -353,6 +353,22 @@ Hooks:
 - `post_switch` → `docker compose up -d` in the target worktree
 - `pre_switch` → `docker compose stop` (only if `auto_stop = true`)
 
+You can add custom `post_switch` hooks alongside Docker's automatic behavior:
+
+```toml
+# .grove/hooks.toml — run after every worktree switch
+[[hooks.post_switch]]
+type        = "command"
+command     = "bin/rails db:migrate"
+working_dir = "new"
+on_failure  = "warn"
+
+[[hooks.post_switch]]
+type        = "command"
+command     = "git pull origin main --ff-only"
+on_failure  = "warn"
+```
+
 Note: `auto_stop` defaults to `false` in local mode. Multiple worktrees can have containers running simultaneously, which causes port conflicts if they use the same ports. Enable `auto_stop = true` or use different ports per worktree.
 
 ### External Mode

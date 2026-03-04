@@ -461,6 +461,34 @@ When working with multiple worktrees that run containers, you may encounter port
    auto_stop = true
    ```
 
+## Multi-Container Troubleshooting
+
+### Services fail to start after switching worktrees
+
+If containers fail to come up after `grove to`, check:
+
+1. **`auto_stop` is enabled** — without it, stale containers from the previous worktree may hold ports or volumes. Set `auto_stop = true` in `[plugins.docker]`.
+2. **Orphan containers** — run `docker compose down --remove-orphans` in the compose directory to clean up containers from renamed or removed services.
+3. **(External mode only) Env file stale** — verify `grove doctor` shows the env file is correctly written. Run `cat <compose-dir>/.env.local` to check the `APP_DIR` value matches the current worktree.
+
+### One service starts but another fails
+
+This is usually a dependency ordering issue:
+
+1. Check `docker compose logs <failing-service>` for connection errors
+2. Services that depend on databases may fail if the DB isn't ready — add `depends_on` with `condition: service_healthy` in your compose file
+3. Run `grove restart <service>` to retry the individual service after dependencies are up
+
+### Network not found in isolated mode
+
+Isolated stacks require a pre-existing Docker network (default: `shared`):
+
+```bash
+docker network create shared
+```
+
+If using a custom network name, ensure it matches the `network` field in `[plugins.docker.external.agent]`. Run `docker network ls` to verify.
+
 ## grove test Integration
 
 The Docker plugin integrates with `grove test` to run test commands in an ephemeral container without switching your active dev stack. Configure a service name in `.grove/config.toml`:

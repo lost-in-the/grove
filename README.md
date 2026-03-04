@@ -315,6 +315,12 @@ type = "command"
 command = "bundle install"
 timeout = 300
 on_failure = "warn"
+
+# Run after every worktree switch
+[[hooks.post_switch]]
+type        = "command"
+command     = "git pull origin main --ff-only"
+on_failure  = "warn"
 ```
 
 Supported events: `pre_create`, `post_create`, `pre_switch`, `post_switch`, `pre_remove`, `post_remove`.

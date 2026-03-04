@@ -318,6 +318,51 @@ Hooks are defined in a separate file from main config.
 - Set `override_<event> = true` in the project hooks file to replace global hooks for that
   event entirely instead of appending.
 
+### Setting Up Hooks
+
+1. Create a hooks file — project-level (`.grove/hooks.toml`) or global (`~/.config/grove/hooks.toml`)
+2. Add `[[hooks.<event>]]` entries (see action types and recipes below)
+3. Run `grove doctor` to validate syntax and check for errors
+4. Test with `grove new test-hook` or `grove to <worktree>` to verify hooks fire correctly
+
+### Global vs Project Hook Override
+
+By default, global and project hooks **merge** (global runs first, project appends). Use
+`override_<event> = true` to replace global hooks for a specific event:
+
+```toml
+# ~/.config/grove/hooks.toml (global — applies to all projects)
+[[hooks.post_switch]]
+type    = "command"
+command = "echo 'switched to {{.worktree}}'"
+
+[[hooks.post_create]]
+type    = "command"
+command = "echo 'created {{.worktree}}'"
+```
+
+```toml
+# .grove/hooks.toml (project — overrides global post_create, appends to post_switch)
+[hooks]
+override_post_create = true
+
+[[hooks.post_create]]
+type        = "command"
+command     = "bundle install"
+working_dir = "new"
+timeout     = 300
+on_failure  = "fail"
+
+[[hooks.post_switch]]
+type        = "command"
+command     = "bin/rails db:migrate"
+working_dir = "new"
+on_failure  = "warn"
+```
+
+In this example, `post_create` runs **only** the project hook (`bundle install`); `post_switch`
+runs **both** the global echo and the project migration.
+
 ### Hook Events
 
 | Event | When it fires |
@@ -328,6 +373,20 @@ Hooks are defined in a separate file from main config.
 | `post_switch` | After switching to a worktree |
 | `pre_remove` | Before removing a worktree |
 | `post_remove` | After the worktree has been removed |
+
+### Failure Handling (`on_failure`)
+
+Every hook action supports an `on_failure` field that controls what happens when the action
+fails (non-zero exit code, missing file, timeout, etc.):
+
+| Value | Behavior | Use when |
+|-------|----------|----------|
+| `"warn"` | Print a warning, continue with remaining hooks | Nice-to-have setup (migrations, asset builds) |
+| `"fail"` | Abort the entire operation (create, switch, etc.) | Critical setup (credentials, required config) |
+| `"ignore"` | Silently continue, no output | Best-effort cleanup (killing processes, logging) |
+
+Default: `"warn"`. The `required = true` field on copy/symlink hooks is equivalent to
+`on_failure = "fail"` — if the source file doesn't exist, the operation aborts.
 
 ### Hook Action Types
 
@@ -453,6 +512,132 @@ command = "echo 'Switched to {{.worktree}} on {{.branch}}'"
 match      = "dependabot/*"
 skip_hooks = true
 ```
+
+### Hook Recipes
+
+Common hook configurations for each lifecycle event:
+
+#### post_create — Run after creating a new worktree
+
+```toml
+# Copy credentials and install dependencies in one hooks file
+[[hooks.post_create]]
+type       = "copy"
+from       = ".env.local"
+to         = ".env.local"
+on_failure = "warn"
+
+[[hooks.post_create]]
+type     = "copy"
+from     = "config/master.key"
+to       = "config/master.key"
+required = true              # abort worktree creation if missing
+on_failure = "fail"
+
+[[hooks.post_create]]
+type        = "command"
+command     = "bundle install"
+working_dir = "new"
+timeout     = 300
+on_failure  = "fail"         # fail: dependencies are required
+
+[[hooks.post_create]]
+type = "symlink"
+from = "node_modules"
+to   = "node_modules"
+```
+
+#### post_switch — Run after every worktree switch
+
+```toml
+# Pull latest changes after switching
+[[hooks.post_switch]]
+type        = "command"
+command     = "git pull origin main --ff-only"
+on_failure  = "warn"
+
+# Run database migrations (Rails)
+[[hooks.post_switch]]
+type        = "command"
+command     = "bin/rails db:migrate"
+working_dir = "new"
+timeout     = 120
+on_failure  = "warn"
+
+# Rebuild frontend assets (Node)
+[[hooks.post_switch]]
+type        = "command"
+command     = "npm run build"
+working_dir = "new"
+timeout     = 180
+on_failure  = "warn"
+
+# Log switches for debugging
+[[hooks.post_switch]]
+type    = "command"
+command = "echo \"$(date): switched to {{.worktree}} ({{.branch}})\" >> ~/.grove/switch.log"
+```
+
+#### pre_switch — Run before leaving a worktree
+
+```toml
+# Stop background processes before switching away
+[[hooks.pre_switch]]
+type        = "command"
+command     = "pkill -f 'webpack-dev-server' || true"
+on_failure  = "ignore"
+
+# Save session state
+[[hooks.pre_switch]]
+type    = "command"
+command = "echo '{{.worktree}}' > ~/.grove/last-worktree"
+```
+
+#### pre_remove — Run before deleting a worktree
+
+```toml
+# Stop Docker containers before removal
+[[hooks.pre_remove]]
+type        = "command"
+command     = "docker compose stop"
+on_failure  = "ignore"
+```
+
+### Hook Troubleshooting
+
+**Hooks not running?** Common causes and how to diagnose:
+
+1. **Enable logging** — set `GROVE_LOG=1` to write hook execution details to `~/.grove/grove.log`:
+   ```bash
+   GROVE_LOG=1 grove to my-worktree
+   cat ~/.grove/grove.log   # shows which hooks fired, exit codes, timing
+   ```
+
+2. **Wrong file location** — hooks must be in `.grove/hooks.toml` (project) or
+   `~/.config/grove/hooks.toml` (global). A file named `hooks.toml` in the repo root is ignored.
+
+3. **Using `--peek`** — `grove to <name> --peek` skips all hooks by design. Remove `--peek` for
+   a full switch with hooks.
+
+4. **Branch matches a skip pattern** — check `[[overrides]]` entries in your hooks file.
+   An override with `skip_hooks = true` silences all hooks for matching branches:
+   ```toml
+   # This skips ALL hooks for any branch matching "dependabot/*"
+   [[overrides]]
+   match      = "dependabot/*"
+   skip_hooks = true
+   ```
+
+5. **Hook times out** — the default timeout is 60 seconds. Long-running commands
+   (e.g., `bundle install`, `npm run build`) need an explicit `timeout` value:
+   ```toml
+   [[hooks.post_create]]
+   type    = "command"
+   command = "bundle install"
+   timeout = 300   # 5 minutes
+   ```
+
+6. **Run `grove doctor`** — validates hooks file syntax and reports configuration errors.
 
 ---
 
