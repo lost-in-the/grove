@@ -7,12 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-03-04
+
 ### Added
+- `grove agent-help` command: concise reference for AI agents — env vars, common commands, and tips for programmatic use
 - `grove test` command: Run the configured test command in a worktree, with optional Docker service support for running tests in an ephemeral container
 - Config resolution from `.grove` directory for secondary worktrees, so non-main worktrees correctly inherit project configuration
 - Tmux mode setting (`auto`/`manual`/`off`) with shell auto-attach support, giving finer control over tmux session behavior
 - Config overlay save confirmation and changed-field indicators in the TUI, making it clear which fields have been modified before saving
 - External compose mode with plugin hook registry, enabling Docker services defined in a shared external directory to be managed per-worktree
+- "For AI Agents" section in README pointing to `grove agent-help` and Agent Guide
+
+### Fixed
+- Shell integration binary resolution: use `command -v grove` instead of hardcoded `os.Executable()` path, which broke when installed via `go run` or after brew upgrades (ShellVersion bumped to 3 — re-run `grove setup` to update)
 
 ### Previously Added
 - **Phase 5: Polish & Production Readiness**
