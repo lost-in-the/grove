@@ -139,3 +139,35 @@ func TestBashDirectiveParsing(t *testing.T) {
 		}
 	}
 }
+
+func TestBinaryResolutionUsesDynamicLookup(t *testing.T) {
+	output, err := GenerateZshIntegration()
+	if err != nil {
+		t.Fatalf("GenerateZshIntegration() failed: %v", err)
+	}
+
+	// Should use command -v for dynamic resolution, not a hardcoded path
+	if !strings.Contains(output, "command -v grove") {
+		t.Error("shell integration should use 'command -v grove' for binary resolution")
+	}
+
+	// Should NOT contain a hardcoded absolute path for __GROVE_BIN
+	// (The old approach used os.Executable() which produces paths like /usr/local/bin/grove)
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "__GROVE_BIN=\"/") {
+			t.Errorf("shell integration should not hardcode absolute path in __GROVE_BIN, found: %s", line)
+		}
+	}
+}
+
+func TestBashBinaryResolutionUsesDynamicLookup(t *testing.T) {
+	output, err := GenerateBashIntegration()
+	if err != nil {
+		t.Fatalf("GenerateBashIntegration() failed: %v", err)
+	}
+
+	if !strings.Contains(output, "command -v grove") {
+		t.Error("bash integration should use 'command -v grove' for binary resolution")
+	}
+}

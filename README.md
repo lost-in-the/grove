@@ -158,6 +158,16 @@ Use `grove ls --json` for machine-readable output, or `grove ls --paths` for pat
 grove    # Opens interactive dashboard (inside a grove project)
 ```
 
+## For AI Agents
+
+If you're an AI agent working in a project that uses Grove:
+
+```bash
+grove agent-help    # Quick reference for agent workflows
+```
+
+See [docs/AGENT_GUIDE.md](docs/AGENT_GUIDE.md) for the full agent reference including Docker strategies, parallel workflows, and troubleshooting.
+
 ## Commands
 
 ### Core

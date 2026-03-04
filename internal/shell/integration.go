@@ -3,7 +3,6 @@ package shell
 import (
 	_ "embed"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -27,11 +26,10 @@ func GenerateBashIntegration() (string, error) {
 
 // generateIntegration produces shell integration code for the given shell.
 func generateIntegration(shell, rcFile, installCmd, template string) (string, error) {
-	binaryPath, err := os.Executable()
-	if err != nil {
-		// Fallback to grove in PATH
-		binaryPath = "grove"
-	}
+	// Use dynamic resolution instead of hardcoding os.Executable() path.
+	// The eval "$(grove install zsh)" pattern means grove is already on PATH
+	// when this runs. command -v finds it reliably regardless of install method.
+	binResolver := `__GROVE_BIN="$(command -v grove 2>/dev/null || echo grove)"`
 
 	header := fmt.Sprintf(`# Grove shell integration for %s
 # ─────────────────────────────────────────────────────────────────────────────
@@ -55,7 +53,7 @@ func generateIntegration(shell, rcFile, installCmd, template string) (string, er
 
 `, shell, rcFile, installCmd)
 
-	output := fmt.Sprintf("%s__GROVE_BIN=\"%s\"\n__GROVE_SHELL_VERSION=%d\n\n%s", header, binaryPath, ShellVersion, template)
+	output := fmt.Sprintf("%s%s\n__GROVE_SHELL_VERSION=%d\n\n%s", header, binResolver, ShellVersion, template)
 	return output, nil
 }
 
