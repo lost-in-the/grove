@@ -93,7 +93,7 @@ type DockerPluginConfig struct {
 type ExternalComposeConfig struct {
 	Path        string            `toml:"path"`         // Path to external compose directory
 	EnvVar      string            `toml:"env_var"`      // Environment variable name (e.g., "APP_DIR")
-	EnvFile     string            `toml:"env_file"`     // File to persist env_var in (default: ".env")
+	EnvFile     string            `toml:"env_file"`     // File to write env vars to (default: ".env")
 	Services    []string          `toml:"services"`     // Service names to manage
 	CopyFiles   []string          `toml:"copy_files"`   // Files to copy from main on worktree create
 	SymlinkDirs []string          `toml:"symlink_dirs"` // Directories to symlink from main on create
@@ -102,10 +102,10 @@ type ExternalComposeConfig struct {
 
 // EnvFileName returns the configured env file name, defaulting to ".env".
 func (e *ExternalComposeConfig) EnvFileName() string {
-	if e.EnvFile == "" {
-		return ".env"
+	if e.EnvFile != "" {
+		return e.EnvFile
 	}
-	return e.EnvFile
+	return ".env"
 }
 
 // AgentStackConfig configures agent stack support for external compose mode.

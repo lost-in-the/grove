@@ -30,8 +30,9 @@ func GenerateZshIntegration() (string, error) {
 #
 # WHAT THIS DOES:
 #   1. Creates a 'grove' shell function that wraps the binary
-#      - Directive commands (to, last, fork, fetch, attach): output is captured
-#        and parsed for cd:/tmux-attach: directives
+#      - Directive commands (to, last, fork, fetch, attach, open, up, run,
+#        restart): output is captured and parsed for cd:/tmux-attach:/env:
+#        directives
 #      - All other commands: run directly (streaming-safe for logs, test, etc.)
 #   2. Registers tab completion for grove commands and worktree names
 #   3. Creates 'w' as an alias for 'grove'
@@ -43,7 +44,7 @@ func GenerateZshIntegration() (string, error) {
 # ─────────────────────────────────────────────────────────────────────────────
 
 `
-	output := fmt.Sprintf("%s__GROVE_BIN=\"%s\"\n\n%s", header, binaryPath, zshTemplate)
+	output := fmt.Sprintf("%s__GROVE_BIN=\"%s\"\n__GROVE_SHELL_VERSION=%d\n\n%s", header, binaryPath, ShellVersion, zshTemplate)
 
 	return output, nil
 }
@@ -63,8 +64,9 @@ func GenerateBashIntegration() (string, error) {
 #
 # WHAT THIS DOES:
 #   1. Creates a 'grove' shell function that wraps the binary
-#      - Directive commands (to, last, fork, fetch, attach): output is captured
-#        and parsed for cd:/tmux-attach: directives
+#      - Directive commands (to, last, fork, fetch, attach, open, up, run,
+#        restart): output is captured and parsed for cd:/tmux-attach:/env:
+#        directives
 #      - All other commands: run directly (streaming-safe for logs, test, etc.)
 #   2. Registers tab completion for grove commands and worktree names
 #   3. Creates 'w' as an alias for 'grove'
@@ -76,7 +78,7 @@ func GenerateBashIntegration() (string, error) {
 # ─────────────────────────────────────────────────────────────────────────────
 
 `
-	output := fmt.Sprintf("%s__GROVE_BIN=\"%s\"\n\n%s", header, binaryPath, bashTemplate)
+	output := fmt.Sprintf("%s__GROVE_BIN=\"%s\"\n__GROVE_SHELL_VERSION=%d\n\n%s", header, binaryPath, ShellVersion, bashTemplate)
 
 	return output, nil
 }

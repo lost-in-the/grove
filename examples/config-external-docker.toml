@@ -52,9 +52,23 @@ env_var = "MY_PROJECT_DIR"
 
 # File to write the env_var value to in the compose directory.
 # Default: ".env" (Docker Compose reads this natively).
-# Set to ".env.local" if your compose directory uses direnv with
-# `dotenv_if_exists .env.local` in .envrc — this keeps the tracked .env
-# clean. Run `grove doctor` to verify your direnv setup.
+#
+# Grove passes --env-file automatically to all compose commands it runs,
+# so grove commands (grove up, grove down, etc.) work without any extra
+# tools. Env file loaders are only needed if you also run manual
+# `docker compose` commands directly in the compose directory.
+#
+# To keep the tracked .env clean, set env_file = ".env.local" and
+# optionally configure a loader for manual compose usage:
+#
+#   direnv (.envrc in compose directory):
+#     dotenv_if_exists .env.local
+#
+#   mise (.mise.toml in compose directory):
+#     [env]
+#     _.file = ".env.local"
+#
+# Run `grove doctor` to verify your setup.
 # Optional.
 # env_file = ".env.local"
 

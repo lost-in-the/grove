@@ -70,7 +70,7 @@ Each worktree has its own `docker-compose.yml`. Commands run in the worktree dir
 For projects whose Docker services are defined in a shared, external compose setup (e.g., a central `shared-infra` directory that orchestrates multiple apps). In this mode:
 
 - Commands run in the **external compose directory**, not the worktree
-- An **environment variable** (e.g., `APP_DIR`) points the compose config to the active worktree
+- Grove writes an **environment variable** (e.g., `APP_DIR=/abs/path/to/worktree`) to an **env file** in the compose directory, then passes `--env-file` to every `docker compose` call so compose reads the correct worktree path
 - Only the **configured services** are managed (shared infra like MySQL/Redis is untouched)
 - `grove down` uses `docker compose stop` (not `down`) to preserve the shared network
 - `grove new` **copies credentials** and **creates symlinks** from the main worktree
@@ -157,7 +157,7 @@ The Docker plugin integrates with Grove's hook system to automatically manage co
 
 **Local mode**: Starts containers if a docker-compose file exists in the worktree and auto-start is enabled (default: true).
 
-**External mode**: Runs `docker compose up -d <services>` in the external compose directory with the env var pointing to the new worktree.
+**External mode**: Writes the new worktree path to the env file (e.g., `APP_DIR=/home/user/myapp-feature-x` → `.env.local`), then runs `docker compose --env-file .env.local up -d <services>` in the external compose directory.
 
 ### Pre-Switch Hook (Auto-Stop)
 
@@ -202,6 +202,12 @@ path = "~/projects/shared-infra"
 # Environment variable that the compose YAML reads to find this app
 env_var = "APP_DIR"
 
+# File to write env_var to (default: ".env"). Grove writes e.g.
+# APP_DIR=/home/user/myapp-feature-x to this file, then passes
+# --env-file to every compose command. Set to ".env.local" to
+# avoid dirtying a git-tracked .env in the compose directory.
+env_file = ".env.local"
+
 # Services to start/stop/restart (only these, not shared infra)
 services = [
   "app", "app_worker", "app_esbuild",
@@ -228,7 +234,7 @@ symlink_dirs = [
 |-------|----------|-------------|
 | `path` | Yes | Absolute path to the external compose directory (supports `~`) |
 | `env_var` | Yes | Environment variable name the compose YAML reads |
-| `env_file` | No | File to persist `env_var` in (default: `.env`). Set to `.env.local` with direnv for clean git status. |
+| `env_file` | No | Filename in the compose directory where grove writes the `env_var` value (default: `.env`). For example, with `env_var = "APP_DIR"` and `env_file = ".env.local"`, grove writes `APP_DIR=/abs/path/to/worktree` to `.env.local` and passes `--env-file .env.local` to compose. Set to `.env.local` to avoid dirtying a git-tracked `.env`. See [Env File Loaders](#env-file-loaders-direnv--mise) for optional loader setup. |
 | `services` | Yes | List of service names to manage |
 | `copy_files` | No | Files to copy from main worktree on `grove new` |
 | `symlink_dirs` | No | Directories to symlink from main worktree on `grove new` |
@@ -244,6 +250,65 @@ symlink_dirs = [
 - `enabled`: true (if docker is available)
 - `auto_start`: true
 - `auto_stop`: true
+
+### Env File Loaders (direnv / mise)
+
+#### Why this exists
+
+By default, grove writes to `.env` in the compose directory — Docker Compose reads this automatically. But many shared compose setups **track `.env` in git** (for default values, shared config, etc.). When grove writes the active worktree path there, it dirties git status. Setting `env_file = ".env.local"` avoids this.
+
+#### Do I need a loader?
+
+**For grove commands** (`grove up`, `grove down`, `grove restart`, etc.): **No.** Grove passes `--env-file .env.local` to every compose call automatically.
+
+**For manual `docker compose` commands** in the compose directory: **Yes.** If you `cd ~/projects/shared-infra && docker compose logs app`, compose only reads `.env` by default — it won't see `.env.local` unless you pass `--env-file` yourself or configure a loader to inject the variables into your shell.
+
+#### Setup
+
+#### Option A: direnv
+
+[direnv](https://direnv.net/) automatically loads environment files when you `cd` into a directory.
+
+1. Install direnv: `brew install direnv` (or see [direnv.net](https://direnv.net/docs/installation.html))
+2. Add the hook to your shell (if not already done):
+   ```bash
+   # ~/.zshrc
+   eval "$(direnv hook zsh)"
+   ```
+3. Create `.envrc` in the compose directory:
+   ```bash
+   # ~/projects/shared-infra/.envrc
+   dotenv_if_exists .env.local
+   ```
+4. Allow the file: `cd ~/projects/shared-infra && direnv allow`
+
+#### Option B: mise
+
+[mise](https://mise.jdx.dev/) is a polyglot tool manager that also supports env file loading.
+
+1. Install mise: `brew install mise` (or see [mise.jdx.dev](https://mise.jdx.dev/getting-started.html))
+2. Add the hook to your shell (if not already done):
+   ```bash
+   # ~/.zshrc
+   eval "$(mise activate zsh)"
+   ```
+3. Create `.mise.toml` in the compose directory:
+   ```toml
+   # ~/projects/shared-infra/.mise.toml
+   [env]
+   _.file = ".env.local"
+   ```
+4. Trust the file: `cd ~/projects/shared-infra && mise trust`
+
+#### Verification
+
+Run `grove doctor` to check that your loader is detected and configured correctly. The checks will show:
+
+```
+✓ Env file target (.env.local)
+✓ Env file loader (direnv found in PATH)
+✓ Env file loader configured (configured)
+```
 
 ## Requirements
 
@@ -265,9 +330,10 @@ The plugin automatically detects which version is available and uses the appropr
 ### External Mode
 
 1. **Configuration**: Reads `mode = "external"` and the `[plugins.docker.external]` table
-2. **Command Execution**: Runs docker-compose in the external compose directory with the env var set
-3. **Service Scoping**: Only manages the configured services, leaving shared infrastructure running
-4. **Worktree Setup**: On `grove new`, copies credentials and creates symlinks from the main worktree
+2. **Env file write**: Writes `ENV_VAR=/abs/path/to/worktree` to the configured `env_file` (default `.env`) in the compose directory
+3. **Command execution**: Runs `docker compose --env-file <env_file> <command> <services>` in the compose directory — the `--env-file` flag tells compose where to read the variable, so no external tools are needed for grove commands
+4. **Service scoping**: Only manages the configured services, leaving shared infrastructure running
+5. **Worktree setup**: On `grove new`, copies credentials and creates symlinks from the main worktree
 
 ## Supported Compose Files (Local Mode)
 
@@ -314,13 +380,16 @@ w new feature-x
 #   symlinked vendor/bundle
 #   symlinked node_modules
 
-# Switch to it — stops app services, restarts with APP_DIR=./app-feature-x
+# Switch to it:
+#   1. grove stops app services (auto_stop)
+#   2. grove writes APP_DIR=/home/user/myapp-feature-x to .env.local
+#   3. grove runs: docker compose --env-file .env.local up -d app app_worker
 w to feature-x
 
 # Check app logs from the external compose
 w logs app
 
-# Switch back to main — stops services, restarts with APP_DIR=./app
+# Switch back to main — same process, now APP_DIR=/home/user/myapp
 w to main
 
 # Manually stop app services
@@ -408,7 +477,7 @@ When `service` is set, `grove test <worktree>` spawns a fresh container in the t
 
 - [ ] Multi-app external mode: Extend external compose support to additional apps
 - [ ] Port conflict detection and automatic prevention
-- [ ] Environment variable generation via direnv integration
+- [x] Environment variable persistence via `env_file` + `--env-file` flag
 - [ ] Status command to show running containers per worktree
 - [ ] Advanced port allocation strategy to prevent conflicts automatically
 

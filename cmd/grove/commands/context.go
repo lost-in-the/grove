@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/spf13/cobra"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 	"github.com/LeahArmstrong/grove-cli/internal/log"
 	"github.com/LeahArmstrong/grove-cli/internal/plugins"
+	"github.com/LeahArmstrong/grove-cli/internal/shell"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
 	"github.com/LeahArmstrong/grove-cli/plugins/docker"
 )
@@ -38,11 +40,18 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 
 		log.Printf("grove dir resolved to: %s", groveDir)
 
+		// Warn if shell integration is outdated
+		if v := os.Getenv("GROVE_SHELL_VERSION"); v != "" {
+			if shellVer, err := strconv.Atoi(v); err == nil && shellVer < shell.ShellVersion {
+				fmt.Fprintf(os.Stderr, "grove: shell integration outdated (v%d, current v%d) — run: grove setup\n", shellVer, shell.ShellVersion)
+			}
+		}
+
 		if groveDir == "" {
 			stderr := cli.NewStderr()
 			cli.Error(stderr, "not a grove project")
 			fmt.Fprintln(os.Stderr)
-			cli.Faint(stderr, "Run 'grove setup' to initialize a new grove project,")
+			cli.Faint(stderr, "Run 'grove init' to initialize a new grove project,")
 			cli.Faint(stderr, "or change to a directory containing a .grove folder.")
 			os.Exit(exitcode.NotGroveProject)
 			return nil // unreachable

@@ -273,7 +273,7 @@ sequenceDiagram
 - Detects main branch via `git rev-parse`
 - Registers main worktree as "main" with `Root: true` in state
 - Auto-generates `hooks.toml` based on detected project type (Rails, Node, Go, Python, Docker)
-- `grove setup` is a hidden alias for `grove init`
+- `grove setup` interactively configures shell integration (detects shell, appends eval line to rc file)
 
 ### Worktree Creation: `grove new`
 

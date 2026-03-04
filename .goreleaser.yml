@@ -116,11 +116,16 @@ release:
     After installation, set up shell integration:
 
     ```bash
-    # For zsh
-    eval "$(grove init zsh)"
+    grove setup
+    ```
 
-    # For bash
-    eval "$(grove init bash)"
+    Or manually:
+    ```bash
+    # For zsh (~/.zshrc)
+    eval "$(grove install zsh)"
+
+    # For bash (~/.bashrc)
+    eval "$(grove install bash)"
     ```
 
     Then create your first worktree:

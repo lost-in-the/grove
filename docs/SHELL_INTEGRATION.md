@@ -6,7 +6,17 @@ The shell wrapper is a function that replaces the `grove` binary in your shell s
 
 ## Setup
 
-### zsh
+The easiest way to set up shell integration is:
+
+```bash
+grove setup
+```
+
+This detects your shell, finds the rc file, and appends the eval line idempotently.
+
+### Manual Setup
+
+#### zsh
 
 Add to your `~/.zshrc`:
 
@@ -14,7 +24,7 @@ Add to your `~/.zshrc`:
 eval "$(grove install zsh)"
 ```
 
-### bash
+#### bash
 
 Add to your `~/.bashrc`:
 
@@ -48,19 +58,22 @@ Running `eval "$(grove install <shell>)"` installs three things:
 
 The wrapper uses a **directives protocol** — the grove binary writes special lines to stdout that the shell function intercepts and acts on.
 
-### Directive Commands (`grove to`, `grove last`, `grove fork`, `grove fetch`, `grove attach`, `grove open`)
+### Directive Commands (`grove to`, `grove last`, `grove fork`, `grove fetch`, `grove attach`, `grove open`, `grove up`, `grove run`, `grove restart`)
 
-These six commands can emit `cd:` or `tmux-attach:` directives. The wrapper captures their stdout (stderr passes through to the terminal), scans it line-by-line, separates directives from normal output, and then:
+These commands can emit `cd:`, `tmux-attach:`, or `env:` directives. The wrapper captures their stdout (stderr passes through to the terminal), scans it line-by-line, separates directives from normal output, and then:
 
-1. Executes any directory change
-2. Prints normal output
-3. Attaches to any tmux session
+1. Exports any environment variables
+2. Executes any directory change
+3. Prints normal output
+4. Attaches to any tmux session
 
 ```bash
 # The binary outputs this internally:
+env:ADMIN_DIR=./admin-feature
 cd:/Users/you/work/myproject-feature
 
 # The shell wrapper intercepts it and runs:
+export ADMIN_DIR=./admin-feature
 cd /Users/you/work/myproject-feature
 ```
 
@@ -85,7 +98,7 @@ rm -f "$cd_file"
 
 ### All Other Commands (passthrough)
 
-Commands that never emit directives — `grove ls`, `grove logs`, `grove test`, `grove up`, `grove here`, etc. — run the binary directly without output capture:
+Commands that never emit directives — `grove ls`, `grove logs`, `grove test`, `grove down`, `grove here`, etc. — run the binary directly without output capture:
 
 ```bash
 GROVE_SHELL=1 "$__GROVE_BIN" "$@"
@@ -105,6 +118,7 @@ The grove binary communicates with the shell wrapper through directive lines —
 | `GROVE_CD:` | `GROVE_CD:/path/to/dir` | Change directory (current) |
 | `cd:` | `cd:/path/to/dir` | Change directory (legacy, same effect) |
 | `tmux-attach:` | `tmux-attach:myproject-feature` | Attach to named tmux session |
+| `env:` | `env:ADMIN_DIR=./admin-feature` | Export environment variable in shell |
 
 Lines that do not match any directive prefix are treated as normal output and printed to the terminal as-is.
 
@@ -117,6 +131,7 @@ When `GROVE_CD_FILE` is set, the TUI writes the target path to the file instead 
 | Variable | Description |
 |----------|-------------|
 | `GROVE_SHELL` | Set to `1` by the wrapper. The binary uses this to enable directive output. Without it, commands print human-readable output only. |
+| `GROVE_SHELL_VERSION` | Shell integration version number. The binary checks this and warns when the shell integration is outdated. |
 | `GROVE_CD_FILE` | Path to a temp file where the TUI writes a directory to switch to. Set by the wrapper for bare `grove` invocations. |
 | `GROVE_TUI` | Set to `0` to disable the TUI. When disabled, bare `grove` prints usage instead of launching the dashboard. |
 | `GROVE_HIGH_CONTRAST` | Set to `1` to enable high-contrast mode in the TUI's form elements. |

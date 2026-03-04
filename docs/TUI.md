@@ -246,3 +246,25 @@ When a filter is active, number quick-switch keys (`1`–`9`) are disabled to av
 ## Accessibility
 
 Grove checks for high-contrast mode. If the `GROVE_HIGH_CONTRAST` environment variable is set or if the terminal reports a high-contrast preference, form elements switch to an accessible rendering mode.
+
+## Agent Notes
+
+Reference for AI agents working on TUI code. The TUI uses **Bubbletea v2** (Elm Architecture):
+- `charm.land/bubbletea/v2` — framework (Model/Update/View)
+- `charm.land/lipgloss/v2` — styling (ANSI-aware widths, colors, borders)
+- `charm.land/bubbles/v2` — components (list, textinput, viewport)
+
+### Key Patterns
+- **ANSI-aware string measurement** — always use `lipgloss.Width(s)` not `len(s)` for visible width
+- **Style.Render()** for applying styles, not `Style.SetString()` + `Style.String()`
+
+### File Map
+| File | Purpose |
+|------|---------|
+| `internal/theme/colors.go` | Centralized `ColorScheme` with semantic colors |
+| `internal/tui/theme_v2.go` | `StyleSet` — lipgloss styles built from the color scheme |
+| `internal/tui/list_v2.go` | **Default** two-line delegate with indicator/status columns (`NewWorktreeDelegateV2`) |
+| `internal/tui/list.go` | Compact single-line V1 delegate with column headers (`NewWorktreeDelegate`) |
+
+### List View Modes
+The `v` key toggles between V2 (default two-line) and V1 (compact single-line) at runtime. Set permanently via `tui.compact_list = true` in config.

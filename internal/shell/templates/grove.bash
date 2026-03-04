@@ -3,7 +3,7 @@ grove() {
     # Bare "grove" with no args launches TUI — run directly, no capture
     if [[ $# -eq 0 ]]; then
         local cd_file=$(mktemp "${TMPDIR:-/tmp}/grove-cd.XXXXXX")
-        GROVE_SHELL=1 GROVE_CD_FILE="$cd_file" "$__GROVE_BIN"
+        GROVE_SHELL=1 GROVE_SHELL_VERSION="$__GROVE_SHELL_VERSION" GROVE_CD_FILE="$cd_file" "$__GROVE_BIN"
         local exit_code=$?
         if [[ -s "$cd_file" ]]; then
             local target=$(cat "$cd_file")
@@ -16,10 +16,10 @@ grove() {
     # Only directive-producing commands need output capture.
     # All other commands run directly for streaming support.
     case "$1" in
-        to|last|fork|fetch|attach|open)
-            # Capture output and parse for cd:/tmux-attach: directives
+        to|last|fork|fetch|attach|open|up|run|restart)
+            # Capture output and parse for cd:/tmux-attach:/env: directives
             local output exit_code
-            output=$(GROVE_SHELL=1 "$__GROVE_BIN" "$@")
+            output=$(GROVE_SHELL=1 GROVE_SHELL_VERSION="$__GROVE_SHELL_VERSION" "$__GROVE_BIN" "$@")
             exit_code=$?
 
             local should_cd=0
@@ -33,6 +33,8 @@ grove() {
                     should_cd=1
                 elif [[ "$line" == tmux-attach:* ]]; then
                     tmux_session="${line#tmux-attach:}"
+                elif [[ "$line" == env:* ]]; then
+                    export "${line#env:}"
                 else
                     if [[ -n "$other_lines" ]]; then
                         other_lines="${other_lines}"$'\n'"${line}"
@@ -58,7 +60,7 @@ grove() {
             ;;
         *)
             # All other commands: run directly (streaming-safe)
-            GROVE_SHELL=1 "$__GROVE_BIN" "$@"
+            GROVE_SHELL=1 GROVE_SHELL_VERSION="$__GROVE_SHELL_VERSION" "$__GROVE_BIN" "$@"
             return $?
             ;;
     esac

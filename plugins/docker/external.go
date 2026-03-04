@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/LeahArmstrong/grove-cli/internal/cli"
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
@@ -46,6 +47,9 @@ func (s *externalStrategy) OnPostSwitch(ctx *hooks.Context) error {
 		fmt.Fprintf(os.Stderr, "warning: failed to persist %s to %s: %v\n", s.ext.EnvVar, s.ext.EnvFileName(), err)
 	}
 
+	// Export the env var into the user's shell so manual docker compose commands work
+	s.emitEnvDirective(worktreePath)
+
 	if !s.getAutoStart() {
 		return nil
 	}
@@ -58,6 +62,11 @@ func (s *externalStrategy) OnPostCreate(ctx *hooks.Context) error {
 		return nil
 	}
 
+	if err := s.persistEnvVar(ctx.WorktreePath); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to persist %s to %s: %v\n", s.ext.EnvVar, s.ext.EnvFileName(), err)
+	}
+	s.emitEnvDirective(ctx.WorktreePath)
+
 	return setupWorktreeFiles(s.ext, ctx.WorktreePath, ctx.MainPath)
 }
 
@@ -66,6 +75,7 @@ func (s *externalStrategy) Up(worktreePath string, detach bool) error {
 	if err := s.persistEnvVar(worktreePath); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: failed to persist %s to %s: %v\n", s.ext.EnvVar, s.ext.EnvFileName(), err)
 	}
+	s.emitEnvDirective(worktreePath)
 
 	args := []string{"up"}
 	if detach {
@@ -73,7 +83,7 @@ func (s *externalStrategy) Up(worktreePath string, detach bool) error {
 	}
 	args = append(args, s.ext.Services...)
 
-	cmd := composeCommand(s.composePath(), s.envForWorktree(worktreePath), args...)
+	cmd := composeCommand(s.composePath(), s.ext.EnvFileName(), s.envForWorktree(worktreePath), args...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -94,7 +104,7 @@ func (s *externalStrategy) Logs(_ string, service string, follow bool) error {
 		args = append(args, s.ext.Services...)
 	}
 
-	cmd := composeCommand(s.composePath(), nil, args...)
+	cmd := composeCommand(s.composePath(), s.ext.EnvFileName(), nil, args...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
@@ -106,6 +116,7 @@ func (s *externalStrategy) Run(worktreePath string, service string, command stri
 	if err := s.persistEnvVar(worktreePath); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: failed to persist %s to %s: %v\n", s.ext.EnvVar, s.ext.EnvFileName(), err)
 	}
+	s.emitEnvDirective(worktreePath)
 
 	env := s.envForWorktree(worktreePath)
 
@@ -116,7 +127,7 @@ func (s *externalStrategy) Run(worktreePath string, service string, command stri
 		env = append(env, fmt.Sprintf("TEST_ENV_NUMBER=%d", envNum))
 	}
 
-	cmd := composeCommand(s.composePath(), env, "run", "--rm", service, "bash", "-cil", command)
+	cmd := composeCommand(s.composePath(), s.ext.EnvFileName(), env, "run", "--rm", service, "bash", "-cil", command)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
@@ -150,7 +161,7 @@ func (s *externalStrategy) Restart(_ string, service string) error {
 		args = append(args, s.ext.Services...)
 	}
 
-	cmd := composeCommand(s.composePath(), nil, args...)
+	cmd := composeCommand(s.composePath(), s.ext.EnvFileName(), nil, args...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -159,7 +170,7 @@ func (s *externalStrategy) Restart(_ string, service string) error {
 // stopServices stops (not removes) the configured services in the external compose.
 func (s *externalStrategy) stopServices() error {
 	args := append([]string{"stop"}, s.ext.Services...)
-	cmd := composeCommand(s.composePath(), nil, args...)
+	cmd := composeCommand(s.composePath(), s.ext.EnvFileName(), nil, args...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -168,10 +179,17 @@ func (s *externalStrategy) stopServices() error {
 // startServices starts the configured services with the env var pointing to the worktree.
 func (s *externalStrategy) startServices(worktreePath string) error {
 	args := append([]string{"up", "-d"}, s.ext.Services...)
-	cmd := composeCommand(s.composePath(), s.envForWorktree(worktreePath), args...)
+	cmd := composeCommand(s.composePath(), s.ext.EnvFileName(), s.envForWorktree(worktreePath), args...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// emitEnvDirective emits an env: shell directive so the user's shell exports
+// the env var after grove commands. Only emitted under shell integration.
+func (s *externalStrategy) emitEnvDirective(worktreePath string) {
+	rel := s.relativeWorktreePath(worktreePath)
+	cli.EnvDirective(s.ext.EnvVar, rel)
 }
 
 // composePath returns the resolved absolute path to the external compose directory.
@@ -184,8 +202,8 @@ func (s *externalStrategy) envFilePath() string {
 	return filepath.Join(s.composePath(), s.ext.EnvFileName())
 }
 
-// persistEnvVar writes the env_var (e.g., APP_DIR) to the env file in the compose
-// directory so that subsequent docker compose commands outside grove use the correct value.
+// persistEnvVar writes the env_var (e.g., APP_DIR) to the configured env file in
+// the compose directory so that subsequent docker compose commands use the correct value.
 func (s *externalStrategy) persistEnvVar(worktreePath string) error {
 	envFile := s.envFilePath()
 	key := s.ext.EnvVar

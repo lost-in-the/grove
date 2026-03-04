@@ -61,7 +61,7 @@ func (s *localStrategy) Up(worktreePath string, detach bool) error {
 		args = append(args, "-d")
 	}
 
-	cmd := composeCommand(worktreePath, nil, args...)
+	cmd := composeCommand(worktreePath, "", nil, args...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -72,7 +72,7 @@ func (s *localStrategy) Down(worktreePath string) error {
 		return ErrNoComposeFile
 	}
 
-	cmd := composeCommand(worktreePath, nil, "down")
+	cmd := composeCommand(worktreePath, "", nil, "down")
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -91,7 +91,7 @@ func (s *localStrategy) Logs(worktreePath string, service string, follow bool) e
 		args = append(args, service)
 	}
 
-	cmd := composeCommand(worktreePath, nil, args...)
+	cmd := composeCommand(worktreePath, "", nil, args...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
@@ -103,7 +103,7 @@ func (s *localStrategy) Run(worktreePath string, service string, command string)
 		return ErrNoComposeFile
 	}
 
-	cmd := composeCommand(worktreePath, nil, "run", "--rm", service, "bash", "-cil", command)
+	cmd := composeCommand(worktreePath, "", nil, "run", "--rm", service, "bash", "-cil", command)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
@@ -120,7 +120,7 @@ func (s *localStrategy) Restart(worktreePath string, service string) error {
 		args = append(args, service)
 	}
 
-	cmd := composeCommand(worktreePath, nil, args...)
+	cmd := composeCommand(worktreePath, "", nil, args...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -192,10 +192,18 @@ func hasDockerCompose(dir string) bool {
 }
 
 // composeCommand creates a docker-compose command with optional environment variables.
-// dir sets the working directory. env is a list of extra KEY=VALUE strings to add.
-func composeCommand(dir string, env []string, args ...string) *exec.Cmd {
+// dir sets the working directory. envFile, when non-empty and not ".env", adds
+// --env-file to the compose command for YAML variable interpolation. env is a list
+// of extra KEY=VALUE strings to add to the process environment.
+func composeCommand(dir string, envFile string, env []string, args ...string) *exec.Cmd {
 	if _, err := exec.LookPath("docker"); err == nil {
-		cmdArgs := append([]string{"compose"}, args...)
+		var cmdArgs []string
+		if envFile != "" && envFile != ".env" {
+			cmdArgs = append(cmdArgs, "compose", "--env-file", envFile)
+		} else {
+			cmdArgs = append(cmdArgs, "compose")
+		}
+		cmdArgs = append(cmdArgs, args...)
 		cmd := exec.Command("docker", cmdArgs...)
 		cmd.Dir = dir
 		if len(env) > 0 {
@@ -204,7 +212,13 @@ func composeCommand(dir string, env []string, args ...string) *exec.Cmd {
 		return cmd
 	}
 
-	cmd := exec.Command("docker-compose", args...)
+	// docker-compose v1 fallback — --env-file goes after compose subcommand
+	var cmdArgs []string
+	if envFile != "" && envFile != ".env" {
+		cmdArgs = append(cmdArgs, "--env-file", envFile)
+	}
+	cmdArgs = append(cmdArgs, args...)
+	cmd := exec.Command("docker-compose", cmdArgs...)
 	cmd.Dir = dir
 	if len(env) > 0 {
 		cmd.Env = append(os.Environ(), env...)

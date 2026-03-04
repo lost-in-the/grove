@@ -8,66 +8,122 @@ import (
 )
 
 func TestCheckEnvFileConfig_NonDefault(t *testing.T) {
-	direnvFound := func(name string) (string, error) { return "/usr/bin/direnv", nil }
-	direnvMissing := func(name string) (string, error) { return "", fmt.Errorf("not found") }
+	direnvFound := func(name string) (string, error) {
+		if name == "direnv" {
+			return "/usr/bin/direnv", nil
+		}
+		return "", fmt.Errorf("not found")
+	}
+	miseFound := func(name string) (string, error) {
+		if name == "mise" {
+			return "/usr/bin/mise", nil
+		}
+		return "", fmt.Errorf("not found")
+	}
+	bothFound := func(name string) (string, error) {
+		if name == "direnv" {
+			return "/usr/bin/direnv", nil
+		}
+		if name == "mise" {
+			return "/usr/bin/mise", nil
+		}
+		return "", fmt.Errorf("not found")
+	}
+	neitherFound := func(name string) (string, error) { return "", fmt.Errorf("not found") }
 
 	tests := []struct {
-		name          string
-		envFileName   string
-		envrcContent  string // "" means no .envrc file
-		lookPath      func(string) (string, error)
-		wantDirenv    bool
-		wantEnvrc     bool
-		wantLoads     bool
-		wantDirenvErr bool
-		wantEnvrcErr  bool
+		name           string
+		envFileName    string
+		envrcContent   string // "" means no .envrc file
+		miseContent    string // "" means no .mise.toml file
+		lookPath       func(string) (string, error)
+		wantLoader     bool
+		wantLoaderName string
+		wantConfig     bool
+		wantLoads      bool
+		wantLoaderErr  bool
+		wantConfigErr  bool
 	}{
 		{
-			name:         "all good: direnv installed and envrc references file",
-			envFileName:  ".env.local",
-			envrcContent: "dotenv_if_exists .env.local",
-			lookPath:     direnvFound,
-			wantDirenv:   true,
-			wantEnvrc:    true,
-			wantLoads:    true,
+			name:           "direnv installed and envrc references file",
+			envFileName:    ".env.local",
+			envrcContent:   "dotenv_if_exists .env.local",
+			lookPath:       direnvFound,
+			wantLoader:     true,
+			wantLoaderName: "direnv",
+			wantConfig:     true,
+			wantLoads:      true,
 		},
 		{
-			name:          "direnv not installed",
+			name:           "mise installed and mise.toml references file",
+			envFileName:    ".env.local",
+			miseContent:    "[env]\nfile = \".env.local\"",
+			lookPath:       miseFound,
+			wantLoader:     true,
+			wantLoaderName: "mise",
+			wantConfig:     true,
+			wantLoads:      true,
+		},
+		{
+			name:           "both installed, direnv preferred",
+			envFileName:    ".env.local",
+			envrcContent:   "dotenv_if_exists .env.local",
+			lookPath:       bothFound,
+			wantLoader:     true,
+			wantLoaderName: "direnv",
+			wantConfig:     true,
+			wantLoads:      true,
+		},
+		{
+			name:          "neither direnv nor mise installed",
 			envFileName:   ".env.local",
 			envrcContent:  "dotenv_if_exists .env.local",
-			lookPath:      direnvMissing,
-			wantDirenv:    false,
-			wantEnvrc:     true,
+			lookPath:      neitherFound,
+			wantLoader:    false,
+			wantConfig:    true,
 			wantLoads:     true,
-			wantDirenvErr: true,
+			wantLoaderErr: true,
 		},
 		{
-			name:         "envrc missing",
-			envFileName:  ".env.local",
-			envrcContent: "",
-			lookPath:     direnvFound,
-			wantDirenv:   true,
-			wantEnvrc:    false,
-			wantEnvrcErr: true,
+			name:           "direnv installed but no config files",
+			envFileName:    ".env.local",
+			lookPath:       direnvFound,
+			wantLoader:     true,
+			wantLoaderName: "direnv",
+			wantConfig:     false,
+			wantConfigErr:  true,
 		},
 		{
-			name:         "envrc exists but does not reference file",
-			envFileName:  ".env.local",
-			envrcContent: "layout ruby",
-			lookPath:     direnvFound,
-			wantDirenv:   true,
-			wantEnvrc:    true,
-			wantLoads:    false,
-			wantEnvrcErr: true,
+			name:           "envrc exists but does not reference file",
+			envFileName:    ".env.local",
+			envrcContent:   "layout ruby",
+			lookPath:       direnvFound,
+			wantLoader:     true,
+			wantLoaderName: "direnv",
+			wantConfig:     true,
+			wantLoads:      false,
+			wantConfigErr:  true,
 		},
 		{
-			name:         "custom env file name",
-			envFileName:  ".env.grove",
-			envrcContent: "dotenv_if_exists .env.grove",
-			lookPath:     direnvFound,
-			wantDirenv:   true,
-			wantEnvrc:    true,
-			wantLoads:    true,
+			name:           "mise installed with mise.toml not referencing file",
+			envFileName:    ".env.local",
+			miseContent:    "[tools]\nnode = \"20\"",
+			lookPath:       miseFound,
+			wantLoader:     true,
+			wantLoaderName: "mise",
+			wantConfig:     true,
+			wantLoads:      false,
+			wantConfigErr:  true,
+		},
+		{
+			name:           "custom env file name with direnv",
+			envFileName:    ".env.grove",
+			envrcContent:   "dotenv_if_exists .env.grove",
+			lookPath:       direnvFound,
+			wantLoader:     true,
+			wantLoaderName: "direnv",
+			wantConfig:     true,
+			wantLoads:      true,
 		},
 	}
 
@@ -76,28 +132,35 @@ func TestCheckEnvFileConfig_NonDefault(t *testing.T) {
 			tmpDir := t.TempDir()
 
 			if tt.envrcContent != "" {
-				envrcPath := filepath.Join(tmpDir, ".envrc")
-				if err := os.WriteFile(envrcPath, []byte(tt.envrcContent), 0644); err != nil {
+				if err := os.WriteFile(filepath.Join(tmpDir, ".envrc"), []byte(tt.envrcContent), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tt.miseContent != "" {
+				if err := os.WriteFile(filepath.Join(tmpDir, ".mise.toml"), []byte(tt.miseContent), 0644); err != nil {
 					t.Fatal(err)
 				}
 			}
 
 			result := checkEnvFileConfig(tt.envFileName, tmpDir, tt.lookPath)
 
-			if result.direnvInstalled != tt.wantDirenv {
-				t.Errorf("direnvInstalled = %v, want %v", result.direnvInstalled, tt.wantDirenv)
+			if result.loaderInstalled != tt.wantLoader {
+				t.Errorf("loaderInstalled = %v, want %v", result.loaderInstalled, tt.wantLoader)
 			}
-			if result.envrcExists != tt.wantEnvrc {
-				t.Errorf("envrcExists = %v, want %v", result.envrcExists, tt.wantEnvrc)
+			if result.loaderName != tt.wantLoaderName {
+				t.Errorf("loaderName = %q, want %q", result.loaderName, tt.wantLoaderName)
 			}
-			if result.envrcLoadsFile != tt.wantLoads {
-				t.Errorf("envrcLoadsFile = %v, want %v", result.envrcLoadsFile, tt.wantLoads)
+			if result.configExists != tt.wantConfig {
+				t.Errorf("configExists = %v, want %v", result.configExists, tt.wantConfig)
 			}
-			if (result.direnvErr != "") != tt.wantDirenvErr {
-				t.Errorf("direnvErr = %q, wantErr = %v", result.direnvErr, tt.wantDirenvErr)
+			if result.configLoadsFile != tt.wantLoads {
+				t.Errorf("configLoadsFile = %v, want %v", result.configLoadsFile, tt.wantLoads)
 			}
-			if (result.envrcErr != "") != tt.wantEnvrcErr {
-				t.Errorf("envrcErr = %q, wantErr = %v", result.envrcErr, tt.wantEnvrcErr)
+			if (result.loaderErr != "") != tt.wantLoaderErr {
+				t.Errorf("loaderErr = %q, wantErr = %v", result.loaderErr, tt.wantLoaderErr)
+			}
+			if (result.configErr != "") != tt.wantConfigErr {
+				t.Errorf("configErr = %q, wantErr = %v", result.configErr, tt.wantConfigErr)
 			}
 		})
 	}
@@ -109,6 +172,7 @@ func TestCheckEnvFileConfig_DefaultEnv(t *testing.T) {
 	tests := []struct {
 		name         string
 		envrcContent string
+		miseContent  string
 		wantHint     bool
 	}{
 		{
@@ -117,12 +181,17 @@ func TestCheckEnvFileConfig_DefaultEnv(t *testing.T) {
 			wantHint:     true,
 		},
 		{
+			name:        "mise.toml with env.local support shows hint",
+			miseContent: "[env]\nfile = \".env.local\"",
+			wantHint:    true,
+		},
+		{
 			name:         "envrc without env.local support no hint",
 			envrcContent: "layout ruby",
 			wantHint:     false,
 		},
 		{
-			name:         "no envrc no hint",
+			name:         "no config files no hint",
 			envrcContent: "",
 			wantHint:     false,
 		},
@@ -133,8 +202,12 @@ func TestCheckEnvFileConfig_DefaultEnv(t *testing.T) {
 			tmpDir := t.TempDir()
 
 			if tt.envrcContent != "" {
-				envrcPath := filepath.Join(tmpDir, ".envrc")
-				if err := os.WriteFile(envrcPath, []byte(tt.envrcContent), 0644); err != nil {
+				if err := os.WriteFile(filepath.Join(tmpDir, ".envrc"), []byte(tt.envrcContent), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tt.miseContent != "" {
+				if err := os.WriteFile(filepath.Join(tmpDir, ".mise.toml"), []byte(tt.miseContent), 0644); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -144,12 +217,11 @@ func TestCheckEnvFileConfig_DefaultEnv(t *testing.T) {
 			if result.hintAvailable != tt.wantHint {
 				t.Errorf("hintAvailable = %v, want %v", result.hintAvailable, tt.wantHint)
 			}
-			// Default mode should not set direnv/envrc fields
-			if result.direnvInstalled {
-				t.Error("direnvInstalled should be false in default mode")
+			if result.loaderInstalled {
+				t.Error("loaderInstalled should be false in default mode")
 			}
-			if result.envrcExists {
-				t.Error("envrcExists should be false in default mode")
+			if result.configExists {
+				t.Error("configExists should be false in default mode")
 			}
 		})
 	}
