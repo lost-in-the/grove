@@ -1834,41 +1834,58 @@ Excluded worktrees:
 
 ### grove doctor
 
-**Purpose:** Diagnose common issues.
+**Purpose:** Diagnose common issues. Runs anywhere — does not require a grove project.
 
 **Usage:**
 ```
 grove doctor [flags]
 ```
 
-**Output:**
+**Two-tier design:**
+
+- **Tier 1 (System checks):** Always run, regardless of project context. Checks grove binary resolution, shell integration version, git, tmux, GitHub CLI, Docker availability.
+- **Tier 2 (Project checks):** Only run when inside a grove project. Checks config loading, config symlinks across worktrees, Docker external mode, env file loaders, agent stacks.
+
+Tier 1 checks for tmux, GitHub CLI, and Docker are informational — failures do not affect the overall pass/fail result. Git and grove binary are required.
+
+**Output (outside a grove project):**
 ```
-Grove Doctor
-============
+grove doctor
+────────────
 
-Environment:
-  ✓ Git version 2.40.0 (minimum: 2.30)
-  ✓ Tmux version 3.3a (minimum: 3.0)
-  ✓ Docker version 24.0.0
+  ✓ Grove binary (/opt/homebrew/bin/grove)
+  ✓ Shell integration (v2, current)
+  ✓ Git (2.40.0)
+  ✓ Tmux (tmux 3.3a)
+  ✓ GitHub CLI (found)
+  ✓ Docker available (found in PATH)
+  ✓ Docker running (v24.0.0)
+
+  ℹ Project: not in a grove project — skipping project checks
+
+  ✓ All checks passed
+```
+
+**Output (inside a grove project):**
+```
+grove doctor
+────────────
+
+  ✓ Grove binary (/opt/homebrew/bin/grove)
+  ✓ Shell integration (v2, current)
+  ✓ Git (2.40.0)
+  ✓ Tmux (tmux 3.3a)
+  ✓ GitHub CLI (found)
+  ✓ Docker available (found in PATH)
+  ✓ Docker running (v24.0.0)
+
+  ℹ Project: /path/to/project
+  ✓ Config (loaded)
+  ✓ Config symlinks (4 worktrees checked)
+  ✓ External compose path (/path/to/compose-dev)
   ✓ Env file target (.env.local)
-  ✓ Env file loader (direnv found in PATH)
-  ✓ Env file loader configured (configured)
-  ✗ Shell integration not detected
-    → Add to ~/.zshrc: eval "$(grove install zsh)"
 
-Configuration:
-  ✓ Global config: ~/.config/grove/config.toml
-  ✓ Config syntax valid
-
-Project 'grove-cli':
-  ✓ Git repository valid
-  ✓ 4 worktrees found
-  ⚠ 1 worktree has missing directory
-    → Run: grove repair
-
-Recommendations:
-  1. Install shell integration for directory switching
-  2. Run 'grove repair' to fix worktree issues
+  ✓ All checks passed
 ```
 
 ---

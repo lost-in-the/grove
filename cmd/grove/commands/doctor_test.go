@@ -3,7 +3,9 @@ package commands
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -225,4 +227,153 @@ func TestCheckEnvFileConfig_DefaultEnv(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCheckGroveBinary(t *testing.T) {
+	tests := []struct {
+		name     string
+		lookPath func(string) (string, error)
+		wantPass bool
+		wantMsg  string
+	}{
+		{
+			name: "binary found",
+			lookPath: func(name string) (string, error) {
+				return "/usr/local/bin/grove", nil
+			},
+			wantPass: true,
+			wantMsg:  "grove",
+		},
+		{
+			name: "binary not found",
+			lookPath: func(name string) (string, error) {
+				return "", fmt.Errorf("not found")
+			},
+			wantPass: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			detail, err := checkGroveBinary(tt.lookPath)
+			if tt.wantPass && err != nil {
+				t.Errorf("expected pass, got error: %v", err)
+			}
+			if !tt.wantPass && err == nil {
+				t.Errorf("expected fail, got pass with: %s", detail)
+			}
+			if tt.wantPass && !strings.Contains(detail, tt.wantMsg) {
+				t.Errorf("expected detail to contain %q, got %q", tt.wantMsg, detail)
+			}
+		})
+	}
+}
+
+// testRunGit runs a git command in the given directory, failing the test on error.
+func testRunGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=test",
+		"GIT_AUTHOR_EMAIL=test@test.com",
+		"GIT_COMMITTER_NAME=test",
+		"GIT_COMMITTER_EMAIL=test@test.com",
+		"GIT_CONFIG_GLOBAL=/dev/null",
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, out)
+	}
+}
+
+func TestCheckConfigSymlinks(t *testing.T) {
+	t.Run("all symlinks valid", func(t *testing.T) {
+		mainDir := t.TempDir()
+		testRunGit(t, mainDir, "init")
+		testRunGit(t, mainDir, "commit", "--allow-empty", "-m", "init")
+
+		// Create .grove/config.toml in main worktree
+		groveDir := filepath.Join(mainDir, ".grove")
+		if err := os.MkdirAll(groveDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		configPath := filepath.Join(groveDir, "config.toml")
+		if err := os.WriteFile(configPath, []byte("[grove]"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		// Create a secondary worktree
+		wtDir := filepath.Join(t.TempDir(), "worktree")
+		testRunGit(t, mainDir, "worktree", "add", wtDir, "-b", "test-branch")
+
+		// Create .grove with valid symlink in worktree
+		wtGrove := filepath.Join(wtDir, ".grove")
+		if err := os.MkdirAll(wtGrove, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(configPath, filepath.Join(wtGrove, "config.toml")); err != nil {
+			t.Fatal(err)
+		}
+
+		detail, err := checkConfigSymlinks(groveDir)
+		if err != nil {
+			t.Errorf("expected pass, got error: %v", err)
+		}
+		if !strings.Contains(detail, "worktrees checked") {
+			t.Errorf("expected 'worktrees checked' in detail, got %q", detail)
+		}
+	})
+
+	t.Run("broken symlink detected", func(t *testing.T) {
+		mainDir := t.TempDir()
+		testRunGit(t, mainDir, "init")
+		testRunGit(t, mainDir, "commit", "--allow-empty", "-m", "init")
+
+		// Create .grove in main (no config.toml — target will be missing)
+		groveDir := filepath.Join(mainDir, ".grove")
+		if err := os.MkdirAll(groveDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		// Create a secondary worktree
+		wtDir := filepath.Join(t.TempDir(), "worktree")
+		testRunGit(t, mainDir, "worktree", "add", wtDir, "-b", "test-branch")
+
+		// Create .grove with broken symlink in worktree
+		wtGrove := filepath.Join(wtDir, ".grove")
+		if err := os.MkdirAll(wtGrove, 0755); err != nil {
+			t.Fatal(err)
+		}
+		// Point to non-existent target
+		if err := os.Symlink(filepath.Join(groveDir, "config.toml"), filepath.Join(wtGrove, "config.toml")); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := checkConfigSymlinks(groveDir)
+		if err == nil {
+			t.Fatal("expected error for broken symlink, got nil")
+		}
+		if !strings.Contains(err.Error(), "broken symlinks") {
+			t.Errorf("expected 'broken symlinks' in error, got %q", err.Error())
+		}
+	})
+
+	t.Run("no worktrees besides main", func(t *testing.T) {
+		mainDir := t.TempDir()
+		testRunGit(t, mainDir, "init")
+		testRunGit(t, mainDir, "commit", "--allow-empty", "-m", "init")
+
+		groveDir := filepath.Join(mainDir, ".grove")
+		if err := os.MkdirAll(groveDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		detail, err := checkConfigSymlinks(groveDir)
+		if err != nil {
+			t.Errorf("expected pass, got error: %v", err)
+		}
+		if !strings.Contains(detail, "1 worktrees checked") {
+			t.Errorf("expected '1 worktrees checked', got %q", detail)
+		}
+	})
 }

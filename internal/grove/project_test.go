@@ -279,7 +279,7 @@ func TestMustProjectRoot(t *testing.T) {
 	}
 }
 
-func TestGetMainWorktreePath(t *testing.T) {
+func TestMainWorktreePath(t *testing.T) {
 	// Set up a real git repo to test against
 	dir := t.TempDir()
 	dir, _ = filepath.EvalSymlinks(dir)

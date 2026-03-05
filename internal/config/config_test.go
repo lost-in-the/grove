@@ -1085,6 +1085,42 @@ func TestMergeConfigsProtectionUnion(t *testing.T) {
 	}
 }
 
+func TestLoadFromGroveDir_BrokenSymlink(t *testing.T) {
+	groveDir := t.TempDir()
+
+	// Create a symlink pointing to a non-existent file
+	configPath := filepath.Join(groveDir, "config.toml")
+	os.Symlink("/nonexistent/config.toml", configPath)
+
+	_, err := LoadFromGroveDir(groveDir)
+	if err == nil {
+		t.Fatal("expected error for broken symlink, got nil")
+	}
+	if !strings.Contains(err.Error(), "config symlink broken") {
+		t.Errorf("expected 'config symlink broken' in error, got: %s", err.Error())
+	}
+}
+
+func TestLoadFromGroveDir_ValidSymlink(t *testing.T) {
+	groveDir := t.TempDir()
+	targetDir := t.TempDir()
+
+	// Create a real config file and symlink to it
+	targetPath := filepath.Join(targetDir, "config.toml")
+	os.WriteFile(targetPath, []byte("alias = \"test\"\n"), 0644)
+
+	configPath := filepath.Join(groveDir, "config.toml")
+	os.Symlink(targetPath, configPath)
+
+	cfg, err := LoadFromGroveDir(groveDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Alias != "test" {
+		t.Errorf("expected alias 'test', got '%s'", cfg.Alias)
+	}
+}
+
 func TestIsExternalDockerMode(t *testing.T) {
 	cfg := &Config{}
 	if cfg.IsExternalDockerMode() {

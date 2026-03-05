@@ -158,6 +158,18 @@ echo 'eval "$(grove install bash)"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
+**Important: PATH setup for non-login shells**
+
+The `eval "$(grove install zsh)"` line resolves the grove binary via `command -v grove`. This requires the binary's directory to be in PATH for all shell types — not just login shells.
+
+| File | When sourced | Use for |
+|------|-------------|---------|
+| `~/.zshenv` | Every zsh invocation | PATH setup, `brew shellenv` — ensures tools are available everywhere |
+| `~/.zprofile` | Login shells only | One-time session setup (ssh-agent, etc.) |
+| `~/.zshrc` | Interactive shells | Shell integration (`eval "$(grove install zsh)"`), aliases, prompt |
+
+If you installed grove via Homebrew, ensure `eval "$(brew shellenv)"` is in `~/.zshenv`, not `~/.zprofile`. Otherwise, non-interactive tools (CI, Claude Code, scripts) won't find the grove binary.
+
 ### Verifying Installation
 
 ```bash
@@ -698,28 +710,38 @@ export GROVE_NONINTERACTIVE=1    # auto-accept all prompts
 
 ### `grove doctor`
 
-Always run this first. It checks:
+Always run this first. It works in two tiers:
 
-- Git version (need 2.30+)
-- Shell integration loaded (`grove` is a function, not a binary)
-- Shell integration version matches binary
-- Tmux availability and version
-- `gh` CLI availability and auth status
-- Docker availability
-- Project config validity
-- For external Docker mode: env file target, loader detection, loader configuration
+**Tier 1 — System checks (run anywhere, no grove project required):**
+- Grove binary resolution (with PATH hints if not found)
+- Shell integration version
+- Git, tmux, gh CLI availability
+- Docker availability and daemon status
+
+**Tier 2 — Project checks (only when inside a grove project):**
+- Config validity and symlink health across all worktrees
+- External Docker mode configuration
+- Env file loader detection and configuration
+- Agent stack configuration and slot usage
 
 ```bash
 grove doctor
-# ✓ Git 2.43.0
-# ✓ Shell integration loaded (v3)
-# ✓ Tmux 3.4
-# ✓ gh CLI authenticated
-# ✓ Docker available
-# ✓ Project config valid
+# ✓ Grove binary (/opt/homebrew/bin/grove)
+# ✓ Shell integration (v3, current)
+# ✓ Git (2.43.0)
+# ✓ Tmux (tmux 3.4)
+# ✓ GitHub CLI (found)
+# ✓ Docker available (found in PATH)
+# ✓ Docker running (v27.1.1)
+#
+# ℹ Project: ~/projects/myapp
+# ✓ Config (loaded)
+# ✓ Config symlinks (4 worktrees checked)
 # ✗ Env file loader not configured
 #   Run: echo 'dotenv_if_exists .env.local' > .envrc && direnv allow
 ```
+
+Run `grove doctor` outside a grove project to diagnose installation and PATH issues without needing to be in a project first.
 
 ### Common Issues
 
@@ -730,6 +752,27 @@ The binary is not in `$PATH`. Verify:
 which grove || echo "not found"
 # For Homebrew: check brew --prefix, ensure /opt/homebrew/bin or /usr/local/bin is in PATH
 # For go install: ensure $GOPATH/bin (usually ~/go/bin) is in PATH
+```
+
+**`permission denied` or empty output when running `grove`**
+
+The shell wrapper resolved `__GROVE_BIN` to an empty string because the grove binary isn't in PATH for this shell session. Common cause: Homebrew's `brew shellenv` is in `~/.zprofile` (login shells only) instead of `~/.zshenv` (all shells).
+
+Non-login shells (Claude Code, `zsh -c`, cron, scripts) never source `.zprofile`, so `/opt/homebrew/bin` is missing from PATH.
+
+Fix:
+```bash
+# Move brew shellenv from ~/.zprofile to ~/.zshenv
+# In ~/.zshenv (runs for ALL zsh invocations):
+eval "$(/opt/homebrew/bin/brew shellenv)"
+
+# Remove the same line from ~/.zprofile
+```
+
+Verify:
+```bash
+zsh -c 'command -v grove'    # should print a path
+# If using chezmoi, edit the source files and run chezmoi apply
 ```
 
 **`grove to` does not change directory**
@@ -748,6 +791,31 @@ Run from inside the project directory, or initialize:
 ```bash
 cd ~/projects/myapp
 grove init
+```
+
+**`not a grove project — main worktree has no .grove directory` when inside a worktree**
+
+You're in a secondary worktree (e.g., `admin-feature-x`) but the main worktree (e.g., `admin`) was never initialized with `grove init`:
+```bash
+# Check where the main worktree is
+git worktree list | head -1
+
+# Initialize from there
+cd /path/to/main/worktree
+grove init
+```
+
+After initializing, secondary worktrees will be detected via grove's main-worktree fallback.
+
+**`config symlink broken` warning**
+
+A worktree's `.grove/config.toml` is a symlink pointing to the main worktree's config, but the target doesn't exist. Usually means the main worktree's `.grove` was deleted or never created:
+```bash
+# Check what the symlink points to
+ls -la .grove/config.toml
+
+# Fix: initialize the main worktree, or repair all symlinks
+grove repair
 ```
 
 **Port conflicts between worktrees (local Docker mode)**

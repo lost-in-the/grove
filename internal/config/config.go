@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -158,12 +159,20 @@ func Load() (*Config, error) {
 func LoadFromGroveDir(groveDir string) (*Config, error) {
 	cfg := LoadDefaults()
 
+	// Check for broken config symlink before attempting to load
+	projectPath := filepath.Join(groveDir, "config.toml")
+	if target, err := os.Readlink(projectPath); err == nil {
+		// It's a symlink — verify the target exists
+		if _, statErr := os.Stat(projectPath); statErr != nil {
+			return nil, fmt.Errorf("config symlink broken: %s → %s (target missing)", projectPath, target)
+		}
+	}
+
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return cfg, err
 	}
 	globalPath := filepath.Join(homeDir, ".config", "grove", "config.toml")
-	projectPath := filepath.Join(groveDir, "config.toml")
 
 	return loadFromPaths(cfg, globalPath, projectPath)
 }
