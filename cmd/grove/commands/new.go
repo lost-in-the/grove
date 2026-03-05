@@ -10,6 +10,7 @@ import (
 
 	"github.com/LeahArmstrong/grove-cli/internal/cli"
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
+	"github.com/LeahArmstrong/grove-cli/internal/log"
 	"github.com/LeahArmstrong/grove-cli/internal/output"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
@@ -21,6 +22,7 @@ var (
 	newNoDocker bool   // Skip auto-starting Docker
 	newBranch   string // Override branch name
 	newFrom     string // Create branch from this ref
+	newNoSwitch bool   // Skip auto-switching to the new worktree
 )
 
 var newCmd = &cobra.Command{
@@ -155,18 +157,77 @@ Examples:
 			}
 		}
 
-		// JSON output mode
+		// JSON output mode — return early to avoid cd: directive collision
 		if newJSON {
 			result := output.NewWorktreeResult{
-				SwitchTo: wt.Path,
-				Name:     name,
-				Branch:   branchName,
-				Path:     wt.Path,
-				Created:  true,
+				Name:    name,
+				Branch:  branchName,
+				Path:    wt.Path,
+				Created: true,
+			}
+			if !newNoSwitch {
+				result.SwitchTo = wt.Path
 			}
 			if err := output.PrintJSON(result); err != nil {
 				return err
 			}
+			return nil
+		}
+
+		// Determine current worktree name for state tracking
+		currentWorktreeName := ""
+		if currentWt, _ := mgr.GetCurrent(); currentWt != nil {
+			currentWorktreeName = currentWt.DisplayName()
+		}
+
+		// Switch to new worktree unless --no-switch
+		if !newNoSwitch {
+			// Update last_worktree before switching
+			if currentWorktreeName != "" {
+				if err := ctx.State.SetLastWorktree(currentWorktreeName); err != nil {
+					log.Printf("failed to set last worktree %q: %v", currentWorktreeName, err)
+				}
+			}
+
+			// Store current session as last if inside tmux
+			if tmux.IsInsideTmux() {
+				currentSession, err := tmux.GetCurrentSession()
+				if err == nil {
+					if err := tmux.StoreLastSession(currentSession); err != nil {
+						log.Printf("failed to store last session %q: %v", currentSession, err)
+					}
+				}
+			}
+
+			// Switch tmux session if inside tmux (skip in agent mode)
+			var tmuxSwitched bool
+			if !ctx.Config.AgentMode && tmux.IsTmuxAvailable() && tmux.IsInsideTmux() {
+				sessionName := worktree.TmuxSessionName(projectName, name)
+				if err := tmux.SwitchSession(sessionName); err != nil {
+					cli.Warning(w, "Failed to switch session: %v", err)
+				} else {
+					tmuxSwitched = true
+				}
+			}
+
+			// Update last_accessed_at for target worktree
+			if err := ctx.State.TouchWorktree(name); err != nil {
+				log.Printf("failed to touch worktree %q: %v", name, err)
+			}
+
+			// Skip cd directive when tmux switch already moved the user
+			if !tmuxSwitched {
+				hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
+				if hasShellIntegration {
+					cli.Directive("cd", wt.Path)
+				} else {
+					cli.Info(stderr, "Directory switching requires shell integration.")
+					cli.Faint(stderr, "To change directory manually:")
+					cli.Faint(stderr, "  cd %s", wt.Path)
+				}
+			}
+		} else {
+			cli.Info(w, "To switch to the new worktree: grove to %s", name)
 		}
 
 		return nil
@@ -179,6 +240,7 @@ func init() {
 	newCmd.Flags().StringVarP(&newFrom, "from", "f", "", "Create branch from this ref (default: HEAD)")
 	newCmd.Flags().StringVar(&newMirror, "mirror", "", "Create environment worktree tracking a remote branch (e.g., origin/main)")
 	newCmd.Flags().BoolVar(&newNoDocker, "no-docker", false, "Skip Docker auto-start")
+	newCmd.Flags().BoolVarP(&newNoSwitch, "no-switch", "n", false, "Stay in current worktree after creation")
 	newCmd.MarkFlagsMutuallyExclusive("mirror", "from")
 	newCmd.MarkFlagsMutuallyExclusive("mirror", "branch")
 	rootCmd.AddCommand(newCmd)

@@ -26,7 +26,7 @@ func TestNewCmd(t *testing.T) {
 func TestNewCmd_Flags(t *testing.T) {
 	flags := newCmd.Flags()
 
-	tests := []string{"json", "branch", "from", "mirror", "no-docker"}
+	tests := []string{"json", "branch", "from", "mirror", "no-docker", "no-switch"}
 	for _, name := range tests {
 		if flags.Lookup(name) == nil {
 			t.Errorf("expected --%s flag to exist", name)
@@ -83,6 +83,26 @@ func TestNewCmd_BranchOverridesBranchName(t *testing.T) {
 	// The flag's usage should indicate it overrides the branch name
 	if !strings.Contains(strings.ToLower(flag.Usage), "branch") {
 		t.Errorf("--branch usage = %q, should mention 'branch'", flag.Usage)
+	}
+}
+
+func TestNewCmd_NoSwitchFlag(t *testing.T) {
+	flag := newCmd.Flags().Lookup("no-switch")
+	if flag == nil {
+		t.Fatal("expected --no-switch flag to exist")
+	}
+	if flag.Shorthand != "n" {
+		t.Errorf("--no-switch shorthand = %q, want %q", flag.Shorthand, "n")
+	}
+	if flag.DefValue != "false" {
+		t.Errorf("--no-switch default = %q, want %q", flag.DefValue, "false")
+	}
+}
+
+func TestNewAutoSwitchDefault(t *testing.T) {
+	// Verify newNoSwitch defaults to false, meaning auto-switch is on by default
+	if newNoSwitch {
+		t.Error("newNoSwitch should default to false (auto-switch enabled)")
 	}
 }
 
