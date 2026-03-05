@@ -84,6 +84,12 @@ services = ["app", "worker", "vite"]
 # Optional.
 copy_files = [".env", "config/master.key"]
 
+# Files to symlink from the main worktree on grove new.
+# Unlike copy_files, changes to the source propagate instantly.
+# Ideal for shared credentials that never diverge across worktrees.
+# Optional.
+symlink_files = ["config/credentials/development.key", "config/credentials/test.key"]
+
 # Directories to symlink from the main worktree into each new worktree on
 # `grove new`. Saves disk space for large directories like node_modules or
 # vendor/bundle. Paths are relative to the worktree root.

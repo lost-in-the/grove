@@ -635,6 +635,118 @@ func TestHasActiveAgentSlot_NoAgentConfig(t *testing.T) {
 	}
 }
 
+func TestSetupWorktreeFiles_SymlinkFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	mainPath := filepath.Join(tmpDir, "main")
+	_ = os.MkdirAll(filepath.Join(mainPath, "config", "credentials"), 0755)
+	_ = os.WriteFile(filepath.Join(mainPath, "config", "credentials", "dev.key"), []byte("devkey"), 0600)
+
+	newPath := filepath.Join(tmpDir, "worktree")
+	_ = os.MkdirAll(newPath, 0755)
+
+	ext := &config.ExternalComposeConfig{
+		SymlinkFiles: []string{"config/credentials/dev.key"},
+	}
+
+	err := setupWorktreeFiles(ext, newPath, mainPath)
+	if err != nil {
+		t.Fatalf("setupWorktreeFiles() error = %v", err)
+	}
+
+	// Verify it's a symlink, not a copy
+	dst := filepath.Join(newPath, "config", "credentials", "dev.key")
+	info, err := os.Lstat(dst)
+	if err != nil {
+		t.Fatalf("Failed to stat symlinked file: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Error("Expected config/credentials/dev.key to be a symlink")
+	}
+
+	// Verify content is accessible through the symlink
+	data, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatalf("Failed to read through symlink: %v", err)
+	}
+	if string(data) != "devkey" {
+		t.Errorf("Expected 'devkey', got %q", string(data))
+	}
+}
+
+func TestSetupWorktreeFiles_AllThreeTypes(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	mainPath := filepath.Join(tmpDir, "main")
+	_ = os.MkdirAll(filepath.Join(mainPath, "config"), 0755)
+	_ = os.WriteFile(filepath.Join(mainPath, "config", "settings.yml"), []byte("settings"), 0644)
+	_ = os.WriteFile(filepath.Join(mainPath, "config", "secret.key"), []byte("secret"), 0600)
+	_ = os.MkdirAll(filepath.Join(mainPath, "vendor", "bundle"), 0755)
+
+	newPath := filepath.Join(tmpDir, "worktree")
+	_ = os.MkdirAll(newPath, 0755)
+
+	ext := &config.ExternalComposeConfig{
+		CopyFiles:    []string{"config/settings.yml"},
+		SymlinkFiles: []string{"config/secret.key"},
+		SymlinkDirs:  []string{"vendor/bundle"},
+	}
+
+	err := setupWorktreeFiles(ext, newPath, mainPath)
+	if err != nil {
+		t.Fatalf("setupWorktreeFiles() error = %v", err)
+	}
+
+	// Verify copied file is a regular file
+	copyInfo, err := os.Lstat(filepath.Join(newPath, "config", "settings.yml"))
+	if err != nil {
+		t.Fatalf("Failed to stat copied file: %v", err)
+	}
+	if copyInfo.Mode()&os.ModeSymlink != 0 {
+		t.Error("Expected config/settings.yml to be a regular file (copy), not a symlink")
+	}
+
+	// Verify symlinked file
+	fileInfo, err := os.Lstat(filepath.Join(newPath, "config", "secret.key"))
+	if err != nil {
+		t.Fatalf("Failed to stat symlinked file: %v", err)
+	}
+	if fileInfo.Mode()&os.ModeSymlink == 0 {
+		t.Error("Expected config/secret.key to be a symlink")
+	}
+
+	// Verify symlinked directory
+	dirInfo, err := os.Lstat(filepath.Join(newPath, "vendor", "bundle"))
+	if err != nil {
+		t.Fatalf("Failed to stat symlinked dir: %v", err)
+	}
+	if dirInfo.Mode()&os.ModeSymlink == 0 {
+		t.Error("Expected vendor/bundle to be a symlink")
+	}
+}
+
+func TestSetupWorktreeFiles_SymlinkFiles_MissingSource(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	mainPath := filepath.Join(tmpDir, "main")
+	_ = os.MkdirAll(mainPath, 0755)
+
+	newPath := filepath.Join(tmpDir, "worktree")
+	_ = os.MkdirAll(newPath, 0755)
+
+	ext := &config.ExternalComposeConfig{
+		SymlinkFiles: []string{"nonexistent.key"},
+	}
+
+	err := setupWorktreeFiles(ext, newPath, mainPath)
+	if err == nil {
+		t.Error("Expected error for missing source file, got nil")
+	}
+	if !strings.Contains(err.Error(), "source not found") {
+		t.Errorf("Expected 'source not found' in error, got %q", err.Error())
+	}
+}
+
 func TestPlugin_RegisterHooks_IncludesPreRemove(t *testing.T) {
 	plugin := New()
 	cfg := &config.Config{}

@@ -306,6 +306,20 @@ func setupWorktreeFiles(ext *config.ExternalComposeConfig, newPath, mainPath str
 		fmt.Fprintf(os.Stderr, "  copied %s\n", relPath)
 	}
 
+	for _, relPath := range ext.SymlinkFiles {
+		src := filepath.Join(mainPath, relPath)
+		dst := filepath.Join(newPath, relPath)
+
+		if err := createSymlink(src, dst); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to symlink %s: %v\n", relPath, err)
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		fmt.Fprintf(os.Stderr, "  symlinked %s\n", relPath)
+	}
+
 	for _, relPath := range ext.SymlinkDirs {
 		src := filepath.Join(mainPath, relPath)
 		dst := filepath.Join(newPath, relPath)

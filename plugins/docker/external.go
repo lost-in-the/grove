@@ -351,7 +351,7 @@ func copyFile(src, dst string) error {
 // as needed. If dst already exists and is a symlink, it is replaced.
 func createSymlink(src, dst string) error {
 	if _, err := os.Stat(src); err != nil {
-		return fmt.Errorf("source directory not found: %w", err)
+		return fmt.Errorf("source not found: %w", err)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {

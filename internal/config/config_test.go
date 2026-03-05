@@ -608,6 +608,59 @@ symlink_dirs = ["vendor/bundle"]
 	}
 }
 
+func TestLoadExternalDockerConfig_WithSymlinkFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	composePath := filepath.Join(tmpDir, "shared-infra")
+	if err := os.MkdirAll(composePath, 0755); err != nil {
+		t.Fatalf("Failed to create compose dir: %v", err)
+	}
+
+	configData := `
+[plugins.docker]
+enabled = true
+mode = "external"
+
+[plugins.docker.external]
+path = "` + composePath + `"
+env_var = "APP_DIR"
+services = ["app"]
+copy_files = ["config/settings.local.yml"]
+symlink_files = ["config/credentials/development.key", "config/credentials/test.key"]
+symlink_dirs = ["vendor/bundle"]
+`
+	configPath := filepath.Join(tmpDir, "config.toml")
+	if err := os.WriteFile(configPath, []byte(configData), 0644); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
+
+	cfg, err := LoadConfigFromPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfigFromPath() error = %v", err)
+	}
+
+	ext := cfg.Plugins.Docker.External
+	if ext == nil {
+		t.Fatal("Expected External config to be non-nil")
+	}
+	if len(ext.CopyFiles) != 1 {
+		t.Errorf("Expected 1 copy_files entry, got %d", len(ext.CopyFiles))
+	}
+	if len(ext.SymlinkFiles) != 2 {
+		t.Errorf("Expected 2 symlink_files entries, got %d", len(ext.SymlinkFiles))
+	}
+	if len(ext.SymlinkFiles) >= 2 {
+		if ext.SymlinkFiles[0] != "config/credentials/development.key" {
+			t.Errorf("Expected first symlink_files to be 'config/credentials/development.key', got %q", ext.SymlinkFiles[0])
+		}
+		if ext.SymlinkFiles[1] != "config/credentials/test.key" {
+			t.Errorf("Expected second symlink_files to be 'config/credentials/test.key', got %q", ext.SymlinkFiles[1])
+		}
+	}
+	if len(ext.SymlinkDirs) != 1 {
+		t.Errorf("Expected 1 symlink_dirs entry, got %d", len(ext.SymlinkDirs))
+	}
+}
+
 func TestMergeConfigsExternalDocker(t *testing.T) {
 	boolTrue := true
 

@@ -92,13 +92,14 @@ type DockerPluginConfig struct {
 // ExternalComposeConfig configures external Docker Compose mode where services
 // are defined in a shared compose setup outside the project directory.
 type ExternalComposeConfig struct {
-	Path        string            `toml:"path"`         // Path to external compose directory
-	EnvVar      string            `toml:"env_var"`      // Environment variable name (e.g., "APP_DIR")
-	EnvFile     string            `toml:"env_file"`     // File to write env vars to (default: ".env")
-	Services    []string          `toml:"services"`     // Service names to manage
-	CopyFiles   []string          `toml:"copy_files"`   // Files to copy from main on worktree create
-	SymlinkDirs []string          `toml:"symlink_dirs"` // Directories to symlink from main on create
-	Agent       *AgentStackConfig `toml:"agent"`        // Optional agent stack configuration
+	Path         string            `toml:"path"`          // Path to external compose directory
+	EnvVar       string            `toml:"env_var"`       // Environment variable name (e.g., "APP_DIR")
+	EnvFile      string            `toml:"env_file"`      // File to write env vars to (default: ".env")
+	Services     []string          `toml:"services"`      // Service names to manage
+	CopyFiles    []string          `toml:"copy_files"`    // Files to copy from main on worktree create
+	SymlinkFiles []string          `toml:"symlink_files"` // Files to symlink from main on create
+	SymlinkDirs  []string          `toml:"symlink_dirs"`  // Directories to symlink from main on create
+	Agent        *AgentStackConfig `toml:"agent"`         // Optional agent stack configuration
 }
 
 // EnvFileName returns the configured env file name, defaulting to ".env".

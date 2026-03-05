@@ -237,6 +237,7 @@ symlink_dirs = [
 | `env_file` | No | Filename in the compose directory where grove writes the `env_var` value (default: `.env`). For example, with `env_var = "APP_DIR"` and `env_file = ".env.local"`, grove writes `APP_DIR=/abs/path/to/worktree` to `.env.local` and passes `--env-file .env.local` to compose. Set to `.env.local` to avoid dirtying a git-tracked `.env`. See [Env File Loaders](#env-file-loaders-direnv--mise) for optional loader setup. |
 | `services` | Yes | List of service names to manage |
 | `copy_files` | No | Files to copy from main worktree on `grove new` |
+| `symlink_files` | No | Files to symlink from main worktree on `grove new` (changes propagate instantly) |
 | `symlink_dirs` | No | Directories to symlink from main worktree on `grove new` |
 
 ### Defaults

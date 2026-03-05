@@ -235,8 +235,11 @@ func filterProfileForExternalDocker(profile *detect.ProjectProfile, ext *config.
 	for _, s := range ext.SymlinkDirs {
 		symlinkSet[s] = true
 	}
-	copySet := make(map[string]bool, len(ext.CopyFiles))
+	copySet := make(map[string]bool, len(ext.CopyFiles)+len(ext.SymlinkFiles))
 	for _, f := range ext.CopyFiles {
+		copySet[f] = true
+	}
+	for _, f := range ext.SymlinkFiles {
 		copySet[f] = true
 	}
 
