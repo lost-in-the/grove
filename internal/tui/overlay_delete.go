@@ -10,11 +10,21 @@ type DeleteState struct {
 	Item         *WorktreeItem
 	Warnings     []string
 	DeleteBranch bool
+	Deleting     bool
 }
 
 func renderDelete(s *DeleteState, width int) string {
 	if s == nil || s.Item == nil {
 		return ""
+	}
+
+	if s.Deleting {
+		var b strings.Builder
+		b.WriteString("⏳ Deleting worktree " + s.Item.ShortName + "...\n")
+		b.WriteString("\n" + Styles.Footer.Render("Please wait..."))
+		return Styles.OverlayBorder.Render(
+			Styles.OverlayTitle.Render("Delete Worktree") + "\n\n" + b.String(),
+		)
 	}
 
 	var b strings.Builder

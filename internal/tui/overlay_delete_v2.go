@@ -21,6 +21,15 @@ func renderDeleteV2(s *DeleteState, width int) string {
 	}
 	innerWidth := overlayWidth - 6
 
+	if s.Deleting {
+		var b strings.Builder
+		b.WriteString("⏳ Deleting worktree " + Styles.DetailValue.Render(s.Item.ShortName) + "...\n")
+		b.WriteString("\n" + Styles.Footer.Render("Please wait..."))
+		return Styles.OverlayBorderDanger.Width(overlayWidth).Render(
+			Styles.OverlayTitle.Render("Delete Worktree") + "\n\n" + b.String(),
+		)
+	}
+
 	var b strings.Builder
 
 	// Worktree name header

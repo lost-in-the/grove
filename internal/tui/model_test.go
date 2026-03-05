@@ -160,6 +160,35 @@ func TestDeleteFlow(t *testing.T) {
 			t.Errorf("expected ViewDashboard, got %d", m.activeView)
 		}
 	})
+
+	t.Run("y sets Deleting true", func(t *testing.T) {
+		m := newTestModel(withItems(3), withSize(80, 24))
+		m = sendKey(m, "j")
+		m = sendKey(m, "d")
+		m = sendKey(m, "y")
+		if m.deleteState == nil {
+			t.Fatal("expected deleteState to still be set")
+		}
+		if !m.deleteState.Deleting {
+			t.Error("expected Deleting to be true after confirming")
+		}
+	})
+
+	t.Run("keys ignored while deleting", func(t *testing.T) {
+		m := newTestModel(withItems(3), withSize(80, 24))
+		m = sendKey(m, "j")
+		m = sendKey(m, "d")
+		m = sendKey(m, "y")
+		// Try to cancel while deleting — should be ignored
+		m = sendKey(m, "n")
+		if m.activeView != ViewDelete {
+			t.Errorf("expected ViewDelete (input blocked during delete), got %d", m.activeView)
+		}
+		m = sendKey(m, "esc")
+		if m.activeView != ViewDelete {
+			t.Errorf("expected ViewDelete (esc blocked during delete), got %d", m.activeView)
+		}
+	})
 }
 
 func TestCreateWizardFlow(t *testing.T) {
@@ -801,6 +830,29 @@ func TestWorktreeDeletedMsgWithError(t *testing.T) {
 	// Toast should show the error
 	if m.toast.Current == nil || m.toast.Current.Level != ToastError {
 		t.Error("expected error toast on delete failure")
+	}
+}
+
+func TestWorktreeDeletedMsgErrorDuringDeletion(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 24))
+	m.activeView = ViewDelete
+	m.deleteState = &DeleteState{
+		Item:     &WorktreeItem{ShortName: "test"},
+		Deleting: true,
+	}
+	m = sendMsg(m, worktreeDeletedMsg{name: "test", err: errTest})
+
+	// deleteState should be cleared
+	if m.deleteState != nil {
+		t.Error("expected deleteState to be nil after error")
+	}
+	// Should return to dashboard
+	if m.activeView != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	}
+	// Toast should show error
+	if m.toast.Current == nil || m.toast.Current.Level != ToastError {
+		t.Error("expected error toast on delete failure during deletion")
 	}
 }
 
