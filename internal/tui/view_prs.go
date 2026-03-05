@@ -94,8 +94,8 @@ func (m Model) handlePRKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		s.ShowPreview = !s.ShowPreview
 		return m, nil
 
-	case msg.String() == "o":
-		if s.ShowPreview && len(filtered) > 0 && s.Cursor < len(filtered) {
+	case msg.String() == "o" && s.ShowPreview:
+		if len(filtered) > 0 && s.Cursor < len(filtered) {
 			pr := filtered[s.Cursor]
 			if pr.URL != "" {
 				var cmd *exec.Cmd
