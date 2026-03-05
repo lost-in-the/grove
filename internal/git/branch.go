@@ -1,9 +1,11 @@
 package git
 
 import (
+	"context"
 	"fmt"
-	"os/exec"
 	"strings"
+
+	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
 )
 
 // BranchStatus contains information about a git branch's state
@@ -82,8 +84,7 @@ func (b *BranchManager) Delete(branch string, force bool) error {
 		flag = "-D"
 	}
 
-	cmd := exec.Command("git", "-C", b.repoPath, "branch", flag, branch)
-	output, err := cmd.CombinedOutput()
+	output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", b.repoPath, "branch", flag, branch}, "", cmdexec.GitLocal)
 	if err != nil {
 		return fmt.Errorf("failed to delete branch: %s", strings.TrimSpace(string(output)))
 	}
@@ -105,8 +106,7 @@ func (b *BranchManager) GetUnpushedCommits(branch string, limit int) ([]string, 
 		args = append(args, fmt.Sprintf("-%d", limit))
 	}
 
-	cmd := exec.Command("git", args...)
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "git", args, "", cmdexec.GitLocal)
 	if err != nil {
 		return nil, err
 	}
@@ -120,8 +120,7 @@ func (b *BranchManager) GetUnpushedCommits(branch string, limit int) ([]string, 
 
 // ListLocalBranches returns the names of all local branches.
 func ListLocalBranches(repoPath string) ([]string, error) {
-	cmd := exec.Command("git", "-C", repoPath, "branch", "--format=%(refname:short)")
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"-C", repoPath, "branch", "--format=%(refname:short)"}, "", cmdexec.GitLocal)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list branches: %w", err)
 	}
@@ -135,8 +134,7 @@ func ListLocalBranches(repoPath string) ([]string, error) {
 // isBranchMerged checks if a branch is fully merged into the default branch
 func (b *BranchManager) isBranchMerged(branch string) (bool, error) {
 	// List branches merged into default branch
-	cmd := exec.Command("git", "-C", b.repoPath, "branch", "--merged", b.defaultBranch)
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"-C", b.repoPath, "branch", "--merged", b.defaultBranch}, "", cmdexec.GitLocal)
 	if err != nil {
 		return false, err
 	}
@@ -161,9 +159,8 @@ func (b *BranchManager) hasRemoteTracking(branch string) (bool, error) {
 
 // getUpstream returns the upstream tracking branch for a local branch
 func (b *BranchManager) getUpstream(branch string) (string, error) {
-	cmd := exec.Command("git", "-C", b.repoPath, "rev-parse", "--abbrev-ref",
-		fmt.Sprintf("%s@{upstream}", branch))
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"-C", b.repoPath, "rev-parse", "--abbrev-ref",
+		fmt.Sprintf("%s@{upstream}", branch)}, "", cmdexec.GitLocal)
 	if err != nil {
 		// No upstream set - not an error
 		return "", nil
@@ -179,9 +176,8 @@ func (b *BranchManager) countUnpushedCommits(branch string) (int, error) {
 	}
 
 	// Count commits ahead of upstream
-	cmd := exec.Command("git", "-C", b.repoPath, "rev-list", "--count",
-		fmt.Sprintf("%s..%s", upstream, branch))
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"-C", b.repoPath, "rev-list", "--count",
+		fmt.Sprintf("%s..%s", upstream, branch)}, "", cmdexec.GitLocal)
 	if err != nil {
 		return 0, err
 	}
@@ -193,8 +189,7 @@ func (b *BranchManager) countUnpushedCommits(branch string) (int, error) {
 
 // branchUsedByWorktree returns the worktree path using this branch, or empty string
 func (b *BranchManager) branchUsedByWorktree(branch string, excludeWorktree string) (string, error) {
-	cmd := exec.Command("git", "-C", b.repoPath, "worktree", "list", "--porcelain")
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"-C", b.repoPath, "worktree", "list", "--porcelain"}, "", cmdexec.GitLocal)
 	if err != nil {
 		return "", err
 	}
@@ -225,8 +220,7 @@ func (b *BranchManager) branchUsedByWorktree(branch string, excludeWorktree stri
 // detectDefaultBranch attempts to determine the default branch for a repository
 func detectDefaultBranch(repoPath string) (string, error) {
 	// Try to get from remote HEAD reference
-	cmd := exec.Command("git", "-C", repoPath, "symbolic-ref", "refs/remotes/origin/HEAD")
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"-C", repoPath, "symbolic-ref", "refs/remotes/origin/HEAD"}, "", cmdexec.GitLocal)
 	if err == nil {
 		ref := strings.TrimSpace(string(output))
 		// Extract branch name from refs/remotes/origin/main
@@ -236,12 +230,11 @@ func detectDefaultBranch(repoPath string) (string, error) {
 	}
 
 	// Try git config init.defaultBranch
-	cmd = exec.Command("git", "-C", repoPath, "config", "init.defaultBranch")
-	if output, err = cmd.Output(); err == nil {
+	output, err = cmdexec.Output(context.TODO(), "git", []string{"-C", repoPath, "config", "init.defaultBranch"}, "", cmdexec.GitLocal)
+	if err == nil {
 		candidate := strings.TrimSpace(string(output))
 		if candidate != "" {
-			verify := exec.Command("git", "-C", repoPath, "rev-parse", "--verify", candidate)
-			if verify.Run() == nil {
+			if err := cmdexec.Run(context.TODO(), "git", []string{"-C", repoPath, "rev-parse", "--verify", candidate}, "", cmdexec.GitLocal); err == nil {
 				return candidate, nil
 			}
 		}
@@ -249,15 +242,13 @@ func detectDefaultBranch(repoPath string) (string, error) {
 
 	// Fall back to checking common default branch names
 	for _, candidate := range []string{"main", "master"} {
-		verify := exec.Command("git", "-C", repoPath, "rev-parse", "--verify", candidate)
-		if err := verify.Run(); err == nil {
+		if err := cmdexec.Run(context.TODO(), "git", []string{"-C", repoPath, "rev-parse", "--verify", candidate}, "", cmdexec.GitLocal); err == nil {
 			return candidate, nil
 		}
 	}
 
 	// Last resort: use the current branch (skip if detached HEAD)
-	cmd = exec.Command("git", "-C", repoPath, "rev-parse", "--abbrev-ref", "HEAD")
-	output, err = cmd.Output()
+	output, err = cmdexec.Output(context.TODO(), "git", []string{"-C", repoPath, "rev-parse", "--abbrev-ref", "HEAD"}, "", cmdexec.GitLocal)
 	if err != nil {
 		return "", fmt.Errorf("could not determine default branch")
 	}

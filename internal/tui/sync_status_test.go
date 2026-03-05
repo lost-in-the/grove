@@ -128,17 +128,12 @@ func TestRenderDetailV2_SyncWithHasRemote(t *testing.T) {
 	}
 }
 
-func TestHasUpstream(t *testing.T) {
-	// hasUpstream with an invalid path should return false
-	got := hasUpstream("/nonexistent/path")
-	if got {
-		t.Error("hasUpstream() should return false for nonexistent path")
+func TestGetUpstreamInfo_InvalidPath(t *testing.T) {
+	ahead, behind, hasRemote := getUpstreamInfo("/nonexistent/path")
+	if hasRemote {
+		t.Error("getUpstreamInfo() should return hasRemote=false for nonexistent path")
 	}
-}
-
-func TestGetUpstreamCounts_InvalidPath(t *testing.T) {
-	ahead, behind := getUpstreamCounts("/nonexistent/path")
 	if ahead != 0 || behind != 0 {
-		t.Errorf("getUpstreamCounts() = (%d, %d), want (0, 0)", ahead, behind)
+		t.Errorf("getUpstreamInfo() = (%d, %d, _), want (0, 0, _)", ahead, behind)
 	}
 }

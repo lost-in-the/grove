@@ -1,12 +1,14 @@
 package tracker
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
 )
 
 // GitHubAdapter implements the Tracker interface using the GitHub CLI.
@@ -309,8 +311,7 @@ func (g *GitHubAdapter) ListPRs(opts ListOptions) ([]*PullRequest, error) {
 
 // runGH executes a gh CLI command and returns the output.
 func (g *GitHubAdapter) runGH(args ...string) ([]byte, error) {
-	cmd := exec.Command("gh", args...)
-	output, err := cmd.CombinedOutput()
+	output, err := cmdexec.CombinedOutput(context.TODO(), "gh", args, "", cmdexec.GHCLI)
 	if err != nil {
 		outputStr := strings.TrimSpace(string(output))
 		if outputStr != "" {
@@ -323,14 +324,12 @@ func (g *GitHubAdapter) runGH(args ...string) ([]byte, error) {
 
 // IsGHInstalled checks if the gh CLI is installed and authenticated.
 func IsGHInstalled() bool {
-	cmd := exec.Command("gh", "auth", "status")
-	return cmd.Run() == nil
+	return cmdexec.Run(context.TODO(), "gh", []string{"auth", "status"}, "", cmdexec.GHCLI) == nil
 }
 
 // DetectRepo tries to detect the GitHub repository from the current directory.
 func DetectRepo() (string, error) {
-	cmd := exec.Command("gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner")
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "gh", []string{"repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"}, "", cmdexec.GHCLI)
 	if err != nil {
 		return "", fmt.Errorf("detect repo: %w", err)
 	}

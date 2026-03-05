@@ -213,7 +213,7 @@ func (s *externalStrategy) persistEnvVar(worktreePath string) error {
 	content, err := os.ReadFile(envFile)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return os.WriteFile(envFile, []byte(line+"\n"), 0644)
+			return os.WriteFile(envFile, []byte(line+"\n"), 0o600)
 		}
 		return fmt.Errorf("failed to read %s: %w", s.ext.EnvFileName(), err)
 	}
@@ -241,7 +241,7 @@ func (s *externalStrategy) persistEnvVar(worktreePath string) error {
 		}
 	}
 
-	return os.WriteFile(envFile, []byte(strings.Join(lines, "\n")), 0644)
+	return os.WriteFile(envFile, []byte(strings.Join(lines, "\n")), 0o600)
 }
 
 // removeEnvVar removes the env_var entry from the env file if its value matches
@@ -279,7 +279,7 @@ func (s *externalStrategy) removeEnvVar(worktreePath string) error {
 	if result == "" {
 		result = "\n"
 	}
-	return os.WriteFile(envFile, []byte(result), 0644)
+	return os.WriteFile(envFile, []byte(result), 0o600)
 }
 
 // envForWorktree returns the environment variable setting for the given worktree path.
@@ -350,7 +350,7 @@ func copyFile(src, dst string) error {
 // createSymlink creates a symbolic link from src to dst, creating parent directories
 // as needed. If dst already exists and is a symlink, it is replaced.
 func createSymlink(src, dst string) error {
-	if _, err := os.Stat(src); err != nil {
+	if _, err := os.Lstat(src); err != nil {
 		return fmt.Errorf("source not found: %w", err)
 	}
 
@@ -361,7 +361,9 @@ func createSymlink(src, dst string) error {
 	// Remove existing symlink if present
 	if info, err := os.Lstat(dst); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
-			_ = os.Remove(dst)
+			if err := os.Remove(dst); err != nil {
+				return fmt.Errorf("failed to remove existing symlink %s: %w", dst, err)
+			}
 		} else {
 			return fmt.Errorf("%s already exists and is not a symlink", dst)
 		}

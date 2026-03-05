@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
 )
 
 // Session represents a tmux session
@@ -53,8 +56,7 @@ func CreateSession(name, path string) error {
 		return nil
 	}
 
-	cmd := exec.Command("tmux", "new-session", "-d", "-s", name, "-c", path)
-	output, err := cmd.CombinedOutput()
+	output, err := cmdexec.CombinedOutput(context.TODO(), "tmux", []string{"new-session", "-d", "-s", name, "-c", path}, "", cmdexec.Tmux)
 	if err != nil {
 		return fmt.Errorf("failed to create session: %s: %w", string(output), err)
 	}
@@ -62,7 +64,8 @@ func CreateSession(name, path string) error {
 	return nil
 }
 
-// AttachSession attaches to an existing session
+// AttachSession attaches to an existing session.
+// This is interactive (blocks until detach) — no timeout applied.
 func AttachSession(name string) error {
 	if name == "" {
 		return fmt.Errorf("session name cannot be empty")
@@ -81,7 +84,7 @@ func AttachSession(name string) error {
 		return SwitchSession(name)
 	}
 
-	// Attach to session (this will block)
+	// Attach to session (this will block — interactive, no timeout)
 	cmd := exec.Command("tmux", "attach-session", "-t", name)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -101,8 +104,7 @@ func SwitchSession(name string) error {
 		return fmt.Errorf("not inside tmux session")
 	}
 
-	cmd := exec.Command("tmux", "switch-client", "-t", name)
-	output, err := cmd.CombinedOutput()
+	output, err := cmdexec.CombinedOutput(context.TODO(), "tmux", []string{"switch-client", "-t", name}, "", cmdexec.Tmux)
 	if err != nil {
 		return fmt.Errorf("failed to switch session: %s: %w", string(output), err)
 	}
@@ -117,8 +119,7 @@ func KillSession(name string) error {
 		return fmt.Errorf("session name cannot be empty")
 	}
 
-	cmd := exec.Command("tmux", "kill-session", "-t", name)
-	output, err := cmd.CombinedOutput()
+	output, err := cmdexec.CombinedOutput(context.TODO(), "tmux", []string{"kill-session", "-t", name}, "", cmdexec.Tmux)
 	if err != nil {
 		return fmt.Errorf("failed to kill session: %s: %w", string(output), err)
 	}
@@ -128,8 +129,7 @@ func KillSession(name string) error {
 
 // SessionExists checks if a session exists
 func SessionExists(name string) (bool, error) {
-	cmd := exec.Command("tmux", "has-session", "-t", name)
-	err := cmd.Run()
+	err := cmdexec.Run(context.TODO(), "tmux", []string{"has-session", "-t", name}, "", cmdexec.Tmux)
 	if err != nil {
 		// Exit code 1 means session doesn't exist
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -144,8 +144,7 @@ func SessionExists(name string) (bool, error) {
 
 // ListSessions returns all tmux sessions
 func ListSessions() ([]*Session, error) {
-	cmd := exec.Command("tmux", "list-sessions", "-F", "#{session_name}|#{session_windows}|#{session_attached}|#{session_created}")
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "tmux", []string{"list-sessions", "-F", "#{session_name}|#{session_windows}|#{session_attached}|#{session_created}"}, "", cmdexec.Tmux)
 	if err != nil {
 		// If no sessions exist, that's okay
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -188,8 +187,7 @@ func GetCurrentSession() (string, error) {
 		return "", fmt.Errorf("not inside tmux session")
 	}
 
-	cmd := exec.Command("tmux", "display-message", "-p", "#{session_name}")
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "tmux", []string{"display-message", "-p", "#{session_name}"}, "", cmdexec.Tmux)
 	if err != nil {
 		return "", fmt.Errorf("failed to get current session: %w", err)
 	}
@@ -272,8 +270,7 @@ type PaneInfo struct {
 
 // GetPaneInfo returns the current path and command for a session's active pane
 func GetPaneInfo(sessionName string) (*PaneInfo, error) {
-	cmd := exec.Command("tmux", "display-message", "-t", sessionName, "-p", "#{pane_current_path}|#{pane_current_command}")
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "tmux", []string{"display-message", "-t", sessionName, "-p", "#{pane_current_path}|#{pane_current_command}"}, "", cmdexec.Tmux)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get pane info: %w", err)
 	}
@@ -302,8 +299,7 @@ func (p *PaneInfo) IsShell() bool {
 
 // SendKeys sends keys to the active pane of a tmux session
 func SendKeys(sessionName string, keys string) error {
-	cmd := exec.Command("tmux", "send-keys", "-t", sessionName, keys, "Enter")
-	output, err := cmd.CombinedOutput()
+	output, err := cmdexec.CombinedOutput(context.TODO(), "tmux", []string{"send-keys", "-t", sessionName, keys, "Enter"}, "", cmdexec.Tmux)
 	if err != nil {
 		return fmt.Errorf("failed to send keys: %s: %w", string(output), err)
 	}
@@ -340,8 +336,7 @@ func CreateSessionWithCommand(name, path, command string) error {
 		args = append(args, command)
 	}
 
-	cmd := exec.Command("tmux", args...)
-	output, err := cmd.CombinedOutput()
+	output, err := cmdexec.CombinedOutput(context.TODO(), "tmux", args, "", cmdexec.Tmux)
 	if err != nil {
 		return fmt.Errorf("failed to create session: %s: %w", string(output), err)
 	}
@@ -351,6 +346,7 @@ func CreateSessionWithCommand(name, path, command string) error {
 
 // DisplayPopup opens a tmux display-popup attached to an existing session.
 // Width and height are tmux percentage strings (e.g., "80%").
+// This is interactive — no timeout applied.
 func DisplayPopup(sessionName, width, height string) error {
 	if sessionName == "" {
 		return fmt.Errorf("session name cannot be empty")

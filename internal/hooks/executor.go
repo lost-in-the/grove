@@ -241,8 +241,8 @@ func (e *Executor) executeSymlink(action *HookAction, ctx *ExecutionContext, var
 	srcPath := resolvePath(from, ctx.MainPath)
 	linkPath := resolvePath(to, ctx.NewPath)
 
-	// Check if source exists
-	if _, err := os.Stat(srcPath); err != nil {
+	// Check if source exists (Lstat avoids following symlink chains)
+	if _, err := os.Lstat(srcPath); err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("symlink source does not exist: %s", srcPath)
 		}
@@ -251,7 +251,7 @@ func (e *Executor) executeSymlink(action *HookAction, ctx *ExecutionContext, var
 
 	// Remove existing file/link at destination if exists
 	if _, err := os.Lstat(linkPath); err == nil {
-		if err := os.RemoveAll(linkPath); err != nil {
+		if err := os.Remove(linkPath); err != nil {
 			return fmt.Errorf("symlink: cannot remove existing %s: %w", linkPath, err)
 		}
 	}

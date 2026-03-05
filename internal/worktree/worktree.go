@@ -1,11 +1,14 @@
 package worktree
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
+
+	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
 )
 
 const (
@@ -40,8 +43,7 @@ type Manager struct {
 func NewManager(repoRoot string) (*Manager, error) {
 	if repoRoot == "" {
 		// Try to detect repo root from current directory
-		cmd := exec.Command("git", "rev-parse", "--show-toplevel")
-		output, err := cmd.Output()
+		output, err := cmdexec.Output(context.TODO(), "git", []string{"rev-parse", "--show-toplevel"}, "", cmdexec.GitLocal)
 		if err != nil {
 			return nil, fmt.Errorf("not in a git repository: %w", err)
 		}
@@ -74,10 +76,7 @@ func (m *Manager) Create(name, branch string) error {
 
 	// Create worktree with new branch
 	args := []string{"worktree", "add", "-b", branch, wtPath}
-	cmd := exec.Command("git", args...)
-	cmd.Dir = m.repoRoot
-
-	output, err := cmd.CombinedOutput()
+	output, err := cmdexec.CombinedOutput(context.TODO(), "git", args, m.repoRoot, cmdexec.GitLocal)
 	if err != nil {
 		return fmt.Errorf("failed to create worktree: %s: %w", string(output), err)
 	}
@@ -105,10 +104,7 @@ func (m *Manager) CreateFromExisting(name, branch string) error {
 
 	// Create worktree from existing branch (no -b flag)
 	args := []string{"worktree", "add", wtPath, branch}
-	cmd := exec.Command("git", args...)
-	cmd.Dir = m.repoRoot
-
-	output, err := cmd.CombinedOutput()
+	output, err := cmdexec.CombinedOutput(context.TODO(), "git", args, m.repoRoot, cmdexec.GitLocal)
 	if err != nil {
 		return fmt.Errorf("failed to create worktree: %s: %w", string(output), err)
 	}
@@ -138,16 +134,11 @@ func (m *Manager) CreateFromBranch(name, branch string) error {
 
 	// First, try to fetch the branch if it doesn't exist locally
 	// This is important for PR branches that only exist remotely
-	fetchCmd := exec.Command("git", "fetch", "origin", branch+":"+branch)
-	fetchCmd.Dir = m.repoRoot
-	_ = fetchCmd.Run() // Ignore errors - branch might already exist locally
+	_ = cmdexec.Run(context.TODO(), "git", []string{"fetch", "origin", branch + ":" + branch}, m.repoRoot, cmdexec.GitRemote)
 
 	// Create worktree from the branch
 	args := []string{"worktree", "add", wtPath, branch}
-	cmd := exec.Command("git", args...)
-	cmd.Dir = m.repoRoot
-
-	output, err := cmd.CombinedOutput()
+	output, err := cmdexec.CombinedOutput(context.TODO(), "git", args, m.repoRoot, cmdexec.GitLocal)
 	if err != nil {
 		return fmt.Errorf("failed to create worktree from branch %q: %s: %w", branch, string(output), err)
 	}
@@ -178,10 +169,7 @@ func (m *Manager) Find(name string) (*Worktree, error) {
 
 // List returns all worktrees in the repository
 func (m *Manager) List() ([]*Worktree, error) {
-	cmd := exec.Command("git", "worktree", "list", "--porcelain")
-	cmd.Dir = m.repoRoot
-
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"worktree", "list", "--porcelain"}, m.repoRoot, cmdexec.GitLocal)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list worktrees: %w", err)
 	}
@@ -190,13 +178,19 @@ func (m *Manager) List() ([]*Worktree, error) {
 	mainPath := m.getMainWorktreePath()
 	trees := parseWorktreeList(string(output), mainPath, projectName)
 
-	// Check dirty status for each worktree
+	// Check dirty status in parallel — each goroutine writes to its own struct
+	var wg sync.WaitGroup
 	for _, tree := range trees {
-		dirty, err := m.isDirty(tree.Path)
-		if err == nil {
-			tree.IsDirty = dirty
-		}
+		wg.Add(1)
+		go func(t *Worktree) {
+			defer wg.Done()
+			dirty, err := m.isDirty(t.Path)
+			if err == nil {
+				t.IsDirty = dirty
+			}
+		}(tree)
 	}
+	wg.Wait()
 
 	return trees, nil
 }
@@ -227,9 +221,7 @@ func (m *Manager) Remove(name string) error {
 
 	// If the worktree is prunable (directory missing), use git worktree prune
 	if targetTree.IsPrunable {
-		cmd := exec.Command("git", "worktree", "prune")
-		cmd.Dir = m.repoRoot
-		output, err := cmd.CombinedOutput()
+		output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"worktree", "prune"}, m.repoRoot, cmdexec.GitLocal)
 		if err != nil {
 			return fmt.Errorf("failed to prune stale worktree: %s: %w", string(output), err)
 		}
@@ -237,15 +229,10 @@ func (m *Manager) Remove(name string) error {
 	}
 
 	// Remove the worktree normally
-	cmd := exec.Command("git", "worktree", "remove", targetTree.Path)
-	cmd.Dir = m.repoRoot
-
-	_, err = cmd.CombinedOutput()
+	_, err = cmdexec.CombinedOutput(context.TODO(), "git", []string{"worktree", "remove", targetTree.Path}, m.repoRoot, cmdexec.GitLocal)
 	if err != nil {
 		// Try force remove if regular remove fails
-		cmd = exec.Command("git", "worktree", "remove", "--force", targetTree.Path)
-		cmd.Dir = m.repoRoot
-		output, err := cmd.CombinedOutput()
+		output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"worktree", "remove", "--force", targetTree.Path}, m.repoRoot, cmdexec.GitLocal)
 		if err != nil {
 			return fmt.Errorf("failed to remove worktree: %s: %w", string(output), err)
 		}
@@ -256,8 +243,7 @@ func (m *Manager) Remove(name string) error {
 
 // GetCurrent returns the current worktree
 func (m *Manager) GetCurrent() (*Worktree, error) {
-	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"rev-parse", "--show-toplevel"}, "", cmdexec.GitLocal)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get current worktree: %w", err)
 	}
@@ -301,10 +287,7 @@ func (m *Manager) GetDirtyFiles(path string) (string, error) {
 
 // getDirtyFiles returns the list of dirty files from git status
 func (m *Manager) getDirtyFiles(path string) (string, error) {
-	cmd := exec.Command("git", "status", "--porcelain")
-	cmd.Dir = path
-
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"status", "--porcelain"}, path, cmdexec.GitLocal)
 	if err != nil {
 		return "", err
 	}
@@ -331,10 +314,7 @@ func (m *Manager) GetCommitInfo(path string) (shortHash, message, age string, er
 func (m *Manager) getCommitInfo(path string) (shortHash, message, age string, err error) {
 	// Use a delimiter that's unlikely to appear in commit messages
 	// Format: full_hash<delim>short_hash<delim>subject<delim>relative_date
-	cmd := exec.Command("git", "log", "-1", "--format=%H%x1E%h%x1E%s%x1E%cr")
-	cmd.Dir = path
-
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"log", "-1", "--format=%H%x1E%h%x1E%s%x1E%cr"}, path, cmdexec.GitLocal)
 	if err != nil {
 		return "", "", "", fmt.Errorf("failed to get commit info: %w", err)
 	}

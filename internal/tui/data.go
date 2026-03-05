@@ -1,13 +1,14 @@
 package tui
 
 import (
+	"context"
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/plugins"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
@@ -103,13 +104,22 @@ func (w *WorktreeItem) SyncStatusText() string {
 	return strings.Join(parts, " ")
 }
 
-// hasUpstream returns true if the branch at the given worktree path
-// has an upstream tracking branch configured.
-func hasUpstream(worktreePath string) bool {
-	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
-	cmd.Dir = worktreePath
-	err := cmd.Run()
-	return err == nil
+// getUpstreamInfo returns upstream tracking info in a single git call.
+// If no upstream is configured, hasRemote is false and counts are 0.
+func getUpstreamInfo(worktreePath string) (ahead, behind int, hasRemote bool) {
+	out, err := cmdexec.Output(context.TODO(), "git", []string{"rev-list", "--count", "--left-right", "@{upstream}...HEAD"}, worktreePath, cmdexec.GitLocal)
+	if err != nil {
+		return 0, 0, false
+	}
+
+	parts := strings.Fields(strings.TrimSpace(string(out)))
+	if len(parts) != 2 {
+		return 0, 0, false
+	}
+
+	b, _ := strconv.Atoi(parts[0])
+	a, _ := strconv.Atoi(parts[1])
+	return a, b, true
 }
 
 // FetchWorktrees gathers all enriched worktree data for display.
@@ -233,12 +243,10 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager, pluginMgr ..
 					}
 				}
 
-				if hasUpstream(treePath) {
-					item.HasRemote = true
-					ahead, behind := getUpstreamCounts(treePath)
-					item.AheadCount = ahead
-					item.BehindCount = behind
-				}
+				ahead, behind, hasRemote := getUpstreamInfo(treePath)
+				item.HasRemote = hasRemote
+				item.AheadCount = ahead
+				item.BehindCount = behind
 			}(item, tree.Path, tree.IsDirty, item.IsCurrent)
 		}
 	}
@@ -273,25 +281,4 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager, pluginMgr ..
 	}
 
 	return items, nil
-}
-
-// getUpstreamCounts returns (ahead, behind) commit counts relative to the
-// upstream tracking branch. Returns (0, 0) when there is no upstream or on
-// any error (detached HEAD, local-only branch, etc.).
-func getUpstreamCounts(worktreePath string) (ahead, behind int) {
-	cmd := exec.Command("git", "rev-list", "--count", "--left-right", "@{upstream}...HEAD")
-	cmd.Dir = worktreePath
-	out, err := cmd.Output()
-	if err != nil {
-		return 0, 0
-	}
-
-	parts := strings.Fields(strings.TrimSpace(string(out)))
-	if len(parts) != 2 {
-		return 0, 0
-	}
-
-	b, _ := strconv.Atoi(parts[0])
-	a, _ := strconv.Atoi(parts[1])
-	return a, b
 }

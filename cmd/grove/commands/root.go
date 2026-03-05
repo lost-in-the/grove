@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -79,9 +80,9 @@ Use 'grove install --help' for details.`,
 	},
 }
 
-// Execute runs the root command
-func Execute() error {
-	return rootCmd.Execute()
+// Execute runs the root command with the given context.
+func Execute(ctx context.Context) error {
+	return rootCmd.ExecuteContext(ctx)
 }
 
 func init() {
