@@ -55,10 +55,19 @@ func NewManager(repoRoot string) (*Manager, error) {
 	}, nil
 }
 
-// Create creates a new worktree
+// Create creates a new worktree with a new branch from HEAD.
 // The name parameter is the short name (e.g., "testing")
 // The directory will be created with the full name including project prefix
 func (m *Manager) Create(name, branch string) error {
+	return m.CreateFromRef(name, branch, "")
+}
+
+// CreateFromRef creates a new worktree with a new branch starting from a specific ref.
+// The name parameter is the short name (e.g., "testing")
+// The branch parameter is the new branch name to create.
+// The fromRef parameter is the starting point (e.g., "develop", "origin/main", a commit SHA).
+// If fromRef is empty, the worktree is created from HEAD.
+func (m *Manager) CreateFromRef(name, branch, fromRef string) error {
 	if name == "" {
 		return fmt.Errorf("worktree name cannot be empty")
 	}
@@ -74,8 +83,19 @@ func (m *Manager) Create(name, branch string) error {
 		return fmt.Errorf("worktree already exists at %s", wtPath)
 	}
 
-	// Create worktree with new branch
+	// Validate the ref exists before attempting worktree creation
+	if fromRef != "" {
+		verifyArgs := []string{"rev-parse", "--verify", fromRef}
+		if _, err := cmdexec.CombinedOutput(context.TODO(), "git", verifyArgs, m.repoRoot, cmdexec.GitLocal); err != nil {
+			return fmt.Errorf("ref '%s' does not exist", fromRef)
+		}
+	}
+
+	// Create worktree with new branch, optionally from a specific ref
 	args := []string{"worktree", "add", "-b", branch, wtPath}
+	if fromRef != "" {
+		args = append(args, fromRef)
+	}
 	output, err := cmdexec.CombinedOutput(context.TODO(), "git", args, m.repoRoot, cmdexec.GitLocal)
 	if err != nil {
 		return fmt.Errorf("failed to create worktree: %s: %w", string(output), err)

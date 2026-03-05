@@ -609,6 +609,112 @@ func TestCreateFromBranch(t *testing.T) {
 	}
 }
 
+func TestCreateFromRef(t *testing.T) {
+	tmpDir, _ := setupTestRepo(t)
+
+	// Create a second commit on a branch so we have a distinct ref
+	branchCmd := exec.Command("git", "checkout", "-b", "develop")
+	branchCmd.Dir = tmpDir
+	if err := branchCmd.Run(); err != nil {
+		t.Fatalf("Failed to create develop branch: %v", err)
+	}
+
+	testFile := filepath.Join(tmpDir, "develop.txt")
+	if err := os.WriteFile(testFile, []byte("develop content"), 0644); err != nil {
+		t.Fatalf("Failed to write file: %v", err)
+	}
+
+	addCmd := exec.Command("git", "add", ".")
+	addCmd.Dir = tmpDir
+	if err := addCmd.Run(); err != nil {
+		t.Fatalf("Failed to add: %v", err)
+	}
+
+	commitCmd := exec.Command("git", "commit", "-m", "develop commit")
+	commitCmd.Dir = tmpDir
+	if err := commitCmd.Run(); err != nil {
+		t.Fatalf("Failed to commit: %v", err)
+	}
+
+	// Get the develop commit hash for verification
+	revCmd := exec.Command("git", "rev-parse", "develop")
+	revCmd.Dir = tmpDir
+	revOut, err := revCmd.Output()
+	if err != nil {
+		t.Fatalf("Failed to get develop rev: %v", err)
+	}
+	developSHA := strings.TrimSpace(string(revOut))
+
+	// Switch back to main/master
+	checkoutCmd := exec.Command("git", "checkout", "-")
+	checkoutCmd.Dir = tmpDir
+	if err := checkoutCmd.Run(); err != nil {
+		t.Fatalf("Failed to checkout back: %v", err)
+	}
+
+	m := &Manager{repoRoot: tmpDir}
+
+	t.Run("creates worktree from valid ref", func(t *testing.T) {
+		err := m.CreateFromRef("from-ref", "my-feature", "develop")
+		if err != nil {
+			t.Fatalf("CreateFromRef() error = %v", err)
+		}
+
+		projectName := m.GetProjectName()
+		fullName := projectName + "-from-ref"
+
+		wt, err := m.Find(fullName)
+		if err != nil {
+			t.Fatalf("Find() error = %v", err)
+		}
+		if wt == nil {
+			t.Fatal("Find() returned nil")
+		}
+		if wt.Branch != "my-feature" {
+			t.Errorf("Branch = %q, want %q", wt.Branch, "my-feature")
+		}
+
+		// Verify the worktree HEAD matches the develop commit
+		headCmd := exec.Command("git", "rev-parse", "HEAD")
+		headCmd.Dir = wt.Path
+		headOut, err := headCmd.Output()
+		if err != nil {
+			t.Fatalf("Failed to get HEAD: %v", err)
+		}
+		if strings.TrimSpace(string(headOut)) != developSHA {
+			t.Errorf("HEAD = %q, want %q (develop)", strings.TrimSpace(string(headOut)), developSHA)
+		}
+	})
+
+	t.Run("errors on nonexistent ref", func(t *testing.T) {
+		err := m.CreateFromRef("bad-ref", "bad-branch", "nonexistent-ref-xyz")
+		if err == nil {
+			t.Fatal("CreateFromRef() expected error for nonexistent ref, got nil")
+		}
+		if !strings.Contains(err.Error(), "does not exist") {
+			t.Errorf("error = %q, want it to contain 'does not exist'", err.Error())
+		}
+	})
+
+	t.Run("empty fromRef creates from HEAD", func(t *testing.T) {
+		err := m.CreateFromRef("head-ref", "head-branch", "")
+		if err != nil {
+			t.Fatalf("CreateFromRef() with empty fromRef error = %v", err)
+		}
+
+		projectName := m.GetProjectName()
+		fullName := projectName + "-head-ref"
+
+		wt, err := m.Find(fullName)
+		if err != nil {
+			t.Fatalf("Find() error = %v", err)
+		}
+		if wt == nil {
+			t.Fatal("Find() returned nil")
+		}
+	})
+}
+
 func TestCreateFromExisting(t *testing.T) {
 	tmpDir, _ := setupTestRepo(t)
 

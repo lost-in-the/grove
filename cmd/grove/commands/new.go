@@ -19,6 +19,8 @@ var (
 	newJSON     bool
 	newMirror   string // Remote branch to mirror (e.g., "origin/main")
 	newNoDocker bool   // Skip auto-starting Docker
+	newBranch   string // Override branch name
+	newFrom     string // Create branch from this ref
 )
 
 var newCmd = &cobra.Command{
@@ -29,6 +31,8 @@ var newCmd = &cobra.Command{
 
 The worktree will be created in the parent directory of the current repository.
 A new branch with the same name will be created automatically.
+Use --branch to override the branch name.
+Use --from to specify the base ref for the new branch (default: HEAD).
 
 When Docker agent stacks are configured, containers start automatically.
 Use --no-docker to skip Docker auto-start.
@@ -37,10 +41,12 @@ Use --mirror to create an environment worktree that tracks a remote branch.
 Environment worktrees are read-only and can be synced with 'grove sync'.
 
 Examples:
-  grove new feature-auth                  # Create worktree + tmux + Docker
-  grove new feature-auth --no-docker      # Skip Docker auto-start
-  grove spawn feature-x                   # Alias (implies --json output)
-  grove new staging --mirror origin/main  # Environment worktree tracking origin/main`,
+  grove new feature-auth                          # Create worktree + tmux + Docker
+  grove new feature-auth --branch custom-branch   # Use custom branch name
+  grove new feature-auth --from develop            # Branch from develop
+  grove new feature-auth --no-docker               # Skip Docker auto-start
+  grove spawn feature-x                            # Alias (implies --json output)
+  grove new staging --mirror origin/main           # Environment worktree tracking origin/main`,
 	Args: cobra.ExactArgs(1),
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		// spawn alias implies JSON output
@@ -101,10 +107,22 @@ Examples:
 				cli.Success(w, "Created environment worktree '%s' tracking %s", name, newMirror)
 			}
 		} else {
-			// Regular worktree - use name as branch name
-			branchName = name
-			if err := mgr.Create(name, branchName); err != nil {
-				return fmt.Errorf("failed to create worktree: %w", err)
+			// Regular worktree - use --branch if provided, otherwise name
+			if newBranch != "" {
+				branchName = newBranch
+			} else {
+				branchName = name
+			}
+
+			if newFrom != "" {
+				// Create branch from specified ref
+				if err := mgr.CreateFromRef(name, branchName, newFrom); err != nil {
+					return fmt.Errorf("failed to create worktree: %w", err)
+				}
+			} else {
+				if err := mgr.Create(name, branchName); err != nil {
+					return fmt.Errorf("failed to create worktree: %w", err)
+				}
 			}
 
 			if !newJSON {
@@ -157,7 +175,11 @@ Examples:
 
 func init() {
 	newCmd.Flags().BoolVarP(&newJSON, "json", "j", false, "Output as JSON with switch_to field")
+	newCmd.Flags().StringVarP(&newBranch, "branch", "b", "", "Branch name to create (default: worktree name)")
+	newCmd.Flags().StringVarP(&newFrom, "from", "f", "", "Create branch from this ref (default: HEAD)")
 	newCmd.Flags().StringVar(&newMirror, "mirror", "", "Create environment worktree tracking a remote branch (e.g., origin/main)")
 	newCmd.Flags().BoolVar(&newNoDocker, "no-docker", false, "Skip Docker auto-start")
+	newCmd.MarkFlagsMutuallyExclusive("mirror", "from")
+	newCmd.MarkFlagsMutuallyExclusive("mirror", "branch")
 	rootCmd.AddCommand(newCmd)
 }

@@ -286,9 +286,11 @@ Arguments:
   name    Name for the new worktree (required)
 
 Flags:
-  -j, --json           Output as JSON with switch_to field
-      --mirror <ref>   Create environment worktree tracking a remote branch (e.g., origin/main)
-      --no-docker      Skip Docker auto-start
+  -b, --branch <branch>  Branch name to create (default: worktree name)
+  -f, --from <ref>       Create branch from this ref (default: HEAD)
+  -j, --json             Output as JSON with switch_to field
+      --mirror <ref>     Create environment worktree tracking a remote branch (e.g., origin/main)
+      --no-docker        Skip Docker auto-start
 ```
 
 **Behavior:**
