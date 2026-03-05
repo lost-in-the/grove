@@ -480,6 +480,57 @@ func TestFind(t *testing.T) {
 	}
 }
 
+func TestFindByBranchName(t *testing.T) {
+	tmpDir, _ := setupTestRepo(t)
+
+	m := &Manager{repoRoot: tmpDir}
+
+	// The main worktree is on the "main" (or "master") branch.
+	// Find("main") should locate it via branch matching.
+	trees, err := m.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(trees) == 0 {
+		t.Fatal("No worktrees found")
+	}
+
+	branch := trees[0].Branch
+	wt, err := m.Find(branch)
+	if err != nil {
+		t.Fatalf("Find(%q) error = %v", branch, err)
+	}
+	if wt == nil {
+		t.Fatalf("Find(%q) returned nil, want main worktree", branch)
+	}
+	if wt.Path != trees[0].Path {
+		t.Errorf("Find(%q) path = %q, want %q", branch, wt.Path, trees[0].Path)
+	}
+}
+
+func TestFindByShortName(t *testing.T) {
+	tmpDir, _ := setupTestRepo(t)
+
+	m := &Manager{repoRoot: tmpDir}
+
+	// Create a worktree and verify it can be found by short name
+	err := m.Create("lookup-test", "lookup-test-branch")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	wt, err := m.Find("lookup-test")
+	if err != nil {
+		t.Fatalf("Find('lookup-test') error = %v", err)
+	}
+	if wt == nil {
+		t.Fatal("Find('lookup-test') returned nil")
+	}
+	if wt.ShortName != "lookup-test" {
+		t.Errorf("ShortName = %q, want 'lookup-test'", wt.ShortName)
+	}
+}
+
 func TestFindNotFound(t *testing.T) {
 	tmpDir, _ := setupTestRepo(t)
 
