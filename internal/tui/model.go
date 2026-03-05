@@ -360,10 +360,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.err != nil {
 				m.forkState.Err = msg.err
 				// Don't skip WIP step on error — we don't know the real state
-			} else if !msg.hasWIP {
-				// Skip WIP step if no WIP
-				m.forkState.Step = ForkStepConfirm
-				m.forkState.Stepper.Current = 2
 			}
 		}
 		return m, nil

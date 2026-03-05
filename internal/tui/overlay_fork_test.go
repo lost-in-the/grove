@@ -62,7 +62,7 @@ func TestForkOverlay_NilState(t *testing.T) {
 	}
 }
 
-func TestForkOverlay_WIPCheckSkipsStep(t *testing.T) {
+func TestForkOverlay_WIPCheckNoWIPStaysOnName(t *testing.T) {
 	source := WorktreeItem{
 		ShortName: "feature-auth",
 		Branch:    "feature-auth",
@@ -70,13 +70,42 @@ func TestForkOverlay_WIPCheckSkipsStep(t *testing.T) {
 	}
 	s := NewForkState(source)
 
-	// Simulate WIP check with no WIP — should skip to confirm
+	// Simulate WIP check with no WIP — should stay on name step,
+	// NOT skip to confirm (that was the bug in #53)
 	m := newTestModel(withItems(3), withSize(80, 30))
 	m.activeView = ViewFork
 	m.forkState = s
 	m = sendMsg(m, forkWIPCheckMsg{hasWIP: false, files: nil})
-	if m.forkState.Step != ForkStepConfirm {
-		t.Errorf("expected ForkStepConfirm when no WIP, got %d", m.forkState.Step)
+	if m.forkState.Step != ForkStepName {
+		t.Errorf("expected ForkStepName when no WIP (user hasn't entered name yet), got %d", m.forkState.Step)
+	}
+	if m.forkState.Stepper.Current != 0 {
+		t.Errorf("expected stepper on step 0, got %d", m.forkState.Stepper.Current)
+	}
+}
+
+func TestForkOverlay_RootWorktreeStartsOnName(t *testing.T) {
+	// Forking root worktree should start on name step, not skip to confirm
+	root := WorktreeItem{
+		ShortName: "main",
+		Branch:    "main",
+		Path:      "/tmp/test-project",
+		IsMain:    true,
+	}
+	s := NewForkState(root)
+
+	m := newTestModel(withItems(3), withSize(80, 30))
+	m.activeView = ViewFork
+	m.forkState = s
+
+	// Root worktrees are typically clean, so WIP check returns false
+	m = sendMsg(m, forkWIPCheckMsg{hasWIP: false, files: nil})
+	if m.forkState.Step != ForkStepName {
+		t.Errorf("expected ForkStepName after WIP check on root, got %d", m.forkState.Step)
+	}
+	// HasWIP should be recorded for later use by name step's Enter handler
+	if m.forkState.HasWIP {
+		t.Error("expected HasWIP=false for clean root worktree")
 	}
 }
 
