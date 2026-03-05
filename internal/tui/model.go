@@ -108,8 +108,11 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 
 	s := GroveSpinner()
 
-	// Determine compact mode from config
+	// Determine compact mode: persisted preference > config > default (false)
 	compact := cfg != nil && cfg.TUI.CompactList != nil && *cfg.TUI.CompactList
+	if prefs := loadUIPrefs(projectRoot); prefs != nil && prefs.CompactMode != nil {
+		compact = *prefs.CompactMode
+	}
 
 	var delegate list.ItemDelegate
 	var v1Delegate WorktreeDelegate
@@ -152,7 +155,7 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		spinner:      s,
 		help:         h,
 		toast:        NewToastModel(),
-		helpFooter:   NewHelpFooter(),
+		helpFooter:   &HelpFooter{CompactMode: compact},
 		activeView:   ViewDashboard,
 		loading:      true,
 	}
@@ -545,6 +548,14 @@ func (m *Model) updateLayout() {
 // toggleCompactMode switches between V1 (compact) and V2 (two-line) delegates.
 func (m *Model) toggleCompactMode() {
 	m.compactMode = !m.compactMode
+	m.helpFooter.CompactMode = m.compactMode
+
+	// Persist preference (best-effort, don't block on errors)
+	newVal := m.compactMode
+	if err := saveUIPrefs(m.projectRoot, &UIPrefs{CompactMode: &newVal}); err != nil {
+		tuilog.Printf("warning: failed to save UI prefs: %v", err)
+	}
+
 	if m.compactMode {
 		d := ComputeDelegateWidths(m.list.Items(), m.list.Width())
 		m.listDelegate = d

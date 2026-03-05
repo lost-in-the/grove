@@ -269,6 +269,7 @@ func withSortMode(mode SortMode) testOpt {
 func withCompactMode() testOpt {
 	return func(m *Model) {
 		m.compactMode = true
+		m.helpFooter.CompactMode = true
 		d := ComputeDelegateWidths(m.list.Items(), m.list.Width())
 		m.listDelegate = d
 		m.list.SetDelegate(d)

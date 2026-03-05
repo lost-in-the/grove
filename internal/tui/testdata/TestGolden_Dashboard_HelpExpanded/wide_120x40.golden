@@ -16,7 +16,7 @@
   │                                                                                                                  │
   │    [1m↑/k       [mmove up                    [1mn         [mnew worktree               [1m1-9       [mquick-switch              │
   │    [1m↓/j       [mmove down                  [1md         [mdelete                     [1m/         [mfilter                    │
-  │    [1menter     [mswitch                     [1mf         [mfork worktree              [1mv         [mcompact/expanded          │
+  │    [1menter     [mswitch                     [1mf         [mfork worktree              [1mv         [mcompact                   │
   │    [1mesc       [mback/close                 [1ms         [msync changes               [1m?         [mtoggle help               │
   │                                         [1mc         [mconfigure                  [1mq         [mquit                      │
   │                                         [1mp         [mbrowse PRs                                                     │

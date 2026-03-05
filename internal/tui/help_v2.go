@@ -14,7 +14,8 @@ type Hint struct {
 
 // HelpFooter manages a two-level help system: compact hints and expanded panel.
 type HelpFooter struct {
-	Expanded bool
+	Expanded    bool
+	CompactMode bool // mirrors Model.compactMode for dynamic hint labels
 }
 
 // NewHelpFooter creates a collapsed HelpFooter.
@@ -25,6 +26,15 @@ func NewHelpFooter() *HelpFooter {
 // Toggle switches between compact and expanded modes.
 func (h *HelpFooter) Toggle() {
 	h.Expanded = !h.Expanded
+}
+
+// viewModeLabel returns "compact" or "detailed" based on current mode.
+// When compact mode is active, the toggle will switch to detailed, and vice versa.
+func (h *HelpFooter) viewModeLabel() string {
+	if h.CompactMode {
+		return "detailed"
+	}
+	return "compact"
 }
 
 // CompactHints returns context-aware key hints for the given view.
@@ -40,7 +50,7 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 			{"s", "sync"},
 			{"c", "config"},
 			{"o", "sort"},
-			{"v", "compact"},
+			{"v", h.viewModeLabel()},
 			{"/", "filter"},
 			{"p", "PRs"},
 			{"i", "issues"},
@@ -175,7 +185,7 @@ func (h *HelpFooter) RenderExpanded(width int) string {
 			items: []Hint{
 				{"1-9", "quick-switch"},
 				{"/", "filter"},
-				{"v", "compact/expanded"},
+				{"v", h.viewModeLabel()},
 				{"?", "toggle help"},
 				{"q", "quit"},
 			},

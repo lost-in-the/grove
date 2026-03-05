@@ -42,6 +42,63 @@ func TestHelpFooterCompactHints(t *testing.T) {
 	}
 }
 
+func TestCompactHintsDynamicLabel(t *testing.T) {
+	t.Run("compact mode off shows compact label", func(t *testing.T) {
+		hf := NewHelpFooter()
+		hf.CompactMode = false
+		hints := hf.CompactHints(ViewDashboard)
+		for _, hint := range hints {
+			if hint.Key == "v" {
+				if hint.Description != "compact" {
+					t.Errorf("expected 'compact' label when CompactMode=false, got %q", hint.Description)
+				}
+				return
+			}
+		}
+		t.Error("expected 'v' key in dashboard hints")
+	})
+
+	t.Run("compact mode on shows detailed label", func(t *testing.T) {
+		hf := NewHelpFooter()
+		hf.CompactMode = true
+		hints := hf.CompactHints(ViewDashboard)
+		for _, hint := range hints {
+			if hint.Key == "v" {
+				if hint.Description != "detailed" {
+					t.Errorf("expected 'detailed' label when CompactMode=true, got %q", hint.Description)
+				}
+				return
+			}
+		}
+		t.Error("expected 'v' key in dashboard hints")
+	})
+}
+
+func TestRenderExpandedDynamicLabel(t *testing.T) {
+	t.Run("compact mode off shows compact in expanded help", func(t *testing.T) {
+		hf := NewHelpFooter()
+		hf.CompactMode = false
+		hf.Expanded = true
+		result := hf.RenderExpanded(80)
+		if !strings.Contains(result, "compact") {
+			t.Error("expected 'compact' in expanded help when CompactMode=false")
+		}
+		if strings.Contains(result, "detailed") {
+			t.Error("should not contain 'detailed' when CompactMode=false")
+		}
+	})
+
+	t.Run("compact mode on shows detailed in expanded help", func(t *testing.T) {
+		hf := NewHelpFooter()
+		hf.CompactMode = true
+		hf.Expanded = true
+		result := hf.RenderExpanded(80)
+		if !strings.Contains(result, "detailed") {
+			t.Error("expected 'detailed' in expanded help when CompactMode=true")
+		}
+	})
+}
+
 func TestHelpFooterRenderCompact(t *testing.T) {
 	hf := NewHelpFooter()
 	result := hf.RenderCompact(ViewDashboard, 200)

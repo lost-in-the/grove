@@ -54,6 +54,7 @@ plan-*.md
 .grove/state.json
 .grove/state.json.bak
 .grove/state.lock
+.grove/ui_prefs.json
 .grove/.envrc
 
 # Auto Claude data directory
