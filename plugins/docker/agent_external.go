@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
@@ -352,8 +354,7 @@ func agentComposeCommand(composePath string, templateFile string, projectName st
 
 // checkDockerNetwork verifies that the named external Docker network exists.
 func checkDockerNetwork(networkName string) error {
-	cmd := exec.Command("docker", "network", "ls", "--format", "{{.Name}}")
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "docker", []string{"network", "ls", "--format", "{{.Name}}"}, "", cmdexec.Docker)
 	if err != nil {
 		return fmt.Errorf("failed to list Docker networks: %w", err)
 	}

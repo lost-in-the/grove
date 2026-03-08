@@ -39,11 +39,12 @@ type WorktreeState struct {
 
 // Manager handles state management for Grove
 type Manager struct {
-	groveDir  string // Path to .grove directory
-	stateFile string
-	lockFile  string // .grove/state.lock
-	mu        sync.RWMutex
-	state     *State
+	groveDir         string // Path to .grove directory
+	stateFile        string
+	lockFile         string // .grove/state.lock
+	mu               sync.RWMutex
+	state            *State
+	removedWorktrees map[string]bool // tracks explicit removals for merge in save()
 }
 
 // NewManager creates a new state manager for a grove project
@@ -62,10 +63,11 @@ func NewManager(groveDir string) (*Manager, error) {
 	lockFile := filepath.Join(groveDir, "state.lock")
 
 	mgr := &Manager{
-		groveDir:  groveDir,
-		stateFile: stateFile,
-		lockFile:  lockFile,
-		state:     newEmptyState(),
+		groveDir:         groveDir,
+		stateFile:        stateFile,
+		lockFile:         lockFile,
+		state:            newEmptyState(),
+		removedWorktrees: make(map[string]bool),
 	}
 
 	// Load existing state if it exists
@@ -168,6 +170,7 @@ func (m *Manager) RemoveWorktree(name string) error {
 	defer m.mu.Unlock()
 
 	delete(m.state.Worktrees, name)
+	m.removedWorktrees[name] = true
 	return m.save()
 }
 
@@ -247,12 +250,27 @@ func (m *Manager) load() error {
 }
 
 // save writes the state to disk with file locking and atomic rename.
+// It merges with the current on-disk state to avoid clobbering concurrent changes
+// from other grove processes (e.g., two simultaneous grove new commands).
 func (m *Manager) save() error {
 	f, err := m.fileLock()
 	if err != nil {
 		return fmt.Errorf("failed to lock state: %w", err)
 	}
 	defer m.fileUnlock(f)
+
+	// Re-read current disk state under the lock to preserve entries
+	// added by other processes since we loaded.
+	if diskData, err := os.ReadFile(m.stateFile); err == nil {
+		var diskState State
+		if err := json.Unmarshal(diskData, &diskState); err == nil {
+			for name, ws := range diskState.Worktrees {
+				if _, exists := m.state.Worktrees[name]; !exists && !m.removedWorktrees[name] {
+					m.state.Worktrees[name] = ws
+				}
+			}
+		}
+	}
 
 	data, err := json.MarshalIndent(m.state, "", "  ")
 	if err != nil {
@@ -267,6 +285,9 @@ func (m *Manager) save() error {
 	if err := os.Rename(tmpFile, m.stateFile); err != nil {
 		return fmt.Errorf("failed to save state file: %w", err)
 	}
+
+	// Disk is now authoritative — clear the tracking set.
+	m.removedWorktrees = make(map[string]bool)
 
 	return nil
 }

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/LeahArmstrong/grove-cli/internal/cli"
+	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/grove"
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
@@ -24,9 +26,7 @@ func isGitRepo(dir string) bool {
 }
 
 func detectProjectName(dir string) string {
-	cmd := exec.Command("git", "remote", "get-url", "origin")
-	cmd.Dir = dir
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"remote", "get-url", "origin"}, dir, cmdexec.GitLocal)
 	if err == nil {
 		url := strings.TrimSpace(string(output))
 		url = strings.TrimSuffix(url, ".git")
@@ -47,16 +47,12 @@ func detectProjectName(dir string) string {
 
 func detectMainBranch(dir string) string {
 	for _, branch := range []string{"main", "master"} {
-		cmd := exec.Command("git", "rev-parse", "--verify", branch)
-		cmd.Dir = dir
-		if err := cmd.Run(); err == nil {
+		if err := cmdexec.Run(context.TODO(), "git", []string{"rev-parse", "--verify", branch}, dir, cmdexec.GitLocal); err == nil {
 			return branch
 		}
 	}
 
-	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
-	cmd.Dir = dir
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"rev-parse", "--abbrev-ref", "HEAD"}, dir, cmdexec.GitLocal)
 	if err == nil {
 		return strings.TrimSpace(string(output))
 	}
@@ -92,16 +88,15 @@ func createWorktree(repoDir, projectName, name string) error {
 	parentDir := filepath.Dir(repoDir)
 	worktreeDir := filepath.Join(parentDir, fmt.Sprintf("%s-%s", projectName, name))
 
-	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
-	cmd.Dir = repoDir
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"rev-parse", "--abbrev-ref", "HEAD"}, repoDir, cmdexec.GitLocal)
 	if err != nil {
 		return fmt.Errorf("failed to get current branch: %w", err)
 	}
 	baseBranch := strings.TrimSpace(string(output))
 
 	branchName := name
-	cmd = exec.Command("git", "worktree", "add", "-b", branchName, worktreeDir, baseBranch)
+	// Worktree add streams progress to stdout/stderr — use exec.Command directly
+	cmd := exec.Command("git", "worktree", "add", "-b", branchName, worktreeDir, baseBranch)
 	cmd.Dir = repoDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

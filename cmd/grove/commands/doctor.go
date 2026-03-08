@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/LeahArmstrong/grove-cli/internal/cli"
+	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/grove"
 	"github.com/LeahArmstrong/grove-cli/internal/shell"
@@ -65,7 +67,7 @@ Examples:
 
 		// Check: Git available
 		allPassed = runCheck(w, "Git", func() (string, error) {
-			out, err := exec.Command("git", "--version").Output()
+			out, err := cmdexec.Output(context.TODO(), "git", []string{"--version"}, "", cmdexec.GitLocal)
 			if err != nil {
 				return "", fmt.Errorf("git not found in PATH")
 			}
@@ -74,7 +76,7 @@ Examples:
 
 		// Check: tmux available
 		runCheck(w, "Tmux", func() (string, error) {
-			out, err := exec.Command("tmux", "-V").Output()
+			out, err := cmdexec.Output(context.TODO(), "tmux", []string{"-V"}, "", cmdexec.Tmux)
 			if err != nil {
 				return "", fmt.Errorf("tmux not found in PATH (optional, needed for session management)")
 			}
@@ -99,8 +101,7 @@ Examples:
 
 		// Check: Docker daemon running
 		runCheck(w, "Docker running", func() (string, error) {
-			cmd := exec.Command("docker", "info", "--format", "{{.ServerVersion}}")
-			out, err := cmd.Output()
+			out, err := cmdexec.Output(context.TODO(), "docker", []string{"info", "--format", "{{.ServerVersion}}"}, "", cmdexec.Docker)
 			if err != nil {
 				return "", fmt.Errorf("docker daemon not responding (optional, needed for grove new/to)")
 			}
@@ -192,8 +193,7 @@ func checkGroveBinary(lookPath func(string) (string, error)) (string, error) {
 func checkConfigSymlinks(groveDir string) (string, error) {
 	projectRoot := filepath.Dir(groveDir)
 
-	cmd := exec.Command("git", "-C", projectRoot, "worktree", "list", "--porcelain")
-	out, err := cmd.Output()
+	out, err := cmdexec.Output(context.TODO(), "git", []string{"-C", projectRoot, "worktree", "list", "--porcelain"}, "", cmdexec.GitLocal)
 	if err != nil {
 		return "", fmt.Errorf("failed to list worktrees: %w", err)
 	}
@@ -287,8 +287,7 @@ func runExternalModeChecks(w *cli.Writer, cfg *config.Config, allPassed *bool) {
 
 		if ext.Agent.Network != "" {
 			*allPassed = runCheck(w, "Docker network '"+ext.Agent.Network+"'", func() (string, error) {
-				cmd := exec.Command("docker", "network", "ls", "--format", "{{.Name}}")
-				out, err := cmd.Output()
+				out, err := cmdexec.Output(context.TODO(), "docker", []string{"network", "ls", "--format", "{{.Name}}"}, "", cmdexec.Docker)
 				if err != nil {
 					return "", fmt.Errorf("failed to list networks: %w", err)
 				}

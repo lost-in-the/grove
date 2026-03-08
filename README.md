@@ -236,7 +236,7 @@ See [docs/TUI.md](docs/TUI.md) for the full reference — overlays, PR browser, 
 | Command | What it does |
 |---------|-------------|
 | `grove ls` | List all worktrees — name, branch, status, tmux state |
-| `grove new <name>` | Create a worktree + branch + tmux session |
+| `grove new <name>` | Create a worktree + branch + tmux session (`--branch`, `--from`) |
 | `grove to <name>` | Switch context: directory, hooks, Docker, tmux |
 | `grove to <name> --peek` | Lightweight switch — skip hooks (no Docker side effects) |
 | `grove here` | Show current worktree: branch, SHA, age, status |

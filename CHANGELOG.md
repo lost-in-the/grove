@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `--branch` and `--from` flags for `grove new` — override branch name or base ref
+- Auto-switch to new worktree after `grove new` (shell integration)
+- `Find()` now matches worktrees by branch name in addition to short name
+- Progress indicator during worktree deletion in the TUI
+- Dynamic compact toggle label and preference persistence in the TUI
+- VHS showcase GIF and demo fixture automation
+- `symlink_files` option for external compose config
+- Two-tier `grove doctor` with contextual errors and config symlink detection
+
+### Fixed
+- TUI fork from root no longer skips the name input step
+- PR browser no longer swallows the 'o' key when filter input is focused
+- Command timeouts, signal handling, and correctness fixes
+
 ## [0.4.0] - 2026-03-04
 
 ### Added

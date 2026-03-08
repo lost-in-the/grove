@@ -1,48 +1,77 @@
 # Grove function wrapper for zsh
 grove() {
-    # Set environment variable to indicate we're in the shell wrapper
-    local output exit_code
-    output=$(GROVE_SHELL=1 "$__GROVE_BIN" "$@" 2>&1)
-    exit_code=$?
-    
-    # Parse output line by line for directives
-    local should_cd=0
-    local cd_target=""
-    local other_lines=""
-    
-    while IFS= read -r line; do
-        if [[ "$line" == cd:* ]]; then
-            # Extract directory path from cd: directive
-            cd_target="${line#cd:}"
-            should_cd=1
-        else
-            # Collect non-directive output
-            if [[ -n "$other_lines" ]]; then
-                other_lines="${other_lines}"$'\n'"${line}"
-            else
-                other_lines="$line"
-            fi
+    # Bare "grove" with no args launches TUI — run directly, no capture
+    if [[ $# -eq 0 ]]; then
+        local cd_file=$(mktemp "${TMPDIR:-/tmp}/grove-cd.XXXXXX")
+        GROVE_SHELL=1 GROVE_SHELL_VERSION="$__GROVE_SHELL_VERSION" GROVE_CD_FILE="$cd_file" "$__GROVE_BIN"
+        local exit_code=$?
+        if [[ -s "$cd_file" ]]; then
+            local target=$(cat "$cd_file")
+            cd "$target" 2>/dev/null
         fi
-    done <<< "$output"
-    
-    # Execute directory change if directive was found
-    if [[ $should_cd -eq 1 && -n "$cd_target" ]]; then
-        cd "$cd_target" || return 1
+        rm -f "$cd_file"
+        return $exit_code
     fi
-    
-    # Print any non-directive output
-    if [[ -n "$other_lines" ]]; then
-        echo "$other_lines"
-    fi
-    
-    return $exit_code
+
+    # Only directive-producing commands need output capture.
+    # All other commands run directly for streaming support.
+    case "$1" in
+        to|last|fork|fetch|attach|open|up|run|restart)
+            # Capture output and parse for cd:/tmux-attach:/env: directives
+            local output exit_code
+            output=$(GROVE_SHELL=1 GROVE_SHELL_VERSION="$__GROVE_SHELL_VERSION" "$__GROVE_BIN" "$@")
+            exit_code=$?
+
+            local should_cd=0
+            local cd_target=""
+            local tmux_session=""
+            local other_lines=""
+
+            while IFS= read -r line; do
+                if [[ "$line" == cd:* ]]; then
+                    cd_target="${line#cd:}"
+                    should_cd=1
+                elif [[ "$line" == tmux-attach:* ]]; then
+                    tmux_session="${line#tmux-attach:}"
+                elif [[ "$line" == env:* ]]; then
+                    export "${line#env:}"
+                else
+                    if [[ -n "$other_lines" ]]; then
+                        other_lines="${other_lines}"$'\n'"${line}"
+                    else
+                        other_lines="$line"
+                    fi
+                fi
+            done <<< "$output"
+
+            if [[ $should_cd -eq 1 && -n "$cd_target" ]]; then
+                cd "$cd_target" || return 1
+            fi
+
+            if [[ -n "$other_lines" ]]; then
+                echo "$other_lines"
+            fi
+
+            if [[ -n "$tmux_session" ]]; then
+                tmux attach -t "$tmux_session"
+            fi
+
+            return $exit_code
+            ;;
+        *)
+            # All other commands: run directly (streaming-safe)
+            GROVE_SHELL=1 GROVE_SHELL_VERSION="$__GROVE_SHELL_VERSION" "$__GROVE_BIN" "$@"
+            return $?
+            ;;
+    esac
 }
 
 # Tab completion for grove
 _grove_completion() {
     local -a worktrees
-    worktrees=($(git worktree list --porcelain 2>/dev/null | awk '/^worktree / {print $2}' | xargs -n1 basename))
-    
+    # Use grove ls -q for short names (consistent with display)
+    worktrees=($(GROVE_SHELL=1 "$__GROVE_BIN" ls -q 2>/dev/null))
+
     local -a commands
     commands=(
         'ls:List all worktrees'
@@ -51,54 +80,40 @@ _grove_completion() {
         'rm:Remove a worktree'
         'here:Show current worktree'
         'last:Switch to previous worktree'
-        'freeze:Freeze a worktree'
-        'resume:Resume a frozen worktree'
-        'time:Show time tracking information'
-        'fetch:Fetch PR or issue as worktree'
-        'issues:Browse and select issues'
-        'prs:Browse and select pull requests'
+        'fork:Fork current worktree'
+        'compare:Compare worktrees'
+        'apply:Apply changes from another worktree'
+        'sync:Sync environment worktrees'
+        'clean:Remove old unused worktrees'
+        'repair:Repair state inconsistencies'
+        'init:Initialize grove project'
+        'setup:Set up shell integration'
+        'attach:Attach to tmux session for a worktree'
+        'fetch:Create worktree from issue/PR'
+        'issues:Browse GitHub issues'
+        'prs:Browse GitHub PRs'
         'up:Start Docker containers'
         'down:Stop Docker containers'
-        'logs:View container logs'
-        'restart:Restart containers'
+        'logs:View Docker logs'
+        'restart:Restart Docker containers'
+        'test:Run tests in a worktree'
         'config:Show configuration'
+        'doctor:Check system health and configuration'
+        'open:Open a worktree session'
+        'ps:Show active stacks'
+        'agent-status:Show active isolated stacks'
         'version:Show version'
-        'init:Generate shell integration'
+        'install:Generate shell integration'
     )
-    
+
     if (( CURRENT == 2 )); then
         _describe 'command' commands
     elif (( CURRENT == 3 )); then
         case "${words[2]}" in
-            to|rm)
+            to|rm|compare|sync|test|apply|attach|open)
                 _describe 'worktree' worktrees
                 ;;
-            resume)
-                _describe 'worktree' worktrees
-                ;;
-            freeze)
-                _describe 'worktree' worktrees
-                _arguments \
-                    '--all[Freeze all worktrees except current]'
-                ;;
-            time)
-                _arguments \
-                    '--all[Show time for all worktrees]' \
-                    '--json[Output in JSON format]'
-                _describe 'command' '(week:Show weekly summary)'
-                ;;
-            fetch)
-                _describe 'type' '(pr:Fetch pull request issue:Fetch issue is:Fetch issue shorthand)'
-                ;;
-            issues|prs)
-                _arguments \
-                    '--state=[Filter by state]:state:(open closed all)' \
-                    '--label=[Filter by label]:label:' \
-                    '--assignee=[Filter by assignee]:assignee:' \
-                    '--author=[Filter by author]:author:' \
-                    '--limit=[Limit results]:limit:'
-                ;;
-            init)
+            install)
                 _values 'shell' 'zsh' 'bash'
                 ;;
         esac
@@ -106,7 +121,6 @@ _grove_completion() {
 }
 
 compdef _grove_completion grove
-compdef _grove_completion w
 
 # Alias
 alias w=grove

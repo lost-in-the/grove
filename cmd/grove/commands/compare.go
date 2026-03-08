@@ -1,13 +1,14 @@
 package commands
 
 import (
+	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/LeahArmstrong/grove-cli/internal/cli"
+	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
 	"github.com/LeahArmstrong/grove-cli/internal/output"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 )
@@ -200,9 +201,8 @@ Examples:
 // getCommitDifference returns commits in current that are not in target branch.
 func getCommitDifference(repoPath, targetBranch string) ([]CommitDiff, error) {
 	// Get commits that are in HEAD but not in target branch
-	cmd := exec.Command("git", "-C", repoPath, "log", "--oneline", "--format=%H|%s|%an|%ar",
-		fmt.Sprintf("%s..HEAD", targetBranch))
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"-C", repoPath, "log", "--oneline", "--format=%H|%s|%an|%ar",
+		fmt.Sprintf("%s..HEAD", targetBranch)}, "", cmdexec.GitLocal)
 	if err != nil {
 		// This might fail if branches have diverged significantly
 		return nil, nil
@@ -232,8 +232,7 @@ func getWIPDifference(currentPath, _ string) (*WIPDiff, error) {
 	wip := &WIPDiff{}
 
 	// Get staged files
-	stagedCmd := exec.Command("git", "-C", currentPath, "diff", "--cached", "--name-only")
-	if output, err := stagedCmd.Output(); err == nil {
+	if output, err := cmdexec.Output(context.TODO(), "git", []string{"-C", currentPath, "diff", "--cached", "--name-only"}, "", cmdexec.GitLocal); err == nil {
 		for _, f := range strings.Split(strings.TrimSpace(string(output)), "\n") {
 			if f != "" {
 				wip.Staged = append(wip.Staged, f)
@@ -242,8 +241,7 @@ func getWIPDifference(currentPath, _ string) (*WIPDiff, error) {
 	}
 
 	// Get unstaged files (modified tracked files)
-	unstagedCmd := exec.Command("git", "-C", currentPath, "diff", "--name-only")
-	if output, err := unstagedCmd.Output(); err == nil {
+	if output, err := cmdexec.Output(context.TODO(), "git", []string{"-C", currentPath, "diff", "--name-only"}, "", cmdexec.GitLocal); err == nil {
 		for _, f := range strings.Split(strings.TrimSpace(string(output)), "\n") {
 			if f != "" {
 				wip.Unstaged = append(wip.Unstaged, f)
@@ -252,8 +250,7 @@ func getWIPDifference(currentPath, _ string) (*WIPDiff, error) {
 	}
 
 	// Get untracked files
-	untrackedCmd := exec.Command("git", "-C", currentPath, "ls-files", "--others", "--exclude-standard")
-	if output, err := untrackedCmd.Output(); err == nil {
+	if output, err := cmdexec.Output(context.TODO(), "git", []string{"-C", currentPath, "ls-files", "--others", "--exclude-standard"}, "", cmdexec.GitLocal); err == nil {
 		for _, f := range strings.Split(strings.TrimSpace(string(output)), "\n") {
 			if f != "" {
 				wip.Untracked = append(wip.Untracked, f)
@@ -266,8 +263,7 @@ func getWIPDifference(currentPath, _ string) (*WIPDiff, error) {
 
 // getDiffStats returns the diffstat between current HEAD and target branch.
 func getDiffStats(repoPath, targetBranch string) (*DiffStats, error) {
-	cmd := exec.Command("git", "-C", repoPath, "diff", "--stat", targetBranch)
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"-C", repoPath, "diff", "--stat", targetBranch}, "", cmdexec.GitLocal)
 	if err != nil {
 		return nil, err
 	}

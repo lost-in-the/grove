@@ -1,14 +1,15 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/LeahArmstrong/grove-cli/internal/cli"
+	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
 	"github.com/LeahArmstrong/grove-cli/internal/grove"
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
@@ -97,8 +98,7 @@ Examples:
 		}
 
 		// Check if branch already exists
-		checkCmd := exec.Command("git", "-C", currentTree.Path, "show-ref", "--verify", "--quiet", "refs/heads/"+newBranchName)
-		if err := checkCmd.Run(); err == nil {
+		if err := cmdexec.Run(context.TODO(), "git", []string{"-C", currentTree.Path, "show-ref", "--verify", "--quiet", "refs/heads/" + newBranchName}, "", cmdexec.GitLocal); err == nil {
 			// Branch exists
 			cli.Error(stderr, "branch '%s' already exists", newBranchName)
 			os.Exit(exitcode.ResourceExists)
@@ -165,8 +165,7 @@ Examples:
 		}
 
 		// Create branch from base reference
-		createBranchCmd := exec.Command("git", "-C", currentTree.Path, "branch", newBranchName, baseRef)
-		if output, err := createBranchCmd.CombinedOutput(); err != nil {
+		if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", currentTree.Path, "branch", newBranchName, baseRef}, "", cmdexec.GitLocal); err != nil {
 			cli.Error(stderr, "git operation failed: %s", output)
 			os.Exit(exitcode.GitOperationFailed)
 		}
@@ -174,7 +173,7 @@ Examples:
 		// Create worktree
 		if err := mgr.CreateFromBranch(name, newBranchName); err != nil {
 			// Cleanup: delete the branch we just created
-			_ = exec.Command("git", "-C", currentTree.Path, "branch", "-D", newBranchName).Run()
+			_ = cmdexec.Run(context.TODO(), "git", []string{"-C", currentTree.Path, "branch", "-D", newBranchName}, "", cmdexec.GitLocal)
 			return fmt.Errorf("failed to create worktree: %w", err)
 		}
 
@@ -205,12 +204,10 @@ Examples:
 				}
 				// Reset source worktree only after successful patch application
 				if forkMoveWIP {
-					resetCmd := exec.Command("git", "-C", currentTree.Path, "checkout", "--", ".")
-					if output, err := resetCmd.CombinedOutput(); err != nil {
+					if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", currentTree.Path, "checkout", "--", "."}, "", cmdexec.GitLocal); err != nil {
 						cli.Warning(w, "changes applied to fork but failed to reset source: %v\n%s", err, output)
 					} else {
-						cleanCmd := exec.Command("git", "-C", currentTree.Path, "clean", "-fd")
-						if output, err := cleanCmd.CombinedOutput(); err != nil {
+						if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", currentTree.Path, "clean", "-fd"}, "", cmdexec.GitLocal); err != nil {
 							cli.Warning(w, "failed to clean untracked files in source: %v\n%s", err, output)
 						}
 						cli.Success(w, "Moved uncommitted changes to fork")
@@ -326,7 +323,10 @@ Examples:
 // isInteractive checks if we're running interactively.
 func isInteractive() bool {
 	// Check if stdin is a terminal
-	fileInfo, _ := os.Stdin.Stat()
+	fileInfo, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
 	return (fileInfo.Mode() & os.ModeCharDevice) != 0
 }
 

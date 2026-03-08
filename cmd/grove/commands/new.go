@@ -1,14 +1,15 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/LeahArmstrong/grove-cli/internal/cli"
+	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
 	"github.com/LeahArmstrong/grove-cli/internal/log"
 	"github.com/LeahArmstrong/grove-cli/internal/output"
@@ -77,22 +78,24 @@ Examples:
 
 		var branchName string
 		isEnvironment := newMirror != ""
+		mirror := newMirror
 
 		if isEnvironment {
 			// Environment worktree - verify remote branch exists
-			if !strings.Contains(newMirror, "/") {
+			if !strings.Contains(mirror, "/") {
 				// Assume origin if no remote specified
-				newMirror = "origin/" + newMirror
+				mirror = "origin/" + mirror
 			}
 
 			// Fetch to ensure we have latest refs
-			fetchCmd := exec.Command("git", "-C", ctx.ProjectRoot, "fetch", "--prune")
-			_ = fetchCmd.Run()
+			if _, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", ctx.ProjectRoot, "fetch", "--prune"}, "", cmdexec.GitRemote); err != nil {
+				cli.Warning(stderr, "git fetch failed: %v", err)
+				cli.Faint(stderr, "Proceeding with local refs — remote branch may be stale")
+			}
 
 			// Verify the remote branch exists
-			verifyCmd := exec.Command("git", "-C", ctx.ProjectRoot, "rev-parse", "--verify", newMirror)
-			if err := verifyCmd.Run(); err != nil {
-				cli.Error(stderr, "remote branch '%s' not found", newMirror)
+			if err := cmdexec.Run(context.TODO(), "git", []string{"-C", ctx.ProjectRoot, "rev-parse", "--verify", mirror}, "", cmdexec.GitLocal); err != nil {
+				cli.Error(stderr, "remote branch '%s' not found", mirror)
 				cli.Faint(stderr, "Run 'git fetch' and verify the branch exists")
 				os.Exit(exitcode.ResourceNotFound)
 			}
@@ -101,12 +104,12 @@ Examples:
 			branchName = "env/" + name
 
 			// Create worktree from the remote branch
-			if err := mgr.CreateFromBranch(name, newMirror); err != nil {
+			if err := mgr.CreateFromBranch(name, mirror); err != nil {
 				return fmt.Errorf("failed to create environment worktree: %w", err)
 			}
 
 			if !newJSON {
-				cli.Success(w, "Created environment worktree '%s' tracking %s", name, newMirror)
+				cli.Success(w, "Created environment worktree '%s' tracking %s", name, mirror)
 			}
 		} else {
 			// Regular worktree - use --branch if provided, otherwise name
@@ -135,7 +138,7 @@ Examples:
 		// Post-create setup: find, symlink, state, hooks, docker
 		wt, err := setupCreatedWorktree(ctx, mgr, name, branchName, worktreeSetupOpts{
 			IsEnvironment: isEnvironment,
-			Mirror:        newMirror,
+			Mirror:        mirror,
 			NoDocker:      newNoDocker,
 			JSONOutput:    newJSON,
 		}, w)

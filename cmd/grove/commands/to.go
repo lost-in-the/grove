@@ -221,6 +221,7 @@ When using shell integration, this will also change your current directory.`,
 func handleDirectoryDrift(sessionName, worktreePath, onSwitch string, stderr *cli.Writer) {
 	pane, err := tmux.GetPaneInfo(sessionName)
 	if err != nil {
+		log.Printf("failed to get pane info for drift check on %q: %v", sessionName, err)
 		return
 	}
 
@@ -238,7 +239,11 @@ func handleDirectoryDrift(sessionName, worktreePath, onSwitch string, stderr *cl
 	case "ignore":
 		// Do nothing
 	default: // "reset" or ""
-		_ = tmux.SendKeys(sessionName, fmt.Sprintf("cd %q", worktreePath))
+		// Use single quotes for shell safety — path cannot contain single quotes
+		// (git worktree paths are derived from branch names which disallow them)
+		if err := tmux.SendKeys(sessionName, "cd '"+worktreePath+"'"); err != nil {
+			log.Printf("failed to reset directory in session %q: %v", sessionName, err)
+		}
 	}
 }
 

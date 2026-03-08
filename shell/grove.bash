@@ -1,41 +1,69 @@
 # Grove function wrapper for bash
 grove() {
-    # Set environment variable to indicate we're in the shell wrapper
-    local output exit_code
-    output=$(GROVE_SHELL=1 "$__GROVE_BIN" "$@" 2>&1)
-    exit_code=$?
-    
-    # Parse output line by line for directives
-    local should_cd=0
-    local cd_target=""
-    local other_lines=""
-    
-    while IFS= read -r line; do
-        if [[ "$line" == cd:* ]]; then
-            # Extract directory path from cd: directive
-            cd_target="${line#cd:}"
-            should_cd=1
-        else
-            # Collect non-directive output
-            if [[ -n "$other_lines" ]]; then
-                other_lines="${other_lines}"$'\n'"${line}"
-            else
-                other_lines="$line"
-            fi
+    # Bare "grove" with no args launches TUI — run directly, no capture
+    if [[ $# -eq 0 ]]; then
+        local cd_file=$(mktemp "${TMPDIR:-/tmp}/grove-cd.XXXXXX")
+        GROVE_SHELL=1 GROVE_SHELL_VERSION="$__GROVE_SHELL_VERSION" GROVE_CD_FILE="$cd_file" "$__GROVE_BIN"
+        local exit_code=$?
+        if [[ -s "$cd_file" ]]; then
+            local target=$(cat "$cd_file")
+            cd "$target" 2>/dev/null
         fi
-    done <<< "$output"
-    
-    # Execute directory change if directive was found
-    if [[ $should_cd -eq 1 && -n "$cd_target" ]]; then
-        cd "$cd_target" || return 1
+        rm -f "$cd_file"
+        return $exit_code
     fi
-    
-    # Print any non-directive output
-    if [[ -n "$other_lines" ]]; then
-        echo "$other_lines"
-    fi
-    
-    return $exit_code
+
+    # Only directive-producing commands need output capture.
+    # All other commands run directly for streaming support.
+    case "$1" in
+        to|last|fork|fetch|attach|open|up|run|restart)
+            # Capture output and parse for cd:/tmux-attach:/env: directives
+            local output exit_code
+            output=$(GROVE_SHELL=1 GROVE_SHELL_VERSION="$__GROVE_SHELL_VERSION" "$__GROVE_BIN" "$@")
+            exit_code=$?
+
+            local should_cd=0
+            local cd_target=""
+            local tmux_session=""
+            local other_lines=""
+
+            while IFS= read -r line; do
+                if [[ "$line" == cd:* ]]; then
+                    cd_target="${line#cd:}"
+                    should_cd=1
+                elif [[ "$line" == tmux-attach:* ]]; then
+                    tmux_session="${line#tmux-attach:}"
+                elif [[ "$line" == env:* ]]; then
+                    export "${line#env:}"
+                else
+                    if [[ -n "$other_lines" ]]; then
+                        other_lines="${other_lines}"$'\n'"${line}"
+                    else
+                        other_lines="$line"
+                    fi
+                fi
+            done <<< "$output"
+
+            if [[ $should_cd -eq 1 && -n "$cd_target" ]]; then
+                cd "$cd_target" || return 1
+            fi
+
+            if [[ -n "$other_lines" ]]; then
+                echo "$other_lines"
+            fi
+
+            if [[ -n "$tmux_session" ]]; then
+                tmux attach -t "$tmux_session"
+            fi
+
+            return $exit_code
+            ;;
+        *)
+            # All other commands: run directly (streaming-safe)
+            GROVE_SHELL=1 GROVE_SHELL_VERSION="$__GROVE_SHELL_VERSION" "$__GROVE_BIN" "$@"
+            return $?
+            ;;
+    esac
 }
 
 # Tab completion for grove
@@ -51,68 +79,27 @@ _grove_completion() {
         words=("${COMP_WORDS[@]}")
         cword=$COMP_CWORD
     fi
-    
-    local commands="ls new to rm here last freeze resume time fetch issues prs up down logs restart config version init"
-    
+
+    local commands="ls new to rm here last fork compare apply sync clean repair init setup fetch attach open issues prs up down logs restart test config doctor ps agent-status version install"
+
     if [[ $cword -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$commands" -- "$cur"))
         return 0
     fi
-    
+
     case "${words[1]}" in
-        to|rm)
-            # Complete with worktree names
-            local worktrees=$(git worktree list --porcelain 2>/dev/null | awk '/^worktree / {print $2}' | xargs -n1 basename)
+        to|rm|compare|sync|test|apply|attach|open)
+            # Complete with worktree short names (using grove ls -q for consistency)
+            local worktrees=$(GROVE_SHELL=1 "$__GROVE_BIN" ls -q 2>/dev/null)
             COMPREPLY=($(compgen -W "$worktrees" -- "$cur"))
             ;;
-        resume)
-            # Complete with worktree names
-            local worktrees=$(git worktree list --porcelain 2>/dev/null | awk '/^worktree / {print $2}' | xargs -n1 basename)
-            COMPREPLY=($(compgen -W "$worktrees" -- "$cur"))
-            ;;
-        freeze)
-            # Complete with worktree names or --all flag
-            if [[ "$cur" == -* ]]; then
-                COMPREPLY=($(compgen -W "--all" -- "$cur"))
-            else
-                local worktrees=$(git worktree list --porcelain 2>/dev/null | awk '/^worktree / {print $2}' | xargs -n1 basename)
-                COMPREPLY=($(compgen -W "$worktrees" -- "$cur"))
-            fi
-            ;;
-        time)
-            if [[ $cword -eq 2 ]]; then
-                if [[ "$cur" == -* ]]; then
-                    COMPREPLY=($(compgen -W "--all --json" -- "$cur"))
-                else
-                    COMPREPLY=($(compgen -W "week" -- "$cur"))
-                fi
-            else
-                COMPREPLY=($(compgen -W "--json" -- "$cur"))
-            fi
-            ;;
-        fetch)
-            if [[ $cword -eq 2 ]]; then
-                COMPREPLY=($(compgen -W "pr/ issue/ is/" -- "$cur"))
-            fi
-            ;;
-        issues|prs)
-            if [[ "$cur" == -* ]]; then
-                COMPREPLY=($(compgen -W "--state --label --assignee --author --limit" -- "$cur"))
-            elif [[ "$prev" == "--state" ]]; then
-                COMPREPLY=($(compgen -W "open closed all" -- "$cur"))
-            fi
-            ;;
-        init)
+        install)
             COMPREPLY=($(compgen -W "zsh bash" -- "$cur"))
-            ;;
-        logs|restart)
-            # Service names would require context
             ;;
     esac
 }
 
 complete -F _grove_completion grove
-complete -F _grove_completion w
 
 # Alias
 alias w=grove

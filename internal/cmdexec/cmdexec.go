@@ -14,6 +14,7 @@ const (
 	GitRemote = 30 * time.Second
 	Tmux      = 5 * time.Second
 	GHCLI     = 15 * time.Second
+	Docker    = 15 * time.Second
 )
 
 // Output runs a command with timeout and returns its stdout.

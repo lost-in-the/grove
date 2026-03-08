@@ -1,8 +1,8 @@
 package tui
 
 import (
+	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -10,6 +10,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
 	"github.com/LeahArmstrong/grove-cli/internal/state"
 	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/internal/tuilog"
@@ -114,8 +115,7 @@ func forkWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, forkState *
 		newBranchName := fmt.Sprintf("%s-%s", source.Branch, name)
 
 		// Check if branch already exists
-		checkCmd := exec.Command("git", "-C", source.Path, "show-ref", "--verify", "--quiet", "refs/heads/"+newBranchName)
-		if err := checkCmd.Run(); err == nil {
+		if err := cmdexec.Run(context.TODO(), "git", []string{"-C", source.Path, "show-ref", "--verify", "--quiet", "refs/heads/" + newBranchName}, "", cmdexec.GitLocal); err == nil {
 			return forkCompleteMsg{err: fmt.Errorf("branch %q already exists", newBranchName)}
 		}
 
@@ -131,15 +131,14 @@ func forkWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, forkState *
 		}
 
 		// Create branch from source HEAD
-		createBranchCmd := exec.Command("git", "-C", source.Path, "branch", newBranchName, "HEAD")
-		if output, err := createBranchCmd.CombinedOutput(); err != nil {
+		if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", source.Path, "branch", newBranchName, "HEAD"}, "", cmdexec.GitLocal); err != nil {
 			return forkCompleteMsg{err: fmt.Errorf("failed to create branch: %w\n%s", err, output)}
 		}
 
 		// Create worktree
 		if err := mgr.CreateFromBranch(name, newBranchName); err != nil {
 			// Cleanup: delete the branch we just created
-			if cleanupErr := exec.Command("git", "-C", source.Path, "branch", "-D", newBranchName).Run(); cleanupErr != nil {
+			if cleanupErr := cmdexec.Run(context.TODO(), "git", []string{"-C", source.Path, "branch", "-D", newBranchName}, "", cmdexec.GitLocal); cleanupErr != nil {
 				return forkCompleteMsg{err: fmt.Errorf("failed to create worktree: %w (orphaned branch %q may need manual cleanup)", err, newBranchName)}
 			}
 			return forkCompleteMsg{err: fmt.Errorf("failed to create worktree: %w", err)}
@@ -161,12 +160,10 @@ func forkWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, forkState *
 
 		// Only clean source AFTER new worktree + patch succeeded (WIPMove)
 		if forkState.HasWIP && strategy == WIPMove && len(wipPatch) > 0 {
-			resetCmd := exec.Command("git", "-C", source.Path, "checkout", "--", ".")
-			if output, err := resetCmd.CombinedOutput(); err != nil {
+			if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", source.Path, "checkout", "--", "."}, "", cmdexec.GitLocal); err != nil {
 				return forkCompleteMsg{name: name, path: newTree.Path, err: fmt.Errorf("forked but failed to clean source: %w\n%s", err, output)}
 			}
-			cleanCmd := exec.Command("git", "-C", source.Path, "clean", "-fd")
-			if output, err := cleanCmd.CombinedOutput(); err != nil {
+			if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", source.Path, "clean", "-fd"}, "", cmdexec.GitLocal); err != nil {
 				return forkCompleteMsg{name: name, path: newTree.Path, err: fmt.Errorf("forked but failed to clean untracked files: %w\n%s", err, output)}
 			}
 		}

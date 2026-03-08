@@ -2,10 +2,12 @@
 package grove
 
 import (
+	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
 )
 
 // FindRoot searches for the .grove directory starting from startDir and walking up.
@@ -29,8 +31,7 @@ func FindRoot(startDir string) (string, error) {
 	// Without this boundary, the walk can escape the repo and find
 	// unrelated .grove directories (e.g., ~/.grove from debug logging).
 	var gitRoot string
-	gitCmd := exec.Command("git", "-C", absDir, "rev-parse", "--show-toplevel")
-	if out, err := gitCmd.Output(); err == nil {
+	if out, err := cmdexec.Output(context.TODO(), "git", []string{"-C", absDir, "rev-parse", "--show-toplevel"}, "", cmdexec.GitLocal); err == nil {
 		gitRoot = strings.TrimSpace(string(out))
 	}
 
@@ -177,8 +178,7 @@ func EnsureConfigSymlink(mainPath, newWorktreePath string) error {
 // getMainWorktreePath returns the path of the main worktree by parsing
 // the first entry from `git worktree list --porcelain`.
 func getMainWorktreePath(fromDir string) (string, error) {
-	cmd := exec.Command("git", "-C", fromDir, "worktree", "list", "--porcelain")
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"-C", fromDir, "worktree", "list", "--porcelain"}, "", cmdexec.GitLocal)
 	if err != nil {
 		return "", err
 	}

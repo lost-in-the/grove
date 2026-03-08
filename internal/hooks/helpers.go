@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"time"
+
+	"github.com/LeahArmstrong/grove-cli/internal/fsutil"
 )
 
 // resolvePath resolves a path that may be relative or absolute
@@ -24,38 +26,7 @@ func resolvePath(path, basePath string) string {
 
 // copyFile copies a single file from src to dst
 func copyFile(src, dst string) error {
-	// Open source file
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = srcFile.Close() }()
-
-	// Get source file info for permissions
-	srcInfo, err := srcFile.Stat()
-	if err != nil {
-		return err
-	}
-
-	// Ensure destination directory exists
-	dstDir := filepath.Dir(dst)
-	if err := os.MkdirAll(dstDir, 0755); err != nil {
-		return err
-	}
-
-	// Create destination file
-	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, srcInfo.Mode())
-	if err != nil {
-		return err
-	}
-	defer func() { _ = dstFile.Close() }()
-
-	// Copy contents
-	if _, err := io.Copy(dstFile, srcFile); err != nil {
-		return err
-	}
-
-	return nil
+	return fsutil.CopyFile(src, dst)
 }
 
 // copyDir recursively copies a directory from src to dst

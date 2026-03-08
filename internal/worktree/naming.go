@@ -1,14 +1,16 @@
 package worktree
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/binary"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
 )
 
 // TestEnvNumber derives a stable TEST_ENV_NUMBER in range [50, 99] from a worktree name.
@@ -42,9 +44,7 @@ func (m *Manager) detectProjectName() string {
 	}
 
 	// Priority 2: Extract from git remote URL
-	cmd := exec.Command("git", "remote", "get-url", "origin")
-	cmd.Dir = mainWorktreePath
-	if output, err := cmd.Output(); err == nil {
+	if output, err := cmdexec.Output(context.TODO(), "git", []string{"remote", "get-url", "origin"}, mainWorktreePath, cmdexec.GitLocal); err == nil {
 		remoteURL := strings.TrimSpace(string(output))
 		if projectName := extractProjectNameFromRemote(remoteURL); projectName != "" {
 			return projectName
@@ -58,10 +58,7 @@ func (m *Manager) detectProjectName() string {
 // getMainWorktreePath returns the path to the main (first) worktree
 func (m *Manager) getMainWorktreePath() string {
 	// Try to get the list of worktrees
-	cmd := exec.Command("git", "worktree", "list", "--porcelain")
-	cmd.Dir = m.repoRoot
-
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"worktree", "list", "--porcelain"}, m.repoRoot, cmdexec.GitLocal)
 	if err != nil {
 		// Fallback to repoRoot if we can't get worktree list
 		return m.repoRoot

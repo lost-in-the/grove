@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
+	"github.com/LeahArmstrong/grove-cli/internal/log"
 )
 
 const (
@@ -18,18 +19,19 @@ const (
 
 // Worktree represents a git worktree
 type Worktree struct {
-	Name          string // Short name (derived from path)
-	Path          string // Absolute path to worktree
-	Branch        string // Branch name or "detached"
-	Commit        string // Commit hash (full)
-	ShortCommit   string // Short commit hash (7 chars)
-	CommitMessage string // Commit message subject
-	CommitAge     string // Relative commit time
-	IsDirty       bool   // Whether there are uncommitted changes
-	DirtyFiles    string // List of dirty files (from git status --porcelain)
-	IsMain        bool   // Whether this is the main worktree
-	ShortName     string // Short name without project prefix
-	IsPrunable    bool   // Whether the worktree directory is missing (stale)
+	Name             string // Short name (derived from path)
+	Path             string // Absolute path to worktree
+	Branch           string // Branch name or "detached"
+	Commit           string // Commit hash (full)
+	ShortCommit      string // Short commit hash (7 chars)
+	CommitMessage    string // Commit message subject
+	CommitAge        string // Relative commit time
+	IsDirty          bool   // Whether there are uncommitted changes
+	DirtyCheckFailed bool   // Whether the dirty check errored (status unknown)
+	DirtyFiles       string // List of dirty files (from git status --porcelain)
+	IsMain           bool   // Whether this is the main worktree
+	ShortName        string // Short name without project prefix
+	IsPrunable       bool   // Whether the worktree directory is missing (stale)
 }
 
 // Manager handles git worktree operations
@@ -152,9 +154,10 @@ func (m *Manager) CreateFromBranch(name, branch string) error {
 		return fmt.Errorf("worktree already exists at %s", wtPath)
 	}
 
-	// First, try to fetch the branch if it doesn't exist locally
-	// This is important for PR branches that only exist remotely
-	_ = cmdexec.Run(context.TODO(), "git", []string{"fetch", "origin", branch + ":" + branch}, m.repoRoot, cmdexec.GitRemote)
+	// Fetch the branch if it doesn't exist locally (important for PR branches)
+	if err := cmdexec.Run(context.TODO(), "git", []string{"fetch", "origin", branch + ":" + branch}, m.repoRoot, cmdexec.GitRemote); err != nil {
+		log.Printf("fetch origin %s failed (may already exist locally): %v", branch, err)
+	}
 
 	// Create worktree from the branch
 	args := []string{"worktree", "add", wtPath, branch}
@@ -205,9 +208,12 @@ func (m *Manager) List() ([]*Worktree, error) {
 		go func(t *Worktree) {
 			defer wg.Done()
 			dirty, err := m.isDirty(t.Path)
-			if err == nil {
-				t.IsDirty = dirty
+			if err != nil {
+				log.Printf("warning: dirty check failed for %q: %v", t.Path, err)
+				t.DirtyCheckFailed = true
+				return
 			}
+			t.IsDirty = dirty
 		}(tree)
 	}
 	wg.Wait()

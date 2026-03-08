@@ -187,6 +187,10 @@ func hasDockerCompose(dir string) bool {
 // dir sets the working directory. envFile, when non-empty and not ".env", adds
 // --env-file to the compose command for YAML variable interpolation. env is a list
 // of extra KEY=VALUE strings to add to the process environment.
+//
+// Callers set cmd.Stdout = os.Stderr intentionally: grove reserves stdout for
+// shell-integration directives (cd:, env:, tmux-attach:), so Docker output
+// must go to stderr to avoid corrupting the directive stream.
 func composeCommand(dir string, envFile string, env []string, args ...string) *exec.Cmd {
 	if _, err := exec.LookPath("docker"); err == nil {
 		var cmdArgs []string

@@ -194,9 +194,10 @@ Examples:
 			// Kill tmux session if exists
 			sessionName := worktree.TmuxSessionName(projectName, c.Name)
 			if tmux.IsTmuxAvailable() {
-				exists, _ := tmux.SessionExists(sessionName)
-				if exists {
-					_ = tmux.KillSession(sessionName)
+				if exists, _ := tmux.SessionExists(sessionName); exists {
+					if err := tmux.KillSession(sessionName); err != nil {
+						cli.Warning(w, "Worktree removed but failed to kill tmux session '%s': %v", sessionName, err)
+					}
 				}
 			}
 
@@ -245,6 +246,7 @@ func handleBatchBranchDeletion(repoPath string, branches []string, forceDelete b
 	for _, branch := range branches {
 		status, err := branchMgr.GetStatus(branch, "")
 		if err != nil {
+			log.Printf("skipping branch %q during cleanup: %v", branch, err)
 			continue
 		}
 

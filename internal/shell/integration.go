@@ -1,11 +1,13 @@
 package shell
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
 )
 
 //go:embed templates/grove.zsh
@@ -62,8 +64,7 @@ func generateIntegration(shell, rcFile, installCmd, template string) (string, er
 // or programmatic access to worktree names. Shell completions currently
 // use git commands directly in the shell templates for better performance.
 func GetWorktreeNames() ([]string, error) {
-	cmd := exec.Command("git", "worktree", "list", "--porcelain")
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"worktree", "list", "--porcelain"}, "", cmdexec.GitLocal)
 	if err != nil {
 		return nil, err
 	}

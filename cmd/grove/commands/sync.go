@@ -1,15 +1,16 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/LeahArmstrong/grove-cli/internal/cli"
+	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
 	"github.com/LeahArmstrong/grove-cli/internal/log"
 	"github.com/LeahArmstrong/grove-cli/internal/output"
@@ -144,8 +145,7 @@ Examples:
 
 			// Fetch from remote
 			fetchErr := cli.Spin(fmt.Sprintf("Fetching '%s'", name), func() error {
-				fetchCmd := exec.Command("git", "-C", ws.Path, "fetch", "--prune")
-				if output, err := fetchCmd.CombinedOutput(); err != nil {
+				if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", ws.Path, "fetch", "--prune"}, "", cmdexec.GitRemote); err != nil {
 					return fmt.Errorf("%v\n%s", err, output)
 				}
 				return nil
@@ -164,8 +164,7 @@ Examples:
 			// Fast-forward to mirror
 			// Get the mirror ref (e.g., origin/main)
 			mirror := ws.Mirror
-			ffCmd := exec.Command("git", "-C", ws.Path, "merge", "--ff-only", mirror)
-			if output, err := ffCmd.CombinedOutput(); err != nil {
+			if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", ws.Path, "merge", "--ff-only", mirror}, "", cmdexec.GitLocal); err != nil {
 				if !syncJSON {
 					fmt.Printf("  ⚠ Failed to fast-forward '%s': %v\n%s", name, err, output)
 				}
@@ -182,8 +181,7 @@ Examples:
 			// Count commits synced
 			commitsAhead := 0
 			if oldCommit != newCommit {
-				countCmd := exec.Command("git", "-C", ws.Path, "rev-list", "--count", oldCommit+".."+newCommit)
-				if output, err := countCmd.Output(); err == nil {
+				if output, err := cmdexec.Output(context.TODO(), "git", []string{"-C", ws.Path, "rev-list", "--count", oldCommit + ".." + newCommit}, "", cmdexec.GitLocal); err == nil {
 					_, _ = fmt.Sscanf(strings.TrimSpace(string(output)), "%d", &commitsAhead)
 				}
 			}
@@ -232,8 +230,7 @@ Examples:
 
 // getCurrentCommit returns the current HEAD commit SHA (short, 7 chars)
 func getCurrentCommit(repoPath string) (string, error) {
-	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "HEAD")
-	output, err := cmd.Output()
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"-C", repoPath, "rev-parse", "HEAD"}, "", cmdexec.GitLocal)
 	if err != nil {
 		return "", err
 	}

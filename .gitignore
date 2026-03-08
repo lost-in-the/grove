@@ -49,6 +49,10 @@ grove-test/
 
 # Temporary plan files
 plan-*.md
+docs/plans/
+
+# Playwright MCP logs
+.playwright-mcp/
 
 # Grove (worktree manager)
 .grove/state.json

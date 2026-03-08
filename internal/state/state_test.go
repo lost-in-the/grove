@@ -145,6 +145,68 @@ func TestConcurrentOperations(t *testing.T) {
 	})
 }
 
+func TestTwoManagerMerge(t *testing.T) {
+	t.Run("separate managers preserve each others entries", func(t *testing.T) {
+		stateDir := t.TempDir()
+
+		mgr1, err := NewManager(stateDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mgr2, err := NewManager(stateDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// mgr1 adds a worktree and saves
+		if err := mgr1.AddWorktree("from-mgr1", &WorktreeState{Path: "/p1", Branch: "b1"}); err != nil {
+			t.Fatal(err)
+		}
+
+		// mgr2 adds a different worktree — should merge mgr1's entry on save
+		if err := mgr2.AddWorktree("from-mgr2", &WorktreeState{Path: "/p2", Branch: "b2"}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Reload from disk and verify both entries survived
+		mgr3, err := NewManager(stateDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		names := mgr3.ListWorktrees()
+		if len(names) != 2 {
+			t.Fatalf("got %d worktrees, want 2: %v", len(names), names)
+		}
+		ws1, _ := mgr3.GetWorktree("from-mgr1")
+		ws2, _ := mgr3.GetWorktree("from-mgr2")
+		if ws1 == nil || ws2 == nil {
+			t.Fatalf("expected both worktrees to exist, got mgr1=%v mgr2=%v", ws1, ws2)
+		}
+	})
+
+	t.Run("removed entries are not resurrected", func(t *testing.T) {
+		stateDir := t.TempDir()
+
+		// Seed state with two worktrees
+		mgr1, _ := NewManager(stateDir)
+		_ = mgr1.AddWorktree("keep", &WorktreeState{Path: "/p1", Branch: "b1"})
+		_ = mgr1.AddWorktree("remove-me", &WorktreeState{Path: "/p2", Branch: "b2"})
+
+		// mgr2 loads the seeded state, then removes one entry
+		mgr2, _ := NewManager(stateDir)
+		if err := mgr2.RemoveWorktree("remove-me"); err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify removed entry is gone
+		mgr3, _ := NewManager(stateDir)
+		names := mgr3.ListWorktrees()
+		if len(names) != 1 || names[0] != "keep" {
+			t.Fatalf("got worktrees %v, want [keep]", names)
+		}
+	})
+}
+
 // --- V2 State Method Tests ---
 
 func TestManagerProject(t *testing.T) {

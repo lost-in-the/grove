@@ -2,13 +2,13 @@ package docker
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/LeahArmstrong/grove-cli/internal/cli"
 	"github.com/LeahArmstrong/grove-cli/internal/config"
+	"github.com/LeahArmstrong/grove-cli/internal/fsutil"
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
 )
@@ -322,29 +322,7 @@ func (s *externalStrategy) getAutoStop() bool {
 
 // copyFile copies a single file from src to dst, creating parent directories as needed.
 func copyFile(src, dst string) error {
-	srcInfo, err := os.Stat(src)
-	if err != nil {
-		return fmt.Errorf("source file not found: %w", err)
-	}
-
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
-	}
-
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = srcFile.Close() }()
-
-	dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, srcInfo.Mode())
-	if err != nil {
-		return err
-	}
-	defer func() { _ = dstFile.Close() }()
-
-	_, err = io.Copy(dstFile, srcFile)
-	return err
+	return fsutil.CopyFile(src, dst)
 }
 
 // createSymlink creates a symbolic link from src to dst, creating parent directories

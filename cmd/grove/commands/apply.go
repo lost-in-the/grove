@@ -1,14 +1,15 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/LeahArmstrong/grove-cli/internal/cli"
+	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
 	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
 	"github.com/LeahArmstrong/grove-cli/internal/output"
 	"github.com/LeahArmstrong/grove-cli/internal/worktree"
@@ -196,8 +197,7 @@ Examples:
 // applyCommitsSinceAncestor cherry-picks commits from source that are not in current.
 func applyCommitsSinceAncestor(w, stderr *cli.Writer, targetPath string, sourceTree *worktree.Worktree, dryRun, jsonOutput bool) ([]CommitInfo, error) {
 	// Find merge base
-	mergeBaseCmd := exec.Command("git", "-C", targetPath, "merge-base", "HEAD", sourceTree.Branch)
-	baseOutput, err := mergeBaseCmd.Output()
+	baseOutput, err := cmdexec.Output(context.TODO(), "git", []string{"-C", targetPath, "merge-base", "HEAD", sourceTree.Branch}, "", cmdexec.GitLocal)
 	if err != nil {
 		if !jsonOutput {
 			cli.Warning(stderr, "could not find common ancestor with %s", sourceTree.Branch)
@@ -207,11 +207,10 @@ func applyCommitsSinceAncestor(w, stderr *cli.Writer, targetPath string, sourceT
 	mergeBase := strings.TrimSpace(string(baseOutput))
 
 	// Get commits in source that are after merge base
-	revListCmd := exec.Command("git", "-C", sourceTree.Path, "rev-list", "--reverse",
-		fmt.Sprintf("%s..HEAD", mergeBase))
-	revOutput, err := revListCmd.Output()
+	revOutput, err := cmdexec.Output(context.TODO(), "git", []string{"-C", sourceTree.Path, "rev-list", "--reverse",
+		fmt.Sprintf("%s..HEAD", mergeBase)}, "", cmdexec.GitLocal)
 	if err != nil {
-		return nil, nil // No commits to apply
+		return nil, fmt.Errorf("failed to list commits since common ancestor: %w", err)
 	}
 
 	shas := strings.Split(strings.TrimSpace(string(revOutput)), "\n")
@@ -244,8 +243,7 @@ func applySpecificCommits(w, stderr *cli.Writer, targetPath, sourcePath string, 
 			}
 
 			// Get commit message
-			msgCmd := exec.Command("git", "-C", sourcePath, "log", "-1", "--format=%s", s)
-			msgOutput, err := msgCmd.Output()
+			msgOutput, err := cmdexec.Output(context.TODO(), "git", []string{"-C", sourcePath, "log", "-1", "--format=%s", s}, "", cmdexec.GitLocal)
 			if err != nil {
 				if !jsonOutput {
 					cli.Warning(stderr, "commit %s not found in source", s)
@@ -285,8 +283,7 @@ func applySpecificCommits(w, stderr *cli.Writer, targetPath, sourcePath string, 
 	}
 
 	for _, c := range commits {
-		cherryCmd := exec.Command("git", "-C", targetPath, "cherry-pick", c.SHA)
-		if output, err := cherryCmd.CombinedOutput(); err != nil {
+		if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", targetPath, "cherry-pick", c.SHA}, "", cmdexec.GitLocal); err != nil {
 			if !jsonOutput {
 				cli.Error(stderr, "Conflict applying %s", c.SHA[:7])
 				_, _ = fmt.Fprintf(stderr, "%s\n", output)
