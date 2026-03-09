@@ -59,7 +59,8 @@ type ProtectionConfig struct {
 
 // SwitchConfig controls worktree switching behavior
 type SwitchConfig struct {
-	DirtyHandling string `toml:"dirty_handling"` // auto-stash, prompt, refuse
+	DirtyHandling   string `toml:"dirty_handling"`   // auto-stash, prompt, refuse
+	ContainerSwitch string `toml:"container_switch"` // auto, prompt, off
 }
 
 // NamingConfig controls worktree naming conventions
@@ -69,9 +70,10 @@ type NamingConfig struct {
 
 // TmuxConfig controls tmux session behavior
 type TmuxConfig struct {
-	Mode     string `toml:"mode"`      // auto, manual, off
-	Prefix   string `toml:"prefix"`    // Prefix for tmux session names
-	OnSwitch string `toml:"on_switch"` // reset (default), warn, ignore — directory drift behavior
+	Mode        string `toml:"mode"`         // auto, manual, off
+	Prefix      string `toml:"prefix"`       // Prefix for tmux session names
+	OnSwitch    string `toml:"on_switch"`    // reset (default), warn, ignore — directory drift behavior
+	ControlMode *bool  `toml:"control_mode"` // enables tmux -CC for iTerm2 integration
 }
 
 // PluginsConfig controls plugin behavior
@@ -250,6 +252,9 @@ func mergeConfigs(base, override *Config) *Config {
 	if override.Switch.DirtyHandling != "" {
 		result.Switch.DirtyHandling = override.Switch.DirtyHandling
 	}
+	if override.Switch.ContainerSwitch != "" {
+		result.Switch.ContainerSwitch = override.Switch.ContainerSwitch
+	}
 	if override.Naming.Pattern != "" {
 		result.Naming.Pattern = override.Naming.Pattern
 	}
@@ -261,6 +266,9 @@ func mergeConfigs(base, override *Config) *Config {
 	}
 	if override.Tmux.OnSwitch != "" {
 		result.Tmux.OnSwitch = override.Tmux.OnSwitch
+	}
+	if override.Tmux.ControlMode != nil {
+		result.Tmux.ControlMode = override.Tmux.ControlMode
 	}
 	// Merge plugin configs - only override if explicitly set (non-nil)
 	if override.Plugins.Docker.Enabled != nil {

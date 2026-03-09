@@ -21,13 +21,15 @@ func LoadDefaults() *Config {
 		ProjectsDir:   projectsDir,
 		DefaultBranch: "main",
 		Switch: SwitchConfig{
-			DirtyHandling: "prompt",
+			DirtyHandling:   "prompt",
+			ContainerSwitch: "auto",
 		},
 		Naming: NamingConfig{
 			Pattern: "{type}/{description}",
 		},
 		Tmux: TmuxConfig{
-			Mode: "auto",
+			Mode:        "auto",
+			ControlMode: &trueVal,
 		},
 		Plugins: PluginsConfig{
 			Docker: DockerPluginConfig{
