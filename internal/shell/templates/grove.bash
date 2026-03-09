@@ -80,7 +80,7 @@ _grove_completion() {
         cword=$COMP_CWORD
     fi
 
-    local commands="ls new to rm here last fork compare apply sync clean repair init setup fetch attach open issues prs up down logs restart test config doctor ps agent-status version install"
+    local commands="ls new to rm here last fork compare apply sync clean repair init setup fetch attach open issues prs up down logs restart test which config doctor ps agent-status version install"
 
     if [[ $cword -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$commands" -- "$cur"))

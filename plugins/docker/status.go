@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/plugins"
 )
 
@@ -170,6 +171,100 @@ func pathMatchesEnv(worktreePath, envValue, composePath string) bool {
 	resolved = filepath.Clean(resolved)
 
 	return filepath.Clean(worktreePath) == resolved
+}
+
+// ServiceInfo describes the current Docker service state for a single worktree.
+type ServiceInfo struct {
+	RunningFor     string // worktree name services are running for
+	IsRunning      bool
+	MatchesCurrent bool // whether services are running for the queried worktree
+}
+
+// CurrentServiceInfo returns Docker service status for the given worktree path.
+// Returns nil if Docker is not configured or not applicable.
+func CurrentServiceInfo(cfg *config.Config, currentPath string) *ServiceInfo {
+	if cfg == nil {
+		return nil
+	}
+
+	dockerCfg := cfg.Plugins.Docker
+	if dockerCfg.Enabled != nil && !*dockerCfg.Enabled {
+		return nil
+	}
+
+	mode := dockerCfg.Mode
+	if mode == "" {
+		mode = "local"
+	}
+
+	switch mode {
+	case "external":
+		return externalServiceInfo(cfg, currentPath)
+	case "local":
+		return localServiceInfo(currentPath)
+	default:
+		return nil
+	}
+}
+
+// localServiceInfo checks docker compose status for a worktree with a local compose file.
+func localServiceInfo(currentPath string) *ServiceInfo {
+	if !hasDockerCompose(currentPath) {
+		return nil
+	}
+
+	running, _ := composeRunningCount(currentPath, nil)
+	return &ServiceInfo{
+		RunningFor:     filepath.Base(currentPath),
+		IsRunning:      running,
+		MatchesCurrent: true, // local always matches
+	}
+}
+
+// externalServiceInfo checks docker compose status for an external compose setup.
+func externalServiceInfo(cfg *config.Config, currentPath string) *ServiceInfo {
+	ext := cfg.Plugins.Docker.External
+	if ext == nil {
+		return nil
+	}
+
+	// Check agent mode first
+	if ext.Agent != nil && ext.Agent.Enabled != nil && *ext.Agent.Enabled {
+		return agentServiceInfo(cfg, currentPath)
+	}
+
+	composePath := resolveComposePath(ext.Path)
+	activeWorktree := readEnvVar(composePath, ext.EnvVar)
+	running, _ := composeRunningCount(composePath, nil)
+	matches := pathMatchesEnv(currentPath, activeWorktree, composePath)
+
+	runningFor := filepath.Base(activeWorktree)
+	if activeWorktree == "" {
+		runningFor = ""
+	}
+
+	return &ServiceInfo{
+		RunningFor:     runningFor,
+		IsRunning:      running,
+		MatchesCurrent: matches,
+	}
+}
+
+// agentServiceInfo checks agent slot allocation for the given worktree path.
+func agentServiceInfo(cfg *config.Config, currentPath string) *ServiceInfo {
+	slot := FindWorktreeSlot(cfg, currentPath)
+	if slot == 0 {
+		return &ServiceInfo{
+			IsRunning:      false,
+			MatchesCurrent: false,
+		}
+	}
+
+	return &ServiceInfo{
+		RunningFor:     filepath.Base(currentPath),
+		IsRunning:      true,
+		MatchesCurrent: true,
+	}
 }
 
 // composeRunningCount runs docker compose ps -q with a timeout to count running containers.

@@ -97,6 +97,7 @@ _grove_completion() {
         'logs:View Docker logs'
         'restart:Restart Docker containers'
         'test:Run tests in a worktree'
+        'which:Show current worktree and service status'
         'config:Show configuration'
         'doctor:Check system health and configuration'
         'open:Open a worktree session'
