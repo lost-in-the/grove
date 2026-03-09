@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"os"
 	"testing"
 )
 
@@ -445,5 +446,81 @@ func TestGetCurrentSession_NotInTmux(t *testing.T) {
 	_, err := GetCurrentSession()
 	if err == nil {
 		t.Error("GetCurrentSession() expected error when not in tmux, got nil")
+	}
+}
+
+func TestIsControlModeTerminal(t *testing.T) {
+	tests := []struct {
+		name        string
+		termProgram string
+		unset       bool
+		expected    bool
+	}{
+		{name: "iTerm2", termProgram: "iTerm2", expected: true},
+		{name: "Apple_Terminal", termProgram: "Apple_Terminal", expected: false},
+		{name: "unset", unset: true, expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.unset {
+				os.Unsetenv("TERM_PROGRAM")
+			} else {
+				t.Setenv("TERM_PROGRAM", tt.termProgram)
+			}
+
+			got := IsControlModeTerminal()
+			if got != tt.expected {
+				t.Errorf("IsControlModeTerminal() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestShouldUseControlMode(t *testing.T) {
+	trueVal := true
+	falseVal := false
+
+	tests := []struct {
+		name        string
+		cfg         *bool
+		termProgram string
+		expected    bool
+	}{
+		{name: "nil config + iTerm2", cfg: nil, termProgram: "iTerm2", expected: true},
+		{name: "true config + iTerm2", cfg: &trueVal, termProgram: "iTerm2", expected: true},
+		{name: "false config + iTerm2", cfg: &falseVal, termProgram: "iTerm2", expected: false},
+		{name: "nil config + Terminal", cfg: nil, termProgram: "Terminal", expected: false},
+		{name: "true config + Terminal", cfg: &trueVal, termProgram: "Terminal", expected: false},
+		{name: "false config + Terminal", cfg: &falseVal, termProgram: "Terminal", expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("TERM_PROGRAM", tt.termProgram)
+
+			got := ShouldUseControlMode(tt.cfg)
+			if got != tt.expected {
+				t.Errorf("ShouldUseControlMode() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestAttachSessionControlMode_EmptyName(t *testing.T) {
+	err := AttachSessionControlMode("")
+	if err == nil {
+		t.Error("AttachSessionControlMode(\"\") expected error, got nil")
+	}
+}
+
+func TestAttachSessionControlMode_NonExistent(t *testing.T) {
+	if !IsTmuxAvailable() {
+		t.Skip("tmux not available")
+	}
+
+	err := AttachSessionControlMode("test-grove-no-such-session-cc")
+	if err == nil {
+		t.Error("AttachSessionControlMode(nonexistent) expected error, got nil")
 	}
 }

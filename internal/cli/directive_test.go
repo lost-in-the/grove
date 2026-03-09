@@ -38,6 +38,43 @@ func TestDirective_NoANSI(t *testing.T) {
 	}
 }
 
+func TestTmuxAttachDirective(t *testing.T) {
+	tests := []struct {
+		name        string
+		session     string
+		controlMode bool
+		expected    string
+	}{
+		{name: "normal mode", session: "test-session", controlMode: false, expected: "tmux-attach:test-session\n"},
+		{name: "control mode", session: "test-session", controlMode: true, expected: "tmux-attach-cc:test-session\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			oldStdout := os.Stdout
+			t.Cleanup(func() { os.Stdout = oldStdout })
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatalf("pipe failed: %v", err)
+			}
+			os.Stdout = w
+
+			TmuxAttachDirective(tt.session, tt.controlMode)
+
+			_ = w.Close()
+
+			buf := make([]byte, 1024)
+			n, _ := r.Read(buf)
+			_ = r.Close()
+			got := string(buf[:n])
+
+			if got != tt.expected {
+				t.Errorf("TmuxAttachDirective(%q, %v) = %q, want %q", tt.session, tt.controlMode, got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestDirective_TmuxAttach_NoANSI(t *testing.T) {
 	oldStdout := os.Stdout
 	t.Cleanup(func() { os.Stdout = oldStdout })

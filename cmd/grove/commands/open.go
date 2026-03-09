@@ -160,6 +160,7 @@ Examples:
 		}
 
 		// Step 3: Attach — popup or switch/attach
+		useCC := tmux.ShouldUseControlMode(ctx.Config.Tmux.ControlMode)
 		usePopup := ctx.Config.Session.Popup != nil && *ctx.Config.Session.Popup && !openNoPopup
 
 		if usePopup && tmux.IsInsideTmux() {
@@ -177,8 +178,11 @@ Examples:
 		hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
 		if hasShellIntegration {
 			cli.Directive("cd", wt.Path)
-			cli.Directive("tmux-attach", sessionName)
+			cli.TmuxAttachDirective(sessionName, useCC)
 		} else {
+			if useCC {
+				return tmux.AttachSessionControlMode(sessionName)
+			}
 			return tmux.AttachSession(sessionName)
 		}
 

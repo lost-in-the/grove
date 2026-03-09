@@ -69,9 +69,10 @@ type NamingConfig struct {
 
 // TmuxConfig controls tmux session behavior
 type TmuxConfig struct {
-	Mode     string `toml:"mode"`      // auto, manual, off
-	Prefix   string `toml:"prefix"`    // Prefix for tmux session names
-	OnSwitch string `toml:"on_switch"` // reset (default), warn, ignore — directory drift behavior
+	Mode        string `toml:"mode"`         // auto, manual, off
+	Prefix      string `toml:"prefix"`       // Prefix for tmux session names
+	OnSwitch    string `toml:"on_switch"`    // reset (default), warn, ignore — directory drift behavior
+	ControlMode *bool  `toml:"control_mode"` // nil/true = auto-detect iTerm2 for tmux -CC, false = disabled
 }
 
 // PluginsConfig controls plugin behavior

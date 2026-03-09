@@ -152,6 +152,7 @@ When using shell integration, this will also change your current directory.`,
 		if tmuxMode == "" {
 			tmuxMode = "auto"
 		}
+		useCC := tmux.ShouldUseControlMode(cfg.Tmux.ControlMode)
 		// Agent mode: suppress tmux to prevent terminal takeover
 		if cfg.AgentMode {
 			tmuxMode = "off"
@@ -237,7 +238,7 @@ When using shell integration, this will also change your current directory.`,
 				cli.Directive("cd", targetTree.Path)
 				// In auto mode outside tmux, emit tmux-attach directive for shell wrapper
 				if tmuxMode == "auto" && sessionName != "" {
-					cli.Directive("tmux-attach", sessionName)
+					cli.TmuxAttachDirective(sessionName, useCC)
 				}
 			} else {
 				cli.Faint(stderr, "Note: Directory switching requires shell integration.")
@@ -250,8 +251,14 @@ When using shell integration, this will also change your current directory.`,
 				cli.Faint(stderr, "  cd %s", targetTree.Path)
 				// In auto mode outside tmux without shell wrapper, attach directly
 				if tmuxMode == "auto" && sessionName != "" {
-					if err := tmux.AttachSession(sessionName); err != nil {
-						return fmt.Errorf("failed to attach session: %w", err)
+					var attachErr error
+					if useCC {
+						attachErr = tmux.AttachSessionControlMode(sessionName)
+					} else {
+						attachErr = tmux.AttachSession(sessionName)
+					}
+					if attachErr != nil {
+						return fmt.Errorf("failed to attach session: %w", attachErr)
 					}
 				}
 			}
