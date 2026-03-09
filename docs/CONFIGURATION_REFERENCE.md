@@ -64,6 +64,12 @@ Controls behavior when switching to a worktree that has uncommitted changes in t
 # "auto-stash" — automatically stash changes before switching, unstash on return
 # "refuse"     — abort the switch if changes are present
 dirty_handling = "prompt"          # string: prompt | auto-stash | refuse
+
+# Controls Docker container lifecycle during worktree switches.
+# "auto"   — start/stop containers automatically (default, same as auto_start/auto_stop)
+# "prompt" — ask before starting/stopping containers (falls back to auto in non-interactive)
+# "off"    — skip container start/stop entirely (env var persistence still runs in external mode)
+container_switch = "auto"          # string: auto | prompt | off
 ```
 
 ---
@@ -103,6 +109,12 @@ prefix = ""                        # string
 # "warn"   — warn if the session is not in the expected directory
 # "ignore" — do nothing; leave the session wherever it is
 on_switch = "reset"                # string: reset | warn | ignore
+
+# Enable tmux -CC (control mode) for iTerm2 native window integration.
+# When true (default) and TERM_PROGRAM=iTerm2, grove uses `tmux -CC attach`
+# instead of `tmux attach`. Set to false to always use standard tmux attach.
+# Default: true
+control_mode = true                # bool
 ```
 
 ---
@@ -647,7 +659,7 @@ These are read at runtime and never written to config files.
 
 | Variable | Values | Purpose |
 |----------|--------|---------|
-| `GROVE_SHELL` | `1` | Set by shell integration. Enables the directive protocol (cd:, env:, tmux-attach:). |
+| `GROVE_SHELL` | `1` | Set by shell integration. Enables the directive protocol (cd:, env:, tmux-attach:, tmux-attach-cc:). |
 | `GROVE_SHELL_VERSION` | integer | Set by shell integration. Binary warns if shell is outdated. |
 | `GROVE_TUI` | `0` to disable | Set to `0` to disable TUI mode. Bare `grove` shows help instead. Default: enabled. |
 | `GROVE_AGENT_MODE` | any non-empty | Forces isolated Docker strategy and suppresses tmux for AI agent workloads. |

@@ -60,7 +60,7 @@ The wrapper uses a **directives protocol** — the grove binary writes special l
 
 ### Directive Commands (`grove to`, `grove last`, `grove fork`, `grove fetch`, `grove attach`, `grove open`, `grove up`, `grove run`, `grove restart`)
 
-These commands can emit `cd:`, `tmux-attach:`, or `env:` directives. The wrapper captures their stdout (stderr passes through to the terminal), scans it line-by-line, separates directives from normal output, and then:
+These commands can emit `cd:`, `tmux-attach:`, `tmux-attach-cc:`, or `env:` directives. The wrapper captures their stdout (stderr passes through to the terminal), scans it line-by-line, separates directives from normal output, and then:
 
 1. Exports any environment variables
 2. Executes any directory change
@@ -118,6 +118,7 @@ The grove binary communicates with the shell wrapper through directive lines —
 | `GROVE_CD:` | `GROVE_CD:/path/to/dir` | Change directory (current) |
 | `cd:` | `cd:/path/to/dir` | Change directory (legacy, same effect) |
 | `tmux-attach:` | `tmux-attach:myproject-feature` | Attach to named tmux session |
+| `tmux-attach-cc:` | `tmux-attach-cc:myproject-feature` | Attach using `tmux -CC` (iTerm2 control mode) |
 | `env:` | `env:ADMIN_DIR=./admin-feature` | Export environment variable in shell |
 
 Lines that do not match any directive prefix are treated as normal output and printed to the terminal as-is.
@@ -208,3 +209,12 @@ The `grove` binary only prints `cd:` and `tmux-attach:` directives when it detec
 1. `tmux` is installed and in `$PATH`
 2. `grove install zsh/bash` was run after installing tmux
 3. The tmux mode in config is not set to `off` (`grove config` → Behavior → `tmux_mode`)
+
+### iTerm2 control mode (`tmux -CC`)
+
+When `TERM_PROGRAM=iTerm2` and `tmux.control_mode` is enabled (default: true), grove uses `tmux -CC attach` instead of `tmux attach`. This integrates tmux sessions as native iTerm2 windows/tabs.
+
+The shell wrapper handles the `tmux-attach-cc:` directive automatically. If you see issues:
+1. Run `grove doctor` — it checks for `aggressive-resize` which conflicts with `-CC`
+2. To disable: set `control_mode = false` in `[tmux]` config
+3. Non-iTerm2 terminals always use standard `tmux attach` regardless of this setting

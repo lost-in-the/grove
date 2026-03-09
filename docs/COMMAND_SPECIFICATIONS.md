@@ -20,6 +20,7 @@ This document provides exhaustive specifications for each grove command. Every b
    - [grove here](#grove-here)
    - [grove last](#grove-last)
    - [grove attach](#grove-attach)
+   - [grove which](#grove-which)
 4. [State Commands](#state-commands)
    - [grove freeze](#grove-freeze)
    - [grove resume](#grove-resume)
@@ -480,14 +481,18 @@ Flags:
 
 3. **Handle tmux session:**
    - If session exists and inside tmux: `tmux switch-client -t {session}`
-   - If session exists and outside tmux: `tmux attach -t {session}`
+   - If session exists and outside tmux: `tmux attach -t {session}` (or `tmux -CC attach` in iTerm2 when `control_mode` is enabled)
    - If session doesn't exist: Create it, then attach/switch
 
-4. **Fire pre-switch hooks** (unless `--peek`).
+4. **Fire pre-switch hooks** (unless `--peek`):
+   - Docker container lifecycle is controlled by `switch.container_switch`:
+     - `"auto"` (default): Start/stop containers as normal (respects `auto_start`/`auto_stop`)
+     - `"prompt"`: Ask user before starting/stopping containers. Falls back to `auto` in non-interactive sessions.
+     - `"off"`: Skip container start/stop entirely. In external mode, env var persistence and env directives still run — only `stopServices()` and `startServices()` are skipped.
 
 5. **Switch tmux session** (if inside tmux): `tmux switch-client -t {session}`
 
-6. **Fire post-switch hooks** (Docker start, etc.) before tmux switch so progress is visible in current session (unless `--peek`).
+6. **Fire post-switch hooks** (Docker start, etc.) before tmux switch so progress is visible in current session (unless `--peek`). Container lifecycle gating from step 4 applies here too.
 
 7. **Change directory:**
    - If inside tmux: session switch handles navigation
@@ -595,6 +600,10 @@ Please be more specific.
 | Dirty worktree, prompt mode (non-TTY) | Fall back to refuse behavior (exit 1) |
 | Dirty worktree with `--peek` | Bypass dirty check entirely, proceed with switch |
 | Dirty check fails (git error) | Treat as clean, proceed with switch |
+| container_switch = "off" | Skip Docker start/stop; env var persistence still runs in external mode |
+| container_switch = "prompt" (TTY) | Ask before start/stop; user can decline |
+| container_switch = "prompt" (non-TTY) | Fall back to auto behavior |
+| iTerm2 + control_mode enabled | Use `tmux -CC attach` for native window integration |
 
 **Directory Drift Detection:**
 
@@ -995,6 +1004,71 @@ Does **not** emit a `cd:` directive. Use `grove to` if you want a directory chan
 **Exit Codes:**
 - 0: Success
 - 1: Worktree not found, tmux unavailable, or tmux disabled
+
+---
+
+### grove which
+
+**Purpose:** Show current worktree and Docker service status — a quick operational context check.
+
+**Usage:**
+```
+grove which [flags]
+Alias: status
+
+Flags:
+  -j, --json    Output as JSON
+```
+
+**Behavior:**
+
+1. Find the current worktree (same as `grove here`)
+2. Query Docker service status via `CurrentServiceInfo()`:
+   - **Local mode**: Check for compose file and running containers in the worktree directory
+   - **External mode**: Read the env file to determine which worktree services are pointed to, check if services are running, and whether they match the current worktree
+   - **Agent mode**: Check slot allocation for the current worktree
+   - **No Docker**: Services section is omitted
+3. Display worktree name, branch, and service status
+
+**Output (formatted, services running for current worktree):**
+```
+Worktree:  testing
+Branch:    feat/testing
+Services:  ● running for testing
+```
+
+**Output (formatted, services running for a different worktree):**
+```
+Worktree:  testing
+Branch:    feat/testing
+Services:  ⚠ running for feature-auth (not this worktree)
+```
+
+**Output (formatted, no services running):**
+```
+Worktree:  testing
+Branch:    feat/testing
+Services:  ○ not running
+```
+
+**Output (JSON, `--json`):**
+```json
+{
+  "worktree": "testing",
+  "branch": "feat/testing",
+  "path": "/path/to/grove-cli-testing",
+  "services": {
+    "running_for": "testing",
+    "matches_current": true
+  }
+}
+```
+
+When no Docker is configured, the `services` field is `null`/omitted.
+
+**Exit Codes:**
+- 0: Success
+- 1: Not in a grove worktree
 
 ---
 
