@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/LeahArmstrong/grove-cli/internal/cli"
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/hooks"
 )
@@ -24,9 +25,21 @@ func (s *localStrategy) OnPreSwitch(ctx *hooks.Context) error {
 		return nil
 	}
 
+	action := resolveFromConfig(s.getContainerSwitch(ctx))
+	if action == ContainerSwitchOff {
+		return nil
+	}
+
 	worktreePath := s.getWorktreePath(ctx.PrevWorktree)
 	if !hasDockerCompose(worktreePath) {
 		return nil
+	}
+
+	if action == ContainerSwitchPrompt {
+		yes, err := cli.Confirm("Stop containers in previous worktree?", false)
+		if err != nil || !yes {
+			return nil
+		}
 	}
 
 	return s.down(worktreePath)
@@ -37,9 +50,21 @@ func (s *localStrategy) OnPostSwitch(ctx *hooks.Context) error {
 		return nil
 	}
 
+	action := resolveFromConfig(s.getContainerSwitch(ctx))
+	if action == ContainerSwitchOff {
+		return nil
+	}
+
 	worktreePath := s.getWorktreePath(ctx.Worktree)
 	if !hasDockerCompose(worktreePath) {
 		return nil
+	}
+
+	if action == ContainerSwitchPrompt {
+		yes, err := cli.Confirm("Start containers for this worktree?", true)
+		if err != nil || !yes {
+			return nil
+		}
 	}
 
 	return s.up(worktreePath, false)
@@ -138,6 +163,13 @@ func (s *localStrategy) getAutoStart() bool {
 		return *s.cfg.Plugins.Docker.AutoStart
 	}
 	return true
+}
+
+func (s *localStrategy) getContainerSwitch(ctx *hooks.Context) string {
+	if ctx.Config != nil {
+		return ctx.Config.Switch.ContainerSwitch
+	}
+	return ""
 }
 
 func (s *localStrategy) getAutoStop() bool {
