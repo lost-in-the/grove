@@ -1836,8 +1836,19 @@ func (m *Model) handleTmuxSwitch(switchPath string) bool {
 		return true
 	}
 
-	if err := tmux.AttachSession(sessionName); err != nil {
-		tuilog.Printf("warning: failed to attach tmux session: %v", err)
+	useCC := tmux.ShouldUseControlMode(nil)
+	if m.cfg != nil {
+		useCC = tmux.ShouldUseControlMode(m.cfg.Tmux.ControlMode)
+	}
+
+	var attachErr error
+	if useCC {
+		attachErr = tmux.AttachSessionControlMode(sessionName)
+	} else {
+		attachErr = tmux.AttachSession(sessionName)
+	}
+	if attachErr != nil {
+		tuilog.Printf("warning: failed to attach tmux session: %v", attachErr)
 		return false
 	}
 	return true

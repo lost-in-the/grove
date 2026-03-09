@@ -9,9 +9,18 @@ import (
 // and must contain zero ANSI escape sequences — the shell wrapper parses
 // these lines literally.
 //
-// Valid kinds: "cd", "tmux-attach", "env"
+// Valid kinds: "cd", "tmux-attach", "tmux-attach-cc", "env"
 func Directive(kind, value string) {
 	_, _ = fmt.Fprintf(os.Stdout, "%s:%s\n", kind, value)
+}
+
+// TmuxAttachDirective emits the appropriate tmux attach directive based on control mode.
+func TmuxAttachDirective(sessionName string, controlMode bool) {
+	if controlMode {
+		Directive("tmux-attach-cc", sessionName)
+	} else {
+		Directive("tmux-attach", sessionName)
+	}
 }
 
 // EnvDirective emits an env: directive that the shell wrapper will export.

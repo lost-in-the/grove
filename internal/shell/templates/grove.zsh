@@ -25,14 +25,19 @@ grove() {
             local should_cd=0
             local cd_target=""
             local tmux_session=""
+            local tmux_cc=0
             local other_lines=""
 
             while IFS= read -r line; do
                 if [[ "$line" == cd:* ]]; then
                     cd_target="${line#cd:}"
                     should_cd=1
+                elif [[ "$line" == tmux-attach-cc:* ]]; then
+                    tmux_session="${line#tmux-attach-cc:}"
+                    tmux_cc=1
                 elif [[ "$line" == tmux-attach:* ]]; then
                     tmux_session="${line#tmux-attach:}"
+                    tmux_cc=0
                 elif [[ "$line" == env:* ]]; then
                     export "${line#env:}"
                 else
@@ -53,7 +58,11 @@ grove() {
             fi
 
             if [[ -n "$tmux_session" ]]; then
-                tmux attach -t "$tmux_session"
+                if [[ "$tmux_cc" -eq 1 ]]; then
+                    tmux -CC attach -t "$tmux_session"
+                else
+                    tmux attach -t "$tmux_session"
+                fi
             fi
 
             return $exit_code

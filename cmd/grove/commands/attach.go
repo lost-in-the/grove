@@ -65,6 +65,7 @@ This is a tmux-only command — it does not emit cd: directives.`,
 		if tmuxMode == "" {
 			tmuxMode = "auto"
 		}
+		useCC := tmux.ShouldUseControlMode(cfg.Tmux.ControlMode)
 
 		if tmuxMode == "off" {
 			return fmt.Errorf("tmux is disabled in grove configuration (mode: off)")
@@ -128,11 +129,17 @@ This is a tmux-only command — it does not emit cd: directives.`,
 			hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
 			if hasShellIntegration {
 				// Emit tmux-attach directive for shell wrapper
-				cli.Directive("tmux-attach", sessionName)
+				cli.TmuxAttachDirective(sessionName, useCC)
 			} else {
 				// No shell integration: attach directly (blocks, takes over terminal)
-				if err := tmux.AttachSession(sessionName); err != nil {
-					return fmt.Errorf("failed to attach session: %w", err)
+				var attachErr error
+				if useCC {
+					attachErr = tmux.AttachSessionControlMode(sessionName)
+				} else {
+					attachErr = tmux.AttachSession(sessionName)
+				}
+				if attachErr != nil {
+					return fmt.Errorf("failed to attach session: %w", attachErr)
 				}
 			}
 		}

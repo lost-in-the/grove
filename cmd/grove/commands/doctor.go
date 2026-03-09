@@ -16,6 +16,7 @@ import (
 	"github.com/LeahArmstrong/grove-cli/internal/config"
 	"github.com/LeahArmstrong/grove-cli/internal/grove"
 	"github.com/LeahArmstrong/grove-cli/internal/shell"
+	"github.com/LeahArmstrong/grove-cli/internal/tmux"
 	"github.com/LeahArmstrong/grove-cli/plugins/docker"
 )
 
@@ -82,6 +83,17 @@ Examples:
 			}
 			return strings.TrimSpace(string(out)), nil
 		})
+
+		// Check: aggressive-resize warning for iTerm2 control mode
+		if tmux.IsControlModeTerminal() {
+			runCheck(w, "Tmux control mode", func() (string, error) {
+				out, err := cmdexec.Output(context.TODO(), "tmux", []string{"show-option", "-gv", "aggressive-resize"}, "", cmdexec.Tmux)
+				if err == nil && strings.TrimSpace(string(out)) == "on" {
+					return "", fmt.Errorf("aggressive-resize is on — may cause display issues with tmux -CC in iTerm2. Run: tmux set-option -g aggressive-resize off")
+				}
+				return "iTerm2 detected, control mode available", nil
+			})
+		}
 
 		// Check: gh CLI available
 		runCheck(w, "GitHub CLI", func() (string, error) {

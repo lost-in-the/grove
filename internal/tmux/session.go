@@ -26,6 +26,50 @@ func IsInsideTmux() bool {
 	return os.Getenv("TMUX") != ""
 }
 
+// IsControlModeTerminal returns true if the current terminal supports tmux control mode.
+// Currently this means iTerm2.
+func IsControlModeTerminal() bool {
+	return os.Getenv("TERM_PROGRAM") == "iTerm2"
+}
+
+// ShouldUseControlMode determines whether to use tmux -CC based on config and terminal.
+// Returns true when: config allows it (nil or true) AND terminal supports it.
+func ShouldUseControlMode(controlModeCfg *bool) bool {
+	if controlModeCfg != nil && !*controlModeCfg {
+		return false
+	}
+	return IsControlModeTerminal()
+}
+
+// AttachSessionControlMode attaches to a session using tmux -CC (control mode).
+// This is for iTerm2 integration where -CC goes before the subcommand.
+func AttachSessionControlMode(name string) error {
+	if name == "" {
+		return fmt.Errorf("session name cannot be empty")
+	}
+
+	exists, err := SessionExists(name)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return fmt.Errorf("session '%s' does not exist", name)
+	}
+
+	// If inside tmux, just switch (control mode doesn't apply for switch-client)
+	if IsInsideTmux() {
+		return SwitchSession(name)
+	}
+
+	// -CC goes before the subcommand for control mode
+	cmd := exec.Command("tmux", "-CC", "attach-session", "-t", name)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	return cmd.Run()
+}
+
 var (
 	tmuxAvailableOnce   sync.Once
 	tmuxAvailableResult bool
