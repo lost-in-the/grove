@@ -59,7 +59,8 @@ type ProtectionConfig struct {
 
 // SwitchConfig controls worktree switching behavior
 type SwitchConfig struct {
-	DirtyHandling string `toml:"dirty_handling"` // auto-stash, prompt, refuse
+	DirtyHandling   string `toml:"dirty_handling"`   // auto-stash, prompt, refuse
+	ContainerSwitch string `toml:"container_switch"` // auto, prompt, off
 }
 
 // NamingConfig controls worktree naming conventions
@@ -249,6 +250,9 @@ func mergeConfigs(base, override *Config) *Config {
 	}
 	if override.Switch.DirtyHandling != "" {
 		result.Switch.DirtyHandling = override.Switch.DirtyHandling
+	}
+	if override.Switch.ContainerSwitch != "" {
+		result.Switch.ContainerSwitch = override.Switch.ContainerSwitch
 	}
 	if override.Naming.Pattern != "" {
 		result.Naming.Pattern = override.Naming.Pattern

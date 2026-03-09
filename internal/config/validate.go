@@ -32,6 +32,17 @@ func Validate(cfg *Config) error {
 		return fmt.Errorf("dirty_handling must be one of: auto-stash, prompt, refuse")
 	}
 
+	// Validate container_switch options
+	validContainerSwitch := map[string]bool{
+		"":       true,
+		"auto":   true,
+		"prompt": true,
+		"off":    true,
+	}
+	if !validContainerSwitch[cfg.Switch.ContainerSwitch] {
+		return fmt.Errorf("container_switch must be one of: auto, prompt, off (got %q)", cfg.Switch.ContainerSwitch)
+	}
+
 	// Validate tmux mode
 	validTmuxMode := map[string]bool{
 		"auto":   true,

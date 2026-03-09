@@ -32,6 +32,18 @@ func (s *externalStrategy) OnPreSwitch(ctx *hooks.Context) error {
 		return nil
 	}
 
+	action := resolveFromConfig(s.getContainerSwitch(ctx))
+	if action == ContainerSwitchOff {
+		return nil
+	}
+
+	if action == ContainerSwitchPrompt {
+		yes, err := cli.Confirm("Stop containers in previous worktree?", false)
+		if err != nil || !yes {
+			return nil
+		}
+	}
+
 	return s.stopServices()
 }
 
@@ -52,6 +64,18 @@ func (s *externalStrategy) OnPostSwitch(ctx *hooks.Context) error {
 
 	if !s.getAutoStart() {
 		return nil
+	}
+
+	action := resolveFromConfig(s.getContainerSwitch(ctx))
+	if action == ContainerSwitchOff {
+		return nil
+	}
+
+	if action == ContainerSwitchPrompt {
+		yes, err := cli.Confirm("Start containers for this worktree?", true)
+		if err != nil || !yes {
+			return nil
+		}
 	}
 
 	return s.startServices(worktreePath)
@@ -302,6 +326,13 @@ func (s *externalStrategy) relativeWorktreePath(absPath string) string {
 		rel = "./" + rel
 	}
 	return rel
+}
+
+func (s *externalStrategy) getContainerSwitch(ctx *hooks.Context) string {
+	if ctx.Config != nil {
+		return ctx.Config.Switch.ContainerSwitch
+	}
+	return ""
 }
 
 func (s *externalStrategy) getAutoStart() bool {
