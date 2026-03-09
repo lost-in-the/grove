@@ -92,7 +92,9 @@ Toast levels:
 | `1`–`9` | Quick-switch to nth worktree |
 | `n` | Create new worktree |
 | `d` | Delete selected worktree |
+| `R` | Rename selected worktree |
 | `f` | Fork selected worktree |
+| `b` | Switch branch of selected worktree |
 | `s` | Sync changes from another worktree |
 | `c` | Open config editor |
 | `p` | Browse GitHub PRs |
@@ -142,6 +144,19 @@ Press `y` to confirm, `n` or `esc` to cancel.
 
 > The main worktree and protected worktrees cannot be deleted.
 
+### Rename Worktree (`R`)
+
+A text input overlay for renaming the selected worktree:
+- Shows the current name
+- Text input for the new name
+- Validates that the new name is not empty, not the same, and not taken
+
+Press `enter` to rename, `esc` to cancel.
+
+Renaming moves the git worktree directory, updates the state entry, and renames the associated tmux session.
+
+> The main worktree and protected worktrees cannot be renamed.
+
 ### Fork Worktree (`f`)
 
 Fork creates a new worktree branched from the currently selected one — useful when you want to try a different approach without losing your current work.
@@ -153,6 +168,19 @@ Steps:
    - **Copy** — Apply changes to both the fork and the source.
    - **Leave** — Fork starts from the commit HEAD; source keeps its changes.
 3. **Confirm** — Review and press `enter` to create.
+
+### Switch Branch (`b`)
+
+Changes which branch a worktree has checked out — without needing to delete and recreate it.
+
+Steps:
+1. **Branch** — Select a target branch from a filterable list. Branches already used by other worktrees are excluded.
+2. **WIP** (skipped if worktree is clean) — Choose how to handle uncommitted changes:
+   - **Stash** — Stash changes before switching (`git stash`).
+   - **Cancel** — Abort the branch switch.
+3. **Confirm** — Review current and target branches, then press `enter` to switch.
+
+> The main worktree and protected worktrees cannot have their branch changed.
 
 ### Sync Changes (`s`)
 

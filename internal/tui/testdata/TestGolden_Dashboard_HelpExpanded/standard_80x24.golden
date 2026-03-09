@@ -7,10 +7,14 @@
   │    [1m↑/k       [mmove up       [1mn         [mnew worktree  [1m1-9       [mquick-      │
   │  switch                                                                  │
   │    [1m↓/j       [mmove down     [1md         [mdelete        [1m/         [mfilter      │
-  │    [1menter     [mswitch        [1mf         [mfork          [1mv         [mcompact     │
+  │    [1menter     [mswitch        [1mR         [mrename        [1mv         [mcompact     │
   │    [1mesc       [mback/close  worktree                  [1m?         [mtoggle      │
   │  help                                                                    │
-  │                            [1ms         [msync changes  [1mq         [mquit        │
+  │                            [1mf         [mfork          [1mq         [mquit        │
+  │                          worktree                                        │
+  │                            [1mb         [mswitch                              │
+  │                          branch                                          │
+  │                            [1ms         [msync changes                        │
   │                            [1mc         [mconfigure                           │
   │                            [1mp         [mbrowse PRs                          │
   │                            [1mi         [mbrowse                              │
@@ -18,7 +22,3 @@
   │                            [1ma         [mbulk delete                         │
   │                            [1mo         [mcycle sort                          │
   │                            [1mr         [mrefresh                             │
-  │                                                                          │
-  │  Press ? again to close                                                  │
-  │                                                                          │
-  ╰──────────────────────────────────────────────────────────────────────────╯

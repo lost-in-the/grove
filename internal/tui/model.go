@@ -37,6 +37,8 @@ const (
 	ViewFork
 	ViewSync
 	ViewConfig
+	ViewRename
+	ViewCheckout
 )
 
 // Model is the root Bubble Tea model.
@@ -73,14 +75,16 @@ type Model struct {
 	sortMode SortMode
 
 	// Overlay state
-	deleteState *DeleteState
-	createState *CreateState
-	bulkState   *BulkState
-	prState     *PRViewState
-	issueState  *IssueViewState
-	forkState   *ForkState
-	syncState   *SyncState
-	configState *ConfigState
+	deleteState   *DeleteState
+	createState   *CreateState
+	bulkState     *BulkState
+	prState       *PRViewState
+	issueState    *IssueViewState
+	forkState     *ForkState
+	syncState     *SyncState
+	configState   *ConfigState
+	renameState   *RenameState
+	checkoutState *CheckoutState
 
 	// Post-create selection
 	pendingSelect string
@@ -450,13 +454,69 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case renameCompleteMsg:
+		m.activeView = ViewDashboard
+		m.renameState = nil
+		if msg.err != nil {
+			m.toast.Show(NewToast(fmt.Sprintf("Rename failed: %s", msg.err), ToastError))
+		} else {
+			m.toast.Show(NewToast(fmt.Sprintf("Renamed %q to %q", msg.oldName, msg.newName), ToastSuccess))
+			m.pendingSelect = msg.newName
+			cmds = append(cmds, m.spinner.Tick)
+		}
+		cmds = append(cmds, m.fetchWorktrees)
+		return m, tea.Batch(cmds...)
+
+	case checkoutBranchesMsg:
+		if m.checkoutState != nil {
+			if msg.err != nil {
+				m.checkoutState.Err = msg.err
+			} else {
+				// Filter out branches used by other worktrees
+				var available []string
+				for _, br := range msg.branches {
+					if !msg.usedBranches[br] {
+						available = append(available, br)
+					}
+				}
+				m.checkoutState.Branches = available
+			}
+		}
+		return m, nil
+
+	case checkoutWIPCheckMsg:
+		if m.checkoutState != nil {
+			m.checkoutState.HasWIP = msg.hasWIP
+			m.checkoutState.WIPCheckDone = true
+			m.checkoutState.WIPFiles = msg.files
+			if msg.err != nil {
+				m.checkoutState.Err = msg.err
+			}
+		}
+		return m, nil
+
+	case checkoutCompleteMsg:
+		if msg.err != nil {
+			if m.checkoutState != nil {
+				m.checkoutState.Err = msg.err
+				m.checkoutState.Switching = false
+			}
+			return m, nil
+		}
+		m.activeView = ViewDashboard
+		m.checkoutState = nil
+		m.toast.Show(NewToast(fmt.Sprintf("Switched to branch %q", msg.branch), ToastSuccess))
+		return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
+
 	case spinner.TickMsg:
 		// Tick toast expiry on every spinner tick
 		if m.toast != nil {
 			m.toast.Tick()
 		}
+		// Clear expired key highlight
+		m.helpFooter.ClearExpiredHighlight()
 		var spinnerCmds []tea.Cmd
-		if m.loading || (m.createState != nil && m.createState.Creating) || (m.forkState != nil && m.forkState.Forking) || (m.syncState != nil && m.syncState.Syncing) || (m.deleteState != nil && m.deleteState.Deleting) || (m.prState != nil && (m.prState.Loading || m.prState.Creating)) || (m.issueState != nil && (m.issueState.Loading || m.issueState.Creating)) || (m.toast != nil && m.toast.Current != nil) {
+		if m.loading || (m.createState != nil && m.createState.Creating) || (m.forkState != nil && m.forkState.Forking) || (m.syncState != nil && m.syncState.Syncing) || (m.deleteState != nil && m.deleteState.Deleting) || (m.renameState != nil && m.renameState.Renaming) || (m.checkoutState != nil && m.checkoutState.Switching) || (m.prState != nil && (m.prState.Loading || m.prState.Creating)) || (m.issueState != nil && (m.issueState.Loading || m.issueState.Creating)) || (m.toast != nil && m.toast.Current != nil) || m.helpFooter.HasHighlight() {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			spinnerCmds = append(spinnerCmds, cmd)
@@ -647,6 +707,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleSyncKey(msg)
 	case ViewConfig:
 		return m.handleConfigKey(msg)
+	case ViewRename:
+		return m.handleRenameKey(msg)
+	case ViewCheckout:
+		return m.handleCheckoutKey(msg)
 	case ViewDashboard:
 		return m.handleDashboardKey(msg)
 	}
@@ -670,6 +734,7 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.keys.Refresh):
+		m.helpFooter.SetHighlight("r")
 		m.loading = true
 		return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
 
@@ -711,10 +776,12 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case key.Matches(msg, m.keys.ViewMode):
+		m.helpFooter.SetHighlight("v")
 		m.toggleCompactMode()
 		return m, nil
 
 	case key.Matches(msg, m.keys.Sort):
+		m.helpFooter.SetHighlight("o")
 		m.sortMode = m.sortMode.Next()
 		m.applySortToList()
 		return m, nil
@@ -746,6 +813,28 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.activeView = ViewConfig
 		m.configState = NewConfigState()
 		return m, loadConfigCmd()
+
+	case key.Matches(msg, m.keys.Rename):
+		item, ok := m.selectedItem()
+		if ok && !item.IsMain && !item.IsProtected {
+			m.activeView = ViewRename
+			m.renameState = NewRenameState(&item)
+			return m, m.renameState.Input.Focus()
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.Checkout):
+		item, ok := m.selectedItem()
+		if ok && !item.IsMain && !item.IsProtected {
+			m.activeView = ViewCheckout
+			m.checkoutState = NewCheckoutState(item)
+			return m, tea.Batch(
+				m.checkoutState.BranchFilterInput.Focus(),
+				listCheckoutBranchesCmd(m.projectRoot, item.Path),
+				checkoutWIPCmd(item),
+			)
+		}
+		return m, nil
 	}
 
 	// Quick-switch: number keys 1-9 jump to nth visible item
@@ -812,6 +901,59 @@ func (m Model) handleDeleteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+func (m Model) handleRenameKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.renameState == nil {
+		m.activeView = ViewDashboard
+		return m, nil
+	}
+
+	if m.renameState.Renaming {
+		return m, nil
+	}
+
+	switch {
+	case key.Matches(msg, m.keys.Escape):
+		m.activeView = ViewDashboard
+		m.renameState = nil
+		return m, nil
+
+	case key.Matches(msg, m.keys.Enter):
+		newName := m.renameState.Input.Value()
+		if newName == "" {
+			m.renameState.Error = "name cannot be empty"
+			return m, nil
+		}
+		if newName == m.renameState.Item.ShortName {
+			m.renameState.Error = "new name is the same as current name"
+			return m, nil
+		}
+
+		// Check if name is already taken
+		for _, li := range m.list.Items() {
+			if item, ok := li.(WorktreeItem); ok {
+				if item.ShortName == newName {
+					m.renameState.Error = fmt.Sprintf("worktree %q already exists", newName)
+					return m, nil
+				}
+			}
+		}
+
+		m.renameState.Error = ""
+		m.renameState.Renaming = true
+		return m, tea.Batch(m.spinner.Tick, renameWorktreeCmd(m.worktreeMgr, m.stateMgr, m.renameState.Item.ShortName, newName))
+
+	default:
+		// Forward to text input
+		var cmd tea.Cmd
+		m.renameState.Input, cmd = m.renameState.Input.Update(msg)
+		// Clear error on typing
+		if m.renameState.Error != "" {
+			m.renameState.Error = ""
+		}
+		return m, cmd
+	}
 }
 
 func (m Model) handleCreateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -1297,6 +1439,20 @@ func (m Model) viewContent() string {
 			bg := m.renderDashboard()
 			return centerOverlay(bg, overlay, m.width, m.height)
 		}
+
+	case ViewRename:
+		if m.renameState != nil {
+			overlay := renderRename(m.renameState, m.width)
+			bg := m.renderDashboard()
+			return centerOverlay(bg, overlay, m.width, m.height)
+		}
+
+	case ViewCheckout:
+		if m.checkoutState != nil {
+			overlay := renderCheckout(m.checkoutState, m.width)
+			bg := m.renderDashboard()
+			return centerOverlay(bg, overlay, m.width, m.height)
+		}
 	}
 
 	return m.renderDashboard()
@@ -1359,8 +1515,10 @@ func (m Model) renderDashboard() string {
 		body = lipgloss.JoinVertical(lipgloss.Left, listView, separator, detailView)
 	}
 
-	// Help footer: always show compact hints
-	footer := m.helpFooter.RenderCompact(m.activeView, m.width-4)
+	// Help footer: always render with dashboard hints so the body height
+	// (computed by updateLayout for ViewDashboard) stays consistent.
+	// Overlay-specific hints are shown inside each overlay's content.
+	footer := m.helpFooter.RenderCompact(ViewDashboard, m.width-4)
 
 	// Composite toast onto the header line (right-aligned) to avoid layout shift
 	if m.toast != nil && m.toast.Current != nil {
@@ -1372,6 +1530,17 @@ func (m Model) renderDashboard() string {
 
 	// Wrap body in 1-char horizontal padding for visual framing
 	body = lipgloss.NewStyle().Padding(0, 1).Render(body)
+
+	// Clamp body so that statusBar + body + footer = exactly m.height lines.
+	// Child components (list, viewport) may render extra lines; trimming the
+	// body preserves the footer for overlay compositing.
+	if m.height > 0 {
+		footerLines := strings.Count(footer, "\n") + 1
+		bodyBudget := m.height - 1 - footerLines // 1 for statusBar
+		if bodyBudget > 0 {
+			body = clampLines(body, bodyBudget)
+		}
+	}
 
 	dashboard := lipgloss.JoinVertical(lipgloss.Left, statusBar, body, footer)
 
@@ -1426,8 +1595,38 @@ func (m Model) renderStatusBar() string {
 		Styles.TextMuted.Render(fmt.Sprintf(" %d worktrees", len(m.list.Items()))),
 	}
 
-	if m.sortMode != SortByName {
+	narrow := m.width < 80
+
+	// Always show sort mode (including default "name")
+	if narrow {
+		parts = append(parts, Styles.TextMuted.Render("↕"))
+	} else {
 		parts = append(parts, Styles.TextMuted.Render("↕ "+m.sortMode.String()))
+	}
+
+	// Always show view mode
+	viewLabel := "detailed"
+	if m.compactMode {
+		viewLabel = "compact"
+	}
+	if narrow {
+		parts = append(parts, Styles.TextMuted.Render("☰"))
+	} else {
+		parts = append(parts, Styles.TextMuted.Render("☰ "+viewLabel))
+	}
+
+	// Show filter when active (Filtering or FilterApplied)
+	if m.list.FilterState() != list.Unfiltered {
+		filterText := m.list.FilterValue()
+		matchCount := len(m.list.VisibleItems())
+		totalCount := len(m.list.Items())
+		if narrow {
+			badge := fmt.Sprintf("🔍 %d/%d", matchCount, totalCount)
+			parts = append(parts, Styles.TextNormal.Render(badge))
+		} else {
+			badge := fmt.Sprintf("🔍 %s [%d/%d]", filterText, matchCount, totalCount)
+			parts = append(parts, Styles.TextNormal.Render(badge))
+		}
 	}
 
 	if msg := m.toast.Message(); msg != "" {
@@ -1461,6 +1660,21 @@ func compositeToastOnHeader(header, toast string, width int) string {
 
 	// Fallback: just show header
 	return header
+}
+
+// clampLines pads or trims s to exactly n lines.
+func clampLines(s string, n int) string {
+	if n <= 0 {
+		return s
+	}
+	lines := strings.Split(s, "\n")
+	for len(lines) < n {
+		lines = append(lines, "")
+	}
+	if len(lines) > n {
+		lines = lines[:n]
+	}
+	return strings.Join(lines, "\n")
 }
 
 func centerOverlay(bg, overlay string, width, height int) string {

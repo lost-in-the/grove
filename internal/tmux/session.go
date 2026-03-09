@@ -112,6 +112,24 @@ func SwitchSession(name string) error {
 	return nil
 }
 
+// RenameSession renames an existing tmux session.
+// Callers are responsible for checking SessionExists beforehand if needed.
+func RenameSession(oldName, newName string) error {
+	if oldName == "" {
+		return fmt.Errorf("old session name cannot be empty")
+	}
+	if newName == "" {
+		return fmt.Errorf("new session name cannot be empty")
+	}
+
+	output, err := cmdexec.CombinedOutput(context.TODO(), "tmux", []string{"rename-session", "-t", oldName, newName}, "", cmdexec.Tmux)
+	if err != nil {
+		return fmt.Errorf("failed to rename tmux session: %s: %w", string(output), err)
+	}
+
+	return nil
+}
+
 // KillSession kills a tmux session.
 // Callers are responsible for checking SessionExists beforehand if needed.
 func KillSession(name string) error {

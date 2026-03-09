@@ -174,6 +174,42 @@ func (m *Manager) RemoveWorktree(name string) error {
 	return m.save()
 }
 
+// RenameWorktree renames a worktree in state, moving all fields to the new key.
+// Returns an error if the old name doesn't exist or the new name is already taken.
+func (m *Manager) RenameWorktree(oldName, newName string) error {
+	if oldName == "" {
+		return fmt.Errorf("old worktree name cannot be empty")
+	}
+	if newName == "" {
+		return fmt.Errorf("new worktree name cannot be empty")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	ws, ok := m.state.Worktrees[oldName]
+	if !ok {
+		return fmt.Errorf("worktree %q not found in state", oldName)
+	}
+
+	if _, exists := m.state.Worktrees[newName]; exists {
+		return fmt.Errorf("worktree %q already exists in state", newName)
+	}
+
+	// Move entry to new key, marking the old name as explicitly removed
+	// so save()'s disk-merge doesn't resurrect it.
+	delete(m.state.Worktrees, oldName)
+	m.removedWorktrees[oldName] = true
+	m.state.Worktrees[newName] = ws
+
+	// Update LastWorktree if it pointed to the old name
+	if m.state.LastWorktree == oldName {
+		m.state.LastWorktree = newName
+	}
+
+	return m.save()
+}
+
 // TouchWorktree updates the last_accessed_at timestamp for a worktree
 func (m *Manager) TouchWorktree(name string) error {
 	if name == "" {

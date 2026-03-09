@@ -111,9 +111,10 @@ type StyleSet struct {
 	SuccessText          lipgloss.Style
 
 	// Help
-	HelpKey  lipgloss.Style
-	HelpDesc lipgloss.Style
-	HelpSep  lipgloss.Style
+	HelpKey          lipgloss.Style
+	HelpKeyHighlight lipgloss.Style
+	HelpDesc         lipgloss.Style
+	HelpSep          lipgloss.Style
 
 	// Input
 	InputBorder lipgloss.Style
@@ -210,9 +211,10 @@ func NewStyleSet(cs ColorScheme) StyleSet {
 		SuccessText:   lipgloss.NewStyle().Foreground(cs.Success),
 
 		// Help
-		HelpKey:  lipgloss.NewStyle().Foreground(cs.Primary).Bold(true),
-		HelpDesc: lipgloss.NewStyle().Foreground(cs.TextMuted),
-		HelpSep:  lipgloss.NewStyle().Foreground(cs.TextMuted),
+		HelpKey:          lipgloss.NewStyle().Foreground(cs.Primary).Bold(true),
+		HelpKeyHighlight: lipgloss.NewStyle().Foreground(cs.HeaderBg).Background(cs.Primary).Bold(true),
+		HelpDesc:         lipgloss.NewStyle().Foreground(cs.TextMuted),
+		HelpSep:          lipgloss.NewStyle().Foreground(cs.TextMuted),
 
 		// Input
 		InputBorder: lipgloss.NewStyle().

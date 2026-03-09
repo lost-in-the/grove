@@ -169,6 +169,27 @@ func (m *Manager) CreateFromBranch(name, branch string) error {
 	return nil
 }
 
+// Move renames a worktree directory using git worktree move.
+// Both oldName and newName are short names (without project prefix).
+func (m *Manager) Move(oldName, newName string) error {
+	if oldName == "" {
+		return fmt.Errorf("old worktree name cannot be empty")
+	}
+	if newName == "" {
+		return fmt.Errorf("new worktree name cannot be empty")
+	}
+
+	oldPath := filepath.Join(filepath.Dir(m.repoRoot), m.FullName(oldName))
+	newPath := filepath.Join(filepath.Dir(m.repoRoot), m.FullName(newName))
+
+	output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"worktree", "move", oldPath, newPath}, m.repoRoot, cmdexec.GitLocal)
+	if err != nil {
+		return fmt.Errorf("failed to move worktree: %s: %w", string(output), err)
+	}
+
+	return nil
+}
+
 // Find searches for a worktree by short name or full name
 // Returns the worktree if found, nil if not found
 func (m *Manager) Find(name string) (*Worktree, error) {

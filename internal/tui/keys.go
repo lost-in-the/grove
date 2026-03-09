@@ -40,22 +40,24 @@ type KeyMap struct {
 	// View mode
 	ViewMode key.Binding
 
-	// Fork/Sync/Config
-	Fork   key.Binding
-	Sync   key.Binding
-	Config key.Binding
+	// Fork/Sync/Config/Rename/Checkout
+	Fork     key.Binding
+	Sync     key.Binding
+	Config   key.Binding
+	Rename   key.Binding
+	Checkout key.Binding
 }
 
 // ShortHelp returns keybindings for the short help view (help.KeyMap interface).
 func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Enter, k.New, k.Delete, k.Fork, k.Sync, k.Config, k.PRs, k.Issues, k.Sort, k.Filter, k.Help, k.Quit}
+	return []key.Binding{k.Enter, k.New, k.Delete, k.Rename, k.Fork, k.Checkout, k.Sync, k.Config, k.PRs, k.Issues, k.Sort, k.Filter, k.Help, k.Quit}
 }
 
 // FullHelp returns keybindings for the full help view (help.KeyMap interface).
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Enter},
-		{k.New, k.Delete, k.Fork, k.Sync, k.Config, k.PRs, k.Issues, k.Sort, k.Filter, k.Refresh},
+		{k.New, k.Delete, k.Rename, k.Fork, k.Checkout, k.Sync, k.Config, k.PRs, k.Issues, k.Sort, k.Filter, k.Refresh},
 		{k.Help, k.Quit, k.Escape},
 	}
 }
@@ -164,6 +166,14 @@ func DefaultKeyMap() KeyMap {
 		Config: key.NewBinding(
 			key.WithKeys("c"),
 			key.WithHelp("c", "config"),
+		),
+		Rename: key.NewBinding(
+			key.WithKeys("R"),
+			key.WithHelp("R", "rename"),
+		),
+		Checkout: key.NewBinding(
+			key.WithKeys("b"),
+			key.WithHelp("b", "branch"),
 		),
 	}
 }

@@ -2,9 +2,13 @@ package tui
 
 import (
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 )
+
+// highlightDuration is how long a key hint stays highlighted after being pressed.
+const highlightDuration = 500 * time.Millisecond
 
 // Hint represents a single key-description pair for the help footer.
 type Hint struct {
@@ -16,6 +20,10 @@ type Hint struct {
 type HelpFooter struct {
 	Expanded    bool
 	CompactMode bool // mirrors Model.compactMode for dynamic hint labels
+
+	// Highlight state: briefly flashes the key hint when pressed.
+	highlightedKey string
+	highlightedAt  time.Time
 }
 
 // NewHelpFooter creates a collapsed HelpFooter.
@@ -26,6 +34,39 @@ func NewHelpFooter() *HelpFooter {
 // Toggle switches between compact and expanded modes.
 func (h *HelpFooter) Toggle() {
 	h.Expanded = !h.Expanded
+}
+
+// SetHighlight marks a key as highlighted, recording the current time.
+func (h *HelpFooter) SetHighlight(key string) {
+	h.highlightedKey = key
+	h.highlightedAt = time.Now()
+}
+
+// IsHighlighted returns true if the given key is currently highlighted and
+// the highlight has not expired.
+func (h *HelpFooter) IsHighlighted(key string) bool {
+	if h.highlightedKey == "" || h.highlightedKey != key {
+		return false
+	}
+	return time.Since(h.highlightedAt) < highlightDuration
+}
+
+// ClearExpiredHighlight clears the highlight if it has expired.
+// Returns true if a highlight was cleared (caller should trigger a redraw).
+func (h *HelpFooter) ClearExpiredHighlight() bool {
+	if h.highlightedKey == "" {
+		return false
+	}
+	if time.Since(h.highlightedAt) >= highlightDuration {
+		h.highlightedKey = ""
+		return true
+	}
+	return false
+}
+
+// HasHighlight returns true if any key is currently highlighted (not yet expired).
+func (h *HelpFooter) HasHighlight() bool {
+	return h.highlightedKey != "" && time.Since(h.highlightedAt) < highlightDuration
 }
 
 // viewModeLabel returns "compact" or "detailed" based on current mode.
@@ -46,7 +87,9 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 			{"enter", "switch"},
 			{"n", "new"},
 			{"d", "delete"},
+			{"R", "rename"},
 			{"f", "fork"},
+			{"b", "branch"},
 			{"s", "sync"},
 			{"c", "config"},
 			{"o", "sort"},
@@ -98,6 +141,16 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 			{"enter", "edit"},
 			{"esc", "close"},
 		}
+	case ViewRename:
+		return []Hint{
+			{"enter", "rename"},
+			{"esc", "cancel"},
+		}
+	case ViewCheckout:
+		return []Hint{
+			{"enter", "continue"},
+			{"esc", "cancel"},
+		}
 	default:
 		return []Hint{
 			{"?", "help"},
@@ -113,7 +166,11 @@ func (h *HelpFooter) RenderCompact(view ActiveView, width int) string {
 
 	var parts []string
 	for _, hint := range hints {
-		part := Styles.HelpKey.Render(hint.Key) + " " + Styles.HelpDesc.Render(hint.Description)
+		keyStyle := Styles.HelpKey
+		if h.IsHighlighted(hint.Key) {
+			keyStyle = Styles.HelpKeyHighlight
+		}
+		part := keyStyle.Render(hint.Key) + " " + Styles.HelpDesc.Render(hint.Description)
 		parts = append(parts, part)
 	}
 
@@ -170,7 +227,9 @@ func (h *HelpFooter) RenderExpanded(width int) string {
 			items: []Hint{
 				{"n", "new worktree"},
 				{"d", "delete"},
+				{"R", "rename worktree"},
 				{"f", "fork worktree"},
+				{"b", "switch branch"},
 				{"s", "sync changes"},
 				{"c", "configure"},
 				{"p", "browse PRs"},
