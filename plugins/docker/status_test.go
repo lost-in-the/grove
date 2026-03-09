@@ -214,6 +214,42 @@ func TestComposeRunningCount_NoCompose(t *testing.T) {
 	}
 }
 
+func TestCurrentServiceInfo_NilConfig(t *testing.T) {
+	result := CurrentServiceInfo(nil, "/some/path")
+	if result != nil {
+		t.Errorf("expected nil for nil config, got %+v", result)
+	}
+}
+
+func TestCurrentServiceInfo_DisabledDocker(t *testing.T) {
+	disabled := false
+	cfg := &config.Config{}
+	cfg.Plugins.Docker.Enabled = &disabled
+	result := CurrentServiceInfo(cfg, "/some/path")
+	if result != nil {
+		t.Errorf("expected nil for disabled docker, got %+v", result)
+	}
+}
+
+func TestCurrentServiceInfo_LocalNoCompose(t *testing.T) {
+	dir := t.TempDir()
+	cfg := &config.Config{}
+	// mode defaults to "local" when empty
+	result := CurrentServiceInfo(cfg, dir)
+	if result != nil {
+		t.Errorf("expected nil for local mode without compose file, got %+v", result)
+	}
+}
+
+func TestCurrentServiceInfo_UnknownMode(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Plugins.Docker.Mode = "custom"
+	result := CurrentServiceInfo(cfg, "/some/path")
+	if result != nil {
+		t.Errorf("expected nil for unknown mode, got %+v", result)
+	}
+}
+
 func TestPathMatchesEnv(t *testing.T) {
 	tests := []struct {
 		name         string
