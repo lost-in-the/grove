@@ -3,7 +3,7 @@ package version
 // Version information set by build flags or defaults
 var (
 	// Version is the semantic version of the application
-	Version = "0.5.0-dev"
+	Version = "0.5.0"
 	// Commit is the git commit hash
 	Commit = "unknown"
 	// BuildDate is the date the binary was built

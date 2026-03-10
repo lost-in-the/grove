@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-03-10
+
 ### Added
+- `grove which` command for operational context — shows current worktree, branch, project, and Docker status
+- `-CC` tmux control mode for iTerm2 integration
+- Configurable container lifecycle on `grove to` via `container_switch` config (restart, stop, none)
 - `--branch` and `--from` flags for `grove new` — override branch name or base ref
 - Auto-switch to new worktree after `grove new` (shell integration)
 - `Find()` now matches worktrees by branch name in addition to short name
@@ -18,9 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Two-tier `grove doctor` with contextual errors and config symlink detection
 
 ### Fixed
+- Dirty worktree handling no longer blocks switching in valid cases
+- Key flash on TUI status badges resolved
+- Worktree rename and checkout edge cases fixed
 - TUI fork from root no longer skips the name input step
 - PR browser no longer swallows the 'o' key when filter input is focused
 - Command timeouts, signal handling, and correctness fixes
+- General hardening: bug fixes, timeout enforcement, improved error handling
 
 ## [0.4.0] - 2026-03-04
 
