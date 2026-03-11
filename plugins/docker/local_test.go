@@ -3,7 +3,7 @@ package docker
 import (
 	"testing"
 
-	"github.com/LeahArmstrong/grove-cli/internal/config"
+	"github.com/lost-in-the/grove/internal/config"
 )
 
 func TestLocalStrategy_GetAutoStart_ExplicitValues(t *testing.T) {

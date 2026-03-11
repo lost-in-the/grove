@@ -7,7 +7,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/LeahArmstrong/grove-cli/internal/worktree"
+	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 // SyncStep represents the current step in the sync wizard.

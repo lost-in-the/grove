@@ -8,8 +8,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
-	"github.com/LeahArmstrong/grove-cli/internal/log"
+	"github.com/lost-in-the/grove/internal/cmdexec"
+	"github.com/lost-in-the/grove/internal/log"
 )
 
 const (

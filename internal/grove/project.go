@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
+	"github.com/lost-in-the/grove/internal/cmdexec"
 )
 
 // FindRoot searches for the .grove directory starting from startDir and walking up.

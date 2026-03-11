@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/LeahArmstrong/grove-cli/internal/config"
+	"github.com/lost-in-the/grove/internal/config"
 )
 
 var ansiStripRE = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)

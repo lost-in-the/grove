@@ -8,12 +8,12 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/LeahArmstrong/grove-cli/internal/git"
-	"github.com/LeahArmstrong/grove-cli/internal/hooks"
-	"github.com/LeahArmstrong/grove-cli/internal/state"
-	"github.com/LeahArmstrong/grove-cli/internal/tmux"
-	"github.com/LeahArmstrong/grove-cli/internal/tuilog"
-	"github.com/LeahArmstrong/grove-cli/internal/worktree"
+	"github.com/lost-in-the/grove/internal/git"
+	"github.com/lost-in-the/grove/internal/hooks"
+	"github.com/lost-in-the/grove/internal/state"
+	"github.com/lost-in-the/grove/internal/tmux"
+	"github.com/lost-in-the/grove/internal/tuilog"
+	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 var errWorktreeNotFound = errors.New("worktree created but not found")

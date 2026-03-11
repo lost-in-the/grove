@@ -6,7 +6,7 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/LeahArmstrong/grove-cli/internal/theme"
+	"github.com/lost-in-the/grove/internal/theme"
 )
 
 // Writer wraps an io.Writer with TTY detection.

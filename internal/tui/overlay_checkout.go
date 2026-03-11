@@ -9,9 +9,9 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
-	"github.com/LeahArmstrong/grove-cli/internal/git"
-	"github.com/LeahArmstrong/grove-cli/internal/worktree"
+	"github.com/lost-in-the/grove/internal/cmdexec"
+	"github.com/lost-in-the/grove/internal/git"
+	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 // CheckoutStep represents the current step in the checkout wizard.

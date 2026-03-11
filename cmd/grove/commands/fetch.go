@@ -9,12 +9,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/LeahArmstrong/grove-cli/internal/cli"
-	"github.com/LeahArmstrong/grove-cli/internal/log"
-	"github.com/LeahArmstrong/grove-cli/internal/state"
-	"github.com/LeahArmstrong/grove-cli/internal/tmux"
-	"github.com/LeahArmstrong/grove-cli/internal/worktree"
-	"github.com/LeahArmstrong/grove-cli/plugins/tracker"
+	"github.com/lost-in-the/grove/internal/cli"
+	"github.com/lost-in-the/grove/internal/log"
+	"github.com/lost-in-the/grove/internal/state"
+	"github.com/lost-in-the/grove/internal/tmux"
+	"github.com/lost-in-the/grove/internal/worktree"
+	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
 // fetchItem creates a worktree from a GitHub PR or issue.

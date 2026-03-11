@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
+	"github.com/lost-in-the/grove/internal/cmdexec"
 )
 
 // BranchStatus contains information about a git branch's state

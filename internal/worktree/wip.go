@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
+	"github.com/lost-in-the/grove/internal/cmdexec"
 )
 
 // WIPHandler handles work-in-progress detection and manipulation.

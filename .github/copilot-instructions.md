@@ -26,8 +26,8 @@ Before making changes, review these specifications:
 Worktrees MUST use the `{project}-{name}` pattern:
 
 ```
-✓ grove-cli-testing
-✓ grove-cli-feature-auth
+✓ grove-testing
+✓ grove-feature-auth
 ✗ testing
 ✗ feature-auth
 ```
@@ -57,7 +57,7 @@ When implementing commands that switch worktrees, output `cd:` prefix, never cal
 |---------|--------|
 | `grove ls` output | Short names: "testing", "main" |
 | `grove here` output | Short name + branch + short SHA (7 chars) + commit message + age |
-| Tmux session names | Full names: "grove-cli-testing" |
+| Tmux session names | Full names: "grove-testing" |
 | Error messages | Lowercase, no punctuation, wrap with context |
 
 ## Architecture

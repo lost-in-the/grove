@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/LeahArmstrong/grove-cli/internal/config"
-	"github.com/LeahArmstrong/grove-cli/internal/plugins"
+	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/plugins"
 )
 
 // statusTimeout is the maximum time allowed for docker compose ps calls.

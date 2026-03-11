@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/LeahArmstrong/grove-cli/internal/shell"
+	"github.com/lost-in-the/grove/internal/shell"
 )
 
 var installCmd = &cobra.Command{

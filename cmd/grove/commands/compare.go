@@ -7,10 +7,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/LeahArmstrong/grove-cli/internal/cli"
-	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
-	"github.com/LeahArmstrong/grove-cli/internal/output"
-	"github.com/LeahArmstrong/grove-cli/internal/worktree"
+	"github.com/lost-in-the/grove/internal/cli"
+	"github.com/lost-in-the/grove/internal/cmdexec"
+	"github.com/lost-in-the/grove/internal/output"
+	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 var (

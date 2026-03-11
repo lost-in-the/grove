@@ -11,13 +11,13 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/LeahArmstrong/grove-cli/internal/cli"
-	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
-	"github.com/LeahArmstrong/grove-cli/internal/config"
-	"github.com/LeahArmstrong/grove-cli/internal/grove"
-	"github.com/LeahArmstrong/grove-cli/internal/shell"
-	"github.com/LeahArmstrong/grove-cli/internal/tmux"
-	"github.com/LeahArmstrong/grove-cli/plugins/docker"
+	"github.com/lost-in-the/grove/internal/cli"
+	"github.com/lost-in-the/grove/internal/cmdexec"
+	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/grove"
+	"github.com/lost-in-the/grove/internal/shell"
+	"github.com/lost-in-the/grove/internal/tmux"
+	"github.com/lost-in-the/grove/plugins/docker"
 )
 
 func init() {

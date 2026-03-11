@@ -3,7 +3,7 @@ package tui
 import (
 	lipgloss "charm.land/lipgloss/v2"
 
-	"github.com/LeahArmstrong/grove-cli/internal/theme"
+	"github.com/lost-in-the/grove/internal/theme"
 )
 
 // ColorScheme is re-exported from internal/theme for backward compatibility.

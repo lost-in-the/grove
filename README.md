@@ -68,7 +68,7 @@ Grove wraps the full worktree lifecycle — create, switch, fork, clean up — a
 ### Homebrew (recommended)
 
 ```bash
-brew tap LeahArmstrong/tap
+brew tap lost-in-the/tap
 brew install grove
 ```
 
@@ -77,24 +77,24 @@ Includes automatic updates and shell completions.
 ### Go Install
 
 ```bash
-go install github.com/LeahArmstrong/grove-cli/cmd/grove@latest
+go install github.com/lost-in-the/grove/cmd/grove@latest
 ```
 
 ### Release Binaries
 
-Download the latest release for your platform from the [releases page](https://github.com/LeahArmstrong/grove-cli/releases).
+Download the latest release for your platform from the [releases page](https://github.com/lost-in-the/grove/releases).
 
 ```bash
 # macOS (Apple Silicon)
-curl -L https://github.com/LeahArmstrong/grove-cli/releases/latest/download/grove-cli_v1.0.0_Darwin_arm64.tar.gz | tar xz
+curl -L https://github.com/lost-in-the/grove/releases/latest/download/grove_1.0.0_Darwin_arm64.tar.gz | tar xz
 sudo mv grove /usr/local/bin/
 ```
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/LeahArmstrong/grove-cli
-cd grove-cli
+git clone https://github.com/lost-in-the/grove
+cd grove
 make build
 sudo make install
 ```

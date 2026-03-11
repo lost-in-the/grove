@@ -8,13 +8,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
-	"github.com/LeahArmstrong/grove-cli/internal/config"
-	"github.com/LeahArmstrong/grove-cli/internal/plugins"
-	"github.com/LeahArmstrong/grove-cli/internal/state"
-	"github.com/LeahArmstrong/grove-cli/internal/tmux"
-	"github.com/LeahArmstrong/grove-cli/internal/tuilog"
-	"github.com/LeahArmstrong/grove-cli/internal/worktree"
+	"github.com/lost-in-the/grove/internal/cmdexec"
+	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/plugins"
+	"github.com/lost-in-the/grove/internal/state"
+	"github.com/lost-in-the/grove/internal/tmux"
+	"github.com/lost-in-the/grove/internal/tuilog"
+	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 // WorktreeItem holds enriched worktree data for the TUI.

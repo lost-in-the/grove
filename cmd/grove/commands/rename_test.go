@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/LeahArmstrong/grove-cli/internal/worktree"
+	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 func TestRenameCmd(t *testing.T) {

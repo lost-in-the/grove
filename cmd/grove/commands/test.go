@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/LeahArmstrong/grove-cli/internal/worktree"
-	"github.com/LeahArmstrong/grove-cli/plugins/docker"
+	"github.com/lost-in-the/grove/internal/worktree"
+	"github.com/lost-in-the/grove/plugins/docker"
 )
 
 var testCmd = &cobra.Command{

@@ -1,6 +1,6 @@
 package docker
 
-import "github.com/LeahArmstrong/grove-cli/internal/cli"
+import "github.com/lost-in-the/grove/internal/cli"
 
 // ContainerSwitchAction represents the resolved action for container lifecycle during switch.
 type ContainerSwitchAction int

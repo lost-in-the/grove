@@ -9,8 +9,8 @@ import (
 
 	"charm.land/bubbles/v2/list"
 
-	"github.com/LeahArmstrong/grove-cli/internal/plugins"
-	"github.com/LeahArmstrong/grove-cli/internal/tui"
+	"github.com/lost-in-the/grove/internal/plugins"
+	"github.com/lost-in-the/grove/internal/tui"
 )
 
 func main() {

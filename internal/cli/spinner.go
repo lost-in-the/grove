@@ -8,7 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	lipgloss "charm.land/lipgloss/v2"
 
-	"github.com/LeahArmstrong/grove-cli/internal/theme"
+	"github.com/lost-in-the/grove/internal/theme"
 )
 
 // spinnerModel is a minimal Bubbletea model for a CLI spinner.

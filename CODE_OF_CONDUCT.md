@@ -6,4 +6,4 @@ Please read the full text at the link above. By participating in this project, y
 
 ## Reporting
 
-Report issues to code@leah.wtf or via [GitHub Security Advisories](https://github.com/LeahArmstrong/grove-cli/security/advisories/new) for sensitive matters.
+Report issues to code@leah.wtf or via [GitHub Security Advisories](https://github.com/lost-in-the/grove/security/advisories/new) for sensitive matters.

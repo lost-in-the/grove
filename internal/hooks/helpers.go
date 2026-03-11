@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/LeahArmstrong/grove-cli/internal/fsutil"
+	"github.com/lost-in-the/grove/internal/fsutil"
 )
 
 // resolvePath resolves a path that may be relative or absolute

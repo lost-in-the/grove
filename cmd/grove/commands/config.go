@@ -8,10 +8,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/LeahArmstrong/grove-cli/internal/cli"
-	"github.com/LeahArmstrong/grove-cli/internal/config"
-	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
-	"github.com/LeahArmstrong/grove-cli/internal/grove"
+	"github.com/lost-in-the/grove/internal/cli"
+	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/exitcode"
+	"github.com/lost-in-the/grove/internal/grove"
 )
 
 var (

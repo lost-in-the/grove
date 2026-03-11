@@ -9,14 +9,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/LeahArmstrong/grove-cli/internal/cli"
-	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
-	"github.com/LeahArmstrong/grove-cli/internal/config"
-	"github.com/LeahArmstrong/grove-cli/internal/grove"
-	"github.com/LeahArmstrong/grove-cli/internal/hooks"
-	"github.com/LeahArmstrong/grove-cli/internal/state"
-	"github.com/LeahArmstrong/grove-cli/internal/worktree"
-	"github.com/LeahArmstrong/grove-cli/plugins/docker"
+	"github.com/lost-in-the/grove/internal/cli"
+	"github.com/lost-in-the/grove/internal/cmdexec"
+	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/grove"
+	"github.com/lost-in-the/grove/internal/hooks"
+	"github.com/lost-in-the/grove/internal/state"
+	"github.com/lost-in-the/grove/internal/worktree"
+	"github.com/lost-in-the/grove/plugins/docker"
 )
 
 func isGitRepo(dir string) bool {

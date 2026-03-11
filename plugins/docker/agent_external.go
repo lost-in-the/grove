@@ -10,10 +10,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
-	"github.com/LeahArmstrong/grove-cli/internal/config"
-	"github.com/LeahArmstrong/grove-cli/internal/hooks"
-	"github.com/LeahArmstrong/grove-cli/internal/worktree"
+	"github.com/lost-in-the/grove/internal/cmdexec"
+	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/hooks"
+	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 // agentExternalStrategy implements the docker mode for agent worktrees that run

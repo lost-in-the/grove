@@ -87,7 +87,7 @@ Priority 3: Root directory name
 
 **Example:**
 ```
-~/projects/grove-cli/.git  →  project = "grove-cli"
+~/projects/grove/.git  →  project = "grove"
 ~/projects/my-app/.grove/  →  project = (from config or "my-app")
 ```
 
@@ -102,8 +102,8 @@ Priority 3: Root directory name
 **Examples:**
 | Project | User Input | Worktree Directory | Tmux Session |
 |---------|------------|-------------------|--------------|
-| grove-cli | testing | grove-cli-testing | grove-cli-testing |
-| grove-cli | feature-auth | grove-cli-feature-auth | grove-cli-feature-auth |
+| grove | testing | grove-testing | grove-testing |
+| grove | feature-auth | grove-feature-auth | grove-feature-auth |
 | my-app | hotfix-123 | my-app-hotfix-123 | my-app-hotfix-123 |
 
 **Rationale:** 
@@ -116,14 +116,14 @@ Priority 3: Root directory name
 Commands should use **short names** for user-facing display within project context:
 
 ```
-# grove ls (when in grove-cli project)
+# grove ls (when in grove project)
 NAME          BRANCH    STATUS
-testing       testing   clean      ← shows "testing" not "grove-cli-testing"
+testing       testing   clean      ← shows "testing" not "grove-testing"
 feature-auth  auth      dirty
 
 # tmux list-sessions (shows full names)
-grove-cli-testing: 1 windows
-grove-cli-feature-auth: 1 windows
+grove-testing: 1 windows
+grove-feature-auth: 1 windows
 my-app-main: 1 windows
 ```
 
@@ -170,9 +170,9 @@ Worktrees are created as **siblings** to the main project directory:
 
 ```
 ~/projects/
-├── grove-cli/              ← main project (where you run commands)
-├── grove-cli-testing/      ← worktree created by `w new testing`
-├── grove-cli-feature-auth/ ← worktree created by `w new feature-auth`
+├── grove/              ← main project (where you run commands)
+├── grove-testing/      ← worktree created by `w new testing`
+├── grove-feature-auth/ ← worktree created by `w new feature-auth`
 └── my-other-project/       ← unrelated project
 ```
 
@@ -218,10 +218,10 @@ Flags:
 ```
 NAME            BRANCH          STATUS     TMUX        PATH
 ────────────────────────────────────────────────────────────────────────
-• main          main            clean      attached    ~/projects/grove-cli
-  testing       testing         clean      detached    ~/projects/grove-cli-testing
-  feature-auth  feature/auth    dirty      none        ~/projects/grove-cli-feature-auth
-  hotfix        main            clean      frozen      ~/projects/grove-cli-hotfix
+• main          main            clean      attached    ~/projects/grove
+  testing       testing         clean      detached    ~/projects/grove-testing
+  feature-auth  feature/auth    dirty      none        ~/projects/grove-feature-auth
+  hotfix        main            clean      frozen      ~/projects/grove-hotfix
 ```
 
 **Column Definitions:**
@@ -234,22 +234,22 @@ NAME            BRANCH          STATUS     TMUX        PATH
 
 **Output Format (--paths):**
 ```
-~/projects/grove-cli
-~/projects/grove-cli-testing
-~/projects/grove-cli-feature-auth
+~/projects/grove
+~/projects/grove-testing
+~/projects/grove-feature-auth
 ```
 
 **Output Format (--json):**
 ```json
 {
-  "project": "grove-cli",
+  "project": "grove",
   "current": "main",
   "worktrees": [
     {
       "name": "main",
-      "fullName": "grove-cli",
+      "fullName": "grove",
       "branch": "main",
-      "path": "~/projects/grove-cli",
+      "path": "~/projects/grove",
       "status": "clean",
       "tmux": "attached",
       "frozen": false,
@@ -325,7 +325,7 @@ Flags:
 **Output (Success):**
 ```
 ✓ Created worktree 'testing'
-✓ Created tmux session 'grove-cli-testing'
+✓ Created tmux session 'grove-testing'
 ✓ Docker stack started
 ```
 
@@ -333,7 +333,7 @@ Flags:
 ```
 ✗ Worktree 'testing' already exists
 
-  Path:   ~/projects/grove-cli-testing
+  Path:   ~/projects/grove-testing
   Branch: testing
   Status: clean
 
@@ -344,9 +344,9 @@ To remove it:    grove rm testing
 
 **Output (Branch Exists, No Worktree):**
 ```
-✓ Created worktree 'feature-auth' at ~/projects/grove-cli-feature-auth
+✓ Created worktree 'feature-auth' at ~/projects/grove-feature-auth
 ✓ Checked out existing branch 'feature/auth'
-✓ Created tmux session 'grove-cli-feature-auth'
+✓ Created tmux session 'grove-feature-auth'
 ```
 
 **Edge Cases:**
@@ -421,7 +421,7 @@ popup_height = "80%"
 **Output (New worktree):**
 ```
 ✓ Created worktree 'feature-x'
-✓ Created session 'grove-cli-feature-x' running 'claude'
+✓ Created session 'grove-feature-x' running 'claude'
 ```
 
 **Output (Existing worktree, reattach):**
@@ -510,23 +510,23 @@ Flags:
 
 **Output (Inside tmux, direct execution):**
 ```
-✓ Switched to tmux session 'grove-cli-testing'
+✓ Switched to tmux session 'grove-testing'
 ```
 *Tmux session switches, directory follows*
 
 **Output (Outside tmux, via shell wrapper):**
 ```
-✓ Attached to tmux session 'grove-cli-testing'
-cd:~/projects/grove-cli-testing
+✓ Attached to tmux session 'grove-testing'
+cd:~/projects/grove-testing
 ```
 *New tmux client opens, shell changes directory after*
 
 **Output (Outside tmux, direct execution):**
 ```
-✓ Tmux session 'grove-cli-testing' ready
+✓ Tmux session 'grove-testing' ready
 
-To attach: tmux attach -t grove-cli-testing
-To enter directory: cd ~/projects/grove-cli-testing
+To attach: tmux attach -t grove-testing
+To enter directory: cd ~/projects/grove-testing
 ```
 
 **Output (Dirty worktree, refuse mode):**
@@ -672,7 +672,7 @@ Flags:
 
 **Output (Success):**
 ```
-✓ Killed tmux session 'grove-cli-testing'
+✓ Killed tmux session 'grove-testing'
 ✓ Removed worktree 'testing'
 ✓ Deleted branch 'testing'
 ```
@@ -820,26 +820,26 @@ Flags:
 **Output (Default):**
 ```
 Worktree: testing
-Project:  grove-cli
+Project:  grove
 Branch:   testing
-Path:     ~/projects/grove-cli-testing
+Path:     ~/projects/grove-testing
 Commit:   abc1234 (2 hours ago) Fix authentication bug
 Status:   clean
-Tmux:     attached (grove-cli-testing)
+Tmux:     attached (grove-testing)
 Docker:   running (3 containers)
 ```
 
 **Output (Dirty):**
 ```
 Worktree: testing
-Project:  grove-cli
+Project:  grove
 Branch:   testing
-Path:     ~/projects/grove-cli-testing
+Path:     ~/projects/grove-testing
 Commit:   abc1234 (2 hours ago) Fix authentication bug
 Status:   dirty
           M  src/auth.go
           ?? src/new_file.go
-Tmux:     attached (grove-cli-testing)
+Tmux:     attached (grove-testing)
 Docker:   stopped
 ```
 
@@ -852,10 +852,10 @@ testing
 ```json
 {
   "name": "testing",
-  "fullName": "grove-cli-testing",
-  "project": "grove-cli",
+  "fullName": "grove-testing",
+  "project": "grove",
   "branch": "testing",
-  "path": "~/projects/grove-cli-testing",
+  "path": "~/projects/grove-testing",
   "commit": {
     "hash": "abc1234def5678",
     "shortHash": "abc1234",
@@ -865,7 +865,7 @@ testing
   "status": "dirty",
   "changes": ["M  src/auth.go", "?? src/new_file.go"],
   "tmux": {
-    "session": "grove-cli-testing",
+    "session": "grove-testing",
     "status": "attached"
   },
   "docker": {
@@ -995,8 +995,8 @@ Does **not** emit a `cd:` directive. Use `grove to` if you want a directory chan
 ```json
 {
   "name": "testing",
-  "session": "grove-cli-testing",
-  "path": "/path/to/grove-cli-testing",
+  "session": "grove-testing",
+  "path": "/path/to/grove-testing",
   "created": false
 }
 ```
@@ -1056,7 +1056,7 @@ Services:  ○ not running
 {
   "worktree": "testing",
   "branch": "feat/testing",
-  "path": "/path/to/grove-cli-testing",
+  "path": "/path/to/grove-testing",
   "services": {
     "running_for": "testing",
     "matches_current": true
@@ -1186,9 +1186,9 @@ Flags:
 **Output:**
 ```
 Starting containers for 'testing'...
-  ✓ grove-cli-testing-db
-  ✓ grove-cli-testing-redis
-  ✓ grove-cli-testing-web
+  ✓ grove-testing-db
+  ✓ grove-testing-redis
+  ✓ grove-testing-web
 
 All containers running. Web available at http://localhost:3001
 ```
@@ -1222,9 +1222,9 @@ Flags:
 **Output:**
 ```
 Stopping containers for 'testing'...
-  ✓ grove-cli-testing-web
-  ✓ grove-cli-testing-redis
-  ✓ grove-cli-testing-db
+  ✓ grove-testing-web
+  ✓ grove-testing-redis
+  ✓ grove-testing-db
 
 All containers stopped.
 ```
@@ -1405,8 +1405,8 @@ Choice [1-4]:
 ```
 ✓ Created worktree 'hotfix' with branch 'main-hotfix'
 ✓ Moved uncommitted changes to fork
-✓ Created tmux session 'grove-cli-hotfix'
-cd:~/projects/grove-cli-hotfix
+✓ Created tmux session 'grove-hotfix'
+cd:~/projects/grove-hotfix
 ```
 
 **Output (--json):**
@@ -1414,10 +1414,10 @@ cd:~/projects/grove-cli-hotfix
 {
   "name": "hotfix",
   "branch": "main-hotfix",
-  "path": "~/projects/grove-cli-hotfix",
+  "path": "~/projects/grove-hotfix",
   "parent": "main",
   "created": true,
-  "switch_to": "~/projects/grove-cli-hotfix"
+  "switch_to": "~/projects/grove-hotfix"
 }
 ```
 
@@ -1820,10 +1820,10 @@ Flags:
 
 **Output (Default):**
 ```
-Configuration for 'grove-cli'
+Configuration for 'grove'
 
 Global: ~/.config/grove/config.toml
-Local:  ~/projects/grove-cli/.grove/config.toml (not found)
+Local:  ~/projects/grove/.grove/config.toml (not found)
 
 Settings:
   alias:            w

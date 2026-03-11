@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/LeahArmstrong/grove-cli/internal/version"
+	"github.com/lost-in-the/grove/internal/version"
 )
 
 var versionCmd = &cobra.Command{

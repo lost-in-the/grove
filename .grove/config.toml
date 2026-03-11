@@ -1,5 +1,5 @@
 # Grove project configuration
-project_name = "grove-cli"
+project_name = "grove"
 
 [switch]
 dirty_handling = "prompt"  # auto-stash, prompt, refuse

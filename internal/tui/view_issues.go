@@ -9,9 +9,9 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/LeahArmstrong/grove-cli/internal/state"
-	"github.com/LeahArmstrong/grove-cli/internal/worktree"
-	"github.com/LeahArmstrong/grove-cli/plugins/tracker"
+	"github.com/lost-in-the/grove/internal/state"
+	"github.com/lost-in-the/grove/internal/worktree"
+	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
 // IssueViewState holds the state for the issue browser view.

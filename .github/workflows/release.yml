@@ -43,7 +43,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
 
           # Download source tarball and compute SHA256
-          TARBALL_URL="https://github.com/LeahArmstrong/grove-cli/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
+          TARBALL_URL="https://github.com/lost-in-the/grove/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
           SHA256=$(curl -sL "$TARBALL_URL" | sha256sum | awk '{print $1}')
 
           # Generate formula from template
@@ -55,7 +55,7 @@ jobs:
           # Get current file SHA (needed for updates)
           CURRENT_SHA=$(curl -s \
             -H "Authorization: token ${TAP_GITHUB_TOKEN}" \
-            "https://api.github.com/repos/LeahArmstrong/homebrew-tap/contents/Formula/grove.rb" \
+            "https://api.github.com/repos/lost-in-the/homebrew-tap/contents/Formula/grove.rb" \
             | jq -r '.sha // empty')
 
           # Build request body
@@ -76,7 +76,7 @@ jobs:
             -H "Authorization: token ${TAP_GITHUB_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "$BODY" \
-            "https://api.github.com/repos/LeahArmstrong/homebrew-tap/contents/Formula/grove.rb")
+            "https://api.github.com/repos/lost-in-the/homebrew-tap/contents/Formula/grove.rb")
 
           HTTP_CODE=$(echo "$RESPONSE" | tail -1)
           BODY_OUT=$(echo "$RESPONSE" | sed '$d')

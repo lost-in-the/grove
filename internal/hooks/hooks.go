@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/LeahArmstrong/grove-cli/internal/config"
+	"github.com/lost-in-the/grove/internal/config"
 )
 
 // Hook is a function that can be registered to run at specific lifecycle points

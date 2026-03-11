@@ -3,7 +3,7 @@
 # Detects OS/arch, installs via Homebrew or GitHub release, runs grove setup.
 set -e
 
-REPO="LeahArmstrong/grove-cli"
+REPO="lost-in-the/grove"
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -38,7 +38,7 @@ detect_arch() {
 
 install_brew() {
     info "Installing via Homebrew..."
-    brew tap "$REPO" 2>/dev/null || true
+    brew tap "lost-in-the/tap" 2>/dev/null || true
     brew install grove
     ok "Installed grove via Homebrew"
 }
@@ -59,7 +59,7 @@ install_release() {
     fi
 
     VERSION="${TAG#v}"
-    ARCHIVE="grove-cli_${VERSION}_${OS}_${ARCH}.tar.gz"
+    ARCHIVE="grove_${VERSION}_${OS}_${ARCH}.tar.gz"
     URL="https://github.com/${REPO}/releases/download/${TAG}/${ARCHIVE}"
 
     TMPDIR=$(mktemp -d)

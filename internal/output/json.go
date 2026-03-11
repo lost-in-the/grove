@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
+	"github.com/lost-in-the/grove/internal/exitcode"
 )
 
 // JSONError represents an error response in JSON format.

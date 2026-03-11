@@ -9,7 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/LeahArmstrong/grove-cli/internal/plugins"
+	"github.com/lost-in-the/grove/internal/plugins"
 )
 
 // ComputeDelegateWidthsV2 computes content-adaptive column widths for the V2

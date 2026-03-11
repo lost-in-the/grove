@@ -8,11 +8,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/LeahArmstrong/grove-cli/internal/config"
-	"github.com/LeahArmstrong/grove-cli/internal/detect"
-	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
-	"github.com/LeahArmstrong/grove-cli/internal/grove"
-	"github.com/LeahArmstrong/grove-cli/internal/state"
+	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/detect"
+	"github.com/lost-in-the/grove/internal/exitcode"
+	"github.com/lost-in-the/grove/internal/grove"
+	"github.com/lost-in-the/grove/internal/state"
 )
 
 var (
@@ -289,7 +289,7 @@ func generateHooksToml(profile *detect.ProjectProfile) string {
 	b.WriteString("# Auto-generated for detected project type: " + profile.Type + "\n")
 	b.WriteString("#\n")
 	b.WriteString("# Edit: grove config --hooks -e\n")
-	b.WriteString("# Docs: https://github.com/LeahArmstrong/grove-cli#hooks\n\n")
+	b.WriteString("# Docs: https://github.com/lost-in-the/grove#hooks\n\n")
 
 	for _, f := range profile.Copy {
 		b.WriteString("[[hooks.post_create]]\n")

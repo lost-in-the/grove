@@ -6,7 +6,7 @@ import (
 
 	"github.com/charmbracelet/glamour"
 
-	"github.com/LeahArmstrong/grove-cli/plugins/tracker"
+	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
 // renderPRPreview renders a detailed preview panel for a single PR.

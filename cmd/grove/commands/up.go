@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/LeahArmstrong/grove-cli/internal/cli"
-	"github.com/LeahArmstrong/grove-cli/plugins/docker"
+	"github.com/lost-in-the/grove/internal/cli"
+	"github.com/lost-in-the/grove/plugins/docker"
 )
 
 var (

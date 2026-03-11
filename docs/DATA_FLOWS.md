@@ -83,7 +83,7 @@ WorktreeState
 
 ```
 Worktree
-  Name          string  # directory basename (e.g., "grove-cli-testing")
+  Name          string  # directory basename (e.g., "grove-testing")
   Path          string  # absolute path
   Branch        string  # branch name or "detached"
   Commit        string  # full commit hash

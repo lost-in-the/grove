@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/LeahArmstrong/grove-cli/plugins/tracker"
+	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
 func TestRenderPRPreview(t *testing.T) {

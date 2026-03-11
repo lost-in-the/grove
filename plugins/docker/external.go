@@ -6,11 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/LeahArmstrong/grove-cli/internal/cli"
-	"github.com/LeahArmstrong/grove-cli/internal/config"
-	"github.com/LeahArmstrong/grove-cli/internal/fsutil"
-	"github.com/LeahArmstrong/grove-cli/internal/hooks"
-	"github.com/LeahArmstrong/grove-cli/internal/worktree"
+	"github.com/lost-in-the/grove/internal/cli"
+	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/fsutil"
+	"github.com/lost-in-the/grove/internal/hooks"
+	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 // externalStrategy implements the docker mode for projects whose services are defined

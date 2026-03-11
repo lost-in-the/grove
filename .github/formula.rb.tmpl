@@ -1,7 +1,7 @@
 class Grove < Formula
   desc "Zero-friction worktree management for developers"
-  homepage "https://github.com/LeahArmstrong/grove-cli"
-  url "https://github.com/LeahArmstrong/grove-cli/archive/refs/tags/vVERSION.tar.gz"
+  homepage "https://github.com/lost-in-the/grove"
+  url "https://github.com/lost-in-the/grove/archive/refs/tags/vVERSION.tar.gz"
   sha256 "SHA256"
   license "MIT"
 
@@ -10,9 +10,9 @@ class Grove < Formula
   def install
     ldflags = %W[
       -s -w
-      -X github.com/LeahArmstrong/grove-cli/internal/version.Version=#{version}
-      -X github.com/LeahArmstrong/grove-cli/internal/version.Commit=HEAD
-      -X github.com/LeahArmstrong/grove-cli/internal/version.BuildDate=#{time.iso8601}
+      -X github.com/lost-in-the/grove/internal/version.Version=#{version}
+      -X github.com/lost-in-the/grove/internal/version.Commit=HEAD
+      -X github.com/lost-in-the/grove/internal/version.BuildDate=#{time.iso8601}
     ]
     system "go", "build", *std_go_args(ldflags:), "./cmd/grove"
   end

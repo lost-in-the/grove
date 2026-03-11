@@ -12,7 +12,7 @@ This package provides state persistence for Grove, specifically managing frozen 
 ## Usage
 
 ```go
-import "github.com/LeahArmstrong/grove-cli/internal/state"
+import "github.com/lost-in-the/grove/internal/state"
 
 // Create a manager (empty string uses default location)
 mgr, err := state.NewManager("")

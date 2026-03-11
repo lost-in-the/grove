@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/LeahArmstrong/grove-cli/internal/config"
-	"github.com/LeahArmstrong/grove-cli/internal/hooks"
+	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/hooks"
 )
 
 // mockPlugin is a test implementation of the Plugin interface

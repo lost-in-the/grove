@@ -7,8 +7,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/LeahArmstrong/grove-cli/cmd/grove/commands"
-	"github.com/LeahArmstrong/grove-cli/internal/log"
+	"github.com/lost-in-the/grove/cmd/grove/commands"
+	"github.com/lost-in-the/grove/internal/log"
 )
 
 func main() {

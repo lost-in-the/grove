@@ -10,7 +10,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
+	"github.com/lost-in-the/grove/internal/cmdexec"
 )
 
 // TestEnvNumber derives a stable TEST_ENV_NUMBER in range [50, 99] from a worktree name.

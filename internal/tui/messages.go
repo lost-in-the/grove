@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"github.com/LeahArmstrong/grove-cli/plugins/tracker"
+	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
 // worktreesFetchedMsg is sent when worktree data has been loaded.

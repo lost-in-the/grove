@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/LeahArmstrong/grove-cli/internal/tuilog"
+	"github.com/lost-in-the/grove/internal/tuilog"
 )
 
 // UIPrefs stores user preferences that persist across TUI sessions.

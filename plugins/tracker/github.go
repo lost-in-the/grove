@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
+	"github.com/lost-in-the/grove/internal/cmdexec"
 )
 
 // GitHubAdapter implements the Tracker interface using the GitHub CLI.

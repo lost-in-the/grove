@@ -9,7 +9,7 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/LeahArmstrong/grove-cli/plugins/tracker"
+	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
 func TestUpdateDashboardNavigation(t *testing.T) {

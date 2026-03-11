@@ -8,7 +8,7 @@ If you discover a security vulnerability in Grove, please report it responsibly.
 
 ### How to Report
 
-Use [GitHub Security Advisories](https://github.com/LeahArmstrong/grove-cli/security/advisories/new) to privately report the vulnerability.
+Use [GitHub Security Advisories](https://github.com/lost-in-the/grove/security/advisories/new) to privately report the vulnerability.
 
 ### What to Expect
 

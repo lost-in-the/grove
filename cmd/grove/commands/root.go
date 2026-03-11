@@ -8,12 +8,12 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/LeahArmstrong/grove-cli/internal/config"
-	"github.com/LeahArmstrong/grove-cli/internal/grove"
-	"github.com/LeahArmstrong/grove-cli/internal/log"
-	"github.com/LeahArmstrong/grove-cli/internal/state"
-	"github.com/LeahArmstrong/grove-cli/internal/tui"
-	"github.com/LeahArmstrong/grove-cli/internal/worktree"
+	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/grove"
+	"github.com/lost-in-the/grove/internal/log"
+	"github.com/lost-in-the/grove/internal/state"
+	"github.com/lost-in-the/grove/internal/tui"
+	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 var rootCmd = &cobra.Command{

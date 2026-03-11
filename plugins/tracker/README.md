@@ -149,7 +149,7 @@ type Tracker interface {
 Trackers are registered at startup:
 
 ```go
-import "github.com/LeahArmstrong/grove-cli/plugins/tracker"
+import "github.com/lost-in-the/grove/plugins/tracker"
 
 // Register a tracker
 tracker.Register("github", NewGitHubAdapter())
@@ -282,7 +282,7 @@ grove issues --label bug
 # Select issue #123 from fzf
 # → Creates worktree: issue-123-fix-auth-bug
 # → Creates branch: issue-123-fix-auth-bug
-# → Creates tmux session: grove-cli-issue-123-fix-auth-bug
+# → Creates tmux session: grove-issue-123-fix-auth-bug
 # → Changes directory (with shell integration)
 
 # Make changes, commit, push
@@ -305,7 +305,7 @@ grove prs --label needs-review
 # Select PR #456 from fzf
 # → Creates worktree: pr-456-add-user-api
 # → Checks out branch: add-user-api
-# → Creates tmux session: grove-cli-pr-456-add-user-api
+# → Creates tmux session: grove-pr-456-add-user-api
 
 # Review, test, comment
 grove to main  # Switch back to main

@@ -72,8 +72,8 @@ cd plugins/myplugin
 package myplugin
 
 import (
-    "github.com/LeahArmstrong/grove-cli/internal/config"
-    "github.com/LeahArmstrong/grove-cli/internal/hooks"
+    "github.com/lost-in-the/grove/internal/config"
+    "github.com/lost-in-the/grove/internal/hooks"
 )
 
 type MyPlugin struct {
@@ -116,7 +116,7 @@ Add your plugin to the main initialization in `cmd/grove/main.go`:
 
 ```go
 import (
-    myplugin "github.com/LeahArmstrong/grove-cli/plugins/myplugin"
+    myplugin "github.com/lost-in-the/grove/plugins/myplugin"
 )
 
 func initializePlugins(cfg *config.Config, registry *hooks.Registry) error {
@@ -143,7 +143,7 @@ package myplugin
 
 import (
     "testing"
-    "github.com/LeahArmstrong/grove-cli/internal/hooks"
+    "github.com/lost-in-the/grove/internal/hooks"
 )
 
 func TestPluginName(t *testing.T) {

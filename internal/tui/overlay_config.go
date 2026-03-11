@@ -9,7 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/LeahArmstrong/grove-cli/internal/config"
+	"github.com/lost-in-the/grove/internal/config"
 )
 
 // ConfigTab identifies which tab is active in the config overlay.

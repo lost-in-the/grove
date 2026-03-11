@@ -1,6 +1,6 @@
 ---
 name: grove-worktree-management
-description: Use grove-cli for git worktree management with tmux, Docker, and GitHub integration. Replaces manual worktree + Docker + tmux orchestration with single commands.
+description: Use grove for git worktree management with tmux, Docker, and GitHub integration. Replaces manual worktree + Docker + tmux orchestration with single commands.
 ---
 
 # Grove Worktree Management

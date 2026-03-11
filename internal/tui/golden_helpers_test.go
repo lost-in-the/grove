@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/LeahArmstrong/grove-cli/plugins/tracker"
+	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
 // viewString extracts the View() output as a string.

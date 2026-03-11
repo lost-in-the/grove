@@ -3,8 +3,8 @@ package plugins
 import (
 	"sync"
 
-	"github.com/LeahArmstrong/grove-cli/internal/config"
-	"github.com/LeahArmstrong/grove-cli/internal/hooks"
+	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/hooks"
 )
 
 // Plugin represents a grove plugin that can extend functionality

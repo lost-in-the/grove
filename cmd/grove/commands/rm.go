@@ -7,12 +7,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/LeahArmstrong/grove-cli/internal/cli"
-	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
-	"github.com/LeahArmstrong/grove-cli/internal/git"
-	"github.com/LeahArmstrong/grove-cli/internal/hooks"
-	"github.com/LeahArmstrong/grove-cli/internal/tmux"
-	"github.com/LeahArmstrong/grove-cli/internal/worktree"
+	"github.com/lost-in-the/grove/internal/cli"
+	"github.com/lost-in-the/grove/internal/exitcode"
+	"github.com/lost-in-the/grove/internal/git"
+	"github.com/lost-in-the/grove/internal/hooks"
+	"github.com/lost-in-the/grove/internal/tmux"
+	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 var (

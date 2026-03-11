@@ -152,9 +152,9 @@ on_failure = "ignore"
 # Available in all string fields:
 #
 #   {{.worktree}}      - Short worktree name (e.g., "testing")
-#   {{.worktree_full}} - Full directory name (e.g., "grove-cli-testing")
+#   {{.worktree_full}} - Full directory name (e.g., "grove-testing")
 #   {{.branch}}        - Git branch name (e.g., "feature/testing")
-#   {{.project}}       - Project name (e.g., "grove-cli")
+#   {{.project}}       - Project name (e.g., "grove")
 #   {{.main_path}}     - Absolute path to main worktree
 #   {{.new_path}}      - Absolute path to new worktree
 #   {{.prev_path}}     - Absolute path to previous worktree (switch events)

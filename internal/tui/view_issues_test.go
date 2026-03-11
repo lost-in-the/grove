@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/LeahArmstrong/grove-cli/plugins/tracker"
+	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
 func TestFilteredIssues(t *testing.T) {

@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"github.com/LeahArmstrong/grove-cli/internal/theme"
+	"github.com/lost-in-the/grove/internal/theme"
 )
 
 // RelativeLuminance delegates to the shared theme package.

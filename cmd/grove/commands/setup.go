@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/LeahArmstrong/grove-cli/internal/cli"
+	"github.com/lost-in-the/grove/internal/cli"
 )
 
 var setupCmd = &cobra.Command{

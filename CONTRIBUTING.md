@@ -20,12 +20,12 @@ Be respectful, inclusive, and professional. We're all here to build something gr
 1. Fork the repository
 2. Clone your fork:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/grove-cli
-   cd grove-cli
+   git clone https://github.com/YOUR_USERNAME/grove
+   cd grove
    ```
 3. Add upstream remote:
    ```bash
-   git remote add upstream https://github.com/LeahArmstrong/grove-cli
+   git remote add upstream https://github.com/lost-in-the/grove
    ```
 4. Install dependencies:
    ```bash
@@ -265,14 +265,14 @@ All three use Go 1.24 with module cache keyed by `go.sum`. All three must pass f
 
 **Distribution**:
 - GitHub Releases — binary archives with LICENSE, README, CHANGELOG, CONTRIBUTING, and shell integration scripts
-- Homebrew tap — `LeahArmstrong/homebrew-tap` (`brew tap LeahArmstrong/tap && brew install grove`)
+- Homebrew tap — `lost-in-the/homebrew-tap` (`brew tap lost-in-the/tap && brew install grove`)
 
 **Test-only dependencies** (`teatest`, `golden`, etc.) are safe in `go.mod`. Go only compiles `_test.go` imports into test binaries, never into release builds. No action needed to exclude them.
 
 ## Project Structure
 
 ```
-grove-cli/
+grove/
 ├── cmd/
 │   └── grove/
 │       ├── main.go           # Entry point
@@ -322,9 +322,9 @@ grove-cli/
 
 ## Getting Help
 
-- **Questions**: Open a [Discussion](https://github.com/LeahArmstrong/grove-cli/discussions)
-- **Bugs**: Open an [Issue](https://github.com/LeahArmstrong/grove-cli/issues)
-- **Features**: Open a [Feature Request](https://github.com/LeahArmstrong/grove-cli/issues/new?template=feature_request.md)
+- **Questions**: Open a [Discussion](https://github.com/lost-in-the/grove/discussions)
+- **Bugs**: Open an [Issue](https://github.com/lost-in-the/grove/issues)
+- **Features**: Open a [Feature Request](https://github.com/lost-in-the/grove/issues/new?template=feature_request.md)
 
 ## License
 

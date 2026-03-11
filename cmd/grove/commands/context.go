@@ -7,16 +7,16 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/LeahArmstrong/grove-cli/internal/cli"
-	"github.com/LeahArmstrong/grove-cli/internal/config"
-	"github.com/LeahArmstrong/grove-cli/internal/exitcode"
-	"github.com/LeahArmstrong/grove-cli/internal/grove"
-	"github.com/LeahArmstrong/grove-cli/internal/hooks"
-	"github.com/LeahArmstrong/grove-cli/internal/log"
-	"github.com/LeahArmstrong/grove-cli/internal/plugins"
-	"github.com/LeahArmstrong/grove-cli/internal/shell"
-	"github.com/LeahArmstrong/grove-cli/internal/state"
-	"github.com/LeahArmstrong/grove-cli/plugins/docker"
+	"github.com/lost-in-the/grove/internal/cli"
+	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/exitcode"
+	"github.com/lost-in-the/grove/internal/grove"
+	"github.com/lost-in-the/grove/internal/hooks"
+	"github.com/lost-in-the/grove/internal/log"
+	"github.com/lost-in-the/grove/internal/plugins"
+	"github.com/lost-in-the/grove/internal/shell"
+	"github.com/lost-in-the/grove/internal/state"
+	"github.com/lost-in-the/grove/plugins/docker"
 )
 
 // GroveContext holds the resolved grove project context

@@ -69,18 +69,18 @@ func TestDetectProjectName(t *testing.T) {
 	}{
 		{
 			name:       "from git remote URL - github https",
-			remotePath: "https://github.com/LeahArmstrong/grove-cli.git",
-			want:       "grove-cli",
+			remotePath: "https://github.com/lost-in-the/grove.git",
+			want:       "grove",
 		},
 		{
 			name:       "from git remote URL - github ssh",
-			remotePath: "git@github.com:LeahArmstrong/grove-cli.git",
-			want:       "grove-cli",
+			remotePath: "git@github.com:lost-in-the/grove.git",
+			want:       "grove",
 		},
 		{
 			name:       "from git remote URL - no .git suffix",
-			remotePath: "https://github.com/LeahArmstrong/grove-cli",
-			want:       "grove-cli",
+			remotePath: "https://github.com/lost-in-the/grove",
+			want:       "grove",
 		},
 		{
 			name:       "from directory name when no remote",

@@ -6,7 +6,7 @@ import (
 
 	lipgloss "charm.land/lipgloss/v2"
 
-	"github.com/LeahArmstrong/grove-cli/internal/theme"
+	"github.com/lost-in-the/grove/internal/theme"
 )
 
 // Column defines a table column with optional styling.

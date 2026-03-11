@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/LeahArmstrong/grove-cli/internal/cmdexec"
+	"github.com/lost-in-the/grove/internal/cmdexec"
 )
 
 // Session represents a tmux session

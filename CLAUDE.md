@@ -26,7 +26,7 @@ Grove replaces manual git worktree + tmux + Docker orchestration. One command (`
 ## Critical Rules
 
 ### Worktree Naming
-Worktrees MUST follow `{project}-{name}`: `grove-cli-testing` not `testing`.
+Worktrees MUST follow `{project}-{name}`: `grove-testing` not `testing`.
 Project name derived from: git remote > directory name > config.
 
 ### Shell Integration Protocol
@@ -35,7 +35,7 @@ Commands that change directories output `cd:/path/to/dir` — shell wrapper inte
 ### Display Rules
 - `grove ls` shows SHORT names ("testing", "main") not full paths
 - `grove here` shows: short name, branch, short SHA (7 chars), commit message, age
-- Tmux sessions use FULL names: `grove-cli-testing`
+- Tmux sessions use FULL names: `grove-testing`
 
 ## Architecture
 - `cmd/` — entry points only, no business logic

@@ -1,4 +1,4 @@
-module github.com/LeahArmstrong/grove-cli
+module github.com/lost-in-the/grove
 
 go 1.24.2
 

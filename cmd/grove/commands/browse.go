@@ -11,9 +11,9 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/LeahArmstrong/grove-cli/internal/tui"
-	"github.com/LeahArmstrong/grove-cli/internal/worktree"
-	"github.com/LeahArmstrong/grove-cli/plugins/tracker"
+	"github.com/lost-in-the/grove/internal/tui"
+	"github.com/lost-in-the/grove/internal/worktree"
+	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
 var issuesCmd = &cobra.Command{

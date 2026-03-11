@@ -123,13 +123,13 @@ gh --version      # optional, needed for grove fetch pr/N and grove prs/issues
 
 **Homebrew (preferred):**
 ```bash
-brew tap LeahArmstrong/tap
+brew tap lost-in-the/tap
 brew install grove
 ```
 
 **go install:**
 ```bash
-go install github.com/LeahArmstrong/grove-cli/cmd/grove@latest
+go install github.com/lost-in-the/grove/cmd/grove@latest
 ```
 
 **Release binaries:**
