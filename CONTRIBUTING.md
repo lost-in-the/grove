@@ -265,7 +265,7 @@ All three use Go 1.24 with module cache keyed by `go.sum`. All three must pass f
 
 **Distribution**:
 - GitHub Releases — binary archives with LICENSE, README, CHANGELOG, CONTRIBUTING, and shell integration scripts
-- Homebrew tap — `lost-in-the/homebrew-tap` (`brew tap lost-in-the/tap && brew install grove`)
+- Homebrew tap — `lost-in-the/homebrew-tap` (`brew install lost-in-the/tap/grove`)
 
 **Test-only dependencies** (`teatest`, `golden`, etc.) are safe in `go.mod`. Go only compiles `_test.go` imports into test binaries, never into release builds. No action needed to exclude them.
 

@@ -96,8 +96,7 @@ release:
 
     #### Homebrew (macOS/Linux)
     ```bash
-    brew tap lost-in-the/tap
-    brew install grove
+    brew install lost-in-the/tap/grove
     ```
 
     #### Direct Download

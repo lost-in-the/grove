@@ -123,8 +123,7 @@ gh --version      # optional, needed for grove fetch pr/N and grove prs/issues
 
 **Homebrew (preferred):**
 ```bash
-brew tap lost-in-the/tap
-brew install grove
+brew install lost-in-the/tap/grove
 ```
 
 **go install:**

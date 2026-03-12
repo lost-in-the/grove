@@ -68,8 +68,7 @@ Grove wraps the full worktree lifecycle — create, switch, fork, clean up — a
 ### Homebrew (recommended)
 
 ```bash
-brew tap lost-in-the/tap
-brew install grove
+brew install lost-in-the/tap/grove
 ```
 
 Includes automatic updates and shell completions.

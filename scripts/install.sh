@@ -38,8 +38,7 @@ detect_arch() {
 
 install_brew() {
     info "Installing via Homebrew..."
-    brew tap "lost-in-the/tap" 2>/dev/null || true
-    brew install grove
+    brew install lost-in-the/tap/grove
     ok "Installed grove via Homebrew"
 }
 
