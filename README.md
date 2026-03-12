@@ -242,7 +242,7 @@ See [docs/TUI.md](docs/TUI.md) for the full reference — overlays, PR browser, 
 | `grove last` | Toggle to previous worktree |
 | `grove rm <name>` | Remove worktree, kill tmux session, delete branch |
 | `grove open <name>` | Open a session in any worktree (create if needed) |
-| `grove attach [name]` | Attach to a tmux session without changing directory |
+| `grove join [name]` | Join a tmux session without changing directory |
 
 ### GitHub integration
 
@@ -260,11 +260,11 @@ Requires `gh` CLI (installed and authenticated to your repo).
 | Command | What it does |
 |---------|-------------|
 | `grove fork <name>` | Fork current worktree into a new one (optionally move or copy WIP) |
-| `grove compare <name>` | Diff current worktree against another |
-| `grove apply <name>` | Cherry-pick commits or apply WIP from another worktree |
+| `grove diff <name>` | Diff current worktree against another |
+| `grove graft <name>` | Cherry-pick commits or graft WIP from another worktree |
 | `grove sync [name]` | Fast-forward a worktree from its remote |
 | `grove test <name> [args]` | Run your test command in any worktree without switching |
-| `grove clean` | Remove worktrees not accessed in N days (default: 30) |
+| `grove trim` | Trim worktrees not accessed in N days (default: 30) |
 
 ### Docker
 
@@ -273,7 +273,7 @@ Requires `gh` CLI (installed and authenticated to your repo).
 | `grove up` | Start Docker containers for the current worktree |
 | `grove down` | Stop Docker containers |
 | `grove logs [service]` | Tail container logs |
-| `grove restart [service]` | Restart containers |
+| `grove kick [service]` | Kick (restart) containers |
 | `grove up --isolated` | Start an isolated Docker stack (for parallel agent use) |
 | `grove ps` | Show active stacks with ports and reference IDs |
 

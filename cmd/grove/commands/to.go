@@ -22,7 +22,7 @@ var (
 
 var toCmd = &cobra.Command{
 	Use:     "to <name>",
-	Aliases: []string{"switch"},
+	Aliases: []string{"switch", "t"},
 	Short:   "Switch to a worktree",
 	Long: `Switch to a worktree by name. If a tmux session exists for the worktree, switch to it.
 If no tmux session exists, create one.

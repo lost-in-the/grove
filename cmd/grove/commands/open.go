@@ -31,8 +31,9 @@ func init() {
 }
 
 var openCmd = &cobra.Command{
-	Use:   "open <name>",
-	Short: "Open a worktree session (create if needed)",
+	Use:     "open <name>",
+	Aliases: []string{"o"},
+	Short:   "Open a worktree session (create if needed)",
 	Long: `Open a worktree by creating it if needed, ensuring a tmux session exists,
 launching the configured session command, and attaching.
 

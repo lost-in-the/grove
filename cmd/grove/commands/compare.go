@@ -50,19 +50,20 @@ type DiffStats struct {
 }
 
 var compareCmd = &cobra.Command{
-	Use:   "compare <name>",
-	Short: "Compare current worktree with another",
-	Long: `Compare the current worktree with another worktree.
+	Use:     "diff <name>",
+	Aliases: []string{"compare", "d"},
+	Short:   "Diff current worktree against another",
+	Long: `Diff the current worktree against another worktree.
 
 Shows differences in commits and optionally uncommitted changes (WIP).
 By default shows both committed and uncommitted differences.
 
 Examples:
-  grove compare main           # Compare with main worktree
-  grove compare feature --stat # Show only diffstat
-  grove compare main --committed  # Show only commit differences
-  grove compare main --wip     # Show only uncommitted differences
-  grove compare main --json    # Output as JSON`,
+  grove diff main           # Diff against main worktree
+  grove diff feature --stat # Show only diffstat
+  grove diff main --committed  # Show only commit differences
+  grove diff main --wip     # Show only uncommitted differences
+  grove diff main --json    # Output as JSON`,
 	Args: cobra.ExactArgs(1),
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		targetName := args[0]

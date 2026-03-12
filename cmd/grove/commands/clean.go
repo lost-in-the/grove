@@ -35,9 +35,10 @@ type CleanCandidate struct {
 }
 
 var cleanCmd = &cobra.Command{
-	Use:   "clean",
-	Short: "Remove old unused worktrees",
-	Long: `Remove worktrees that haven't been accessed recently.
+	Use:     "trim",
+	Aliases: []string{"clean", "tm"},
+	Short:   "Trim old unused worktrees",
+	Long: `Trim worktrees that haven't been accessed recently.
 
 By default, targets worktrees not accessed in 30 days.
 Dirty worktrees are excluded unless --include-dirty is specified.
@@ -52,12 +53,12 @@ Always excludes:
 This command ALWAYS prompts for confirmation, even in non-interactive mode.
 
 Examples:
-  grove clean                      # Clean worktrees older than 30 days
-  grove clean --older-than 7       # Clean worktrees older than 7 days
-  grove clean --include-dirty      # Include dirty worktrees
-  grove clean --delete-branches    # Delete branches without prompting
-  grove clean --keep-branches      # Keep all branches
-  grove clean --dry-run            # Show what would be cleaned`,
+  grove trim                      # Trim worktrees older than 30 days
+  grove trim --older-than 7       # Trim worktrees older than 7 days
+  grove trim --include-dirty      # Include dirty worktrees
+  grove trim --delete-branches    # Delete branches without prompting
+  grove trim --keep-branches      # Keep all branches
+  grove trim --dry-run            # Show what would be trimmed`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		w := cli.NewStdout()
 

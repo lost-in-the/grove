@@ -15,8 +15,9 @@ func init() {
 }
 
 var downCmd = &cobra.Command{
-	Use:   "down",
-	Short: "Stop containers for current worktree",
+	Use:     "down",
+	Aliases: []string{"do"},
+	Short:   "Stop containers for current worktree",
 	Long: `Stop Docker containers for the current worktree.
 
 This command looks for a docker-compose.yml file in the current directory
