@@ -155,7 +155,7 @@ Uses `complete -F _grove_completion grove`. Works with or without bash-completio
 | Position | Completions |
 |----------|-------------|
 | First argument | All grove commands |
-| Second argument (after `to`, `rm`, `compare`, `sync`, `test`, `apply`, `attach`, `open`) | Worktree short names |
+| Second argument (after `to`, `rm`, `diff`, `sync`, `test`, `graft`, `join`, `open`) | Worktree short names |
 | Second argument (after `install`) | `zsh`, `bash` |
 
 Worktree names are fetched by running `grove ls -q` (quiet mode), which lists short names only.

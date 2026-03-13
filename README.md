@@ -212,6 +212,7 @@ The detail panel updates as you navigate — branch, commit, sync status, tmux s
 | `↑` / `↓` or `k` / `j` | Navigate worktrees |
 | `1`–`9` | Quick-switch to the nth worktree |
 | `enter` | Switch to selected worktree |
+| `U` | Switch and start containers |
 | `n` | Create new worktree |
 | `d` | Delete selected worktree |
 | `f` | Fork selected worktree |
@@ -221,7 +222,7 @@ The detail panel updates as you navigate — branch, commit, sync status, tmux s
 | `/` | Filter by name or branch |
 | `o` | Cycle sort: name → recent → dirty |
 | `c` | Edit config in-TUI |
-| `?` | Full keybinding reference |
+| `?` | Context-sensitive help |
 | `q` | Quit |
 
 See [docs/TUI.md](docs/TUI.md) for the full reference — overlays, PR browser, issue browser, sort modes.

@@ -69,7 +69,7 @@ Selecting a worktree updates the detail panel with:
 
 ### Footer
 
-A compact hint bar at the bottom shows context-sensitive keybindings. Press `?` to expand a full Quick Reference panel.
+A compact hint bar at the bottom shows essential keybindings. Press `?` to open a scrollable, context-sensitive help overlay with the full reference for the current view.
 
 ### Toast Notifications
 
