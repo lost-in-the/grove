@@ -28,19 +28,19 @@ This document provides exhaustive specifications for each grove command. Every b
    - [grove up](#grove-up)
    - [grove down](#grove-down)
    - [grove logs](#grove-logs)
-   - [grove restart](#grove-restart)
+   - [grove kick](#grove-kick)
    - [grove ps](#grove-ps)
 6. [Worktree Flow Commands](#worktree-flow-commands)
    - [grove fork](#grove-fork)
    - [grove sync](#grove-sync)
-   - [grove compare](#grove-compare)
-   - [grove apply](#grove-apply)
+   - [grove diff](#grove-diff)
+   - [grove graft](#grove-graft)
    - [grove test](#grove-test)
 7. [Utility Commands](#utility-commands)
    - [grove config](#grove-config)
    - [grove init](#grove-init)
    - [grove repair](#grove-repair)
-   - [grove clean](#grove-clean)
+   - [grove trim](#grove-trim)
    - [grove doctor](#grove-doctor)
 8. [Exit Codes](#exit-codes)
 9. [Output Formatting](#output-formatting)
@@ -1253,13 +1253,13 @@ Pass through to `docker compose logs` with appropriate project name.
 
 ---
 
-### grove restart
+### grove kick
 
-**Purpose:** Restart Docker containers.
+**Purpose:** Kick (restart) Docker containers. Aliases: `restart`, `k`.
 
 **Usage:**
 ```
-grove restart [services...] [flags]
+grove kick [services...] [flags]
 
 Arguments:
   services    Services to restart (default: all)
@@ -1516,16 +1516,16 @@ Flags:
 
 ---
 
-### grove compare
+### grove diff
 
-**Purpose:** Compare the current worktree with another, showing commit and WIP differences.
+**Purpose:** Diff the current worktree against another, showing commit and WIP differences. Aliases: `compare`, `d`.
 
 **Usage:**
 ```
-grove compare <name> [flags]
+grove diff <name> [flags]
 
 Arguments:
-  name    Target worktree to compare against (required)
+  name    Target worktree to diff against (required)
 
 Flags:
       --stat        Show diffstat summary
@@ -1609,16 +1609,16 @@ No differences found
 
 ---
 
-### grove apply
+### grove graft
 
-**Purpose:** Apply commits or uncommitted changes from another worktree to the current one.
+**Purpose:** Graft commits or uncommitted changes from another worktree to the current one. Aliases: `apply`, `g`.
 
 **Usage:**
 ```
-grove apply <name> [flags]
+grove graft <name> [flags]
 
 Arguments:
-  name    Source worktree to apply changes from (required)
+  name    Source worktree to graft changes from (required)
 
 Flags:
       --commits         Apply only committed changes (cherry-pick)
@@ -1942,13 +1942,13 @@ Repaired 1 issue.
 
 ---
 
-### grove clean
+### grove trim
 
-**Purpose:** Remove worktrees that haven't been accessed recently.
+**Purpose:** Trim worktrees that haven't been accessed recently. Aliases: `clean`, `tm`.
 
 **Usage:**
 ```
-grove clean [flags]
+grove trim [flags]
 
 Flags:
       --older-than N      Remove worktrees not accessed in N days (default: 30)

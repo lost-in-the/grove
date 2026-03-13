@@ -42,20 +42,21 @@ type CommitInfo struct {
 }
 
 var applyCmd = &cobra.Command{
-	Use:   "apply <name>",
-	Short: "Apply changes from another worktree",
-	Long: `Apply commits or uncommitted changes from another worktree to the current one.
+	Use:     "graft <name>",
+	Aliases: []string{"apply", "g"},
+	Short:   "Graft changes from another worktree",
+	Long: `Graft commits or uncommitted changes from another worktree to the current one.
 
-By default, applies both committed and uncommitted changes from the source worktree.
-Use --commits or --wip to apply only one type of change.
-Use --pick to apply specific commits by SHA.
+By default, grafts both committed and uncommitted changes from the source worktree.
+Use --commits or --wip to graft only one type of change.
+Use --pick to graft specific commits by SHA.
 
 Examples:
-  grove apply feature-auth           # Apply all changes from feature-auth
-  grove apply feature-auth --commits # Apply only commits (cherry-pick)
-  grove apply feature-auth --wip     # Apply only uncommitted changes
-  grove apply feature-auth --pick abc123,def456  # Apply specific commits
-  grove apply feature-auth --dry-run # Show what would be applied`,
+  grove graft feature-auth           # Graft all changes from feature-auth
+  grove graft feature-auth --commits # Graft only commits (cherry-pick)
+  grove graft feature-auth --wip     # Graft only uncommitted changes
+  grove graft feature-auth --pick abc123,def456  # Graft specific commits
+  grove graft feature-auth --dry-run # Show what would be grafted`,
 	Args: cobra.ExactArgs(1),
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		sourceName := args[0]
@@ -360,7 +361,7 @@ func applyWIPChanges(w, stderr *cli.Writer, targetPath, sourcePath string, dryRu
 			cli.Error(stderr, "Failed to apply uncommitted changes")
 			_, _ = fmt.Fprintf(stderr, "%v\n", err)
 			cli.Faint(stderr, "The patch may have conflicts with your current changes.")
-			cli.Faint(stderr, "Resolve manually or try 'grove compare' to see differences first.")
+			cli.Faint(stderr, "Resolve manually or try 'grove diff' to see differences first.")
 		}
 		return wipFiles, fmt.Errorf("failed to apply WIP patch")
 	}

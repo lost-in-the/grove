@@ -50,7 +50,7 @@ type lsOutput struct {
 
 var lsCmd = &cobra.Command{
 	Use:     "ls",
-	Aliases: []string{"list"},
+	Aliases: []string{"list", "l"},
 	Short:   "List all worktrees",
 	Long:    `List all git worktrees with their status (clean/dirty) and branch information.`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {

@@ -44,8 +44,9 @@ type SkippedSync struct {
 }
 
 var syncCmd = &cobra.Command{
-	Use:   "sync [name]",
-	Short: "Sync environment worktrees with their mirrors",
+	Use:     "sync [name]",
+	Aliases: []string{"s"},
+	Short:   "Sync environment worktrees with their mirrors",
 	Long: `Sync environment worktrees with their remote tracking branches.
 
 Environment worktrees (created with --mirror) track a remote branch.

@@ -22,8 +22,9 @@ func init() {
 }
 
 var upCmd = &cobra.Command{
-	Use:   "up",
-	Short: "Start containers for current worktree",
+	Use:     "up",
+	Aliases: []string{"u"},
+	Short:   "Start containers for current worktree",
 	Long: `Start Docker containers for the current worktree.
 
 This command looks for a docker-compose.yml file in the current directory

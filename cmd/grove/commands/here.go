@@ -54,9 +54,10 @@ type tmuxInfo struct {
 }
 
 var hereCmd = &cobra.Command{
-	Use:   "here",
-	Short: "Show current worktree information",
-	Long:  `Display information about the current worktree including name, branch, and status.`,
+	Use:     "here",
+	Aliases: []string{"h"},
+	Short:   "Show current worktree information",
+	Long:    `Display information about the current worktree including name, branch, and status.`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		mgr, err := worktree.NewManager(ctx.ProjectRoot)
 		if err != nil {
