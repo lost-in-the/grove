@@ -59,9 +59,10 @@ type Model struct {
 	help    help.Model
 
 	// V2 components
-	header     Header
-	toast      *ToastModel
-	helpFooter *HelpFooter
+	header      Header
+	toast       *ToastModel
+	helpFooter  *HelpFooter
+	helpOverlay *HelpOverlay
 
 	// Keys
 	keys KeyMap
@@ -92,6 +93,7 @@ type Model struct {
 	// Output
 	switchTo            string
 	switchToDisplayName string // display name for tmux session naming
+	switchForceUp       bool   // when true, signal CLI to start containers after switch
 	err                 error
 
 	// Layout
@@ -159,7 +161,8 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		spinner:      s,
 		help:         h,
 		toast:        NewToastModel(),
-		helpFooter:   &HelpFooter{CompactMode: compact},
+		helpFooter:   NewHelpFooter(),
+		helpOverlay:  NewHelpOverlay(),
 		activeView:   ViewDashboard,
 		loading:      true,
 	}
@@ -167,6 +170,9 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 
 // SwitchTo returns the path the user selected to switch to, if any.
 func (m Model) SwitchTo() string { return m.switchTo }
+
+// SwitchForceUp returns true if the CLI should start containers after switching.
+func (m Model) SwitchForceUp() bool { return m.switchForceUp }
 
 // Err returns any error that occurred.
 func (m Model) Err() error { return m.err }
@@ -199,6 +205,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !wasReady && m.cfgLoadErr != nil {
 			m.toast.Show(NewToast("Config load failed: "+m.cfgLoadErr.Error(), ToastWarning))
 			m.cfgLoadErr = nil
+		}
+		// Re-render help overlay at new size if active
+		if m.helpOverlay.Active {
+			m.helpOverlay.Open(m.helpOverlay.ForView, m.width, m.height)
 		}
 		return m, nil
 
@@ -608,7 +618,6 @@ func (m *Model) updateLayout() {
 // toggleCompactMode switches between V1 (compact) and V2 (two-line) delegates.
 func (m *Model) toggleCompactMode() {
 	m.compactMode = !m.compactMode
-	m.helpFooter.CompactMode = m.compactMode
 
 	// Persist preference (best-effort, don't block on errors)
 	newVal := m.compactMode
@@ -687,6 +696,24 @@ func (m Model) selectedItem() (WorktreeItem, bool) {
 }
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// Help overlay intercepts all keys when active
+	if m.helpOverlay.Active {
+		if key.Matches(msg, m.keys.Help) || key.Matches(msg, m.keys.Escape) {
+			m.helpOverlay.Close()
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.helpOverlay, cmd = m.helpOverlay.Update(msg)
+		return m, cmd
+	}
+
+	// ? opens help for views without text input
+	// Views with active text inputs (Create, Rename, Checkout, Fork) pass ? through
+	if key.Matches(msg, m.keys.Help) && !m.viewHasTextInput() {
+		m.helpOverlay.Open(m.activeView, m.width, m.height)
+		return m, nil
+	}
+
 	switch m.activeView {
 	case ViewHelp:
 		m.activeView = ViewDashboard
@@ -723,15 +750,7 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case key.Matches(msg, m.keys.Escape):
-		if m.helpFooter.Expanded {
-			m.helpFooter.Toggle()
-			return m, nil
-		}
 		return m, tea.Quit
-
-	case key.Matches(msg, m.keys.Help):
-		m.helpFooter.Toggle()
-		return m, nil
 
 	case key.Matches(msg, m.keys.Refresh):
 		m.helpFooter.SetHighlight("r")
@@ -762,6 +781,16 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+
+	case key.Matches(msg, m.keys.SwitchUp):
+		item, ok := m.selectedItem()
+		if ok {
+			tuilog.Printf("SwitchUp: item=%q path=%q isCurrent=%v", item.ShortName, item.Path, item.IsCurrent)
+			m.switchForceUp = true
+			m.switchTo = item.Path
+			m.switchToDisplayName = item.displayName()
+			return m, tea.Quit
+		}
 
 	case key.Matches(msg, m.keys.Enter):
 		item, ok := m.selectedItem()
@@ -1378,84 +1407,113 @@ func (m Model) viewContent() string {
 		)
 	}
 
+	var result string
+
 	switch m.activeView {
 	case ViewHelp:
-		// ViewHelp is unused (help is rendered via helpFooter overlay on dashboard).
-		// Fall through to dashboard rendering.
-		return m.renderDashboard()
+		result = m.renderDashboard()
 
 	case ViewDelete:
 		if m.deleteState != nil {
 			overlay := renderDeleteV2(m.deleteState, m.width)
 			bg := m.renderDashboard()
-			return centerOverlay(bg, overlay, m.width, m.height)
+			result = centerOverlay(bg, overlay, m.width, m.height)
 		}
 
 	case ViewCreate:
 		if m.createState != nil {
 			overlay := renderCreateV2(m.createState, m.width, m.spinner.View())
 			bg := m.renderDashboard()
-			return centerOverlay(bg, overlay, m.width, m.height)
+			result = centerOverlay(bg, overlay, m.width, m.height)
 		}
 
 	case ViewBulk:
 		if m.bulkState != nil {
 			overlay := renderBulk(m.bulkState, m.width)
 			bg := m.renderDashboard()
-			return centerOverlay(bg, overlay, m.width, m.height)
+			result = centerOverlay(bg, overlay, m.width, m.height)
 		}
 
 	case ViewPRs:
 		if m.prState != nil {
 			overlay := renderPRViewV2(m.prState, m.width, m.spinner.View())
 			bg := m.renderDashboard()
-			return centerOverlay(bg, overlay, m.width, m.height)
+			result = centerOverlay(bg, overlay, m.width, m.height)
 		}
 
 	case ViewIssues:
 		if m.issueState != nil {
 			overlay := renderIssueView(m.issueState, m.width, m.spinner.View())
 			bg := m.renderDashboard()
-			return centerOverlay(bg, overlay, m.width, m.height)
+			result = centerOverlay(bg, overlay, m.width, m.height)
 		}
 
 	case ViewFork:
 		if m.forkState != nil {
 			overlay := renderFork(m.forkState, m.width)
 			bg := m.renderDashboard()
-			return centerOverlay(bg, overlay, m.width, m.height)
+			result = centerOverlay(bg, overlay, m.width, m.height)
 		}
 
 	case ViewSync:
 		if m.syncState != nil {
 			overlay := renderSync(m.syncState, m.width)
 			bg := m.renderDashboard()
-			return centerOverlay(bg, overlay, m.width, m.height)
+			result = centerOverlay(bg, overlay, m.width, m.height)
 		}
 
 	case ViewConfig:
 		if m.configState != nil {
 			overlay := renderConfig(m.configState, m.width)
 			bg := m.renderDashboard()
-			return centerOverlay(bg, overlay, m.width, m.height)
+			result = centerOverlay(bg, overlay, m.width, m.height)
 		}
 
 	case ViewRename:
 		if m.renameState != nil {
 			overlay := renderRename(m.renameState, m.width)
 			bg := m.renderDashboard()
-			return centerOverlay(bg, overlay, m.width, m.height)
+			result = centerOverlay(bg, overlay, m.width, m.height)
 		}
 
 	case ViewCheckout:
 		if m.checkoutState != nil {
 			overlay := renderCheckout(m.checkoutState, m.width)
 			bg := m.renderDashboard()
-			return centerOverlay(bg, overlay, m.width, m.height)
+			result = centerOverlay(bg, overlay, m.width, m.height)
 		}
 	}
 
-	return m.renderDashboard()
+	if result == "" {
+		result = m.renderDashboard()
+	}
+
+	return m.compositeHelpOverlay(result)
+}
+
+// compositeHelpOverlay renders the help overlay on top of the given content if active.
+func (m Model) compositeHelpOverlay(content string) string {
+	if m.helpOverlay.Active {
+		helpPanel := m.helpOverlay.View(m.width, m.height)
+		return centerOverlay(content, helpPanel, m.width, m.height)
+	}
+	return content
+}
+
+// viewHasTextInput returns true if the active view has a focused text input
+// that should receive ? as a character rather than triggering help.
+func (m Model) viewHasTextInput() bool {
+	switch m.activeView {
+	case ViewCreate, ViewRename, ViewCheckout, ViewFork:
+		return true
+	case ViewPRs:
+		return m.prState != nil && m.prState.FilterInput.Focused()
+	case ViewIssues:
+		return m.issueState != nil && m.issueState.FilterInput.Focused()
+	case ViewDashboard:
+		return m.list.FilterState() == list.Filtering
+	}
+	return false
 }
 
 func (m Model) renderDashboard() string {
@@ -1543,15 +1601,7 @@ func (m Model) renderDashboard() string {
 		}
 	}
 
-	dashboard := lipgloss.JoinVertical(lipgloss.Left, statusBar, body, footer)
-
-	// Render expanded help as centered overlay
-	if m.helpFooter.Expanded {
-		helpOverlay := m.helpFooter.RenderExpanded(m.width)
-		return centerOverlay(dashboard, helpOverlay, m.width, m.height)
-	}
-
-	return dashboard
+	return lipgloss.JoinVertical(lipgloss.Left, statusBar, body, footer)
 }
 
 // selectedItemName returns the short name of the currently selected worktree.
@@ -1767,7 +1817,7 @@ func (m Model) ConfigureForIssues() Model {
 }
 
 // RunPRs starts the TUI directly in the PR browser view.
-func RunPRs(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, pluginMgr ...*plugins.Manager) (string, error) {
+func RunPRs(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, pluginMgr ...*plugins.Manager) (string, bool, error) {
 	tuilog.Init()
 	defer tuilog.Close()
 
@@ -1776,7 +1826,7 @@ func RunPRs(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, 
 }
 
 // RunIssues starts the TUI directly in the issue browser view.
-func RunIssues(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, pluginMgr ...*plugins.Manager) (string, error) {
+func RunIssues(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, pluginMgr ...*plugins.Manager) (string, bool, error) {
 	tuilog.Init()
 	defer tuilog.Close()
 
@@ -1784,8 +1834,8 @@ func RunIssues(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot strin
 	return runModel(model)
 }
 
-// Run starts the TUI and returns the path to switch to (if any).
-func Run(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, pluginMgr ...*plugins.Manager) (string, error) {
+// Run starts the TUI and returns the path to switch to (if any) and whether to force docker up.
+func Run(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, pluginMgr ...*plugins.Manager) (string, bool, error) {
 	tuilog.Init()
 	defer tuilog.Close()
 
@@ -1855,7 +1905,7 @@ func (m *Model) handleTmuxSwitch(switchPath string) bool {
 	return true
 }
 
-func runModel(model Model) (string, error) {
+func runModel(model Model) (string, bool, error) {
 	tuilog.Printf("runModel: projectRoot=%s activeView=%d", model.projectRoot, model.activeView)
 
 	p := tea.NewProgram(model)
@@ -1863,7 +1913,7 @@ func runModel(model Model) (string, error) {
 	finalModel, err := p.Run()
 	if err != nil {
 		tuilog.Printf("runModel: tea.Program error: %v", err)
-		return "", fmt.Errorf("tui error: %w", err)
+		return "", false, fmt.Errorf("tui error: %w", err)
 	}
 
 	m := finalModel.(Model)
@@ -1871,7 +1921,7 @@ func runModel(model Model) (string, error) {
 		m.ready, m.loading, len(m.list.Items()), m.switchTo, m.err)
 
 	if m.Err() != nil {
-		return "", m.Err()
+		return "", false, m.Err()
 	}
 
 	switchPath := m.SwitchTo()
@@ -1884,7 +1934,7 @@ func runModel(model Model) (string, error) {
 			if cdFile := os.Getenv("GROVE_CD_FILE"); cdFile != "" {
 				tuilog.Printf("runModel: writing switchTo=%q to GROVE_CD_FILE=%q", switchPath, cdFile)
 				if err := os.WriteFile(cdFile, []byte(switchPath), 0600); err != nil {
-					return "", fmt.Errorf("failed to write cd file: %w", err)
+					return "", false, fmt.Errorf("failed to write cd file: %w", err)
 				}
 			} else if os.Getenv("GROVE_SHELL") == "1" {
 				tuilog.Printf("runModel: printing cd directive for switchTo=%q", switchPath)
@@ -1898,5 +1948,5 @@ func runModel(model Model) (string, error) {
 		}
 	}
 
-	return switchPath, nil
+	return switchPath, m.SwitchForceUp(), nil
 }

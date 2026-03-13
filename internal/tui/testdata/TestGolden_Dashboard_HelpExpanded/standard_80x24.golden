@@ -1,24 +1,24 @@
-  ╭──────────────────────────────────────────────────────────────────────────╮
-  │                                                                          │
-  │  [1mQuick Reference[m                                                         │
-  │                                                                          │
-  │  [1mNavigation[m              [1mActions[m                 [1mViews[m                   │
-  │                                                                          │
-  │    [1m↑/k       [mmove up       [1mn         [mnew worktree  [1m1-9       [mquick-      │
-  │  switch                                                                  │
-  │    [1m↓/j       [mmove down     [1md         [mdelete        [1m/         [mfilter      │
-  │    [1menter     [mswitch        [1mR         [mrename        [1mv         [mcompact     │
-  │    [1mesc       [mback/close  worktree                  [1m?         [mtoggle      │
-  │  help                                                                    │
-  │                            [1mf         [mfork          [1mq         [mquit        │
-  │                          worktree                                        │
-  │                            [1mb         [mswitch                              │
-  │                          branch                                          │
-  │                            [1ms         [msync changes                        │
-  │                            [1mc         [mconfigure                           │
-  │                            [1mp         [mbrowse PRs                          │
-  │                            [1mi         [mbrowse                              │
-  │                          issues                                          │
-  │                            [1ma         [mbulk delete                         │
-  │                            [1mo         [mcycle sort                          │
-  │                            [1mr         [mrefresh                             │
+[2m [1m[1mtest-project[m  ·  5 worktrees  ·  on root  ·  ↕ name                     ● root[m [m
+            ╭──────────────────────────────────────────────────────╮
+            │                                                      │
+            │  ## Navigation                                       │
+            │                                                      │
+            │     Key              | Action                        │
+            │    ------------------|-----------------------------  │
+            │     ↑/k ↓/j          | Move up / down                │
+            │     enter            | Switch to selected            │
+            │  worktree                                            │
+            │     U                | Switch and start              │
+            │  containers                                          │
+            │     1-9              | Quick-switch by number        │
+            │     /                | Filter worktrees              │
+            │                                                      │
+            │    ## Worktree Actions                               │
+            │                                                      │
+            │     Key              | Action                        │
+            │    ------------------|-----------------------------  │
+            │  ↑↓ scroll · esc close                               │
+            │                                                      │
+            ╰──────────────────────────────────────────────────────╯
+[2m  [1m↑↓[m navigate · [1menter[m switch · [1mU[m up · [1mn[m new                                     [m
+[2m  [1m/[m filter · [1mo[m sort · [1m?[m help · [1mq[m quit                                           [m

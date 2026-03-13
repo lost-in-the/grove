@@ -46,15 +46,15 @@ func TestViewDashboardEmpty(t *testing.T) {
 	}
 }
 
-func TestViewHelpExpanded(t *testing.T) {
+func TestViewHelpOverlay(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
 	m = sendKey(m, "?")
 	v := m.viewString()
-	if !strings.Contains(v, "Quick Reference") {
-		t.Error("expected 'Quick Reference' in expanded help footer")
-	}
 	if !strings.Contains(v, "Navigation") {
-		t.Error("expected 'Navigation' section in expanded help footer")
+		t.Error("expected 'Navigation' section in help overlay")
+	}
+	if !strings.Contains(v, "scroll") {
+		t.Error("expected scroll hint in help overlay")
 	}
 }
 

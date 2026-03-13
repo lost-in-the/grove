@@ -40,6 +40,7 @@ func newTestModel(opts ...testOpt) Model {
 		help:        h,
 		toast:       NewToastModel(),
 		helpFooter:  NewHelpFooter(),
+		helpOverlay: NewHelpOverlay(),
 		detail:      viewport.New(viewport.WithWidth(80), viewport.WithHeight(20)),
 		activeView:  ViewDashboard,
 		loading:     false,

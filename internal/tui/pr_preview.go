@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/glamour"
@@ -64,11 +65,16 @@ func renderPRPreview(pr *tracker.PullRequest, width int) string {
 }
 
 // renderMarkdown renders markdown to styled terminal output using glamour.
+// Respects NO_COLOR and GROVE_NO_COLOR environment variables.
 func renderMarkdown(md string, width int) string {
-	r, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(width),
-	)
+	var opts []glamour.TermRendererOption
+	opts = append(opts, glamour.WithWordWrap(width))
+	if os.Getenv("NO_COLOR") != "" || os.Getenv("GROVE_NO_COLOR") != "" {
+		opts = append(opts, glamour.WithStylePath("notty"))
+	} else {
+		opts = append(opts, glamour.WithAutoStyle())
+	}
+	r, err := glamour.NewTermRenderer(opts...)
 	if err != nil {
 		return md
 	}

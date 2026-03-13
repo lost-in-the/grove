@@ -2,39 +2,39 @@
 [2m                                                                        │                                               [m
 [2m 1 ❯ root ────────────────────────────────────────────────────── 2h ago │                                               [m
 [2m       test commit for root                                             │                                               [m
+                    ╭──────────────────────────────────────────────────────────────────────────────╮
+                    │                                                                              │
+                    │  ## Navigation                                                               │
+                    │                                                                              │
+                    │     Key                                | Action                              │
+                    │    ------------------------------------|-----------------------------------  │
+                    │     ↑/k ↓/j                            | Move up / down                      │
+                    │     enter                              | Switch to selected worktree         │
+                    │     U                                  | Switch and start containers         │
+                    │     1-9                                | Quick-switch by number              │
+                    │     /                                  | Filter worktrees                    │
+                    │                                                                              │
+                    │    ## Worktree Actions                                                       │
+                    │                                                                              │
+                    │     Key                                | Action                              │
+                    │    ------------------------------------|-----------------------------------  │
+                    │     n                                  | Create new worktree                 │
+                    │     d                                  | Delete worktree                     │
+                    │     R                                  | Rename worktree                     │
+                    │     f                                  | Fork (copy) worktree                │
+                    │     a                                  | Bulk delete stale worktrees         │
+                    │                                                                              │
+                    │    ## Workflow                                                               │
+                    │                                                                              │
+                    │     Key                                | Action                              │
+                    │    ------------------------------------|-----------------------------------  │
+                    │     s                                  | Sync environment worktree           │
+                    │     b                                  | Switch git branch in-place          │
+                    │     p                                  | Browse pull requests                │
+                    │  ↑↓ scroll · esc close                                                       │
+                    │                                                                              │
+                    ╰──────────────────────────────────────────────────────────────────────────────╯
 [2m                                                                        │                                               [m
-[2m 2 ○ feature-a… ──────────────────────────────────────────────── 2h ago │                                               [m
-[2m       test commit for feature-auth                                     │                                               [m
-[2m                                                                        │                                               [m
-[2m 3 ○ fix-bug ─────────────────────────────────────────────────── 2h ago │                                               [m
-  ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-  │                                                                                                                  │
-  │  [1mQuick Reference[m                                                                                                 │
-  │                                                                                                                  │
-  │  [1mNavigation[m                           [1mActions[m                              [1mViews[m                                 │
-  │                                                                                                                  │
-  │    [1m↑/k       [mmove up                    [1mn         [mnew worktree               [1m1-9       [mquick-switch              │
-  │    [1m↓/j       [mmove down                  [1md         [mdelete                     [1m/         [mfilter                    │
-  │    [1menter     [mswitch                     [1mR         [mrename worktree            [1mv         [mcompact                   │
-  │    [1mesc       [mback/close                 [1mf         [mfork worktree              [1m?         [mtoggle help               │
-  │                                         [1mb         [mswitch branch              [1mq         [mquit                      │
-  │                                         [1ms         [msync changes                                                   │
-  │                                         [1mc         [mconfigure                                                      │
-  │                                         [1mp         [mbrowse PRs                                                     │
-  │                                         [1mi         [mbrowse issues                                                  │
-  │                                         [1ma         [mbulk delete                                                    │
-  │                                         [1mo         [mcycle sort                                                     │
-  │                                         [1mr         [mrefresh                                                        │
-  │                                                                                                                  │
-  │  Press ? again to close                                                                                          │
-  │                                                                                                                  │
-  ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 [2m                                                                        │                                               [m
 [2m                                                                        │                                               [m
-[2m                                                                        │                                               [m
-[2m                                                                        │                                               [m
-[2m                                                                        │                                               [m
-[2m                                                                        │                                               [m
-[2m                                                                        │                                               [m
-[2m  [1m↑↓[m navigate · [1menter[m switch · [1mn[m new · [1md[m delete · [1mR[m rename · [1mf[m fork · [1mb[m branch                                          [m
-[2m  [1ms[m sync · [1mc[m config · [1mo[m sort · [1mv[m compact · [1m/[m filter · [1mp[m PRs · [1mi[m issues · [1m?[m more                                         [m
+[2m  [1m↑↓[m navigate · [1menter[m switch · [1mU[m up · [1mn[m new · [1m/[m filter · [1mo[m sort · [1m?[m help · [1mq[m quit                                       [m

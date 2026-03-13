@@ -16,24 +16,16 @@ type Hint struct {
 	Description string
 }
 
-// HelpFooter manages a two-level help system: compact hints and expanded panel.
+// HelpFooter manages compact key hints in the footer bar.
 type HelpFooter struct {
-	Expanded    bool
-	CompactMode bool // mirrors Model.compactMode for dynamic hint labels
-
 	// Highlight state: briefly flashes the key hint when pressed.
 	highlightedKey string
 	highlightedAt  time.Time
 }
 
-// NewHelpFooter creates a collapsed HelpFooter.
+// NewHelpFooter creates a HelpFooter.
 func NewHelpFooter() *HelpFooter {
 	return &HelpFooter{}
-}
-
-// Toggle switches between compact and expanded modes.
-func (h *HelpFooter) Toggle() {
-	h.Expanded = !h.Expanded
 }
 
 // SetHighlight marks a key as highlighted, recording the current time.
@@ -69,15 +61,6 @@ func (h *HelpFooter) HasHighlight() bool {
 	return h.highlightedKey != "" && time.Since(h.highlightedAt) < highlightDuration
 }
 
-// viewModeLabel returns "compact" or "detailed" based on current mode.
-// When compact mode is active, the toggle will switch to detailed, and vice versa.
-func (h *HelpFooter) viewModeLabel() string {
-	if h.CompactMode {
-		return "detailed"
-	}
-	return "compact"
-}
-
 // CompactHints returns context-aware key hints for the given view.
 func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 	switch view {
@@ -85,19 +68,19 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 		return []Hint{
 			{"↑↓", "navigate"},
 			{"enter", "switch"},
+			{"U", "up"},
 			{"n", "new"},
-			{"d", "delete"},
-			{"R", "rename"},
-			{"f", "fork"},
-			{"b", "branch"},
-			{"s", "sync"},
-			{"c", "config"},
-			{"o", "sort"},
-			{"v", h.viewModeLabel()},
 			{"/", "filter"},
-			{"p", "PRs"},
-			{"i", "issues"},
-			{"?", "more"},
+			{"o", "sort"},
+			{"?", "help"},
+			{"q", "quit"},
+		}
+	case ViewIssues:
+		return []Hint{
+			{"↑↓", "navigate"},
+			{"enter", "create worktree"},
+			{"/", "filter"},
+			{"esc", "close"},
 		}
 	case ViewCreate:
 		return []Hint{
@@ -207,75 +190,3 @@ func (h *HelpFooter) CompactHeight(view ActiveView, width int) int {
 	return strings.Count(rendered, "\n") + 1
 }
 
-// RenderExpanded renders a three-column help panel.
-func (h *HelpFooter) RenderExpanded(width int) string {
-	cols := []struct {
-		header string
-		items  []Hint
-	}{
-		{
-			header: "Navigation",
-			items: []Hint{
-				{"↑/k", "move up"},
-				{"↓/j", "move down"},
-				{"enter", "switch"},
-				{"esc", "back/close"},
-			},
-		},
-		{
-			header: "Actions",
-			items: []Hint{
-				{"n", "new worktree"},
-				{"d", "delete"},
-				{"R", "rename worktree"},
-				{"f", "fork worktree"},
-				{"b", "switch branch"},
-				{"s", "sync changes"},
-				{"c", "configure"},
-				{"p", "browse PRs"},
-				{"i", "browse issues"},
-				{"a", "bulk delete"},
-				{"o", "cycle sort"},
-				{"r", "refresh"},
-			},
-		},
-		{
-			header: "Views",
-			items: []Hint{
-				{"1-9", "quick-switch"},
-				{"/", "filter"},
-				{"v", h.viewModeLabel()},
-				{"?", "toggle help"},
-				{"q", "quit"},
-			},
-		},
-	}
-
-	colWidth := (width - 8) / 3
-	colWidth = max(colWidth, 15)
-
-	var sections []string
-	for _, col := range cols {
-		var lines []string
-		lines = append(lines, Styles.DetailTitle.Render(col.header))
-		lines = append(lines, "")
-		for _, item := range col.items {
-			k := Styles.HelpKey.Render(padRight(item.Key, 10))
-			d := Styles.HelpDesc.Render(item.Description)
-			lines = append(lines, "  "+k+d)
-		}
-		section := strings.Join(lines, "\n")
-		sections = append(sections, lipgloss.NewStyle().Width(colWidth).Render(section))
-	}
-
-	body := lipgloss.JoinHorizontal(lipgloss.Top, sections...)
-	footer := Styles.TextMuted.Render("Press ? again to close")
-
-	content := Styles.OverlayTitle.Render("Quick Reference") + "\n\n" + body + "\n\n" + footer
-
-	return Styles.RoundedBorder.
-		Width(width-4).
-		Padding(1, 2).
-		BorderForeground(Colors.SurfaceBorder).
-		Render(content)
-}

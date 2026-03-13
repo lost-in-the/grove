@@ -41,11 +41,11 @@ func TestUpdateDashboardNavigation(t *testing.T) {
 			},
 		},
 		{
-			name: "? toggles help footer",
+			name: "? opens help overlay",
 			key:  "?",
 			assert: func(t *testing.T, m Model) {
-				if !m.helpFooter.Expanded {
-					t.Error("expected helpFooter.Expanded=true after ?")
+				if !m.helpOverlay.Active {
+					t.Error("expected helpOverlay.Active=true after ?")
 				}
 			},
 		},
@@ -298,16 +298,16 @@ func TestCreateWizardFlow(t *testing.T) {
 	})
 }
 
-func TestHelpFooterToggleFromDashboard(t *testing.T) {
+func TestHelpOverlayToggleFromDashboard(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
 	m = sendKey(m, "?")
-	if !m.helpFooter.Expanded {
-		t.Fatal("expected helpFooter.Expanded=true after first ?")
+	if !m.helpOverlay.Active {
+		t.Fatal("expected helpOverlay.Active=true after first ?")
 	}
-	// Second ? should collapse
+	// Second ? should close
 	m = sendKey(m, "?")
-	if m.helpFooter.Expanded {
-		t.Error("expected helpFooter.Expanded=false after second ?")
+	if m.helpOverlay.Active {
+		t.Error("expected helpOverlay.Active=false after second ?")
 	}
 }
 

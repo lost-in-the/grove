@@ -251,10 +251,10 @@ func withToastVisible(msg string, level ToastLevel) testOpt {
 	}
 }
 
-// withHelpExpanded expands the help footer overlay.
+// withHelpExpanded opens the help overlay for the current view.
 func withHelpExpanded() testOpt {
 	return func(m *Model) {
-		m.helpFooter.Expanded = true
+		m.helpOverlay.Open(m.activeView, m.width, m.height)
 	}
 }
 
@@ -269,7 +269,6 @@ func withSortMode(mode SortMode) testOpt {
 func withCompactMode() testOpt {
 	return func(m *Model) {
 		m.compactMode = true
-		m.helpFooter.CompactMode = true
 		d := ComputeDelegateWidths(m.list.Items(), m.list.Width())
 		m.listDelegate = d
 		m.list.SetDelegate(d)
