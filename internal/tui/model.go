@@ -1463,6 +1463,7 @@ func (m Model) renderDashboard() string {
 	m.header = Header{
 		ProjectName:   m.projectName,
 		WorktreeCount: len(m.list.Items()),
+		SortLabel:     m.sortMode.String(),
 	}
 	// Find current worktree info and container target for header
 	for _, li := range m.list.Items() {

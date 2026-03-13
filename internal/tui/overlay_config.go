@@ -42,6 +42,7 @@ type ConfigField struct {
 	Type        ConfigFieldType
 	Options     []string // for Enum type
 	Description string   // help text
+	Placeholder string   // shown when value is empty (defaults to "(empty)")
 }
 
 // ConfigState holds the state for the config overlay.
@@ -206,6 +207,7 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Type:        ConfigEnum,
 			Options:     []string{"split", "fork"},
 			Description: "Default action when branch exists",
+			Placeholder: "(prompt each time)",
 		},
 	}
 
@@ -258,6 +260,7 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Default:     strings.Join(cfg.Protection.Protected, ", "),
 			Type:        ConfigList,
 			Description: "Protected worktrees (comma-separated)",
+			Placeholder: "(none — add worktree names)",
 		},
 		{
 			Key:         "protection.immutable",
@@ -266,6 +269,7 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Default:     strings.Join(cfg.Protection.Immutable, ", "),
 			Type:        ConfigList,
 			Description: "Immutable worktrees (comma-separated)",
+			Placeholder: "(none — add worktree names)",
 		},
 	}
 
@@ -567,7 +571,11 @@ func renderConfig(s *ConfigState, width int) string {
 			label := padRight(field.Label, labelWidth)
 			value := field.Value
 			if value == "" {
-				value = Styles.DetailDim.Render("(empty)")
+				placeholder := "(empty)"
+				if field.Placeholder != "" {
+					placeholder = field.Placeholder
+				}
+				value = Styles.DetailDim.Render(placeholder)
 			}
 
 			// Truncate value to fit
