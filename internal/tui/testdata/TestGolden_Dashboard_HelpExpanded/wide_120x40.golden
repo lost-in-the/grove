@@ -10,6 +10,15 @@
                │   [1mU[m                             Switch and start containers                            │
                │   [1m1-9[m                           Quick-switch by number                                 │
                │   [1m/[m                             Filter worktrees                                       │
+               │   [1mtab[m                           Focus detail panel                                     │
+               │                                                                                        │
+               │   [1mDetail Panel (when focused)[m                                                          │
+               │  ────────────────────────────────────────────────────────────────────────────────────  │
+               │   [1m↑/k ↓/j[m                       Scroll up / down                                       │
+               │   [1mg / G[m                         Jump to top / bottom                                   │
+               │   [1mctrl+u / ctrl+d[m               Half page up / down                                    │
+               │   [1mB[m                             Open associated PR in browser                          │
+               │   [1mtab / esc[m                     Return to list                                         │
                │                                                                                        │
                │   [1mWorktree Actions[m                                                                     │
                │  ────────────────────────────────────────────────────────────────────────────────────  │
@@ -21,15 +30,6 @@
                │                                                                                        │
                │   [1mWorkflow[m                                                                             │
                │  ────────────────────────────────────────────────────────────────────────────────────  │
-               │   [1ms[m                             Sync environment worktree                              │
-               │   [1mb[m                             Switch git branch in-place                             │
-               │   [1mp[m                             Browse pull requests                                   │
-               │   [1mi[m                             Browse issues                                          │
-               │                                                                                        │
-               │   [1mDisplay[m                                                                              │
-               │  ────────────────────────────────────────────────────────────────────────────────────  │
-               │   [1mo[m                             Cycle sort (name → recent → dirty)                     │
-               │   [1mv[m                             Toggle compact/detailed view                           │
                │  ────────────────────────────────────────────────────────────────────────────────────  │
                │    [1m↑↓[m scroll · [1mesc[m close                                                               │
                │                                                                                        │
@@ -37,4 +37,4 @@
 [2m                                                                        │                                               [m
 [2m                                                                        │                                               [m
 [2m                                                                        │                                               [m
-[2m  [1m↑↓[m navigate · [1menter[m switch · [1mU[m up · [1mn[m new · [1m/[m filter · [1mo[m sort · [1m?[m help · [1mq[m quit                                       [m
+[2m  [1m↑↓[m navigate · [1menter[m switch · [1mU[m up · [1mn[m new · [1m/[m filter · [1mtab[m detail · [1mo[m sort · [1m?[m help · [1mq[m quit                          [m

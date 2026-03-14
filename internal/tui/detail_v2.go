@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"image/color"
 	"path"
 	"regexp"
 	"sort"
@@ -88,6 +89,18 @@ func renderMetadataGrid(item *WorktreeItem, width int) string {
 		rows = append(rows, label("Commit")+commitVal)
 	}
 
+	// Commit count ahead of default branch (only if > 0 and not on default branch)
+	if item.CommitCount > 0 {
+		rows = append(rows, label("Ahead")+Styles.DetailValue.Render(fmt.Sprintf("%d commits", item.CommitCount)))
+	}
+
+	// Remote tracking branch
+	if item.TrackingBranch != "" {
+		rows = append(rows, label("Remote")+Styles.DetailValue.Render(truncate(item.TrackingBranch, width-labelWidth-2)))
+	} else if !item.HasRemote && !item.IsMain {
+		rows = append(rows, label("Remote")+Styles.StatusWarning.Render("not tracking"))
+	}
+
 	// Status section
 	rows = append(rows, "")
 	rows = append(rows, renderSectionHeader("Status", width))
@@ -99,7 +112,15 @@ func renderMetadataGrid(item *WorktreeItem, width int) string {
 	// Sync (ahead/behind/synced) — only show when remote is tracked
 	if item.HasRemote {
 		syncVal := renderSyncValue(item)
+		if item.AheadCount > 0 {
+			syncVal += Styles.DetailDim.Render(" unpushed")
+		}
 		rows = append(rows, label("Sync")+syncVal)
+	}
+
+	// Stash count (only if > 0)
+	if item.StashCount > 0 {
+		rows = append(rows, label("Stash")+Styles.StatusWarning.Render(fmt.Sprintf("%d stashed", item.StashCount)))
 	}
 
 	// Tmux (only if session exists)
@@ -121,7 +142,50 @@ func renderMetadataGrid(item *WorktreeItem, width int) string {
 		}
 	}
 
+	// Recent commits section (styled to match PR commit list)
+	if len(item.RecentCommits) > 0 {
+		rows = append(rows, "")
+		rows = append(rows, renderSectionHeader("Recent", width))
+		for _, c := range item.RecentCommits {
+			msg := truncate(c.Message, width-12)
+			rows = append(rows, "  "+Styles.DetailDim.Render(c.SHA)+" "+msg)
+		}
+	}
+
+	// Associated PR section
+	if item.AssociatedPR != nil {
+		rows = append(rows, "")
+		rows = append(rows, renderSectionHeader("PR", width))
+		pr := item.AssociatedPR
+		title := truncate(fmt.Sprintf("#%d %s", pr.Number, pr.Title), width-4)
+		rows = append(rows, "  "+Styles.DetailValue.Render(title))
+		if pr.ReviewDecision != "" {
+			style := Styles.DetailDim
+			switch pr.ReviewDecision {
+			case "APPROVED":
+				style = Styles.SuccessText
+			case "CHANGES_REQUESTED":
+				style = Styles.ErrorText
+			}
+			rows = append(rows, "  "+style.Render(formatReviewDecision(pr.ReviewDecision)))
+		}
+	}
+
 	return strings.Join(rows, "\n")
+}
+
+// formatReviewDecision returns a human-readable review status string.
+func formatReviewDecision(decision string) string {
+	switch decision {
+	case "APPROVED":
+		return "Approved"
+	case "CHANGES_REQUESTED":
+		return "Changes requested"
+	case "REVIEW_REQUIRED":
+		return "Review required"
+	default:
+		return decision
+	}
 }
 
 // renderStatusValue returns styled status text for the detail panel.
@@ -190,7 +254,8 @@ func renderTmuxValue(item *WorktreeItem) string {
 	}
 }
 
-const maxChangesShown = 15
+// maxChangesShown is no longer limited — the detail panel is scrollable via
+// Tab focus + j/k navigation, so all files are shown.
 
 // fileEntry holds a parsed git status entry for tree rendering.
 type fileEntry struct {
@@ -235,35 +300,26 @@ func buildFileTree(files []string) []fileEntry {
 
 // renderChangesSection renders the changed files list grouped by directory.
 func renderChangesSection(files []string, width int) string {
-	header := Styles.DetailLabel.Render("── Changes ") +
-		Styles.DetailDim.Render(strings.Repeat("─", max(0, width-12)))
-
 	var lines []string
-	lines = append(lines, header)
+	lines = append(lines, renderSectionHeader("Changes", width))
 
 	entries := buildFileTree(files)
-
-	overflow := 0
-	if len(entries) > maxChangesShown {
-		overflow = len(entries) - maxChangesShown
-		entries = entries[:maxChangesShown]
-	}
 
 	lastDir := "\x00" // sentinel so first dir always triggers header
 	for _, e := range entries {
 		if e.dir != lastDir {
 			lastDir = e.dir
 			if e.dir != "" {
-				dirDisplay := truncate(e.dir+"/", width-2)
-				lines = append(lines, Styles.DetailDim.Render(dirDisplay))
+				dirDisplay := truncate(e.dir+"/", width-4)
+				lines = append(lines, "  "+Styles.DetailDim.Render(dirDisplay))
 			}
 		}
 
-		indent := " "
-		nameWidth := width - 4
+		indent := "  "
+		nameWidth := width - 6
 		if e.dir != "" {
-			indent = "   "
-			nameWidth = width - 6
+			indent = "    "
+			nameWidth = width - 8
 		}
 		baseName := truncate(e.base, nameWidth)
 
@@ -279,10 +335,6 @@ func renderChangesSection(files []string, width int) string {
 		lines = append(lines, indent+styled)
 	}
 
-	if overflow > 0 {
-		lines = append(lines, " "+Styles.StatusInfo.Render(fmt.Sprintf("… and %d more files", overflow)))
-	}
-
 	return strings.Join(lines, "\n")
 }
 
@@ -290,6 +342,11 @@ func renderChangesSection(files []string, width int) string {
 // with the title inset after the corner character.
 // It strips ANSI codes before rune-slicing to avoid cutting inside escape sequences.
 func injectBorderTitle(rendered, title string) string {
+	return injectBorderTitleWithColor(rendered, title, Styles.DetailBorder.GetBorderTopForeground())
+}
+
+// injectBorderTitleWithColor is like injectBorderTitle but accepts a custom border color.
+func injectBorderTitleWithColor(rendered, title string, borderColor color.Color) string {
 	lines := strings.Split(rendered, "\n")
 	if len(lines) == 0 {
 		return rendered
@@ -305,7 +362,6 @@ func injectBorderTitle(rendered, title string) string {
 	}
 
 	// Re-apply the border color to the spliced segments
-	borderColor := Styles.DetailBorder.GetBorderTopForeground()
 	borderStyle := lipgloss.NewStyle().Foreground(borderColor)
 
 	newTop := borderStyle.Render(string(cleanRunes[:2])) + title +

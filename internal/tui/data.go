@@ -17,6 +17,20 @@ import (
 	"github.com/lost-in-the/grove/internal/worktree"
 )
 
+// PRInfo holds lightweight PR metadata for display in the detail panel.
+type PRInfo struct {
+	Number         int
+	Title          string
+	URL            string
+	ReviewDecision string // "APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED", ""
+}
+
+// RecentCommit holds a short SHA and subject for display.
+type RecentCommit struct {
+	SHA     string // 7-char short hash
+	Message string // first line of commit message
+}
+
 // WorktreeItem holds enriched worktree data for the TUI.
 type WorktreeItem struct {
 	ShortName      string
@@ -35,8 +49,13 @@ type WorktreeItem struct {
 	IsPrunable     bool
 	TmuxStatus     string // "attached", "detached", "none"
 	HasRemote      bool   // true if branch has upstream tracking
+	TrackingBranch string // e.g., "origin/feat/ux-polish" (empty if no upstream)
 	AheadCount     int    // commits ahead of upstream
 	BehindCount    int    // commits behind upstream
+	CommitCount    int    // commits ahead of default branch
+	RecentCommits  []RecentCommit // last 3 commits
+	StashCount     int    // number of stashes in this worktree
+	AssociatedPR   *PRInfo  // PR linked to this branch (nil if none)
 	LastAccessed   time.Time
 	PluginStatuses []plugins.StatusEntry // status entries from plugins
 }
@@ -106,20 +125,71 @@ func (w *WorktreeItem) SyncStatusText() string {
 
 // getUpstreamInfo returns upstream tracking info in a single git call.
 // If no upstream is configured, hasRemote is false and counts are 0.
-func getUpstreamInfo(worktreePath string) (ahead, behind int, hasRemote bool) {
+func getUpstreamInfo(worktreePath string) (ahead, behind int, hasRemote bool, trackingBranch string) {
 	out, err := cmdexec.Output(context.TODO(), "git", []string{"rev-list", "--count", "--left-right", "@{upstream}...HEAD"}, worktreePath, cmdexec.GitLocal)
 	if err != nil {
-		return 0, 0, false
+		return 0, 0, false, ""
 	}
 
 	parts := strings.Fields(strings.TrimSpace(string(out)))
 	if len(parts) != 2 {
-		return 0, 0, false
+		return 0, 0, false, ""
 	}
 
 	b, _ := strconv.Atoi(parts[0])
 	a, _ := strconv.Atoi(parts[1])
-	return a, b, true
+
+	// Get the tracking branch name
+	tbOut, tbErr := cmdexec.Output(context.TODO(), "git", []string{"rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"}, worktreePath, cmdexec.GitLocal)
+	if tbErr == nil {
+		trackingBranch = strings.TrimSpace(string(tbOut))
+	}
+
+	return a, b, true, trackingBranch
+}
+
+// getCommitCountAhead returns the number of commits a worktree branch is ahead
+// of the default branch. Returns 0 if on the default branch or on error.
+func getCommitCountAhead(worktreePath, defaultBranch string) int {
+	out, err := cmdexec.Output(context.TODO(), "git", []string{"rev-list", "--count", defaultBranch + "..HEAD"}, worktreePath, cmdexec.GitLocal)
+	if err != nil {
+		return 0
+	}
+	count, _ := strconv.Atoi(strings.TrimSpace(string(out)))
+	return count
+}
+
+// getRecentCommits returns the last n commits (SHA + subject) for a worktree.
+func getRecentCommits(worktreePath string, n int) []RecentCommit {
+	out, err := cmdexec.Output(context.TODO(), "git", []string{"log", fmt.Sprintf("-%d", n), "--format=%h %s"}, worktreePath, cmdexec.GitLocal)
+	if err != nil {
+		return nil
+	}
+	raw := strings.TrimSpace(string(out))
+	if raw == "" {
+		return nil
+	}
+	lines := strings.Split(raw, "\n")
+	commits := make([]RecentCommit, 0, len(lines))
+	for _, line := range lines {
+		if sha, msg, ok := strings.Cut(line, " "); ok {
+			commits = append(commits, RecentCommit{SHA: sha, Message: msg})
+		}
+	}
+	return commits
+}
+
+// getStashCount returns the number of stashes in a worktree.
+func getStashCount(worktreePath string) int {
+	out, err := cmdexec.Output(context.TODO(), "git", []string{"stash", "list"}, worktreePath, cmdexec.GitLocal)
+	if err != nil {
+		return 0
+	}
+	raw := strings.TrimSpace(string(out))
+	if raw == "" {
+		return 0
+	}
+	return len(strings.Split(raw, "\n"))
 }
 
 // FetchWorktrees gathers all enriched worktree data for display.
@@ -132,10 +202,16 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager, pluginMgr ..
 
 	projectName := mgr.GetProjectName()
 
-	// Load config for protection checks
+	// Load config for protection checks and default branch
 	cfg, cfgErr := config.Load()
 	if cfgErr != nil {
 		tuilog.Printf("warning: failed to load config for protection checks: %v", cfgErr)
+	}
+
+	// Determine default branch for commit count
+	defaultBranch := "main"
+	if cfg != nil && cfg.DefaultBranch != "" {
+		defaultBranch = cfg.DefaultBranch
 	}
 
 	// Current worktree
@@ -212,10 +288,10 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager, pluginMgr ..
 			item.IsProtected = cfg.IsProtected(tree.ShortName)
 		}
 
-		// Parallel: commit info + dirty files + upstream
+		// Parallel: commit info + dirty files + upstream + commit count + recent + stash
 		if !tree.IsPrunable {
 			wg.Add(1)
-			go func(item *WorktreeItem, treePath string, isDirty, isCurrent bool) {
+			go func(item *WorktreeItem, treePath, branch string, isDirty bool) {
 				defer wg.Done()
 
 				shortHash, message, age, err := mgr.GetCommitInfo(treePath)
@@ -243,11 +319,23 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager, pluginMgr ..
 					}
 				}
 
-				ahead, behind, hasRemote := getUpstreamInfo(treePath)
+				ahead, behind, hasRemote, trackingBranch := getUpstreamInfo(treePath)
 				item.HasRemote = hasRemote
+				item.TrackingBranch = trackingBranch
 				item.AheadCount = ahead
 				item.BehindCount = behind
-			}(item, tree.Path, tree.IsDirty, item.IsCurrent)
+
+				// Commit count ahead of default branch (skip if on default branch)
+				if branch != defaultBranch {
+					item.CommitCount = getCommitCountAhead(treePath, defaultBranch)
+				}
+
+				// Recent commits (last 3)
+				item.RecentCommits = getRecentCommits(treePath, 3)
+
+				// Stash count
+				item.StashCount = getStashCount(treePath)
+			}(item, tree.Path, tree.Branch, tree.IsDirty)
 		}
 	}
 

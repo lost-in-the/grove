@@ -11,7 +11,7 @@ import (
 )
 
 // renderPRPreview renders a detailed preview panel for a single PR.
-func renderPRPreview(pr *tracker.PullRequest, width int) string {
+func renderPRPreview(pr *tracker.PullRequest, width int, footer string) string {
 	contentWidth := max(width-6, 30)
 
 	var b strings.Builder
@@ -59,7 +59,7 @@ func renderPRPreview(pr *tracker.PullRequest, width int) string {
 	}
 
 	b.WriteString("\n\n")
-	b.WriteString(Styles.Footer.Render("[enter] Create worktree  [o] Open in browser  [tab] Back  [esc] Close"))
+	b.WriteString(footer)
 
 	return Styles.OverlayBorderInfo.Render(b.String())
 }
@@ -67,13 +67,17 @@ func renderPRPreview(pr *tracker.PullRequest, width int) string {
 // renderMarkdown renders markdown to styled terminal output using glamour.
 // Used for user-provided content (PR bodies, issue bodies).
 // Respects NO_COLOR and GROVE_NO_COLOR environment variables.
+//
+// Uses WithStandardStyle("dark") instead of WithAutoStyle() to avoid
+// terminal queries (OSC 11) that leak through Bubbletea's input parser
+// as spurious key press events.
 func renderMarkdown(md string, width int) string {
 	var opts []glamour.TermRendererOption
 	opts = append(opts, glamour.WithWordWrap(width))
 	if os.Getenv("NO_COLOR") != "" || os.Getenv("GROVE_NO_COLOR") != "" {
 		opts = append(opts, glamour.WithStylePath("notty"))
 	} else {
-		opts = append(opts, glamour.WithAutoStyle())
+		opts = append(opts, glamour.WithStandardStyle("dark"))
 	}
 	r, err := glamour.NewTermRenderer(opts...)
 	if err != nil {

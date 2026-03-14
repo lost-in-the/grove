@@ -1,24 +1,24 @@
-[2m [1m[1mtest-project[m  ·  3 worktrees  ·  on root  ·  ↕ name                     ● root[m [m
-[2m                                                                                [m
-    ╭──────────────────────────────────────────────────────────────────────╮
-    │                                                                      │
-    │  [1mPull Requests[m                                                       │
-    │                                                                      │
-    │  3 open                                                              │
-    │                                                                      │
-    │  ❯ #42    Add user authentication flow  feature/auth                 │
-    │           @alice · 3 commits · +245 -12  ✓ worktree                  │
-    │                                                                      │
-    │    #38    [DRAFT] Fix login redirect loop  fix/login                 │
-    │           @bob · 1 commit · +8 -3                                    │
-    │                                                                      │
-    │    #35    Refactor database connection pooling  refactor/db-pool     │
-    │           @carol · 7 commits · +1,203 -456                           │
-    │                                                                      │
-    │  [enter] create worktree  [tab] preview  [esc] close  type to        │
-    │  filter                                                              │
-    │                                                                      │
-    ╰──────────────────────────────────────────────────────────────────────╯
-[2m                                                                                [m
-[2m  [1m↑↓[m navigate · [1menter[m switch · [1mU[m up · [1mn[m new                                     [m
-[2m  [1m/[m filter · [1mo[m sort · [1m?[m help · [1mq[m quit                                           [m
+ [1m[1mtest-project[m  ←  [1mPull Requests[m                                   esc to return[m 
+ 3 open                                                                         
+                                                                                
+ ❯ #42    Add user authentication flow  feature/auth                            
+          @alice · 3 commits · +245 -12  ✓ worktree                             
+                                                                                
+   #38    [DRAFT] Fix login redirect loop  fix/login                            
+          @bob · 1 commit · +8 -3                                               
+                                                                                
+   #35    Refactor database connection pooling  refactor/db-pool                
+          @carol · 7 commits · +1,203 -456                                      
+                                                                                
+ ── #42 Add user authentication flow ────────────────────────────────────────── 
+ ╭─ [1m#42[m ────────────────────────────────────────────────────────────────────╮   
+ │[1mAdd user authentication flow[m                                              │   
+ │                                                                          │   
+ │── PR Info ─────────────────────────────────────────────────────────────  │   
+ │Branch    feature/auth                                                    │   
+ │Author    @alice                                                          │   
+ │Commits   3 commits                                                       │   
+ │Changes   +245 -12                                                        │   
+ │                                                                          │   
+  [1m↑↓[m navigate · [1menter[m create worktree · [1mB[m open in browser                       
+  [1mtab[m detail · [1m/[m filter · [1mesc[m close                                             

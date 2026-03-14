@@ -30,6 +30,16 @@ func renderCreateV2(s *CreateState, width int, spinnerView string) string {
 // overlayIndent is the consistent left-padding for all content inside overlays.
 const overlayIndent = "  "
 
+// padToHeight pads content with blank lines so it reaches at least minLines.
+// This prevents overlay height jitter when switching between wizard steps.
+func padToHeight(content string, minLines int) string {
+	lines := strings.Count(content, "\n")
+	if lines >= minLines {
+		return content
+	}
+	return content + strings.Repeat("\n", minLines-lines)
+}
+
 // indentBlock prepends indent to every line of a multi-line string.
 func indentBlock(s, indent string) string {
 	return indent + strings.ReplaceAll(s, "\n", "\n"+indent)
@@ -64,7 +74,13 @@ func renderCreateSpinnerV2(s *CreateState, spinnerView string) string {
 		b.WriteString(renderContextSummary(s, overlayWidth-10) + "\n\n")
 	}
 
-	b.WriteString(spinnerView + " Creating worktree " + Styles.DetailValue.Render(s.Name) + "...\n")
+	// Activity log (streaming progress) or fallback spinner
+	if s.ActivityLog != nil {
+		b.WriteString(s.ActivityLog.View(spinnerView))
+	} else {
+		b.WriteString(spinnerView + " Creating worktree " + Styles.DetailValue.Render(s.Name) + "...\n")
+	}
+
 	if s.Error != "" {
 		b.WriteString("\n" + Styles.ErrorText.Render(s.Error) + "\n")
 	}
@@ -127,12 +143,17 @@ func renderCreateBranchSelectorV2(s *CreateState, width int) string {
 		}
 	}
 
-	b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] select  [esc] cancel  type to filter"))
+	content := b.String()
+	footer := "\n" + Styles.Footer.Render(indent+"[enter] select  [esc] cancel  type to filter")
 
 	return Styles.OverlayBorderSuccess.Width(overlayWidth).Render(
-		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + b.String(),
+		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + padToHeight(content, createOverlayMinLines) + footer,
 	)
 }
+
+// createOverlayMinLines is the fixed content height for the create wizard.
+// Set to accommodate the tallest step (branch selector with scroll window).
+const createOverlayMinLines = 18
 
 func renderCreateNameV2(s *CreateState, width int) string {
 	overlayWidth := calcOverlayWidth(width)
@@ -178,14 +199,16 @@ func renderCreateNameV2(s *CreateState, width int) string {
 		b.WriteString("\n" + indent + Styles.SuccessText.Render("✓ valid name") + "\n")
 	}
 
+	content := b.String()
+	var footer string
 	if s.ExistingWorktree != nil {
-		b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] Switch to existing  [tab] edit name  [esc] cancel"))
+		footer = "\n" + Styles.Footer.Render(indent+"[enter] Switch to existing  [tab] edit name  [esc] cancel")
 	} else {
-		b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] next  [backspace] back  [esc] cancel"))
+		footer = "\n" + Styles.Footer.Render(indent+"[enter] next  [backspace] back  [esc] cancel")
 	}
 
 	return Styles.OverlayBorderSuccess.Width(overlayWidth).Render(
-		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + b.String(),
+		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + padToHeight(content, createOverlayMinLines) + footer,
 	)
 }
 
@@ -226,10 +249,11 @@ func renderCreateBranchActionV2(s *CreateState, width int) string {
 	}
 	b.WriteString(indent + checkbox + " Don't show this again\n")
 
-	b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] confirm  [backspace] back  [esc] cancel  [space] toggle"))
+	content := b.String()
+	footer := "\n" + Styles.Footer.Render(indent+"[enter] confirm  [backspace] back  [esc] cancel  [space] toggle")
 
 	return Styles.OverlayBorderSuccess.Width(overlayWidth).Render(
-		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + b.String(),
+		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + padToHeight(content, createOverlayMinLines) + footer,
 	)
 }
 
@@ -289,15 +313,18 @@ func renderCreateConfirmV2(s *CreateState, width int) string {
 		b.WriteString(indent + "Strategy: " + Styles.DetailValue.Render("create new branch") + "\n")
 	}
 
+	var footer string
 	if s.Error != "" {
 		b.WriteString("\n" + Styles.ErrorText.Render(indent+s.Error) + "\n")
-		b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] retry  [backspace] back  [esc] cancel"))
+		footer = "\n" + Styles.Footer.Render(indent+"[enter] retry  [backspace] back  [esc] cancel")
 	} else {
 		b.WriteString("\n" + Styles.SuccessText.Render(indent+"Ready to create worktree.") + "\n")
-		b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] create  [backspace] back  [esc] cancel"))
+		footer = "\n" + Styles.Footer.Render(indent+"[enter] create  [backspace] back  [esc] cancel")
 	}
 
+	content := b.String()
+
 	return Styles.OverlayBorderSuccess.Width(overlayWidth).Render(
-		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + b.String(),
+		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + padToHeight(content, createOverlayMinLines) + footer,
 	)
 }

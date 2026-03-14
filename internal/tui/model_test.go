@@ -1358,14 +1358,28 @@ func TestPRFilterTypingThroughUpdate(t *testing.T) {
 		{Number: 2, Title: "Beta bugfix", Branch: "beta", Author: "user"},
 	}
 
-	t.Run("typing populates filter", func(t *testing.T) {
+	t.Run("typing populates filter after / activation", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
 		m = enterPRViewLoaded(m, prs)
 
+		m = sendKey(m, "/") // activate filter mode
 		m = sendKey(m, "a")
 		m = sendKey(m, "l")
 		if m.prState.FilterInput.Value() != "al" {
 			t.Errorf("expected filter 'al', got %q", m.prState.FilterInput.Value())
+		}
+		if !m.prState.Filtering {
+			t.Error("expected Filtering to be true")
+		}
+	})
+
+	t.Run("typing without / does not filter", func(t *testing.T) {
+		m := newTestModel(withItems(1), withSize(80, 24))
+		m = enterPRViewLoaded(m, prs)
+
+		m = sendKey(m, "a")
+		if m.prState.FilterInput.Value() != "" {
+			t.Errorf("expected empty filter without /, got %q", m.prState.FilterInput.Value())
 		}
 	})
 
@@ -1373,6 +1387,7 @@ func TestPRFilterTypingThroughUpdate(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
 		m = enterPRViewLoaded(m, prs)
 
+		m = sendKey(m, "/")
 		m = sendKey(m, "a")
 		m = sendKey(m, "l")
 		m = sendKey(m, "p")
@@ -1386,11 +1401,43 @@ func TestPRFilterTypingThroughUpdate(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
 		m = enterPRViewLoaded(m, prs)
 
+		m = sendKey(m, "/")
 		m = sendKey(m, "a")
 		m = sendKey(m, "b")
 		m = sendKey(m, "backspace")
 		if m.prState.FilterInput.Value() != "a" {
 			t.Errorf("expected filter 'a', got %q", m.prState.FilterInput.Value())
+		}
+	})
+
+	t.Run("esc clears filter and exits filter mode", func(t *testing.T) {
+		m := newTestModel(withItems(1), withSize(80, 24))
+		m = enterPRViewLoaded(m, prs)
+
+		m = sendKey(m, "/")
+		m = sendKey(m, "a")
+		m = sendKey(m, "esc")
+		if m.prState.FilterInput.Value() != "" {
+			t.Errorf("expected empty filter after esc, got %q", m.prState.FilterInput.Value())
+		}
+		if m.prState.Filtering {
+			t.Error("expected Filtering to be false after esc")
+		}
+	})
+
+	t.Run("enter keeps filter value and exits filter mode", func(t *testing.T) {
+		m := newTestModel(withItems(1), withSize(80, 24))
+		m = enterPRViewLoaded(m, prs)
+
+		m = sendKey(m, "/")
+		m = sendKey(m, "a")
+		m = sendKey(m, "l")
+		m = sendKey(m, "enter")
+		if m.prState.FilterInput.Value() != "al" {
+			t.Errorf("expected filter 'al' after enter, got %q", m.prState.FilterInput.Value())
+		}
+		if m.prState.Filtering {
+			t.Error("expected Filtering to be false after enter")
 		}
 	})
 }
@@ -1401,14 +1448,28 @@ func TestIssueFilterTypingThroughUpdate(t *testing.T) {
 		{Number: 2, Title: "Signup slow"},
 	}
 
-	t.Run("typing populates filter", func(t *testing.T) {
+	t.Run("typing populates filter after / activation", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
 		m = enterIssueViewLoaded(m, issues)
 
+		m = sendKey(m, "/") // activate filter mode
 		m = sendKey(m, "l")
 		m = sendKey(m, "o")
 		if m.issueState.FilterInput.Value() != "lo" {
 			t.Errorf("expected filter 'lo', got %q", m.issueState.FilterInput.Value())
+		}
+		if !m.issueState.Filtering {
+			t.Error("expected Filtering to be true")
+		}
+	})
+
+	t.Run("typing without / does not filter", func(t *testing.T) {
+		m := newTestModel(withItems(1), withSize(80, 24))
+		m = enterIssueViewLoaded(m, issues)
+
+		m = sendKey(m, "l")
+		if m.issueState.FilterInput.Value() != "" {
+			t.Errorf("expected empty filter without /, got %q", m.issueState.FilterInput.Value())
 		}
 	})
 
@@ -1416,12 +1477,28 @@ func TestIssueFilterTypingThroughUpdate(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
 		m = enterIssueViewLoaded(m, issues)
 
+		m = sendKey(m, "/")
 		m = sendKey(m, "l")
 		m = sendKey(m, "o")
 		m = sendKey(m, "g")
 		filtered := filteredIssues(m.issueState.Issues, m.issueState.FilterInput.Value())
 		if len(filtered) != 1 {
 			t.Errorf("expected 1 filtered issue, got %d", len(filtered))
+		}
+	})
+
+	t.Run("esc clears filter and exits filter mode", func(t *testing.T) {
+		m := newTestModel(withItems(1), withSize(80, 24))
+		m = enterIssueViewLoaded(m, issues)
+
+		m = sendKey(m, "/")
+		m = sendKey(m, "l")
+		m = sendKey(m, "esc")
+		if m.issueState.FilterInput.Value() != "" {
+			t.Errorf("expected empty filter after esc, got %q", m.issueState.FilterInput.Value())
+		}
+		if m.issueState.Filtering {
+			t.Error("expected Filtering to be false after esc")
 		}
 	})
 }

@@ -8,6 +8,7 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/lost-in-the/grove/internal/state"
@@ -25,8 +26,12 @@ type PRViewState struct {
 	WorktreeBranches map[string]bool // branches that have worktrees
 	Creating         bool
 	CreatingPR       *tracker.PullRequest // PR being created
+	ActivityLog      *ActivityLog         // streaming creation progress
 	FilterInput      textinput.Model
-	ShowPreview      bool // toggle PR preview panel with Tab
+	Filtering        bool // true when filter input is active (activated by /)
+	DetailFocused    bool // true when detail panel has focus (Tab to toggle)
+	DetailViewport   viewport.Model
+	lastCursor       int // tracks cursor changes to update viewport content
 }
 
 // newPRFilterInput creates a configured textinput for PR filtering.
@@ -72,6 +77,64 @@ func (m Model) handlePRKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	filtered := filteredPRs(s.PRs, s.FilterInput.Value())
 
+	// When filtering is active, route keys to the textinput
+	if s.Filtering {
+		switch {
+		case key.Matches(msg, m.keys.Escape):
+			s.Filtering = false
+			s.FilterInput.Blur()
+			s.FilterInput.SetValue("")
+			s.Cursor = 0
+			return m, nil
+		case key.Matches(msg, m.keys.Enter):
+			s.Filtering = false
+			s.FilterInput.Blur()
+			return m, nil
+		default:
+			prevVal := s.FilterInput.Value()
+			var cmd tea.Cmd
+			s.FilterInput, cmd = s.FilterInput.Update(msg)
+			if s.FilterInput.Value() != prevVal {
+				s.Cursor = 0
+			}
+			return m, cmd
+		}
+	}
+
+	// When detail panel is focused, route keys for scrolling
+	if s.DetailFocused {
+		switch {
+		case key.Matches(msg, m.keys.Escape):
+			s.DetailFocused = false
+			return m, nil
+		case key.Matches(msg, m.keys.Tab):
+			s.DetailFocused = false
+			return m, nil
+		case key.Matches(msg, m.keys.Up):
+			s.DetailViewport.ScrollUp(1)
+			return m, nil
+		case key.Matches(msg, m.keys.Down):
+			s.DetailViewport.ScrollDown(1)
+			return m, nil
+		case msg.String() == "g":
+			s.DetailViewport.GotoTop()
+			return m, nil
+		case msg.String() == "G":
+			s.DetailViewport.GotoBottom()
+			return m, nil
+		case msg.String() == "ctrl+u":
+			s.DetailViewport.HalfPageUp()
+			return m, nil
+		case msg.String() == "ctrl+d":
+			s.DetailViewport.HalfPageDown()
+			return m, nil
+		default:
+			// Swallow all other keys while detail is focused
+			return m, nil
+		}
+	}
+
+	// Normal mode (not filtering, list focused)
 	switch {
 	case key.Matches(msg, m.keys.Escape):
 		m.activeView = ViewDashboard
@@ -91,28 +154,19 @@ func (m Model) handlePRKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.keys.Tab):
-		s.ShowPreview = !s.ShowPreview
+		s.DetailFocused = true
 		return m, nil
 
-	case msg.String() == "o" && s.ShowPreview:
+	case msg.String() == "B":
 		if len(filtered) > 0 && s.Cursor < len(filtered) {
 			pr := filtered[s.Cursor]
-			if pr.URL != "" {
-				var cmd *exec.Cmd
-				switch runtime.GOOS {
-				case "darwin":
-					cmd = exec.Command("open", pr.URL)
-				case "windows":
-					cmd = exec.Command("cmd", "/c", "start", pr.URL)
-				default:
-					cmd = exec.Command("xdg-open", pr.URL)
-				}
-				if err := cmd.Start(); err != nil {
-					tuilog.Printf("warning: failed to open URL %q: %v", pr.URL, err)
-				}
-			}
+			openURL(pr.URL)
 		}
 		return m, nil
+
+	case key.Matches(msg, m.keys.Filter):
+		s.Filtering = true
+		return m, s.FilterInput.Focus()
 
 	case key.Matches(msg, m.keys.Enter):
 		if len(filtered) > 0 && s.Cursor < len(filtered) {
@@ -125,21 +179,14 @@ func (m Model) handlePRKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			s.Creating = true
 			s.CreatingPR = pr
 			s.Error = ""
+			s.ActivityLog = NewActivityLog(60, 10)
 			name := tracker.GenerateWorktreeName("pr", pr.Number, pr.Title)
 			return m, tea.Batch(m.spinner.Tick, createPRWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, name, pr.Branch))
 		}
 		return m, nil
-
-	default:
-		// Route remaining keys through the filter textinput
-		prevVal := s.FilterInput.Value()
-		var cmd tea.Cmd
-		s.FilterInput, cmd = s.FilterInput.Update(msg)
-		if s.FilterInput.Value() != prevVal {
-			s.Cursor = 0
-		}
-		return m, cmd
 	}
+
+	return m, nil
 }
 
 func filteredPRs(prs []*tracker.PullRequest, filter string) []*tracker.PullRequest {
@@ -160,17 +207,53 @@ func filteredPRs(prs []*tracker.PullRequest, filter string) []*tracker.PullReque
 }
 
 func createPRWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot, name, branch string) tea.Cmd {
-	return func() tea.Msg {
+	ch := make(chan creationEvent, 10)
+
+	go func() {
+		defer close(ch)
+
+		ch <- creationEvent{line: fmt.Sprintf("Creating worktree '%s' from PR branch '%s'...", name, branch)}
+
 		err := mgr.CreateFromBranch(name, branch)
 		if err != nil {
-			return prWorktreeCreatedMsg{name: name, err: err}
-		}
-		wt, err := mgr.Find(name)
-		if err != nil || wt == nil {
-			return prWorktreeCreatedMsg{name: name, err: errWorktreeNotFound}
+			ch <- creationEvent{done: true, name: name, err: err}
+			return
 		}
 
-		result := runPostCreate(mgr, stateMgr, projectRoot, name, wt)
-		return prWorktreeCreatedMsg{name: name, path: wt.Path, hookOutput: result.hookOutput, hookErr: result.hookErr}
+		wt, err := mgr.Find(name)
+		if err != nil || wt == nil {
+			ch <- creationEvent{done: true, name: name, err: errWorktreeNotFound}
+			return
+		}
+
+		result := runPostCreateStreaming(ch, mgr, stateMgr, projectRoot, name, wt)
+		ch <- creationEvent{
+			done:       true,
+			name:       name,
+			path:       wt.Path,
+			hookOutput: result.hookOutput,
+			hookErr:    result.hookErr,
+		}
+	}()
+
+	return readCreationLog(ch, "pr")
+}
+
+// openURL opens a URL in the user's default browser.
+func openURL(url string) {
+	if url == "" {
+		return
+	}
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", url)
+	default:
+		cmd = exec.Command("xdg-open", url)
+	}
+	if err := cmd.Start(); err != nil {
+		tuilog.Printf("warning: failed to open URL %q: %v", url, err)
 	}
 }

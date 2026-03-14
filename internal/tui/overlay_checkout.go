@@ -345,6 +345,8 @@ func renderCheckout(s *CheckoutState, width int) string {
 		b.WriteString(indent + Styles.ErrorText.Render("Error: "+s.Err.Error()) + "\n\n")
 	}
 
+	var footer string
+
 	switch s.Step {
 	case CheckoutStepBranch:
 		// Worktree context
@@ -385,7 +387,7 @@ func renderCheckout(s *CheckoutState, width int) string {
 		if !s.WIPCheckDone {
 			b.WriteString("\n" + indent + Styles.DetailDim.Render("Checking for uncommitted changes...") + "\n")
 		}
-		b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] select  [esc] cancel  type to filter"))
+		footer = "\n" + Styles.Footer.Render(indent+"[enter] select  [esc] cancel  type to filter")
 
 	case CheckoutStepWIP:
 		// Context summary
@@ -405,7 +407,7 @@ func renderCheckout(s *CheckoutState, width int) string {
 			}
 			b.WriteString(indent + cursor + opt + "\n")
 		}
-		b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] select  [backspace] back  [esc] cancel"))
+		footer = "\n" + Styles.Footer.Render(indent+"[enter] select  [backspace] back  [esc] cancel")
 
 	case CheckoutStepConfirm:
 		b.WriteString(indent + Styles.DetailLabel.Render("Worktree: ") + Styles.DetailValue.Render(s.Item.ShortName) + "\n")
@@ -417,10 +419,16 @@ func renderCheckout(s *CheckoutState, width int) string {
 		}
 
 		b.WriteString("\n" + Styles.SuccessText.Render(indent+"Ready to switch.") + "\n")
-		b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] switch  [backspace] back  [esc] cancel"))
+		footer = "\n" + Styles.Footer.Render(indent+"[enter] switch  [backspace] back  [esc] cancel")
 	}
 
+	content := b.String()
+
 	return Styles.OverlayBorderSuccess.Width(overlayWidth).Render(
-		Styles.OverlayTitle.Render("Switch Branch") + "\n\n" + b.String(),
+		Styles.OverlayTitle.Render("Switch Branch") + "\n\n" + padToHeight(content, checkoutOverlayMinLines) + footer,
 	)
 }
+
+// checkoutOverlayMinLines is the fixed content height for the checkout wizard.
+// Set to accommodate the tallest step (branch selector with scroll window).
+const checkoutOverlayMinLines = 20

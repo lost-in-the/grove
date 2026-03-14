@@ -68,9 +68,10 @@ type Model struct {
 	keys KeyMap
 
 	// State
-	activeView ActiveView
-	ready      bool // true after first WindowSizeMsg
-	loading    bool // true while fetching worktrees
+	activeView    ActiveView
+	ready         bool // true after first WindowSizeMsg
+	loading       bool // true while fetching worktrees
+	detailFocused bool // true when dashboard detail panel has focus
 
 	// Sort
 	sortMode SortMode
@@ -243,6 +244,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.updateDetailContent()
+
+		// Fire lazy PR lookup for all branches
+		var branches []string
+		for _, li := range listItems {
+			if item, ok := li.(WorktreeItem); ok {
+				branches = append(branches, item.Branch)
+			}
+		}
+		return m, lookupPRsCmd(branches)
+
+	case prLookupMsg:
+		if msg.prs != nil {
+			listItems := m.list.Items()
+			for i, li := range listItems {
+				if item, ok := li.(WorktreeItem); ok {
+					if pr, found := msg.prs[item.Branch]; found {
+						item.AssociatedPR = pr
+						listItems[i] = item
+					}
+				}
+			}
+			m.list.SetItems(listItems)
+			m.updateDetailContent()
+		}
 		return m, nil
 
 	case worktreeDeletedMsg:
@@ -259,6 +284,112 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		cmds = append(cmds, m.fetchWorktrees)
 		return m, tea.Batch(cmds...)
+
+	case creationLogMsg:
+		// Append log line to the appropriate activity log and chain next read.
+		if m.createState != nil && m.createState.ActivityLog != nil {
+			m.createState.ActivityLog.AddLine(msg.line)
+		}
+		if m.prState != nil && m.prState.ActivityLog != nil {
+			m.prState.ActivityLog.AddLine(msg.line)
+		}
+		if m.issueState != nil && m.issueState.ActivityLog != nil {
+			m.issueState.ActivityLog.AddLine(msg.line)
+		}
+		// Determine source for the next read based on which state is active.
+		source := "create"
+		if m.prState != nil && m.prState.Creating {
+			source = "pr"
+		} else if m.issueState != nil && m.issueState.Creating {
+			source = "issue"
+		}
+		return m, readCreationLog(msg.ch, source)
+
+	case creationDoneMsg:
+		switch msg.source {
+		case "create":
+			if msg.err != nil {
+				if m.createState != nil {
+					m.createState.Creating = false
+					m.createState.Error = msg.err.Error()
+					if m.createState.ActivityLog != nil {
+						m.createState.ActivityLog.SetDone(msg.err)
+					}
+				}
+				return m, nil
+			}
+			if m.createState != nil && m.createState.ActivityLog != nil {
+				m.createState.ActivityLog.SetDone(nil)
+			}
+			m.activeView = ViewDashboard
+			m.createState = nil
+			m.pendingSelect = msg.name
+			if msg.hookErr != nil {
+				m.toast.Show(NewToast(fmt.Sprintf("Created %q (hook failed: %s)", msg.name, msg.hookErr), ToastWarning))
+			} else {
+				m.toast.Show(NewToast(fmt.Sprintf("Created %q", msg.name), ToastSuccess))
+			}
+			if msg.hookOutput != "" {
+				tuilog.Printf("hook output for %q: %s", msg.name, msg.hookOutput)
+			}
+			cmds = append(cmds, m.spinner.Tick, m.fetchWorktrees)
+			return m, tea.Batch(cmds...)
+
+		case "pr":
+			if m.prState != nil {
+				m.prState.Creating = false
+				if m.prState.ActivityLog != nil {
+					m.prState.ActivityLog.SetDone(msg.err)
+				}
+			}
+			if msg.err != nil {
+				if m.prState != nil {
+					m.prState.Error = msg.err.Error()
+				}
+				return m, nil
+			}
+			m.activeView = ViewDashboard
+			m.prState = nil
+			m.pendingSelect = msg.name
+			if msg.hookErr != nil {
+				m.toast.Show(NewToast(fmt.Sprintf("Created from PR %q (hook failed: %s)", msg.name, msg.hookErr), ToastWarning))
+			} else {
+				m.toast.Show(NewToast(fmt.Sprintf("Created worktree from PR %q", msg.name), ToastSuccess))
+			}
+			if msg.hookOutput != "" {
+				tuilog.Printf("hook output for PR worktree %q: %s", msg.name, msg.hookOutput)
+			}
+			cmds = append(cmds, m.spinner.Tick, m.fetchWorktrees)
+			return m, tea.Batch(cmds...)
+
+		case "issue":
+			if m.issueState != nil {
+				m.issueState.Creating = false
+				if m.issueState.ActivityLog != nil {
+					m.issueState.ActivityLog.SetDone(msg.err)
+				}
+			}
+			if msg.err != nil {
+				if m.issueState != nil {
+					m.issueState.Error = msg.err.Error()
+				}
+				return m, nil
+			}
+			m.activeView = ViewDashboard
+			m.issueState = nil
+			m.pendingSelect = msg.name
+			if msg.hookErr != nil {
+				m.toast.Show(NewToast(fmt.Sprintf("Created from issue %q (hook failed: %s)", msg.name, msg.hookErr), ToastWarning))
+			} else {
+				m.toast.Show(NewToast(fmt.Sprintf("Created worktree from issue %q", msg.name), ToastSuccess))
+			}
+			if msg.hookOutput != "" {
+				tuilog.Printf("hook output for issue worktree %q: %s", msg.name, msg.hookOutput)
+			}
+			cmds = append(cmds, m.spinner.Tick, m.fetchWorktrees)
+			return m, tea.Batch(cmds...)
+		}
+		return m, nil
 
 	case worktreeCreatedMsg:
 		if msg.err != nil {
@@ -435,6 +566,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.configState.Config = msg.cfg
 				m.configState.Fields = populateConfigFields(msg.cfg)
+
+				// Build the Huh form from populated fields
+				overlayWidth := m.width * 60 / 100
+				if overlayWidth < 60 {
+					overlayWidth = 60
+				}
+				if overlayWidth > 80 {
+					overlayWidth = 80
+				}
+				contentWidth := overlayWidth - 6 // account for border+padding
+				form, vals := buildConfigForm(m.configState.Fields, contentWidth)
+				m.configState.Form = form
+				m.configState.FormValues = vals
+				return m, form.Init()
 			}
 		}
 		return m, nil
@@ -554,6 +699,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	default:
+		// Forward unhandled messages to the config form when in config view
+		// (needed for cursor blink, internal form messages, etc.)
+		if m.activeView == ViewConfig && m.configState != nil && m.configState.Form != nil {
+			return m.handleConfigFormMsg(msg)
+		}
+
 		// Forward unhandled messages to the list so it can process
 		// internal messages (e.g. filter match results from fuzzy search).
 		var cmd tea.Cmd
@@ -745,12 +896,66 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// When detail panel is focused, route keys for scrolling
+	if m.detailFocused {
+		switch {
+		case key.Matches(msg, m.keys.Escape):
+			m.detailFocused = false
+			m.refreshDetailForFocus()
+			return m, nil
+		case key.Matches(msg, m.keys.Tab):
+			m.detailFocused = false
+			m.refreshDetailForFocus()
+			return m, nil
+		case key.Matches(msg, m.keys.Up):
+			m.detail.ScrollUp(1)
+			return m, nil
+		case key.Matches(msg, m.keys.Down):
+			m.detail.ScrollDown(1)
+			return m, nil
+		case msg.String() == "g":
+			m.detail.GotoTop()
+			return m, nil
+		case msg.String() == "G":
+			m.detail.GotoBottom()
+			return m, nil
+		case msg.String() == "ctrl+u":
+			m.detail.HalfPageUp()
+			return m, nil
+		case msg.String() == "ctrl+d":
+			m.detail.HalfPageDown()
+			return m, nil
+		case msg.String() == "B":
+			item, ok := m.selectedItem()
+			if ok && item.AssociatedPR != nil && item.AssociatedPR.URL != "" {
+				openURL(item.AssociatedPR.URL)
+			}
+			return m, nil
+		case key.Matches(msg, m.keys.Quit):
+			return m, tea.Quit
+		default:
+			return m, nil
+		}
+	}
+
 	switch {
 	case key.Matches(msg, m.keys.Quit):
 		return m, tea.Quit
 
 	case key.Matches(msg, m.keys.Escape):
 		return m, tea.Quit
+
+	case key.Matches(msg, m.keys.Tab):
+		m.detailFocused = true
+		m.refreshDetailForFocus()
+		return m, nil
+
+	case msg.String() == "B":
+		item, ok := m.selectedItem()
+		if ok && item.AssociatedPR != nil && item.AssociatedPR.URL != "" {
+			openURL(item.AssociatedPR.URL)
+		}
+		return m, nil
 
 	case key.Matches(msg, m.keys.Refresh):
 		m.helpFooter.SetHighlight("r")
@@ -812,8 +1017,8 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Sort):
 		m.helpFooter.SetHighlight("o")
 		m.sortMode = m.sortMode.Next()
-		m.applySortToList()
-		return m, nil
+		cmd := m.applySortToList()
+		return m, cmd
 
 	case key.Matches(msg, m.keys.All):
 		return m.enterBulkMode()
@@ -1085,6 +1290,7 @@ func (m *Model) startCreate(name, baseBranch string) (tea.Model, tea.Cmd) {
 	}
 	m.createState.Error = ""
 	m.createState.Creating = true
+	m.createState.ActivityLog = NewActivityLog(60, 10)
 	return m, tea.Batch(m.spinner.Tick, createWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, name, baseBranch))
 }
 
@@ -1249,11 +1455,12 @@ func (m Model) handleNameKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m *Model) applySortToList() {
+func (m *Model) applySortToList() tea.Cmd {
 	sorted := sortWorktreeItems(m.list.Items(), m.sortMode)
-	m.list.SetItems(sorted)
+	cmd := m.list.SetItems(sorted)
 	m.computeColumnWidths()
 	m.updateDetailContent()
+	return cmd
 }
 
 func (m Model) enterPRView() (tea.Model, tea.Cmd) {
@@ -1271,7 +1478,7 @@ func (m Model) enterPRView() (tea.Model, tea.Cmd) {
 		WorktreeBranches: branches,
 		FilterInput:      newPRFilterInput(),
 	}
-	return m, tea.Batch(m.spinner.Tick, m.fetchPRsCmd, m.prState.FilterInput.Focus())
+	return m, tea.Batch(m.spinner.Tick, m.fetchPRsCmd)
 }
 
 func (m Model) enterIssueView() (tea.Model, tea.Cmd) {
@@ -1280,7 +1487,7 @@ func (m Model) enterIssueView() (tea.Model, tea.Cmd) {
 		Loading:     true,
 		FilterInput: newIssueFilterInput(),
 	}
-	return m, tea.Batch(m.spinner.Tick, m.fetchIssuesCmd, m.issueState.FilterInput.Focus())
+	return m, tea.Batch(m.spinner.Tick, m.fetchIssuesCmd)
 }
 
 func (m Model) enterBulkMode() (tea.Model, tea.Cmd) {
@@ -1436,16 +1643,12 @@ func (m Model) viewContent() string {
 
 	case ViewPRs:
 		if m.prState != nil {
-			overlay := renderPRViewV2(m.prState, m.width, m.spinner.View())
-			bg := m.renderDashboard()
-			result = centerOverlay(bg, overlay, m.width, m.height)
+			result = m.renderPRPanel()
 		}
 
 	case ViewIssues:
 		if m.issueState != nil {
-			overlay := renderIssueView(m.issueState, m.width, m.spinner.View())
-			bg := m.renderDashboard()
-			result = centerOverlay(bg, overlay, m.width, m.height)
+			result = m.renderIssuePanel()
 		}
 
 	case ViewFork:
@@ -1507,9 +1710,9 @@ func (m Model) viewHasTextInput() bool {
 	case ViewCreate, ViewRename, ViewCheckout, ViewFork:
 		return true
 	case ViewPRs:
-		return m.prState != nil && m.prState.FilterInput.Focused()
+		return m.prState != nil && m.prState.Filtering
 	case ViewIssues:
-		return m.issueState != nil && m.issueState.FilterInput.Focused()
+		return m.issueState != nil && m.issueState.Filtering
 	case ViewDashboard:
 		return m.list.FilterState() == list.Filtering
 	}
@@ -1574,10 +1777,14 @@ func (m Model) renderDashboard() string {
 		body = lipgloss.JoinVertical(lipgloss.Left, listView, separator, detailView)
 	}
 
-	// Help footer: always render with dashboard hints so the body height
-	// (computed by updateLayout for ViewDashboard) stays consistent.
-	// Overlay-specific hints are shown inside each overlay's content.
-	footer := m.helpFooter.RenderCompact(ViewDashboard, m.width-4)
+	// Help footer: context-aware based on focus state.
+	// When detail is focused, show scroll-specific hints.
+	var footer string
+	if m.detailFocused {
+		footer = m.helpFooter.RenderCompactWithHints(m.dashboardDetailFocusedHints(), m.width-4)
+	} else {
+		footer = m.helpFooter.RenderCompact(ViewDashboard, m.width-4)
+	}
 
 	// Composite toast onto the header line (right-aligned) to avoid layout shift
 	if m.toast != nil && m.toast.Current != nil {
@@ -1689,6 +1896,63 @@ func (m Model) renderStatusBar() string {
 
 func (m Model) renderDetailPanel() string {
 	return m.detail.View()
+}
+
+// refreshDetailForFocus updates the detail viewport content with the
+// appropriate border style (highlighted when focused, normal when not).
+func (m *Model) refreshDetailForFocus() {
+	item, ok := m.selectedItem()
+	if !ok {
+		return
+	}
+	var content string
+	if m.detailFocused {
+		content = renderDetailV2Focused(&item, m.detail.Width())
+	} else {
+		content = renderDetailV2(&item, m.detail.Width())
+	}
+	m.detail.SetContent(content)
+}
+
+// renderDetailV2Focused renders the worktree detail panel with a highlighted
+// border to indicate the panel has keyboard focus.
+func renderDetailV2Focused(item *WorktreeItem, width int) string {
+	if item == nil || width < 20 {
+		return ""
+	}
+
+	innerWidth := max(width-6, 16)
+
+	var sections []string
+	sections = append(sections, renderMetadataGrid(item, innerWidth))
+	if len(item.DirtyFiles) > 0 {
+		sections = append(sections, renderChangesSection(item.DirtyFiles, innerWidth))
+	}
+
+	body := strings.Join(sections, "\n\n")
+
+	card := Styles.DetailBorder.
+		BorderForeground(Colors.Primary).
+		Width(width - 2).
+		Render(body)
+
+	title := " " + Styles.DetailTitle.Render(item.ShortName) + " "
+	card = injectBorderTitleWithColor(card, title, Colors.Primary)
+
+	return card
+}
+
+// dashboardDetailFocusedHints returns hints for when the dashboard detail panel is focused.
+func (m Model) dashboardDetailFocusedHints() []Hint {
+	hints := []Hint{
+		{"↑↓", "scroll"},
+		{"g/G", "top/bottom"},
+	}
+	if item, ok := m.selectedItem(); ok && item.AssociatedPR != nil {
+		hints = append(hints, Hint{"B", "open PR"})
+	}
+	hints = append(hints, Hint{"tab", "list"}, Hint{"esc", "quit"})
+	return hints
 }
 
 // compositeToastOnHeader overlays a right-aligned toast onto the header line,

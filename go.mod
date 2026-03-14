@@ -1,6 +1,6 @@
 module github.com/lost-in-the/grove
 
-go 1.24.2
+go 1.25.8
 
 require (
 	github.com/BurntSushi/toml v1.6.0
@@ -13,17 +13,23 @@ require (
 
 require (
 	charm.land/bubbles/v2 v2.0.0
-	charm.land/bubbletea/v2 v2.0.0
-	charm.land/lipgloss/v2 v2.0.0
+	charm.land/bubbletea/v2 v2.0.2
+	charm.land/huh/v2 v2.0.3
+	charm.land/lipgloss/v2 v2.0.1
 	github.com/charmbracelet/x/exp/golden v0.0.0-20250806222409-83e3a29d542f
 )
 
 require (
+	github.com/catppuccin/go v0.2.0 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260205113103-524a6607adb8 // indirect
+	github.com/charmbracelet/x/exp/ordered v0.1.0 // indirect
+	github.com/charmbracelet/x/exp/strings v0.0.0-20240722160745-212f7b056ed0 // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
+	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 )
 
@@ -31,7 +37,7 @@ require (
 	github.com/alecthomas/chroma/v2 v2.14.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
-	github.com/aymanbagabas/go-udiff v0.4.0 // indirect
+	github.com/aymanbagabas/go-udiff v0.4.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/charmbracelet/colorprofile v0.4.2 // indirect
 	github.com/charmbracelet/glamour v0.10.0
@@ -59,6 +65,6 @@ require (
 	github.com/yuin/goldmark v1.7.8 // indirect
 	github.com/yuin/goldmark-emoji v1.0.5 // indirect
 	golang.org/x/net v0.33.0 // indirect
-	golang.org/x/sys v0.41.0 // indirect
+	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 )

@@ -10,26 +10,26 @@ import (
 
 func TestRenderPRViewV2_Loading(t *testing.T) {
 	s := &PRViewState{Loading: true}
-	view := renderPRViewV2(s, 80, "⠋")
+	view := renderPRViewV2(s, 80, "⠋", "test-footer")
 	assertContains(t, view, "Pull Requests")
 	assertContains(t, view, "Loading")
 }
 
 func TestRenderPRViewV2_Creating(t *testing.T) {
 	s := &PRViewState{Creating: true}
-	view := renderPRViewV2(s, 80, "⠋")
+	view := renderPRViewV2(s, 80, "⠋", "test-footer")
 	assertContains(t, view, "Creating worktree")
 }
 
 func TestRenderPRViewV2_Error(t *testing.T) {
 	s := &PRViewState{Error: "something broke"}
-	view := renderPRViewV2(s, 80, "")
+	view := renderPRViewV2(s, 80, "", "test-footer")
 	assertContains(t, view, "something broke")
 }
 
 func TestRenderPRViewV2_EmptyPRs(t *testing.T) {
 	s := &PRViewState{PRs: nil}
-	view := renderPRViewV2(s, 80, "")
+	view := renderPRViewV2(s, 80, "", "test-footer")
 	assertContains(t, view, "no matching PRs")
 }
 
@@ -43,7 +43,7 @@ func TestRenderPRViewV2_FilterCount(t *testing.T) {
 		},
 		FilterInput: fi,
 	}
-	view := renderPRViewV2(s, 100, "")
+	view := renderPRViewV2(s, 100, "", "test-footer")
 	assertContains(t, view, "alpha")
 	assertContains(t, view, "1 of 2")
 }
@@ -63,7 +63,7 @@ func TestRenderPRViewV2_TwoLineItems(t *testing.T) {
 			},
 		},
 	}
-	view := renderPRViewV2(s, 100, "")
+	view := renderPRViewV2(s, 100, "", "test-footer")
 	assertContains(t, view, "#116")
 	assertContains(t, view, "Fix diff review cleanup")
 	assertContains(t, view, "@LeahArmstrong")
@@ -78,7 +78,7 @@ func TestRenderPRViewV2_DraftLabel(t *testing.T) {
 			{Number: 106, Title: "Staging", Branch: "staging", Author: "user", IsDraft: true},
 		},
 	}
-	view := renderPRViewV2(s, 100, "")
+	view := renderPRViewV2(s, 100, "", "test-footer")
 	assertContains(t, view, "[DRAFT]")
 }
 
@@ -89,7 +89,7 @@ func TestRenderPRViewV2_WorktreeBadge(t *testing.T) {
 		},
 		WorktreeBranches: map[string]bool{"fix/diff-review": true},
 	}
-	view := renderPRViewV2(s, 100, "")
+	view := renderPRViewV2(s, 100, "", "test-footer")
 	assertContains(t, view, "✓ worktree")
 }
 
@@ -101,7 +101,7 @@ func TestRenderPRViewV2_SelectedCursor(t *testing.T) {
 		},
 		Cursor: 1,
 	}
-	view := renderPRViewV2(s, 100, "")
+	view := renderPRViewV2(s, 100, "", "test-footer")
 	lines := strings.Split(view, "\n")
 	foundCursorOnSecond := false
 	for _, line := range lines {
@@ -120,9 +120,8 @@ func TestRenderPRViewV2_Footer(t *testing.T) {
 			{Number: 1, Title: "Test", Branch: "test", Author: "u"},
 		},
 	}
-	view := renderPRViewV2(s, 100, "")
-	assertContains(t, view, "enter")
-	assertContains(t, view, "esc")
+	view := renderPRViewV2(s, 100, "", "test-footer")
+	assertContains(t, view, "test-footer")
 }
 
 func TestRenderPRViewV2_BranchColumn(t *testing.T) {
@@ -131,7 +130,7 @@ func TestRenderPRViewV2_BranchColumn(t *testing.T) {
 			{Number: 1, Title: "Test PR", Branch: "feature/my-branch", Author: "user"},
 		},
 	}
-	view := renderPRViewV2(s, 100, "")
+	view := renderPRViewV2(s, 100, "", "test-footer")
 	assertContains(t, view, "feature/my-branch")
 }
 

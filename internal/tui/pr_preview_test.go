@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
@@ -114,20 +115,21 @@ func TestRenderPRPreview(t *testing.T) {
 				Body:   "Test.",
 			},
 			width:     80,
-			wantParts: []string{"worktree", "esc", "Back"},
+			wantParts: []string{"test-footer"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := renderPRPreview(tt.pr, tt.width)
+			got := renderPRPreview(tt.pr, tt.width, "test-footer")
+			plain := ansi.Strip(got)
 			for _, part := range tt.wantParts {
-				if !strings.Contains(got, part) {
+				if !strings.Contains(plain, part) {
 					t.Errorf("renderPRPreview() missing %q in output:\n%s", part, got)
 				}
 			}
 			for _, absent := range tt.wantAbsent {
-				if strings.Contains(got, absent) {
+				if strings.Contains(plain, absent) {
 					t.Errorf("renderPRPreview() should not contain %q in output:\n%s", absent, got)
 				}
 			}
@@ -135,7 +137,7 @@ func TestRenderPRPreview(t *testing.T) {
 	}
 }
 
-func TestPRViewStatePreviewToggle(t *testing.T) {
+func TestPRViewStateDetailFocusToggle(t *testing.T) {
 	prs := []*tracker.PullRequest{
 		{Number: 1, Title: "Test PR", Branch: "test", Author: "user", Body: "Body"},
 	}
@@ -147,50 +149,35 @@ func TestPRViewStatePreviewToggle(t *testing.T) {
 		t.Errorf("PRs length = %d, want 1", len(s.PRs))
 	}
 
-	// Initially no preview
-	if s.ShowPreview {
-		t.Error("ShowPreview should be false initially")
+	// Initially not focused
+	if s.DetailFocused {
+		t.Error("DetailFocused should be false initially")
 	}
 
 	// Toggle on
-	s.ShowPreview = true
-	if !s.ShowPreview {
-		t.Error("ShowPreview should be true after toggle")
+	s.DetailFocused = true
+	if !s.DetailFocused {
+		t.Error("DetailFocused should be true after toggle")
 	}
 
 	// Toggle off
-	s.ShowPreview = false
-	if s.ShowPreview {
-		t.Error("ShowPreview should be false after second toggle")
+	s.DetailFocused = false
+	if s.DetailFocused {
+		t.Error("DetailFocused should be false after second toggle")
 	}
 }
 
-func TestRenderPRViewV2WithPreview(t *testing.T) {
+func TestRenderPRViewV2ShowsList(t *testing.T) {
 	s := &PRViewState{
 		PRs: []*tracker.PullRequest{
 			{Number: 1, Title: "Test PR", Branch: "test", Author: "user", Body: "PR body text"},
 		},
-		ShowPreview: true,
 	}
 
-	got := renderPRViewV2(s, 120, "⠋")
-	// When preview is shown, the PR body content should appear
-	if !strings.Contains(got, "PR body text") {
-		t.Errorf("renderPRViewV2 with preview should show PR body, got:\n%s", got)
-	}
-}
-
-func TestRenderPRViewV2WithoutPreview(t *testing.T) {
-	s := &PRViewState{
-		PRs: []*tracker.PullRequest{
-			{Number: 1, Title: "Test PR", Branch: "test", Author: "user", Body: "PR body text"},
-		},
-		ShowPreview: false,
-	}
-
-	got := renderPRViewV2(s, 120, "⠋")
-	// When preview is not shown, body should not appear
-	if strings.Contains(got, "PR body text") {
-		t.Errorf("renderPRViewV2 without preview should NOT show PR body, got:\n%s", got)
+	got := renderPRViewV2(s, 120, "⠋", "test-footer")
+	// The overlay view always shows the PR list (detail is in panel layout)
+	plain := ansi.Strip(got)
+	if !strings.Contains(plain, "Test PR") {
+		t.Errorf("renderPRViewV2 should show PR title in list, got:\n%s", got)
 	}
 }

@@ -342,6 +342,8 @@ func renderFork(s *ForkState, width int) string {
 		b.WriteString(indent + Styles.ErrorText.Render("Error: "+s.Err.Error()) + "\n\n")
 	}
 
+	var footer string
+
 	switch s.Step {
 	case ForkStepName:
 		// Source info
@@ -350,7 +352,7 @@ func renderFork(s *ForkState, width int) string {
 
 		// Name input with textinput component
 		b.WriteString(indent + s.NameInput.View() + "\n")
-		b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] next  [esc] cancel"))
+		footer = "\n" + Styles.Footer.Render(indent+"[enter] next  [esc] cancel")
 
 	case ForkStepWIP:
 		// Context summary
@@ -372,7 +374,7 @@ func renderFork(s *ForkState, width int) string {
 			}
 			b.WriteString(indent + cursor + opt + "\n")
 		}
-		b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] next  [backspace] back  [esc] cancel"))
+		footer = "\n" + Styles.Footer.Render(indent+"[enter] next  [backspace] back  [esc] cancel")
 
 	case ForkStepConfirm:
 		// Full summary
@@ -393,10 +395,16 @@ func renderFork(s *ForkState, width int) string {
 		}
 
 		b.WriteString("\n" + Styles.SuccessText.Render(indent+"Ready to fork.") + "\n")
-		b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] fork  [backspace] back  [esc] cancel"))
+		footer = "\n" + Styles.Footer.Render(indent+"[enter] fork  [backspace] back  [esc] cancel")
 	}
 
+	content := b.String()
+
 	return Styles.OverlayBorderSuccess.Width(overlayWidth).Render(
-		Styles.OverlayTitle.Render("Fork Worktree") + "\n\n" + b.String(),
+		Styles.OverlayTitle.Render("Fork Worktree") + "\n\n" + padToHeight(content, forkOverlayMinLines) + footer,
 	)
 }
+
+// forkOverlayMinLines is the fixed content height for the fork wizard.
+// Set to accommodate the tallest step (WIP strategy selection).
+const forkOverlayMinLines = 15

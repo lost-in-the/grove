@@ -1,4 +1,3 @@
-[2m [1m[1mtest-project[m  ·  3 worktrees  ·  on root  ·  ↕ name                     ● root[m [m
                ╭────────────────────────────────────────────────╮
                │                                                │
                │  [1mNew Worktree[m                                  │
@@ -17,8 +16,9 @@
                │                                                │
                │    Ready to create worktree.                   │
                │                                                │
-               │    [enter] create  [backspace] back  [esc]     │
-               │  cancel                                        │
                │                                                │
-               ╰────────────────────────────────────────────────╯
-[2m  [1m/[m filter · [1mo[m sort · [1m?[m help · [1mq[m quit                                           [m
+               │                                                │
+               │                                                │
+               │                                                │
+               │                                                │
+               │    [enter] create  [backspace] back  [esc]     │

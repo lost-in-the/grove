@@ -255,6 +255,8 @@ func renderSync(s *SyncState, width int) string {
 		b.WriteString(indent + Styles.ErrorText.Render("Error: "+s.Err.Error()) + "\n\n")
 	}
 
+	var footer string
+
 	switch s.Step {
 	case SyncStepSource:
 		b.WriteString(indent + "Pull uncommitted changes from another worktree\n")
@@ -283,7 +285,7 @@ func renderSync(s *SyncState, width int) string {
 			}
 		}
 
-		b.WriteString("\n" + Styles.Footer.Render(indent+"↑↓ navigate  enter select  esc cancel"))
+		footer = "\n" + Styles.Footer.Render(indent+"↑↓ navigate  enter select  esc cancel")
 
 	case SyncStepPreview:
 		src := s.selectedSource()
@@ -301,7 +303,7 @@ func renderSync(s *SyncState, width int) string {
 			b.WriteString(indent + "  " + f + "\n")
 		}
 
-		b.WriteString("\n" + Styles.Footer.Render(indent+"enter confirm  backspace back  esc cancel"))
+		footer = "\n" + Styles.Footer.Render(indent+"enter confirm  backspace back  esc cancel")
 
 	case SyncStepConfirm:
 		src := s.selectedSource()
@@ -313,10 +315,16 @@ func renderSync(s *SyncState, width int) string {
 		b.WriteString(indent + Styles.DetailLabel.Render("Files:  ") + Styles.DetailValue.Render(fmt.Sprintf("%d", len(src.Files))) + "\n")
 
 		b.WriteString("\n" + Styles.SuccessText.Render(indent+"Ready to sync.") + "\n")
-		b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] sync  [backspace] back  [esc] cancel"))
+		footer = "\n" + Styles.Footer.Render(indent+"[enter] sync  [backspace] back  [esc] cancel")
 	}
 
+	content := b.String()
+
 	return Styles.OverlayBorderInfo.Width(overlayWidth).Render(
-		Styles.OverlayTitle.Render("Sync Changes") + "\n\n" + b.String(),
+		Styles.OverlayTitle.Render("Sync Changes") + "\n\n" + padToHeight(content, syncOverlayMinLines) + footer,
 	)
 }
+
+// syncOverlayMinLines is the fixed content height for the sync wizard.
+// Set to accommodate the tallest step (preview with file list).
+const syncOverlayMinLines = 18

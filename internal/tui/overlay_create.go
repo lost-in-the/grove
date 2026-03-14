@@ -43,7 +43,8 @@ type CreateState struct {
 	ExistingWorktree *WorktreeItem // populated if name conflicts with existing worktree
 
 	// Creating state
-	Creating bool
+	Creating    bool
+	ActivityLog *ActivityLog // streaming creation progress
 }
 
 // newBranchFilterInput creates a configured textinput for branch filtering.

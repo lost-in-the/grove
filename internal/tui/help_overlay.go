@@ -263,6 +263,14 @@ var helpSectionsDashboard = []helpSection{
 		{"U", "Switch and start containers"},
 		{"1-9", "Quick-switch by number"},
 		{"/", "Filter worktrees"},
+		{"tab", "Focus detail panel"},
+	}},
+	{title: "Detail Panel (when focused)", items: []helpEntry{
+		{"↑/k ↓/j", "Scroll up / down"},
+		{"g / G", "Jump to top / bottom"},
+		{"ctrl+u / ctrl+d", "Half page up / down"},
+		{"B", "Open associated PR in browser"},
+		{"tab / esc", "Return to list"},
 	}},
 	{title: "Worktree Actions", items: []helpEntry{
 		{"n", "Create new worktree"},
@@ -323,10 +331,16 @@ var helpSectionsPRs = []helpSection{
 	{title: "Pull Requests", note: "Browse and create worktrees from open pull requests.", items: []helpEntry{
 		{"↑/k ↓/j", "Navigate PRs"},
 		{"enter", "Create worktree from PR"},
-		{"o", "Open PR in browser"},
-		{"tab", "Preview PR details"},
+		{"B", "Open PR in browser"},
+		{"tab", "Focus detail panel"},
 		{"/", "Filter PRs"},
 		{"esc", "Close"},
+	}},
+	{title: "Detail Panel (when focused)", items: []helpEntry{
+		{"↑/k ↓/j", "Scroll up / down"},
+		{"g / G", "Jump to top / bottom"},
+		{"ctrl+u / ctrl+d", "Half page up / down"},
+		{"tab / esc", "Return to list"},
 	}},
 }
 
@@ -334,9 +348,15 @@ var helpSectionsIssues = []helpSection{
 	{title: "Issues", note: "Browse open issues from GitHub.", items: []helpEntry{
 		{"↑/k ↓/j", "Navigate issues"},
 		{"enter", "Create worktree from issue"},
-		{"o", "Open issue in browser"},
+		{"tab", "Focus detail panel"},
 		{"/", "Filter issues"},
 		{"esc", "Close"},
+	}},
+	{title: "Detail Panel (when focused)", items: []helpEntry{
+		{"↑/k ↓/j", "Scroll up / down"},
+		{"g / G", "Jump to top / bottom"},
+		{"ctrl+u / ctrl+d", "Half page up / down"},
+		{"tab / esc", "Return to list"},
 	}},
 }
 

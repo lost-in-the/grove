@@ -99,7 +99,7 @@ func TestRenderIssueView(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			view := renderIssueView(tt.state, tt.width, "⠋")
+			view := renderIssueView(tt.state, tt.width, "⠋", "test-footer")
 			for _, s := range tt.contains {
 				if !strings.Contains(view, s) {
 					t.Errorf("renderIssueView() missing %q in:\n%s", s, view)
@@ -152,7 +152,7 @@ func TestRenderIssuePreview(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			view := renderIssuePreview(tt.issue, tt.width)
+			view := renderIssuePreview(tt.issue, tt.width, "test-footer")
 			for _, s := range tt.contains {
 				if !strings.Contains(view, s) {
 					t.Errorf("renderIssuePreview() missing %q in:\n%s", s, view)

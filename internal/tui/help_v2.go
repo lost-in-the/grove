@@ -71,6 +71,7 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 			{"U", "up"},
 			{"n", "new"},
 			{"/", "filter"},
+			{"tab", "detail"},
 			{"o", "sort"},
 			{"?", "help"},
 			{"q", "quit"},
@@ -79,6 +80,7 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 		return []Hint{
 			{"↑↓", "navigate"},
 			{"enter", "create worktree"},
+			{"tab", "detail"},
 			{"/", "filter"},
 			{"esc", "close"},
 		}
@@ -104,6 +106,9 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 		return []Hint{
 			{"↑↓", "navigate"},
 			{"enter", "create worktree"},
+			{"B", "open in browser"},
+			{"tab", "detail"},
+			{"/", "filter"},
 			{"esc", "close"},
 		}
 	case ViewFork:
@@ -188,5 +193,55 @@ func (h *HelpFooter) RenderCompact(view ActiveView, width int) string {
 func (h *HelpFooter) CompactHeight(view ActiveView, width int) int {
 	rendered := h.RenderCompact(view, width)
 	return strings.Count(rendered, "\n") + 1
+}
+
+// RenderCompactWithHints renders a one- or two-line footer with the given hints
+// (instead of looking up hints by view). Used for context-specific hint sets
+// like detail-focused mode.
+func (h *HelpFooter) RenderCompactWithHints(hints []Hint, width int) string {
+	var parts []string
+	for _, hint := range hints {
+		keyStyle := Styles.HelpKey
+		if h.IsHighlighted(hint.Key) {
+			keyStyle = Styles.HelpKeyHighlight
+		}
+		part := keyStyle.Render(hint.Key) + " " + Styles.HelpDesc.Render(hint.Description)
+		parts = append(parts, part)
+	}
+
+	sep := Styles.HelpSep.Render(" · ")
+	line := strings.Join(parts, sep)
+
+	if lipgloss.Width(line) <= width || width <= 0 {
+		return "  " + line
+	}
+
+	for split := len(parts) / 2; split >= 1; split-- {
+		line1 := strings.Join(parts[:split], sep)
+		line2 := strings.Join(parts[split:], sep)
+		if lipgloss.Width(line1) <= width && lipgloss.Width(line2) <= width {
+			return "  " + line1 + "\n  " + line2
+		}
+	}
+
+	for i := len(parts) - 1; i >= 1; i-- {
+		line = strings.Join(parts[:i], sep)
+		if lipgloss.Width(line) <= width {
+			break
+		}
+	}
+	return "  " + line
+}
+
+// renderHelpHints renders a slice of Hint using the standard purple HelpKey styling.
+// Used by overlay sub-views (previews) that don't go through RenderCompact.
+func renderHelpHints(hints []Hint) string {
+	var parts []string
+	for _, hint := range hints {
+		part := Styles.HelpKey.Render(hint.Key) + " " + Styles.HelpDesc.Render(hint.Description)
+		parts = append(parts, part)
+	}
+	sep := Styles.HelpSep.Render(" · ")
+	return "  " + strings.Join(parts, sep)
 }
 
