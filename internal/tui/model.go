@@ -286,24 +286,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case creationLogMsg:
-		// Append log line to the appropriate activity log and chain next read.
-		if m.createState != nil && m.createState.ActivityLog != nil {
-			m.createState.ActivityLog.AddLine(msg.line)
+		// Append log line to only the activity log that owns this creation.
+		switch msg.source {
+		case "create":
+			if m.createState != nil && m.createState.ActivityLog != nil {
+				m.createState.ActivityLog.AddLine(msg.line)
+			}
+		case "pr":
+			if m.prState != nil && m.prState.ActivityLog != nil {
+				m.prState.ActivityLog.AddLine(msg.line)
+			}
+		case "issue":
+			if m.issueState != nil && m.issueState.ActivityLog != nil {
+				m.issueState.ActivityLog.AddLine(msg.line)
+			}
 		}
-		if m.prState != nil && m.prState.ActivityLog != nil {
-			m.prState.ActivityLog.AddLine(msg.line)
-		}
-		if m.issueState != nil && m.issueState.ActivityLog != nil {
-			m.issueState.ActivityLog.AddLine(msg.line)
-		}
-		// Determine source for the next read based on which state is active.
-		source := "create"
-		if m.prState != nil && m.prState.Creating {
-			source = "pr"
-		} else if m.issueState != nil && m.issueState.Creating {
-			source = "issue"
-		}
-		return m, readCreationLog(msg.ch, source)
+		return m, readCreationLog(msg.ch, msg.source)
 
 	case creationDoneMsg:
 		switch msg.source {

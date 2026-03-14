@@ -233,7 +233,7 @@ func readCreationLog(ch <-chan creationEvent, source string) tea.Cmd {
 				hookErr:    ev.hookErr,
 			}
 		}
-		return creationLogMsg{line: ev.line, ch: ch}
+		return creationLogMsg{source: source, line: ev.line, ch: ch}
 	}
 }
 

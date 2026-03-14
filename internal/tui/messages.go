@@ -66,8 +66,9 @@ type issueWorktreeCreatedMsg struct {
 // creationLogMsg carries a single log line from a streaming creation goroutine.
 // The channel is carried so Update can chain the next read.
 type creationLogMsg struct {
-	line string
-	ch   <-chan creationEvent
+	source string // "create", "pr", or "issue" — routes to the right log
+	line   string
+	ch     <-chan creationEvent
 }
 
 // creationDoneMsg signals that streaming creation has finished.

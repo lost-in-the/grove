@@ -16,6 +16,9 @@ func TestReadCreationLog_Line(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected creationLogMsg, got %T", msg)
 	}
+	if logMsg.source != "test" {
+		t.Errorf("source = %q, want %q", logMsg.source, "test")
+	}
 	if logMsg.line != "step 1" {
 		t.Errorf("line = %q, want %q", logMsg.line, "step 1")
 	}
@@ -72,7 +75,7 @@ func TestCreationLogMsg_ChainsNext(t *testing.T) {
 	}
 
 	ch := make(chan creationEvent, 5)
-	msg := creationLogMsg{line: "building...", ch: ch}
+	msg := creationLogMsg{source: "create", line: "building...", ch: ch}
 
 	result, cmd := m.Update(msg)
 	m = result.(Model)
