@@ -1,39 +1,39 @@
 [2m [1m[1mtest-project[m  ·  5 worktrees  ·  on root  ·  ↕ name                                                             ● root[m [m
 [2m                                                                        │                                               [m
 [2m 1 ❯ root ────────────────────────────────────────────────────── 2h ago │                                               [m
-[2m       test commit for root                                             │                                               [m
-                    ╭──────────────────────────────────────────────────────────────────────────────╮
-                    │                                                                              │
-                    │  ## Navigation                                                               │
-                    │                                                                              │
-                    │     Key                                | Action                              │
-                    │    ------------------------------------|-----------------------------------  │
-                    │     ↑/k ↓/j                            | Move up / down                      │
-                    │     enter                              | Switch to selected worktree         │
-                    │     U                                  | Switch and start containers         │
-                    │     1-9                                | Quick-switch by number              │
-                    │     /                                  | Filter worktrees                    │
-                    │                                                                              │
-                    │    ## Worktree Actions                                                       │
-                    │                                                                              │
-                    │     Key                                | Action                              │
-                    │    ------------------------------------|-----------------------------------  │
-                    │     n                                  | Create new worktree                 │
-                    │     d                                  | Delete worktree                     │
-                    │     R                                  | Rename worktree                     │
-                    │     f                                  | Fork (copy) worktree                │
-                    │     a                                  | Bulk delete stale worktrees         │
-                    │                                                                              │
-                    │    ## Workflow                                                               │
-                    │                                                                              │
-                    │     Key                                | Action                              │
-                    │    ------------------------------------|-----------------------------------  │
-                    │     s                                  | Sync environment worktree           │
-                    │     b                                  | Switch git branch in-place          │
-                    │     p                                  | Browse pull requests                │
-                    │  ↑↓ scroll · esc close                                                       │
-                    │                                                                              │
-                    ╰──────────────────────────────────────────────────────────────────────────────╯
+               ╭────────────────────────────────────────────────────────────────────────────────────────╮
+               │                                                                                        │
+               │   [1mNavigation[m                                                                           │
+               │  ────────────────────────────────────────────────────────────────────────────────────  │
+               │   [1m↑/k ↓/j[m                       Move up / down                                         │
+               │   [1menter[m                         Switch to selected worktree                            │
+               │   [1mU[m                             Switch and start containers                            │
+               │   [1m1-9[m                           Quick-switch by number                                 │
+               │   [1m/[m                             Filter worktrees                                       │
+               │                                                                                        │
+               │   [1mWorktree Actions[m                                                                     │
+               │  ────────────────────────────────────────────────────────────────────────────────────  │
+               │   [1mn[m                             Create new worktree                                    │
+               │   [1md[m                             Delete worktree                                        │
+               │   [1mR[m                             Rename worktree                                        │
+               │   [1mf[m                             Fork (copy) worktree                                   │
+               │   [1ma[m                             Bulk delete stale worktrees                            │
+               │                                                                                        │
+               │   [1mWorkflow[m                                                                             │
+               │  ────────────────────────────────────────────────────────────────────────────────────  │
+               │   [1ms[m                             Sync environment worktree                              │
+               │   [1mb[m                             Switch git branch in-place                             │
+               │   [1mp[m                             Browse pull requests                                   │
+               │   [1mi[m                             Browse issues                                          │
+               │                                                                                        │
+               │   [1mDisplay[m                                                                              │
+               │  ────────────────────────────────────────────────────────────────────────────────────  │
+               │   [1mo[m                             Cycle sort (name → recent → dirty)                     │
+               │   [1mv[m                             Toggle compact/detailed view                           │
+               │  ────────────────────────────────────────────────────────────────────────────────────  │
+               │    [1m↑↓[m scroll · [1mesc[m close                                                               │
+               │                                                                                        │
+               ╰────────────────────────────────────────────────────────────────────────────────────────╯
 [2m                                                                        │                                               [m
 [2m                                                                        │                                               [m
 [2m                                                                        │                                               [m

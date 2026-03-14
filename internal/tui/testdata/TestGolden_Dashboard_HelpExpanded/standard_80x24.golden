@@ -1,24 +1,24 @@
 [2m [1m[1mtest-project[m  ·  5 worktrees  ·  on root  ·  ↕ name                     ● root[m [m
-            ╭──────────────────────────────────────────────────────╮
-            │                                                      │
-            │  ## Navigation                                       │
-            │                                                      │
-            │     Key              | Action                        │
-            │    ------------------|-----------------------------  │
-            │     ↑/k ↓/j          | Move up / down                │
-            │     enter            | Switch to selected            │
-            │  worktree                                            │
-            │     U                | Switch and start              │
-            │  containers                                          │
-            │     1-9              | Quick-switch by number        │
-            │     /                | Filter worktrees              │
-            │                                                      │
-            │    ## Worktree Actions                               │
-            │                                                      │
-            │     Key              | Action                        │
-            │    ------------------|-----------------------------  │
-            │  ↑↓ scroll · esc close                               │
-            │                                                      │
-            ╰──────────────────────────────────────────────────────╯
+[2m                                                                                [m
+          ╭──────────────────────────────────────────────────────────╮
+          │                                                          │
+          │   [1mNavigation[m                                             │
+          │  ──────────────────────────────────────────────────────  │
+          │   [1m↑/k ↓/j[m                                                │
+          │   └ Move up / down                                       │
+          │   [1menter[m                                                  │
+          │   └ Switch to selected worktree                          │
+          │   [1mU[m                                                      │
+          │   └ Switch and start containers                          │
+          │   [1m1-9[m                                                    │
+          │   └ Quick-switch by number                               │
+          │   [1m/[m                                                      │
+          │   └ Filter worktrees                                     │
+          │                                                          │
+          │   [1mWorktree Actions[m                                       │
+          │  ──────────────────────────────────────────────────────  │
+          │    [1m↑↓[m scroll · [1mesc[m close                                 │
+          │                                                          │
+          ╰──────────────────────────────────────────────────────────╯
 [2m  [1m↑↓[m navigate · [1menter[m switch · [1mU[m up · [1mn[m new                                     [m
 [2m  [1m/[m filter · [1mo[m sort · [1m?[m help · [1mq[m quit                                           [m

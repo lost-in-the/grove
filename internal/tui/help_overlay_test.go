@@ -37,7 +37,7 @@ func TestHelpOverlayClose(t *testing.T) {
 	}
 }
 
-func TestHelpContentForAllViews(t *testing.T) {
+func TestHelpSectionsForAllViews(t *testing.T) {
 	views := []ActiveView{
 		ViewDashboard,
 		ViewHelp,
@@ -54,74 +54,75 @@ func TestHelpContentForAllViews(t *testing.T) {
 	}
 
 	for _, view := range views {
-		content := helpContentFor(view)
+		sections := helpSectionsFor(view)
+		if len(sections) == 0 {
+			t.Errorf("helpSectionsFor(%d) returned no sections", view)
+		}
+		for _, sec := range sections {
+			if sec.title == "" {
+				t.Errorf("helpSectionsFor(%d) has section with empty title", view)
+			}
+			if len(sec.items) == 0 {
+				t.Errorf("helpSectionsFor(%d) section %q has no items", view, sec.title)
+			}
+		}
+	}
+}
+
+func TestHelpSectionsDashboardContent(t *testing.T) {
+	sections := helpSectionsFor(ViewDashboard)
+
+	titles := make(map[string]bool)
+	for _, sec := range sections {
+		titles[sec.title] = true
+	}
+
+	required := []string{"Navigation", "Worktree Actions", "CLI Companions"}
+	for _, name := range required {
+		if !titles[name] {
+			t.Errorf("dashboard help missing section %q", name)
+		}
+	}
+}
+
+func TestRenderHelpContentNonEmpty(t *testing.T) {
+	content := renderHelpContent(ViewDashboard, 70)
+	if content == "" {
+		t.Error("renderHelpContent returned empty string")
+	}
+	if !strings.Contains(content, "Navigation") {
+		t.Error("rendered content missing 'Navigation' section title")
+	}
+	if !strings.Contains(content, "Move up") {
+		t.Error("rendered content missing key descriptions")
+	}
+}
+
+func TestRenderHelpContentMultipleWidths(t *testing.T) {
+	// Verify rendering succeeds at various widths without panicking
+	for _, w := range []int{20, 50, 70, 90} {
+		content := renderHelpContent(ViewDashboard, w)
 		if content == "" {
-			t.Errorf("helpContentFor(%d) returned empty string", view)
+			t.Errorf("renderHelpContent at width %d returned empty string", w)
 		}
-		if !strings.Contains(content, "##") {
-			t.Errorf("helpContentFor(%d) missing markdown header", view)
-		}
-	}
-}
-
-func TestHelpContentDashboardSections(t *testing.T) {
-	content := helpContentFor(ViewDashboard)
-
-	sections := []string{"Navigation", "Worktree Actions", "CLI Companions"}
-	for _, section := range sections {
-		if !strings.Contains(content, section) {
-			t.Errorf("dashboard help missing section %q", section)
-		}
-	}
-}
-
-func TestCalcHelpOverlaySizeMinBounds(t *testing.T) {
-	// Small terminal should hit minimums
-	w, h := calcHelpOverlaySize(40, 10)
-	if w != 60 {
-		t.Errorf("expected min width 60, got %d", w)
-	}
-	if h != 15 {
-		t.Errorf("expected min height 15, got %d", h)
-	}
-}
-
-func TestCalcHelpOverlaySizeMaxBounds(t *testing.T) {
-	// Large terminal should hit maximums
-	w, h := calcHelpOverlaySize(200, 80)
-	if w != 90 {
-		t.Errorf("expected max width 90, got %d", w)
-	}
-	if h != 35 {
-		t.Errorf("expected max height 35, got %d", h)
-	}
-}
-
-func TestCalcHelpOverlaySizeNormal(t *testing.T) {
-	// 100 * 70% = 70, within [60, 90]
-	// 40 * 80% = 32, within [15, 35]
-	w, h := calcHelpOverlaySize(100, 40)
-	if w != 70 {
-		t.Errorf("expected width 70, got %d", w)
-	}
-	if h != 32 {
-		t.Errorf("expected height 32, got %d", h)
 	}
 }
 
 func TestHelpOverlayCacheInvalidation(t *testing.T) {
 	h := NewHelpOverlay()
 
-	// Open at width 80
 	h.Open(ViewDashboard, 80, 30)
-	content80 := h.cache[ViewDashboard]
+	if _, ok := h.cache[ViewDashboard]; !ok {
+		t.Fatal("expected cache entry after first Open")
+	}
 
-	// Open at width 120 — cache should be rebuilt
-	h.Open(ViewDashboard, 120, 30)
-	content120 := h.cache[ViewDashboard]
-
-	if content80 == content120 {
-		t.Error("expected different rendered content at different widths")
+	// Opening at a different width should clear and rebuild the cache
+	h.Open(ViewDelete, 120, 30)
+	if _, ok := h.cache[ViewDashboard]; ok {
+		t.Error("expected dashboard cache entry to be cleared after width change")
+	}
+	if _, ok := h.cache[ViewDelete]; !ok {
+		t.Error("expected delete cache entry after Open at new width")
 	}
 }
 
@@ -135,6 +136,36 @@ func TestHelpOverlayViewNonEmpty(t *testing.T) {
 	}
 	if !strings.Contains(view, "scroll") {
 		t.Error("expected footer hint containing 'scroll'")
+	}
+}
+
+func TestCalcHelpOverlaySizeMinBounds(t *testing.T) {
+	w, h := calcHelpOverlaySize(40, 10)
+	if w != 60 {
+		t.Errorf("expected min width 60, got %d", w)
+	}
+	if h != 15 {
+		t.Errorf("expected min height 15, got %d", h)
+	}
+}
+
+func TestCalcHelpOverlaySizeMaxBounds(t *testing.T) {
+	w, h := calcHelpOverlaySize(200, 80)
+	if w != 100 {
+		t.Errorf("expected max width 100, got %d", w)
+	}
+	if h != 35 {
+		t.Errorf("expected max height 35, got %d", h)
+	}
+}
+
+func TestCalcHelpOverlaySizeNormal(t *testing.T) {
+	w, h := calcHelpOverlaySize(100, 40)
+	if w != 75 {
+		t.Errorf("expected width 75, got %d", w)
+	}
+	if h != 32 {
+		t.Errorf("expected height 32, got %d", h)
 	}
 }
 

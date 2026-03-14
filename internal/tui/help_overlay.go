@@ -1,18 +1,20 @@
 package tui
 
 import (
+	"strings"
+
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
-// HelpOverlay renders context-sensitive help content using Glamour markdown
-// and a viewport for scrolling.
+// HelpOverlay renders context-sensitive help as a scrollable overlay.
 type HelpOverlay struct {
 	Active    bool
 	ForView   ActiveView
 	viewport  viewport.Model
-	cache     map[ActiveView]string // rendered markdown per view
-	lastWidth int                   // invalidate cache on resize
+	cache     map[ActiveView]string
+	lastWidth int
 }
 
 // NewHelpOverlay creates a HelpOverlay with an empty cache.
@@ -22,43 +24,39 @@ func NewHelpOverlay() *HelpOverlay {
 	}
 }
 
-// Open activates the overlay for the given view, rendering help content
-// at the appropriate size.
+// Open activates the overlay for the given view.
 func (h *HelpOverlay) Open(view ActiveView, width, height int) {
 	h.Active = true
 	h.ForView = view
 
 	w, ht := calcHelpOverlaySize(width, height)
 
-	// Content width accounts for border + padding (2 border + 4 padding = 6)
-	contentWidth := w - 6
-	if contentWidth < 20 {
-		contentWidth = 20
+	// OverlayBorderInfo has Border (2) + Padding(1,2) (4 horizontal).
+	// Width() in lipgloss includes border + padding + text, so
+	// text area = Width - border(2) - padding(4) = Width - 6.
+	textWidth := w - 6
+	if textWidth < 20 {
+		textWidth = 20
 	}
 
-	// Invalidate cache on width change
 	if width != h.lastWidth {
 		h.cache = make(map[ActiveView]string)
 		h.lastWidth = width
 	}
 
-	// Render or use cached content
 	rendered, ok := h.cache[view]
 	if !ok {
-		raw := helpContentFor(view)
-		rendered = renderMarkdown(raw, contentWidth)
+		rendered = renderHelpContent(view, textWidth)
 		h.cache[view] = rendered
 	}
 
-	// Viewport height accounts for border + padding (2 border + 2 padding = 4)
-	// plus footer line (1)
 	vpHeight := ht - 5
 	if vpHeight < 5 {
 		vpHeight = 5
 	}
 
 	h.viewport = viewport.New(
-		viewport.WithWidth(contentWidth),
+		viewport.WithWidth(textWidth),
 		viewport.WithHeight(vpHeight),
 	)
 	h.viewport.SetContent(rendered)
@@ -80,27 +78,29 @@ func (h *HelpOverlay) Update(msg tea.KeyMsg) (*HelpOverlay, tea.Cmd) {
 func (h *HelpOverlay) View(width, height int) string {
 	w, ht := calcHelpOverlaySize(width, height)
 
-	// Content width for the border style
-	contentWidth := w - 6
-	if contentWidth < 20 {
-		contentWidth = 20
+	textWidth := w - 6
+	if textWidth < 20 {
+		textWidth = 20
 	}
 
 	vpContent := h.viewport.View()
-
-	footer := Styles.TextMuted.Render("↑↓ scroll · esc close")
-
-	content := vpContent + "\n" + footer
+	footerRule := lipgloss.NewStyle().Foreground(Colors.SurfaceBorder).
+		Render(strings.Repeat("─", textWidth))
+	footerKeys := "  " +
+		Styles.HelpKey.Render("↑↓") + " " + Styles.HelpDesc.Render("scroll") +
+		Styles.HelpSep.Render(" · ") +
+		Styles.HelpKey.Render("esc") + " " + Styles.HelpDesc.Render("close")
+	content := vpContent + "\n" + footerRule + "\n" + footerKeys
 
 	return Styles.OverlayBorderInfo.
-		Width(contentWidth).
-		Height(ht - 4). // subtract border (2) + padding (2)
+		Width(w).
+		Height(ht).
 		Render(content)
 }
 
 // calcHelpOverlaySize computes overlay dimensions from terminal size.
 func calcHelpOverlaySize(termW, termH int) (w, h int) {
-	w = clamp(termW*70/100, 60, 90)
+	w = clamp(termW*75/100, 60, 100)
 	h = clamp(termH*80/100, 15, 35)
 	return
 }
@@ -116,204 +116,268 @@ func clamp(val, lo, hi int) int {
 	return val
 }
 
-// helpContentFor returns raw markdown help content for the given view.
-func helpContentFor(view ActiveView) string {
+// helpEntry is a key/action pair displayed in the help overlay.
+type helpEntry struct {
+	key  string
+	desc string
+}
+
+// helpSection is a titled group of help entries.
+type helpSection struct {
+	title string
+	note  string
+	items []helpEntry
+}
+
+// renderHelpContent builds styled help text with manual two-column layout.
+// Each section: full-width header, horizontal rule, then key-description rows
+// with alternating backgrounds. Avoids lipgloss table border rendering issues.
+func renderHelpContent(view ActiveView, width int) string {
+	sections := helpSectionsFor(view)
+
+	// Compute max key width across ALL sections for consistent columns
+	maxKeyW := 0
+	for _, sec := range sections {
+		for _, item := range sec.items {
+			if w := lipgloss.Width(item.key); w > maxKeyW {
+				maxKeyW = w
+			}
+		}
+	}
+	// Below this width, two-column layout wraps awkwardly — use stacked.
+	stacked := width < 60
+
+	// Key column: 1 padding + key + 1 padding, capped at 40% of width
+	// so CLI Companions' long keys don't squeeze the description column.
+	keyColW := maxKeyW + 2
+	maxKeyCol := width * 2 / 5
+	if keyColW > maxKeyCol {
+		keyColW = maxKeyCol
+	}
+	descColW := width - keyColW
+	if descColW < 10 {
+		descColW = 10
+	}
+
+	headerStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(Colors.Primary).
+		Padding(0, 1)
+
+	noteStyle := lipgloss.NewStyle().
+		Foreground(Colors.TextMuted).
+		Padding(0, 1)
+
+	ruleStyle := lipgloss.NewStyle().Foreground(Colors.SurfaceBorder)
+	rule := ruleStyle.Render(strings.Repeat("─", width))
+
+	evenBg := Colors.SelectionBg
+
+	var b strings.Builder
+	rowIdx := 0
+
+	for i, sec := range sections {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+
+		b.WriteString(headerStyle.Render(sec.title))
+		b.WriteString("\n")
+		if sec.note != "" {
+			b.WriteString(noteStyle.Render(sec.note))
+			b.WriteString("\n")
+		}
+		b.WriteString(rule)
+		b.WriteString("\n")
+
+		for _, item := range sec.items {
+			if stacked {
+				// Stacked: key on its own line, description with └ connector below.
+				// Connector and desc rendered as separate blocks with matching
+				// backgrounds — avoids pre-rendered ANSI codes that prevent
+				// background propagation when nested inside another Render().
+				ks := lipgloss.NewStyle().Bold(true).Foreground(Colors.TextBright).Padding(0, 1).Width(width)
+				cs := lipgloss.NewStyle().Foreground(Colors.TextMuted)
+				ds := lipgloss.NewStyle().Foreground(Colors.TextNormal).Width(width - 3)
+				if rowIdx%2 == 0 {
+					ks = ks.Background(evenBg)
+					cs = cs.Background(evenBg)
+					ds = ds.Background(evenBg)
+				}
+				b.WriteString(ks.Render(item.key))
+				b.WriteString("\n")
+				b.WriteString(cs.Render(" └ ") + ds.Render(item.desc))
+				b.WriteString("\n")
+			} else {
+				// Two-column: key and description side by side
+				ks := lipgloss.NewStyle().Bold(true).Foreground(Colors.TextBright).Padding(0, 1).Width(keyColW)
+				ds := lipgloss.NewStyle().Foreground(Colors.TextNormal).Padding(0, 1).Width(descColW)
+				if rowIdx%2 == 0 {
+					ks = ks.Background(evenBg)
+					ds = ds.Background(evenBg)
+				}
+				b.WriteString(ks.Render(item.key) + ds.Render(item.desc))
+				b.WriteString("\n")
+			}
+			rowIdx++
+		}
+	}
+
+	return b.String()
+}
+
+// helpSectionsFor returns structured help data for the given view.
+func helpSectionsFor(view ActiveView) []helpSection {
 	switch view {
 	case ViewDashboard, ViewHelp:
-		return helpDashboard
+		return helpSectionsDashboard
 	case ViewDelete:
-		return helpDelete
+		return helpSectionsDelete
 	case ViewCreate:
-		return helpCreate
+		return helpSectionsCreate
 	case ViewBulk:
-		return helpBulk
+		return helpSectionsBulk
 	case ViewPRs:
-		return helpPRs
+		return helpSectionsPRs
 	case ViewIssues:
-		return helpIssues
+		return helpSectionsIssues
 	case ViewFork:
-		return helpFork
+		return helpSectionsFork
 	case ViewSync:
-		return helpSync
+		return helpSectionsSync
 	case ViewConfig:
-		return helpConfig
+		return helpSectionsConfig
 	case ViewRename:
-		return helpRename
+		return helpSectionsRename
 	case ViewCheckout:
-		return helpCheckout
+		return helpSectionsCheckout
 	default:
-		return helpDashboard
+		return helpSectionsDashboard
 	}
 }
 
-//nolint:lll
-const helpDashboard = `## Navigation
+var helpSectionsDashboard = []helpSection{
+	{title: "Navigation", items: []helpEntry{
+		{"↑/k ↓/j", "Move up / down"},
+		{"enter", "Switch to selected worktree"},
+		{"U", "Switch and start containers"},
+		{"1-9", "Quick-switch by number"},
+		{"/", "Filter worktrees"},
+	}},
+	{title: "Worktree Actions", items: []helpEntry{
+		{"n", "Create new worktree"},
+		{"d", "Delete worktree"},
+		{"R", "Rename worktree"},
+		{"f", "Fork (copy) worktree"},
+		{"a", "Bulk delete stale worktrees"},
+	}},
+	{title: "Workflow", items: []helpEntry{
+		{"s", "Sync environment worktree"},
+		{"b", "Switch git branch in-place"},
+		{"p", "Browse pull requests"},
+		{"i", "Browse issues"},
+	}},
+	{title: "Display", items: []helpEntry{
+		{"o", "Cycle sort (name → recent → dirty)"},
+		{"v", "Toggle compact/detailed view"},
+		{"r", "Refresh worktree list"},
+		{"c", "Open configuration"},
+	}},
+	{title: "CLI Companions", note: "Commands with more options than TUI shortcuts:", items: []helpEntry{
+		{"grove to <name> --peek", "Switch without hooks (read-only)"},
+		{"grove fork <name> --move-wip", "Fork with uncommitted changes"},
+		{"grove test <name>", "Run tests in another worktree"},
+		{"grove diff <name>", "Diff against another worktree"},
+		{"grove doctor", "Health check for grove setup"},
+	}},
+}
 
-| Key | Action |
-|-----|--------|
-| ↑/k ↓/j | Move up / down |
-| enter | Switch to selected worktree |
-| U | Switch and start containers |
-| 1-9 | Quick-switch by number |
-| / | Filter worktrees |
+var helpSectionsDelete = []helpSection{
+	{title: "Delete Worktree", note: "Remove a worktree and optionally its git branch.", items: []helpEntry{
+		{"y", "Confirm deletion"},
+		{"n", "Cancel"},
+		{"space", "Toggle branch deletion"},
+		{"esc", "Close"},
+	}},
+}
 
-## Worktree Actions
+var helpSectionsCreate = []helpSection{
+	{title: "Create Worktree", note: "Create a new worktree with a new or existing branch.", items: []helpEntry{
+		{"tab / shift+tab", "Navigate fields"},
+		{"enter", "Create worktree"},
+		{"esc", "Cancel"},
+	}},
+}
 
-| Key | Action |
-|-----|--------|
-| n | Create new worktree |
-| d | Delete worktree |
-| R | Rename worktree |
-| f | Fork (copy) worktree |
-| a | Bulk delete stale worktrees |
+var helpSectionsBulk = []helpSection{
+	{title: "Bulk Delete", note: "Select multiple stale worktrees for deletion.", items: []helpEntry{
+		{"↑/k ↓/j", "Navigate worktrees"},
+		{"space", "Toggle selection"},
+		{"enter", "Delete selected worktrees"},
+		{"a", "Select all"},
+		{"esc", "Cancel"},
+	}},
+}
 
-## Workflow
+var helpSectionsPRs = []helpSection{
+	{title: "Pull Requests", note: "Browse and create worktrees from open pull requests.", items: []helpEntry{
+		{"↑/k ↓/j", "Navigate PRs"},
+		{"enter", "Create worktree from PR"},
+		{"o", "Open PR in browser"},
+		{"tab", "Preview PR details"},
+		{"/", "Filter PRs"},
+		{"esc", "Close"},
+	}},
+}
 
-| Key | Action |
-|-----|--------|
-| s | Sync environment worktree |
-| b | Switch git branch in-place |
-| p | Browse pull requests |
-| i | Browse issues |
+var helpSectionsIssues = []helpSection{
+	{title: "Issues", note: "Browse open issues from GitHub.", items: []helpEntry{
+		{"↑/k ↓/j", "Navigate issues"},
+		{"enter", "Create worktree from issue"},
+		{"o", "Open issue in browser"},
+		{"/", "Filter issues"},
+		{"esc", "Close"},
+	}},
+}
 
-## Display
+var helpSectionsFork = []helpSection{
+	{title: "Fork Worktree", note: "Copy a worktree to a new branch, optionally moving uncommitted changes.", items: []helpEntry{
+		{"tab / shift+tab", "Navigate fields"},
+		{"enter", "Create fork"},
+		{"esc", "Cancel"},
+	}},
+}
 
-| Key | Action |
-|-----|--------|
-| o | Cycle sort (name → recent → dirty) |
-| v | Toggle compact/detailed view |
-| r | Refresh worktree list |
-| c | Open configuration |
+var helpSectionsSync = []helpSection{
+	{title: "Sync Environment", note: "Sync configuration and dependencies from the main worktree.", items: []helpEntry{
+		{"↑/k ↓/j", "Navigate items"},
+		{"enter", "Start sync"},
+		{"space", "Toggle item"},
+		{"esc", "Cancel"},
+	}},
+}
 
-## CLI Companions
+var helpSectionsConfig = []helpSection{
+	{title: "Configuration", note: "Edit grove settings. Changes saved to .grove/config.toml.", items: []helpEntry{
+		{"tab / shift+tab", "Switch config tab"},
+		{"↑/k ↓/j", "Navigate fields"},
+		{"enter", "Edit selected field"},
+		{"esc", "Close configuration"},
+	}},
+}
 
-These commands offer more options than TUI shortcuts:
+var helpSectionsRename = []helpSection{
+	{title: "Rename Worktree", note: "Change the short name of a worktree.", items: []helpEntry{
+		{"enter", "Confirm rename"},
+		{"esc", "Cancel"},
+	}},
+}
 
-| Command | Purpose |
-|---------|---------|
-| ` + "`grove to <name> --peek`" + ` | Switch without hooks (read-only) |
-| ` + "`grove fork <name> --move-wip`" + ` | Fork with uncommitted changes |
-| ` + "`grove test <name>`" + ` | Run tests in another worktree |
-| ` + "`grove diff <name>`" + ` | Diff against another worktree |
-| ` + "`grove doctor`" + ` | Health check for grove setup |
-`
-
-const helpDelete = `## Delete Worktree
-
-Remove a worktree and optionally its git branch.
-
-| Key | Action |
-|-----|--------|
-| y | Confirm deletion |
-| n | Cancel |
-| space | Toggle branch deletion |
-| esc | Close |
-`
-
-const helpCreate = `## Create Worktree
-
-Create a new worktree with a new or existing branch.
-
-| Key | Action |
-|-----|--------|
-| tab / shift+tab | Navigate fields |
-| enter | Create worktree |
-| esc | Cancel |
-`
-
-const helpBulk = `## Bulk Delete
-
-Select multiple stale worktrees for deletion.
-
-| Key | Action |
-|-----|--------|
-| ↑/k ↓/j | Navigate worktrees |
-| space | Toggle selection |
-| enter | Delete selected worktrees |
-| a | Select all |
-| esc | Cancel |
-`
-
-const helpPRs = `## Pull Requests
-
-Browse and create worktrees from open pull requests.
-
-| Key | Action |
-|-----|--------|
-| ↑/k ↓/j | Navigate PRs |
-| enter | Create worktree from PR |
-| o | Open PR in browser |
-| tab | Preview PR details |
-| / | Filter PRs |
-| esc | Close |
-`
-
-const helpIssues = `## Issues
-
-Browse open issues from GitHub.
-
-| Key | Action |
-|-----|--------|
-| ↑/k ↓/j | Navigate issues |
-| enter | Create worktree from issue |
-| o | Open issue in browser |
-| / | Filter issues |
-| esc | Close |
-`
-
-const helpFork = `## Fork Worktree
-
-Copy a worktree to a new branch, optionally moving uncommitted changes.
-
-| Key | Action |
-|-----|--------|
-| tab / shift+tab | Navigate fields |
-| enter | Create fork |
-| esc | Cancel |
-`
-
-const helpSync = `## Sync Environment
-
-Sync configuration and dependencies from the main worktree.
-
-| Key | Action |
-|-----|--------|
-| ↑/k ↓/j | Navigate items |
-| enter | Start sync |
-| space | Toggle item |
-| esc | Cancel |
-`
-
-const helpConfig = `## Configuration
-
-Edit grove settings. Changes are saved to ` + "`.grove/config.toml`" + `.
-
-| Key | Action |
-|-----|--------|
-| tab / shift+tab | Switch config tab |
-| ↑/k ↓/j | Navigate fields |
-| enter | Edit selected field |
-| esc | Close configuration |
-`
-
-const helpRename = `## Rename Worktree
-
-Change the short name of a worktree.
-
-| Key | Action |
-|-----|--------|
-| enter | Confirm rename |
-| esc | Cancel |
-`
-
-const helpCheckout = `## Switch Branch
-
-Switch the git branch of the current worktree.
-
-| Key | Action |
-|-----|--------|
-| ↑/k ↓/j | Navigate branches |
-| / | Filter branches |
-| enter | Switch to branch |
-| esc | Cancel |
-`
+var helpSectionsCheckout = []helpSection{
+	{title: "Switch Branch", note: "Switch the git branch of the current worktree.", items: []helpEntry{
+		{"↑/k ↓/j", "Navigate branches"},
+		{"/", "Filter branches"},
+		{"enter", "Switch to branch"},
+		{"esc", "Cancel"},
+	}},
+}

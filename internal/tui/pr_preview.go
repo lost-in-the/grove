@@ -65,6 +65,7 @@ func renderPRPreview(pr *tracker.PullRequest, width int) string {
 }
 
 // renderMarkdown renders markdown to styled terminal output using glamour.
+// Used for user-provided content (PR bodies, issue bodies).
 // Respects NO_COLOR and GROVE_NO_COLOR environment variables.
 func renderMarkdown(md string, width int) string {
 	var opts []glamour.TermRendererOption
