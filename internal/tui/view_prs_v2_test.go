@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
@@ -176,6 +177,130 @@ func TestFormatCommitCount(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRenderPRList_Loading(t *testing.T) {
+	s := &PRViewState{Loading: true}
+	got := renderPRList(s, 80, "⠋", 20)
+	assertContains(t, got, "Loading PRs")
+}
+
+func TestRenderPRList_WithItems(t *testing.T) {
+	s := &PRViewState{
+		PRs: []*tracker.PullRequest{
+			{Number: 10, Title: "Add login", Branch: "feat/login", Author: "alice"},
+			{Number: 20, Title: "Fix crash", Branch: "fix/crash", Author: "bob"},
+		},
+		FilterInput: newPRFilterInput(),
+	}
+	got := renderPRList(s, 80, "⠋", 20)
+	assertContains(t, got, "#10")
+	assertContains(t, got, "Add login")
+	assertContains(t, got, "#20")
+	assertContains(t, got, "Fix crash")
+}
+
+func TestRenderPRList_Filtered(t *testing.T) {
+	fi := newPRFilterInput()
+	fi.SetValue("auth")
+	s := &PRViewState{
+		PRs: []*tracker.PullRequest{
+			{Number: 1, Title: "Add auth", Branch: "feat/auth", Author: "user"},
+			{Number: 2, Title: "Fix bug", Branch: "fix/bug", Author: "user"},
+			{Number: 3, Title: "Update docs", Branch: "docs", Author: "user"},
+		},
+		FilterInput: fi,
+	}
+	got := renderPRList(s, 80, "", 20)
+	assertContains(t, got, "of")
+}
+
+func TestRenderPRDetailContent_Commits(t *testing.T) {
+	pr := &tracker.PullRequest{
+		Number: 42,
+		Title:  "Test PR",
+		Branch: "feat/test",
+		Author: "user",
+		Commits: []tracker.PRCommit{
+			{SHA: "abc1234", Message: "fix bug"},
+		},
+	}
+	got := renderPRDetailContent(pr, 80)
+	plain := ansi.Strip(got)
+	assertContains(t, plain, "Commits")
+	assertContains(t, plain, "abc1234")
+	assertContains(t, plain, "fix bug")
+}
+
+func TestRenderPRDetailContent_NoCommits(t *testing.T) {
+	pr := &tracker.PullRequest{
+		Number: 42,
+		Title:  "Test PR",
+		Branch: "feat/test",
+		Author: "user",
+	}
+	got := renderPRDetailContent(pr, 80)
+	plain := ansi.Strip(got)
+	if strings.Contains(plain, "Commits") {
+		t.Errorf("did not expect 'Commits' section without commits, got:\n%s", plain)
+	}
+}
+
+func TestRenderPRDetailContent_ReviewDecision(t *testing.T) {
+	pr := &tracker.PullRequest{
+		Number:         42,
+		Title:          "Test PR",
+		Branch:         "feat/test",
+		Author:         "user",
+		ReviewDecision: "APPROVED",
+	}
+	got := renderPRDetailContent(pr, 80)
+	assertContains(t, got, "APPROVED")
+}
+
+func TestRenderPRDetailContent_Body(t *testing.T) {
+	pr := &tracker.PullRequest{
+		Number: 42,
+		Title:  "Test PR",
+		Branch: "feat/test",
+		Author: "user",
+		Body:   "This fixes the login flow",
+	}
+	got := renderPRDetailContent(pr, 80)
+	plain := ansi.Strip(got)
+	assertContains(t, plain, "Description")
+	assertContains(t, plain, "login flow")
+}
+
+func TestRenderPRFooter_ListFocused(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 30))
+	m.activeView = ViewPRs
+	m.prState = &PRViewState{
+		PRs:         []*tracker.PullRequest{{Number: 1, Title: "T", Branch: "b", Author: "u"}},
+		FilterInput: newPRFilterInput(),
+	}
+	got := m.renderPRFooter()
+	assertContains(t, got, "tab")
+	assertContains(t, got, "detail")
+}
+
+func TestRenderPRFooter_DetailFocused(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 30))
+	m.activeView = ViewPRs
+	m.prState = &PRViewState{
+		PRs:           []*tracker.PullRequest{{Number: 1, Title: "T", Branch: "b", Author: "u"}},
+		FilterInput:   newPRFilterInput(),
+		DetailFocused: true,
+	}
+	got := m.renderPRFooter()
+	assertContains(t, got, "scroll")
+}
+
+func TestRenderContextHeader(t *testing.T) {
+	got := renderContextHeader("Pull Requests", "myproject", 120)
+	assertContains(t, got, "myproject")
+	assertContains(t, got, "Pull Requests")
+	assertContains(t, got, "esc to return")
 }
 
 // assertContains is a test helper for checking string containment.

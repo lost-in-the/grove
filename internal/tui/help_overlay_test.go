@@ -169,6 +169,33 @@ func TestCalcHelpOverlaySizeNormal(t *testing.T) {
 	}
 }
 
+func TestHelpOverlay_DashboardHasDetailSection(t *testing.T) {
+	content := renderHelpContent(ViewDashboard, 80)
+	if !strings.Contains(content, "Detail Panel") {
+		t.Error("expected dashboard help to contain 'Detail Panel'")
+	}
+}
+
+func TestHelpOverlay_PRsHasDetailSection(t *testing.T) {
+	content := renderHelpContent(ViewPRs, 80)
+	if !strings.Contains(content, "Detail Panel") {
+		t.Error("expected PR help to contain 'Detail Panel'")
+	}
+	if !strings.Contains(content, "g / G") {
+		t.Error("expected PR help to contain 'g / G'")
+	}
+}
+
+func TestHelpOverlay_PRsShowsBForBrowser(t *testing.T) {
+	content := renderHelpContent(ViewPRs, 80)
+	if !strings.Contains(content, "B") {
+		t.Error("expected PR help to contain 'B' key")
+	}
+	if !strings.Contains(content, "browser") {
+		t.Error("expected PR help to contain 'browser'")
+	}
+}
+
 func TestClamp(t *testing.T) {
 	tests := []struct {
 		val, lo, hi, want int

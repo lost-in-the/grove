@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -347,6 +348,82 @@ func TestRenderDetailV2_NoPRSection(t *testing.T) {
 	got := renderDetailV2(item, 60)
 	if strings.Contains(got, " PR ") {
 		t.Errorf("did not expect PR section without associated PR, got:\n%s", got)
+	}
+}
+
+func TestRenderDetailV2_TrackingBranch(t *testing.T) {
+	item := &WorktreeItem{
+		ShortName:      "test",
+		Branch:         "feat/auth",
+		TrackingBranch: "origin/feat/foo",
+	}
+	got := renderDetailV2(item, 60)
+	if !strings.Contains(got, "origin/feat/foo") {
+		t.Errorf("expected 'origin/feat/foo' in output, got:\n%s", got)
+	}
+}
+
+func TestRenderDetailV2_NoTracking(t *testing.T) {
+	item := &WorktreeItem{
+		ShortName:      "test",
+		Branch:         "feat/auth",
+		IsMain:         false,
+		HasRemote:      false,
+		TrackingBranch: "",
+	}
+	got := renderDetailV2(item, 60)
+	if !strings.Contains(got, "not tracking") {
+		t.Errorf("expected 'not tracking' in output, got:\n%s", got)
+	}
+}
+
+func TestRenderDetailV2_UnpushedSync(t *testing.T) {
+	item := &WorktreeItem{
+		ShortName:  "test",
+		Branch:     "feat/auth",
+		HasRemote:  true,
+		AheadCount: 3,
+	}
+	got := renderDetailV2(item, 60)
+	if !strings.Contains(got, "unpushed") {
+		t.Errorf("expected 'unpushed' in output, got:\n%s", got)
+	}
+}
+
+func TestRenderDetailV2_FullChanges(t *testing.T) {
+	var files []string
+	for i := 0; i < 25; i++ {
+		files = append(files, fmt.Sprintf("M  file%d.go", i))
+	}
+	item := &WorktreeItem{
+		ShortName:  "test",
+		Branch:     "main",
+		IsDirty:    true,
+		DirtyFiles: files,
+	}
+	got := renderDetailV2(item, 80)
+	for i := 0; i < 25; i++ {
+		name := fmt.Sprintf("file%d.go", i)
+		if !strings.Contains(got, name) {
+			t.Errorf("expected %q in output (no truncation), got:\n%s", name, got)
+		}
+	}
+}
+
+func TestRenderDetailV2_CommitSHAStyle(t *testing.T) {
+	item := &WorktreeItem{
+		ShortName: "test",
+		Branch:    "main",
+		RecentCommits: []RecentCommit{
+			{SHA: "abc1234", Message: "test msg"},
+		},
+	}
+	got := renderDetailV2(item, 60)
+	if !strings.Contains(got, "abc1234") {
+		t.Errorf("expected commit SHA 'abc1234' in output, got:\n%s", got)
+	}
+	if !strings.Contains(got, "test msg") {
+		t.Errorf("expected commit message 'test msg' in output, got:\n%s", got)
 	}
 }
 

@@ -1540,3 +1540,35 @@ func TestCreateNameTypingThroughUpdate(t *testing.T) {
 		}
 	})
 }
+
+func TestDashboardKey_B_NoOpWithoutPR(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 24))
+	m = sendKey(m, "B")
+	if m.activeView != ViewDashboard {
+		t.Errorf("expected ViewDashboard after B with no PR, got %d", m.activeView)
+	}
+}
+
+func TestDashboardKey_B_WithPR(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 24))
+	// Set an AssociatedPR on the first item
+	items := m.list.Items()
+	item := items[0].(WorktreeItem)
+	item.AssociatedPR = &PRInfo{Number: 42, Title: "Test PR"}
+	items[0] = item
+	m.list.SetItems(items)
+
+	// Sending B should not panic even with an associated PR
+	m = sendKey(m, "B")
+	if m.activeView != ViewDashboard {
+		t.Errorf("expected ViewDashboard after B, got %d", m.activeView)
+	}
+}
+
+func TestDashboardKey_Tab(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 24))
+	m = sendKey(m, "tab")
+	if !m.detailFocused {
+		t.Error("expected detailFocused=true after tab")
+	}
+}

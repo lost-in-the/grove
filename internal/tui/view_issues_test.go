@@ -195,6 +195,102 @@ func issueStateWithFilter(issues []*tracker.Issue, filter string) *IssueViewStat
 	return &IssueViewState{Issues: issues, FilterInput: fi}
 }
 
+func TestRenderIssueList_Loading(t *testing.T) {
+	s := &IssueViewState{Loading: true}
+	got := renderIssueList(s, 80, "⠋", 20)
+	if !strings.Contains(got, "Loading issues") {
+		t.Errorf("expected 'Loading issues' in output, got:\n%s", got)
+	}
+}
+
+func TestRenderIssueList_WithItems(t *testing.T) {
+	now := time.Now()
+	s := &IssueViewState{
+		Issues: []*tracker.Issue{
+			{Number: 10, Title: "Add login page", Author: "alice", CreatedAt: now},
+			{Number: 20, Title: "Fix crash on startup", Author: "bob", CreatedAt: now},
+		},
+		FilterInput: newIssueFilterInput(),
+	}
+	got := renderIssueList(s, 80, "⠋", 20)
+	if !strings.Contains(got, "#10") {
+		t.Errorf("expected '#10' in output, got:\n%s", got)
+	}
+	if !strings.Contains(got, "Add login page") {
+		t.Errorf("expected 'Add login page' in output, got:\n%s", got)
+	}
+	if !strings.Contains(got, "#20") {
+		t.Errorf("expected '#20' in output, got:\n%s", got)
+	}
+	if !strings.Contains(got, "Fix crash on startup") {
+		t.Errorf("expected 'Fix crash on startup' in output, got:\n%s", got)
+	}
+}
+
+func TestRenderIssueDetailContent_Body(t *testing.T) {
+	issue := &tracker.Issue{
+		Number: 33,
+		Title:  "Test issue",
+		Author: "user",
+		Body:   "This is a detailed description of the issue.",
+	}
+	got := renderIssueDetailContent(issue, 80)
+	plain := ansiStripRE.ReplaceAllString(got, "")
+	if !strings.Contains(plain, "Description") {
+		t.Errorf("expected 'Description' in output, got:\n%s", plain)
+	}
+	if !strings.Contains(plain, "detailed description") {
+		t.Errorf("expected body text in output, got:\n%s", plain)
+	}
+}
+
+func TestRenderIssueDetailContent_Labels(t *testing.T) {
+	issue := &tracker.Issue{
+		Number: 33,
+		Title:  "Test issue",
+		Author: "user",
+		Labels: []string{"bug", "urgent"},
+	}
+	got := renderIssueDetailContent(issue, 80)
+	if !strings.Contains(got, "bug") {
+		t.Errorf("expected 'bug' label in output, got:\n%s", got)
+	}
+	if !strings.Contains(got, "urgent") {
+		t.Errorf("expected 'urgent' label in output, got:\n%s", got)
+	}
+}
+
+func TestRenderIssueFooter_ListFocused(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 30))
+	m.activeView = ViewIssues
+	m.issueState = &IssueViewState{
+		Issues:        []*tracker.Issue{{Number: 1, Title: "T", Author: "u"}},
+		FilterInput:   newIssueFilterInput(),
+		DetailFocused: false,
+	}
+	got := m.renderIssueFooter()
+	if !strings.Contains(got, "tab") {
+		t.Errorf("expected 'tab' in footer, got:\n%s", got)
+	}
+	if !strings.Contains(got, "detail") {
+		t.Errorf("expected 'detail' in footer, got:\n%s", got)
+	}
+}
+
+func TestRenderIssueFooter_DetailFocused(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 30))
+	m.activeView = ViewIssues
+	m.issueState = &IssueViewState{
+		Issues:        []*tracker.Issue{{Number: 1, Title: "T", Author: "u"}},
+		FilterInput:   newIssueFilterInput(),
+		DetailFocused: true,
+	}
+	got := m.renderIssueFooter()
+	if !strings.Contains(got, "scroll") {
+		t.Errorf("expected 'scroll' in footer, got:\n%s", got)
+	}
+}
+
 func TestFormatIssueAge(t *testing.T) {
 	tests := []struct {
 		name string

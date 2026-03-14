@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/lost-in-the/grove/internal/config"
 )
 
@@ -394,6 +396,28 @@ func TestConfigEditKey_DirtyDetection(t *testing.T) {
 	m.configState.Fields[ConfigTabGeneral][0].Value = original
 	if m.configState.Fields[ConfigTabGeneral][0].Value != original {
 		t.Error("expected value to match original after restore")
+	}
+}
+
+func TestConfigForm_EscapeClosesOverlay(t *testing.T) {
+	m := newConfigTestModel(t)
+	// Form is not dirty, so esc should close directly
+	m.configState.Dirty = false
+	m = sendKey(m, "esc")
+	if m.activeView != ViewDashboard {
+		t.Errorf("expected ViewDashboard after esc on clean form, got %d", m.activeView)
+	}
+	if m.configState != nil {
+		t.Error("expected configState nil after esc on clean form")
+	}
+}
+
+func TestConfigForm_MessageForwarding(t *testing.T) {
+	m := newConfigTestModel(t)
+	// Send a WindowSizeMsg — should not panic
+	m = sendMsg(m, tea.WindowSizeMsg{Width: 100, Height: 40})
+	if m.activeView != ViewConfig {
+		t.Errorf("expected ViewConfig after WindowSizeMsg, got %d", m.activeView)
 	}
 }
 
