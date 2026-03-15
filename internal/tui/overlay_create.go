@@ -83,10 +83,10 @@ func newBranchNameInput() textinput.Model {
 }
 
 // newNameInput creates a configured textinput for worktree naming.
-func newNameInput(placeholder string) textinput.Model {
+func newNameInput(suggestion string) textinput.Model {
 	ti := textinput.New()
 	ti.Prompt = "Name: "
-	ti.Placeholder = placeholder
+	ti.Placeholder = ""
 	ti.CharLimit = 100
 	return ti
 }
