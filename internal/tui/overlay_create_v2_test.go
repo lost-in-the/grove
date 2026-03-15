@@ -54,7 +54,23 @@ func TestRenderContextSummary(t *testing.T) {
 	}
 }
 
-func TestRenderCreateBranchSelectorV2(t *testing.T) {
+func TestRenderCreateBranchChoiceV2(t *testing.T) {
+	state := &CreateState{
+		Step:              CreateStepBranchChoice,
+		Branches:          []string{"main", "develop"},
+		BranchFilterInput: newBranchFilterInput(),
+		BranchNameInput:   newBranchNameInput(),
+	}
+	got := renderCreateBranchChoiceV2(state, 80)
+
+	for _, want := range []string{"Select an existing branch", "Create a new branch", "Branch"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("renderCreateBranchChoiceV2() missing %q in output:\n%s", want, got)
+		}
+	}
+}
+
+func TestRenderCreateBranchSelectV2(t *testing.T) {
 	tests := []struct {
 		name     string
 		state    *CreateState
@@ -62,33 +78,34 @@ func TestRenderCreateBranchSelectorV2(t *testing.T) {
 		wantStrs []string
 	}{
 		{
-			name: "branch selector shows branches",
+			name: "shows branch list",
 			state: &CreateState{
-				Step:              CreateStepBranch,
+				Step:              CreateStepBranchSelect,
 				Branches:          []string{"main", "develop", "feature/auth"},
 				BranchFilterInput: newBranchFilterInput(),
 			},
-			width: 80,
-			wantStrs: []string{
-				"main",
-				"develop",
-				"Branch",
-			},
+			width:    80,
+			wantStrs: []string{"main", "develop", "Branch"},
 		},
 		{
-			name:  "branch selector with filter shows create new",
-			state: createStateWithBranchFilter([]string{"main", "develop"}, "my-feat"),
-			width: 80,
-			wantStrs: []string{
-				"Create new branch",
-				"my-feat",
-				"Filter",
-			},
+			name: "shows filter when active",
+			state: func() *CreateState {
+				bfi := newBranchFilterInput()
+				bfi.SetValue("feat")
+				return &CreateState{
+					Step:              CreateStepBranchSelect,
+					Branches:          []string{"main", "develop", "feature/auth"},
+					BranchFilterInput: bfi,
+					BranchFilterMode:  BranchFilterOn,
+				}
+			}(),
+			width:    80,
+			wantStrs: []string{"feature/auth", "Filter"},
 		},
 		{
-			name: "branch selector shows stepper labels",
+			name: "shows stepper labels",
 			state: &CreateState{
-				Step:              CreateStepBranch,
+				Step:              CreateStepBranchSelect,
 				Branches:          []string{"main"},
 				BranchFilterInput: newBranchFilterInput(),
 			},
@@ -99,13 +116,27 @@ func TestRenderCreateBranchSelectorV2(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := renderCreateBranchSelectorV2(tt.state, tt.width)
+			got := renderCreateBranchSelectV2(tt.state, tt.width)
 			for _, want := range tt.wantStrs {
 				if !strings.Contains(got, want) {
-					t.Errorf("renderCreateBranchSelectorV2() missing %q in output:\n%s", want, got)
+					t.Errorf("renderCreateBranchSelectV2() missing %q in output:\n%s", want, got)
 				}
 			}
 		})
+	}
+}
+
+func TestRenderCreateBranchCreateV2(t *testing.T) {
+	state := &CreateState{
+		Step:            CreateStepBranchCreate,
+		BranchNameInput: newBranchNameInput(),
+	}
+	got := renderCreateBranchCreateV2(state, 80)
+
+	for _, want := range []string{"Enter a name", "Branch"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("renderCreateBranchCreateV2() missing %q in output:\n%s", want, got)
+		}
 	}
 }
 
@@ -161,9 +192,19 @@ func TestRenderCreateV2Dispatch(t *testing.T) {
 			wantStrs: []string{"Name"},
 		},
 		{
-			name: "dispatches to branch step",
+			name: "dispatches to branch choice step",
 			state: &CreateState{
-				Step:              CreateStepBranch,
+				Step:              CreateStepBranchChoice,
+				Branches:          []string{"main", "develop"},
+				BranchFilterInput: newBranchFilterInput(),
+				BranchNameInput:   newBranchNameInput(),
+			},
+			wantStrs: []string{"Select an existing branch"},
+		},
+		{
+			name: "dispatches to branch select step",
+			state: &CreateState{
+				Step:              CreateStepBranchSelect,
 				Branches:          []string{"main", "develop"},
 				BranchFilterInput: newBranchFilterInput(),
 			},
@@ -195,8 +236,8 @@ func TestBackspacePreservesValues(t *testing.T) {
 	s := createStateWithName("my-feature", "acupoll")
 	s.BaseBranch = "develop"
 
-	// Simulate going back to branch step
-	s.Step = CreateStepBranch
+	// Simulate going back to branch choice step
+	s.Step = CreateStepBranchChoice
 
 	if s.Name != "my-feature" {
 		t.Errorf("Name not preserved: got %q, want %q", s.Name, "my-feature")
@@ -213,17 +254,6 @@ func TestBackspacePreservesValues(t *testing.T) {
 	view := renderCreateNameV2(s, 80)
 	if !strings.Contains(view, "my-feature") {
 		t.Errorf("name step should show preserved name, got:\n%s", view)
-	}
-}
-
-// createStateWithBranchFilter creates a CreateState with a pre-set branch filter.
-func createStateWithBranchFilter(branches []string, filter string) *CreateState {
-	bfi := newBranchFilterInput()
-	bfi.SetValue(filter)
-	return &CreateState{
-		Step:              CreateStepBranch,
-		Branches:          branches,
-		BranchFilterInput: bfi,
 	}
 }
 

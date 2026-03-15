@@ -967,12 +967,13 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			tuilog.Printf("warning: failed to list branches: %v", branchErr)
 		}
 		m.createState = &CreateState{
-			Step:              CreateStepBranch,
+			Step:              CreateStepBranchChoice,
 			ProjectName:       m.projectName,
 			Branches:          branches,
 			BranchFilterInput: newBranchFilterInput(),
+			BranchNameInput:   newBranchNameInput(),
 		}
-		return m, m.createState.BranchFilterInput.Focus()
+		return m, nil
 
 	case key.Matches(msg, m.keys.Delete):
 		item, ok := m.selectedItem()
@@ -1195,8 +1196,12 @@ func (m Model) handleCreateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch m.createState.Step {
-	case CreateStepBranch:
-		return m.handleBranchSelectorKey(msg)
+	case CreateStepBranchChoice:
+		return m.handleBranchChoiceKey(msg)
+	case CreateStepBranchSelect:
+		return m.handleBranchSelectKey(msg)
+	case CreateStepBranchCreate:
+		return m.handleBranchCreateKey(msg)
 	case CreateStepBranchAction:
 		return m.handleBranchActionKey(msg)
 	case CreateStepName:
@@ -1218,7 +1223,7 @@ func (m Model) handleBranchActionKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.keys.Back):
-		s.Step = CreateStepBranch
+		s.Step = CreateStepBranchSelect
 		return m, nil
 
 	case key.Matches(msg, m.keys.Up):
@@ -1292,23 +1297,93 @@ func (m *Model) startCreate(name, baseBranch string) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(m.spinner.Tick, createWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, name, baseBranch))
 }
 
-// handleBranchSelectorKey handles the unified branch selector step.
-func (m Model) handleBranchSelectorKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+// handleBranchChoiceKey handles the initial "Select existing" vs "Create new" choice.
+func (m Model) handleBranchChoiceKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	s := m.createState
+	switch {
+	case key.Matches(msg, m.keys.Escape):
+		m.activeView = ViewDashboard
+		m.createState = nil
+		return m, nil
+
+	case key.Matches(msg, m.keys.Up):
+		if s.BranchChoice > 0 {
+			s.BranchChoice--
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.Down):
+		if s.BranchChoice < 1 {
+			s.BranchChoice++
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.Enter):
+		if s.BranchChoice == 0 {
+			s.Step = CreateStepBranchSelect
+			s.BranchCursor = 0
+			s.BranchFilterMode = BranchFilterOff
+			return m, nil
+		}
+		// Create new branch
+		s.Step = CreateStepBranchCreate
+		s.BranchNameInput = newBranchNameInput()
+		return m, s.BranchNameInput.Focus()
+	}
+	return m, nil
+}
+
+// handleBranchSelectKey handles the filterable branch list step.
+func (m Model) handleBranchSelectKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := m.createState
 
+	// When filter is active, route most keys to the textinput
+	if s.BranchFilterMode == BranchFilterOn {
+		switch {
+		case key.Matches(msg, m.keys.Escape):
+			// Exit filter mode, keep filter text
+			s.BranchFilterMode = BranchFilterOff
+			s.BranchFilterInput.Blur()
+			return m, nil
+
+		case key.Matches(msg, m.keys.Enter):
+			// Accept filter and exit filter mode
+			s.BranchFilterMode = BranchFilterOff
+			s.BranchFilterInput.Blur()
+			return m, nil
+
+		default:
+			// All other keys go to the textinput (j/k are typed as text)
+			prevVal := s.BranchFilterInput.Value()
+			var cmd tea.Cmd
+			s.BranchFilterInput, cmd = s.BranchFilterInput.Update(msg)
+			if s.BranchFilterInput.Value() != prevVal {
+				s.BranchCursor = 0
+			}
+			return m, cmd
+		}
+	}
+
+	// Filter is off — j/k navigate, / enters filter mode
 	filter := s.BranchFilterInput.Value()
 	filtered := filteredBranches(s.Branches, filter)
-	showCreateNew := filter != "" && !exactBranchMatch(s.Branches, filter)
 	totalItems := len(filtered)
-	if showCreateNew {
-		totalItems++
-	}
 
 	switch {
 	case key.Matches(msg, m.keys.Escape):
 		m.activeView = ViewDashboard
 		m.createState = nil
 		return m, nil
+
+	case key.Matches(msg, m.keys.Back):
+		s.Step = CreateStepBranchChoice
+		s.BranchFilterInput.SetValue("")
+		s.BranchCursor = 0
+		return m, nil
+
+	case msg.String() == "/":
+		s.BranchFilterMode = BranchFilterOn
+		return m, s.BranchFilterInput.Focus()
 
 	case key.Matches(msg, m.keys.Up):
 		if s.BranchCursor > 0 {
@@ -1327,18 +1402,14 @@ func (m Model) handleBranchSelectorKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 			return m, nil
 		}
 		if s.BranchCursor < len(filtered) {
-			// Selected an existing branch
 			selected := filtered[s.BranchCursor]
 			s.BaseBranch = selected
 			s.NewBranchName = ""
-			// Derive name suggestion
 			strategy := ""
 			if m.cfg != nil {
 				strategy = m.cfg.TUI.WorktreeNameFromBranch
 			}
 			s.NameSuggestion = worktree.DeriveWorktreeName(selected, strategy)
-
-			// Initialize name input with placeholder
 			s.NameInput = newNameInput(s.NameSuggestion)
 
 			// Check if branch action should be skipped
@@ -1355,28 +1426,47 @@ func (m Model) handleBranchSelectorKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 			s.DontShowAgain = false
 			s.Step = CreateStepBranchAction
 			return m, nil
-		} else if showCreateNew {
-			// Selected "Create new branch"
-			s.BaseBranch = ""
-			s.NewBranchName = filter
-			s.NameSuggestion = filter
-
-			// Initialize name input with placeholder
-			s.NameInput = newNameInput(s.NameSuggestion)
-
-			s.Step = CreateStepName
-			return m, s.NameInput.Focus()
 		}
 		return m, nil
+	}
+	return m, nil
+}
+
+// handleBranchCreateKey handles the new branch name text input step.
+func (m Model) handleBranchCreateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	s := m.createState
+
+	switch {
+	case key.Matches(msg, m.keys.Escape):
+		m.activeView = ViewDashboard
+		m.createState = nil
+		return m, nil
+
+	case key.Matches(msg, m.keys.Back):
+		if s.BranchNameInput.Value() == "" {
+			s.Step = CreateStepBranchChoice
+			return m, nil
+		}
+		// Let textinput handle backspace
+		var cmd tea.Cmd
+		s.BranchNameInput, cmd = s.BranchNameInput.Update(msg)
+		return m, cmd
+
+	case key.Matches(msg, m.keys.Enter):
+		name := s.BranchNameInput.Value()
+		if name == "" {
+			return m, nil
+		}
+		s.BaseBranch = ""
+		s.NewBranchName = name
+		s.NameSuggestion = name
+		s.NameInput = newNameInput(s.NameSuggestion)
+		s.Step = CreateStepName
+		return m, s.NameInput.Focus()
 
 	default:
-		// Route remaining keys through the filter textinput
-		prevVal := s.BranchFilterInput.Value()
 		var cmd tea.Cmd
-		s.BranchFilterInput, cmd = s.BranchFilterInput.Update(msg)
-		if s.BranchFilterInput.Value() != prevVal {
-			s.BranchCursor = 0
-		}
+		s.BranchNameInput, cmd = s.BranchNameInput.Update(msg)
 		return m, cmd
 	}
 }
@@ -1394,8 +1484,8 @@ func (m Model) handleNameKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Back):
 		// Only go back if the name input is empty
 		if s.NameInput.Value() == "" {
-			s.Step = CreateStepBranch
-			return m, s.BranchFilterInput.Focus()
+			s.Step = CreateStepBranchChoice
+			return m, nil
 		}
 		// Otherwise let textinput handle backspace
 		prevVal := s.NameInput.Value()

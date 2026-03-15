@@ -99,6 +99,7 @@ func withCreateStep(step CreateStep) testOpt {
 			Branches:          []string{"main", "develop", "feature/auth", "fix/login-bug", "release/v2"},
 			ProjectName:       m.projectName,
 			BranchFilterInput: newBranchFilterInput(),
+			BranchNameInput:   newBranchNameInput(),
 		}
 		switch step {
 		case CreateStepName:

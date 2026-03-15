@@ -59,8 +59,8 @@ func TestUpdateDashboardNavigation(t *testing.T) {
 				if m.createState == nil {
 					t.Fatal("expected createState to be set")
 				}
-				if m.createState.Step != CreateStepBranch {
-					t.Errorf("expected CreateStepBranch, got %d", m.createState.Step)
+				if m.createState.Step != CreateStepBranchChoice {
+					t.Errorf("expected CreateStepBranchChoice, got %d", m.createState.Step)
 				}
 			},
 		},
@@ -192,9 +192,10 @@ func TestDeleteFlow(t *testing.T) {
 }
 
 func TestCreateWizardFlow(t *testing.T) {
-	t.Run("branch step: typing adds to filter", func(t *testing.T) {
+	t.Run("branch select: / then typing adds to filter", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
 		m = enterCreateManual(m)
+		m = sendKey(m, "/") // enter filter mode
 		m = sendKey(m, "d")
 		m = sendKey(m, "e")
 		m = sendKey(m, "v")
@@ -203,7 +204,7 @@ func TestCreateWizardFlow(t *testing.T) {
 		}
 	})
 
-	t.Run("branch step: selecting existing branch advances to action", func(t *testing.T) {
+	t.Run("branch select: selecting existing branch advances to action", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
 		m = enterCreateManual(m)
 		// Select first branch (main)
@@ -216,10 +217,15 @@ func TestCreateWizardFlow(t *testing.T) {
 		}
 	})
 
-	t.Run("branch step: create new branch advances to name", func(t *testing.T) {
+	t.Run("branch create: typing and enter advances to name", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
-		m = enterCreateManual(m)
-		// Type a name that doesn't match any branch
+		m = sendKey(m, "n") // open wizard at BranchChoice
+		m.createState.Branches = []string{"main", "develop", "feature/auth"}
+		m = sendKey(m, "j")     // move to "Create new branch"
+		m = sendKey(m, "enter") // enter BranchCreate step
+		if m.createState.Step != CreateStepBranchCreate {
+			t.Fatalf("expected BranchCreate, got %d", m.createState.Step)
+		}
 		m = sendKey(m, "m")
 		m = sendKey(m, "y")
 		m = sendKey(m, "-")
@@ -227,8 +233,6 @@ func TestCreateWizardFlow(t *testing.T) {
 		m = sendKey(m, "e")
 		m = sendKey(m, "a")
 		m = sendKey(m, "t")
-		// Move cursor down to "Create new branch" option (past the 0 filtered results)
-		// With filter "my-feat", no branches match, so cursor 0 = "Create new branch"
 		m = sendKey(m, "enter")
 		if m.createState.Step != CreateStepName {
 			t.Errorf("expected CreateStepName, got %d", m.createState.Step)
@@ -280,8 +284,8 @@ func TestCreateWizardFlow(t *testing.T) {
 		m = enterCreateManual(m)
 		m = enterNameStep(m)
 		m = sendKey(m, "backspace")
-		if m.createState.Step != CreateStepBranch {
-			t.Errorf("expected CreateStepBranch after backspace, got %d", m.createState.Step)
+		if m.createState.Step != CreateStepBranchChoice {
+			t.Errorf("expected CreateStepBranchChoice after backspace, got %d", m.createState.Step)
 		}
 	})
 
@@ -610,7 +614,7 @@ func TestRenderCreateOverlaySteps(t *testing.T) {
 	})
 
 	t.Run("branch step", func(t *testing.T) {
-		s := &CreateState{Step: CreateStepBranch, Branches: []string{"main", "develop"}, BranchFilterInput: newBranchFilterInput()}
+		s := &CreateState{Step: CreateStepBranchChoice, Branches: []string{"main", "develop"}, BranchFilterInput: newBranchFilterInput()}
 		v := renderCreate(s, 80, "")
 		if !strings.Contains(v, "Branch") {
 			t.Error("expected 'Branch' in create branch step")
@@ -618,18 +622,12 @@ func TestRenderCreateOverlaySteps(t *testing.T) {
 	})
 
 	t.Run("branch step with filter", func(t *testing.T) {
-		s := createStateWithBranchFilter([]string{"main", "develop"}, "dev")
+		bfi := newBranchFilterInput()
+		bfi.SetValue("dev")
+		s := &CreateState{Step: CreateStepBranchSelect, Branches: []string{"main", "develop"}, BranchFilterInput: bfi}
 		v := renderCreate(s, 80, "")
-		if !strings.Contains(v, "Filter") {
-			t.Error("expected 'Filter' label in filtered branch list")
-		}
-	})
-
-	t.Run("branch step no matches shows create new", func(t *testing.T) {
-		s := createStateWithBranchFilter([]string{"main"}, "nonexistent")
-		v := renderCreate(s, 80, "")
-		if !strings.Contains(v, "Create new branch") {
-			t.Error("expected 'Create new branch' option")
+		if !strings.Contains(v, "Branch") {
+			t.Error("expected 'Branch' in v1 branch step")
 		}
 	})
 
@@ -948,15 +946,15 @@ func TestCreateNameBackspaceOnEmpty(t *testing.T) {
 	m = enterNameStep(m)
 	m = sendKey(m, "backspace")
 	// Backspace with empty name goes back to branch step
-	if m.createState.Step != CreateStepBranch {
-		t.Errorf("expected CreateStepBranch after backspace on empty name, got %d", m.createState.Step)
+	if m.createState.Step != CreateStepBranchChoice {
+		t.Errorf("expected CreateStepBranchChoice after backspace on empty name, got %d", m.createState.Step)
 	}
 }
 
 func TestCreateBranchEsc(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
 	m = enterCreateManual(m)
-	m.createState.Step = CreateStepBranch
+	m.createState.Step = CreateStepBranchChoice
 	m = sendKey(m, "esc")
 	if m.activeView != ViewDashboard {
 		t.Errorf("expected ViewDashboard, got %d", m.activeView)
@@ -981,7 +979,7 @@ func TestCreateNameEnterWithInvalidName(t *testing.T) {
 func TestBranchStepUpAtZero(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
 	m = enterCreateManual(m)
-	m.createState.Step = CreateStepBranch
+	m.createState.Step = CreateStepBranchChoice
 	m.createState.BranchCursor = 0
 	m = sendKey(m, "k")
 	if m.createState.BranchCursor != 0 {
@@ -992,7 +990,7 @@ func TestBranchStepUpAtZero(t *testing.T) {
 func TestBranchSelectorUpAtZero(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
 	m = enterCreateManual(m)
-	m.createState.Step = CreateStepBranch
+	m.createState.Step = CreateStepBranchChoice
 	m.createState.Branches = []string{"main", "dev"}
 	m.createState.BranchCursor = 0
 	m = sendKey(m, "up")
@@ -1093,58 +1091,51 @@ func TestCreateWizardBranchActionNavigation(t *testing.T) {
 		t.Error("expected DontShowAgain=true after toggle")
 	}
 
-	// Backspace goes back to branch selector
+	// Backspace goes back to branch select
 	m = sendKey(m, "backspace")
-	if m.createState.Step != CreateStepBranch {
-		t.Errorf("expected CreateStepBranch, got %d", m.createState.Step)
+	if m.createState.Step != CreateStepBranchSelect {
+		t.Errorf("expected CreateStepBranchSelect, got %d", m.createState.Step)
 	}
 }
 
 func TestCreateWizardBranchFilterAndNavigation(t *testing.T) {
-	t.Run("typing adds to filter", func(t *testing.T) {
+	t.Run("/ then typing adds to filter", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
 		m = enterCreateManual(m)
-		m.createState.Step = CreateStepBranch
-		m.createState.Branches = []string{"main", "develop", "feature/auth"}
 
+		m = sendKey(m, "/") // enter filter mode
 		m = sendKey(m, "d")
 		if m.createState.BranchFilterInput.Value() != "d" {
 			t.Errorf("expected filter 'd', got %q", m.createState.BranchFilterInput.Value())
 		}
 	})
 
-	t.Run("backspace removes filter char", func(t *testing.T) {
+	t.Run("backspace removes filter char in filter mode", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
 		m = enterCreateManual(m)
-		m.createState.Step = CreateStepBranch
-		m.createState.Branches = []string{"main", "develop"}
-		m.createState.BranchFilterInput.SetValue("de")
 
+		m = sendKey(m, "/") // enter filter mode
+		m = sendKey(m, "d")
+		m = sendKey(m, "e")
 		m = sendKey(m, "backspace")
 		if m.createState.BranchFilterInput.Value() != "d" {
 			t.Errorf("expected filter 'd', got %q", m.createState.BranchFilterInput.Value())
 		}
 	})
 
-	t.Run("backspace with empty filter is no-op on branch step", func(t *testing.T) {
+	t.Run("backspace with empty filter goes back to choice", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
 		m = enterCreateManual(m)
-		m.createState.Step = CreateStepBranch
-		m.createState.Branches = []string{"main"}
 
 		m = sendKey(m, "backspace")
-		// Branch is step 0, so backspace with empty filter stays on branch
-		if m.createState.Step != CreateStepBranch {
-			t.Errorf("expected CreateStepBranch, got %d", m.createState.Step)
+		if m.createState.Step != CreateStepBranchChoice {
+			t.Errorf("expected CreateStepBranchChoice, got %d", m.createState.Step)
 		}
 	})
 
-	t.Run("arrow down moves cursor", func(t *testing.T) {
+	t.Run("arrow down moves cursor in branch select", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
 		m = enterCreateManual(m)
-		m.createState.Step = CreateStepBranch
-		m.createState.Branches = []string{"main", "develop", "feature/auth"}
-		m.createState.BranchCursor = 0
 
 		m = sendKey(m, "down")
 		if m.createState.BranchCursor != 1 {
@@ -1176,7 +1167,7 @@ func TestBulkSelectedItems(t *testing.T) {
 func TestCreateWizardEscFromBranchSelector(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
 	m = enterCreateManual(m)
-	m.createState.Step = CreateStepBranch
+	m.createState.Step = CreateStepBranchChoice
 	m.createState.Branches = []string{"main"}
 	m = sendKey(m, "esc")
 	if m.activeView != ViewDashboard {
@@ -1506,18 +1497,46 @@ func TestIssueFilterTypingThroughUpdate(t *testing.T) {
 func TestCreateBranchFilterTypingThroughUpdate(t *testing.T) {
 	t.Run("typing via Update populates filter", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
-		m = sendKey(m, "n") // enter create wizard
+		m = sendKey(m, "n") // enter create wizard at BranchChoice
 		if m.createState == nil {
 			t.Fatal("expected createState after 'n'")
 		}
+		if m.createState.Step != CreateStepBranchChoice {
+			t.Fatalf("expected BranchChoice step, got %d", m.createState.Step)
+		}
 		m.createState.Branches = []string{"main", "develop", "feature/auth"}
-		// Focus is called on the stored reference by our fix, so sendKey("n")
-		// already focused BranchFilterInput via m.createState.BranchFilterInput.Focus()
 
+		// Select "Select existing branch" to enter BranchSelect
+		m = sendKey(m, "enter")
+		if m.createState.Step != CreateStepBranchSelect {
+			t.Fatalf("expected BranchSelect step, got %d", m.createState.Step)
+		}
+
+		// Press / to enter filter mode
+		m = sendKey(m, "/")
+		if m.createState.BranchFilterMode != BranchFilterOn {
+			t.Fatal("expected BranchFilterOn after /")
+		}
+
+		// Now type — j and k should reach the textinput
 		m = sendKey(m, "d")
 		m = sendKey(m, "e")
 		if m.createState.BranchFilterInput.Value() != "de" {
 			t.Errorf("expected filter 'de', got %q", m.createState.BranchFilterInput.Value())
+		}
+	})
+
+	t.Run("j and k are typed in filter mode", func(t *testing.T) {
+		m := newTestModel(withItems(1), withSize(80, 24))
+		m = sendKey(m, "n")
+		m.createState.Branches = []string{"main", "jk-branch"}
+
+		m = sendKey(m, "enter") // select existing
+		m = sendKey(m, "/")     // enter filter mode
+		m = sendKey(m, "j")
+		m = sendKey(m, "k")
+		if m.createState.BranchFilterInput.Value() != "jk" {
+			t.Errorf("expected filter 'jk', got %q", m.createState.BranchFilterInput.Value())
 		}
 	})
 }

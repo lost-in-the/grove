@@ -11,10 +11,20 @@ import (
 type CreateStep int
 
 const (
-	CreateStepBranch       CreateStep = 0 // unified branch selector
-	CreateStepBranchAction CreateStep = 1 // split/fork (conditional)
-	CreateStepName         CreateStep = 2 // name with suggestion
-	CreateStepConfirm      CreateStep = 3
+	CreateStepBranchChoice CreateStep = 0 // "Select existing" vs "Create new"
+	CreateStepBranchSelect CreateStep = 1 // filterable branch list (/ to filter)
+	CreateStepBranchCreate CreateStep = 2 // text input for new branch name
+	CreateStepBranchAction CreateStep = 3 // split/fork (conditional)
+	CreateStepName         CreateStep = 4 // name with suggestion
+	CreateStepConfirm      CreateStep = 5
+)
+
+// BranchFilterMode tracks whether the filter input is active in the branch select step.
+type BranchFilterMode int
+
+const (
+	BranchFilterOff BranchFilterMode = iota // j/k navigate, / enters filter
+	BranchFilterOn                          // textinput active, esc exits filter
 )
 
 // CreateState holds the state for the new worktree wizard.
@@ -27,10 +37,17 @@ type CreateState struct {
 	NewBranchName  string // set when creating new branch via selector
 	Error          string
 
-	// Branch selector state (unified)
+	// Branch choice state (step 0)
+	BranchChoice int // 0 = select existing, 1 = create new
+
+	// Branch selector state (step 1: select existing)
 	Branches          []string
 	BranchCursor      int
 	BranchFilterInput textinput.Model
+	BranchFilterMode  BranchFilterMode
+
+	// Branch create state (step 2: create new)
+	BranchNameInput textinput.Model
 
 	// Name input
 	NameInput textinput.Model
@@ -51,7 +68,16 @@ type CreateState struct {
 func newBranchFilterInput() textinput.Model {
 	ti := textinput.New()
 	ti.Prompt = "Filter: "
-	ti.Placeholder = "type to filter or create new"
+	ti.Placeholder = "type to filter branches"
+	ti.CharLimit = 100
+	return ti
+}
+
+// newBranchNameInput creates a configured textinput for new branch name entry.
+func newBranchNameInput() textinput.Model {
+	ti := textinput.New()
+	ti.Prompt = "Branch: "
+	ti.Placeholder = ""
 	ti.CharLimit = 100
 	return ti
 }
@@ -70,7 +96,7 @@ func renderCreate(s *CreateState, width int, spinnerView string) string {
 		return renderCreateSpinner(s, spinnerView)
 	}
 	switch s.Step {
-	case CreateStepBranch:
+	case CreateStepBranchChoice, CreateStepBranchSelect, CreateStepBranchCreate:
 		return renderCreateBranch(s)
 	case CreateStepBranchAction:
 		return renderCreateBranchAction(s)

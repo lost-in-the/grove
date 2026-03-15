@@ -15,8 +15,12 @@ func renderCreateV2(s *CreateState, width int, spinnerView string) string {
 	}
 
 	switch s.Step {
-	case CreateStepBranch:
-		return renderCreateBranchSelectorV2(s, width)
+	case CreateStepBranchChoice:
+		return renderCreateBranchChoiceV2(s, width)
+	case CreateStepBranchSelect:
+		return renderCreateBranchSelectV2(s, width)
+	case CreateStepBranchCreate:
+		return renderCreateBranchCreateV2(s, width)
 	case CreateStepBranchAction:
 		return renderCreateBranchActionV2(s, width)
 	case CreateStepName:
@@ -91,10 +95,8 @@ func renderCreateSpinnerV2(s *CreateState, spinnerView string) string {
 	)
 }
 
-// renderCreateBranchSelectorV2 renders the unified branch selector (Step 1).
-// Shows a filterable list of existing branches with a "Create new branch" option
-// when the filter text doesn't exactly match an existing branch.
-func renderCreateBranchSelectorV2(s *CreateState, width int) string {
+// renderCreateBranchChoiceV2 renders the initial choice: select existing or create new.
+func renderCreateBranchChoiceV2(s *CreateState, width int) string {
 	overlayWidth := calcOverlayWidth(width)
 	contentWidth := overlayWidth - 6
 	indent := overlayIndent
@@ -102,29 +104,60 @@ func renderCreateBranchSelectorV2(s *CreateState, width int) string {
 
 	var b strings.Builder
 
-	// Stepper — on step 1 (index 0)
 	stepper := NewStepper("Branch", "Name", "Confirm")
 	stepper.Current = 0
 	b.WriteString(indentBlock(stepper.View(innerWidth), indent) + "\n\n")
 
-	// Filter input
-	filter := s.BranchFilterInput.Value()
-	if filter != "" {
-		b.WriteString(indent + s.BranchFilterInput.View() + "\n\n")
-	} else {
-		b.WriteString(indent + "Select a branch or type to create new\n\n")
+	b.WriteString(indent + "How would you like to set up the branch?\n\n")
+
+	options := []string{
+		"Select an existing branch",
+		"Create a new branch",
+	}
+	for i, opt := range options {
+		cursor := "  "
+		if i == s.BranchChoice {
+			cursor = Styles.ListCursor.Render("❯ ")
+		}
+		b.WriteString(indent + cursor + opt + "\n")
 	}
 
-	// Build visible items
-	filtered := filteredBranches(s.Branches, filter)
-	showCreateNew := filter != "" && !exactBranchMatch(s.Branches, filter)
-	totalItems := len(filtered)
-	if showCreateNew {
-		totalItems++
+	content := b.String()
+	footer := "\n" + Styles.Footer.Render(indent+"[enter] select  [esc] cancel")
+
+	return Styles.OverlayBorderSuccess.Width(overlayWidth).Render(
+		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + padToHeight(content, createOverlayMinLines) + footer,
+	)
+}
+
+// renderCreateBranchSelectV2 renders the filterable branch list.
+func renderCreateBranchSelectV2(s *CreateState, width int) string {
+	overlayWidth := calcOverlayWidth(width)
+	contentWidth := overlayWidth - 6
+	indent := overlayIndent
+	innerWidth := contentWidth - len(indent)*2
+
+	var b strings.Builder
+
+	stepper := NewStepper("Branch", "Name", "Confirm")
+	stepper.Current = 0
+	b.WriteString(indentBlock(stepper.View(innerWidth), indent) + "\n\n")
+
+	// Show filter input when active
+	filter := s.BranchFilterInput.Value()
+	if s.BranchFilterMode == BranchFilterOn {
+		b.WriteString(indent + s.BranchFilterInput.View() + "\n\n")
+	} else if filter != "" {
+		b.WriteString(indent + Styles.DetailDim.Render("Filter: "+filter) + "  " + Styles.Footer.Render("[/] edit") + "\n\n")
+	} else {
+		b.WriteString(indent + "Select a branch\n\n")
 	}
+
+	filtered := filteredBranches(s.Branches, filter)
+	totalItems := len(filtered)
 
 	if totalItems == 0 {
-		b.WriteString(indent + Styles.DetailDim.Render("(no branches found)") + "\n")
+		b.WriteString(indent + Styles.DetailDim.Render("(no matching branches)") + "\n")
 	} else {
 		start, end := scrollWindow(totalItems, s.BranchCursor, 10)
 		for i := start; i < end; i++ {
@@ -132,11 +165,7 @@ func renderCreateBranchSelectorV2(s *CreateState, width int) string {
 			if i == s.BranchCursor {
 				cursor = Styles.ListCursor.Render("❯ ")
 			}
-			if i < len(filtered) {
-				b.WriteString(indent + cursor + filtered[i] + "\n")
-			} else {
-				b.WriteString(indent + cursor + Styles.DetailValue.Render("Create new branch: \""+filter+"\"") + "\n")
-			}
+			b.WriteString(indent + cursor + filtered[i] + "\n")
 		}
 		if end < totalItems {
 			b.WriteString(indent + Styles.DetailDim.Render(fmt.Sprintf("… and %d more", totalItems-end)) + "\n")
@@ -144,7 +173,36 @@ func renderCreateBranchSelectorV2(s *CreateState, width int) string {
 	}
 
 	content := b.String()
-	footer := "\n" + Styles.Footer.Render(indent+"[enter] select  [esc] cancel  type to filter")
+	var footer string
+	if s.BranchFilterMode == BranchFilterOn {
+		footer = "\n" + Styles.Footer.Render(indent+"[enter] accept filter  [esc] clear filter")
+	} else {
+		footer = "\n" + Styles.Footer.Render(indent+"[enter] select  [/] filter  [backspace] back  [esc] cancel")
+	}
+
+	return Styles.OverlayBorderSuccess.Width(overlayWidth).Render(
+		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + padToHeight(content, createOverlayMinLines) + footer,
+	)
+}
+
+// renderCreateBranchCreateV2 renders the new branch name text input.
+func renderCreateBranchCreateV2(s *CreateState, width int) string {
+	overlayWidth := calcOverlayWidth(width)
+	contentWidth := overlayWidth - 6
+	indent := overlayIndent
+	innerWidth := contentWidth - len(indent)*2
+
+	var b strings.Builder
+
+	stepper := NewStepper("Branch", "Name", "Confirm")
+	stepper.Current = 0
+	b.WriteString(indentBlock(stepper.View(innerWidth), indent) + "\n\n")
+
+	b.WriteString(indent + "Enter a name for the new branch:\n\n")
+	b.WriteString(indent + s.BranchNameInput.View() + "\n")
+
+	content := b.String()
+	footer := "\n" + Styles.Footer.Render(indent+"[enter] next  [backspace] back  [esc] cancel")
 
 	return Styles.OverlayBorderSuccess.Width(overlayWidth).Render(
 		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + padToHeight(content, createOverlayMinLines) + footer,

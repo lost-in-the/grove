@@ -87,8 +87,12 @@ func TestGolden_Overlay_Delete(t *testing.T) {
 }
 
 func TestGolden_Overlay_Create(t *testing.T) {
-	t.Run("branch_step", func(t *testing.T) {
-		m := goldenModel(t, sizeStandard, withItems(3), withCreateStep(CreateStepBranch))
+	t.Run("branch_choice_step", func(t *testing.T) {
+		m := goldenModel(t, sizeStandard, withItems(3), withCreateStep(CreateStepBranchChoice))
+		golden.RequireEqual(t, []byte(m.viewString()))
+	})
+	t.Run("branch_select_step", func(t *testing.T) {
+		m := goldenModel(t, sizeStandard, withItems(3), withCreateStep(CreateStepBranchSelect))
 		golden.RequireEqual(t, []byte(m.viewString()))
 	})
 	t.Run("name_step", func(t *testing.T) {
