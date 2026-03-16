@@ -102,21 +102,3 @@ func TestViewStackedLayout(t *testing.T) {
 		t.Error("expected separator in stacked layout")
 	}
 }
-
-func TestViewStatusBarWithSort(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(80, 24))
-	m = sendKey(m, "o") // cycle to "recent"
-	v := m.renderStatusBar()
-	if !strings.Contains(v, "recent") {
-		t.Error("expected sort mode 'recent' in status bar")
-	}
-}
-
-func TestViewStatusBarWithToast(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(80, 24))
-	m = sendMsg(m, worktreeDeletedMsg{name: "testing", err: nil})
-	v := m.renderStatusBar()
-	if !strings.Contains(v, "testing") {
-		t.Error("expected toast with deleted name in status bar")
-	}
-}

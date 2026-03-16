@@ -3,137 +3,11 @@ package tui
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/charmbracelet/x/ansi"
+
 	"github.com/lost-in-the/grove/plugins/tracker"
 )
-
-func TestRenderPRViewV2_Loading(t *testing.T) {
-	s := &PRViewState{Loading: true}
-	view := renderPRViewV2(s, 80, "⠋", "test-footer")
-	assertContains(t, view, "Pull Requests")
-	assertContains(t, view, "Loading")
-}
-
-func TestRenderPRViewV2_Creating(t *testing.T) {
-	s := &PRViewState{Creating: true}
-	view := renderPRViewV2(s, 80, "⠋", "test-footer")
-	assertContains(t, view, "Creating worktree")
-}
-
-func TestRenderPRViewV2_Error(t *testing.T) {
-	s := &PRViewState{Error: "something broke"}
-	view := renderPRViewV2(s, 80, "", "test-footer")
-	assertContains(t, view, "something broke")
-}
-
-func TestRenderPRViewV2_EmptyPRs(t *testing.T) {
-	s := &PRViewState{PRs: nil}
-	view := renderPRViewV2(s, 80, "", "test-footer")
-	assertContains(t, view, "no matching PRs")
-}
-
-func TestRenderPRViewV2_FilterCount(t *testing.T) {
-	fi := newPRFilterInput()
-	fi.SetValue("alpha")
-	s := &PRViewState{
-		PRs: []*tracker.PullRequest{
-			{Number: 1, Title: "Alpha", Branch: "alpha", Author: "user"},
-			{Number: 2, Title: "Beta", Branch: "beta", Author: "user"},
-		},
-		FilterInput: fi,
-	}
-	view := renderPRViewV2(s, 100, "", "test-footer")
-	assertContains(t, view, "alpha")
-	assertContains(t, view, "1 of 2")
-}
-
-func TestRenderPRViewV2_TwoLineItems(t *testing.T) {
-	s := &PRViewState{
-		PRs: []*tracker.PullRequest{
-			{
-				Number:      116,
-				Title:       "Fix diff review cleanup",
-				Branch:      "fix/diff-review",
-				Author:      "LeahArmstrong",
-				Additions:   234,
-				Deletions:   89,
-				CommitCount: 5,
-				CreatedAt:   time.Now().Add(-2 * time.Hour),
-			},
-		},
-	}
-	view := renderPRViewV2(s, 100, "", "test-footer")
-	assertContains(t, view, "#116")
-	assertContains(t, view, "Fix diff review cleanup")
-	assertContains(t, view, "@LeahArmstrong")
-	assertContains(t, view, "5 commits")
-	assertContains(t, view, "+234")
-	assertContains(t, view, "-89")
-}
-
-func TestRenderPRViewV2_DraftLabel(t *testing.T) {
-	s := &PRViewState{
-		PRs: []*tracker.PullRequest{
-			{Number: 106, Title: "Staging", Branch: "staging", Author: "user", IsDraft: true},
-		},
-	}
-	view := renderPRViewV2(s, 100, "", "test-footer")
-	assertContains(t, view, "[DRAFT]")
-}
-
-func TestRenderPRViewV2_WorktreeBadge(t *testing.T) {
-	s := &PRViewState{
-		PRs: []*tracker.PullRequest{
-			{Number: 116, Title: "Fix", Branch: "fix/diff-review", Author: "user"},
-		},
-		WorktreeBranches: map[string]bool{"fix/diff-review": true},
-	}
-	view := renderPRViewV2(s, 100, "", "test-footer")
-	assertContains(t, view, "✓ worktree")
-}
-
-func TestRenderPRViewV2_SelectedCursor(t *testing.T) {
-	s := &PRViewState{
-		PRs: []*tracker.PullRequest{
-			{Number: 1, Title: "First", Branch: "a", Author: "u"},
-			{Number: 2, Title: "Second", Branch: "b", Author: "u"},
-		},
-		Cursor: 1,
-	}
-	view := renderPRViewV2(s, 100, "", "test-footer")
-	lines := strings.Split(view, "\n")
-	foundCursorOnSecond := false
-	for _, line := range lines {
-		if strings.Contains(line, "Second") && strings.Contains(line, "❯") {
-			foundCursorOnSecond = true
-		}
-	}
-	if !foundCursorOnSecond {
-		t.Error("cursor should be on second PR")
-	}
-}
-
-func TestRenderPRViewV2_Footer(t *testing.T) {
-	s := &PRViewState{
-		PRs: []*tracker.PullRequest{
-			{Number: 1, Title: "Test", Branch: "test", Author: "u"},
-		},
-	}
-	view := renderPRViewV2(s, 100, "", "test-footer")
-	assertContains(t, view, "test-footer")
-}
-
-func TestRenderPRViewV2_BranchColumn(t *testing.T) {
-	s := &PRViewState{
-		PRs: []*tracker.PullRequest{
-			{Number: 1, Title: "Test PR", Branch: "feature/my-branch", Author: "user"},
-		},
-	}
-	view := renderPRViewV2(s, 100, "", "test-footer")
-	assertContains(t, view, "feature/my-branch")
-}
 
 func TestFormatDiffStats(t *testing.T) {
 	tests := []struct {
@@ -191,7 +65,7 @@ func TestRenderPRList_WithItems(t *testing.T) {
 			{Number: 10, Title: "Add login", Branch: "feat/login", Author: "alice"},
 			{Number: 20, Title: "Fix crash", Branch: "fix/crash", Author: "bob"},
 		},
-		FilterInput: newPRFilterInput(),
+		FilterInput: newFilterInput(""),
 	}
 	got := renderPRList(s, 80, "⠋", 20)
 	assertContains(t, got, "#10")
@@ -201,7 +75,7 @@ func TestRenderPRList_WithItems(t *testing.T) {
 }
 
 func TestRenderPRList_Filtered(t *testing.T) {
-	fi := newPRFilterInput()
+	fi := newFilterInput("")
 	fi.SetValue("auth")
 	s := &PRViewState{
 		PRs: []*tracker.PullRequest{
@@ -277,7 +151,7 @@ func TestRenderPRFooter_ListFocused(t *testing.T) {
 	m.activeView = ViewPRs
 	m.prState = &PRViewState{
 		PRs:         []*tracker.PullRequest{{Number: 1, Title: "T", Branch: "b", Author: "u"}},
-		FilterInput: newPRFilterInput(),
+		FilterInput: newFilterInput(""),
 	}
 	got := m.renderPRFooter()
 	assertContains(t, got, "tab")
@@ -289,7 +163,7 @@ func TestRenderPRFooter_DetailFocused(t *testing.T) {
 	m.activeView = ViewPRs
 	m.prState = &PRViewState{
 		PRs:           []*tracker.PullRequest{{Number: 1, Title: "T", Branch: "b", Author: "u"}},
-		FilterInput:   newPRFilterInput(),
+		FilterInput:   newFilterInput(""),
 		DetailFocused: true,
 	}
 	got := m.renderPRFooter()

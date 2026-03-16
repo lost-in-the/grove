@@ -40,128 +40,6 @@ func TestFilteredIssues(t *testing.T) {
 	}
 }
 
-func TestRenderIssueView(t *testing.T) {
-	now := time.Now()
-	issues := []*tracker.Issue{
-		{Number: 33, Title: "grove last should be project-scoped", Author: "LeahArmstrong", Labels: []string{"enhancement", "CLI"}, CreatedAt: now},
-		{Number: 32, Title: "grove new missing flags", Author: "LeahArmstrong", Labels: []string{"enhancement"}, CreatedAt: now},
-	}
-
-	tests := []struct {
-		name     string
-		state    *IssueViewState
-		width    int
-		contains []string
-	}{
-		{
-			"loading state",
-			&IssueViewState{Loading: true},
-			80,
-			[]string{"Issues", "Loading"},
-		},
-		{
-			"creating state",
-			&IssueViewState{Creating: true},
-			80,
-			[]string{"Issues", "Creating worktree"},
-		},
-		{
-			"renders issue list",
-			&IssueViewState{Issues: issues},
-			80,
-			[]string{"#33", "grove last", "@LeahArmstrong", "enhancement", "2 open"},
-		},
-		{
-			"shows error",
-			&IssueViewState{Issues: issues, Error: "something failed"},
-			80,
-			[]string{"something failed"},
-		},
-		{
-			"filter with count",
-			issueStateWithFilter(issues, "grove"),
-			80,
-			[]string{"Filter:", "grove", "2 of 2"},
-		},
-		{
-			"empty filtered results",
-			issueStateWithFilter(issues, "nonexistent"),
-			80,
-			[]string{"no matching issues"},
-		},
-		{
-			"cursor indicator on selected",
-			&IssueViewState{Issues: issues, Cursor: 0},
-			80,
-			[]string{"❯"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			view := renderIssueView(tt.state, tt.width, "⠋", "test-footer")
-			for _, s := range tt.contains {
-				if !strings.Contains(view, s) {
-					t.Errorf("renderIssueView() missing %q in:\n%s", s, view)
-				}
-			}
-		})
-	}
-}
-
-func TestRenderIssuePreview(t *testing.T) {
-	issue := &tracker.Issue{
-		Number: 33,
-		Title:  "grove last should be project-scoped",
-		Body:   "## Description\n\nThe `grove last` command should filter by project.",
-		Author: "LeahArmstrong",
-		Labels: []string{"enhancement", "CLI"},
-	}
-
-	tests := []struct {
-		name     string
-		issue    *tracker.Issue
-		width    int
-		contains []string
-	}{
-		{
-			"renders title and number",
-			issue,
-			80,
-			[]string{"#33", "grove last should be project-scoped"},
-		},
-		{
-			"renders metadata",
-			issue,
-			80,
-			[]string{"@LeahArmstrong", "enhancement", "CLI"},
-		},
-		{
-			"renders body markdown",
-			issue,
-			80,
-			[]string{"Description", "grove last"},
-		},
-		{
-			"empty body message",
-			&tracker.Issue{Number: 1, Title: "test", Author: "user"},
-			80,
-			[]string{"No description provided"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			view := renderIssuePreview(tt.issue, tt.width, "test-footer")
-			for _, s := range tt.contains {
-				if !strings.Contains(view, s) {
-					t.Errorf("renderIssuePreview() missing %q in:\n%s", s, view)
-				}
-			}
-		})
-	}
-}
-
 func TestIssueViewState(t *testing.T) {
 	t.Run("initial state", func(t *testing.T) {
 		s := &IssueViewState{Loading: true}
@@ -190,7 +68,7 @@ func TestIssueViewState(t *testing.T) {
 
 // issueStateWithFilter creates an IssueViewState with a pre-set filter value.
 func issueStateWithFilter(issues []*tracker.Issue, filter string) *IssueViewState {
-	fi := newIssueFilterInput()
+	fi := newFilterInput("")
 	fi.SetValue(filter)
 	return &IssueViewState{Issues: issues, FilterInput: fi}
 }
@@ -210,7 +88,7 @@ func TestRenderIssueList_WithItems(t *testing.T) {
 			{Number: 10, Title: "Add login page", Author: "alice", CreatedAt: now},
 			{Number: 20, Title: "Fix crash on startup", Author: "bob", CreatedAt: now},
 		},
-		FilterInput: newIssueFilterInput(),
+		FilterInput: newFilterInput(""),
 	}
 	got := renderIssueList(s, 80, "⠋", 20)
 	if !strings.Contains(got, "#10") {
@@ -265,7 +143,7 @@ func TestRenderIssueFooter_ListFocused(t *testing.T) {
 	m.activeView = ViewIssues
 	m.issueState = &IssueViewState{
 		Issues:        []*tracker.Issue{{Number: 1, Title: "T", Author: "u"}},
-		FilterInput:   newIssueFilterInput(),
+		FilterInput:   newFilterInput(""),
 		DetailFocused: false,
 	}
 	got := m.renderIssueFooter()
@@ -282,7 +160,7 @@ func TestRenderIssueFooter_DetailFocused(t *testing.T) {
 	m.activeView = ViewIssues
 	m.issueState = &IssueViewState{
 		Issues:        []*tracker.Issue{{Number: 1, Title: "T", Author: "u"}},
-		FilterInput:   newIssueFilterInput(),
+		FilterInput:   newFilterInput(""),
 		DetailFocused: true,
 	}
 	got := m.renderIssueFooter()

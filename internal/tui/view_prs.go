@@ -34,13 +34,10 @@ type PRViewState struct {
 	lastCursor       int // tracks cursor changes to update viewport content
 }
 
-// newPRFilterInput creates a configured textinput for PR filtering.
-func newPRFilterInput() textinput.Model {
-	ti := textinput.New()
-	ti.Prompt = "Filter: "
-	ti.Placeholder = ""
-	ti.CharLimit = 100
-	return ti
+func (s *PRViewState) getActivityLog() *ActivityLog { return s.ActivityLog }
+func (s *PRViewState) setCreatingDone(errMsg string) {
+	s.Creating = false
+	s.Error = errMsg
 }
 
 func (m Model) fetchPRsCmd() tea.Msg {
@@ -79,62 +76,32 @@ func (m Model) handlePRKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	// When filtering is active, route keys to the textinput
 	if s.Filtering {
-		switch {
-		case key.Matches(msg, m.keys.Escape):
+		var cmd tea.Cmd
+		var stop bool
+		s.FilterInput, s.Cursor, cmd, stop = handleListFilterKey(msg, m.keys, s.FilterInput, s.Cursor)
+		if stop {
 			s.Filtering = false
-			s.FilterInput.Blur()
-			s.FilterInput.SetValue("")
-			s.Cursor = 0
-			return m, nil
-		case key.Matches(msg, m.keys.Enter):
-			s.Filtering = false
-			s.FilterInput.Blur()
-			return m, nil
-		default:
-			prevVal := s.FilterInput.Value()
-			var cmd tea.Cmd
-			s.FilterInput, cmd = s.FilterInput.Update(msg)
-			if s.FilterInput.Value() != prevVal {
-				s.Cursor = 0
-			}
-			return m, cmd
 		}
+		return m, cmd
 	}
 
 	// When detail panel is focused, route keys for scrolling
 	if s.DetailFocused {
-		switch {
-		case key.Matches(msg, m.keys.Escape):
+		if key.Matches(msg, m.keys.Escape) || key.Matches(msg, m.keys.Tab) {
 			s.DetailFocused = false
-			return m, nil
-		case key.Matches(msg, m.keys.Tab):
-			s.DetailFocused = false
-			return m, nil
-		case key.Matches(msg, m.keys.Up):
-			s.DetailViewport.ScrollUp(1)
-			return m, nil
-		case key.Matches(msg, m.keys.Down):
-			s.DetailViewport.ScrollDown(1)
-			return m, nil
-		case msg.String() == "g":
-			s.DetailViewport.GotoTop()
-			return m, nil
-		case msg.String() == "G":
-			s.DetailViewport.GotoBottom()
-			return m, nil
-		case msg.String() == "ctrl+u":
-			s.DetailViewport.HalfPageUp()
-			return m, nil
-		case msg.String() == "ctrl+d":
-			s.DetailViewport.HalfPageDown()
-			return m, nil
-		default:
-			// Swallow all other keys while detail is focused
 			return m, nil
 		}
+		handleDetailFocusedKey(msg, m.keys, &s.DetailViewport)
+		return m, nil
 	}
 
 	// Normal mode (not filtering, list focused)
+	return m.handlePRNormalKey(msg, filtered)
+}
+
+func (m Model) handlePRNormalKey(msg tea.KeyPressMsg, filtered []*tracker.PullRequest) (tea.Model, tea.Cmd) {
+	s := m.prState
+
 	switch {
 	case key.Matches(msg, m.keys.Escape):
 		m.activeView = ViewDashboard
@@ -169,24 +136,29 @@ func (m Model) handlePRKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, s.FilterInput.Focus()
 
 	case key.Matches(msg, m.keys.Enter):
-		if len(filtered) > 0 && s.Cursor < len(filtered) {
-			pr := filtered[s.Cursor]
-			// Check if worktree already exists for this branch
-			if s.WorktreeBranches[pr.Branch] {
-				s.Error = fmt.Sprintf("worktree already exists for branch %q", pr.Branch)
-				return m, nil
-			}
-			s.Creating = true
-			s.CreatingPR = pr
-			s.Error = ""
-			s.ActivityLog = NewActivityLog(60, 10)
-			name := tracker.GenerateWorktreeName("pr", pr.Number, pr.Title)
-			return m, tea.Batch(m.spinner.Tick, createPRWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, name, pr.Branch))
-		}
-		return m, nil
+		return m.handlePREnter(s, filtered)
 	}
 
 	return m, nil
+}
+
+func (m Model) handlePREnter(s *PRViewState, filtered []*tracker.PullRequest) (tea.Model, tea.Cmd) {
+	if len(filtered) == 0 || s.Cursor >= len(filtered) {
+		return m, nil
+	}
+
+	pr := filtered[s.Cursor]
+	if s.WorktreeBranches[pr.Branch] {
+		s.Error = fmt.Sprintf("worktree already exists for branch %q", pr.Branch)
+		return m, nil
+	}
+
+	s.Creating = true
+	s.CreatingPR = pr
+	s.Error = ""
+	s.ActivityLog = NewActivityLog(60, 10)
+	name := tracker.GenerateWorktreeName("pr", pr.Number, pr.Title)
+	return m, tea.Batch(m.spinner.Tick, createPRWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, name, pr.Branch))
 }
 
 func filteredPRs(prs []*tracker.PullRequest, filter string) []*tracker.PullRequest {
@@ -207,36 +179,10 @@ func filteredPRs(prs []*tracker.PullRequest, filter string) []*tracker.PullReque
 }
 
 func createPRWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot, name, branch string) tea.Cmd {
-	ch := make(chan creationEvent, 10)
-
-	go func() {
-		defer close(ch)
-
-		ch <- creationEvent{line: fmt.Sprintf("Creating worktree '%s' from PR branch '%s'...", name, branch)}
-
-		err := mgr.CreateFromBranch(name, branch)
-		if err != nil {
-			ch <- creationEvent{done: true, name: name, err: err}
-			return
-		}
-
-		wt, err := mgr.Find(name)
-		if err != nil || wt == nil {
-			ch <- creationEvent{done: true, name: name, err: errWorktreeNotFound}
-			return
-		}
-
-		result := runPostCreateStreaming(ch, mgr, stateMgr, projectRoot, name, wt)
-		ch <- creationEvent{
-			done:       true,
-			name:       name,
-			path:       wt.Path,
-			hookOutput: result.hookOutput,
-			hookErr:    result.hookErr,
-		}
-	}()
-
-	return readCreationLog(ch, "pr")
+	return streamingCreateCmd(mgr, stateMgr, projectRoot, name, "pr",
+		[]string{fmt.Sprintf("Creating worktree '%s' from PR branch '%s'...", name, branch)},
+		func() error { return mgr.CreateFromBranch(name, branch) },
+	)
 }
 
 // openURL opens a URL in the user's default browser.

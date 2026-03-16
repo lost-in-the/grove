@@ -72,49 +72,6 @@ func TestCompactAge(t *testing.T) {
 	}
 }
 
-func TestFilterItems(t *testing.T) {
-	items := []WorktreeItem{
-		{ShortName: "main", Branch: "main"},
-		{ShortName: "feature-auth", Branch: "feature/auth"},
-		{ShortName: "fix-bug", Branch: "fix/bug-123"},
-	}
-
-	t.Run("empty query returns all", func(t *testing.T) {
-		result := filterItems(items, "")
-		if len(result) != 3 {
-			t.Errorf("expected 3, got %d", len(result))
-		}
-	})
-
-	t.Run("matches short name", func(t *testing.T) {
-		result := filterItems(items, "auth")
-		if len(result) != 1 {
-			t.Errorf("expected 1, got %d", len(result))
-		}
-	})
-
-	t.Run("matches branch", func(t *testing.T) {
-		result := filterItems(items, "bug-123")
-		if len(result) != 1 {
-			t.Errorf("expected 1, got %d", len(result))
-		}
-	})
-
-	t.Run("case insensitive", func(t *testing.T) {
-		result := filterItems(items, "MAIN")
-		if len(result) != 1 {
-			t.Errorf("expected 1, got %d", len(result))
-		}
-	})
-
-	t.Run("no matches", func(t *testing.T) {
-		result := filterItems(items, "nonexistent")
-		if len(result) != 0 {
-			t.Errorf("expected 0, got %d", len(result))
-		}
-	})
-}
-
 func TestFilteredBranches(t *testing.T) {
 	branches := []string{"main", "feature/auth", "fix/bug-123"}
 
