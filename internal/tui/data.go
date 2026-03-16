@@ -47,15 +47,15 @@ type WorktreeItem struct {
 	IsEnvironment  bool
 	IsProtected    bool
 	IsPrunable     bool
-	TmuxStatus     string // "attached", "detached", "none"
-	HasRemote      bool   // true if branch has upstream tracking
-	TrackingBranch string // e.g., "origin/feat/ux-polish" (empty if no upstream)
-	AheadCount     int    // commits ahead of upstream
-	BehindCount    int    // commits behind upstream
-	CommitCount    int    // commits ahead of default branch
+	TmuxStatus     string         // "attached", "detached", "none"
+	HasRemote      bool           // true if branch has upstream tracking
+	TrackingBranch string         // e.g., "origin/feat/ux-polish" (empty if no upstream)
+	AheadCount     int            // commits ahead of upstream
+	BehindCount    int            // commits behind upstream
+	CommitCount    int            // commits ahead of default branch
 	RecentCommits  []RecentCommit // last 3 commits
-	StashCount     int    // number of stashes in this worktree
-	AssociatedPR   *PRInfo  // PR linked to this branch (nil if none)
+	StashCount     int            // number of stashes in this worktree
+	AssociatedPR   *PRInfo        // PR linked to this branch (nil if none)
 	LastAccessed   time.Time
 	PluginStatuses []plugins.StatusEntry // status entries from plugins
 }
@@ -103,24 +103,6 @@ func (w *WorktreeItem) AgeText() string {
 		return ""
 	}
 	return Styles.DetailDim.Render(w.CommitAge)
-}
-
-// SyncStatusText returns a compact sync status string for the list view.
-func (w *WorktreeItem) SyncStatusText() string {
-	if !w.HasRemote {
-		return "⚠ no remote"
-	}
-	if w.AheadCount == 0 && w.BehindCount == 0 {
-		return "✓ synced"
-	}
-	var parts []string
-	if w.AheadCount > 0 {
-		parts = append(parts, fmt.Sprintf("↑%d", w.AheadCount))
-	}
-	if w.BehindCount > 0 {
-		parts = append(parts, fmt.Sprintf("↓%d", w.BehindCount))
-	}
-	return strings.Join(parts, " ")
 }
 
 // getUpstreamInfo returns upstream tracking info in a single git call.
@@ -192,6 +174,122 @@ func getStashCount(worktreePath string) int {
 	return len(strings.Split(raw, "\n"))
 }
 
+// fetchContext holds preloaded data used when enriching worktree items.
+type fetchContext struct {
+	projectName   string
+	defaultBranch string
+	currentPath   string
+	sessions      map[string]*tmux.Session
+	cfg           *config.Config
+	stateMgr      *state.Manager
+	mgr           *worktree.Manager
+}
+
+func loadFetchContext(mgr *worktree.Manager, stateMgr *state.Manager) fetchContext {
+	fc := fetchContext{
+		projectName:   mgr.GetProjectName(),
+		defaultBranch: "main",
+		stateMgr:      stateMgr,
+		mgr:           mgr,
+	}
+
+	cfg, cfgErr := config.Load()
+	if cfgErr != nil {
+		tuilog.Printf("warning: failed to load config for protection checks: %v", cfgErr)
+	}
+	fc.cfg = cfg
+	if cfg != nil && cfg.DefaultBranch != "" {
+		fc.defaultBranch = cfg.DefaultBranch
+	}
+
+	currentTree, currentErr := mgr.GetCurrent()
+	if currentErr != nil {
+		tuilog.Printf("warning: failed to get current worktree: %v", currentErr)
+	}
+	if currentTree != nil {
+		fc.currentPath = currentTree.Path
+	}
+
+	if tmux.IsTmuxAvailable() {
+		sessionList, err := tmux.ListSessions()
+		if err != nil {
+			tuilog.Printf("warning: failed to list tmux sessions: %v", err)
+		} else {
+			fc.sessions = make(map[string]*tmux.Session, len(sessionList))
+			for _, s := range sessionList {
+				fc.sessions[s.Name] = s
+			}
+		}
+	}
+
+	return fc
+}
+
+func tmuxStatusForSession(s *tmux.Session) string {
+	if s.Attached {
+		return "attached"
+	}
+	return "detached"
+}
+
+func (fc *fetchContext) setTmuxStatus(item *WorktreeItem, tree worktree.Worktree) {
+	if fc.sessions == nil {
+		return
+	}
+	sessionName := worktree.TmuxSessionName(fc.projectName, tree.ShortName)
+	if s, ok := fc.sessions[sessionName]; ok {
+		item.TmuxStatus = tmuxStatusForSession(s)
+	} else if s, ok := fc.sessions[tree.Name]; ok {
+		item.TmuxStatus = tmuxStatusForSession(s)
+	}
+}
+
+func (fc *fetchContext) setStateInfo(item *WorktreeItem, shortName string) {
+	if fc.stateMgr == nil {
+		return
+	}
+	isEnv, _ := fc.stateMgr.IsEnvironment(shortName)
+	item.IsEnvironment = isEnv
+
+	ws, _ := fc.stateMgr.GetWorktree(shortName)
+	if ws != nil {
+		item.LastAccessed = ws.LastAccessedAt
+	}
+}
+
+func (fc *fetchContext) enrichGitInfo(item *WorktreeItem, treePath, branch string, isDirty bool) {
+	shortHash, message, age, err := fc.mgr.GetCommitInfo(treePath)
+	if err != nil {
+		tuilog.Printf("warning: failed to get commit info for %q: %v", treePath, err)
+	} else {
+		item.Commit = shortHash
+		item.CommitMessage = message
+		item.CommitAge = age
+	}
+
+	if isDirty {
+		dirtyFiles, err := fc.mgr.GetDirtyFiles(treePath)
+		if err != nil {
+			tuilog.Printf("warning: failed to get dirty files for %q: %v", treePath, err)
+		} else if dirtyFiles != "" {
+			for _, f := range strings.Split(dirtyFiles, "\n") {
+				if f != "" {
+					item.DirtyFiles = append(item.DirtyFiles, f)
+				}
+			}
+		}
+	}
+
+	item.AheadCount, item.BehindCount, item.HasRemote, item.TrackingBranch = getUpstreamInfo(treePath)
+
+	if branch != fc.defaultBranch {
+		item.CommitCount = getCommitCountAhead(treePath, fc.defaultBranch)
+	}
+
+	item.RecentCommits = getRecentCommits(treePath, 3)
+	item.StashCount = getStashCount(treePath)
+}
+
 // FetchWorktrees gathers all enriched worktree data for display.
 // pluginMgr is optional — pass nil to skip plugin status collection.
 func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager, pluginMgr ...*plugins.Manager) ([]WorktreeItem, error) {
@@ -200,47 +298,9 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager, pluginMgr ..
 		return nil, fmt.Errorf("failed to list worktrees: %w", err)
 	}
 
-	projectName := mgr.GetProjectName()
-
-	// Load config for protection checks and default branch
-	cfg, cfgErr := config.Load()
-	if cfgErr != nil {
-		tuilog.Printf("warning: failed to load config for protection checks: %v", cfgErr)
-	}
-
-	// Determine default branch for commit count
-	defaultBranch := "main"
-	if cfg != nil && cfg.DefaultBranch != "" {
-		defaultBranch = cfg.DefaultBranch
-	}
-
-	// Current worktree
-	currentTree, currentErr := mgr.GetCurrent()
-	if currentErr != nil {
-		tuilog.Printf("warning: failed to get current worktree: %v", currentErr)
-	}
-	var currentPath string
-	if currentTree != nil {
-		currentPath = currentTree.Path
-	}
-
-	// Tmux sessions
-	var sessions map[string]*tmux.Session
-	if tmux.IsTmuxAvailable() {
-		sessionList, err := tmux.ListSessions()
-		if err != nil {
-			tuilog.Printf("warning: failed to list tmux sessions: %v", err)
-		} else {
-			sessions = make(map[string]*tmux.Session, len(sessionList))
-			for _, s := range sessionList {
-				sessions[s.Name] = s
-			}
-		}
-	}
-
+	fc := loadFetchContext(mgr, stateMgr)
 	items := make([]WorktreeItem, len(trees))
 
-	// Enrich worktrees in parallel for performance (git calls per tree)
 	var wg sync.WaitGroup
 	for i, tree := range trees {
 		item := &items[i]
@@ -250,96 +310,26 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager, pluginMgr ..
 		item.Branch = tree.Branch
 		item.IsDirty = tree.IsDirty
 		item.IsMain = tree.IsMain
-		item.IsCurrent = tree.Path == currentPath
+		item.IsCurrent = tree.Path == fc.currentPath
 		item.IsPrunable = tree.IsPrunable
 		item.TmuxStatus = "none"
 
-		// Tmux status (no git call, fast)
-		if sessions != nil {
-			sessionName := worktree.TmuxSessionName(projectName, tree.ShortName)
-			if s, ok := sessions[sessionName]; ok {
-				if s.Attached {
-					item.TmuxStatus = "attached"
-				} else {
-					item.TmuxStatus = "detached"
-				}
-			} else if s, ok := sessions[tree.Name]; ok {
-				if s.Attached {
-					item.TmuxStatus = "attached"
-				} else {
-					item.TmuxStatus = "detached"
-				}
-			}
+		fc.setTmuxStatus(item, *tree)
+		fc.setStateInfo(item, tree.ShortName)
+
+		if fc.cfg != nil {
+			item.IsProtected = fc.cfg.IsProtected(tree.ShortName)
 		}
 
-		// State info (no git call, fast)
-		if stateMgr != nil {
-			isEnv, _ := stateMgr.IsEnvironment(tree.ShortName)
-			item.IsEnvironment = isEnv
-
-			ws, _ := stateMgr.GetWorktree(tree.ShortName)
-			if ws != nil {
-				item.LastAccessed = ws.LastAccessedAt
-			}
-		}
-
-		// Protection check (no git call, fast)
-		if cfg != nil {
-			item.IsProtected = cfg.IsProtected(tree.ShortName)
-		}
-
-		// Parallel: commit info + dirty files + upstream + commit count + recent + stash
 		if !tree.IsPrunable {
 			wg.Add(1)
 			go func(item *WorktreeItem, treePath, branch string, isDirty bool) {
 				defer wg.Done()
-
-				shortHash, message, age, err := mgr.GetCommitInfo(treePath)
-				if err != nil {
-					tuilog.Printf("warning: failed to get commit info for %q: %v", treePath, err)
-				} else {
-					item.Commit = shortHash
-					item.CommitMessage = message
-					item.CommitAge = age
-				}
-
-				if isDirty {
-					dirtyFiles, err := mgr.GetDirtyFiles(treePath)
-					if err != nil {
-						tuilog.Printf("warning: failed to get dirty files for %q: %v", treePath, err)
-					}
-					if err == nil && dirtyFiles != "" {
-						var files []string
-						for _, f := range strings.Split(dirtyFiles, "\n") {
-							if f != "" {
-								files = append(files, f)
-							}
-						}
-						item.DirtyFiles = files
-					}
-				}
-
-				ahead, behind, hasRemote, trackingBranch := getUpstreamInfo(treePath)
-				item.HasRemote = hasRemote
-				item.TrackingBranch = trackingBranch
-				item.AheadCount = ahead
-				item.BehindCount = behind
-
-				// Commit count ahead of default branch (skip if on default branch)
-				if branch != defaultBranch {
-					item.CommitCount = getCommitCountAhead(treePath, defaultBranch)
-				}
-
-				// Recent commits (last 3)
-				item.RecentCommits = getRecentCommits(treePath, 3)
-
-				// Stash count
-				item.StashCount = getStashCount(treePath)
+				fc.enrichGitInfo(item, treePath, branch, isDirty)
 			}(item, tree.Path, tree.Branch, tree.IsDirty)
 		}
 	}
 
-	// Plugin statuses — run in parallel with git enrichment
 	var pluginStatuses map[string][]plugins.StatusEntry
 	var pm *plugins.Manager
 	if len(pluginMgr) > 0 {
@@ -359,7 +349,6 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager, pluginMgr ..
 
 	wg.Wait()
 
-	// Attach plugin statuses to items
 	if pluginStatuses != nil {
 		for i := range items {
 			if entries, ok := pluginStatuses[items[i].Path]; ok {

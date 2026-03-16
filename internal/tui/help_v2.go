@@ -152,7 +152,7 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 func (h *HelpFooter) RenderCompact(view ActiveView, width int) string {
 	hints := h.CompactHints(view)
 
-	var parts []string
+	parts := make([]string, 0, len(hints))
 	for _, hint := range hints {
 		keyStyle := Styles.HelpKey
 		if h.IsHighlighted(hint.Key) {
@@ -199,7 +199,7 @@ func (h *HelpFooter) CompactHeight(view ActiveView, width int) int {
 // (instead of looking up hints by view). Used for context-specific hint sets
 // like detail-focused mode.
 func (h *HelpFooter) RenderCompactWithHints(hints []Hint, width int) string {
-	var parts []string
+	parts := make([]string, 0, len(hints))
 	for _, hint := range hints {
 		keyStyle := Styles.HelpKey
 		if h.IsHighlighted(hint.Key) {
@@ -232,16 +232,3 @@ func (h *HelpFooter) RenderCompactWithHints(hints []Hint, width int) string {
 	}
 	return "  " + line
 }
-
-// renderHelpHints renders a slice of Hint using the standard purple HelpKey styling.
-// Used by overlay sub-views (previews) that don't go through RenderCompact.
-func renderHelpHints(hints []Hint) string {
-	var parts []string
-	for _, hint := range hints {
-		part := Styles.HelpKey.Render(hint.Key) + " " + Styles.HelpDesc.Render(hint.Description)
-		parts = append(parts, part)
-	}
-	sep := Styles.HelpSep.Render(" · ")
-	return "  " + strings.Join(parts, sep)
-}
-

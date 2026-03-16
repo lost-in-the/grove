@@ -59,15 +59,15 @@ func (a *ActivityLog) View(spinnerView string) string {
 			b.WriteString(spinnerView + " " + line + "\n")
 		} else {
 			// Completed lines get a dim bullet
-			b.WriteString(Styles.DetailDim.Render("  " + line) + "\n")
+			b.WriteString(Styles.DetailDim.Render("  "+line) + "\n")
 		}
 	}
 
 	if a.done {
 		if a.err != nil {
-			b.WriteString(Styles.ErrorText.Render("  " + SymbolError + " Failed: " + a.err.Error()) + "\n")
+			b.WriteString(Styles.ErrorText.Render("  "+SymbolError+" Failed: "+a.err.Error()) + "\n")
 		} else {
-			b.WriteString(Styles.SuccessText.Render("  " + SymbolSuccess + " Done") + "\n")
+			b.WriteString(Styles.SuccessText.Render("  "+SymbolSuccess+" Done") + "\n")
 		}
 	}
 
