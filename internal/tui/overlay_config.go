@@ -61,7 +61,7 @@ type ConfigState struct {
 	Config            *config.Config // loaded config
 
 	// Huh form integration
-	Form       *huh.Form        // the embedded Huh form (nil until fields loaded)
+	Form       *huh.Form         // the embedded Huh form (nil until fields loaded)
 	FormValues *configFormValues // value bindings for the form
 }
 
@@ -160,9 +160,9 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 	}
 
 	// Behavior tab
-	skipNotice := "false"
+	skipNotice := boolFalse
 	if cfg.TUI.SkipBranchNotice != nil && *cfg.TUI.SkipBranchNotice {
-		skipNotice = "true"
+		skipNotice = boolTrue
 	}
 	tmuxMode := cfg.Tmux.Mode
 	if tmuxMode == "" {
@@ -216,9 +216,9 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 	}
 
 	// Plugins tab
-	dockerEnabled := "true"
-	dockerAutoStart := "true"
-	dockerAutoStop := "false"
+	dockerEnabled := boolTrue
+	dockerAutoStart := boolTrue
+	dockerAutoStop := boolFalse
 	if cfg.Plugins.Docker.Enabled != nil {
 		dockerEnabled = fmt.Sprintf("%v", *cfg.Plugins.Docker.Enabled)
 	}
@@ -400,24 +400,27 @@ func (m *Model) syncConfigFormValues() {
 
 	for tabIdx := range s.Fields {
 		for fieldIdx := range s.Fields[tabIdx] {
-			f := &s.Fields[tabIdx][fieldIdx]
+			syncConfigField(&s.Fields[tabIdx][fieldIdx], s)
+		}
+	}
+}
 
-			// Bool fields are stored in FormValues.bools
-			if f.Type == ConfigBool {
-				if bPtr, ok := s.FormValues.bools[f.Key]; ok {
-					if *bPtr {
-						f.Value = "true"
-					} else {
-						f.Value = "false"
-					}
-				}
-			}
-			// String/Enum/List fields are bound directly via &f.Value
-
-			if f.Value != f.Default {
-				s.Dirty = true
+// syncConfigField updates a single config field from form values and marks
+// the state dirty when the value differs from the default.
+func syncConfigField(f *ConfigField, s *ConfigState) {
+	if f.Type == ConfigBool {
+		if bPtr, ok := s.FormValues.bools[f.Key]; ok {
+			if *bPtr {
+				f.Value = boolTrue
+			} else {
+				f.Value = boolFalse
 			}
 		}
+	}
+	// String/Enum/List fields are bound directly via &f.Value
+
+	if f.Value != f.Default {
+		s.Dirty = true
 	}
 }
 

@@ -2,8 +2,6 @@ package tui
 
 import (
 	"testing"
-
-	tea "charm.land/bubbletea/v2"
 )
 
 // --- Dashboard focus tests ---
@@ -47,8 +45,7 @@ func TestDashboard_FocusScrollSwallowsKeys(t *testing.T) {
 func TestDashboard_FocusQStillQuits(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(120, 40))
 	m = sendKey(m, "tab")
-	result, cmd := m.Update(makeKeyMsg("q"))
-	m = result.(Model)
+	_, cmd := m.Update(makeKeyMsg("q"))
 	if cmd == nil {
 		t.Error("q while detail focused should return a non-nil cmd (quit)")
 	}
@@ -190,14 +187,4 @@ func TestIssue_FocusScrollSwallowsKeys(t *testing.T) {
 	if m.issueState.Cursor != cursorBefore {
 		t.Errorf("j while issue detail focused should not move cursor: got %d, want %d", m.issueState.Cursor, cursorBefore)
 	}
-}
-
-// Verify tea.Quit is returned from the quit command by checking the message type.
-func isQuitCmd(cmd tea.Cmd) bool {
-	if cmd == nil {
-		return false
-	}
-	msg := cmd()
-	_, ok := msg.(tea.QuitMsg)
-	return ok
 }

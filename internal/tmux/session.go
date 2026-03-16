@@ -13,6 +13,8 @@ import (
 	"github.com/lost-in-the/grove/internal/cmdexec"
 )
 
+const sessionStatusNone = "none"
+
 // Session represents a tmux session
 type Session struct {
 	Name     string
@@ -44,30 +46,7 @@ func ShouldUseControlMode(controlModeCfg *bool) bool {
 // AttachSessionControlMode attaches to a session using tmux -CC (control mode).
 // This is for iTerm2 integration where -CC goes before the subcommand.
 func AttachSessionControlMode(name string) error {
-	if name == "" {
-		return fmt.Errorf("session name cannot be empty")
-	}
-
-	exists, err := SessionExists(name)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		return fmt.Errorf("session '%s' does not exist", name)
-	}
-
-	// If inside tmux, just switch (control mode doesn't apply for switch-client)
-	if IsInsideTmux() {
-		return SwitchSession(name)
-	}
-
-	// -CC goes before the subcommand for control mode
-	cmd := exec.Command("tmux", "-CC", "attach-session", "-t", name)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	return cmd.Run()
+	return attachSession(name, "-CC", "attach-session", "-t", name)
 }
 
 var (
@@ -88,29 +67,19 @@ func IsTmuxAvailable() bool {
 // CreateSession creates a new detached tmux session.
 // If the session already exists, this is a no-op (idempotent).
 func CreateSession(name, path string) error {
-	if name == "" {
-		return fmt.Errorf("session name cannot be empty")
-	}
-
-	exists, err := SessionExists(name)
-	if err != nil {
-		return fmt.Errorf("check session exists: %w", err)
-	}
-	if exists {
-		return nil
-	}
-
-	output, err := cmdexec.CombinedOutput(context.TODO(), "tmux", []string{"new-session", "-d", "-s", name, "-c", path}, "", cmdexec.Tmux)
-	if err != nil {
-		return fmt.Errorf("failed to create session: %s: %w", string(output), err)
-	}
-
-	return nil
+	return CreateSessionWithCommand(name, path, "")
 }
 
 // AttachSession attaches to an existing session.
 // This is interactive (blocks until detach) — no timeout applied.
 func AttachSession(name string) error {
+	return attachSession(name, "attach-session", "-t", name)
+}
+
+// attachSession is the shared implementation for AttachSession and AttachSessionControlMode.
+// It validates the session, falls back to SwitchSession when inside tmux,
+// and otherwise runs tmux with the given args interactively.
+func attachSession(name string, tmuxArgs ...string) error {
 	if name == "" {
 		return fmt.Errorf("session name cannot be empty")
 	}
@@ -123,13 +92,11 @@ func AttachSession(name string) error {
 		return fmt.Errorf("session '%s' does not exist", name)
 	}
 
-	// If we're inside tmux, switch; otherwise attach
 	if IsInsideTmux() {
 		return SwitchSession(name)
 	}
 
-	// Attach to session (this will block — interactive, no timeout)
-	cmd := exec.Command("tmux", "attach-session", "-t", name)
+	cmd := exec.Command("tmux", tmuxArgs...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -304,12 +271,12 @@ func GetLastSession() (string, error) {
 // Returns "attached", "detached", or "none" if session doesn't exist
 func GetSessionStatus(name string) string {
 	if !IsTmuxAvailable() {
-		return "none"
+		return sessionStatusNone
 	}
 
 	sessions, err := ListSessions()
 	if err != nil {
-		return "none"
+		return sessionStatusNone
 	}
 
 	for _, s := range sessions {
@@ -321,7 +288,7 @@ func GetSessionStatus(name string) string {
 		}
 	}
 
-	return "none"
+	return sessionStatusNone
 }
 
 // PaneInfo holds the current state of a session's active pane

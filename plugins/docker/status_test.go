@@ -205,7 +205,7 @@ func TestAgentStatuses_URLPattern(t *testing.T) {
 func TestComposeRunningCount_NoCompose(t *testing.T) {
 	// A temp dir with no compose file — docker compose ps should fail, returning (false, 0).
 	dir := t.TempDir()
-	running, count := composeRunningCount(dir, nil)
+	running, count := composeRunningCount(dir)
 	if running {
 		t.Error("expected not running for directory without compose file")
 	}

@@ -9,6 +9,7 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/lost-in-the/grove/internal/theme"
 	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
@@ -489,7 +490,7 @@ func TestToastSuperseding(t *testing.T) {
 	m = sendMsg(m, worktreeDeletedMsg{name: "first", err: nil})
 
 	// Second action supersedes
-	m = sendMsg(m, worktreeCreatedMsg{name: "second", path: "/tmp/second"})
+	m = sendMsg(m, worktreeCreatedMsg{name: "second"})
 	if m.toast.Message() == "" || m.toast.Message() == `Deleted "first"` {
 		t.Error("expected second toast to replace first")
 	}
@@ -590,7 +591,7 @@ func TestAgeText(t *testing.T) {
 func TestRenderCreateOverlayWithError(t *testing.T) {
 	s := createStateWithName("bad/name", "proj")
 	s.Error = "invalid character"
-	v := renderCreate(s, 80, "")
+	v := renderCreateV2(s, 80, "")
 	if !strings.Contains(v, "invalid") {
 		t.Error("expected error in create overlay")
 	}
@@ -598,7 +599,7 @@ func TestRenderCreateOverlayWithError(t *testing.T) {
 
 func TestRenderCreateBranchActionWithDontShowAgain(t *testing.T) {
 	s := &CreateState{Step: CreateStepBranchAction, BaseBranch: "dev", DontShowAgain: true}
-	v := renderCreate(s, 80, "")
+	v := renderCreateV2(s, 80, "")
 	if !strings.Contains(v, "[x]") {
 		t.Error("expected checked checkbox for DontShowAgain")
 	}
@@ -607,7 +608,7 @@ func TestRenderCreateBranchActionWithDontShowAgain(t *testing.T) {
 func TestRenderCreateOverlaySteps(t *testing.T) {
 	t.Run("name step", func(t *testing.T) {
 		s := createStateWithName("test", "proj")
-		v := renderCreate(s, 80, "")
+		v := renderCreateV2(s, 80, "")
 		if !strings.Contains(v, "Name") {
 			t.Error("expected 'Name' in create name step")
 		}
@@ -615,7 +616,7 @@ func TestRenderCreateOverlaySteps(t *testing.T) {
 
 	t.Run("branch step", func(t *testing.T) {
 		s := &CreateState{Step: CreateStepBranchChoice, Branches: []string{"main", "develop"}, BranchFilterInput: newBranchFilterInput()}
-		v := renderCreate(s, 80, "")
+		v := renderCreateV2(s, 80, "")
 		if !strings.Contains(v, "Branch") {
 			t.Error("expected 'Branch' in create branch step")
 		}
@@ -624,16 +625,16 @@ func TestRenderCreateOverlaySteps(t *testing.T) {
 	t.Run("branch step with filter", func(t *testing.T) {
 		bfi := newBranchFilterInput()
 		bfi.SetValue("dev")
-		s := &CreateState{Step: CreateStepBranchSelect, Branches: []string{"main", "develop"}, BranchFilterInput: bfi}
-		v := renderCreate(s, 80, "")
-		if !strings.Contains(v, "Branch") {
-			t.Error("expected 'Branch' in v1 branch step")
+		s := &CreateState{Step: CreateStepBranchSelect, Branches: []string{"main", "develop"}, BranchFilterInput: bfi, BranchFilterMode: BranchFilterOn}
+		v := renderCreateV2(s, 80, "")
+		if !strings.Contains(v, "Filter") {
+			t.Error("expected 'Filter' label in filtered branch list")
 		}
 	})
 
 	t.Run("branch action step", func(t *testing.T) {
 		s := &CreateState{Step: CreateStepBranchAction, BaseBranch: "develop"}
-		v := renderCreate(s, 80, "")
+		v := renderCreateV2(s, 80, "")
 		if !strings.Contains(v, "already exists") {
 			t.Error("expected 'already exists' in branch action step")
 		}
@@ -643,7 +644,7 @@ func TestRenderCreateOverlaySteps(t *testing.T) {
 func TestRenderDeleteOverlay(t *testing.T) {
 	item := &WorktreeItem{ShortName: "testing", Branch: "testing"}
 	s := &DeleteState{Item: item, Warnings: []string{"dirty"}, DeleteBranch: true}
-	v := renderDelete(s, 80)
+	v := renderDeleteV2(s, 80)
 	if !strings.Contains(v, "testing") {
 		t.Error("expected item name in delete overlay")
 	}
@@ -655,7 +656,7 @@ func TestRenderDeleteOverlay(t *testing.T) {
 func TestRenderBulkOverlay(t *testing.T) {
 	t.Run("empty items", func(t *testing.T) {
 		s := &BulkState{Items: nil, Selected: nil}
-		v := renderBulk(s, 80)
+		v := renderBulk(s)
 		if !strings.Contains(v, "No merged") {
 			t.Error("expected empty message")
 		}
@@ -663,7 +664,7 @@ func TestRenderBulkOverlay(t *testing.T) {
 
 	t.Run("deleting state", func(t *testing.T) {
 		s := &BulkState{Deleting: true, Progress: "Deleting 2/3..."}
-		v := renderBulk(s, 80)
+		v := renderBulk(s)
 		if !strings.Contains(v, "Deleting 2/3") {
 			t.Error("expected progress text")
 		}
@@ -675,7 +676,7 @@ func TestRenderBulkOverlay(t *testing.T) {
 			Items:    items,
 			Selected: []bool{true, false, false},
 		}
-		v := renderBulk(s, 80)
+		v := renderBulk(s)
 		if !strings.Contains(v, "1/3 selected") {
 			t.Error("expected selection count")
 		}
@@ -743,15 +744,15 @@ func TestGatherDeleteWarnings(t *testing.T) {
 func TestNoColor(t *testing.T) {
 	// Ensure env is clean
 	t.Setenv("NO_COLOR", "1")
-	if !isNoColor() {
-		t.Error("expected isNoColor()=true when NO_COLOR set")
+	if !theme.IsNoColor() {
+		t.Error("expected theme.IsNoColor()=true when NO_COLOR set")
 	}
 }
 
 func TestNoColorGrove(t *testing.T) {
 	t.Setenv("GROVE_NO_COLOR", "1")
-	if !isNoColor() {
-		t.Error("expected isNoColor()=true when GROVE_NO_COLOR set")
+	if !theme.IsNoColor() {
+		t.Error("expected theme.IsNoColor()=true when GROVE_NO_COLOR set")
 	}
 }
 
@@ -1248,54 +1249,6 @@ func TestHandleIssueKeyNilState(t *testing.T) {
 	m = sendKey(m, "j")
 	if m.activeView != ViewDashboard {
 		t.Errorf("expected ViewDashboard, got %d", m.activeView)
-	}
-}
-
-func TestPRWorktreeCreatedMsg_Error(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(80, 24))
-	m.activeView = ViewPRs
-	m.prState = &PRViewState{Creating: true}
-	m = sendMsg(m, prWorktreeCreatedMsg{name: "pr-123", err: errTest})
-	if m.prState == nil {
-		t.Fatal("expected prState preserved on error")
-	}
-	if m.prState.Creating {
-		t.Error("expected Creating=false after error")
-	}
-	if m.prState.Error == "" {
-		t.Error("expected error message on prState")
-	}
-}
-
-func TestPRWorktreeCreatedMsg_Success(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(80, 24))
-	m.activeView = ViewPRs
-	m.prState = &PRViewState{Creating: true}
-	m = sendMsg(m, prWorktreeCreatedMsg{name: "pr-123", path: "/tmp/pr-123"})
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard, got %d", m.activeView)
-	}
-	if m.prState != nil {
-		t.Error("expected prState nil after success")
-	}
-	if m.pendingSelect != "pr-123" {
-		t.Errorf("expected pendingSelect=pr-123, got %q", m.pendingSelect)
-	}
-}
-
-func TestIssueWorktreeCreatedMsg_Error(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(80, 24))
-	m.activeView = ViewIssues
-	m.issueState = &IssueViewState{Creating: true}
-	m = sendMsg(m, issueWorktreeCreatedMsg{name: "issue-42", err: errTest})
-	if m.issueState == nil {
-		t.Fatal("expected issueState preserved on error")
-	}
-	if m.issueState.Creating {
-		t.Error("expected Creating=false after error")
-	}
-	if m.issueState.Error == "" {
-		t.Error("expected error message on issueState")
 	}
 }
 

@@ -3,6 +3,8 @@ package tui
 import (
 	"os"
 	"testing"
+
+	"github.com/lost-in-the/grove/internal/theme"
 )
 
 // TestContrastRatio verifies the WCAG contrast ratio calculation.
@@ -22,9 +24,9 @@ func TestContrastRatio(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ratio := ContrastRatio(tt.fg, tt.bg)
+			ratio := theme.ContrastRatio(tt.fg, tt.bg)
 			if ratio < tt.wantMin || ratio > tt.wantMax {
-				t.Errorf("ContrastRatio(%s, %s) = %.2f, want [%.1f, %.1f]",
+				t.Errorf("theme.ContrastRatio(%s, %s) = %.2f, want [%.1f, %.1f]",
 					tt.fg, tt.bg, ratio, tt.wantMin, tt.wantMax)
 			}
 		})
@@ -46,9 +48,9 @@ func TestRelativeLuminance(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			lum := RelativeLuminance(tt.hex)
+			lum := theme.RelativeLuminance(tt.hex)
 			if lum < tt.wantMin || lum > tt.wantMax {
-				t.Errorf("RelativeLuminance(%s) = %.4f, want [%.2f, %.2f]",
+				t.Errorf("theme.RelativeLuminance(%s) = %.4f, want [%.2f, %.2f]",
 					tt.hex, lum, tt.wantMin, tt.wantMax)
 			}
 		})
@@ -57,7 +59,7 @@ func TestRelativeLuminance(t *testing.T) {
 
 // TestColorSchemeNotNil verifies color schemes produce non-nil colors.
 func TestColorSchemeNotNil(t *testing.T) {
-	scheme := defaultColorScheme()
+	scheme := theme.DefaultColorScheme()
 	if scheme.Primary == nil {
 		t.Error("expected Primary color to be non-nil")
 	}
@@ -68,7 +70,7 @@ func TestColorSchemeNotNil(t *testing.T) {
 
 // TestHighContrastColorSchemeNotNil verifies the high-contrast scheme has non-nil colors.
 func TestHighContrastColorSchemeNotNil(t *testing.T) {
-	scheme := highContrastColorScheme()
+	scheme := theme.HighContrastColorScheme()
 	if scheme.Primary == nil {
 		t.Error("expected Primary color to be non-nil")
 	}
@@ -103,13 +105,13 @@ func TestHighContrastNotSetUsesDefault(t *testing.T) {
 // TestIsHighContrast checks the detection function.
 func TestIsHighContrast(t *testing.T) {
 	_ = os.Unsetenv("GROVE_HIGH_CONTRAST")
-	if isHighContrast() {
+	if theme.IsHighContrast() {
 		t.Error("expected false when GROVE_HIGH_CONTRAST not set")
 	}
 
 	_ = os.Setenv("GROVE_HIGH_CONTRAST", "1")
 	defer func() { _ = os.Unsetenv("GROVE_HIGH_CONTRAST") }()
-	if !isHighContrast() {
+	if !theme.IsHighContrast() {
 		t.Error("expected true when GROVE_HIGH_CONTRAST=1")
 	}
 }
@@ -119,12 +121,11 @@ func TestHighContrastModeDetection(t *testing.T) {
 	_ = os.Setenv("GROVE_HIGH_CONTRAST", "1")
 	defer func() { _ = os.Unsetenv("GROVE_HIGH_CONTRAST") }()
 
-	if !isHighContrast() {
-		t.Error("expected isHighContrast() to return true when GROVE_HIGH_CONTRAST is set")
+	if !theme.IsHighContrast() {
+		t.Error("expected theme.IsHighContrast() to return true when GROVE_HIGH_CONTRAST is set")
 	}
 }
 
-// hexToRGB is a test helper.
 func TestHexToRGB(t *testing.T) {
 	tests := []struct {
 		hex     string
@@ -139,13 +140,13 @@ func TestHexToRGB(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.hex, func(t *testing.T) {
-			r, g, b, err := hexToRGB(tt.hex)
+			r, g, b, err := theme.HexToRGB(tt.hex)
 			if err != nil {
-				t.Errorf("hexToRGB(%s) unexpected error: %v", tt.hex, err)
+				t.Errorf("theme.HexToRGB(%s) unexpected error: %v", tt.hex, err)
 				return
 			}
 			if r != tt.r || g != tt.g || b != tt.b {
-				t.Errorf("hexToRGB(%s) = (%d,%d,%d), want (%d,%d,%d)",
+				t.Errorf("theme.HexToRGB(%s) = (%d,%d,%d), want (%d,%d,%d)",
 					tt.hex, r, g, b, tt.r, tt.g, tt.b)
 			}
 		})

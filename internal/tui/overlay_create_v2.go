@@ -62,6 +62,26 @@ func calcOverlayWidth(width int) int {
 	return w
 }
 
+// overlayDims holds precomputed overlay layout dimensions.
+type overlayDims struct {
+	overlay int // total overlay width (border + padding + content)
+	content int // usable width inside the border
+	inner   int // content minus indent on both sides
+	indent  string
+}
+
+// calcOverlayDims computes standard overlay dimensions from terminal width.
+func calcOverlayDims(termWidth int) overlayDims {
+	ow := calcOverlayWidth(termWidth)
+	cw := ow - 6
+	return overlayDims{
+		overlay: ow,
+		content: cw,
+		inner:   cw - len(overlayIndent)*2,
+		indent:  overlayIndent,
+	}
+}
+
 func renderCreateSpinnerV2(s *CreateState, spinnerView string) string {
 	overlayWidth := 60
 
@@ -97,18 +117,15 @@ func renderCreateSpinnerV2(s *CreateState, spinnerView string) string {
 
 // renderCreateBranchChoiceV2 renders the initial choice: select existing or create new.
 func renderCreateBranchChoiceV2(s *CreateState, width int) string {
-	overlayWidth := calcOverlayWidth(width)
-	contentWidth := overlayWidth - 6
-	indent := overlayIndent
-	innerWidth := contentWidth - len(indent)*2
+	d := calcOverlayDims(width)
 
 	var b strings.Builder
 
 	stepper := NewStepper("Branch", "Name", "Confirm")
 	stepper.Current = 0
-	b.WriteString(indentBlock(stepper.View(innerWidth), indent) + "\n\n")
+	b.WriteString(indentBlock(stepper.View(d.inner), d.indent) + "\n\n")
 
-	b.WriteString(indent + "How would you like to set up the branch?\n\n")
+	b.WriteString(d.indent + "How would you like to set up the branch?\n\n")
 
 	options := []string{
 		"Select an existing branch",
@@ -119,45 +136,42 @@ func renderCreateBranchChoiceV2(s *CreateState, width int) string {
 		if i == s.BranchChoice {
 			cursor = Styles.ListCursor.Render("❯ ")
 		}
-		b.WriteString(indent + cursor + opt + "\n")
+		b.WriteString(d.indent + cursor + opt + "\n")
 	}
 
 	content := b.String()
-	footer := "\n" + Styles.Footer.Render(indent+"[enter] select  [esc] cancel")
+	footer := "\n" + Styles.Footer.Render(d.indent+"[enter] select  [esc] cancel")
 
-	return Styles.OverlayBorderSuccess.Width(overlayWidth).Render(
+	return Styles.OverlayBorderSuccess.Width(d.overlay).Render(
 		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + padToHeight(content, createOverlayMinLines) + footer,
 	)
 }
 
 // renderCreateBranchSelectV2 renders the filterable branch list.
 func renderCreateBranchSelectV2(s *CreateState, width int) string {
-	overlayWidth := calcOverlayWidth(width)
-	contentWidth := overlayWidth - 6
-	indent := overlayIndent
-	innerWidth := contentWidth - len(indent)*2
+	d := calcOverlayDims(width)
 
 	var b strings.Builder
 
 	stepper := NewStepper("Branch", "Name", "Confirm")
 	stepper.Current = 0
-	b.WriteString(indentBlock(stepper.View(innerWidth), indent) + "\n\n")
+	b.WriteString(indentBlock(stepper.View(d.inner), d.indent) + "\n\n")
 
 	// Show filter input when active
 	filter := s.BranchFilterInput.Value()
 	if s.BranchFilterMode == BranchFilterOn {
-		b.WriteString(indent + s.BranchFilterInput.View() + "\n\n")
+		b.WriteString(d.indent + s.BranchFilterInput.View() + "\n\n")
 	} else if filter != "" {
-		b.WriteString(indent + Styles.DetailDim.Render("Filter: "+filter) + "  " + Styles.Footer.Render("[/] edit") + "\n\n")
+		b.WriteString(d.indent + Styles.DetailDim.Render("Filter: "+filter) + "  " + Styles.Footer.Render("[/] edit") + "\n\n")
 	} else {
-		b.WriteString(indent + "Select a branch\n\n")
+		b.WriteString(d.indent + "Select a branch\n\n")
 	}
 
 	filtered := filteredBranches(s.Branches, filter)
 	totalItems := len(filtered)
 
 	if totalItems == 0 {
-		b.WriteString(indent + Styles.DetailDim.Render("(no matching branches)") + "\n")
+		b.WriteString(d.indent + Styles.DetailDim.Render("(no matching branches)") + "\n")
 	} else {
 		start, end := scrollWindow(totalItems, s.BranchCursor, 10)
 		for i := start; i < end; i++ {
@@ -165,46 +179,43 @@ func renderCreateBranchSelectV2(s *CreateState, width int) string {
 			if i == s.BranchCursor {
 				cursor = Styles.ListCursor.Render("❯ ")
 			}
-			b.WriteString(indent + cursor + filtered[i] + "\n")
+			b.WriteString(d.indent + cursor + filtered[i] + "\n")
 		}
 		if end < totalItems {
-			b.WriteString(indent + Styles.DetailDim.Render(fmt.Sprintf("… and %d more", totalItems-end)) + "\n")
+			b.WriteString(d.indent + Styles.DetailDim.Render(fmt.Sprintf("… and %d more", totalItems-end)) + "\n")
 		}
 	}
 
 	content := b.String()
 	var footer string
 	if s.BranchFilterMode == BranchFilterOn {
-		footer = "\n" + Styles.Footer.Render(indent+"[enter] accept filter  [esc] clear filter")
+		footer = "\n" + Styles.Footer.Render(d.indent+"[enter] accept filter  [esc] clear filter")
 	} else {
-		footer = "\n" + Styles.Footer.Render(indent+"[enter] select  [/] filter  [backspace] back  [esc] cancel")
+		footer = "\n" + Styles.Footer.Render(d.indent+"[enter] select  [/] filter  [backspace] back  [esc] cancel")
 	}
 
-	return Styles.OverlayBorderSuccess.Width(overlayWidth).Render(
+	return Styles.OverlayBorderSuccess.Width(d.overlay).Render(
 		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + padToHeight(content, createOverlayMinLines) + footer,
 	)
 }
 
 // renderCreateBranchCreateV2 renders the new branch name text input.
 func renderCreateBranchCreateV2(s *CreateState, width int) string {
-	overlayWidth := calcOverlayWidth(width)
-	contentWidth := overlayWidth - 6
-	indent := overlayIndent
-	innerWidth := contentWidth - len(indent)*2
+	d := calcOverlayDims(width)
 
 	var b strings.Builder
 
 	stepper := NewStepper("Branch", "Name", "Confirm")
 	stepper.Current = 0
-	b.WriteString(indentBlock(stepper.View(innerWidth), indent) + "\n\n")
+	b.WriteString(indentBlock(stepper.View(d.inner), d.indent) + "\n\n")
 
-	b.WriteString(indent + "Enter a name for the new branch:\n\n")
-	b.WriteString(indent + s.BranchNameInput.View() + "\n")
+	b.WriteString(d.indent + "Enter a name for the new branch:\n\n")
+	b.WriteString(d.indent + s.BranchNameInput.View() + "\n")
 
 	content := b.String()
-	footer := "\n" + Styles.Footer.Render(indent+"[enter] next  [backspace] back  [esc] cancel")
+	footer := "\n" + Styles.Footer.Render(d.indent+"[enter] next  [backspace] back  [esc] cancel")
 
-	return Styles.OverlayBorderSuccess.Width(overlayWidth).Render(
+	return Styles.OverlayBorderSuccess.Width(d.overlay).Render(
 		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + padToHeight(content, createOverlayMinLines) + footer,
 	)
 }
@@ -214,79 +225,73 @@ func renderCreateBranchCreateV2(s *CreateState, width int) string {
 const createOverlayMinLines = 18
 
 func renderCreateNameV2(s *CreateState, width int) string {
-	overlayWidth := calcOverlayWidth(width)
-	contentWidth := overlayWidth - 6
-	indent := overlayIndent
-	innerWidth := contentWidth - len(indent)*2
+	d := calcOverlayDims(width)
 
 	var b strings.Builder
 
 	// Stepper — on step 2 (index 1)
 	stepper := NewStepper("Branch", "Name", "Confirm")
 	stepper.Current = 1
-	b.WriteString(indentBlock(stepper.View(innerWidth), indent) + "\n\n")
+	b.WriteString(indentBlock(stepper.View(d.inner), d.indent) + "\n\n")
 
 	// Context summary from previous steps
-	b.WriteString(indentBlock(renderContextSummary(s, innerWidth), indent) + "\n\n")
+	b.WriteString(indentBlock(renderContextSummary(s, d.inner), d.indent) + "\n\n")
 
 	// Input with textinput component
-	b.WriteString(indent + s.NameInput.View() + "\n")
+	b.WriteString(d.indent + s.NameInput.View() + "\n")
 
 	effectiveName := s.NameInput.Value()
 	if effectiveName == "" {
 		effectiveName = s.NameSuggestion
 	}
 	if s.ProjectName != "" && effectiveName != "" {
-		b.WriteString(indent + Styles.DetailDim.Render(fmt.Sprintf("→ %s-%s", s.ProjectName, effectiveName)) + "\n")
+		b.WriteString(d.indent + Styles.DetailDim.Render(fmt.Sprintf("→ %s-%s", s.ProjectName, effectiveName)) + "\n")
 	}
 
 	if s.Error != "" {
-		b.WriteString("\n" + indent + Styles.ErrorText.Render(s.Error) + "\n")
+		b.WriteString("\n" + d.indent + Styles.ErrorText.Render(s.Error) + "\n")
 	} else if s.ExistingWorktree != nil {
 		ex := s.ExistingWorktree
-		b.WriteString("\n" + indent + Styles.ErrorText.Render("✗ Worktree \""+ex.ShortName+"\" already exists") + "\n")
-		b.WriteString("\n" + indent + "Existing worktree:\n")
-		b.WriteString(indent + fmt.Sprintf("  Path:     %s\n", ex.Path))
-		b.WriteString(indent + fmt.Sprintf("  Branch:   %s\n", ex.Branch))
+		b.WriteString("\n" + d.indent + Styles.ErrorText.Render("✗ Worktree \""+ex.ShortName+"\" already exists") + "\n")
+		b.WriteString("\n" + d.indent + "Existing worktree:\n")
+		b.WriteString(d.indent + fmt.Sprintf("  Path:     %s\n", ex.Path))
+		b.WriteString(d.indent + fmt.Sprintf("  Branch:   %s\n", ex.Branch))
 		if ex.IsDirty {
-			b.WriteString(indent + fmt.Sprintf("  Status:   ● dirty (%d files)\n", len(ex.DirtyFiles)))
+			b.WriteString(d.indent + fmt.Sprintf("  Status:   ● dirty (%d files)\n", len(ex.DirtyFiles)))
 		} else {
-			b.WriteString(indent + "  Status:   ● clean\n")
+			b.WriteString(d.indent + "  Status:   ● clean\n")
 		}
 	} else if effectiveName != "" {
-		b.WriteString("\n" + indent + Styles.SuccessText.Render("✓ valid name") + "\n")
+		b.WriteString("\n" + d.indent + Styles.SuccessText.Render("✓ valid name") + "\n")
 	}
 
 	content := b.String()
 	var footer string
 	if s.ExistingWorktree != nil {
-		footer = "\n" + Styles.Footer.Render(indent+"[enter] Switch to existing  [tab] edit name  [esc] cancel")
+		footer = "\n" + Styles.Footer.Render(d.indent+"[enter] Switch to existing  [tab] edit name  [esc] cancel")
 	} else {
-		footer = "\n" + Styles.Footer.Render(indent+"[enter] next  [backspace] back  [esc] cancel")
+		footer = "\n" + Styles.Footer.Render(d.indent+"[enter] next  [backspace] back  [esc] cancel")
 	}
 
-	return Styles.OverlayBorderSuccess.Width(overlayWidth).Render(
+	return Styles.OverlayBorderSuccess.Width(d.overlay).Render(
 		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + padToHeight(content, createOverlayMinLines) + footer,
 	)
 }
 
 func renderCreateBranchActionV2(s *CreateState, width int) string {
-	overlayWidth := calcOverlayWidth(width)
-	contentWidth := overlayWidth - 6
-	indent := overlayIndent
-	innerWidth := contentWidth - len(indent)*2
+	d := calcOverlayDims(width)
 
 	var b strings.Builder
 
 	// Stepper — still on branch phase (index 0)
 	stepper := NewStepper("Branch", "Name", "Confirm")
 	stepper.Current = 0
-	b.WriteString(indentBlock(stepper.View(innerWidth), indent) + "\n\n")
+	b.WriteString(indentBlock(stepper.View(d.inner), d.indent) + "\n\n")
 
 	// Context summary
-	b.WriteString(indentBlock(renderContextSummary(s, innerWidth), indent) + "\n\n")
+	b.WriteString(indentBlock(renderContextSummary(s, d.inner), d.indent) + "\n\n")
 
-	b.WriteString(indent + fmt.Sprintf("Branch %q already exists\n\n", s.BaseBranch))
+	b.WriteString(d.indent + fmt.Sprintf("Branch %q already exists\n\n", s.BaseBranch))
 
 	options := []string{
 		"Use branch as-is (split)",
@@ -297,20 +302,20 @@ func renderCreateBranchActionV2(s *CreateState, width int) string {
 		if i == s.ActionChoice {
 			cursor = Styles.ListCursor.Render("❯ ")
 		}
-		b.WriteString(indent + cursor + opt + "\n")
+		b.WriteString(d.indent + cursor + opt + "\n")
 	}
 
 	b.WriteString("\n")
-	checkbox := "[ ]"
+	checkbox := checkboxUnchecked
 	if s.DontShowAgain {
-		checkbox = "[x]"
+		checkbox = checkboxChecked
 	}
-	b.WriteString(indent + checkbox + " Don't show this again\n")
+	b.WriteString(d.indent + checkbox + " Don't show this again\n")
 
 	content := b.String()
-	footer := "\n" + Styles.Footer.Render(indent+"[enter] confirm  [backspace] back  [esc] cancel  [space] toggle")
+	footer := "\n" + Styles.Footer.Render(d.indent+"[enter] confirm  [backspace] back  [esc] cancel  [space] toggle")
 
-	return Styles.OverlayBorderSuccess.Width(overlayWidth).Render(
+	return Styles.OverlayBorderSuccess.Width(d.overlay).Render(
 		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + padToHeight(content, createOverlayMinLines) + footer,
 	)
 }
@@ -349,40 +354,37 @@ func renderContextSummary(s *CreateState, width int) string {
 
 // renderCreateConfirmV2 renders the confirmation step with full summary.
 func renderCreateConfirmV2(s *CreateState, width int) string {
-	overlayWidth := calcOverlayWidth(width)
-	contentWidth := overlayWidth - 6
-	indent := overlayIndent
-	innerWidth := contentWidth - len(indent)*2
+	d := calcOverlayDims(width)
 
 	var b strings.Builder
 
 	// Stepper at step 3 (index 2)
 	stepper := NewStepper("Branch", "Name", "Confirm")
 	stepper.Current = 2
-	b.WriteString(indentBlock(stepper.View(innerWidth), indent) + "\n\n")
+	b.WriteString(indentBlock(stepper.View(d.inner), d.indent) + "\n\n")
 
 	// Full summary
-	b.WriteString(indentBlock(renderContextSummary(s, innerWidth), indent) + "\n\n")
+	b.WriteString(indentBlock(renderContextSummary(s, d.inner), d.indent) + "\n\n")
 
 	// Branch strategy detail
 	if s.BaseBranch != "" {
-		b.WriteString(indent + "Strategy: " + Styles.DetailValue.Render("from existing branch") + "\n")
+		b.WriteString(d.indent + "Strategy: " + Styles.DetailValue.Render("from existing branch") + "\n")
 	} else {
-		b.WriteString(indent + "Strategy: " + Styles.DetailValue.Render("create new branch") + "\n")
+		b.WriteString(d.indent + "Strategy: " + Styles.DetailValue.Render("create new branch") + "\n")
 	}
 
 	var footer string
 	if s.Error != "" {
-		b.WriteString("\n" + Styles.ErrorText.Render(indent+s.Error) + "\n")
-		footer = "\n" + Styles.Footer.Render(indent+"[enter] retry  [backspace] back  [esc] cancel")
+		b.WriteString("\n" + Styles.ErrorText.Render(d.indent+s.Error) + "\n")
+		footer = "\n" + Styles.Footer.Render(d.indent+"[enter] retry  [backspace] back  [esc] cancel")
 	} else {
-		b.WriteString("\n" + Styles.SuccessText.Render(indent+"Ready to create worktree.") + "\n")
-		footer = "\n" + Styles.Footer.Render(indent+"[enter] create  [backspace] back  [esc] cancel")
+		b.WriteString("\n" + Styles.SuccessText.Render(d.indent+"Ready to create worktree.") + "\n")
+		footer = "\n" + Styles.Footer.Render(d.indent+"[enter] create  [backspace] back  [esc] cancel")
 	}
 
 	content := b.String()
 
-	return Styles.OverlayBorderSuccess.Width(overlayWidth).Render(
+	return Styles.OverlayBorderSuccess.Width(d.overlay).Render(
 		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + padToHeight(content, createOverlayMinLines) + footer,
 	)
 }

@@ -11,6 +11,7 @@
 #   -b NAME   Branch name (default: optimize/auto-YYYYMMDD-HHMM)
 #   -d DIR    Worktree directory (default: ../grove-optimize)
 #   -t SECS   Timeout per iteration in seconds (default: 600)
+#   -p FILE   Custom prompt file (default: scripts/OPTIMIZE_PROMPT.md)
 #   -c        Continue from existing worktree (don't create new one)
 #   -h        Show this help
 #
@@ -51,16 +52,18 @@ BRANCH_NAME=""
 WORKTREE_DIR=""
 TIMEOUT=600
 CONTINUE=false
+PROMPT_FILE=""
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # --- Parse args ---
-while getopts "n:b:d:t:ch" opt; do
+while getopts "n:b:d:t:p:ch" opt; do
     case $opt in
         n) MAX_ITERATIONS="$OPTARG" ;;
         b) BRANCH_NAME="$OPTARG" ;;
         d) WORKTREE_DIR="$OPTARG" ;;
         t) TIMEOUT="$OPTARG" ;;
+        p) PROMPT_FILE="$OPTARG" ;;
         c) CONTINUE=true ;;
         h)
             head -17 "$0" | tail -15
@@ -95,6 +98,11 @@ setup_worktree() {
         green "Continuing in existing worktree: $WORKTREE_DIR"
         cd "$WORKTREE_DIR"
         BRANCH_NAME=$(git branch --show-current)
+        # Update prompt if a custom one was specified
+        if [ -n "$PROMPT_FILE" ]; then
+            cp "$PROMPT_FILE" scripts/ACTIVE_PROMPT.md
+            dim "  Prompt updated: $(basename "$PROMPT_FILE")"
+        fi
         return
     fi
 
@@ -120,9 +128,13 @@ setup_worktree() {
 
     # Copy the optimization scripts and config
     cp "$REPO_ROOT/scripts/optimize-metrics.sh" scripts/
-    cp "$REPO_ROOT/scripts/OPTIMIZE_PROMPT.md" scripts/
     cp "$REPO_ROOT/scripts/optimize-sandbox-hook.sh" scripts/
     cp "$REPO_ROOT/.golangci-optimize.yml" .
+
+    # Use custom prompt if specified, otherwise default
+    local prompt_src="${PROMPT_FILE:-$REPO_ROOT/scripts/OPTIMIZE_PROMPT.md}"
+    cp "$prompt_src" scripts/ACTIVE_PROMPT.md
+    dim "  Prompt: $(basename "$prompt_src")"
 
     # Create sandboxed Claude settings for this worktree
     mkdir -p .claude
@@ -231,7 +243,7 @@ run_iteration() {
         --allowedTools "Read" --allowedTools "Write" --allowedTools "Edit" \
         --allowedTools "Glob" --allowedTools "Grep" --allowedTools "Bash" \
         -- \
-        "$(cat scripts/OPTIMIZE_PROMPT.md)
+        "$(cat scripts/ACTIVE_PROMPT.md)
 
 ## Session context
 - This is iteration $i of $total in the optimization loop.

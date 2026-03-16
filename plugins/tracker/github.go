@@ -103,7 +103,7 @@ func (g *GitHubAdapter) FetchPR(number int) (*PullRequest, error) {
 		HeadRefName string `json:"headRefName"`
 		BaseRefName string `json:"baseRefName"`
 		IsDraft     bool   `json:"isDraft"`
-		Commits []struct {
+		Commits     []struct {
 			Oid             string `json:"oid"`
 			MessageHeadline string `json:"messageHeadline"`
 		} `json:"commits"`

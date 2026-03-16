@@ -29,20 +29,29 @@ func copyFile(src, dst string) error {
 	return fsutil.CopyFile(src, dst)
 }
 
+// copyDirEntry copies a single directory entry (file or symlink) from srcPath to dstPath.
+func copyDirEntry(srcPath, dstPath string, info os.FileInfo) error {
+	if info.Mode()&os.ModeSymlink != 0 {
+		link, err := os.Readlink(srcPath)
+		if err != nil {
+			return err
+		}
+		return os.Symlink(link, dstPath)
+	}
+	return copyFile(srcPath, dstPath)
+}
+
 // copyDir recursively copies a directory from src to dst
 func copyDir(src, dst string) error {
-	// Get source directory info
 	srcInfo, err := os.Stat(src)
 	if err != nil {
 		return err
 	}
 
-	// Create destination directory
 	if err := os.MkdirAll(dst, srcInfo.Mode()); err != nil {
 		return err
 	}
 
-	// Read source directory
 	entries, err := os.ReadDir(src)
 	if err != nil {
 		return err
@@ -56,26 +65,15 @@ func copyDir(src, dst string) error {
 			if err := copyDir(srcPath, dstPath); err != nil {
 				return err
 			}
-		} else {
-			// Handle symlinks
-			info, err := entry.Info()
-			if err != nil {
-				return err
-			}
-			if info.Mode()&os.ModeSymlink != 0 {
-				// Copy symlink as symlink
-				link, err := os.Readlink(srcPath)
-				if err != nil {
-					return err
-				}
-				if err := os.Symlink(link, dstPath); err != nil {
-					return err
-				}
-			} else {
-				if err := copyFile(srcPath, dstPath); err != nil {
-					return err
-				}
-			}
+			continue
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if err := copyDirEntry(srcPath, dstPath, info); err != nil {
+			return err
 		}
 	}
 

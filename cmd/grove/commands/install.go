@@ -35,7 +35,7 @@ script printed to stdout.
 
 NOTE: This is the recommended setup. For native zsh completion files only
 (without directory switching), use 'grove completion zsh' instead.`,
-	ValidArgs: []string{"zsh", "bash"},
+	ValidArgs: []string{shellZsh, shellBash},
 	Args:      cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
@@ -47,9 +47,9 @@ NOTE: This is the recommended setup. For native zsh completion files only
 		var err error
 
 		switch shellType {
-		case "zsh":
+		case shellZsh:
 			output, err = shell.GenerateZshIntegration()
-		case "bash":
+		case shellBash:
 			output, err = shell.GenerateBashIntegration()
 		default:
 			return fmt.Errorf("unsupported shell: %s (supported: zsh, bash)", shellType)

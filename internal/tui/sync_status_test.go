@@ -1,9 +1,29 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
+
+// syncStatusText returns a compact sync status string for testing.
+// Moved from WorktreeItem.SyncStatusText — only used in tests.
+func syncStatusText(w *WorktreeItem) string {
+	if !w.HasRemote {
+		return "⚠ no remote"
+	}
+	if w.AheadCount == 0 && w.BehindCount == 0 {
+		return "✓ synced"
+	}
+	var parts []string
+	if w.AheadCount > 0 {
+		parts = append(parts, fmt.Sprintf("↑%d", w.AheadCount))
+	}
+	if w.BehindCount > 0 {
+		parts = append(parts, fmt.Sprintf("↓%d", w.BehindCount))
+	}
+	return strings.Join(parts, " ")
+}
 
 func TestSyncStatusText(t *testing.T) {
 	tests := []struct {
@@ -40,9 +60,9 @@ func TestSyncStatusText(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.item.SyncStatusText()
+			got := syncStatusText(&tt.item)
 			if !strings.Contains(got, tt.want) {
-				t.Errorf("SyncStatusText() = %q, want to contain %q", got, tt.want)
+				t.Errorf("syncStatusText() = %q, want to contain %q", got, tt.want)
 			}
 		})
 	}

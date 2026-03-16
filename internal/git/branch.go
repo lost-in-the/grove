@@ -51,14 +51,10 @@ func (b *BranchManager) GetStatus(branch string, excludeWorktree string) (*Branc
 	status.IsMerged = merged
 
 	// Check if branch has a remote tracking branch
-	hasRemote, err := b.hasRemoteTracking(branch)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check remote tracking: %w", err)
-	}
-	status.HasRemote = hasRemote
+	status.HasRemote = b.hasRemoteTracking(branch)
 
 	// Count unpushed commits if there's a remote
-	if hasRemote {
+	if status.HasRemote {
 		count, err := b.countUnpushedCommits(branch)
 		if err != nil {
 			// Non-fatal - might not have upstream set
@@ -94,8 +90,8 @@ func (b *BranchManager) Delete(branch string, force bool) error {
 // GetUnpushedCommits returns a list of commit summaries not pushed to remote
 func (b *BranchManager) GetUnpushedCommits(branch string, limit int) ([]string, error) {
 	// Get upstream tracking branch
-	upstream, err := b.getUpstream(branch)
-	if err != nil || upstream == "" {
+	upstream := b.getUpstream(branch)
+	if upstream == "" {
 		return nil, nil
 	}
 
@@ -152,26 +148,25 @@ func (b *BranchManager) isBranchMerged(branch string) (bool, error) {
 }
 
 // hasRemoteTracking checks if a branch has a remote tracking branch
-func (b *BranchManager) hasRemoteTracking(branch string) (bool, error) {
-	upstream, err := b.getUpstream(branch)
-	return upstream != "", err
+func (b *BranchManager) hasRemoteTracking(branch string) bool {
+	return b.getUpstream(branch) != ""
 }
 
-// getUpstream returns the upstream tracking branch for a local branch
-func (b *BranchManager) getUpstream(branch string) (string, error) {
+// getUpstream returns the upstream tracking branch for a local branch.
+// Returns empty string if no upstream is set (not an error condition).
+func (b *BranchManager) getUpstream(branch string) string {
 	output, err := cmdexec.Output(context.TODO(), "git", []string{"-C", b.repoPath, "rev-parse", "--abbrev-ref",
 		fmt.Sprintf("%s@{upstream}", branch)}, "", cmdexec.GitLocal)
 	if err != nil {
-		// No upstream set - not an error
-		return "", nil
+		return ""
 	}
-	return strings.TrimSpace(string(output)), nil
+	return strings.TrimSpace(string(output))
 }
 
 // countUnpushedCommits returns the number of commits not pushed to upstream
 func (b *BranchManager) countUnpushedCommits(branch string) (int, error) {
-	upstream, err := b.getUpstream(branch)
-	if err != nil || upstream == "" {
+	upstream := b.getUpstream(branch)
+	if upstream == "" {
 		return 0, nil
 	}
 

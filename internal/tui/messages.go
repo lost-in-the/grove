@@ -21,7 +21,6 @@ type worktreeDeletedMsg struct {
 // worktreeCreatedMsg is sent after a worktree creation attempt.
 type worktreeCreatedMsg struct {
 	name       string
-	path       string
 	err        error
 	hookOutput string
 	hookErr    error // non-nil if hook execution failed
@@ -39,28 +38,18 @@ type prsFetchedMsg struct {
 	err error
 }
 
-// prWorktreeCreatedMsg is sent after creating a worktree from a PR.
-type prWorktreeCreatedMsg struct {
-	name       string
-	path       string
-	err        error
-	hookOutput string
-	hookErr    error
-}
-
 // issuesFetchedMsg is sent when issue data has been loaded.
 type issuesFetchedMsg struct {
 	issues []*tracker.Issue
 	err    error
 }
 
-// issueWorktreeCreatedMsg is sent after creating a worktree from an issue.
-type issueWorktreeCreatedMsg struct {
-	name       string
-	path       string
-	err        error
-	hookOutput string
-	hookErr    error
+// creationTracker is implemented by state structs that track streaming worktree
+// creation (CreateState, PRViewState, IssueViewState). It allows the common
+// creationDoneMsg / creationLogMsg handling to be written once.
+type creationTracker interface {
+	getActivityLog() *ActivityLog
+	setCreatingDone(errMsg string) // sets Creating=false and Error=errMsg
 }
 
 // creationLogMsg carries a single log line from a streaming creation goroutine.
@@ -75,10 +64,10 @@ type creationLogMsg struct {
 // It carries the same fields as worktreeCreatedMsg so the existing
 // completion logic can be reused.
 type creationDoneMsg struct {
-	source string // "create", "pr", or "issue" — routes to the right handler
-	name   string
-	path   string
-	err    error
+	source     string // "create", "pr", or "issue" — routes to the right handler
+	name       string
+	path       string
+	err        error
 	hookOutput string
 	hookErr    error
 }

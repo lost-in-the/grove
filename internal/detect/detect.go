@@ -79,62 +79,63 @@ func DetectWithRules(dir string, rules []DetectionRule) *ProjectProfile {
 		Type: "unknown",
 	}
 
-	seen := make(map[string]bool) // dedup copy/symlink/command entries
+	seen := make(map[string]bool)
 	var matchedTypes []string
 
 	for _, rule := range rules {
 		if !markerExists(dir, rule.Marker) {
 			continue
 		}
-
 		matchedTypes = append(matchedTypes, rule.Type)
-
-		for _, f := range rule.Copy {
-			if !seen["copy:"+f] {
-				seen["copy:"+f] = true
-				profile.Copy = append(profile.Copy, f)
-			}
-		}
-		for _, s := range rule.Symlinks {
-			if !seen["sym:"+s] {
-				seen["sym:"+s] = true
-				profile.Symlinks = append(profile.Symlinks, s)
-			}
-		}
-		for _, c := range rule.Commands {
-			if !seen["cmd:"+c] {
-				seen["cmd:"+c] = true
-				profile.Commands = append(profile.Commands, c)
-			}
-		}
+		mergeRuleIntoProfile(profile, rule, seen)
 	}
 
-	// Always include .env and .env.local if present but not already listed
-	for _, envFile := range []string{".env", ".env.local"} {
-		if !seen["copy:"+envFile] {
-			if _, err := os.Stat(filepath.Join(dir, envFile)); err == nil {
-				profile.Copy = append(profile.Copy, envFile)
-			}
-		}
-	}
-
-	switch len(matchedTypes) {
-	case 0:
-		profile.Type = "unknown"
-	case 1:
-		profile.Type = matchedTypes[0]
-	default:
-		// Dedup types
-		unique := dedupStrings(matchedTypes)
-		if len(unique) == 1 {
-			profile.Type = unique[0]
-		} else {
-			profile.Type = "mixed"
-			profile.Types = unique
-		}
+	ensureDefaultEnvFiles(profile, dir, seen)
+	profile.Type = resolveProjectType(matchedTypes)
+	if profile.Type == "mixed" {
+		profile.Types = dedupStrings(matchedTypes)
 	}
 
 	return profile
+}
+
+func mergeRuleIntoProfile(profile *ProjectProfile, rule DetectionRule, seen map[string]bool) {
+	profile.Copy = appendUnique(profile.Copy, rule.Copy, "copy:", seen)
+	profile.Symlinks = appendUnique(profile.Symlinks, rule.Symlinks, "sym:", seen)
+	profile.Commands = appendUnique(profile.Commands, rule.Commands, "cmd:", seen)
+}
+
+func appendUnique(dest, src []string, prefix string, seen map[string]bool) []string {
+	for _, s := range src {
+		key := prefix + s
+		if !seen[key] {
+			seen[key] = true
+			dest = append(dest, s)
+		}
+	}
+	return dest
+}
+
+func ensureDefaultEnvFiles(profile *ProjectProfile, dir string, seen map[string]bool) {
+	for _, envFile := range []string{".env", ".env.local"} {
+		if seen["copy:"+envFile] {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(dir, envFile)); err == nil {
+			profile.Copy = append(profile.Copy, envFile)
+		}
+	}
+}
+
+func resolveProjectType(matchedTypes []string) string {
+	if len(matchedTypes) == 0 {
+		return "unknown"
+	}
+	unique := dedupStrings(matchedTypes)
+	if len(unique) == 1 {
+		return unique[0]
+	}
+	return "mixed"
 }
 
 // markerExists checks if a marker file or glob pattern exists in dir

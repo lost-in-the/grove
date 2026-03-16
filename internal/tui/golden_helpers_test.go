@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lost-in-the/grove/internal/theme"
 	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
@@ -43,7 +44,7 @@ func goldenModel(t *testing.T, size termSize, opts ...testOpt) Model {
 
 	// Force NO_COLOR mode for structural golden tests
 	t.Setenv("NO_COLOR", "1")
-	Colors = noColorScheme()
+	Colors = theme.NoColorScheme()
 	Styles = NewStyleSet(Colors)
 
 	t.Cleanup(func() {
@@ -57,13 +58,13 @@ func goldenModel(t *testing.T, size termSize, opts ...testOpt) Model {
 }
 
 // goldenModelThemed creates a test model with full color output for themed golden tests.
-// Uses defaultColorScheme() directly for deterministic color output.
+// Uses theme.DefaultColorScheme() directly for deterministic color output.
 func goldenModelThemed(t *testing.T, size termSize, opts ...testOpt) Model {
 	t.Helper()
 
 	goldenMu.Lock()
 
-	Colors = defaultColorScheme()
+	Colors = theme.DefaultColorScheme()
 	Styles = NewStyleSet(Colors)
 
 	t.Cleanup(func() {
@@ -148,7 +149,7 @@ func withBulkOverlay(n int) testOpt {
 func withPRData() testOpt {
 	return func(m *Model) {
 		m.activeView = ViewPRs
-		fi := newPRFilterInput()
+		fi := newFilterInput("")
 		m.prState = &PRViewState{
 			FilterInput: fi,
 			PRs: []*tracker.PullRequest{
@@ -167,7 +168,7 @@ func withPRData() testOpt {
 func withIssueData() testOpt {
 	return func(m *Model) {
 		m.activeView = ViewIssues
-		ifi := newIssueFilterInput()
+		ifi := newFilterInput("")
 		m.issueState = &IssueViewState{
 			FilterInput: ifi,
 			Issues: []*tracker.Issue{
