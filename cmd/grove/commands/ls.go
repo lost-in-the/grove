@@ -130,27 +130,27 @@ var lsCmd = &cobra.Command{
 			}
 
 			for _, tree := range trees {
-				status := "clean"
+				status := statusClean
 				if tree.IsPrunable {
 					status = "stale"
 				} else if tree.IsDirty {
-					status = "dirty"
+					status = statusDirty
 				}
 
-				tmuxStatus := "none"
+				tmuxStatus := tmuxStatusNone
 				if tmuxAvailable && sessions != nil {
 					sessionName := worktree.TmuxSessionName(projectName, tree.DisplayName())
 					if session, ok := sessions[sessionName]; ok {
 						if session.Attached {
-							tmuxStatus = "attached"
+							tmuxStatus = tmuxStatusAttached
 						} else {
-							tmuxStatus = "detached"
+							tmuxStatus = tmuxStatusDetached
 						}
 					} else if session, ok := sessions[tree.Name]; ok {
 						if session.Attached {
-							tmuxStatus = "attached"
+							tmuxStatus = tmuxStatusAttached
 						} else {
-							tmuxStatus = "detached"
+							tmuxStatus = tmuxStatusDetached
 						}
 					}
 				}
@@ -241,14 +241,14 @@ var lsCmd = &cobra.Command{
 				indicator = "●"
 			}
 
-			status := "clean"
+			status := statusClean
 			if tree.IsPrunable {
 				status = "stale"
 			} else if tree.IsDirty {
-				status = "dirty"
+				status = statusDirty
 			}
 
-			tmuxStatus := "none"
+			tmuxStatus := tmuxStatusNone
 			if tmuxAvailable {
 				tmuxStatus = tmuxStatusFor(tree, projectName, sessions)
 			}
@@ -286,18 +286,18 @@ var lsCmd = &cobra.Command{
 // sessions may be nil (when tmux is not available).
 func tmuxStatusFor(tree *worktree.Worktree, projectName string, sessions map[string]*tmux.Session) string {
 	if sessions == nil {
-		return "none"
+		return tmuxStatusNone
 	}
 	sessionName := worktree.TmuxSessionName(projectName, tree.DisplayName())
 	for _, key := range []string{sessionName, tree.Name} {
 		if session, ok := sessions[key]; ok {
 			if session.Attached {
-				return "attached"
+				return tmuxStatusAttached
 			}
-			return "detached"
+			return tmuxStatusDetached
 		}
 	}
-	return "none"
+	return tmuxStatusNone
 }
 
 func statusLevelString(level plugins.StatusLevel) string {
@@ -311,7 +311,7 @@ func statusLevelString(level plugins.StatusLevel) string {
 	case plugins.StatusError:
 		return "error"
 	default:
-		return "none"
+		return tmuxStatusNone
 	}
 }
 
