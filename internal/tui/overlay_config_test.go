@@ -376,7 +376,6 @@ func TestSyncConfigFormValues(t *testing.T) {
 func TestConfigEditKey_DirtyDetection(t *testing.T) {
 	// Verify that direct field value changes are detected by syncConfigFormValues
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewConfig
 	m.configState = NewConfigState()
 
 	cfg := config.LoadDefaults()

@@ -498,7 +498,7 @@ func TestUpdate_WorktreeCreatedMsg(t *testing.T) {
 	m.activeView = ViewCreate
 	m.createState = &CreateState{}
 
-	msg := worktreeCreatedMsg{name: "new-wt", path: "/some/path"}
+	msg := worktreeCreatedMsg{name: "new-wt"}
 	updated, _ := m.Update(msg)
 	m = updated.(Model)
 

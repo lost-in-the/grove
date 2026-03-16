@@ -46,6 +46,110 @@ func (s *Stepper) IsCurrent(idx int) bool {
 	return idx == s.Current
 }
 
+// stepDot returns the styled dot character for a step at the given index.
+func (s *Stepper) stepDot(idx int) string {
+	switch {
+	case s.IsComplete(idx):
+		return lipgloss.NewStyle().Foreground(Colors.Success).Render("●")
+	case s.IsCurrent(idx):
+		return lipgloss.NewStyle().Foreground(Colors.Primary).Render("●")
+	default:
+		return lipgloss.NewStyle().Foreground(Colors.TextMuted).Render("○")
+	}
+}
+
+// stepLabel returns the styled label string for a step at the given index.
+func (s *Stepper) stepLabel(idx int) string {
+	switch {
+	case s.IsComplete(idx):
+		return lipgloss.NewStyle().Foreground(Colors.Success).Render(s.Steps[idx] + " ✓")
+	case s.IsCurrent(idx):
+		return lipgloss.NewStyle().Foreground(Colors.Primary).Bold(true).Render(s.Steps[idx])
+	default:
+		return lipgloss.NewStyle().Foreground(Colors.TextMuted).Render(s.Steps[idx])
+	}
+}
+
+// connectorWidth calculates the width of connectors between dots.
+func (s *Stepper) connectorWidth(width int) int {
+	n := len(s.Steps)
+	if n <= 1 {
+		return 6
+	}
+	available := width - n
+	perGap := available / (n - 1)
+	perGap = min(perGap, 24)
+	perGap = max(perGap, 3)
+	return perGap
+}
+
+// buildDotLine renders the dot-and-connector progress line.
+func (s *Stepper) buildDotLine(connWidth int) string {
+	n := len(s.Steps)
+	completeConnStyle := lipgloss.NewStyle().Foreground(Colors.Success)
+	futureConnStyle := lipgloss.NewStyle().Foreground(Colors.TextMuted)
+
+	var dotLine strings.Builder
+	for i := range n {
+		dotLine.WriteString(s.stepDot(i))
+		if i < n-1 {
+			connStyle := futureConnStyle
+			if s.IsComplete(i) {
+				connStyle = completeConnStyle
+			}
+			dotLine.WriteString(connStyle.Render(strings.Repeat("━", connWidth)))
+		}
+	}
+	return dotLine.String()
+}
+
+// labelColStart calculates the column start position for a label.
+func labelColStart(idx, n, connWidth, totalWidth, styledWidth, labelPos int) int {
+	var colStart int
+	switch idx {
+	case 0:
+		colStart = 0
+	case n - 1:
+		colStart = totalWidth - styledWidth
+	default:
+		dotPos := idx * (connWidth + 1)
+		colStart = dotPos - styledWidth/2
+	}
+
+	if colStart < labelPos {
+		colStart = labelPos
+	}
+
+	if colStart+styledWidth > totalWidth {
+		colStart = totalWidth - styledWidth
+		if colStart < labelPos {
+			colStart = labelPos
+		}
+	}
+	return colStart
+}
+
+// buildLabelLine renders the centered labels beneath the dot line.
+func (s *Stepper) buildLabelLine(connWidth int) string {
+	n := len(s.Steps)
+	totalWidth := n + (n-1)*connWidth
+
+	var labelLine strings.Builder
+	labelPos := 0
+	for i := range s.Steps {
+		styled := s.stepLabel(i)
+		styledWidth := lipgloss.Width(styled)
+		colStart := labelColStart(i, n, connWidth, totalWidth, styledWidth, labelPos)
+
+		if colStart > labelPos {
+			labelLine.WriteString(strings.Repeat(" ", colStart-labelPos))
+		}
+		labelLine.WriteString(styled)
+		labelPos = colStart + styledWidth
+	}
+	return labelLine.String()
+}
+
 // View renders the stepper as a horizontal progress bar with labels.
 //
 //	●━━━━━━●━━━━━━○
@@ -58,104 +162,9 @@ func (s *Stepper) View(width int) string {
 		return ""
 	}
 
-	completeDot := lipgloss.NewStyle().Foreground(Colors.Success).Render("●")
-	currentDot := lipgloss.NewStyle().Foreground(Colors.Primary).Render("●")
-	futureDot := lipgloss.NewStyle().Foreground(Colors.TextMuted).Render("○")
+	connWidth := s.connectorWidth(width)
+	dotLine := s.buildDotLine(connWidth)
+	labelLine := s.buildLabelLine(connWidth)
 
-	completeConnStyle := lipgloss.NewStyle().Foreground(Colors.Success)
-	futureConnStyle := lipgloss.NewStyle().Foreground(Colors.TextMuted)
-
-	completeLabel := lipgloss.NewStyle().Foreground(Colors.Success)
-	currentLabel := lipgloss.NewStyle().Foreground(Colors.Primary).Bold(true)
-	futureLabel := lipgloss.NewStyle().Foreground(Colors.TextMuted)
-
-	// Calculate connector width between dots
-	n := len(s.Steps)
-	// Reserve space for dots (1 char each) and minimum padding
-	connWidth := 6
-	if n > 1 {
-		available := width - n // dots
-		perGap := available / (n - 1)
-		perGap = min(perGap, 24)
-		perGap = max(perGap, 3)
-		connWidth = perGap
-	}
-
-	// Build dot line
-	var dotLine strings.Builder
-	for i := range n {
-		// Dot
-		switch {
-		case s.IsComplete(i):
-			dotLine.WriteString(completeDot)
-		case s.IsCurrent(i):
-			dotLine.WriteString(currentDot)
-		default:
-			dotLine.WriteString(futureDot)
-		}
-
-		// Connector (not after last dot)
-		if i < n-1 {
-			connStyle := futureConnStyle
-			if s.IsComplete(i) {
-				connStyle = completeConnStyle
-			}
-			dotLine.WriteString(connStyle.Render(strings.Repeat("━", connWidth)))
-		}
-	}
-
-	// Build label line — each step gets an equal-width column, label centered within it.
-	// Total dot line visible width: (n-1)*connWidth + n = n-1 segments + n dots.
-	totalWidth := n + (n-1)*connWidth
-
-	var labelLine strings.Builder
-	labelPos := 0
-	for i, step := range s.Steps {
-		var styled string
-		switch {
-		case s.IsComplete(i):
-			styled = completeLabel.Render(step + " ✓")
-		case s.IsCurrent(i):
-			styled = currentLabel.Render(step)
-		default:
-			styled = futureLabel.Render(step)
-		}
-
-		styledWidth := lipgloss.Width(styled)
-
-		// Center of this step's column
-		var colStart int
-		switch i {
-		case 0:
-			colStart = 0
-		case n - 1:
-			// Last label: right-align so it doesn't overshoot
-			colStart = totalWidth - styledWidth
-		default:
-			// Center under the dot at position i*(connWidth+1)
-			dotPos := i * (connWidth + 1)
-			colStart = dotPos - styledWidth/2
-		}
-
-		// Clamp: don't overlap previous label, don't go negative
-		if colStart < labelPos {
-			colStart = labelPos
-		}
-
-		// Don't exceed total width
-		if colStart+styledWidth > totalWidth {
-			colStart = totalWidth - styledWidth
-			if colStart < labelPos {
-				colStart = labelPos
-			}
-		}
-
-		if colStart > labelPos {
-			labelLine.WriteString(strings.Repeat(" ", colStart-labelPos))
-		}
-		labelLine.WriteString(styled)
-		labelPos = colStart + styledWidth
-	}
-
-	return lipgloss.JoinVertical(lipgloss.Left, dotLine.String(), labelLine.String())
+	return lipgloss.JoinVertical(lipgloss.Left, dotLine, labelLine)
 }

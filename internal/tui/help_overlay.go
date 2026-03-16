@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"image/color"
 	"strings"
 
 	"charm.land/bubbles/v2/viewport"
@@ -129,49 +130,23 @@ type helpSection struct {
 	items []helpEntry
 }
 
+// helpLayout holds precomputed layout parameters for help content rendering.
+type helpLayout struct {
+	width    int
+	stacked  bool
+	keyColW  int
+	descColW int
+	evenBg   color.Color
+}
+
 // renderHelpContent builds styled help text with manual two-column layout.
-// Each section: full-width header, horizontal rule, then key-description rows
-// with alternating backgrounds. Avoids lipgloss table border rendering issues.
 func renderHelpContent(view ActiveView, width int) string {
 	sections := helpSectionsFor(view)
+	layout := computeHelpLayout(sections, width)
 
-	// Compute max key width across ALL sections for consistent columns
-	maxKeyW := 0
-	for _, sec := range sections {
-		for _, item := range sec.items {
-			if w := lipgloss.Width(item.key); w > maxKeyW {
-				maxKeyW = w
-			}
-		}
-	}
-	// Below this width, two-column layout wraps awkwardly — use stacked.
-	stacked := width < 60
-
-	// Key column: 1 padding + key + 1 padding, capped at 40% of width
-	// so CLI Companions' long keys don't squeeze the description column.
-	keyColW := maxKeyW + 2
-	maxKeyCol := width * 2 / 5
-	if keyColW > maxKeyCol {
-		keyColW = maxKeyCol
-	}
-	descColW := width - keyColW
-	if descColW < 10 {
-		descColW = 10
-	}
-
-	headerStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(Colors.Primary).
-		Padding(0, 1)
-
-	noteStyle := lipgloss.NewStyle().
-		Foreground(Colors.TextMuted).
-		Padding(0, 1)
-
-	ruleStyle := lipgloss.NewStyle().Foreground(Colors.SurfaceBorder)
-	rule := ruleStyle.Render(strings.Repeat("─", width))
-
-	evenBg := Colors.SelectionBg
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(Colors.Primary).Padding(0, 1)
+	noteStyle := lipgloss.NewStyle().Foreground(Colors.TextMuted).Padding(0, 1)
+	rule := lipgloss.NewStyle().Foreground(Colors.SurfaceBorder).Render(strings.Repeat("─", width))
 
 	var b strings.Builder
 	rowIdx := 0
@@ -180,7 +155,6 @@ func renderHelpContent(view ActiveView, width int) string {
 		if i > 0 {
 			b.WriteString("\n")
 		}
-
 		b.WriteString(headerStyle.Render(sec.title))
 		b.WriteString("\n")
 		if sec.note != "" {
@@ -191,39 +165,72 @@ func renderHelpContent(view ActiveView, width int) string {
 		b.WriteString("\n")
 
 		for _, item := range sec.items {
-			if stacked {
-				// Stacked: key on its own line, description with └ connector below.
-				// Connector and desc rendered as separate blocks with matching
-				// backgrounds — avoids pre-rendered ANSI codes that prevent
-				// background propagation when nested inside another Render().
-				ks := lipgloss.NewStyle().Bold(true).Foreground(Colors.TextBright).Padding(0, 1).Width(width)
-				cs := lipgloss.NewStyle().Foreground(Colors.TextMuted)
-				ds := lipgloss.NewStyle().Foreground(Colors.TextNormal).Width(width - 3)
-				if rowIdx%2 == 0 {
-					ks = ks.Background(evenBg)
-					cs = cs.Background(evenBg)
-					ds = ds.Background(evenBg)
-				}
-				b.WriteString(ks.Render(item.key))
-				b.WriteString("\n")
-				b.WriteString(cs.Render(" └ ") + ds.Render(item.desc))
-				b.WriteString("\n")
-			} else {
-				// Two-column: key and description side by side
-				ks := lipgloss.NewStyle().Bold(true).Foreground(Colors.TextBright).Padding(0, 1).Width(keyColW)
-				ds := lipgloss.NewStyle().Foreground(Colors.TextNormal).Padding(0, 1).Width(descColW)
-				if rowIdx%2 == 0 {
-					ks = ks.Background(evenBg)
-					ds = ds.Background(evenBg)
-				}
-				b.WriteString(ks.Render(item.key) + ds.Render(item.desc))
-				b.WriteString("\n")
-			}
+			renderHelpRow(&b, item, rowIdx, layout)
 			rowIdx++
 		}
 	}
 
 	return b.String()
+}
+
+// computeHelpLayout determines column widths and layout mode from sections.
+func computeHelpLayout(sections []helpSection, width int) helpLayout {
+	maxKeyW := 0
+	for _, sec := range sections {
+		for _, item := range sec.items {
+			if w := lipgloss.Width(item.key); w > maxKeyW {
+				maxKeyW = w
+			}
+		}
+	}
+
+	keyColW := maxKeyW + 2
+	maxKeyCol := width * 2 / 5
+	if keyColW > maxKeyCol {
+		keyColW = maxKeyCol
+	}
+	descColW := width - keyColW
+	if descColW < 10 {
+		descColW = 10
+	}
+
+	return helpLayout{
+		width:    width,
+		stacked:  width < 60,
+		keyColW:  keyColW,
+		descColW: descColW,
+		evenBg:   Colors.SelectionBg,
+	}
+}
+
+// renderHelpRow writes a single help entry row in stacked or two-column mode.
+func renderHelpRow(b *strings.Builder, item helpEntry, rowIdx int, l helpLayout) {
+	useEvenBg := rowIdx%2 == 0
+
+	if l.stacked {
+		ks := lipgloss.NewStyle().Bold(true).Foreground(Colors.TextBright).Padding(0, 1).Width(l.width)
+		cs := lipgloss.NewStyle().Foreground(Colors.TextMuted)
+		ds := lipgloss.NewStyle().Foreground(Colors.TextNormal).Width(l.width - 3)
+		if useEvenBg {
+			ks = ks.Background(l.evenBg)
+			cs = cs.Background(l.evenBg)
+			ds = ds.Background(l.evenBg)
+		}
+		b.WriteString(ks.Render(item.key))
+		b.WriteString("\n")
+		b.WriteString(cs.Render(" └ ") + ds.Render(item.desc))
+		b.WriteString("\n")
+		return
+	}
+
+	ks := lipgloss.NewStyle().Bold(true).Foreground(Colors.TextBright).Padding(0, 1).Width(l.keyColW)
+	ds := lipgloss.NewStyle().Foreground(Colors.TextNormal).Padding(0, 1).Width(l.descColW)
+	if useEvenBg {
+		ks = ks.Background(l.evenBg)
+		ds = ds.Background(l.evenBg)
+	}
+	b.WriteString(ks.Render(item.key) + ds.Render(item.desc))
+	b.WriteString("\n")
 }
 
 // helpSectionsFor returns structured help data for the given view.

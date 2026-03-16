@@ -227,58 +227,75 @@ func applyCommitsSinceAncestor(w, stderr *cli.Writer, targetPath string, sourceT
 
 // applySpecificCommits cherry-picks specific commits.
 func applySpecificCommits(w, stderr *cli.Writer, targetPath, sourcePath string, shas []string, dryRun, jsonOutput bool) ([]CommitInfo, error) {
-	var commits []CommitInfo
-
-	// Get commit info for each SHA
-	for _, sha := range shas {
-		sha = strings.TrimSpace(sha)
-		if sha == "" {
-			continue
-		}
-
-		// Handle comma-separated SHAs
-		for _, s := range strings.Split(sha, ",") {
-			s = strings.TrimSpace(s)
-			if s == "" {
-				continue
-			}
-
-			// Get commit message
-			msgOutput, err := cmdexec.Output(context.TODO(), "git", []string{"-C", sourcePath, "log", "-1", "--format=%s", s}, "", cmdexec.GitLocal)
-			if err != nil {
-				if !jsonOutput {
-					cli.Warning(stderr, "commit %s not found in source", s)
-				}
-				continue
-			}
-
-			commits = append(commits, CommitInfo{
-				SHA:     s,
-				Message: strings.TrimSpace(string(msgOutput)),
-			})
-		}
-	}
+	normalized := normalizeSHAs(shas)
+	commits := resolveCommits(stderr, sourcePath, normalized, jsonOutput)
 
 	if len(commits) == 0 {
 		return nil, nil
 	}
 
 	if !jsonOutput {
-		cli.Bold(w, "Commits to apply (%d):", len(commits))
-		for _, c := range commits {
-			shortSHA := c.SHA
-			if len(shortSHA) > 7 {
-				shortSHA = shortSHA[:7]
-			}
-			cli.Faint(w, "  %s %s", shortSHA, c.Message)
-		}
+		printCommitList(w, commits)
 	}
 
 	if dryRun {
 		return commits, nil
 	}
 
-	// Cherry-pick each commit
+	if err := cherryPickCommits(w, stderr, targetPath, commits, jsonOutput); err != nil {
+		return commits, err
+	}
+
+	return commits, nil
+}
+
+// normalizeSHAs flattens and trims a list of potentially comma-separated SHAs.
+func normalizeSHAs(shas []string) []string {
+	var result []string
+	for _, sha := range shas {
+		for _, s := range strings.Split(sha, ",") {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				result = append(result, s)
+			}
+		}
+	}
+	return result
+}
+
+// resolveCommits looks up commit messages for each SHA in the source repo.
+func resolveCommits(stderr *cli.Writer, sourcePath string, shas []string, jsonOutput bool) []CommitInfo {
+	var commits []CommitInfo
+	for _, s := range shas {
+		msgOutput, err := cmdexec.Output(context.TODO(), "git", []string{"-C", sourcePath, "log", "-1", "--format=%s", s}, "", cmdexec.GitLocal)
+		if err != nil {
+			if !jsonOutput {
+				cli.Warning(stderr, "commit %s not found in source", s)
+			}
+			continue
+		}
+		commits = append(commits, CommitInfo{
+			SHA:     s,
+			Message: strings.TrimSpace(string(msgOutput)),
+		})
+	}
+	return commits
+}
+
+// printCommitList displays the commits that will be applied.
+func printCommitList(w *cli.Writer, commits []CommitInfo) {
+	cli.Bold(w, "Commits to apply (%d):", len(commits))
+	for _, c := range commits {
+		shortSHA := c.SHA
+		if len(shortSHA) > 7 {
+			shortSHA = shortSHA[:7]
+		}
+		cli.Faint(w, "  %s %s", shortSHA, c.Message)
+	}
+}
+
+// cherryPickCommits applies each commit to the target path via cherry-pick.
+func cherryPickCommits(w, stderr *cli.Writer, targetPath string, commits []CommitInfo, jsonOutput bool) error {
 	if !jsonOutput {
 		cli.Step(w, "Applying commits...")
 	}
@@ -286,16 +303,9 @@ func applySpecificCommits(w, stderr *cli.Writer, targetPath, sourcePath string, 
 	for _, c := range commits {
 		if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", targetPath, "cherry-pick", c.SHA}, "", cmdexec.GitLocal); err != nil {
 			if !jsonOutput {
-				cli.Error(stderr, "Conflict applying %s", c.SHA[:7])
-				_, _ = fmt.Fprintf(stderr, "%s\n", output)
-				cli.Faint(stderr, "To resolve:")
-				cli.Faint(stderr, "  1. Fix conflicts in the affected files")
-				cli.Faint(stderr, "  2. git add <resolved-files>")
-				cli.Faint(stderr, "  3. git cherry-pick --continue")
-				cli.Faint(stderr, "Or to abort:")
-				cli.Faint(stderr, "  git cherry-pick --abort")
+				reportCherryPickConflict(stderr, c.SHA, output)
 			}
-			return commits, fmt.Errorf("cherry-pick failed")
+			return fmt.Errorf("cherry-pick failed")
 		}
 
 		if !jsonOutput {
@@ -303,7 +313,19 @@ func applySpecificCommits(w, stderr *cli.Writer, targetPath, sourcePath string, 
 		}
 	}
 
-	return commits, nil
+	return nil
+}
+
+// reportCherryPickConflict prints conflict resolution instructions.
+func reportCherryPickConflict(stderr *cli.Writer, sha string, output []byte) {
+	cli.Error(stderr, "Conflict applying %s", sha[:7])
+	_, _ = fmt.Fprintf(stderr, "%s\n", output)
+	cli.Faint(stderr, "To resolve:")
+	cli.Faint(stderr, "  1. Fix conflicts in the affected files")
+	cli.Faint(stderr, "  2. git add <resolved-files>")
+	cli.Faint(stderr, "  3. git cherry-pick --continue")
+	cli.Faint(stderr, "Or to abort:")
+	cli.Faint(stderr, "  git cherry-pick --abort")
 }
 
 // applyWIPChanges creates a patch from source's uncommitted changes and applies to target.

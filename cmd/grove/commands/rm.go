@@ -270,7 +270,36 @@ func handleBranchDeletion(repoPath, branch string, forceDelete, forceUnmerged bo
 		return nil
 	}
 
-	// Interactive mode - build prompt with details
+	// Interactive mode - confirm with user
+	return confirmAndDeleteBranch(w, branchMgr, branch, status, forceUnmerged)
+}
+
+// confirmAndDeleteBranch handles interactive branch deletion with user confirmation.
+func confirmAndDeleteBranch(w *cli.Writer, branchMgr *git.BranchManager, branch string, status *git.BranchStatus, forceUnmerged bool) error {
+	details := branchDeletionDetails(branchMgr, branch, status)
+	header := fmt.Sprintf("Branch '%s':", branch)
+
+	confirmed, err := cli.ConfirmWithDetails(w, header, details, "Delete branch?", false)
+	if err != nil {
+		cli.Info(w, "Branch '%s' not deleted (use --delete-branch or --keep-branch)", branch)
+		return nil
+	}
+
+	if confirmed {
+		needsForce := !status.IsMerged || forceUnmerged
+		if err := branchMgr.Delete(branch, needsForce); err != nil {
+			return fmt.Errorf("failed to delete branch: %w", err)
+		}
+		cli.Success(w, "Deleted branch '%s'", branch)
+	} else {
+		cli.Info(w, "Kept branch '%s'", branch)
+	}
+
+	return nil
+}
+
+// branchDeletionDetails builds the detail lines for the branch deletion prompt.
+func branchDeletionDetails(branchMgr *git.BranchManager, branch string, status *git.BranchStatus) []string {
 	var details []string
 
 	if !status.IsMerged {
@@ -280,7 +309,6 @@ func handleBranchDeletion(repoPath, branch string, forceDelete, forceUnmerged bo
 	if status.UnpushedCount > 0 {
 		details = append(details, fmt.Sprintf("Has %d unpushed commit(s)", status.UnpushedCount))
 
-		// Show commits
 		commits, _ := branchMgr.GetUnpushedCommits(branch, 5)
 		for _, commit := range commits {
 			details = append(details, "  "+commit)
@@ -294,28 +322,7 @@ func handleBranchDeletion(repoPath, branch string, forceDelete, forceUnmerged bo
 		details = append(details, "Branch is merged and safe to delete")
 	}
 
-	header := fmt.Sprintf("Branch '%s':", branch)
-
-	// Ask for confirmation. Default is false (keep branch) — safer when Enter is pressed accidentally.
-	confirmed, err := cli.ConfirmWithDetails(w, header, details, "Delete branch?", false)
-	if err != nil {
-		// Non-interactive - provide guidance
-		cli.Info(w, "Branch '%s' not deleted (use --delete-branch or --keep-branch)", branch)
-		return nil
-	}
-
-	if confirmed {
-		// Use force delete if branch is not merged
-		needsForce := !status.IsMerged || forceUnmerged
-		if err := branchMgr.Delete(branch, needsForce); err != nil {
-			return fmt.Errorf("failed to delete branch: %w", err)
-		}
-		cli.Success(w, "Deleted branch '%s'", branch)
-	} else {
-		cli.Info(w, "Kept branch '%s'", branch)
-	}
-
-	return nil
+	return details
 }
 
 func init() {

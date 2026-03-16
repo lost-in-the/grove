@@ -108,10 +108,7 @@ Examples:
 
 		// Compare commits
 		if showCommits {
-			commits, err := getCommitDifference(currentTree.Path, targetTree.Branch)
-			if err != nil {
-				return fmt.Errorf("failed to get commit difference: %w", err)
-			}
+			commits := getCommitDifference(currentTree.Path, targetTree.Branch)
 			result.Commits = commits
 			if len(commits) > 0 {
 				result.HasDiff = true
@@ -120,10 +117,7 @@ Examples:
 
 		// Compare WIP (uncommitted changes)
 		if showWIP {
-			wipDiff, err := getWIPDifference(currentTree.Path, targetTree.Path)
-			if err != nil {
-				return fmt.Errorf("failed to get WIP difference: %w", err)
-			}
+			wipDiff := getWIPDifference(currentTree.Path)
 			if wipDiff != nil && (len(wipDiff.Staged) > 0 || len(wipDiff.Unstaged) > 0 || len(wipDiff.Untracked) > 0) {
 				result.WIP = wipDiff
 				result.HasDiff = true
@@ -200,13 +194,13 @@ Examples:
 }
 
 // getCommitDifference returns commits in current that are not in target branch.
-func getCommitDifference(repoPath, targetBranch string) ([]CommitDiff, error) {
+func getCommitDifference(repoPath, targetBranch string) []CommitDiff {
 	// Get commits that are in HEAD but not in target branch
 	output, err := cmdexec.Output(context.TODO(), "git", []string{"-C", repoPath, "log", "--oneline", "--format=%H|%s|%an|%ar",
 		fmt.Sprintf("%s..HEAD", targetBranch)}, "", cmdexec.GitLocal)
 	if err != nil {
 		// This might fail if branches have diverged significantly
-		return nil, nil
+		return nil
 	}
 
 	var commits []CommitDiff
@@ -225,11 +219,11 @@ func getCommitDifference(repoPath, targetBranch string) ([]CommitDiff, error) {
 			})
 		}
 	}
-	return commits, nil
+	return commits
 }
 
 // getWIPDifference returns uncommitted changes in the current worktree.
-func getWIPDifference(currentPath, _ string) (*WIPDiff, error) {
+func getWIPDifference(currentPath string) *WIPDiff {
 	wip := &WIPDiff{}
 
 	// Get staged files
@@ -259,7 +253,7 @@ func getWIPDifference(currentPath, _ string) (*WIPDiff, error) {
 		}
 	}
 
-	return wip, nil
+	return wip
 }
 
 // getDiffStats returns the diffstat between current HEAD and target branch.
@@ -280,22 +274,29 @@ func getDiffStats(repoPath, targetBranch string) (*DiffStats, error) {
 		}
 		// Format: "N files changed, M insertions(+), K deletions(-)"
 		if strings.Contains(line, "file") && strings.Contains(line, "changed") {
-			_, _ = fmt.Sscanf(line, "%d file", &stats.FilesChanged)
-			if idx := strings.Index(line, "insertion"); idx > 0 {
-				_, _ = fmt.Sscanf(line[strings.LastIndex(line[:idx], " "):idx], "%d", &stats.Insertions)
-			}
-			if idx := strings.Index(line, "deletion"); idx > 0 {
-				start := strings.LastIndex(line[:idx], ",")
-				if start < 0 {
-					start = strings.LastIndex(line[:idx], " ")
-				}
-				_, _ = fmt.Sscanf(line[start:idx], "%d", &stats.Deletions)
-			}
+			parseDiffStatLine(line, stats)
 			break
 		}
 	}
 
 	return stats, nil
+}
+
+// parseDiffStatLine extracts file, insertion, and deletion counts from a git diff --stat summary line.
+func parseDiffStatLine(line string, stats *DiffStats) {
+	_, _ = fmt.Sscanf(line, "%d file", &stats.FilesChanged)
+
+	if idx := strings.Index(line, "insertion"); idx > 0 {
+		_, _ = fmt.Sscanf(line[strings.LastIndex(line[:idx], " "):idx], "%d", &stats.Insertions)
+	}
+
+	if idx := strings.Index(line, "deletion"); idx > 0 {
+		start := strings.LastIndex(line[:idx], ",")
+		if start < 0 {
+			start = strings.LastIndex(line[:idx], " ")
+		}
+		_, _ = fmt.Sscanf(line[start:idx], "%d", &stats.Deletions)
+	}
 }
 
 func init() {

@@ -341,7 +341,8 @@ func setupWorktreeFiles(ext *config.ExternalComposeConfig, newPath, mainPath str
 
 // agentComposeCommand creates a docker compose command with -f and -p flags for agent projects.
 func agentComposeCommand(composePath string, templateFile string, projectName string, env []string, args ...string) *exec.Cmd {
-	cmdArgs := []string{"compose", "-f", templateFile, "-p", projectName}
+	cmdArgs := make([]string, 0, 5+len(args))
+	cmdArgs = append(cmdArgs, "compose", "-f", templateFile, "-p", projectName)
 	cmdArgs = append(cmdArgs, args...)
 
 	cmd := exec.Command("docker", cmdArgs...)
@@ -391,34 +392,46 @@ func warnMemoryUsage(activeStacks int) {
 
 // totalSystemMemoryGB returns total system RAM in GB, or 0 if unavailable.
 func totalSystemMemoryGB() float64 {
-	if runtime.GOOS == "darwin" {
-		out, err := exec.Command("sysctl", "-n", "hw.memsize").Output()
-		if err != nil {
-			return 0
-		}
-		bytes, err := strconv.ParseUint(strings.TrimSpace(string(out)), 10, 64)
-		if err != nil {
-			return 0
-		}
-		return float64(bytes) / (1024 * 1024 * 1024)
+	switch runtime.GOOS {
+	case "darwin":
+		return darwinMemoryGB()
+	case "linux":
+		return linuxMemoryGB()
+	default:
+		return 0
 	}
-	// Linux: read /proc/meminfo
-	if runtime.GOOS == "linux" {
-		out, err := os.ReadFile("/proc/meminfo")
+}
+
+func darwinMemoryGB() float64 {
+	out, err := exec.Command("sysctl", "-n", "hw.memsize").Output()
+	if err != nil {
+		return 0
+	}
+	bytes, err := strconv.ParseUint(strings.TrimSpace(string(out)), 10, 64)
+	if err != nil {
+		return 0
+	}
+	return float64(bytes) / (1024 * 1024 * 1024)
+}
+
+func linuxMemoryGB() float64 {
+	out, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if !strings.HasPrefix(line, "MemTotal:") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			return 0
+		}
+		kb, err := strconv.ParseUint(fields[1], 10, 64)
 		if err != nil {
 			return 0
 		}
-		for _, line := range strings.Split(string(out), "\n") {
-			if strings.HasPrefix(line, "MemTotal:") {
-				fields := strings.Fields(line)
-				if len(fields) >= 2 {
-					kb, err := strconv.ParseUint(fields[1], 10, 64)
-					if err == nil {
-						return float64(kb) / (1024 * 1024)
-					}
-				}
-			}
-		}
+		return float64(kb) / (1024 * 1024)
 	}
 	return 0
 }

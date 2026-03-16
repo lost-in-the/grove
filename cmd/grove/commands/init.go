@@ -25,7 +25,7 @@ var (
 func initArgs(_ *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		shell := args[0]
-		if shell == "zsh" || shell == "bash" || shell == "fish" {
+		if shell == shellZsh || shell == shellBash || shell == "fish" {
 			return fmt.Errorf("to set up shell integration, use: grove install %s\n\n  eval \"$(grove install %s)\"", shell, shell)
 		}
 		return fmt.Errorf("unknown argument %q\n\nUsage: grove init [flags]", shell)
@@ -68,6 +68,52 @@ func runInit() error {
 		return fmt.Errorf("failed to get current directory: %w", err)
 	}
 
+	if err := validateInitPreconditions(cwd); err != nil {
+		return err
+	}
+
+	groveDir := filepath.Join(cwd, ".grove")
+	if err := os.MkdirAll(groveDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .grove directory: %w", err)
+	}
+
+	projectName := detectProjectName(cwd)
+
+	configPath, err := writeInitConfig(groveDir, projectName)
+	if err != nil {
+		return err
+	}
+
+	if err := initializeState(groveDir, cwd, projectName); err != nil {
+		return err
+	}
+
+	if err := updateGitignore(cwd); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to update .gitignore: %v\n", err)
+	}
+
+	writeEnvrc(groveDir, projectName)
+
+	fmt.Printf("✓ Initialized grove project '%s'\n", projectName)
+	fmt.Printf("  Config: %s\n", configPath)
+
+	if !initNoHooks {
+		generateAndWriteHooks(groveDir, cwd)
+	}
+
+	createInitialWorktrees(cwd, projectName)
+
+	fmt.Println("")
+	fmt.Println("Next steps:")
+	fmt.Println("  grove new <name>   Create a new worktree")
+	fmt.Println("  grove ls           List all worktrees")
+	fmt.Println("  grove to <name>    Switch to a worktree")
+
+	return nil
+}
+
+// validateInitPreconditions checks that we're in a valid state to initialize.
+func validateInitPreconditions(cwd string) error {
 	if !isGitRepo(cwd) {
 		PrintError("not a git repository")
 		PrintSuggestion("run 'git init' first, or cd to an existing repository")
@@ -94,12 +140,10 @@ func runInit() error {
 		return nil
 	}
 
-	projectName := detectProjectName(cwd)
+	return nil
+}
 
-	if err := os.MkdirAll(groveDir, 0755); err != nil {
-		return fmt.Errorf("failed to create .grove directory: %w", err)
-	}
-
+func writeInitConfig(groveDir, projectName string) (string, error) {
 	configPath := filepath.Join(groveDir, "config.toml")
 	configContent := fmt.Sprintf(`# Grove project configuration
 project_name = %q
@@ -115,9 +159,12 @@ prefix = ""  # Optional prefix for tmux session names
 `, projectName)
 
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
-		return fmt.Errorf("failed to create config.toml: %w", err)
+		return "", fmt.Errorf("failed to create config.toml: %w", err)
 	}
+	return configPath, nil
+}
 
+func initializeState(groveDir, cwd, projectName string) error {
 	stateMgr, err := state.NewManager(groveDir)
 	if err != nil {
 		return fmt.Errorf("failed to initialize state: %w", err)
@@ -133,14 +180,10 @@ prefix = ""  # Optional prefix for tmux session names
 		Branch: mainBranch,
 		Root:   true,
 	}
-	if err := stateMgr.AddWorktree("main", mainState); err != nil {
-		return fmt.Errorf("failed to register main worktree: %w", err)
-	}
+	return stateMgr.AddWorktree("main", mainState)
+}
 
-	if err := updateGitignore(cwd); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to update .gitignore: %v\n", err)
-	}
-
+func writeEnvrc(groveDir, projectName string) {
 	envrcPath := filepath.Join(groveDir, ".envrc")
 	envrcContent := `# Grove shell integration
 # Source this in your .envrc: source_env .grove/.envrc
@@ -149,82 +192,76 @@ export GROVE_PROJECT="` + projectName + `"
 	if err := os.WriteFile(envrcPath, []byte(envrcContent), 0644); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to create .envrc: %v\n", err)
 	}
+}
 
-	fmt.Printf("✓ Initialized grove project '%s'\n", projectName)
-	fmt.Printf("  Config: %s\n", configPath)
-
-	// Auto-detect project type and generate hooks.toml
-	if !initNoHooks {
-		hooksPath := filepath.Join(groveDir, "hooks.toml")
-		if _, err := os.Stat(hooksPath); os.IsNotExist(err) {
-			profile := detect.Detect(cwd)
-			cfg, _ := config.Load()
-			if cfg != nil && cfg.IsExternalDockerMode() && cfg.Plugins.Docker.External != nil {
-				filterProfileForExternalDocker(profile, cfg.Plugins.Docker.External)
-			}
-			if profile.Type != "unknown" {
-				hooksContent := generateHooksToml(profile)
-				if err := os.WriteFile(hooksPath, []byte(hooksContent), 0644); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: failed to create hooks.toml: %v\n", err)
-				} else {
-					typeName := profile.Type
-					if profile.Type == "mixed" {
-						typeName = "mixed (" + strings.Join(profile.Types, ", ") + ")"
-					}
-					fmt.Printf("\nDetected: %s project\n", typeName)
-					fmt.Printf("  Generated: .grove/hooks.toml\n")
-					for _, f := range profile.Copy {
-						fmt.Printf("    • copy %s\n", f)
-					}
-					for _, s := range profile.Symlinks {
-						fmt.Printf("    • symlink %s\n", s)
-					}
-					for _, c := range profile.Commands {
-						fmt.Printf("    • run: %s\n", c)
-					}
-					fmt.Printf("\n  Edit hooks: grove config --hooks -e\n")
-				}
-			}
-		}
+func generateAndWriteHooks(groveDir, cwd string) {
+	hooksPath := filepath.Join(groveDir, "hooks.toml")
+	if _, err := os.Stat(hooksPath); !os.IsNotExist(err) {
+		return
 	}
 
-	// Create additional worktrees if requested
+	profile := detect.Detect(cwd)
+	cfg, _ := config.Load()
+	if cfg != nil && cfg.IsExternalDockerMode() && cfg.Plugins.Docker.External != nil {
+		filterProfileForExternalDocker(profile, cfg.Plugins.Docker.External)
+	}
+
+	if profile.Type == "unknown" {
+		return
+	}
+
+	hooksContent := generateHooksToml(profile)
+	if err := os.WriteFile(hooksPath, []byte(hooksContent), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to create hooks.toml: %v\n", err)
+		return
+	}
+
+	printHooksSummary(profile)
+}
+
+func printHooksSummary(profile *detect.ProjectProfile) {
+	typeName := profile.Type
+	if profile.Type == "mixed" {
+		typeName = "mixed (" + strings.Join(profile.Types, ", ") + ")"
+	}
+	fmt.Printf("\nDetected: %s project\n", typeName)
+	fmt.Printf("  Generated: .grove/hooks.toml\n")
+	for _, f := range profile.Copy {
+		fmt.Printf("    • copy %s\n", f)
+	}
+	for _, s := range profile.Symlinks {
+		fmt.Printf("    • symlink %s\n", s)
+	}
+	for _, c := range profile.Commands {
+		fmt.Printf("    • run: %s\n", c)
+	}
+	fmt.Printf("\n  Edit hooks: grove config --hooks -e\n")
+}
+
+func createInitialWorktrees(cwd, projectName string) {
 	if initFull {
 		initWithTesting = true
 		initWithScratch = true
 	}
 
+	names := []string{}
 	if initWithTesting {
-		if err := createWorktree(cwd, projectName, "testing"); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to create testing worktree: %v\n", err)
-		} else {
-			fmt.Println("✓ Created 'testing' worktree")
-		}
+		names = append(names, "testing")
 	}
-
 	if initWithScratch {
-		if err := createWorktree(cwd, projectName, "scratch"); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to create scratch worktree: %v\n", err)
-		} else {
-			fmt.Println("✓ Created 'scratch' worktree")
-		}
+		names = append(names, "scratch")
 	}
-
 	if initFull {
-		if err := createWorktree(cwd, projectName, "hotfix"); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to create hotfix worktree: %v\n", err)
-		} else {
-			fmt.Println("✓ Created 'hotfix' worktree")
-		}
+		names = append(names, "hotfix")
 	}
 
-	fmt.Println("")
-	fmt.Println("Next steps:")
-	fmt.Println("  grove new <name>   Create a new worktree")
-	fmt.Println("  grove ls           List all worktrees")
-	fmt.Println("  grove to <name>    Switch to a worktree")
-
-	return nil
+	for _, name := range names {
+		if err := createWorktree(cwd, projectName, name); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to create %s worktree: %v\n", name, err)
+		} else {
+			fmt.Printf("✓ Created '%s' worktree\n", name)
+		}
+	}
 }
 
 // filterProfileForExternalDocker removes entries from a profile that are already
@@ -264,21 +301,23 @@ func filterProfileForExternalDocker(profile *detect.ProjectProfile, ext *config.
 	// Filter commands that operate on symlinked dirs
 	filteredCmds := profile.Commands[:0]
 	for _, c := range profile.Commands {
-		skip := false
-		if symlinkSet["vendor/bundle"] && strings.Contains(c, "bundle install") {
-			skip = true
-		}
-		if symlinkSet["node_modules"] && strings.Contains(c, "npm install") {
-			skip = true
-		}
-		if symlinkSet[".venv"] && strings.Contains(c, "pip install") {
-			skip = true
-		}
-		if !skip {
+		if !shouldSkipCommand(symlinkSet, c) {
 			filteredCmds = append(filteredCmds, c)
 		}
 	}
 	profile.Commands = filteredCmds
+}
+
+// shouldSkipCommand returns true if a command is redundant because the
+// directory it would populate is already provided via symlink.
+func shouldSkipCommand(symlinkSet map[string]bool, cmd string) bool {
+	if symlinkSet["vendor/bundle"] && strings.Contains(cmd, "bundle install") {
+		return true
+	}
+	if symlinkSet["node_modules"] && strings.Contains(cmd, "npm install") {
+		return true
+	}
+	return symlinkSet[".venv"] && strings.Contains(cmd, "pip install")
 }
 
 // generateHooksToml creates hooks.toml content from a detected profile
