@@ -1,5 +1,12 @@
 # Grove function wrapper for zsh
 grove() {
+    # Recursion guard: if __GROVE_BIN is empty or the bare word "grove",
+    # calling it would invoke this function again — infinite recursion.
+    if [[ -z "$__GROVE_BIN" || "$__GROVE_BIN" == "grove" ]]; then
+        echo "grove: binary not found (is grove on your PATH?)" >&2
+        return 127
+    fi
+
     # Bare "grove" with no args launches TUI — run directly, no capture
     if [[ $# -eq 0 ]]; then
         local cd_file=$(mktemp "${TMPDIR:-/tmp}/grove-cd.XXXXXX")
@@ -16,7 +23,7 @@ grove() {
     # Only directive-producing commands need output capture.
     # All other commands run directly for streaming support.
     case "$1" in
-        to|last|fork|fetch|attach|open|up|run|restart)
+        to|t|switch|last|la|fork|fo|split|fetch|f|attach|join|a|j|open|o|up|u|run|kick|k|restart)
             # Capture output and parse for cd:/tmux-attach:/env: directives
             local output exit_code
             output=$(GROVE_SHELL=1 GROVE_SHELL_VERSION="$__GROVE_SHELL_VERSION" "$__GROVE_BIN" "$@")
@@ -84,32 +91,50 @@ _grove_completion() {
     local -a commands
     commands=(
         'ls:List all worktrees'
+        'l:List all worktrees (alias)'
         'new:Create a new worktree'
+        'n:Create a new worktree (alias)'
         'to:Switch to a worktree'
+        't:Switch to a worktree (alias)'
         'rm:Remove a worktree'
         'here:Show current worktree'
+        'h:Show current worktree (alias)'
         'last:Switch to previous worktree'
+        'la:Switch to previous worktree (alias)'
         'fork:Fork current worktree'
-        'compare:Compare worktrees'
-        'apply:Apply changes from another worktree'
+        'fo:Fork current worktree (alias)'
+        'diff:Diff worktrees'
+        'd:Diff worktrees (alias)'
+        'graft:Graft changes from another worktree'
+        'g:Graft changes (alias)'
         'sync:Sync environment worktrees'
-        'clean:Remove old unused worktrees'
+        's:Sync environment worktrees (alias)'
+        'trim:Trim old unused worktrees'
+        'tm:Trim old unused worktrees (alias)'
         'repair:Repair state inconsistencies'
         'init:Initialize grove project'
         'setup:Set up shell integration'
-        'attach:Attach to tmux session for a worktree'
+        'join:Join tmux session for a worktree'
+        'j:Join tmux session (alias)'
         'fetch:Create worktree from issue/PR'
+        'f:Create worktree from issue/PR (alias)'
         'issues:Browse GitHub issues'
         'prs:Browse GitHub PRs'
         'up:Start Docker containers'
+        'u:Start Docker containers (alias)'
         'down:Stop Docker containers'
+        'do:Stop Docker containers (alias)'
         'logs:View Docker logs'
-        'restart:Restart Docker containers'
+        'lo:View Docker logs (alias)'
+        'kick:Kick (restart) Docker containers'
+        'k:Kick Docker containers (alias)'
         'test:Run tests in a worktree'
+        'tt:Run tests (alias)'
         'which:Show current worktree and service status'
         'config:Show configuration'
         'doctor:Check system health and configuration'
         'open:Open a worktree session'
+        'o:Open a worktree session (alias)'
         'ps:Show active stacks'
         'agent-status:Show active isolated stacks'
         'version:Show version'
@@ -120,7 +145,7 @@ _grove_completion() {
         _describe 'command' commands
     elif (( CURRENT == 3 )); then
         case "${words[2]}" in
-            to|rm|compare|sync|test|apply|attach|open)
+            to|t|switch|rm|diff|d|compare|sync|s|test|tt|graft|g|apply|join|j|attach|a|open|o)
                 _describe 'worktree' worktrees
                 ;;
             install)

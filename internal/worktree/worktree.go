@@ -64,25 +64,28 @@ func (m *Manager) Create(name, branch string) error {
 	return m.CreateFromRef(name, branch, "")
 }
 
+// prepareWorktreePath validates the name and returns the full worktree path,
+// returning an error if the name is empty or the path already exists.
+func (m *Manager) prepareWorktreePath(name string) (string, error) {
+	if name == "" {
+		return "", fmt.Errorf("worktree name cannot be empty")
+	}
+	wtPath := filepath.Join(filepath.Dir(m.repoRoot), m.FullName(name))
+	if _, err := os.Stat(wtPath); err == nil {
+		return "", fmt.Errorf("worktree already exists at %s", wtPath)
+	}
+	return wtPath, nil
+}
+
 // CreateFromRef creates a new worktree with a new branch starting from a specific ref.
 // The name parameter is the short name (e.g., "testing")
 // The branch parameter is the new branch name to create.
 // The fromRef parameter is the starting point (e.g., "develop", "origin/main", a commit SHA).
 // If fromRef is empty, the worktree is created from HEAD.
 func (m *Manager) CreateFromRef(name, branch, fromRef string) error {
-	if name == "" {
-		return fmt.Errorf("worktree name cannot be empty")
-	}
-
-	// Get full name with project prefix
-	fullName := m.FullName(name)
-
-	// Worktree path is relative to repo root's parent
-	wtPath := filepath.Join(filepath.Dir(m.repoRoot), fullName)
-
-	// Check if worktree already exists
-	if _, err := os.Stat(wtPath); err == nil {
-		return fmt.Errorf("worktree already exists at %s", wtPath)
+	wtPath, err := m.prepareWorktreePath(name)
+	if err != nil {
+		return err
 	}
 
 	// Validate the ref exists before attempting worktree creation
@@ -110,21 +113,11 @@ func (m *Manager) CreateFromRef(name, branch, fromRef string) error {
 // The name parameter is the short name (e.g., "testing")
 // The directory will be created with the full name including project prefix
 func (m *Manager) CreateFromExisting(name, branch string) error {
-	if name == "" {
-		return fmt.Errorf("worktree name cannot be empty")
+	wtPath, err := m.prepareWorktreePath(name)
+	if err != nil {
+		return err
 	}
 
-	// Get full name with project prefix
-	fullName := m.FullName(name)
-
-	wtPath := filepath.Join(filepath.Dir(m.repoRoot), fullName)
-
-	// Check if worktree already exists
-	if _, err := os.Stat(wtPath); err == nil {
-		return fmt.Errorf("worktree already exists at %s", wtPath)
-	}
-
-	// Create worktree from existing branch (no -b flag)
 	args := []string{"worktree", "add", wtPath, branch}
 	output, err := cmdexec.CombinedOutput(context.TODO(), "git", args, m.repoRoot, cmdexec.GitLocal)
 	if err != nil {
@@ -138,20 +131,13 @@ func (m *Manager) CreateFromExisting(name, branch string) error {
 // For remote branches (e.g., PR branches), it fetches and checks out the branch.
 // The name parameter is the short name (e.g., "pr-123-fix-bug")
 func (m *Manager) CreateFromBranch(name, branch string) error {
-	if name == "" {
-		return fmt.Errorf("worktree name cannot be empty")
-	}
 	if branch == "" {
 		return fmt.Errorf("branch name cannot be empty")
 	}
 
-	// Get full name with project prefix
-	fullName := m.FullName(name)
-	wtPath := filepath.Join(filepath.Dir(m.repoRoot), fullName)
-
-	// Check if worktree already exists
-	if _, err := os.Stat(wtPath); err == nil {
-		return fmt.Errorf("worktree already exists at %s", wtPath)
+	wtPath, err := m.prepareWorktreePath(name)
+	if err != nil {
+		return err
 	}
 
 	// Fetch the branch if it doesn't exist locally (important for PR branches)
@@ -179,8 +165,28 @@ func (m *Manager) Move(oldName, newName string) error {
 		return fmt.Errorf("new worktree name cannot be empty")
 	}
 
-	oldPath := filepath.Join(filepath.Dir(m.repoRoot), m.FullName(oldName))
-	newPath := filepath.Join(filepath.Dir(m.repoRoot), m.FullName(newName))
+	// Look up the actual worktree path instead of constructing it.
+	// Worktrees may live in non-standard locations (e.g. .claude/worktrees/).
+	wt, err := m.Find(oldName)
+	if err != nil {
+		return fmt.Errorf("failed to find worktree %q: %w", oldName, err)
+	}
+	if wt == nil {
+		return fmt.Errorf("worktree %q not found", oldName)
+	}
+	oldPath := wt.Path
+
+	// Place the renamed worktree as a sibling of the original,
+	// preserving the naming convention (with or without project prefix).
+	oldBase := filepath.Base(oldPath)
+	prefix := m.GetProjectName() + "-"
+	var newBase string
+	if strings.HasPrefix(oldBase, prefix) {
+		newBase = prefix + newName
+	} else {
+		newBase = newName
+	}
+	newPath := filepath.Join(filepath.Dir(oldPath), newBase)
 
 	output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"worktree", "move", oldPath, newPath}, m.repoRoot, cmdexec.GitLocal)
 	if err != nil {
@@ -240,6 +246,25 @@ func (m *Manager) List() ([]*Worktree, error) {
 	wg.Wait()
 
 	return trees, nil
+}
+
+// ListNames returns display names for all worktrees without running dirty checks.
+// This is significantly faster than List() and suitable for tab completion.
+func (m *Manager) ListNames() ([]string, error) {
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"worktree", "list", "--porcelain"}, m.repoRoot, cmdexec.GitLocal)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list worktrees: %w", err)
+	}
+
+	projectName := m.GetProjectName()
+	mainPath := m.getMainWorktreePath()
+	trees := parseWorktreeList(string(output), mainPath, projectName)
+
+	names := make([]string, 0, len(trees))
+	for _, t := range trees {
+		names = append(names, t.DisplayName())
+	}
+	return names, nil
 }
 
 // Remove removes a worktree
@@ -375,14 +400,50 @@ func (m *Manager) getCommitInfo(path string) (shortHash, message, age string, er
 	return parts[1], parts[2], parts[3], nil
 }
 
+// newWorktreeEntry creates a Worktree from a "worktree <path>" porcelain line.
+func newWorktreeEntry(path, mainPath, projectName string) *Worktree {
+	name := filepath.Base(path)
+	isMain := (path == mainPath)
+
+	shortName := name
+	if !isMain {
+		prefix := projectName + "-"
+		if strings.HasPrefix(name, prefix) {
+			shortName = strings.TrimPrefix(name, prefix)
+		}
+	}
+
+	return &Worktree{
+		Path:      path,
+		Name:      name,
+		IsMain:    isMain,
+		ShortName: shortName,
+	}
+}
+
+// applyWorktreeAttribute sets a field on wt from a porcelain attribute line.
+func applyWorktreeAttribute(wt *Worktree, line string) {
+	switch {
+	case strings.HasPrefix(line, "HEAD "):
+		wt.Commit = strings.TrimPrefix(line, "HEAD ")
+	case strings.HasPrefix(line, "branch "):
+		branch := strings.TrimPrefix(line, "branch ")
+		wt.Branch = strings.TrimPrefix(branch, "refs/heads/")
+	case strings.HasPrefix(line, "detached"):
+		wt.Branch = "detached"
+	case strings.HasPrefix(line, "prunable"):
+		wt.IsPrunable = true
+	}
+}
+
 // parseWorktreeList parses the output of 'git worktree list --porcelain'
 func parseWorktreeList(output, mainPath, projectName string) []*Worktree {
 	var trees []*Worktree
 	var current *Worktree
 
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
+	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
+
 		if line == "" {
 			if current != nil {
 				trees = append(trees, current)
@@ -392,48 +453,12 @@ func parseWorktreeList(output, mainPath, projectName string) []*Worktree {
 		}
 
 		if strings.HasPrefix(line, "worktree ") {
-			path := strings.TrimPrefix(line, "worktree ")
-			name := filepath.Base(path)
-			isMain := (path == mainPath)
-
-			// Extract short name by removing project prefix
-			shortName := name
-			if !isMain {
-				prefix := projectName + "-"
-				if strings.HasPrefix(name, prefix) {
-					shortName = strings.TrimPrefix(name, prefix)
-				}
-			}
-
-			current = &Worktree{
-				Path:      path,
-				Name:      name,
-				IsMain:    isMain,
-				ShortName: shortName,
-			}
-		} else if strings.HasPrefix(line, "HEAD ") {
-			if current != nil {
-				current.Commit = strings.TrimPrefix(line, "HEAD ")
-			}
-		} else if strings.HasPrefix(line, "branch ") {
-			if current != nil {
-				branch := strings.TrimPrefix(line, "branch ")
-				// Remove refs/heads/ prefix
-				branch = strings.TrimPrefix(branch, "refs/heads/")
-				current.Branch = branch
-			}
-		} else if strings.HasPrefix(line, "detached") {
-			if current != nil {
-				current.Branch = "detached"
-			}
-		} else if strings.HasPrefix(line, "prunable") {
-			if current != nil {
-				current.IsPrunable = true
-			}
+			current = newWorktreeEntry(strings.TrimPrefix(line, "worktree "), mainPath, projectName)
+		} else if current != nil {
+			applyWorktreeAttribute(current, line)
 		}
 	}
 
-	// Don't forget the last worktree
 	if current != nil {
 		trees = append(trees, current)
 	}

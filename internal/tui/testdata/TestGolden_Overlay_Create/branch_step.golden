@@ -1,5 +1,3 @@
-[2m [1m[1mtest-project[m  ·  3 worktrees  ·  on root                                ● root[m [m
-[2m                                                                                [m
                ╭────────────────────────────────────────────────╮
                │                                                │
                │  [1mNew Worktree[m                                  │
@@ -15,10 +13,12 @@
                │      fix/login-bug                             │
                │      release/v2                                │
                │                                                │
-               │    [enter] select  [esc] cancel  type to       │
-               │  filter                                        │
                │                                                │
-               ╰────────────────────────────────────────────────╯
-[2m                                                                                [m
-[2m                                                                                [m
-[2m  [1m↑↓[m navigate · [1menter[m switch · [1mn[m new · [1md[m delete · [1mR[m rename · [1mf[m fork · [1mb[m branch  [m
+               │                                                │
+               │                                                │
+               │                                                │
+               │                                                │
+               │                                                │
+               │                                                │
+               │                                                │
+               │    [enter] select  [esc] cancel  type to       │

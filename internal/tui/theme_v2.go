@@ -17,31 +17,6 @@ func NewColorScheme() ColorScheme {
 	return theme.NewColorScheme()
 }
 
-// isNoColor delegates to the shared theme package.
-func isNoColor() bool {
-	return theme.IsNoColor()
-}
-
-// defaultColorScheme delegates to theme for backward compatibility with tests.
-func defaultColorScheme() ColorScheme {
-	return theme.DefaultColorScheme()
-}
-
-// noColorScheme delegates to theme for backward compatibility with tests.
-func noColorScheme() ColorScheme {
-	return theme.NoColorScheme()
-}
-
-// highContrastColorScheme delegates to theme for backward compatibility with tests.
-func highContrastColorScheme() ColorScheme {
-	return theme.HighContrastColorScheme()
-}
-
-// hexToRGB delegates to theme for backward compatibility with tests.
-func hexToRGB(hex string) (r, g, b uint8, err error) {
-	return theme.HexToRGB(hex)
-}
-
 // StyleSet holds pre-composed lipgloss styles built from a ColorScheme.
 type StyleSet struct {
 	// Borders

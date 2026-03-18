@@ -26,24 +26,31 @@ type Issue struct {
 	URL       string    `json:"url"`
 }
 
+// PRCommit represents a single commit in a pull request.
+type PRCommit struct {
+	SHA     string `json:"sha"`     // short SHA (7 chars)
+	Message string `json:"message"` // first line of commit message
+}
+
 // PullRequest represents a pull request from a tracking system.
 type PullRequest struct {
-	Number         int       `json:"number"`
-	Title          string    `json:"title"`
-	Body           string    `json:"body"`
-	State          string    `json:"state"`
-	Author         string    `json:"author"`
-	Labels         []string  `json:"labels"`
-	Branch         string    `json:"branch"`
-	BaseBranch     string    `json:"base_branch"`
-	IsDraft        bool      `json:"is_draft"`
-	CommitCount    int       `json:"commit_count"`
-	Additions      int       `json:"additions"`
-	Deletions      int       `json:"deletions"`
-	ReviewDecision string    `json:"review_decision"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
-	URL            string    `json:"url"`
+	Number         int        `json:"number"`
+	Title          string     `json:"title"`
+	Body           string     `json:"body"`
+	State          string     `json:"state"`
+	Author         string     `json:"author"`
+	Labels         []string   `json:"labels"`
+	Branch         string     `json:"branch"`
+	BaseBranch     string     `json:"base_branch"`
+	IsDraft        bool       `json:"is_draft"`
+	CommitCount    int        `json:"commit_count"`
+	Commits        []PRCommit `json:"commits"`
+	Additions      int        `json:"additions"`
+	Deletions      int        `json:"deletions"`
+	ReviewDecision string     `json:"review_decision"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	URL            string     `json:"url"`
 }
 
 // ListOptions configures filtering for list operations.
@@ -130,7 +137,7 @@ func slugify(s string) string {
 		case r >= '0' && r <= '9':
 			result = append(result, r)
 			prevDash = false
-		case r == ' ' || r == '-' || r == '_':
+		case r == ' ' || r == '-' || r == '_' || r == '/':
 			if !prevDash && len(result) > 0 {
 				result = append(result, '-')
 				prevDash = true

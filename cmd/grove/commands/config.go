@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 
 	"github.com/spf13/cobra"
 
@@ -132,12 +133,20 @@ Examples:
 
 		_, _ = fmt.Fprintln(w)
 		cli.Bold(w, "[plugins.docker]:")
-		cli.Label(w, "  enabled:", fmt.Sprintf("%v", cfg.Plugins.Docker.Enabled))
-		cli.Label(w, "  auto_start:", fmt.Sprintf("%v", cfg.Plugins.Docker.AutoStart))
-		cli.Label(w, "  auto_stop:", fmt.Sprintf("%v", cfg.Plugins.Docker.AutoStop))
+		cli.Label(w, "  enabled:", formatBoolPtr(cfg.Plugins.Docker.Enabled, "true"))
+		cli.Label(w, "  auto_start:", formatBoolPtr(cfg.Plugins.Docker.AutoStart, "true"))
+		cli.Label(w, "  auto_stop:", formatBoolPtr(cfg.Plugins.Docker.AutoStop, "false"))
 
 		return nil
 	},
+}
+
+// formatBoolPtr safely formats a *bool, returning the default if nil.
+func formatBoolPtr(b *bool, fallback string) string {
+	if b == nil {
+		return fallback
+	}
+	return strconv.FormatBool(*b)
 }
 
 func showHooksConfig(configPath string) error {

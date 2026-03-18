@@ -10,8 +10,8 @@ func TestNewCmd(t *testing.T) {
 		t.Fatal("newCmd is nil")
 	}
 
-	if newCmd.Use != "new <name>" {
-		t.Errorf("newCmd.Use = %v, want 'new <name>'", newCmd.Use)
+	if newCmd.Use != "new [name]" {
+		t.Errorf("newCmd.Use = %v, want 'new [name]'", newCmd.Use)
 	}
 
 	if newCmd.Short == "" {

@@ -320,15 +320,15 @@ Hooks fired: `post_create`
 
 ### Share Changes Between Worktrees
 
-**Compare:**
+**Diff:**
 ```bash
-grove compare <name>
+grove diff <name>
 # Shows diff between current worktree and <name>
 ```
 
-**Apply commits or WIP from another worktree:**
+**Graft commits or WIP from another worktree:**
 ```bash
-grove apply <name>
+grove graft <name>
 # Cherry-picks commits from <name> onto current branch,
 # or applies stashed WIP if no commits differ
 ```

@@ -1,5 +1,12 @@
 # Grove function wrapper for bash
 grove() {
+    # Recursion guard: if __GROVE_BIN is empty or the bare word "grove",
+    # calling it would invoke this function again — infinite recursion.
+    if [[ -z "$__GROVE_BIN" || "$__GROVE_BIN" == "grove" ]]; then
+        echo "grove: binary not found (is grove on your PATH?)" >&2
+        return 127
+    fi
+
     # Bare "grove" with no args launches TUI — run directly, no capture
     if [[ $# -eq 0 ]]; then
         local cd_file=$(mktemp "${TMPDIR:-/tmp}/grove-cd.XXXXXX")
@@ -16,7 +23,7 @@ grove() {
     # Only directive-producing commands need output capture.
     # All other commands run directly for streaming support.
     case "$1" in
-        to|last|fork|fetch|attach|open|up|run|restart)
+        to|t|switch|last|la|fork|fo|split|fetch|f|attach|join|a|j|open|o|up|u|run|kick|k|restart)
             # Capture output and parse for cd:/tmux-attach:/env: directives
             local output exit_code
             output=$(GROVE_SHELL=1 GROVE_SHELL_VERSION="$__GROVE_SHELL_VERSION" "$__GROVE_BIN" "$@")
@@ -89,7 +96,7 @@ _grove_completion() {
         cword=$COMP_CWORD
     fi
 
-    local commands="ls new to rm here last fork compare apply sync clean repair init setup fetch attach open issues prs up down logs restart test which config doctor ps agent-status version install"
+    local commands="ls l new n to t rm here h last la fork fo diff d graft g sync s trim tm repair init setup join j fetch f open o issues prs up u down do logs lo kick k test tt which config doctor ps agent-status version install"
 
     if [[ $cword -eq 1 ]]; then
         COMPREPLY=($(compgen -W "$commands" -- "$cur"))
@@ -97,7 +104,7 @@ _grove_completion() {
     fi
 
     case "${words[1]}" in
-        to|rm|compare|sync|test|apply|attach|open)
+        to|t|switch|rm|diff|d|compare|sync|s|test|tt|graft|g|apply|join|j|attach|a|open|o)
             # Complete with worktree short names (using grove ls -q for consistency)
             local worktrees=$(GROVE_SHELL=1 "$__GROVE_BIN" ls -q 2>/dev/null)
             COMPREPLY=($(compgen -W "$worktrees" -- "$cur"))

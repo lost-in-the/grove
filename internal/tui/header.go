@@ -14,6 +14,7 @@ type Header struct {
 	CurrentBranch   string
 	CurrentName     string
 	ContainerTarget string // worktree name that containers are pointed to
+	SortLabel       string // current sort mode label (e.g. "recent", "dirty")
 }
 
 // View renders the header at the given width.
@@ -36,6 +37,11 @@ func (h Header) View(width int) string {
 	if h.ContainerTarget != "" {
 		left += Styles.TextMuted.Render("  ·  ")
 		left += Styles.ContainerBadgeActive.Render("◆") + Styles.TextMuted.Render(" → ") + Styles.TextNormal.Render(h.ContainerTarget)
+	}
+
+	if h.SortLabel != "" {
+		left += Styles.TextMuted.Render("  ·  ")
+		left += Styles.TextMuted.Render("↕ ") + Styles.TextNormal.Render(h.SortLabel)
 	}
 
 	leftWidth := lipgloss.Width(left)

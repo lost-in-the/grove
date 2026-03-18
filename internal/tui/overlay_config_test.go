@@ -5,10 +5,31 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/lost-in-the/grove/internal/config"
 )
 
 var ansiStripRE = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+// newConfigTestModel creates a test model with config state loaded,
+// including a Huh form built from default config.
+func newConfigTestModel(t *testing.T) Model {
+	t.Helper()
+	m := newTestModel(withItems(3), withSize(80, 30))
+	m = sendKey(m, "c")
+	if m.activeView != ViewConfig {
+		t.Fatalf("expected ViewConfig, got %d", m.activeView)
+	}
+	if m.configState == nil {
+		t.Fatal("expected configState to be set")
+	}
+
+	// Simulate configLoadedMsg to populate fields and build form
+	cfg := config.LoadDefaults()
+	m = sendMsg(m, configLoadedMsg{cfg: cfg})
+	return m
+}
 
 func TestNewConfigState(t *testing.T) {
 	s := NewConfigState()
@@ -49,104 +70,14 @@ func TestConfigOverlay_NilState(t *testing.T) {
 	}
 }
 
-func TestConfigOverlay_TabSwitching(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(80, 30))
-	m = sendKey(m, "c")
+func TestConfigOverlay_FormBuiltOnLoad(t *testing.T) {
+	m := newConfigTestModel(t)
 
-	// Populate fields
-	cfg := config.LoadDefaults()
-	m.configState.Fields = populateConfigFields(cfg)
-	m.configState.Config = cfg
-
-	if m.configState.Tab != ConfigTabGeneral {
-		t.Errorf("expected General tab, got %d", m.configState.Tab)
+	if m.configState.Form == nil {
+		t.Fatal("expected Form to be built after configLoadedMsg")
 	}
-
-	m = sendKey(m, "tab")
-	if m.configState.Tab != ConfigTabBehavior {
-		t.Errorf("expected Behavior tab, got %d", m.configState.Tab)
-	}
-	if m.configState.Cursor != 0 {
-		t.Error("expected cursor reset to 0 on tab switch")
-	}
-
-	m = sendKey(m, "tab")
-	if m.configState.Tab != ConfigTabPlugins {
-		t.Errorf("expected Plugins tab, got %d", m.configState.Tab)
-	}
-
-	m = sendKey(m, "tab")
-	if m.configState.Tab != ConfigTabProtection {
-		t.Errorf("expected Protection tab, got %d", m.configState.Tab)
-	}
-
-	m = sendKey(m, "tab")
-	if m.configState.Tab != ConfigTabGeneral {
-		t.Errorf("expected General tab (wrap around), got %d", m.configState.Tab)
-	}
-}
-
-func TestConfigOverlay_FieldNavigation(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(80, 30))
-	m = sendKey(m, "c")
-
-	cfg := config.LoadDefaults()
-	m.configState.Fields = populateConfigFields(cfg)
-	m.configState.Config = cfg
-
-	if m.configState.Cursor != 0 {
-		t.Errorf("expected cursor at 0, got %d", m.configState.Cursor)
-	}
-
-	m = sendKey(m, "j")
-	if m.configState.Cursor != 1 {
-		t.Errorf("expected cursor at 1, got %d", m.configState.Cursor)
-	}
-
-	m = sendKey(m, "k")
-	if m.configState.Cursor != 0 {
-		t.Errorf("expected cursor at 0, got %d", m.configState.Cursor)
-	}
-
-	// Can't go above 0
-	m = sendKey(m, "k")
-	if m.configState.Cursor != 0 {
-		t.Errorf("expected cursor still at 0, got %d", m.configState.Cursor)
-	}
-}
-
-func TestConfigOverlay_FieldNavigationClamp(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(80, 30))
-	m = sendKey(m, "c")
-
-	cfg := config.LoadDefaults()
-	m.configState.Fields = populateConfigFields(cfg)
-	m.configState.Config = cfg
-
-	// Navigate to the bottom
-	fieldCount := len(m.configState.Fields[ConfigTabGeneral])
-	for i := 0; i < fieldCount+5; i++ {
-		m = sendKey(m, "j")
-	}
-	if m.configState.Cursor != fieldCount-1 {
-		t.Errorf("expected cursor at %d, got %d", fieldCount-1, m.configState.Cursor)
-	}
-}
-
-func TestConfigOverlay_EnterOpensEdit(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(80, 30))
-	m = sendKey(m, "c")
-
-	cfg := config.LoadDefaults()
-	m.configState.Fields = populateConfigFields(cfg)
-	m.configState.Config = cfg
-
-	m = sendKey(m, "enter")
-	if !m.configState.Editing {
-		t.Error("expected Editing=true after enter")
-	}
-	if m.configState.EditBuffer != cfg.ProjectName {
-		t.Errorf("expected EditBuffer=%q, got %q", cfg.ProjectName, m.configState.EditBuffer)
+	if m.configState.FormValues == nil {
+		t.Fatal("expected FormValues to be set after configLoadedMsg")
 	}
 }
 
@@ -168,6 +99,9 @@ func TestConfigLoadedMsg(t *testing.T) {
 	if len(m.configState.Fields[ConfigTabGeneral]) == 0 {
 		t.Error("expected General fields to be populated")
 	}
+	if m.configState.Form == nil {
+		t.Error("expected Form to be built")
+	}
 }
 
 func TestConfigLoadedMsg_Error(t *testing.T) {
@@ -178,6 +112,9 @@ func TestConfigLoadedMsg_Error(t *testing.T) {
 	m = sendMsg(m, configLoadedMsg{err: errTest})
 	if m.configState.Err == nil {
 		t.Error("expected error on configState")
+	}
+	if m.configState.Form != nil {
+		t.Error("expected Form to be nil on error")
 	}
 }
 
@@ -276,7 +213,7 @@ func TestTabName(t *testing.T) {
 }
 
 func TestRenderConfig_AllStates(t *testing.T) {
-	t.Run("empty fields", func(t *testing.T) {
+	t.Run("no form yet", func(t *testing.T) {
 		s := NewConfigState()
 		v := renderConfig(s, 80)
 		if v == "" {
@@ -285,54 +222,30 @@ func TestRenderConfig_AllStates(t *testing.T) {
 		if !strings.Contains(v, "Configuration") {
 			t.Error("expected 'Configuration' title")
 		}
+		if !strings.Contains(v, "Loading configuration...") {
+			t.Error("expected loading message when form is nil")
+		}
 	})
 
-	t.Run("with fields", func(t *testing.T) {
+	t.Run("with form", func(t *testing.T) {
 		s := NewConfigState()
 		cfg := config.LoadDefaults()
 		cfg.ProjectName = "test-project"
 		s.Config = cfg
 		s.Fields = populateConfigFields(cfg)
+		form, vals := buildConfigForm(s.Fields, 60)
+		s.Form = form
+		s.FormValues = vals
+		// Initialize the form so it renders
+		s.Form.Init()
 
 		v := renderConfig(s, 100)
-		if !strings.Contains(v, "project_name") {
+		plain := ansiStripRE.ReplaceAllString(v, "")
+		if !strings.Contains(plain, "project_name") {
 			t.Errorf("expected 'project_name' field in render, got:\n%s", v)
 		}
-		// Strip ANSI codes before checking — lipgloss v2 may wrap each character
-		// individually when applying underline styling.
-		plain := ansiStripRE.ReplaceAllString(v, "")
 		if !strings.Contains(plain, "General") {
-			t.Errorf("expected 'General' tab label, got:\n%s", v)
-		}
-	})
-
-	t.Run("editing mode", func(t *testing.T) {
-		s := NewConfigState()
-		cfg := config.LoadDefaults()
-		s.Config = cfg
-		s.Fields = populateConfigFields(cfg)
-		s.Editing = true
-		s.EditBuffer = s.Fields[ConfigTabGeneral][0].Value
-
-		v := renderConfig(s, 100)
-		if !strings.Contains(v, "save") {
-			t.Error("expected 'save' hint in editing mode")
-		}
-	})
-
-	t.Run("dirty state", func(t *testing.T) {
-		s := NewConfigState()
-		cfg := config.LoadDefaults()
-		s.Config = cfg
-		s.Fields = populateConfigFields(cfg)
-		s.Dirty = true
-
-		v := renderConfig(s, 100)
-		if !strings.Contains(v, "save & close") {
-			t.Error("expected 'save & close' footer in dirty state")
-		}
-		if strings.Contains(v, "unsaved") {
-			t.Error("expected no 'unsaved' indicator — replaced by per-field coloring")
+			t.Errorf("expected 'General' group title, got:\n%s", v)
 		}
 	})
 
@@ -364,37 +277,8 @@ func TestRenderConfig_AllStates(t *testing.T) {
 	})
 }
 
-func TestConfigEditManual_BoolToggle(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(80, 30))
-	m = sendKey(m, "c")
-
-	cfg := config.LoadDefaults()
-	m.configState.Fields = populateConfigFields(cfg)
-	m.configState.Config = cfg
-
-	// Navigate to a bool field (Behavior tab, skip_branch_notice)
-	m = sendKey(m, "tab") // switch to Behavior tab
-	// Navigate down to find a bool field
-	for i := 0; i < len(m.configState.Fields[m.configState.Tab]); i++ {
-		if m.configState.Fields[m.configState.Tab][i].Type == ConfigBool {
-			m.configState.Cursor = i
-			break
-		}
-	}
-
-	m = sendKey(m, "enter")
-	if !m.configState.Editing {
-		t.Fatal("expected editing mode")
-	}
-}
-
 func TestConfigOverlay_EscDirtyConfirms(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(80, 30))
-	m = sendKey(m, "c")
-
-	cfg := config.LoadDefaults()
-	m.configState.Fields = populateConfigFields(cfg)
-	m.configState.Config = cfg
+	m := newConfigTestModel(t)
 	m.configState.Dirty = true
 
 	m = sendKey(m, "esc")
@@ -411,12 +295,7 @@ func TestConfigOverlay_EscDirtyConfirms(t *testing.T) {
 }
 
 func TestConfigOverlay_ConfirmEnterSaves(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(80, 30))
-	m = sendKey(m, "c")
-
-	cfg := config.LoadDefaults()
-	m.configState.Fields = populateConfigFields(cfg)
-	m.configState.Config = cfg
+	m := newConfigTestModel(t)
 	m.configState.Dirty = true
 	m.configState.Confirming = true
 
@@ -431,12 +310,7 @@ func TestConfigOverlay_ConfirmEnterSaves(t *testing.T) {
 }
 
 func TestConfigOverlay_ConfirmEscDiscards(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(80, 30))
-	m = sendKey(m, "c")
-
-	cfg := config.LoadDefaults()
-	m.configState.Fields = populateConfigFields(cfg)
-	m.configState.Config = cfg
+	m := newConfigTestModel(t)
 	m.configState.Dirty = true
 	m.configState.Confirming = true
 
@@ -450,82 +324,99 @@ func TestConfigOverlay_ConfirmEscDiscards(t *testing.T) {
 	}
 }
 
-func TestConfigEditKey_NoFieldsEditing(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewConfig
-	m.configState = NewConfigState()
-	m.configState.Editing = true
-	m.configState.Cursor = 99 // out of bounds
+func TestBuildConfigForm(t *testing.T) {
+	cfg := config.LoadDefaults()
+	fields := populateConfigFields(cfg)
 
-	m = sendKey(m, "enter")
-	if m.configState.Editing {
-		t.Error("expected Editing=false when cursor is out of bounds")
+	form, vals := buildConfigForm(fields, 60)
+	if form == nil {
+		t.Fatal("expected form to be non-nil")
+	}
+	if vals == nil {
+		t.Fatal("expected vals to be non-nil")
+	}
+
+	// Should have bool bindings for the boolean fields
+	if len(vals.bools) == 0 {
+		t.Error("expected bool value bindings")
+	}
+
+	// Should have string bindings for string/enum/list fields
+	if len(vals.strings) == 0 {
+		t.Error("expected string value bindings")
 	}
 }
 
-func TestConfigEditKey_EnterSavesOriginalValue(t *testing.T) {
+func TestSyncConfigFormValues(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m = sendKey(m, "c")
+	m.activeView = ViewConfig
+	m.configState = NewConfigState()
 
 	cfg := config.LoadDefaults()
-	cfg.ProjectName = "my-project"
-	m.configState.Fields = populateConfigFields(cfg)
 	m.configState.Config = cfg
+	m.configState.Fields = populateConfigFields(cfg)
 
-	// Enter should save EditOriginalValue before creating the form
-	m = sendKey(m, "enter")
-	if !m.configState.Editing {
-		t.Fatal("expected Editing=true after enter")
+	form, vals := buildConfigForm(m.configState.Fields, 60)
+	m.configState.Form = form
+	m.configState.FormValues = vals
+
+	// Simulate a bool value change through the binding
+	for key, bPtr := range vals.bools {
+		*bPtr = !*bPtr // flip the bool
+		_ = key
+		break
 	}
-	if m.configState.EditOriginalValue != "my-project" {
-		t.Errorf("expected EditOriginalValue='my-project', got %q", m.configState.EditOriginalValue)
+
+	m.syncConfigFormValues()
+	if !m.configState.Dirty {
+		t.Error("expected Dirty=true after changing a bool value")
 	}
 }
 
 func TestConfigEditKey_DirtyDetection(t *testing.T) {
-	// Verify the Dirty mechanism: Huh updates field.Value through pointer,
-	// so comparing against EditOriginalValue detects changes correctly.
+	// Verify that direct field value changes are detected by syncConfigFormValues
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m = sendKey(m, "c")
+	m.configState = NewConfigState()
 
 	cfg := config.LoadDefaults()
-	m.configState.Fields = populateConfigFields(cfg)
 	m.configState.Config = cfg
+	m.configState.Fields = populateConfigFields(cfg)
 
 	original := m.configState.Fields[ConfigTabGeneral][0].Value
-	m.configState.EditOriginalValue = original
 
 	// Simulate Huh changing the value through pointer binding
 	m.configState.Fields[ConfigTabGeneral][0].Value = "changed-value"
 
-	// The comparison against EditOriginalValue should detect the change
-	if m.configState.Fields[ConfigTabGeneral][0].Value == m.configState.EditOriginalValue {
-		t.Error("expected value to differ from EditOriginalValue after Huh edit")
+	if m.configState.Fields[ConfigTabGeneral][0].Value == original {
+		t.Error("expected value to differ after change")
 	}
 
-	// Verify that unchanged values DON'T set dirty
+	// Restore and verify
 	m.configState.Fields[ConfigTabGeneral][0].Value = original
-	if m.configState.Fields[ConfigTabGeneral][0].Value != m.configState.EditOriginalValue {
-		t.Error("expected value to match EditOriginalValue when unchanged")
+	if m.configState.Fields[ConfigTabGeneral][0].Value != original {
+		t.Error("expected value to match original after restore")
 	}
 }
 
-func TestConfigEditKey_AbortRestoresValue(t *testing.T) {
-	// Verify the abort path restores EditOriginalValue
-	s := NewConfigState()
-	cfg := config.LoadDefaults()
-	cfg.ProjectName = "original-name"
-	s.Fields = populateConfigFields(cfg)
-	s.Config = cfg
+func TestConfigForm_EscapeClosesOverlay(t *testing.T) {
+	m := newConfigTestModel(t)
+	// Form is not dirty, so esc should close directly
+	m.configState.Dirty = false
+	m = sendKey(m, "esc")
+	if m.activeView != ViewDashboard {
+		t.Errorf("expected ViewDashboard after esc on clean form, got %d", m.activeView)
+	}
+	if m.configState != nil {
+		t.Error("expected configState nil after esc on clean form")
+	}
+}
 
-	s.EditOriginalValue = "original-name"
-	// Simulate Huh having modified the value during interaction
-	s.Fields[ConfigTabGeneral][0].Value = "modified-during-edit"
-
-	// The abort code should restore EditOriginalValue
-	s.Fields[ConfigTabGeneral][0].Value = s.EditOriginalValue
-	if s.Fields[ConfigTabGeneral][0].Value != "original-name" {
-		t.Errorf("expected value restored to 'original-name', got %q", s.Fields[ConfigTabGeneral][0].Value)
+func TestConfigForm_MessageForwarding(t *testing.T) {
+	m := newConfigTestModel(t)
+	// Send a WindowSizeMsg — should not panic
+	m = sendMsg(m, tea.WindowSizeMsg{Width: 100, Height: 40})
+	if m.activeView != ViewConfig {
+		t.Errorf("expected ViewConfig after WindowSizeMsg, got %d", m.activeView)
 	}
 }
 

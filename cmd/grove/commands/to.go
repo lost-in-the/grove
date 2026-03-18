@@ -21,8 +21,8 @@ var (
 )
 
 var toCmd = &cobra.Command{
-	Use:     "to <name>",
-	Aliases: []string{"switch"},
+	Use:     "to [name]",
+	Aliases: []string{"switch", "t"},
 	Short:   "Switch to a worktree",
 	Long: `Switch to a worktree by name. If a tmux session exists for the worktree, switch to it.
 If no tmux session exists, create one.
@@ -31,10 +31,21 @@ Use --peek for a lightweight switch that skips hooks (no Docker side effects).
 Useful for code review or quick file checks.
 
 When using shell integration, this will also change your current directory.`,
-	Args: cobra.ExactArgs(1),
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: completeWorktreeNames,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
-		name := args[0]
 		stderr := cli.NewStderr()
+
+		var name string
+		if len(args) == 0 {
+			selected, err := selectWorktree(ctx, "Switch to which worktree?")
+			if err != nil {
+				return err
+			}
+			name = selected
+		} else {
+			name = args[0]
+		}
 
 		if name == "" {
 			return fmt.Errorf("worktree name cannot be empty")
@@ -150,18 +161,18 @@ When using shell integration, this will also change your current directory.`,
 		cfg := ctx.Config
 		tmuxMode := cfg.Tmux.Mode
 		if tmuxMode == "" {
-			tmuxMode = "auto"
+			tmuxMode = tmuxModeAuto
 		}
 		useCC := tmux.ShouldUseControlMode(cfg.Tmux.ControlMode)
 		// Agent mode: suppress tmux to prevent terminal takeover
 		if cfg.AgentMode {
-			tmuxMode = "off"
+			tmuxMode = tmuxModeOff
 		}
 
 		// Handle tmux session (unless mode is "off")
 		var sessionName string
 		var tmuxSwitched bool
-		if tmuxMode != "off" && tmux.IsTmuxAvailable() {
+		if tmuxMode != tmuxModeOff && tmux.IsTmuxAvailable() {
 			sessionName = worktree.TmuxSessionName(projectName, targetTree.DisplayName())
 			exists, err := tmux.SessionExists(sessionName)
 			if err != nil {
@@ -222,7 +233,7 @@ When using shell integration, this will also change your current directory.`,
 		hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
 
 		// Now perform the tmux session switch (if inside tmux)
-		if tmuxMode != "off" && sessionName != "" && tmux.IsInsideTmux() {
+		if tmuxMode != tmuxModeOff && sessionName != "" && tmux.IsInsideTmux() {
 			if err := tmux.SwitchSession(sessionName); err != nil {
 				return fmt.Errorf("failed to switch session: %w", err)
 			}
@@ -237,7 +248,7 @@ When using shell integration, this will also change your current directory.`,
 				// Shell wrapper will parse this and execute cd
 				cli.Directive("cd", targetTree.Path)
 				// In auto mode outside tmux, emit tmux-attach directive for shell wrapper
-				if tmuxMode == "auto" && sessionName != "" {
+				if tmuxMode == tmuxModeAuto && sessionName != "" {
 					cli.TmuxAttachDirective(sessionName, useCC)
 				}
 			} else {
@@ -250,7 +261,7 @@ When using shell integration, this will also change your current directory.`,
 				cli.Faint(stderr, "To change directory manually:")
 				cli.Faint(stderr, "  cd %s", targetTree.Path)
 				// In auto mode outside tmux without shell wrapper, attach directly
-				if tmuxMode == "auto" && sessionName != "" {
+				if tmuxMode == tmuxModeAuto && sessionName != "" {
 					var attachErr error
 					if useCC {
 						attachErr = tmux.AttachSessionControlMode(sessionName)

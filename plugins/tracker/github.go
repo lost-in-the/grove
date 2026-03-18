@@ -104,7 +104,8 @@ func (g *GitHubAdapter) FetchPR(number int) (*PullRequest, error) {
 		BaseRefName string `json:"baseRefName"`
 		IsDraft     bool   `json:"isDraft"`
 		Commits     []struct {
-			Oid string `json:"oid"`
+			Oid             string `json:"oid"`
+			MessageHeadline string `json:"messageHeadline"`
 		} `json:"commits"`
 		Additions      int       `json:"additions"`
 		Deletions      int       `json:"deletions"`
@@ -123,6 +124,15 @@ func (g *GitHubAdapter) FetchPR(number int) (*PullRequest, error) {
 		labels[i] = l.Name
 	}
 
+	commits := make([]PRCommit, len(ghPR.Commits))
+	for i, c := range ghPR.Commits {
+		sha := c.Oid
+		if len(sha) > 7 {
+			sha = sha[:7]
+		}
+		commits[i] = PRCommit{SHA: sha, Message: c.MessageHeadline}
+	}
+
 	return &PullRequest{
 		Number:         ghPR.Number,
 		Title:          ghPR.Title,
@@ -134,6 +144,7 @@ func (g *GitHubAdapter) FetchPR(number int) (*PullRequest, error) {
 		BaseBranch:     ghPR.BaseRefName,
 		IsDraft:        ghPR.IsDraft,
 		CommitCount:    len(ghPR.Commits),
+		Commits:        commits,
 		Additions:      ghPR.Additions,
 		Deletions:      ghPR.Deletions,
 		ReviewDecision: ghPR.ReviewDecision,
@@ -145,7 +156,7 @@ func (g *GitHubAdapter) FetchPR(number int) (*PullRequest, error) {
 
 // ListIssues retrieves issues with optional filtering.
 func (g *GitHubAdapter) ListIssues(opts ListOptions) ([]*Issue, error) {
-	args := []string{"issue", "list", "--json", "number,title,state,author,labels,createdAt,updatedAt,url"}
+	args := []string{"issue", "list", "--json", "number,title,body,state,author,labels,createdAt,updatedAt,url"}
 
 	if opts.State != "" && opts.State != "all" {
 		args = append(args, "--state", opts.State)
@@ -179,6 +190,7 @@ func (g *GitHubAdapter) ListIssues(opts ListOptions) ([]*Issue, error) {
 	var ghIssues []struct {
 		Number int    `json:"number"`
 		Title  string `json:"title"`
+		Body   string `json:"body"`
 		State  string `json:"state"`
 		Author struct {
 			Login string `json:"login"`
@@ -205,6 +217,7 @@ func (g *GitHubAdapter) ListIssues(opts ListOptions) ([]*Issue, error) {
 		issues[i] = &Issue{
 			Number:    gh.Number,
 			Title:     gh.Title,
+			Body:      gh.Body,
 			State:     strings.ToLower(gh.State),
 			Author:    gh.Author.Login,
 			Labels:    labels,
@@ -265,7 +278,8 @@ func (g *GitHubAdapter) ListPRs(opts ListOptions) ([]*PullRequest, error) {
 		BaseRefName string `json:"baseRefName"`
 		IsDraft     bool   `json:"isDraft"`
 		Commits     []struct {
-			Oid string `json:"oid"`
+			Oid             string `json:"oid"`
+			MessageHeadline string `json:"messageHeadline"`
 		} `json:"commits"`
 		Additions      int       `json:"additions"`
 		Deletions      int       `json:"deletions"`
@@ -286,6 +300,15 @@ func (g *GitHubAdapter) ListPRs(opts ListOptions) ([]*PullRequest, error) {
 			labels[j] = l.Name
 		}
 
+		commits := make([]PRCommit, len(gh.Commits))
+		for j, c := range gh.Commits {
+			sha := c.Oid
+			if len(sha) > 7 {
+				sha = sha[:7]
+			}
+			commits[j] = PRCommit{SHA: sha, Message: c.MessageHeadline}
+		}
+
 		prs[i] = &PullRequest{
 			Number:         gh.Number,
 			Title:          gh.Title,
@@ -297,6 +320,7 @@ func (g *GitHubAdapter) ListPRs(opts ListOptions) ([]*PullRequest, error) {
 			BaseBranch:     gh.BaseRefName,
 			IsDraft:        gh.IsDraft,
 			CommitCount:    len(gh.Commits),
+			Commits:        commits,
 			Additions:      gh.Additions,
 			Deletions:      gh.Deletions,
 			ReviewDecision: gh.ReviewDecision,

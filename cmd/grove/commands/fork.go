@@ -40,8 +40,8 @@ type ForkResult struct {
 }
 
 var forkCmd = &cobra.Command{
-	Use:     "fork <name>",
-	Aliases: []string{"split"},
+	Use:     "fork [name]",
+	Aliases: []string{"split", "fo"},
 	Short:   "Fork current worktree into a new one",
 	Long: `Fork the current worktree, creating a new worktree branching from the current HEAD.
 
@@ -53,15 +53,28 @@ Examples:
   grove fork hotfix --branch-name emergency-fix  # Use specific branch name
   grove fork experiment --move-wip   # Move uncommitted changes to fork
   grove fork test --no-switch    # Fork but stay in current worktree`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.MaximumNArgs(1),
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
-		name := args[0]
+		w := cli.NewStdout()
+		stderr := cli.NewStderr()
+
+		var name string
+		if len(args) == 0 {
+			if !cli.IsInteractive() {
+				return fmt.Errorf("worktree name required: grove fork <name>")
+			}
+			var err error
+			name, err = cli.ReadLine("Fork name: ")
+			if err != nil {
+				return err
+			}
+		} else {
+			name = args[0]
+		}
+
 		if name == "" {
 			return fmt.Errorf("worktree name cannot be empty")
 		}
-
-		w := cli.NewStdout()
-		stderr := cli.NewStderr()
 
 		mgr, err := worktree.NewManager(ctx.ProjectRoot)
 		if err != nil {

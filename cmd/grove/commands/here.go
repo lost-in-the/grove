@@ -17,6 +17,16 @@ import (
 const (
 	// maxDirtyFilesShown is the maximum number of dirty files to display
 	maxDirtyFilesShown = 5
+
+	tmuxStatusNone     = "none"
+	tmuxStatusAttached = "attached"
+	tmuxStatusDetached = "detached"
+	statusClean        = "clean"
+	statusDirty        = "dirty"
+	tmuxModeAuto       = "auto"
+	tmuxModeOff        = "off"
+	shellBash          = "bash"
+	shellZsh           = "zsh"
 )
 
 var (
@@ -54,9 +64,10 @@ type tmuxInfo struct {
 }
 
 var hereCmd = &cobra.Command{
-	Use:   "here",
-	Short: "Show current worktree information",
-	Long:  `Display information about the current worktree including name, branch, and status.`,
+	Use:     "here",
+	Aliases: []string{"h"},
+	Short:   "Show current worktree information",
+	Long:    `Display information about the current worktree including name, branch, and status.`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		mgr, err := worktree.NewManager(ctx.ProjectRoot)
 		if err != nil {
@@ -84,7 +95,7 @@ var hereCmd = &cobra.Command{
 		tmuxStatus := tmux.GetSessionStatus(tmuxSessionName)
 
 		// Fallback: check with directory basename
-		if tmuxStatus == "none" {
+		if tmuxStatus == tmuxStatusNone {
 			tmuxSessionName = filepath.Base(tree.Path)
 			tmuxStatus = tmux.GetSessionStatus(tmuxSessionName)
 		}
@@ -107,9 +118,9 @@ var hereCmd = &cobra.Command{
 
 		// JSON mode
 		if hereJSON {
-			status := "clean"
+			status := statusClean
 			if tree.IsDirty {
-				status = "dirty"
+				status = statusDirty
 			}
 
 			var changes []string
@@ -208,7 +219,7 @@ var hereCmd = &cobra.Command{
 
 		// Show tmux status
 		tmuxValue := tmuxSessionName
-		if tmuxStatus != "none" {
+		if tmuxStatus != tmuxStatusNone {
 			tmuxValue = fmt.Sprintf("%s (%s)", tmuxSessionName, tmuxStatus)
 		}
 		cli.Label(w, "tmux:   ", tmuxValue)

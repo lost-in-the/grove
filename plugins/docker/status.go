@@ -51,7 +51,7 @@ func localStatuses(_ *localStrategy, paths []string) map[string]plugins.StatusEn
 			Detail:       "Compose file found",
 		}
 
-		if running, count := composeRunningCount(path, nil); running {
+		if running, count := composeRunningCount(path); running {
 			entry.Level = plugins.StatusActive
 			entry.Short = fmt.Sprintf("up (%d)", count)
 			entry.Detail = fmt.Sprintf("%d container(s) running", count)
@@ -69,7 +69,7 @@ func externalStatuses(s *externalStrategy, paths []string) map[string]plugins.St
 
 	composePath := s.composePath()
 	activeWorktree := readEnvVar(composePath, s.ext.EnvVar)
-	running, count := composeRunningCount(composePath, nil)
+	running, count := composeRunningCount(composePath)
 
 	for _, path := range paths {
 		if !pathMatchesEnv(path, activeWorktree, composePath) {
@@ -213,7 +213,7 @@ func localServiceInfo(currentPath string) *ServiceInfo {
 		return nil
 	}
 
-	running, _ := composeRunningCount(currentPath, nil)
+	running, _ := composeRunningCount(currentPath)
 	return &ServiceInfo{
 		RunningFor:     filepath.Base(currentPath),
 		IsRunning:      running,
@@ -235,7 +235,7 @@ func externalServiceInfo(cfg *config.Config, currentPath string) *ServiceInfo {
 
 	composePath := resolveComposePath(ext.Path)
 	activeWorktree := readEnvVar(composePath, ext.EnvVar)
-	running, _ := composeRunningCount(composePath, nil)
+	running, _ := composeRunningCount(composePath)
 	matches := pathMatchesEnv(currentPath, activeWorktree, composePath)
 
 	runningFor := filepath.Base(activeWorktree)
@@ -268,15 +268,12 @@ func agentServiceInfo(cfg *config.Config, currentPath string) *ServiceInfo {
 }
 
 // composeRunningCount runs docker compose ps -q with a timeout to count running containers.
-func composeRunningCount(composePath string, env []string) (bool, int) {
+func composeRunningCount(composePath string) (bool, int) {
 	ctx, cancel := context.WithTimeout(context.Background(), statusTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "docker", "compose", "ps", "-q")
 	cmd.Dir = composePath
-	if len(env) > 0 {
-		cmd.Env = append(os.Environ(), env...)
-	}
 	out, err := cmd.Output()
 	if err != nil {
 		return false, 0

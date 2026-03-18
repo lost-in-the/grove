@@ -237,6 +237,19 @@ func envBool(name string) bool {
 func mergeConfigs(base, override *Config) *Config {
 	result := *base
 
+	mergeTopLevel(&result, override)
+	mergeSwitchConfig(&result.Switch, &override.Switch)
+	mergeTmuxConfig(&result.Tmux, &override.Tmux)
+	mergeDockerConfig(&result.Plugins.Docker, &override.Plugins.Docker)
+	mergeTUIConfig(&result.TUI, &override.TUI)
+	mergeProtectionConfig(&result.Protection, &override.Protection)
+	mergeTestConfig(&result.Test, &override.Test)
+	mergeSessionConfig(&result.Session, &override.Session)
+
+	return &result
+}
+
+func mergeTopLevel(result *Config, override *Config) {
 	if override.ProjectName != "" {
 		result.ProjectName = override.ProjectName
 	}
@@ -249,98 +262,102 @@ func mergeConfigs(base, override *Config) *Config {
 	if override.DefaultBranch != "" {
 		result.DefaultBranch = override.DefaultBranch
 	}
-	if override.Switch.DirtyHandling != "" {
-		result.Switch.DirtyHandling = override.Switch.DirtyHandling
-	}
-	if override.Switch.ContainerSwitch != "" {
-		result.Switch.ContainerSwitch = override.Switch.ContainerSwitch
-	}
 	if override.Naming.Pattern != "" {
 		result.Naming.Pattern = override.Naming.Pattern
 	}
-	if override.Tmux.Mode != "" {
-		result.Tmux.Mode = override.Tmux.Mode
-	}
-	if override.Tmux.Prefix != "" {
-		result.Tmux.Prefix = override.Tmux.Prefix
-	}
-	if override.Tmux.OnSwitch != "" {
-		result.Tmux.OnSwitch = override.Tmux.OnSwitch
-	}
-	if override.Tmux.ControlMode != nil {
-		result.Tmux.ControlMode = override.Tmux.ControlMode
-	}
-	// Merge plugin configs - only override if explicitly set (non-nil)
-	if override.Plugins.Docker.Enabled != nil {
-		result.Plugins.Docker.Enabled = override.Plugins.Docker.Enabled
-	}
-	if override.Plugins.Docker.AutoStart != nil {
-		result.Plugins.Docker.AutoStart = override.Plugins.Docker.AutoStart
-	}
-	if override.Plugins.Docker.AutoStop != nil {
-		result.Plugins.Docker.AutoStop = override.Plugins.Docker.AutoStop
-	}
-	if override.Plugins.Docker.AutoUp != nil {
-		result.Plugins.Docker.AutoUp = override.Plugins.Docker.AutoUp
-	}
-	if override.Plugins.Docker.Mode != "" {
-		result.Plugins.Docker.Mode = override.Plugins.Docker.Mode
-	}
-	if override.Plugins.Docker.External != nil {
-		result.Plugins.Docker.External = override.Plugins.Docker.External
-	}
+}
 
-	// Merge TUI config
-	if override.TUI.SkipBranchNotice != nil {
-		result.TUI.SkipBranchNotice = override.TUI.SkipBranchNotice
+func mergeSwitchConfig(result, override *SwitchConfig) {
+	if override.DirtyHandling != "" {
+		result.DirtyHandling = override.DirtyHandling
 	}
-	if override.TUI.DefaultBranchAction != "" {
-		result.TUI.DefaultBranchAction = override.TUI.DefaultBranchAction
+	if override.ContainerSwitch != "" {
+		result.ContainerSwitch = override.ContainerSwitch
 	}
-	if override.TUI.WorktreeNameFromBranch != "" {
-		result.TUI.WorktreeNameFromBranch = override.TUI.WorktreeNameFromBranch
-	}
-	if override.TUI.CompactList != nil {
-		result.TUI.CompactList = override.TUI.CompactList
-	}
+}
 
-	// Merge protection config - union semantics (global protections always apply)
-	if len(override.Protection.Protected) > 0 {
-		result.Protection.Protected = deduplicatedUnion(
-			result.Protection.Protected,
-			override.Protection.Protected,
-		)
+func mergeTmuxConfig(result, override *TmuxConfig) {
+	if override.Mode != "" {
+		result.Mode = override.Mode
 	}
-	if len(override.Protection.Immutable) > 0 {
-		result.Protection.Immutable = deduplicatedUnion(
-			result.Protection.Immutable,
-			override.Protection.Immutable,
-		)
+	if override.Prefix != "" {
+		result.Prefix = override.Prefix
 	}
+	if override.OnSwitch != "" {
+		result.OnSwitch = override.OnSwitch
+	}
+	if override.ControlMode != nil {
+		result.ControlMode = override.ControlMode
+	}
+}
 
-	// Merge test config
-	if override.Test.Command != "" {
-		result.Test.Command = override.Test.Command
+func mergeDockerConfig(result, override *DockerPluginConfig) {
+	if override.Enabled != nil {
+		result.Enabled = override.Enabled
 	}
-	if override.Test.Service != "" {
-		result.Test.Service = override.Test.Service
+	if override.AutoStart != nil {
+		result.AutoStart = override.AutoStart
 	}
+	if override.AutoStop != nil {
+		result.AutoStop = override.AutoStop
+	}
+	if override.AutoUp != nil {
+		result.AutoUp = override.AutoUp
+	}
+	if override.Mode != "" {
+		result.Mode = override.Mode
+	}
+	if override.External != nil {
+		result.External = override.External
+	}
+}
 
-	// Merge session config
-	if override.Session.Command != "" {
-		result.Session.Command = override.Session.Command
+func mergeTUIConfig(result, override *TUIConfig) {
+	if override.SkipBranchNotice != nil {
+		result.SkipBranchNotice = override.SkipBranchNotice
 	}
-	if override.Session.Popup != nil {
-		result.Session.Popup = override.Session.Popup
+	if override.DefaultBranchAction != "" {
+		result.DefaultBranchAction = override.DefaultBranchAction
 	}
-	if override.Session.PopupWidth != "" {
-		result.Session.PopupWidth = override.Session.PopupWidth
+	if override.WorktreeNameFromBranch != "" {
+		result.WorktreeNameFromBranch = override.WorktreeNameFromBranch
 	}
-	if override.Session.PopupHeight != "" {
-		result.Session.PopupHeight = override.Session.PopupHeight
+	if override.CompactList != nil {
+		result.CompactList = override.CompactList
 	}
+}
 
-	return &result
+func mergeProtectionConfig(result, override *ProtectionConfig) {
+	if len(override.Protected) > 0 {
+		result.Protected = deduplicatedUnion(result.Protected, override.Protected)
+	}
+	if len(override.Immutable) > 0 {
+		result.Immutable = deduplicatedUnion(result.Immutable, override.Immutable)
+	}
+}
+
+func mergeTestConfig(result, override *TestConfig) {
+	if override.Command != "" {
+		result.Command = override.Command
+	}
+	if override.Service != "" {
+		result.Service = override.Service
+	}
+}
+
+func mergeSessionConfig(result, override *SessionConfig) {
+	if override.Command != "" {
+		result.Command = override.Command
+	}
+	if override.Popup != nil {
+		result.Popup = override.Popup
+	}
+	if override.PopupWidth != "" {
+		result.PopupWidth = override.PopupWidth
+	}
+	if override.PopupHeight != "" {
+		result.PopupHeight = override.PopupHeight
+	}
 }
 
 // deduplicatedUnion merges two string slices, preserving order and removing duplicates.
@@ -420,46 +437,61 @@ func splitKey(key string) (string, string) {
 	return "", key
 }
 
-// setValueInLines inserts or replaces a key=value in the given lines.
-// If section is empty, the key is placed before any section header (top-level).
-func setValueInLines(lines []string, section, field, value string) []string {
-	formattedLine := field + " = " + value
+// lineMatchesField returns true if the trimmed line is an assignment for field.
+func lineMatchesField(trimmed, field string) bool {
+	return strings.HasPrefix(trimmed, field+" =") || strings.HasPrefix(trimmed, field+"=")
+}
 
-	if section == "" {
-		// Top-level key: find existing line or insert before first section header
-		for i, line := range lines {
-			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, field+" =") || strings.HasPrefix(trimmed, field+"=") {
-				lines[i] = formattedLine
-				return lines
-			}
+// setTopLevelValue handles the section=="" case for setValueInLines.
+func setTopLevelValue(lines []string, field, formattedLine string) []string {
+	for i, line := range lines {
+		if lineMatchesField(strings.TrimSpace(line), field) {
+			lines[i] = formattedLine
+			return lines
 		}
-		// Insert before first section header
-		for i, line := range lines {
-			if strings.HasPrefix(strings.TrimSpace(line), "[") {
-				inserted := make([]string, 0, len(lines)+1)
-				inserted = append(inserted, lines[:i]...)
-				inserted = append(inserted, formattedLine)
-				inserted = append(inserted, lines[i:]...)
-				return inserted
-			}
-		}
-		// No sections exist, just append
-		return append(lines, formattedLine)
 	}
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "[") {
+			inserted := make([]string, 0, len(lines)+1)
+			inserted = append(inserted, lines[:i]...)
+			inserted = append(inserted, formattedLine)
+			inserted = append(inserted, lines[i:]...)
+			return inserted
+		}
+	}
+	return append(lines, formattedLine)
+}
 
-	// Find the section header
-	sectionHeader := "[" + section + "]"
-	sectionStart := -1
+// findSectionBounds returns the start index of the section header and the end
+// index (exclusive) of the section body. Returns -1, -1 if the section is not found.
+func findSectionBounds(lines []string, sectionHeader string) (start, end int) {
+	start = -1
 	for i, line := range lines {
 		if strings.TrimSpace(line) == sectionHeader {
-			sectionStart = i
+			start = i
 			break
 		}
 	}
+	if start == -1 {
+		return -1, -1
+	}
+	end = len(lines)
+	for i := start + 1; i < len(lines); i++ {
+		trimmed := strings.TrimSpace(lines[i])
+		if strings.HasPrefix(trimmed, "[") && strings.Contains(trimmed, "]") {
+			end = i
+			break
+		}
+	}
+	return start, end
+}
+
+// setSectionValue handles the section!="" case for setValueInLines.
+func setSectionValue(lines []string, section, field, formattedLine string) []string {
+	sectionHeader := "[" + section + "]"
+	sectionStart, sectionEnd := findSectionBounds(lines, sectionHeader)
 
 	if sectionStart == -1 {
-		// Section doesn't exist — append it
 		if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) != "" {
 			lines = append(lines, "")
 		}
@@ -468,30 +500,28 @@ func setValueInLines(lines []string, section, field, value string) []string {
 		return lines
 	}
 
-	// Find the key within the section (between sectionStart+1 and next section or EOF)
-	sectionEnd := len(lines)
-	for i := sectionStart + 1; i < len(lines); i++ {
-		trimmed := strings.TrimSpace(lines[i])
-		if strings.HasPrefix(trimmed, "[") && strings.Contains(trimmed, "]") {
-			sectionEnd = i
-			break
-		}
-	}
-
 	for i := sectionStart + 1; i < sectionEnd; i++ {
-		trimmed := strings.TrimSpace(lines[i])
-		if strings.HasPrefix(trimmed, field+" =") || strings.HasPrefix(trimmed, field+"=") {
+		if lineMatchesField(strings.TrimSpace(lines[i]), field) {
 			lines[i] = formattedLine
 			return lines
 		}
 	}
 
-	// Key not found in section — insert after header
 	inserted := make([]string, 0, len(lines)+1)
 	inserted = append(inserted, lines[:sectionStart+1]...)
 	inserted = append(inserted, formattedLine)
 	inserted = append(inserted, lines[sectionStart+1:]...)
 	return inserted
+}
+
+// setValueInLines inserts or replaces a key=value in the given lines.
+// If section is empty, the key is placed before any section header (top-level).
+func setValueInLines(lines []string, section, field, value string) []string {
+	formattedLine := field + " = " + value
+	if section == "" {
+		return setTopLevelValue(lines, field, formattedLine)
+	}
+	return setSectionValue(lines, section, field, formattedLine)
 }
 
 // IsExternalDockerMode returns true if the docker plugin is configured for external compose mode.

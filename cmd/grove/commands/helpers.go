@@ -27,19 +27,23 @@ func isGitRepo(dir string) bool {
 
 func detectProjectName(dir string) string {
 	output, err := cmdexec.Output(context.TODO(), "git", []string{"remote", "get-url", "origin"}, dir, cmdexec.GitLocal)
-	if err == nil {
-		url := strings.TrimSpace(string(output))
-		url = strings.TrimSuffix(url, ".git")
-		parts := strings.Split(url, "/")
-		if len(parts) > 0 {
-			name := parts[len(parts)-1]
-			if idx := strings.LastIndex(name, ":"); idx != -1 {
-				name = name[idx+1:]
-			}
-			if name != "" {
-				return name
-			}
-		}
+	if err != nil {
+		return filepath.Base(dir)
+	}
+
+	url := strings.TrimSpace(string(output))
+	url = strings.TrimSuffix(url, ".git")
+	parts := strings.Split(url, "/")
+	if len(parts) == 0 {
+		return filepath.Base(dir)
+	}
+
+	name := parts[len(parts)-1]
+	if idx := strings.LastIndex(name, ":"); idx != -1 {
+		name = name[idx+1:]
+	}
+	if name != "" {
+		return name
 	}
 
 	return filepath.Base(dir)
@@ -151,13 +155,25 @@ func setupCreatedWorktree(ctx *GroveContext, mgr *worktree.Manager, name, branch
 
 	projectName := mgr.GetProjectName()
 
-	// Execute per-project post-create hooks
+	// Execute post-create hooks (per-project and global)
+	runPostCreateHooks(w, ctx, name, branchName, projectName, wt.Path, opts.JSONOutput)
+
+	// Auto-start Docker when configured
+	autoStartDocker(w, ctx.Config, wt.Path, opts.NoDocker, opts.JSONOutput)
+
+	return wt, nil
+}
+
+// runPostCreateHooks executes per-project and global post-create hooks.
+func runPostCreateHooks(w *cli.Writer, ctx *GroveContext, name, branchName, projectName, wtPath string, jsonOutput bool) {
 	hookExecutor, hookErr := hooks.NewExecutor()
 	if hookErr != nil {
-		if !opts.JSONOutput {
+		if !jsonOutput {
 			cli.Warning(w, "Failed to load hooks config: %v", hookErr)
 		}
-	} else if hookExecutor.HasHooksForEvent(hooks.EventPostCreate) {
+		return
+	}
+	if hookExecutor.HasHooksForEvent(hooks.EventPostCreate) {
 		hookCtx := &hooks.ExecutionContext{
 			Event:        hooks.EventPostCreate,
 			Worktree:     name,
@@ -165,35 +181,29 @@ func setupCreatedWorktree(ctx *GroveContext, mgr *worktree.Manager, name, branch
 			Branch:       branchName,
 			Project:      projectName,
 			MainPath:     ctx.ProjectRoot,
-			NewPath:      wt.Path,
+			NewPath:      wtPath,
 		}
-		if !opts.JSONOutput {
+		if !jsonOutput {
 			cli.Step(w, "Running post-create hooks...")
 		}
 		if err := hookExecutor.Execute(hooks.EventPostCreate, hookCtx); err != nil {
-			if !opts.JSONOutput {
+			if !jsonOutput {
 				cli.Warning(w, "Hook execution had errors: %v", err)
 			}
 		}
 	}
 
-	// Fire global registry post-create hook (for plugins like docker external)
 	globalHookCtx := &hooks.Context{
 		Worktree:     name,
 		Config:       ctx.Config,
-		WorktreePath: wt.Path,
+		WorktreePath: wtPath,
 		MainPath:     ctx.ProjectRoot,
 	}
 	if err := hooks.Fire(hooks.EventPostCreate, globalHookCtx); err != nil {
-		if !opts.JSONOutput {
+		if !jsonOutput {
 			cli.Warning(w, "Post-create plugin hook failed: %v", err)
 		}
 	}
-
-	// Auto-start Docker when configured
-	autoStartDocker(w, ctx.Config, wt.Path, opts.NoDocker, opts.JSONOutput)
-
-	return wt, nil
 }
 
 // autoStartDocker starts the Docker stack for a new worktree if configured.

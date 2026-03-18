@@ -42,20 +42,21 @@ type CommitInfo struct {
 }
 
 var applyCmd = &cobra.Command{
-	Use:   "apply <name>",
-	Short: "Apply changes from another worktree",
-	Long: `Apply commits or uncommitted changes from another worktree to the current one.
+	Use:     "graft <name>",
+	Aliases: []string{"apply", "g"},
+	Short:   "Graft changes from another worktree",
+	Long: `Graft commits or uncommitted changes from another worktree to the current one.
 
-By default, applies both committed and uncommitted changes from the source worktree.
-Use --commits or --wip to apply only one type of change.
-Use --pick to apply specific commits by SHA.
+By default, grafts both committed and uncommitted changes from the source worktree.
+Use --commits or --wip to graft only one type of change.
+Use --pick to graft specific commits by SHA.
 
 Examples:
-  grove apply feature-auth           # Apply all changes from feature-auth
-  grove apply feature-auth --commits # Apply only commits (cherry-pick)
-  grove apply feature-auth --wip     # Apply only uncommitted changes
-  grove apply feature-auth --pick abc123,def456  # Apply specific commits
-  grove apply feature-auth --dry-run # Show what would be applied`,
+  grove graft feature-auth           # Graft all changes from feature-auth
+  grove graft feature-auth --commits # Graft only commits (cherry-pick)
+  grove graft feature-auth --wip     # Graft only uncommitted changes
+  grove graft feature-auth --pick abc123,def456  # Graft specific commits
+  grove graft feature-auth --dry-run # Show what would be grafted`,
 	Args: cobra.ExactArgs(1),
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		sourceName := args[0]
@@ -226,58 +227,75 @@ func applyCommitsSinceAncestor(w, stderr *cli.Writer, targetPath string, sourceT
 
 // applySpecificCommits cherry-picks specific commits.
 func applySpecificCommits(w, stderr *cli.Writer, targetPath, sourcePath string, shas []string, dryRun, jsonOutput bool) ([]CommitInfo, error) {
-	var commits []CommitInfo
-
-	// Get commit info for each SHA
-	for _, sha := range shas {
-		sha = strings.TrimSpace(sha)
-		if sha == "" {
-			continue
-		}
-
-		// Handle comma-separated SHAs
-		for _, s := range strings.Split(sha, ",") {
-			s = strings.TrimSpace(s)
-			if s == "" {
-				continue
-			}
-
-			// Get commit message
-			msgOutput, err := cmdexec.Output(context.TODO(), "git", []string{"-C", sourcePath, "log", "-1", "--format=%s", s}, "", cmdexec.GitLocal)
-			if err != nil {
-				if !jsonOutput {
-					cli.Warning(stderr, "commit %s not found in source", s)
-				}
-				continue
-			}
-
-			commits = append(commits, CommitInfo{
-				SHA:     s,
-				Message: strings.TrimSpace(string(msgOutput)),
-			})
-		}
-	}
+	normalized := normalizeSHAs(shas)
+	commits := resolveCommits(stderr, sourcePath, normalized, jsonOutput)
 
 	if len(commits) == 0 {
 		return nil, nil
 	}
 
 	if !jsonOutput {
-		cli.Bold(w, "Commits to apply (%d):", len(commits))
-		for _, c := range commits {
-			shortSHA := c.SHA
-			if len(shortSHA) > 7 {
-				shortSHA = shortSHA[:7]
-			}
-			cli.Faint(w, "  %s %s", shortSHA, c.Message)
-		}
+		printCommitList(w, commits)
 	}
 
 	if dryRun {
 		return commits, nil
 	}
 
-	// Cherry-pick each commit
+	if err := cherryPickCommits(w, stderr, targetPath, commits, jsonOutput); err != nil {
+		return commits, err
+	}
+
+	return commits, nil
+}
+
+// normalizeSHAs flattens and trims a list of potentially comma-separated SHAs.
+func normalizeSHAs(shas []string) []string {
+	var result []string
+	for _, sha := range shas {
+		for _, s := range strings.Split(sha, ",") {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				result = append(result, s)
+			}
+		}
+	}
+	return result
+}
+
+// resolveCommits looks up commit messages for each SHA in the source repo.
+func resolveCommits(stderr *cli.Writer, sourcePath string, shas []string, jsonOutput bool) []CommitInfo {
+	var commits []CommitInfo
+	for _, s := range shas {
+		msgOutput, err := cmdexec.Output(context.TODO(), "git", []string{"-C", sourcePath, "log", "-1", "--format=%s", s}, "", cmdexec.GitLocal)
+		if err != nil {
+			if !jsonOutput {
+				cli.Warning(stderr, "commit %s not found in source", s)
+			}
+			continue
+		}
+		commits = append(commits, CommitInfo{
+			SHA:     s,
+			Message: strings.TrimSpace(string(msgOutput)),
+		})
+	}
+	return commits
+}
+
+// printCommitList displays the commits that will be applied.
+func printCommitList(w *cli.Writer, commits []CommitInfo) {
+	cli.Bold(w, "Commits to apply (%d):", len(commits))
+	for _, c := range commits {
+		shortSHA := c.SHA
+		if len(shortSHA) > 7 {
+			shortSHA = shortSHA[:7]
+		}
+		cli.Faint(w, "  %s %s", shortSHA, c.Message)
+	}
+}
+
+// cherryPickCommits applies each commit to the target path via cherry-pick.
+func cherryPickCommits(w, stderr *cli.Writer, targetPath string, commits []CommitInfo, jsonOutput bool) error {
 	if !jsonOutput {
 		cli.Step(w, "Applying commits...")
 	}
@@ -285,16 +303,9 @@ func applySpecificCommits(w, stderr *cli.Writer, targetPath, sourcePath string, 
 	for _, c := range commits {
 		if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", targetPath, "cherry-pick", c.SHA}, "", cmdexec.GitLocal); err != nil {
 			if !jsonOutput {
-				cli.Error(stderr, "Conflict applying %s", c.SHA[:7])
-				_, _ = fmt.Fprintf(stderr, "%s\n", output)
-				cli.Faint(stderr, "To resolve:")
-				cli.Faint(stderr, "  1. Fix conflicts in the affected files")
-				cli.Faint(stderr, "  2. git add <resolved-files>")
-				cli.Faint(stderr, "  3. git cherry-pick --continue")
-				cli.Faint(stderr, "Or to abort:")
-				cli.Faint(stderr, "  git cherry-pick --abort")
+				reportCherryPickConflict(stderr, c.SHA, output)
 			}
-			return commits, fmt.Errorf("cherry-pick failed")
+			return fmt.Errorf("cherry-pick failed")
 		}
 
 		if !jsonOutput {
@@ -302,7 +313,19 @@ func applySpecificCommits(w, stderr *cli.Writer, targetPath, sourcePath string, 
 		}
 	}
 
-	return commits, nil
+	return nil
+}
+
+// reportCherryPickConflict prints conflict resolution instructions.
+func reportCherryPickConflict(stderr *cli.Writer, sha string, output []byte) {
+	cli.Error(stderr, "Conflict applying %s", sha[:7])
+	_, _ = fmt.Fprintf(stderr, "%s\n", output)
+	cli.Faint(stderr, "To resolve:")
+	cli.Faint(stderr, "  1. Fix conflicts in the affected files")
+	cli.Faint(stderr, "  2. git add <resolved-files>")
+	cli.Faint(stderr, "  3. git cherry-pick --continue")
+	cli.Faint(stderr, "Or to abort:")
+	cli.Faint(stderr, "  git cherry-pick --abort")
 }
 
 // applyWIPChanges creates a patch from source's uncommitted changes and applies to target.
@@ -360,7 +383,7 @@ func applyWIPChanges(w, stderr *cli.Writer, targetPath, sourcePath string, dryRu
 			cli.Error(stderr, "Failed to apply uncommitted changes")
 			_, _ = fmt.Fprintf(stderr, "%v\n", err)
 			cli.Faint(stderr, "The patch may have conflicts with your current changes.")
-			cli.Faint(stderr, "Resolve manually or try 'grove compare' to see differences first.")
+			cli.Faint(stderr, "Resolve manually or try 'grove diff' to see differences first.")
 		}
 		return wipFiles, fmt.Errorf("failed to apply WIP patch")
 	}

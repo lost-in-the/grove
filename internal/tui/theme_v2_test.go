@@ -5,10 +5,12 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+
+	"github.com/lost-in-the/grove/internal/theme"
 )
 
 func TestColorScheme_SemanticColorsNotNil(t *testing.T) {
-	scheme := defaultColorScheme()
+	scheme := theme.DefaultColorScheme()
 	colors := map[string]interface{}{
 		"Primary":   scheme.Primary,
 		"Secondary": scheme.Secondary,
@@ -26,7 +28,7 @@ func TestColorScheme_SemanticColorsNotNil(t *testing.T) {
 }
 
 func TestColorScheme_SurfaceColorsNotNil(t *testing.T) {
-	scheme := defaultColorScheme()
+	scheme := theme.DefaultColorScheme()
 	colors := map[string]interface{}{
 		"SurfaceBg":     scheme.SurfaceBg,
 		"SurfaceFg":     scheme.SurfaceFg,
@@ -42,7 +44,7 @@ func TestColorScheme_SurfaceColorsNotNil(t *testing.T) {
 }
 
 func TestColorScheme_TextColorsNotNil(t *testing.T) {
-	scheme := defaultColorScheme()
+	scheme := theme.DefaultColorScheme()
 	colors := map[string]interface{}{
 		"TextNormal": scheme.TextNormal,
 		"TextBright": scheme.TextBright,
@@ -76,7 +78,7 @@ func TestColorScheme_NOCOLORRespected(t *testing.T) {
 // --- StyleSet Tests ---
 
 func TestStyleSet_NewStyleSetReturnsPopulated(t *testing.T) {
-	scheme := defaultColorScheme()
+	scheme := theme.DefaultColorScheme()
 	ss := NewStyleSet(scheme)
 
 	// Verify key styles are non-zero (have properties set)
@@ -125,7 +127,7 @@ func TestStyleSet_NewStyleSetReturnsPopulated(t *testing.T) {
 }
 
 func TestStyleSet_AllCategoriesPresent(t *testing.T) {
-	scheme := defaultColorScheme()
+	scheme := theme.DefaultColorScheme()
 	ss := NewStyleSet(scheme)
 
 	// Borders
@@ -199,7 +201,7 @@ func TestStyleSet_GlobalStylesInitialized(t *testing.T) {
 }
 
 func TestStyleSet_NOCOLORProducesPlainStyles(t *testing.T) {
-	scheme := noColorScheme()
+	scheme := theme.NoColorScheme()
 	ss := NewStyleSet(scheme)
 
 	// Styles should still be valid (not panic), just without colors
@@ -209,7 +211,7 @@ func TestStyleSet_NOCOLORProducesPlainStyles(t *testing.T) {
 }
 
 func TestColorScheme_AllFieldsPopulated(t *testing.T) {
-	scheme := defaultColorScheme()
+	scheme := theme.DefaultColorScheme()
 
 	// Verify no semantic color is nil
 	colors := map[string]interface{}{

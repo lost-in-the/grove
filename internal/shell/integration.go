@@ -28,10 +28,14 @@ func GenerateBashIntegration() (string, error) {
 
 // generateIntegration produces shell integration code for the given shell.
 func generateIntegration(shell, rcFile, installCmd, template string) (string, error) {
-	// Use dynamic resolution instead of hardcoding os.Executable() path.
-	// The eval "$(grove install zsh)" pattern means grove is already on PATH
-	// when this runs. command -v finds it reliably regardless of install method.
-	binResolver := `__GROVE_BIN="$(command -v grove 2>/dev/null || echo grove)"`
+	// Resolve the binary path dynamically. If grove isn't on PATH when the
+	// shell sources this (e.g. PATH not yet set up in .zshrc), bail out
+	// instead of falling back to the bare name "grove" — that would cause
+	// the grove() function to call itself recursively (infinite loop).
+	binResolver := `__GROVE_BIN="$(command -v grove 2>/dev/null)" || {
+    echo "grove: binary not found on PATH — shell integration disabled" >&2
+    return 0 2>/dev/null || true
+}`
 
 	header := fmt.Sprintf(`# Grove shell integration for %s
 # ─────────────────────────────────────────────────────────────────────────────

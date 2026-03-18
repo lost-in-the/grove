@@ -58,9 +58,9 @@ Running `eval "$(grove install <shell>)"` installs three things:
 
 The wrapper uses a **directives protocol** — the grove binary writes special lines to stdout that the shell function intercepts and acts on.
 
-### Directive Commands (`grove to`, `grove last`, `grove fork`, `grove fetch`, `grove attach`, `grove open`, `grove up`, `grove run`, `grove restart`)
+### Directive Commands (`grove to`, `grove last`, `grove fork`, `grove fetch`, `grove join`, `grove open`, `grove up`, `grove run`, `grove kick`)
 
-These commands can emit `cd:`, `tmux-attach:`, `tmux-attach-cc:`, or `env:` directives. The wrapper captures their stdout (stderr passes through to the terminal), scans it line-by-line, separates directives from normal output, and then:
+These commands (and their aliases) can emit `cd:`, `tmux-attach:`, `tmux-attach-cc:`, or `env:` directives. The wrapper captures their stdout (stderr passes through to the terminal), scans it line-by-line, separates directives from normal output, and then:
 
 1. Exports any environment variables
 2. Executes any directory change
@@ -155,7 +155,7 @@ Uses `complete -F _grove_completion grove`. Works with or without bash-completio
 | Position | Completions |
 |----------|-------------|
 | First argument | All grove commands |
-| Second argument (after `to`, `rm`, `compare`, `sync`, `test`, `apply`, `attach`, `open`) | Worktree short names |
+| Second argument (after `to`, `rm`, `diff`, `sync`, `test`, `graft`, `join`, `open`) | Worktree short names |
 | Second argument (after `install`) | `zsh`, `bash` |
 
 Worktree names are fetched by running `grove ls -q` (quiet mode), which lists short names only.

@@ -11,10 +11,32 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	"github.com/lost-in-the/grove/internal/plugins"
+	"github.com/lost-in-the/grove/internal/state"
 	"github.com/lost-in-the/grove/internal/tui"
 	"github.com/lost-in-the/grove/internal/worktree"
 	"github.com/lost-in-the/grove/plugins/tracker"
 )
+
+func browseRunE(
+	runTUI func(*worktree.Manager, *state.Manager, string, ...*plugins.Manager) (string, bool, error),
+	fzfFallback func(*cobra.Command, *GroveContext) error,
+) func(*cobra.Command, []string) error {
+	return RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
+		useFzf, _ := cmd.Flags().GetBool("fzf")
+
+		if !useFzf && term.IsTerminal(int(os.Stdin.Fd())) && os.Getenv("GROVE_TUI") != "0" {
+			mgr, err := worktree.NewManager(ctx.ProjectRoot)
+			if err != nil {
+				return fmt.Errorf("failed to initialize worktree manager: %w", err)
+			}
+			_, _, err = runTUI(mgr, ctx.State, ctx.ProjectRoot, ctx.PluginManager)
+			return err
+		}
+
+		return fzfFallback(cmd, ctx)
+	})
+}
 
 var issuesCmd = &cobra.Command{
 	Use:   "issues",
@@ -29,20 +51,7 @@ Examples:
   grove issues --fzf        # Use fzf for selection
   grove issues --state all  # Include closed issues
   grove issues --label bug  # Filter by label`,
-	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
-		useFzf, _ := cmd.Flags().GetBool("fzf")
-
-		if !useFzf && term.IsTerminal(int(os.Stdin.Fd())) && os.Getenv("GROVE_TUI") != "0" {
-			mgr, err := worktree.NewManager(ctx.ProjectRoot)
-			if err != nil {
-				return fmt.Errorf("failed to initialize worktree manager: %w", err)
-			}
-			_, err = tui.RunIssues(mgr, ctx.State, ctx.ProjectRoot, ctx.PluginManager)
-			return err
-		}
-
-		return browseIssuesFzf(cmd, ctx)
-	}),
+	RunE: browseRunE(tui.RunIssues, browseIssuesFzf),
 }
 
 var prsCmd = &cobra.Command{
@@ -58,20 +67,7 @@ Examples:
   grove prs --fzf          # Use fzf for selection
   grove prs --state all    # Include closed PRs
   grove prs --label feature  # Filter by label`,
-	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
-		useFzf, _ := cmd.Flags().GetBool("fzf")
-
-		if !useFzf && term.IsTerminal(int(os.Stdin.Fd())) && os.Getenv("GROVE_TUI") != "0" {
-			mgr, err := worktree.NewManager(ctx.ProjectRoot)
-			if err != nil {
-				return fmt.Errorf("failed to initialize worktree manager: %w", err)
-			}
-			_, err = tui.RunPRs(mgr, ctx.State, ctx.ProjectRoot, ctx.PluginManager)
-			return err
-		}
-
-		return browsePRsFzf(cmd, ctx)
-	}),
+	RunE: browseRunE(tui.RunPRs, browsePRsFzf),
 }
 
 func truncate(s string, maxLen int) string {

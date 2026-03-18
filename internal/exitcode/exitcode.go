@@ -3,9 +3,6 @@
 package exitcode
 
 const (
-	// Success indicates the command completed successfully.
-	Success = 0
-
 	// ResourceNotFound indicates a requested resource (worktree, branch, etc.) was not found.
 	ResourceNotFound = 1
 
@@ -38,33 +35,3 @@ const (
 	// Used by grove repair when worktrees are orphaned.
 	WorktreeMissing = 11
 )
-
-// Message returns a human-readable message for an exit code.
-func Message(code int) string {
-	switch code {
-	case Success:
-		return "success"
-	case ResourceNotFound:
-		return "resource not found"
-	case ResourceExists:
-		return "resource already exists"
-	case GitOperationFailed:
-		return "git operation failed"
-	case InvalidInput:
-		return "invalid input"
-	case UserCancelled:
-		return "operation canceled"
-	case ExternalCommandFailed:
-		return "external command failed"
-	case CannotRemove:
-		return "cannot remove worktree"
-	case ConstraintViolated:
-		return "constraint violated"
-	case NotGroveProject:
-		return "not a grove project"
-	case WorktreeMissing:
-		return "worktree missing"
-	default:
-		return "unknown error"
-	}
-}

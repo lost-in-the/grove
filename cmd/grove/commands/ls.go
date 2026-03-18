@@ -50,7 +50,7 @@ type lsOutput struct {
 
 var lsCmd = &cobra.Command{
 	Use:     "ls",
-	Aliases: []string{"list"},
+	Aliases: []string{"list", "l"},
 	Short:   "List all worktrees",
 	Long:    `List all git worktrees with their status (clean/dirty) and branch information.`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
@@ -59,14 +59,34 @@ var lsCmd = &cobra.Command{
 			return fmt.Errorf("failed to initialize worktree manager: %w", err)
 		}
 
+		// Fast paths: quiet and paths modes skip dirty checks entirely
+		if lsQuiet {
+			names, err := mgr.ListNames()
+			if err != nil {
+				return fmt.Errorf("failed to list worktree names: %w", err)
+			}
+			for _, name := range names {
+				fmt.Println(name)
+			}
+			return nil
+		}
+
 		trees, err := mgr.List()
 		if err != nil {
 			return fmt.Errorf("failed to list worktrees: %w", err)
 		}
 
 		if len(trees) == 0 {
-			if !lsQuiet && !lsPaths && !lsJSON {
+			if !lsPaths && !lsJSON {
 				fmt.Println("No worktrees found")
+			}
+			return nil
+		}
+
+		// Paths only mode
+		if lsPaths {
+			for _, tree := range trees {
+				fmt.Println(tree.Path)
 			}
 			return nil
 		}
@@ -100,22 +120,6 @@ var lsCmd = &cobra.Command{
 			pluginStatuses = ctx.PluginManager.CollectStatuses(paths)
 		}
 
-		// Paths only mode
-		if lsPaths {
-			for _, tree := range trees {
-				fmt.Println(tree.Path)
-			}
-			return nil
-		}
-
-		// Quiet mode - names only
-		if lsQuiet {
-			for _, tree := range trees {
-				fmt.Println(tree.DisplayName())
-			}
-			return nil
-		}
-
 		// JSON mode
 		if lsJSON {
 			currentName := ""
@@ -130,27 +134,27 @@ var lsCmd = &cobra.Command{
 			}
 
 			for _, tree := range trees {
-				status := "clean"
+				status := statusClean
 				if tree.IsPrunable {
 					status = "stale"
 				} else if tree.IsDirty {
-					status = "dirty"
+					status = statusDirty
 				}
 
-				tmuxStatus := "none"
+				tmuxStatus := tmuxStatusNone
 				if tmuxAvailable && sessions != nil {
 					sessionName := worktree.TmuxSessionName(projectName, tree.DisplayName())
 					if session, ok := sessions[sessionName]; ok {
 						if session.Attached {
-							tmuxStatus = "attached"
+							tmuxStatus = tmuxStatusAttached
 						} else {
-							tmuxStatus = "detached"
+							tmuxStatus = tmuxStatusDetached
 						}
 					} else if session, ok := sessions[tree.Name]; ok {
 						if session.Attached {
-							tmuxStatus = "attached"
+							tmuxStatus = tmuxStatusAttached
 						} else {
-							tmuxStatus = "detached"
+							tmuxStatus = tmuxStatusDetached
 						}
 					}
 				}
@@ -241,14 +245,14 @@ var lsCmd = &cobra.Command{
 				indicator = "●"
 			}
 
-			status := "clean"
+			status := statusClean
 			if tree.IsPrunable {
 				status = "stale"
 			} else if tree.IsDirty {
-				status = "dirty"
+				status = statusDirty
 			}
 
-			tmuxStatus := "none"
+			tmuxStatus := tmuxStatusNone
 			if tmuxAvailable {
 				tmuxStatus = tmuxStatusFor(tree, projectName, sessions)
 			}
@@ -286,18 +290,18 @@ var lsCmd = &cobra.Command{
 // sessions may be nil (when tmux is not available).
 func tmuxStatusFor(tree *worktree.Worktree, projectName string, sessions map[string]*tmux.Session) string {
 	if sessions == nil {
-		return "none"
+		return tmuxStatusNone
 	}
 	sessionName := worktree.TmuxSessionName(projectName, tree.DisplayName())
 	for _, key := range []string{sessionName, tree.Name} {
 		if session, ok := sessions[key]; ok {
 			if session.Attached {
-				return "attached"
+				return tmuxStatusAttached
 			}
-			return "detached"
+			return tmuxStatusDetached
 		}
 	}
-	return "none"
+	return tmuxStatusNone
 }
 
 func statusLevelString(level plugins.StatusLevel) string {
@@ -311,7 +315,7 @@ func statusLevelString(level plugins.StatusLevel) string {
 	case plugins.StatusError:
 		return "error"
 	default:
-		return "none"
+		return tmuxStatusNone
 	}
 }
 
