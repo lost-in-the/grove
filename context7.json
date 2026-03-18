@@ -1,4 +1,6 @@
 {
+  "url": "https://context7.com/lost-in-the/grove",
+  "public_key": "pk_lHvYkoK2DwC8Cbj0p10kg",
   "projectTitle": "Grove — Git Worktree Flow Manager",
   "description": "Go CLI that manages git worktrees with tmux integration, Docker orchestration, credential copying, and shell integration. One command creates a worktree, branch, tmux session, and Docker stack.",
   "folders": [
