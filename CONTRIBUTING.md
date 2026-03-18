@@ -10,7 +10,7 @@ Be respectful, inclusive, and professional. We're all here to build something gr
 
 ### Prerequisites
 
-- Go 1.24 or later
+- Go 1.25 or later
 - Git 2.30 or later
 - Tmux 3.0 or later (for testing tmux features)
 - Make
@@ -255,7 +255,7 @@ CI runs on push to `main` (and `copilot/**` branches) and on PRs to `main`. Thre
 | **Lint** | golangci-lint (version pinned in CI) + `go vet` + `gofmt -s` check |
 | **Build** | `make build` (binary compilation) |
 
-All three use Go 1.24 with module cache keyed by `go.sum`. All three must pass for a PR to merge.
+All three use Go 1.25 with module cache keyed by `go.sum`. All three must pass for a PR to merge.
 
 ### Releases & Distribution
 
