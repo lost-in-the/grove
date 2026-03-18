@@ -40,7 +40,7 @@ func formatNumber(n int) string {
 }
 
 // renderPRItemList renders a scrollable list of PR items with cursor, scroll window, and overflow indicator.
-func renderPRItemList(prs []*tracker.PullRequest, cursor int, scrollSize int, contentWidth int, worktreeBranches map[string]bool) string {
+func renderPRItemList(prs []*tracker.PullRequest, cursor int, scrollSize int, contentWidth int, worktreeBranches map[string]string) string {
 	var b strings.Builder
 	if len(prs) == 0 {
 		b.WriteString(Styles.DetailDim.Render("  (no matching PRs)") + "\n")
@@ -72,7 +72,7 @@ func renderPRItemList(prs []*tracker.PullRequest, cursor int, scrollSize int, co
 		diffStats := formatDiffStats(pr.Additions, pr.Deletions)
 
 		badge := ""
-		if worktreeBranches[pr.Branch] {
+		if worktreeBranches[pr.Branch] != "" {
 			badge = "  " + Styles.SuccessText.Render("✓ worktree")
 		}
 
@@ -107,7 +107,7 @@ func (m Model) renderPRPanel() string {
 		separatorName = fmt.Sprintf("#%d %s", pr.Number, truncate(pr.Title, m.width-22))
 	}
 
-	return m.renderContextPanel(contextPanelConfig{
+	panel := m.renderContextPanel(contextPanelConfig{
 		contextLabel: "Pull Requests",
 		footer:       m.renderPRFooter(),
 		renderList: func(width int, spinnerView string, maxHeight int) string {
@@ -115,7 +115,7 @@ func (m Model) renderPRPanel() string {
 		},
 		renderDetail: func(width, height int) string {
 			if s.Loading {
-				return m.spinner.View() + " Loading PRs..."
+				return ""
 			}
 			if s.Creating {
 				return renderCreatingDetail(s.ActivityLog, m.spinner.View(), renderCreatingMsg(s))
@@ -127,6 +127,11 @@ func (m Model) renderPRPanel() string {
 		},
 		separatorName: separatorName,
 	})
+
+	if s.ExistsPrompt != nil {
+		return centerOverlay(panel, renderExistingWorktreePrompt(s.ExistsPrompt, m.width), m.width, m.height)
+	}
+	return panel
 }
 
 // renderCreatingMsg returns the "creating worktree" message for PR view.
@@ -268,6 +273,7 @@ func detailFocusedHints() []Hint {
 	return []Hint{
 		{"↑↓", "scroll"},
 		{"g/G", "top/bottom"},
+		{"B", "open in browser"},
 		{"tab", "list"},
 		{"esc", "back"},
 	}

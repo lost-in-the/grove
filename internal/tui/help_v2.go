@@ -80,6 +80,7 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 		return []Hint{
 			{"↑↓", "navigate"},
 			{"enter", "create worktree"},
+			{"B", "open in browser"},
 			{"tab", "detail"},
 			{"/", "filter"},
 			{"esc", "close"},

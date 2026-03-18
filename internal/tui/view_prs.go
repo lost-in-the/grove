@@ -11,9 +11,8 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/lost-in-the/grove/internal/state"
+	"github.com/lost-in-the/grove/internal/git"
 	"github.com/lost-in-the/grove/internal/tuilog"
-	"github.com/lost-in-the/grove/internal/worktree"
 	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
@@ -23,7 +22,8 @@ type PRViewState struct {
 	Cursor           int
 	Loading          bool
 	Error            string
-	WorktreeBranches map[string]bool // branches that have worktrees
+	WorktreeBranches map[string]string // branch → worktree short name
+	ExistsPrompt     *ExistingWorktreePrompt
 	Creating         bool
 	CreatingPR       *tracker.PullRequest // PR being created
 	ActivityLog      *ActivityLog         // streaming creation progress
@@ -63,6 +63,12 @@ func (m Model) handlePRKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	s := m.prState
 
+	if s.ExistsPrompt != nil {
+		return m.handleExistsPromptKey(msg, s.ExistsPrompt,
+			func() { s.ExistsPrompt = nil },
+		)
+	}
+
 	if s.Loading || s.Creating {
 		if key.Matches(msg, m.keys.Escape) {
 			m.activeView = ViewDashboard
@@ -89,6 +95,12 @@ func (m Model) handlePRKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if s.DetailFocused {
 		if key.Matches(msg, m.keys.Escape) || key.Matches(msg, m.keys.Tab) {
 			s.DetailFocused = false
+			return m, nil
+		}
+		if msg.String() == "B" {
+			if len(filtered) > 0 && s.Cursor < len(filtered) {
+				openURL(filtered[s.Cursor].URL)
+			}
 			return m, nil
 		}
 		handleDetailFocusedKey(msg, m.keys, &s.DetailViewport)
@@ -146,19 +158,31 @@ func (m Model) handlePREnter(s *PRViewState, filtered []*tracker.PullRequest) (t
 	if len(filtered) == 0 || s.Cursor >= len(filtered) {
 		return m, nil
 	}
-
 	pr := filtered[s.Cursor]
-	if s.WorktreeBranches[pr.Branch] {
-		s.Error = fmt.Sprintf("worktree already exists for branch %q", pr.Branch)
+
+	// Check if a worktree already exists for this branch
+	if wtName, exists := s.WorktreeBranches[pr.Branch]; exists {
+		s.ExistsPrompt = &ExistingWorktreePrompt{
+			WorktreeName: wtName,
+			Branch:       pr.Branch,
+			ItemLabel:    fmt.Sprintf("PR #%d", pr.Number),
+		}
 		return m, nil
 	}
 
-	s.Creating = true
-	s.CreatingPR = pr
-	s.Error = ""
-	s.ActivityLog = NewActivityLog(60, 10)
-	name := tracker.GenerateWorktreeName("pr", pr.Number, pr.Title)
-	return m, tea.Batch(m.spinner.Tick, createPRWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, name, pr.Branch))
+	return m.openCreateWizardForPR(pr)
+}
+
+func (m Model) openCreateWizardForPR(pr *tracker.PullRequest) (tea.Model, tea.Cmd) {
+	branches, _ := git.ListLocalBranches(m.projectRoot)
+	m.createState = prefillCreateStateForPR(pr, m.projectName, branches)
+	m.createState.ReturnView = ViewPRs
+	m.createState.WorktreeBranches = m.worktreeBranchMap()
+	m.createState.ExistingWorktree = checkDuplicateWorktree(
+		m.createState.NameSuggestion, m.existingWorktreeItems(),
+	)
+	m.activeView = ViewCreate
+	return m, m.createState.NameInput.Focus()
 }
 
 func filteredPRs(prs []*tracker.PullRequest, filter string) []*tracker.PullRequest {
@@ -176,13 +200,6 @@ func filteredPRs(prs []*tracker.PullRequest, filter string) []*tracker.PullReque
 		}
 	}
 	return result
-}
-
-func createPRWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot, name, branch string) tea.Cmd {
-	return streamingCreateCmd(mgr, stateMgr, projectRoot, name, "pr",
-		[]string{fmt.Sprintf("Creating worktree '%s' from PR branch '%s'...", name, branch)},
-		func() error { return mgr.CreateFromBranch(name, branch) },
-	)
 }
 
 // openURL opens a URL in the user's default browser.

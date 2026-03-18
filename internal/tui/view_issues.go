@@ -10,24 +10,25 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/lost-in-the/grove/internal/state"
-	"github.com/lost-in-the/grove/internal/worktree"
+	"github.com/lost-in-the/grove/internal/git"
 	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
 // IssueViewState holds the state for the issue browser view.
 type IssueViewState struct {
-	Issues         []*tracker.Issue
-	Cursor         int
-	Loading        bool
-	Error          string
-	Creating       bool
-	ActivityLog    *ActivityLog // streaming creation progress
-	FilterInput    textinput.Model
-	Filtering      bool // true when filter input is active (activated by /)
-	DetailFocused  bool // true when detail panel has focus (Tab to toggle)
-	DetailViewport viewport.Model
-	lastCursor     int // tracks cursor changes to update viewport content
+	Issues           []*tracker.Issue
+	Cursor           int
+	Loading          bool
+	Error            string
+	Creating         bool
+	ActivityLog      *ActivityLog // streaming creation progress
+	FilterInput      textinput.Model
+	Filtering        bool // true when filter input is active (activated by /)
+	DetailFocused    bool // true when detail panel has focus (Tab to toggle)
+	DetailViewport   viewport.Model
+	lastCursor       int               // tracks cursor changes to update viewport content
+	WorktreeBranches map[string]string // branch → worktree short name
+	ExistsPrompt     *ExistingWorktreePrompt
 }
 
 func (s *IssueViewState) getActivityLog() *ActivityLog { return s.ActivityLog }
@@ -59,6 +60,12 @@ func (m Model) handleIssueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	s := m.issueState
 
+	if s.ExistsPrompt != nil {
+		return m.handleExistsPromptKey(msg, s.ExistsPrompt,
+			func() { s.ExistsPrompt = nil },
+		)
+	}
+
 	if s.Loading || s.Creating {
 		if key.Matches(msg, m.keys.Escape) {
 			m.activeView = ViewDashboard
@@ -85,6 +92,10 @@ func (m Model) handleIssueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if s.DetailFocused {
 		if key.Matches(msg, m.keys.Escape) || key.Matches(msg, m.keys.Tab) {
 			s.DetailFocused = false
+			return m, nil
+		}
+		if msg.String() == "B" {
+			m.openSelectedIssueURL(filtered)
 			return m, nil
 		}
 		handleDetailFocusedKey(msg, m.keys, &s.DetailViewport)
@@ -114,6 +125,10 @@ func (m Model) handleIssueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		s.DetailFocused = true
 		return m, nil
 
+	case msg.String() == "B":
+		m.openSelectedIssueURL(filtered)
+		return m, nil
+
 	case key.Matches(msg, m.keys.Filter):
 		s.Filtering = true
 		return m, s.FilterInput.Focus()
@@ -121,11 +136,19 @@ func (m Model) handleIssueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Enter):
 		if len(filtered) > 0 && s.Cursor < len(filtered) {
 			issue := filtered[s.Cursor]
-			s.Creating = true
-			s.Error = ""
-			s.ActivityLog = NewActivityLog(60, 10)
-			name := tracker.GenerateWorktreeName("issue", issue.Number, issue.Title)
-			return m, tea.Batch(m.spinner.Tick, createIssueWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, name))
+			name := fmt.Sprintf("issue-%d", issue.Number)
+
+			// Check if a worktree already exists with this name
+			if existing := checkDuplicateWorktree(name, m.existingWorktreeItems()); existing != nil {
+				s.ExistsPrompt = &ExistingWorktreePrompt{
+					WorktreeName: existing.ShortName,
+					Branch:       existing.Branch,
+					ItemLabel:    fmt.Sprintf("Issue #%d", issue.Number),
+				}
+				return m, nil
+			}
+
+			return m.openCreateWizardForIssue(issue)
 		}
 		return m, nil
 	}
@@ -133,14 +156,13 @@ func (m Model) handleIssueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func createIssueWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot, name string) tea.Cmd {
-	return streamingCreateCmd(mgr, stateMgr, projectRoot, name, "issue",
-		[]string{
-			fmt.Sprintf("Creating worktree '%s'...", name),
-			fmt.Sprintf("Creating branch '%s'...", name),
-		},
-		func() error { return mgr.Create(name, name) },
-	)
+func (m Model) openCreateWizardForIssue(issue *tracker.Issue) (tea.Model, tea.Cmd) {
+	branches, _ := git.ListLocalBranches(m.projectRoot)
+	m.createState = prefillCreateStateForIssue(issue, m.projectName, branches)
+	m.createState.ReturnView = ViewIssues
+	m.createState.WorktreeBranches = m.worktreeBranchMap()
+	m.activeView = ViewCreate
+	return m, nil
 }
 
 // renderIssueItemList renders a scrollable list of issue items with cursor, scroll window, and overflow indicator.
@@ -249,7 +271,7 @@ func (m Model) renderIssuePanel() string {
 		separatorName = fmt.Sprintf("#%d %s", issue.Number, truncate(issue.Title, m.width-22))
 	}
 
-	return m.renderContextPanel(contextPanelConfig{
+	panel := m.renderContextPanel(contextPanelConfig{
 		contextLabel: "Issues",
 		footer:       m.renderIssueFooter(),
 		renderList: func(width int, spinnerView string, maxHeight int) string {
@@ -257,7 +279,7 @@ func (m Model) renderIssuePanel() string {
 		},
 		renderDetail: func(width, height int) string {
 			if s.Loading {
-				return m.spinner.View() + " Loading issues..."
+				return ""
 			}
 			if s.Creating {
 				return renderCreatingDetail(s.ActivityLog, m.spinner.View(), "Creating worktree from issue...")
@@ -269,6 +291,11 @@ func (m Model) renderIssuePanel() string {
 		},
 		separatorName: separatorName,
 	})
+
+	if s.ExistsPrompt != nil {
+		return centerOverlay(panel, renderExistingWorktreePrompt(s.ExistsPrompt, m.width), m.width, m.height)
+	}
+	return panel
 }
 
 // renderIssueList renders the issue list content for the panel layout.
@@ -354,6 +381,16 @@ func (m Model) renderIssueDetailViewport(issue *tracker.Issue, width, height int
 		width:  width,
 		height: height,
 	})
+}
+
+// openSelectedIssueURL opens the URL of the currently selected issue in the browser.
+func (m *Model) openSelectedIssueURL(filtered []*tracker.Issue) {
+	s := m.issueState
+	if s != nil && len(filtered) > 0 && s.Cursor < len(filtered) {
+		if url := filtered[s.Cursor].URL; url != "" {
+			openURL(url)
+		}
+	}
 }
 
 // renderIssueFooter returns context-aware footer hints for the issue view.
