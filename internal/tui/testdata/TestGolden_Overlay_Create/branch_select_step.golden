@@ -1,0 +1,24 @@
+               ╭────────────────────────────────────────────────╮
+               │                                                │
+               │  [1mNew Worktree[m                                  │
+               │                                                │
+               │    ●━━━━━━━━━━━━━━━━━━○━━━━━━━━━━━━━━━━━━○     │
+               │    [1mBranch[m           Name           Confirm     │
+               │                                                │
+               │    Select a branch                             │
+               │                                                │
+               │    ❯ main                                      │
+               │      develop                                   │
+               │      feature/auth                              │
+               │      fix/login-bug                             │
+               │      release/v2                                │
+               │                                                │
+               │                                                │
+               │                                                │
+               │                                                │
+               │                                                │
+               │                                                │
+               │                                                │
+               │                                                │
+               │                                                │
+               │    [enter] select  [/] filter  [shift+tab]     │

@@ -72,9 +72,7 @@ func TestMigrateStateVersion(t *testing.T) {
 			Version: 0,
 		}
 
-		if err := migrateStateVersion(state); err != nil {
-			t.Fatalf("migrateStateVersion() error = %v", err)
-		}
+		migrateStateVersion(state)
 
 		if state.Version != CurrentVersion {
 			t.Errorf("Version = %d, want %d", state.Version, CurrentVersion)
@@ -90,9 +88,7 @@ func TestMigrateStateVersion(t *testing.T) {
 			Worktrees: map[string]*WorktreeState{"test": {Path: "/test"}},
 		}
 
-		if err := migrateStateVersion(state); err != nil {
-			t.Fatalf("migrateStateVersion() error = %v", err)
-		}
+		migrateStateVersion(state)
 
 		if state.Version != CurrentVersion {
 			t.Errorf("Version changed unexpectedly")
@@ -108,9 +104,7 @@ func TestMigrateStateVersion(t *testing.T) {
 			Worktrees: nil,
 		}
 
-		if err := migrateStateVersion(state); err != nil {
-			t.Fatalf("migrateStateVersion() error = %v", err)
-		}
+		migrateStateVersion(state)
 
 		if state.Worktrees == nil {
 			t.Error("Worktrees should be initialized")

@@ -17,6 +17,16 @@ import (
 const (
 	// maxDirtyFilesShown is the maximum number of dirty files to display
 	maxDirtyFilesShown = 5
+
+	tmuxStatusNone     = "none"
+	tmuxStatusAttached = "attached"
+	tmuxStatusDetached = "detached"
+	statusClean        = "clean"
+	statusDirty        = "dirty"
+	tmuxModeAuto       = "auto"
+	tmuxModeOff        = "off"
+	shellBash          = "bash"
+	shellZsh           = "zsh"
 )
 
 var (
@@ -85,7 +95,7 @@ var hereCmd = &cobra.Command{
 		tmuxStatus := tmux.GetSessionStatus(tmuxSessionName)
 
 		// Fallback: check with directory basename
-		if tmuxStatus == "none" {
+		if tmuxStatus == tmuxStatusNone {
 			tmuxSessionName = filepath.Base(tree.Path)
 			tmuxStatus = tmux.GetSessionStatus(tmuxSessionName)
 		}
@@ -108,9 +118,9 @@ var hereCmd = &cobra.Command{
 
 		// JSON mode
 		if hereJSON {
-			status := "clean"
+			status := statusClean
 			if tree.IsDirty {
-				status = "dirty"
+				status = statusDirty
 			}
 
 			var changes []string
@@ -209,7 +219,7 @@ var hereCmd = &cobra.Command{
 
 		// Show tmux status
 		tmuxValue := tmuxSessionName
-		if tmuxStatus != "none" {
+		if tmuxStatus != tmuxStatusNone {
 			tmuxValue = fmt.Sprintf("%s (%s)", tmuxSessionName, tmuxStatus)
 		}
 		cli.Label(w, "tmux:   ", tmuxValue)

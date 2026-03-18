@@ -40,6 +40,9 @@ type KeyMap struct {
 	// View mode
 	ViewMode key.Binding
 
+	// Switch + start containers
+	SwitchUp key.Binding
+
 	// Fork/Sync/Config/Rename/Checkout
 	Fork     key.Binding
 	Sync     key.Binding
@@ -50,13 +53,13 @@ type KeyMap struct {
 
 // ShortHelp returns keybindings for the short help view (help.KeyMap interface).
 func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Enter, k.New, k.Delete, k.Rename, k.Fork, k.Checkout, k.Sync, k.Config, k.PRs, k.Issues, k.Sort, k.Filter, k.Help, k.Quit}
+	return []key.Binding{k.Enter, k.SwitchUp, k.New, k.Delete, k.Rename, k.Fork, k.Checkout, k.Sync, k.Config, k.PRs, k.Issues, k.Sort, k.Filter, k.Help, k.Quit}
 }
 
 // FullHelp returns keybindings for the full help view (help.KeyMap interface).
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Up, k.Down, k.Enter},
+		{k.Up, k.Down, k.Enter, k.SwitchUp},
 		{k.New, k.Delete, k.Rename, k.Fork, k.Checkout, k.Sync, k.Config, k.PRs, k.Issues, k.Sort, k.Filter, k.Refresh},
 		{k.Help, k.Quit, k.Escape},
 	}
@@ -151,6 +154,10 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("a", "all merged"),
 		),
 
+		SwitchUp: key.NewBinding(
+			key.WithKeys("U"),
+			key.WithHelp("U", "switch + up"),
+		),
 		ViewMode: key.NewBinding(
 			key.WithKeys("v"),
 			key.WithHelp("v", "compact"),

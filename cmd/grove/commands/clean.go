@@ -233,6 +233,71 @@ type BranchInfo struct {
 	StatusSummary string
 }
 
+func collectBranchInfos(branchMgr *git.BranchManager, branches []string) []BranchInfo {
+	var infos []BranchInfo
+	for _, branch := range branches {
+		status, err := branchMgr.GetStatus(branch, "")
+		if err != nil {
+			log.Printf("skipping branch %q during cleanup: %v", branch, err)
+			continue
+		}
+		if status.UsedByWorktree != "" {
+			continue
+		}
+		infos = append(infos, classifyBranch(branch, status))
+	}
+	return infos
+}
+
+func classifyBranch(name string, status *git.BranchStatus) BranchInfo {
+	info := BranchInfo{Name: name, Status: status}
+	switch {
+	case status.IsMerged && status.UnpushedCount == 0:
+		info.SafeToDelete = true
+		info.StatusSummary = "merged, safe to delete"
+	case status.UnpushedCount > 0:
+		info.StatusSummary = fmt.Sprintf("%d unpushed commit(s)", status.UnpushedCount)
+	default:
+		info.StatusSummary = "not merged"
+	}
+	return info
+}
+
+func deleteBranches(w *cli.Writer, branchMgr *git.BranchManager, infos []BranchInfo, forceAll bool) {
+	deleted := 0
+	for _, info := range infos {
+		force := forceAll || !info.SafeToDelete
+		if err := branchMgr.Delete(info.Name, force); err != nil {
+			cli.Warning(w, "Failed to delete branch '%s': %v", info.Name, err)
+		} else {
+			cli.Success(w, "Deleted branch '%s'", info.Name)
+			deleted++
+		}
+	}
+	if deleted > 0 {
+		cli.Info(w, "Deleted %d branch(es)", deleted)
+	}
+}
+
+func displayBranchSummary(w *cli.Writer, infos []BranchInfo) {
+	_, _ = fmt.Fprintln(w)
+	cli.Header(w, "Associated branches")
+	hasUnsafe := false
+	for _, info := range infos {
+		if !info.SafeToDelete {
+			hasUnsafe = true
+			cli.Warning(w, "%s (%s)", info.Name, info.StatusSummary)
+		} else {
+			_, _ = fmt.Fprintf(w, "  • %s ", info.Name)
+			cli.Faint(w, "  (%s)", info.StatusSummary)
+		}
+	}
+	if hasUnsafe {
+		_, _ = fmt.Fprintln(w)
+		cli.Warning(w, "Some branches have unpushed commits or are not merged")
+	}
+}
+
 // handleBatchBranchDeletion handles batch deletion of branches after grove clean
 func handleBatchBranchDeletion(repoPath string, branches []string, forceDelete bool) error {
 	w := cli.NewStdout()
@@ -242,103 +307,27 @@ func handleBatchBranchDeletion(repoPath string, branches []string, forceDelete b
 		return fmt.Errorf("failed to initialize branch manager: %w", err)
 	}
 
-	// Collect branch info
-	branchInfos := []BranchInfo{}
-	for _, branch := range branches {
-		status, err := branchMgr.GetStatus(branch, "")
-		if err != nil {
-			log.Printf("skipping branch %q during cleanup: %v", branch, err)
-			continue
-		}
-
-		// Skip branches used by other worktrees
-		if status.UsedByWorktree != "" {
-			continue
-		}
-
-		info := BranchInfo{
-			Name:   branch,
-			Status: status,
-		}
-
-		// Determine if safe to delete and build summary
-		if status.IsMerged && status.UnpushedCount == 0 {
-			info.SafeToDelete = true
-			info.StatusSummary = "merged, safe to delete"
-		} else if status.UnpushedCount > 0 {
-			info.SafeToDelete = false
-			info.StatusSummary = fmt.Sprintf("%d unpushed commit(s)", status.UnpushedCount)
-		} else if !status.IsMerged {
-			info.SafeToDelete = false
-			info.StatusSummary = "not merged"
-		}
-
-		branchInfos = append(branchInfos, info)
-	}
-
+	branchInfos := collectBranchInfos(branchMgr, branches)
 	if len(branchInfos) == 0 {
 		return nil
 	}
 
-	// Force delete - no prompting
 	if forceDelete {
-		deleted := 0
-		for _, info := range branchInfos {
-			if err := branchMgr.Delete(info.Name, true); err != nil {
-				cli.Warning(w, "Failed to delete branch '%s': %v", info.Name, err)
-			} else {
-				cli.Success(w, "Deleted branch '%s'", info.Name)
-				deleted++
-			}
-		}
-		if deleted > 0 {
-			cli.Info(w, "Deleted %d branch(es)", deleted)
-		}
+		deleteBranches(w, branchMgr, branchInfos, true)
 		return nil
 	}
 
-	// Interactive mode - show summary and prompt
-	_, _ = fmt.Fprintln(w)
-	cli.Header(w, "Associated branches")
-	hasUnsafe := false
-	for _, info := range branchInfos {
-		if !info.SafeToDelete {
-			hasUnsafe = true
-			cli.Warning(w, "%s (%s)", info.Name, info.StatusSummary)
-		} else {
-			_, _ = fmt.Fprintf(w, "  • %s ", info.Name)
-			cli.Faint(w, "  (%s)", info.StatusSummary)
-		}
-	}
+	displayBranchSummary(w, branchInfos)
 
-	if hasUnsafe {
-		_, _ = fmt.Fprintln(w)
-		cli.Warning(w, "Some branches have unpushed commits or are not merged")
-	}
-
-	// Ask for confirmation
 	question := fmt.Sprintf("Delete %d associated branch(es)?", len(branchInfos))
 	confirmed, err := cli.Confirm(question, false)
 	if err != nil {
-		// Non-interactive
 		cli.Info(w, "Branches not deleted (use --delete-branches or --keep-branches)")
 		return nil
 	}
 
 	if confirmed {
-		deleted := 0
-		for _, info := range branchInfos {
-			// Force delete if not safe (user confirmed)
-			if err := branchMgr.Delete(info.Name, !info.SafeToDelete); err != nil {
-				cli.Warning(w, "Failed to delete branch '%s': %v", info.Name, err)
-			} else {
-				cli.Success(w, "Deleted branch '%s'", info.Name)
-				deleted++
-			}
-		}
-		if deleted > 0 {
-			cli.Info(w, "Deleted %d branch(es)", deleted)
-		}
+		deleteBranches(w, branchMgr, branchInfos, false)
 	} else {
 		cli.Info(w, "Kept all branches")
 	}

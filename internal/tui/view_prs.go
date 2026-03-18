@@ -8,11 +8,11 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/lost-in-the/grove/internal/state"
+	"github.com/lost-in-the/grove/internal/git"
 	"github.com/lost-in-the/grove/internal/tuilog"
-	"github.com/lost-in-the/grove/internal/worktree"
 	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
@@ -22,20 +22,22 @@ type PRViewState struct {
 	Cursor           int
 	Loading          bool
 	Error            string
-	WorktreeBranches map[string]bool // branches that have worktrees
+	WorktreeBranches map[string]string // branch → worktree short name
+	ExistsPrompt     *ExistingWorktreePrompt
 	Creating         bool
 	CreatingPR       *tracker.PullRequest // PR being created
+	ActivityLog      *ActivityLog         // streaming creation progress
 	FilterInput      textinput.Model
-	ShowPreview      bool // toggle PR preview panel with Tab
+	Filtering        bool // true when filter input is active (activated by /)
+	DetailFocused    bool // true when detail panel has focus (Tab to toggle)
+	DetailViewport   viewport.Model
+	lastCursor       int // tracks cursor changes to update viewport content
 }
 
-// newPRFilterInput creates a configured textinput for PR filtering.
-func newPRFilterInput() textinput.Model {
-	ti := textinput.New()
-	ti.Prompt = "Filter: "
-	ti.Placeholder = ""
-	ti.CharLimit = 100
-	return ti
+func (s *PRViewState) getActivityLog() *ActivityLog { return s.ActivityLog }
+func (s *PRViewState) setCreatingDone(errMsg string) {
+	s.Creating = false
+	s.Error = errMsg
 }
 
 func (m Model) fetchPRsCmd() tea.Msg {
@@ -61,6 +63,12 @@ func (m Model) handlePRKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	s := m.prState
 
+	if s.ExistsPrompt != nil {
+		return m.handleExistsPromptKey(msg, s.ExistsPrompt,
+			func() { s.ExistsPrompt = nil },
+		)
+	}
+
 	if s.Loading || s.Creating {
 		if key.Matches(msg, m.keys.Escape) {
 			m.activeView = ViewDashboard
@@ -71,6 +79,40 @@ func (m Model) handlePRKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	filtered := filteredPRs(s.PRs, s.FilterInput.Value())
+
+	// When filtering is active, route keys to the textinput
+	if s.Filtering {
+		var cmd tea.Cmd
+		var stop bool
+		s.FilterInput, s.Cursor, cmd, stop = handleListFilterKey(msg, m.keys, s.FilterInput, s.Cursor)
+		if stop {
+			s.Filtering = false
+		}
+		return m, cmd
+	}
+
+	// When detail panel is focused, route keys for scrolling
+	if s.DetailFocused {
+		if key.Matches(msg, m.keys.Escape) || key.Matches(msg, m.keys.Tab) {
+			s.DetailFocused = false
+			return m, nil
+		}
+		if msg.String() == "B" {
+			if len(filtered) > 0 && s.Cursor < len(filtered) {
+				openURL(filtered[s.Cursor].URL)
+			}
+			return m, nil
+		}
+		handleDetailFocusedKey(msg, m.keys, &s.DetailViewport)
+		return m, nil
+	}
+
+	// Normal mode (not filtering, list focused)
+	return m.handlePRNormalKey(msg, filtered)
+}
+
+func (m Model) handlePRNormalKey(msg tea.KeyPressMsg, filtered []*tracker.PullRequest) (tea.Model, tea.Cmd) {
+	s := m.prState
 
 	switch {
 	case key.Matches(msg, m.keys.Escape):
@@ -91,55 +133,56 @@ func (m Model) handlePRKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.keys.Tab):
-		s.ShowPreview = !s.ShowPreview
+		s.DetailFocused = true
 		return m, nil
 
-	case msg.String() == "o" && s.ShowPreview:
+	case msg.String() == "B":
 		if len(filtered) > 0 && s.Cursor < len(filtered) {
 			pr := filtered[s.Cursor]
-			if pr.URL != "" {
-				var cmd *exec.Cmd
-				switch runtime.GOOS {
-				case "darwin":
-					cmd = exec.Command("open", pr.URL)
-				case "windows":
-					cmd = exec.Command("cmd", "/c", "start", pr.URL)
-				default:
-					cmd = exec.Command("xdg-open", pr.URL)
-				}
-				if err := cmd.Start(); err != nil {
-					tuilog.Printf("warning: failed to open URL %q: %v", pr.URL, err)
-				}
-			}
+			openURL(pr.URL)
 		}
 		return m, nil
+
+	case key.Matches(msg, m.keys.Filter):
+		s.Filtering = true
+		return m, s.FilterInput.Focus()
 
 	case key.Matches(msg, m.keys.Enter):
-		if len(filtered) > 0 && s.Cursor < len(filtered) {
-			pr := filtered[s.Cursor]
-			// Check if worktree already exists for this branch
-			if s.WorktreeBranches[pr.Branch] {
-				s.Error = fmt.Sprintf("worktree already exists for branch %q", pr.Branch)
-				return m, nil
-			}
-			s.Creating = true
-			s.CreatingPR = pr
-			s.Error = ""
-			name := tracker.GenerateWorktreeName("pr", pr.Number, pr.Title)
-			return m, tea.Batch(m.spinner.Tick, createPRWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, name, pr.Branch))
+		return m.handlePREnter(s, filtered)
+	}
+
+	return m, nil
+}
+
+func (m Model) handlePREnter(s *PRViewState, filtered []*tracker.PullRequest) (tea.Model, tea.Cmd) {
+	if len(filtered) == 0 || s.Cursor >= len(filtered) {
+		return m, nil
+	}
+	pr := filtered[s.Cursor]
+
+	// Check if a worktree already exists for this branch
+	if wtName, exists := s.WorktreeBranches[pr.Branch]; exists {
+		s.ExistsPrompt = &ExistingWorktreePrompt{
+			WorktreeName: wtName,
+			Branch:       pr.Branch,
+			ItemLabel:    fmt.Sprintf("PR #%d", pr.Number),
 		}
 		return m, nil
-
-	default:
-		// Route remaining keys through the filter textinput
-		prevVal := s.FilterInput.Value()
-		var cmd tea.Cmd
-		s.FilterInput, cmd = s.FilterInput.Update(msg)
-		if s.FilterInput.Value() != prevVal {
-			s.Cursor = 0
-		}
-		return m, cmd
 	}
+
+	return m.openCreateWizardForPR(pr)
+}
+
+func (m Model) openCreateWizardForPR(pr *tracker.PullRequest) (tea.Model, tea.Cmd) {
+	branches, _ := git.ListLocalBranches(m.projectRoot)
+	m.createState = prefillCreateStateForPR(pr, m.projectName, branches)
+	m.createState.ReturnView = ViewPRs
+	m.createState.WorktreeBranches = m.worktreeBranchMap()
+	m.createState.ExistingWorktree = checkDuplicateWorktree(
+		m.createState.NameSuggestion, m.existingWorktreeItems(),
+	)
+	m.activeView = ViewCreate
+	return m, m.createState.NameInput.Focus()
 }
 
 func filteredPRs(prs []*tracker.PullRequest, filter string) []*tracker.PullRequest {
@@ -159,18 +202,21 @@ func filteredPRs(prs []*tracker.PullRequest, filter string) []*tracker.PullReque
 	return result
 }
 
-func createPRWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot, name, branch string) tea.Cmd {
-	return func() tea.Msg {
-		err := mgr.CreateFromBranch(name, branch)
-		if err != nil {
-			return prWorktreeCreatedMsg{name: name, err: err}
-		}
-		wt, err := mgr.Find(name)
-		if err != nil || wt == nil {
-			return prWorktreeCreatedMsg{name: name, err: errWorktreeNotFound}
-		}
-
-		result := runPostCreate(mgr, stateMgr, projectRoot, name, wt)
-		return prWorktreeCreatedMsg{name: name, path: wt.Path, hookOutput: result.hookOutput, hookErr: result.hookErr}
+// openURL opens a URL in the user's default browser.
+func openURL(url string) {
+	if url == "" {
+		return
+	}
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", url)
+	default:
+		cmd = exec.Command("xdg-open", url)
+	}
+	if err := cmd.Start(); err != nil {
+		tuilog.Printf("warning: failed to open URL %q: %v", url, err)
 	}
 }

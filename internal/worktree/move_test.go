@@ -1,9 +1,12 @@
 package worktree
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lost-in-the/grove/internal/cmdexec"
 )
 
 func TestMove(t *testing.T) {
@@ -53,6 +56,45 @@ func TestMove(t *testing.T) {
 		}
 		if wt == nil {
 			t.Error("moved worktree should be findable")
+		}
+	})
+
+	t.Run("move works for worktree in non-standard location", func(t *testing.T) {
+		// Simulate a worktree created outside the standard sibling directory
+		// (e.g. by Claude Code's EnterWorktree in .claude/worktrees/)
+		subDir := filepath.Join(repoDir, ".claude", "worktrees")
+		if err := os.MkdirAll(subDir, 0755); err != nil {
+			t.Fatalf("MkdirAll() error = %v", err)
+		}
+
+		wtPath := filepath.Join(subDir, "agent-test")
+		output, err := cmdexec.CombinedOutput(context.TODO(), "git",
+			[]string{"worktree", "add", "-b", "worktree-agent-test", wtPath},
+			repoDir, cmdexec.GitLocal)
+		if err != nil {
+			t.Fatalf("git worktree add error = %v: %s", err, output)
+		}
+
+		if err := mgr.Move("agent-test", "agent-renamed"); err != nil {
+			t.Fatalf("Move() error = %v", err)
+		}
+
+		newPath := filepath.Join(subDir, "agent-renamed")
+		if _, err := os.Stat(newPath); err != nil {
+			t.Errorf("renamed worktree should exist at %s: %v", newPath, err)
+		}
+
+		// Old path should be gone
+		if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+			t.Error("old worktree path should not exist after move")
+		}
+
+		wt, err := mgr.Find("agent-renamed")
+		if err != nil {
+			t.Fatalf("Find() error = %v", err)
+		}
+		if wt == nil {
+			t.Error("renamed worktree should be findable")
 		}
 	})
 

@@ -168,30 +168,7 @@ Examples:
 func checkGroveBinary(lookPath func(string) (string, error)) (string, error) {
 	path, err := lookPath("grove")
 	if err != nil {
-		// Check common install locations for a helpful hint
-		hints := []string{
-			"/opt/homebrew/bin/grove", // Homebrew (Apple Silicon)
-			"/usr/local/bin/grove",    // Homebrew (Intel) / manual
-		}
-		for _, hint := range hints {
-			if _, statErr := os.Stat(hint); statErr == nil {
-				return "", fmt.Errorf("grove not found in PATH, but exists at %s — add its directory to PATH in ~/.zshenv", hint)
-			}
-		}
-
-		// Check GOPATH/bin
-		if gopath := os.Getenv("GOPATH"); gopath != "" {
-			gobin := filepath.Join(gopath, "bin", "grove")
-			if _, statErr := os.Stat(gobin); statErr == nil {
-				return "", fmt.Errorf("grove not found in PATH, but exists at %s — add $GOPATH/bin to PATH", gobin)
-			}
-		}
-		homeGobin := filepath.Join(os.Getenv("HOME"), "go", "bin", "grove")
-		if _, statErr := os.Stat(homeGobin); statErr == nil {
-			return "", fmt.Errorf("grove not found in PATH, but exists at %s — add ~/go/bin to PATH", homeGobin)
-		}
-
-		return "", fmt.Errorf("grove binary not found in PATH")
+		return "", groveNotFoundError()
 	}
 
 	// Resolve symlinks for display
@@ -199,6 +176,33 @@ func checkGroveBinary(lookPath func(string) (string, error)) (string, error) {
 		path = resolved
 	}
 	return path, nil
+}
+
+func groveNotFoundError() error {
+	// Check common install locations for a helpful hint
+	hints := []string{
+		"/opt/homebrew/bin/grove", // Homebrew (Apple Silicon)
+		"/usr/local/bin/grove",    // Homebrew (Intel) / manual
+	}
+	for _, hint := range hints {
+		if _, statErr := os.Stat(hint); statErr == nil {
+			return fmt.Errorf("grove not found in PATH, but exists at %s — add its directory to PATH in ~/.zshenv", hint)
+		}
+	}
+
+	// Check GOPATH/bin
+	if gopath := os.Getenv("GOPATH"); gopath != "" {
+		gobin := filepath.Join(gopath, "bin", "grove")
+		if _, statErr := os.Stat(gobin); statErr == nil {
+			return fmt.Errorf("grove not found in PATH, but exists at %s — add $GOPATH/bin to PATH", gobin)
+		}
+	}
+	homeGobin := filepath.Join(os.Getenv("HOME"), "go", "bin", "grove")
+	if _, statErr := os.Stat(homeGobin); statErr == nil {
+		return fmt.Errorf("grove not found in PATH, but exists at %s — add ~/go/bin to PATH", homeGobin)
+	}
+
+	return fmt.Errorf("grove binary not found in PATH")
 }
 
 // checkConfigSymlinks validates .grove/config.toml symlinks across all worktrees.
@@ -259,68 +263,88 @@ func runExternalModeChecks(w *cli.Writer, cfg *config.Config, allPassed *bool) {
 	composePath := docker.ResolveComposePath(ext.Path)
 	efResult := checkEnvFileConfig(envFileName, composePath, exec.LookPath)
 
-	if envFileName != ".env" {
-		*allPassed = runCheck(w, "Env file target", func() (string, error) {
-			return envFileName, nil
-		}) && *allPassed
+	checkEnvFileChecks(w, envFileName, efResult, allPassed)
+	checkAgentStacks(w, cfg, ext, allPassed)
+}
 
-		runCheck(w, "Env file loader", func() (string, error) {
-			if !efResult.loaderInstalled {
-				return "", fmt.Errorf("%s", efResult.loaderErr)
-			}
-			return efResult.loaderName + " found in PATH", nil
-		})
-
-		runCheck(w, "Env file loader configured", func() (string, error) {
-			if efResult.configErr != "" {
-				return "", fmt.Errorf("%s", efResult.configErr)
-			}
-			if !efResult.configLoadsFile {
-				return "", fmt.Errorf("no loader config references %s", envFileName)
-			}
-			return "configured", nil
-		})
-	} else if efResult.hintAvailable {
-		runInfo(w, "Env file hint", "direnv/mise is configured for .env.local — consider setting env_file = \".env.local\" to avoid dirtying tracked .env")
+// checkEnvFileChecks runs env file loader and configuration checks.
+func checkEnvFileChecks(w *cli.Writer, envFileName string, efResult envFileCheckResult, allPassed *bool) {
+	if envFileName == ".env" {
+		if efResult.hintAvailable {
+			runInfo(w, "Env file hint", "direnv/mise is configured for .env.local — consider setting env_file = \".env.local\" to avoid dirtying tracked .env")
+		}
+		return
 	}
 
+	*allPassed = runCheck(w, "Env file target", func() (string, error) {
+		return envFileName, nil
+	}) && *allPassed
+
+	runCheck(w, "Env file loader", func() (string, error) {
+		if !efResult.loaderInstalled {
+			return "", fmt.Errorf("%s", efResult.loaderErr)
+		}
+		return efResult.loaderName + " found in PATH", nil
+	})
+
+	runCheck(w, "Env file loader configured", func() (string, error) {
+		if efResult.configErr != "" {
+			return "", fmt.Errorf("%s", efResult.configErr)
+		}
+		if !efResult.configLoadsFile {
+			return "", fmt.Errorf("no loader config references %s", envFileName)
+		}
+		return "configured", nil
+	})
+}
+
+// checkAgentStacks runs agent stack configuration and network checks.
+func checkAgentStacks(w *cli.Writer, cfg *config.Config, ext *config.ExternalComposeConfig, allPassed *bool) {
 	if ext.Agent == nil || ext.Agent.Enabled == nil || !*ext.Agent.Enabled {
 		runInfo(w, "Agent stacks", "not enabled")
-	} else {
-		*allPassed = runCheck(w, "Agent config", func() (string, error) {
-			if len(ext.Agent.Services) == 0 {
-				return "", fmt.Errorf("agent.services is empty")
-			}
-			if ext.Agent.TemplatePath == "" {
-				return "", fmt.Errorf("agent.template_path not set")
-			}
-			return fmt.Sprintf("%d services, max %d slots", len(ext.Agent.Services), ext.Agent.MaxSlots), nil
-		}) && *allPassed
-
-		if ext.Agent.Network != "" {
-			*allPassed = runCheck(w, "Docker network '"+ext.Agent.Network+"'", func() (string, error) {
-				out, err := cmdexec.Output(context.TODO(), "docker", []string{"network", "ls", "--format", "{{.Name}}"}, "", cmdexec.Docker)
-				if err != nil {
-					return "", fmt.Errorf("failed to list networks: %w", err)
-				}
-				for _, line := range strings.Split(string(out), "\n") {
-					if strings.TrimSpace(line) == ext.Agent.Network {
-						return "exists", nil
-					}
-				}
-				return "", fmt.Errorf("network not found (is the main stack running?)")
-			}) && *allPassed
-		}
-
-		slots, err := docker.ListActiveSlots(cfg)
-		if err == nil {
-			maxSlots := ext.Agent.MaxSlots
-			if maxSlots <= 0 {
-				maxSlots = 5
-			}
-			runInfo(w, "Active stacks", fmt.Sprintf("%d/%d slots in use", len(slots), maxSlots))
-		}
+		return
 	}
+
+	*allPassed = runCheck(w, "Agent config", func() (string, error) {
+		if len(ext.Agent.Services) == 0 {
+			return "", fmt.Errorf("agent.services is empty")
+		}
+		if ext.Agent.TemplatePath == "" {
+			return "", fmt.Errorf("agent.template_path not set")
+		}
+		return fmt.Sprintf("%d services, max %d slots", len(ext.Agent.Services), ext.Agent.MaxSlots), nil
+	}) && *allPassed
+
+	checkAgentNetwork(w, ext.Agent.Network, allPassed)
+
+	slots, err := docker.ListActiveSlots(cfg)
+	if err != nil {
+		return
+	}
+	maxSlots := ext.Agent.MaxSlots
+	if maxSlots <= 0 {
+		maxSlots = 5
+	}
+	runInfo(w, "Active stacks", fmt.Sprintf("%d/%d slots in use", len(slots), maxSlots))
+}
+
+// checkAgentNetwork verifies the Docker network exists.
+func checkAgentNetwork(w *cli.Writer, network string, allPassed *bool) {
+	if network == "" {
+		return
+	}
+	*allPassed = runCheck(w, "Docker network '"+network+"'", func() (string, error) {
+		out, err := cmdexec.Output(context.TODO(), "docker", []string{"network", "ls", "--format", "{{.Name}}"}, "", cmdexec.Docker)
+		if err != nil {
+			return "", fmt.Errorf("failed to list networks: %w", err)
+		}
+		for _, line := range strings.Split(string(out), "\n") {
+			if strings.TrimSpace(line) == network {
+				return "exists", nil
+			}
+		}
+		return "", fmt.Errorf("network not found (is the main stack running?)")
+	}) && *allPassed
 }
 
 func runCheck(w *cli.Writer, name string, check func() (string, error)) bool {
@@ -356,46 +380,50 @@ type envFileCheckResult struct {
 // It checks for direnv (.envrc) and mise (.mise.toml/mise.toml) as env file loaders.
 // lookPath is injected for testability (pass exec.LookPath in production).
 func checkEnvFileConfig(envFileName, composePath string, lookPath func(string) (string, error)) envFileCheckResult {
+	if envFileName != ".env" {
+		return checkCustomEnvFile(envFileName, composePath, lookPath)
+	}
+	return checkDefaultEnvFile(composePath)
+}
+
+func checkCustomEnvFile(envFileName, composePath string, lookPath func(string) (string, error)) envFileCheckResult {
 	var result envFileCheckResult
 
-	if envFileName != ".env" {
-		// Non-default env file: check for direnv or mise
-		if _, err := lookPath("direnv"); err == nil {
-			result.loaderInstalled = true
-			result.loaderName = "direnv"
-		} else if _, err := lookPath("mise"); err == nil {
-			result.loaderInstalled = true
-			result.loaderName = "mise"
-		} else {
-			result.loaderErr = fmt.Sprintf("neither direnv nor mise found — install one if you run manual docker compose commands in %s", composePath)
-		}
-
-		// Check for config file: .envrc (direnv) or .mise.toml/mise.toml (mise)
-		if found, name := checkEnvrcFile(composePath, envFileName); found {
-			result.configExists = true
-			result.configLoadsFile = true
-			_ = name
-		} else if found, name := checkMiseFile(composePath, envFileName); found {
-			result.configExists = true
-			result.configLoadsFile = true
-			_ = name
-		} else {
-			// Check if config files exist but don't reference the env file
-			result.configExists, result.configErr = checkConfigExists(composePath, envFileName)
-		}
+	// Check for direnv or mise
+	if _, err := lookPath("direnv"); err == nil {
+		result.loaderInstalled = true
+		result.loaderName = "direnv"
+	} else if _, err := lookPath("mise"); err == nil {
+		result.loaderInstalled = true
+		result.loaderName = "mise"
 	} else {
-		// Default .env: check if .env.local setup is available via direnv or mise
-		envrcPath := filepath.Join(composePath, ".envrc")
-		if data, err := os.ReadFile(envrcPath); err == nil {
-			if strings.Contains(string(data), ".env.local") {
-				result.hintAvailable = true
-			}
-		}
-		if !result.hintAvailable {
-			if found, _ := checkMiseFile(composePath, ".env.local"); found {
-				result.hintAvailable = true
-			}
-		}
+		result.loaderErr = fmt.Sprintf("neither direnv nor mise found — install one if you run manual docker compose commands in %s", composePath)
+	}
+
+	// Check for config file: .envrc (direnv) or .mise.toml/mise.toml (mise)
+	if found, name := checkEnvrcFile(composePath, envFileName); found {
+		result.configExists = true
+		result.configLoadsFile = true
+		_ = name
+	} else if checkMiseFile(composePath, envFileName) {
+		result.configExists = true
+		result.configLoadsFile = true
+	} else {
+		result.configExists, result.configErr = checkConfigExists(composePath, envFileName)
+	}
+
+	return result
+}
+
+func checkDefaultEnvFile(composePath string) envFileCheckResult {
+	var result envFileCheckResult
+
+	envrcPath := filepath.Join(composePath, ".envrc")
+	if data, err := os.ReadFile(envrcPath); err == nil && strings.Contains(string(data), ".env.local") {
+		result.hintAvailable = true
+	}
+	if !result.hintAvailable && checkMiseFile(composePath, ".env.local") {
+		result.hintAvailable = true
 	}
 
 	return result
@@ -414,17 +442,17 @@ func checkEnvrcFile(composePath, envFileName string) (found bool, name string) {
 }
 
 // checkMiseFile checks if .mise.toml or mise.toml exists and references the env file.
-func checkMiseFile(composePath, envFileName string) (found bool, name string) {
+func checkMiseFile(composePath, envFileName string) bool {
 	for _, fname := range []string{".mise.toml", "mise.toml"} {
 		data, err := os.ReadFile(filepath.Join(composePath, fname))
 		if err != nil {
 			continue
 		}
 		if strings.Contains(string(data), envFileName) {
-			return true, fname
+			return true
 		}
 	}
-	return false, ""
+	return false
 }
 
 // checkConfigExists checks if any env loader config file exists but doesn't reference the env file.

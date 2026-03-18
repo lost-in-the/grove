@@ -4,6 +4,10 @@
 BINARY_NAME=grove
 MAIN_PATH=./cmd/grove
 BUILD_DIR=./bin
+VERSION_PKG=github.com/lost-in-the/grove/internal/version
+GIT_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+LDFLAGS=-X $(VERSION_PKG).Commit=$(GIT_COMMIT) -X $(VERSION_PKG).BuildDate=$(BUILD_DATE)
 
 # Default target
 .DEFAULT_GOAL := help
@@ -17,7 +21,7 @@ help: ## Show this help message
 build: ## Build the binary
 	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p $(BUILD_DIR)
-	@go build -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
+	@go build -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
 	@echo "Binary built at $(BUILD_DIR)/$(BINARY_NAME)"
 
 test: ## Run all tests

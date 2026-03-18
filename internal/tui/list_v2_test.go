@@ -84,7 +84,7 @@ func TestCompactIndicators(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := compactIndicators(tt.item)
+			result := compactIndicatorsBg(tt.item, false)
 			if tt.want == "" && result != "" {
 				t.Errorf("compactIndicators() = %q, want empty", result)
 			}
@@ -108,7 +108,7 @@ func TestRenderBadgesV2(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			badge := renderBadgesV2(tt.item)
+			badge := renderBadgesV2Bg(tt.item, false)
 			if tt.want == "" && badge != "" {
 				t.Errorf("renderBadgesV2() = %q, want empty", badge)
 			}

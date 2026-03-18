@@ -46,15 +46,15 @@ func TestViewDashboardEmpty(t *testing.T) {
 	}
 }
 
-func TestViewHelpExpanded(t *testing.T) {
+func TestViewHelpOverlay(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
 	m = sendKey(m, "?")
 	v := m.viewString()
-	if !strings.Contains(v, "Quick Reference") {
-		t.Error("expected 'Quick Reference' in expanded help footer")
-	}
 	if !strings.Contains(v, "Navigation") {
-		t.Error("expected 'Navigation' section in expanded help footer")
+		t.Error("expected 'Navigation' section in help overlay")
+	}
+	if !strings.Contains(v, "scroll") {
+		t.Error("expected scroll hint in help overlay")
 	}
 }
 
@@ -100,23 +100,5 @@ func TestViewStackedLayout(t *testing.T) {
 	// Stacked layout should contain a separator
 	if !strings.Contains(v, "─") {
 		t.Error("expected separator in stacked layout")
-	}
-}
-
-func TestViewStatusBarWithSort(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(80, 24))
-	m = sendKey(m, "o") // cycle to "recent"
-	v := m.renderStatusBar()
-	if !strings.Contains(v, "recent") {
-		t.Error("expected sort mode 'recent' in status bar")
-	}
-}
-
-func TestViewStatusBarWithToast(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(80, 24))
-	m = sendMsg(m, worktreeDeletedMsg{name: "testing", err: nil})
-	v := m.renderStatusBar()
-	if !strings.Contains(v, "testing") {
-		t.Error("expected toast with deleted name in status bar")
 	}
 }

@@ -95,12 +95,6 @@ func worktreeIndicatorBg(item WorktreeItem, selected bool) string {
 	}
 }
 
-// compactIndicators returns compact status indicators for line 1.
-// Format: ↑N ↓N ~N (sync ahead/behind, dirty count). Stale shows ✗.
-func compactIndicators(item WorktreeItem) string {
-	return compactIndicatorsBg(item, false)
-}
-
 // compactIndicatorsBg returns compact indicators with optional selection background.
 func compactIndicatorsBg(item WorktreeItem, selected bool) string {
 	withBg := func(s lipgloss.Style) lipgloss.Style {
@@ -127,12 +121,6 @@ func compactIndicatorsBg(item WorktreeItem, selected bool) string {
 		return strings.Join(parts, spacer)
 	}
 	return strings.Join(parts, " ")
-}
-
-// renderBadgesV2 returns right-aligned badges for line 2.
-// Order: container statuses first, tmux last (fixed-width, most common).
-func renderBadgesV2(item WorktreeItem) string {
-	return renderBadgesV2Bg(item, false)
 }
 
 // renderBadgesV2Bg returns badges with optional selection background.
@@ -165,9 +153,9 @@ func renderBadgesV2Bg(item WorktreeItem, selected bool) string {
 
 	// Tmux badge last (fixed-width text, most frequently present)
 	switch item.TmuxStatus {
-	case "attached":
+	case tmuxStatusAttached:
 		parts = append(parts, withBg(Styles.TmuxBadgeActive).Render("⬢ tmux"))
-	case "detached":
+	case tmuxStatusDetached:
 		parts = append(parts, withBg(Styles.TmuxBadge).Render("⬡ tmux"))
 	}
 
@@ -276,16 +264,7 @@ func (d WorktreeDelegateV2) Render(w io.Writer, m list.Model, index int, listIte
 	branchLen := lipgloss.Width(branchText)
 
 	// Directory name (secondary, with separator; hidden at narrow widths)
-	nameStyle := withBg(Styles.NormalItem)
-	if selected {
-		nameStyle = withBg(Styles.SelectedItem)
-	}
-	if item.IsCurrent {
-		nameStyle = withBg(Styles.CurrentItem)
-		if selected {
-			nameStyle = nameStyle.Bold(true)
-		}
-	}
+	nameStyle := worktreeNameStyle(item, selected, withBg)
 	var namePart string
 	nameLen := 0
 	if d.NameWidth > 0 {
@@ -341,46 +320,9 @@ func (d WorktreeDelegateV2) Render(w io.Writer, m list.Model, index int, listIte
 
 	// === LINE 2: commit message (left) + badges (right-aligned) ===
 	const line2Pad = 6 // indent to align under name (num:2 + indicator:2 + 2 spaces)
-	padStr := bgSpace(line2Pad)
 
 	badges := renderBadgesV2Bg(item, selected)
-	badgesVisLen := lipgloss.Width(badges)
-	commitText := item.CommitMessage
-	availL2 := width - line2Pad
-
-	var line2 string
-	if badgesVisLen > 0 && commitText != "" {
-		// Both: commit left, badges right
-		msgSpace := availL2 - badgesVisLen - 1
-		if msgSpace > 10 {
-			msg := dimStyle.Render(truncate(commitText, msgSpace))
-			msgVisLen := lipgloss.Width(msg)
-			gap := availL2 - msgVisLen - badgesVisLen
-			if gap < 1 {
-				gap = 1
-			}
-			line2 = padStr + msg + bgSpace(gap) + badges
-		} else {
-			// Not enough room for commit, just badges right-aligned
-			gap := availL2 - badgesVisLen
-			if gap < 0 {
-				gap = 0
-			}
-			line2 = padStr + bgSpace(gap) + badges
-		}
-	} else if badgesVisLen > 0 {
-		// Badges only, right-aligned
-		gap := availL2 - badgesVisLen
-		if gap < 0 {
-			gap = 0
-		}
-		line2 = padStr + bgSpace(gap) + badges
-	} else if commitText != "" {
-		// Commit message only (fallback)
-		line2 = padStr + dimStyle.Render(truncate(commitText, availL2))
-	} else {
-		line2 = padStr
-	}
+	line2 := renderDelegateLine2(width, line2Pad, item.CommitMessage, badges, bgSpace, dimStyle)
 
 	// Pad remaining width so selection background covers the full row
 	line1 = line1 + bgSpace(width-lipgloss.Width(line1))
@@ -390,4 +332,52 @@ func (d WorktreeDelegateV2) Render(w io.Writer, m list.Model, index int, listIte
 	line2 = lipgloss.NewStyle().MaxWidth(width).Render(line2)
 
 	_, _ = fmt.Fprint(w, lipgloss.JoinVertical(lipgloss.Left, line1, line2))
+}
+
+// worktreeNameStyle returns the appropriate style for the worktree name column.
+func worktreeNameStyle(item WorktreeItem, selected bool, withBg func(lipgloss.Style) lipgloss.Style) lipgloss.Style {
+	if item.IsCurrent {
+		s := withBg(Styles.CurrentItem)
+		if selected {
+			s = s.Bold(true)
+		}
+		return s
+	}
+	if selected {
+		return withBg(Styles.SelectedItem)
+	}
+	return withBg(Styles.NormalItem)
+}
+
+// renderDelegateLine2 renders the second line of a worktree delegate row
+// containing the commit message (left) and badges (right-aligned).
+func renderDelegateLine2(width, pad int, commitText, badges string, bgSpace func(int) string, dimStyle lipgloss.Style) string {
+	padStr := bgSpace(pad)
+	badgesVisLen := lipgloss.Width(badges)
+	availL2 := width - pad
+
+	if badgesVisLen == 0 && commitText == "" {
+		return padStr
+	}
+	if badgesVisLen == 0 {
+		return padStr + dimStyle.Render(truncate(commitText, availL2))
+	}
+
+	// Right-align badges with optional commit message on the left
+	gap := availL2 - badgesVisLen
+	if commitText != "" {
+		msgSpace := availL2 - badgesVisLen - 1
+		if msgSpace > 10 {
+			msg := dimStyle.Render(truncate(commitText, msgSpace))
+			gap = availL2 - lipgloss.Width(msg) - badgesVisLen
+			if gap < 1 {
+				gap = 1
+			}
+			return padStr + msg + bgSpace(gap) + badges
+		}
+	}
+	if gap < 0 {
+		gap = 0
+	}
+	return padStr + bgSpace(gap) + badges
 }

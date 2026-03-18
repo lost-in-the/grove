@@ -1,9 +1,29 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
+
+// syncStatusText returns a compact sync status string for testing.
+// Moved from WorktreeItem.SyncStatusText — only used in tests.
+func syncStatusText(w *WorktreeItem) string {
+	if !w.HasRemote {
+		return "⚠ no remote"
+	}
+	if w.AheadCount == 0 && w.BehindCount == 0 {
+		return "✓ synced"
+	}
+	var parts []string
+	if w.AheadCount > 0 {
+		parts = append(parts, fmt.Sprintf("↑%d", w.AheadCount))
+	}
+	if w.BehindCount > 0 {
+		parts = append(parts, fmt.Sprintf("↓%d", w.BehindCount))
+	}
+	return strings.Join(parts, " ")
+}
 
 func TestSyncStatusText(t *testing.T) {
 	tests := []struct {
@@ -40,9 +60,9 @@ func TestSyncStatusText(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.item.SyncStatusText()
+			got := syncStatusText(&tt.item)
 			if !strings.Contains(got, tt.want) {
-				t.Errorf("SyncStatusText() = %q, want to contain %q", got, tt.want)
+				t.Errorf("syncStatusText() = %q, want to contain %q", got, tt.want)
 			}
 		})
 	}
@@ -129,11 +149,14 @@ func TestRenderDetailV2_SyncWithHasRemote(t *testing.T) {
 }
 
 func TestGetUpstreamInfo_InvalidPath(t *testing.T) {
-	ahead, behind, hasRemote := getUpstreamInfo("/nonexistent/path")
+	ahead, behind, hasRemote, trackingBranch := getUpstreamInfo("/nonexistent/path")
 	if hasRemote {
 		t.Error("getUpstreamInfo() should return hasRemote=false for nonexistent path")
 	}
 	if ahead != 0 || behind != 0 {
-		t.Errorf("getUpstreamInfo() = (%d, %d, _), want (0, 0, _)", ahead, behind)
+		t.Errorf("getUpstreamInfo() = (%d, %d, _, _), want (0, 0, _, _)", ahead, behind)
+	}
+	if trackingBranch != "" {
+		t.Errorf("getUpstreamInfo() trackingBranch = %q, want empty", trackingBranch)
 	}
 }

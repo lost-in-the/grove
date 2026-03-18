@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/x/exp/golden"
+
+	"github.com/lost-in-the/grove/internal/theme"
 )
 
 // =============================================================================
@@ -87,8 +89,12 @@ func TestGolden_Overlay_Delete(t *testing.T) {
 }
 
 func TestGolden_Overlay_Create(t *testing.T) {
-	t.Run("branch_step", func(t *testing.T) {
-		m := goldenModel(t, sizeStandard, withItems(3), withCreateStep(CreateStepBranch))
+	t.Run("branch_choice_step", func(t *testing.T) {
+		m := goldenModel(t, sizeStandard, withItems(3), withCreateStep(CreateStepBranchChoice))
+		golden.RequireEqual(t, []byte(m.viewString()))
+	})
+	t.Run("branch_select_step", func(t *testing.T) {
+		m := goldenModel(t, sizeStandard, withItems(3), withCreateStep(CreateStepBranchSelect))
 		golden.RequireEqual(t, []byte(m.viewString()))
 	})
 	t.Run("name_step", func(t *testing.T) {
@@ -156,7 +162,7 @@ func TestGolden_Component_Header(t *testing.T) {
 		t.Run(size.name, func(t *testing.T) {
 			goldenMu.Lock()
 			t.Setenv("NO_COLOR", "1")
-			Colors = noColorScheme()
+			Colors = theme.NoColorScheme()
 			Styles = NewStyleSet(Colors)
 			t.Cleanup(func() {
 				Colors = NewColorScheme()
@@ -185,7 +191,7 @@ func TestGolden_Component_Stepper(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			goldenMu.Lock()
 			t.Setenv("NO_COLOR", "1")
-			Colors = noColorScheme()
+			Colors = theme.NoColorScheme()
 			Styles = NewStyleSet(Colors)
 			t.Cleanup(func() {
 				Colors = NewColorScheme()
@@ -214,7 +220,7 @@ func TestGolden_Component_Toast(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			goldenMu.Lock()
 			t.Setenv("NO_COLOR", "1")
-			Colors = noColorScheme()
+			Colors = theme.NoColorScheme()
 			Styles = NewStyleSet(Colors)
 			t.Cleanup(func() {
 				Colors = NewColorScheme()
@@ -247,7 +253,7 @@ func TestGolden_Component_HelpFooter(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			goldenMu.Lock()
 			t.Setenv("NO_COLOR", "1")
-			Colors = noColorScheme()
+			Colors = theme.NoColorScheme()
 			Styles = NewStyleSet(Colors)
 			t.Cleanup(func() {
 				Colors = NewColorScheme()
@@ -286,7 +292,7 @@ func TestGolden_Themed_Dashboard(t *testing.T) {
 
 func TestGolden_Themed_StatusBadges(t *testing.T) {
 	goldenMu.Lock()
-	Colors = defaultColorScheme()
+	Colors = theme.DefaultColorScheme()
 	Styles = NewStyleSet(Colors)
 	t.Cleanup(func() {
 		Colors = NewColorScheme()

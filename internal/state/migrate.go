@@ -56,9 +56,9 @@ func MigrateFromLegacy(groveDir string, legacyPath string) (bool, error) {
 
 // migrateStateVersion handles in-place migration of state.json between versions
 // This is called when loading state to ensure it's up to date.
-func migrateStateVersion(state *State) error {
+func migrateStateVersion(state *State) {
 	if state.Version == CurrentVersion {
-		return nil // Already current
+		return // Already current
 	}
 
 	// Future version migrations would go here
@@ -72,8 +72,6 @@ func migrateStateVersion(state *State) error {
 	if state.Worktrees == nil {
 		state.Worktrees = make(map[string]*WorktreeState)
 	}
-
-	return nil
 }
 
 // BackupState creates a backup of the current state file

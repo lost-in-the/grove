@@ -7,7 +7,7 @@
 
 _grove() {
     local -a worktrees
-    worktrees=($(git worktree list --porcelain 2>/dev/null | awk '/^worktree / {print $2}' | xargs -n1 basename))
+    worktrees=($(grove ls -q 2>/dev/null))
     
     local -a commands
     commands=(
