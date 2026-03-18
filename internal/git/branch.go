@@ -127,6 +127,46 @@ func ListLocalBranches(repoPath string) ([]string, error) {
 	return strings.Split(raw, "\n"), nil
 }
 
+// ListAllBranches returns local and remote branch names (deduplicated).
+// Remote branches are stripped of the "origin/" prefix.
+// Local branches appear first, followed by remote-only branches.
+func ListAllBranches(repoPath string) ([]string, error) {
+	local, err := ListLocalBranches(repoPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get remote branches
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"-C", repoPath, "branch", "-r", "--format=%(refname:short)"}, "", cmdexec.GitLocal)
+	if err != nil {
+		// Fall back to local-only if remote listing fails
+		return local, nil
+	}
+	raw := strings.TrimSpace(string(output))
+	if raw == "" {
+		return local, nil
+	}
+
+	localSet := make(map[string]bool, len(local))
+	for _, b := range local {
+		localSet[b] = true
+	}
+
+	// Add remote branches not already in local, stripping "origin/" prefix
+	for _, rb := range strings.Split(raw, "\n") {
+		name := strings.TrimPrefix(rb, "origin/")
+		if name == "HEAD" || name == "" {
+			continue
+		}
+		if !localSet[name] {
+			local = append(local, name)
+			localSet[name] = true
+		}
+	}
+
+	return local, nil
+}
+
 // isBranchMerged checks if a branch is fully merged into the default branch
 func (b *BranchManager) isBranchMerged(branch string) (bool, error) {
 	// List branches merged into default branch

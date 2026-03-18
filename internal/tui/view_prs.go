@@ -174,7 +174,7 @@ func (m Model) handlePREnter(s *PRViewState, filtered []*tracker.PullRequest) (t
 }
 
 func (m Model) openCreateWizardForPR(pr *tracker.PullRequest) (tea.Model, tea.Cmd) {
-	branches, _ := git.ListLocalBranches(m.projectRoot)
+	branches, _ := git.ListAllBranches(m.projectRoot)
 	m.createState = prefillCreateStateForPR(pr, m.projectName, branches)
 	m.createState.ReturnView = ViewPRs
 	m.createState.WorktreeBranches = m.worktreeBranchMap()
