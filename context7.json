@@ -1,4 +1,36 @@
 {
-  "url": "https://context7.com/lost-in-the/grove",
-  "public_key": "pk_lHvYkoK2DwC8Cbj0p10kg"
+  "projectTitle": "Grove — Git Worktree Flow Manager",
+  "description": "Go CLI that manages git worktrees with tmux integration, Docker orchestration, credential copying, and shell integration. One command creates a worktree, branch, tmux session, and Docker stack.",
+  "folders": [
+    "docs",
+    "cmd",
+    "internal",
+    "plugins",
+    "shell",
+    "examples"
+  ],
+  "excludeFolders": [
+    "**/testdata",
+    "dist",
+    ".github",
+    ".grove"
+  ],
+  "excludeFiles": [
+    "CHANGELOG.md",
+    "LICENSE",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md",
+    ".goreleaser.yml",
+    "go.sum",
+    "Makefile",
+    "VISUAL_TESTING.md",
+    "WIZARD_UX_RESEARCH.md"
+  ],
+  "rules": [
+    "Install via Homebrew (brew install lost-in-the/tap/grove) then run grove setup. Shell integration (eval \"$(grove install zsh)\") enables directory switching and tab completion.",
+    "Core commands: grove new (create worktree+branch+tmux), grove to (switch), grove fetch pr/42 (from GitHub PR/issue), grove ls, grove rm, grove fork.",
+    "Config in .grove/config.toml per project. Key sections: [switch] dirty handling, [tmux] session control, [naming] worktree pattern, [protection] branch guards.",
+    "Hooks in .grove/hooks.toml define post-create actions: copy files, symlink dirs (node_modules, vendor/bundle), run setup commands. Auto-detected by grove init.",
+    "Docker plugin: embedded mode (per-worktree compose) or external mode (shared compose-dev, ADMIN_DIR). Troubleshoot with grove doctor. Plugin API in plugins/ directory."
+  ]
 }
