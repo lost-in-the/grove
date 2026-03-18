@@ -50,7 +50,7 @@ type DiffStats struct {
 }
 
 var compareCmd = &cobra.Command{
-	Use:     "diff <name>",
+	Use:     "diff [name]",
 	Aliases: []string{"compare", "d"},
 	Short:   "Diff current worktree against another",
 	Long: `Diff the current worktree against another worktree.
@@ -64,9 +64,19 @@ Examples:
   grove diff main --committed  # Show only commit differences
   grove diff main --wip     # Show only uncommitted differences
   grove diff main --json    # Output as JSON`,
-	Args: cobra.ExactArgs(1),
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: completeWorktreeNames,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
-		targetName := args[0]
+		var targetName string
+		if len(args) == 0 {
+			selected, err := selectWorktree(ctx, "Compare with which worktree?")
+			if err != nil {
+				return err
+			}
+			targetName = selected
+		} else {
+			targetName = args[0]
+		}
 
 		mgr, err := worktree.NewManager(ctx.ProjectRoot)
 		if err != nil {

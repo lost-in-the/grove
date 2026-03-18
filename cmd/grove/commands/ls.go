@@ -59,14 +59,34 @@ var lsCmd = &cobra.Command{
 			return fmt.Errorf("failed to initialize worktree manager: %w", err)
 		}
 
+		// Fast paths: quiet and paths modes skip dirty checks entirely
+		if lsQuiet {
+			names, err := mgr.ListNames()
+			if err != nil {
+				return fmt.Errorf("failed to list worktree names: %w", err)
+			}
+			for _, name := range names {
+				fmt.Println(name)
+			}
+			return nil
+		}
+
 		trees, err := mgr.List()
 		if err != nil {
 			return fmt.Errorf("failed to list worktrees: %w", err)
 		}
 
 		if len(trees) == 0 {
-			if !lsQuiet && !lsPaths && !lsJSON {
+			if !lsPaths && !lsJSON {
 				fmt.Println("No worktrees found")
+			}
+			return nil
+		}
+
+		// Paths only mode
+		if lsPaths {
+			for _, tree := range trees {
+				fmt.Println(tree.Path)
 			}
 			return nil
 		}
@@ -98,22 +118,6 @@ var lsCmd = &cobra.Command{
 				paths[i] = t.Path
 			}
 			pluginStatuses = ctx.PluginManager.CollectStatuses(paths)
-		}
-
-		// Paths only mode
-		if lsPaths {
-			for _, tree := range trees {
-				fmt.Println(tree.Path)
-			}
-			return nil
-		}
-
-		// Quiet mode - names only
-		if lsQuiet {
-			for _, tree := range trees {
-				fmt.Println(tree.DisplayName())
-			}
-			return nil
 		}
 
 		// JSON mode

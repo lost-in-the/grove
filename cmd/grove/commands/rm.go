@@ -24,7 +24,7 @@ var (
 )
 
 var rmCmd = &cobra.Command{
-	Use:     "rm <name>",
+	Use:     "rm [name]",
 	Aliases: []string{"remove", "delete"},
 	Short:   "Remove a worktree and its tmux session",
 	Long: `Remove a git worktree by name and kill its associated tmux session.
@@ -40,15 +40,26 @@ Examples:
   grove rm feature-auth --delete-branch  # Remove worktree and branch
   grove rm feature-auth --keep-branch    # Remove worktree, keep branch
   grove rm staging --force --unprotect   # Remove protected worktree`,
-	Args: cobra.ExactArgs(1),
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: completeWorktreeNames,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
-		name := args[0]
+		w := cli.NewStdout()
+		stderr := cli.NewStderr()
+
+		var name string
+		if len(args) == 0 {
+			selected, err := selectWorktree(ctx, "Remove which worktree?")
+			if err != nil {
+				return err
+			}
+			name = selected
+		} else {
+			name = args[0]
+		}
+
 		if name == "" {
 			return fmt.Errorf("worktree name cannot be empty")
 		}
-
-		w := cli.NewStdout()
-		stderr := cli.NewStderr()
 
 		mgr, err := worktree.NewManager(ctx.ProjectRoot)
 		if err != nil {
@@ -63,6 +74,24 @@ Examples:
 		if wt == nil {
 			cli.Error(stderr, "worktree '%s' not found", name)
 			os.Exit(exitcode.ResourceNotFound)
+		}
+
+		// When selected interactively, confirm before proceeding
+		if len(args) == 0 {
+			details := []string{
+				fmt.Sprintf("Branch: %s", wt.Branch),
+				fmt.Sprintf("Path:   %s", wt.Path),
+			}
+			confirmed, confirmErr := cli.ConfirmWithDetails(
+				stderr,
+				fmt.Sprintf("Remove worktree '%s'?", name),
+				details,
+				"Proceed?",
+				false,
+			)
+			if confirmErr != nil || !confirmed {
+				return fmt.Errorf("removal canceled")
+			}
 		}
 
 		// Cannot remove the main worktree (unconditional — git won't allow it)

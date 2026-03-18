@@ -27,7 +27,7 @@ var (
 )
 
 var newCmd = &cobra.Command{
-	Use:     "new <name>",
+	Use:     "new [name]",
 	Aliases: []string{"spawn", "n"},
 	Short:   "Create a new worktree and tmux session",
 	Long: `Create a new git worktree with the specified name and create a tmux session for it.
@@ -50,7 +50,7 @@ Examples:
   grove new feature-auth --no-docker               # Skip Docker auto-start
   grove spawn feature-x                            # Alias (implies --json output)
   grove new staging --mirror origin/main           # Environment worktree tracking origin/main`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.MaximumNArgs(1),
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		// spawn alias implies JSON output
 		if cmd.CalledAs() == "spawn" {
@@ -60,7 +60,20 @@ Examples:
 		w := cli.NewStdout()
 		stderr := cli.NewStderr()
 
-		name := args[0]
+		var name string
+		if len(args) == 0 {
+			if !cli.IsInteractive() {
+				return fmt.Errorf("worktree name required: grove new <name>")
+			}
+			var err error
+			name, err = cli.ReadLine("Worktree name: ")
+			if err != nil {
+				return err
+			}
+		} else {
+			name = args[0]
+		}
+
 		if name == "" {
 			return fmt.Errorf("worktree name cannot be empty")
 		}

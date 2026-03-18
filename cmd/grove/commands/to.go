@@ -21,7 +21,7 @@ var (
 )
 
 var toCmd = &cobra.Command{
-	Use:     "to <name>",
+	Use:     "to [name]",
 	Aliases: []string{"switch", "t"},
 	Short:   "Switch to a worktree",
 	Long: `Switch to a worktree by name. If a tmux session exists for the worktree, switch to it.
@@ -31,10 +31,21 @@ Use --peek for a lightweight switch that skips hooks (no Docker side effects).
 Useful for code review or quick file checks.
 
 When using shell integration, this will also change your current directory.`,
-	Args: cobra.ExactArgs(1),
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: completeWorktreeNames,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
-		name := args[0]
 		stderr := cli.NewStderr()
+
+		var name string
+		if len(args) == 0 {
+			selected, err := selectWorktree(ctx, "Switch to which worktree?")
+			if err != nil {
+				return err
+			}
+			name = selected
+		} else {
+			name = args[0]
+		}
 
 		if name == "" {
 			return fmt.Errorf("worktree name cannot be empty")

@@ -127,11 +127,12 @@ Each overlay opens centered over the dimmed dashboard background. Press `esc` to
 
 A multi-step wizard:
 
-1. **Name** — Enter a short name (e.g., `my-feature`). Grove displays the full name preview (`project-my-feature`) as you type and warns about conflicts with existing worktrees.
-2. **Branch** — Choose to create a new branch or select an existing one. Start typing to filter the branch list.
+1. **Branch** — Choose "Select an existing branch" or "Create a new branch."
+   - *Select existing:* A navigable branch list. Press `/` to filter by name (`j`/`k` navigate, all keys reach the filter input). Press `esc` to exit filter mode.
+   - *Create new:* A focused text input for the new branch name (all keys including `j`/`k` are typed as text).
+   - If you select an existing branch, Grove asks whether to use it as-is (split) or create a new branch from it (fork). You can save this preference to skip the prompt.
+2. **Name** — Enter a short name (e.g., `my-feature`). Grove displays the full name preview (`project-my-feature`) as you type and warns about conflicts with existing worktrees.
 3. **Confirm** — Review the name and branch, then press `enter` to create.
-
-If you select an existing branch, Grove asks whether to use it as-is (split) or create a new branch from it (fork). You can save this preference to skip the prompt in the future.
 
 ### Delete Worktree (`d`)
 

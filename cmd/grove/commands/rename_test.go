@@ -12,8 +12,8 @@ func TestRenameCmd(t *testing.T) {
 		t.Fatal("renameCmd is nil")
 	}
 
-	if renameCmd.Use != "rename <old> <new>" {
-		t.Errorf("renameCmd.Use = %v, want 'rename <old> <new>'", renameCmd.Use)
+	if renameCmd.Use != "rename [old] [new]" {
+		t.Errorf("renameCmd.Use = %v, want 'rename [old] [new]'", renameCmd.Use)
 	}
 
 	if renameCmd.RunE == nil {
@@ -22,22 +22,30 @@ func TestRenameCmd(t *testing.T) {
 }
 
 func TestRenameCmdArgs(t *testing.T) {
-	// Should require exactly 2 args
+	// Should accept 0-2 args (interactive selection when 0 or 1)
 	if renameCmd.Args == nil {
 		t.Fatal("renameCmd.Args is nil")
 	}
 
-	// Verify it errors with wrong number of args
-	err := renameCmd.Args(renameCmd, []string{"only-one"})
-	if err == nil {
-		t.Error("should error with only 1 arg")
+	// 0 args: accepted (interactive selection will prompt)
+	err := renameCmd.Args(renameCmd, []string{})
+	if err != nil {
+		t.Errorf("should accept 0 args for interactive selection, got error: %v", err)
 	}
 
+	// 1 arg: accepted (interactive prompt for new name)
+	err = renameCmd.Args(renameCmd, []string{"only-one"})
+	if err != nil {
+		t.Errorf("should accept 1 arg, got error: %v", err)
+	}
+
+	// 2 args: accepted (explicit old + new name)
 	err = renameCmd.Args(renameCmd, []string{"one", "two"})
 	if err != nil {
 		t.Errorf("should accept 2 args, got error: %v", err)
 	}
 
+	// 3 args: rejected
 	err = renameCmd.Args(renameCmd, []string{"one", "two", "three"})
 	if err == nil {
 		t.Error("should error with 3 args")
