@@ -982,7 +982,7 @@ func (m *Model) openSelectedPRURL() {
 
 func (m Model) handleDashboardNewKey() (tea.Model, tea.Cmd) {
 	m.activeView = ViewCreate
-	branches, branchErr := git.ListLocalBranches(m.projectRoot)
+	branches, branchErr := git.ListAllBranches(m.projectRoot)
 	if branchErr != nil {
 		tuilog.Printf("warning: failed to list branches: %v", branchErr)
 	}
