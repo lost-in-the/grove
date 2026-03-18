@@ -10,6 +10,7 @@ import (
 	lipgloss "charm.land/lipgloss/v2"
 
 	"github.com/lost-in-the/grove/internal/worktree"
+	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
 // renderFilterBar writes the filter/count bar used by list views (Issues, PRs).
@@ -201,5 +202,105 @@ func handleListFilterKey(msg tea.KeyPressMsg, keys KeyMap, ti textinput.Model, c
 			cursor = 0
 		}
 		return ti, cursor, cmd, false
+	}
+}
+
+// ExistingWorktreePrompt holds state for the "worktree already exists" popup
+// shown in PR and issue views when a user tries to create a duplicate.
+type ExistingWorktreePrompt struct {
+	WorktreeName string // short name to highlight on dashboard
+	Branch       string // branch that matched
+	ItemLabel    string // e.g. "PR #42" or "Issue #101"
+}
+
+// renderExistingWorktreePrompt renders a popup offering to go to the existing
+// worktree or create a new one (fork).
+func renderExistingWorktreePrompt(p *ExistingWorktreePrompt, width int) string {
+	d := calcOverlayDims(width)
+
+	var b strings.Builder
+	b.WriteString(d.indent + p.ItemLabel + " uses branch " + Styles.DetailValue.Render(p.Branch) + "\n")
+	b.WriteString(d.indent + "which already has a worktree:\n\n")
+	b.WriteString(d.indent + "  → " + Styles.SuccessText.Render(p.WorktreeName) + "\n")
+
+	content := b.String()
+	footer := "\n" + Styles.Footer.Render(d.indent+"[enter] go to worktree  [n] fork  [esc] back")
+
+	return Styles.OverlayBorder.Width(d.overlay).Render(
+		Styles.OverlayTitle.Render("Worktree Exists") + "\n\n" + padToHeight(content, 8) + footer,
+	)
+}
+
+// handleExistsPromptKey handles key input for the "worktree exists" popup.
+// Enter navigates to the existing worktree. N opens the fork overlay. Esc dismisses.
+func (m Model) handleExistsPromptKey(msg tea.KeyPressMsg, prompt *ExistingWorktreePrompt, dismiss func()) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.keys.Escape):
+		dismiss()
+		return m, nil
+	case key.Matches(msg, m.keys.Enter):
+		m.activeView = ViewDashboard
+		m.prState = nil
+		m.issueState = nil
+		m.pendingSelect = prompt.WorktreeName
+		m.toast.Show(NewToast(fmt.Sprintf("Focused worktree %q", prompt.WorktreeName), ToastInfo))
+		return m, m.fetchWorktrees
+	case msg.String() == "n" || key.Matches(msg, m.keys.New):
+		// Open the fork overlay for the existing worktree
+		item := m.findWorktreeByName(prompt.WorktreeName)
+		if item == nil {
+			dismiss()
+			return m, nil
+		}
+		m.prState = nil
+		m.issueState = nil
+		m.activeView = ViewFork
+		m.forkState = NewForkState(*item)
+		return m, wipCheckCmd(item.Path)
+	}
+	return m, nil
+}
+
+// findWorktreeByName returns the WorktreeItem with the given short name, or nil.
+func (m Model) findWorktreeByName(name string) *WorktreeItem {
+	for _, li := range m.list.Items() {
+		if item, ok := li.(WorktreeItem); ok && item.ShortName == name {
+			return &item
+		}
+	}
+	return nil
+}
+
+// prefillCreateStateForPR creates a CreateState pre-filled from a PR,
+// skipping directly to the name step.
+func prefillCreateStateForPR(pr *tracker.PullRequest, projectName string, branches []string) *CreateState {
+	suggestion := worktree.DeriveWorktreeName(pr.Branch, "")
+	ni := newNameInput("")
+	return &CreateState{
+		Step:              CreateStepName,
+		Source:            "pr",
+		ProjectName:       projectName,
+		BaseBranch:        pr.Branch,
+		NameSuggestion:    suggestion,
+		NameInput:         ni,
+		Branches:          branches,
+		BranchFilterInput: newBranchFilterInput(),
+		BranchNameInput:   newBranchNameInput(),
+	}
+}
+
+// prefillCreateStateForIssue creates a CreateState pre-filled from an issue,
+// starting at the branch choice step so the user can pick a base branch.
+// The issue-derived name is carried as NameSuggestion for the Name step.
+func prefillCreateStateForIssue(issue *tracker.Issue, projectName string, branches []string) *CreateState {
+	name := fmt.Sprintf("issue-%d", issue.Number)
+	return &CreateState{
+		Step:              CreateStepBranchChoice,
+		Source:            "issue",
+		ProjectName:       projectName,
+		NameSuggestion:    name,
+		Branches:          branches,
+		BranchFilterInput: newBranchFilterInput(),
+		BranchNameInput:   newBranchNameInput(),
 	}
 }

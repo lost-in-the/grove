@@ -137,7 +137,7 @@ func slugify(s string) string {
 		case r >= '0' && r <= '9':
 			result = append(result, r)
 			prevDash = false
-		case r == ' ' || r == '-' || r == '_':
+		case r == ' ' || r == '-' || r == '_' || r == '/':
 			if !prevDash && len(result) > 0 {
 				result = append(result, '-')
 				prevDash = true

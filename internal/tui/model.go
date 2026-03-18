@@ -988,10 +988,12 @@ func (m Model) handleDashboardNewKey() (tea.Model, tea.Cmd) {
 	}
 	m.createState = &CreateState{
 		Step:              CreateStepBranchChoice,
+		ReturnView:        ViewDashboard,
 		ProjectName:       m.projectName,
 		Branches:          branches,
 		BranchFilterInput: newBranchFilterInput(),
 		BranchNameInput:   newBranchNameInput(),
+		WorktreeBranches:  m.worktreeBranchMap(),
 	}
 	return m, nil
 }
@@ -1219,9 +1221,14 @@ func (m Model) handleCreateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleBranchActionKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := m.createState
 	switch {
+	case key.Matches(msg, m.keys.ShiftTab):
+		s.Step = CreateStepBranchSelect
+		return m, nil
+
 	case key.Matches(msg, m.keys.Escape):
-		m.activeView = ViewDashboard
+		returnView := s.ReturnView
 		m.createState = nil
+		m.activeView = returnView
 		return m, nil
 
 	case key.Matches(msg, m.keys.Back):
@@ -1263,7 +1270,7 @@ func (m Model) handleBranchActionKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			s.BaseBranch = ""
 		}
 		// Initialize name input and proceed to Name step
-		s.NameInput = newNameInput(s.NameSuggestion)
+		s.NameInput = newNameInput("")
 		s.Step = CreateStepName
 		return m, s.NameInput.Focus()
 	}
@@ -1274,9 +1281,14 @@ func (m Model) handleBranchActionKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := m.createState
 	switch {
+	case key.Matches(msg, m.keys.ShiftTab):
+		s.Step = CreateStepName
+		return m, s.NameInput.Focus()
+
 	case key.Matches(msg, m.keys.Escape):
-		m.activeView = ViewDashboard
+		returnView := s.ReturnView
 		m.createState = nil
+		m.activeView = returnView
 		return m, nil
 
 	case key.Matches(msg, m.keys.Back):
@@ -1303,9 +1315,20 @@ func (m *Model) startCreate(name, baseBranch string) (tea.Model, tea.Cmd) {
 func (m Model) handleBranchChoiceKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := m.createState
 	switch {
+	case key.Matches(msg, m.keys.ShiftTab):
+		if s.Source != "" {
+			returnView := s.ReturnView
+			m.createState = nil
+			m.activeView = returnView
+			return m, nil
+		}
+		// First step from dashboard — no back, treat as no-op
+		return m, nil
+
 	case key.Matches(msg, m.keys.Escape):
-		m.activeView = ViewDashboard
+		returnView := s.ReturnView
 		m.createState = nil
+		m.activeView = returnView
 		return m, nil
 
 	case key.Matches(msg, m.keys.Up):
@@ -1327,9 +1350,12 @@ func (m Model) handleBranchChoiceKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			s.BranchFilterMode = BranchFilterOff
 			return m, nil
 		}
-		// Create new branch
+		// Create new branch — pre-fill from source context if available
 		s.Step = CreateStepBranchCreate
 		s.BranchNameInput = newBranchNameInput()
+		if s.NameSuggestion != "" {
+			s.BranchNameInput.SetValue(s.NameSuggestion)
+		}
 		return m, s.BranchNameInput.Focus()
 	}
 	return m, nil
@@ -1372,9 +1398,14 @@ func (m Model) handleBranchSelectKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	totalItems := len(filtered)
 
 	switch {
+	case key.Matches(msg, m.keys.ShiftTab):
+		s.Step = CreateStepBranchChoice
+		return m, nil
+
 	case key.Matches(msg, m.keys.Escape):
-		m.activeView = ViewDashboard
+		returnView := s.ReturnView
 		m.createState = nil
+		m.activeView = returnView
 		return m, nil
 
 	case key.Matches(msg, m.keys.Back):
@@ -1416,9 +1447,14 @@ func (m Model) handleBranchCreateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := m.createState
 
 	switch {
+	case key.Matches(msg, m.keys.ShiftTab):
+		s.Step = CreateStepBranchChoice
+		return m, nil
+
 	case key.Matches(msg, m.keys.Escape):
-		m.activeView = ViewDashboard
+		returnView := s.ReturnView
 		m.createState = nil
+		m.activeView = returnView
 		return m, nil
 
 	case key.Matches(msg, m.keys.Back):
@@ -1438,8 +1474,10 @@ func (m Model) handleBranchCreateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		s.BaseBranch = ""
 		s.NewBranchName = name
-		s.NameSuggestion = name
-		s.NameInput = newNameInput(s.NameSuggestion)
+		if s.NameSuggestion == "" {
+			s.NameSuggestion = name
+		}
+		s.NameInput = newNameInput("")
 		s.Step = CreateStepName
 		return m, s.NameInput.Focus()
 
@@ -1459,8 +1497,11 @@ func (m Model) selectExistingBranch(branch string) (tea.Model, tea.Cmd) {
 	if m.cfg != nil {
 		strategy = m.cfg.TUI.WorktreeNameFromBranch
 	}
-	s.NameSuggestion = worktree.DeriveWorktreeName(branch, strategy)
-	s.NameInput = newNameInput(s.NameSuggestion)
+	// Keep the existing suggestion if pre-set from a source (e.g., issue name)
+	if s.NameSuggestion == "" {
+		s.NameSuggestion = worktree.DeriveWorktreeName(branch, strategy)
+	}
+	s.NameInput = newNameInput("")
 
 	if m.cfg != nil && m.cfg.TUI.SkipBranchNotice != nil && *m.cfg.TUI.SkipBranchNotice {
 		if m.cfg.TUI.DefaultBranchAction == "fork" {
@@ -1481,14 +1522,34 @@ func (m Model) handleNameKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := m.createState
 
 	switch {
+	case key.Matches(msg, m.keys.ShiftTab):
+		// Always go back regardless of input content
+		if s.Source != "" {
+			// From PR/issue view — back returns to source view
+			returnView := s.ReturnView
+			m.createState = nil
+			m.activeView = returnView
+			return m, nil
+		}
+		s.Step = CreateStepBranchChoice
+		return m, nil
+
 	case key.Matches(msg, m.keys.Escape):
-		m.activeView = ViewDashboard
+		returnView := s.ReturnView
 		m.createState = nil
+		m.activeView = returnView
 		return m, nil
 
 	case key.Matches(msg, m.keys.Back):
 		// Only go back if the name input is empty
 		if s.NameInput.Value() == "" {
+			if s.Source != "" {
+				// From PR/issue view — dismiss wizard, return to source view
+				returnView := s.ReturnView
+				m.createState = nil
+				m.activeView = returnView
+				return m, nil
+			}
 			s.Step = CreateStepBranchChoice
 			return m, nil
 		}
@@ -1557,14 +1618,7 @@ func (m *Model) applySortToList() tea.Cmd {
 }
 
 func (m Model) enterPRView() (tea.Model, tea.Cmd) {
-	// Collect existing worktree branches for badge display
-	branches := make(map[string]bool)
-	for _, li := range m.list.Items() {
-		if item, ok := li.(WorktreeItem); ok {
-			branches[item.Branch] = true
-		}
-	}
-
+	branches := m.worktreeBranchMap()
 	m.activeView = ViewPRs
 	m.prState = &PRViewState{
 		Loading:          true,
@@ -1575,12 +1629,26 @@ func (m Model) enterPRView() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) enterIssueView() (tea.Model, tea.Cmd) {
+	branches := m.worktreeBranchMap()
 	m.activeView = ViewIssues
 	m.issueState = &IssueViewState{
-		Loading:     true,
-		FilterInput: newFilterInput(""),
+		Loading:          true,
+		FilterInput:      newFilterInput(""),
+		WorktreeBranches: branches,
 	}
 	return m, tea.Batch(m.spinner.Tick, m.fetchIssuesCmd)
+}
+
+// worktreeBranchMap builds a map from branch name to worktree short name
+// for all current worktrees. Used by PR and issue views to detect existing worktrees.
+func (m Model) worktreeBranchMap() map[string]string {
+	branches := make(map[string]string)
+	for _, li := range m.list.Items() {
+		if item, ok := li.(WorktreeItem); ok {
+			branches[item.Branch] = item.ShortName
+		}
+	}
+	return branches
 }
 
 func (m Model) enterBulkMode() (tea.Model, tea.Cmd) {
@@ -1722,7 +1790,25 @@ func (m Model) viewForActiveView() string {
 	case ViewDelete:
 		return m.overlayOnDashboard(m.deleteState != nil, func() string { return renderDeleteV2(m.deleteState, m.width) })
 	case ViewCreate:
-		return m.overlayOnDashboard(m.createState != nil, func() string { return renderCreateV2(m.createState, m.width, m.spinner.View()) })
+		if m.createState != nil {
+			overlay := renderCreateV2(m.createState, m.width, m.spinner.View())
+			var bg string
+			switch m.createState.Source {
+			case "pr":
+				if m.prState != nil {
+					bg = m.renderPRPanel()
+				}
+			case "issue":
+				if m.issueState != nil {
+					bg = m.renderIssuePanel()
+				}
+			}
+			if bg == "" {
+				bg = m.renderDashboard()
+			}
+			return centerOverlay(bg, overlay, m.width, m.height)
+		}
+		return ""
 	case ViewBulk:
 		return m.overlayOnDashboard(m.bulkState != nil, func() string { return renderBulk(m.bulkState) })
 	case ViewPRs:
@@ -2089,16 +2175,10 @@ func gatherDeleteWarnings(item *WorktreeItem) []string {
 
 // ConfigureForPRs configures the model to start directly in the PR browser view.
 func (m Model) ConfigureForPRs() Model {
-	branches := make(map[string]bool)
-	for _, li := range m.list.Items() {
-		if item, ok := li.(WorktreeItem); ok {
-			branches[item.Branch] = true
-		}
-	}
 	m.activeView = ViewPRs
 	m.prState = &PRViewState{
 		Loading:          true,
-		WorktreeBranches: branches,
+		WorktreeBranches: m.worktreeBranchMap(),
 	}
 	return m
 }

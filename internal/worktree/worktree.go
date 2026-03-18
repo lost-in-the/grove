@@ -165,8 +165,28 @@ func (m *Manager) Move(oldName, newName string) error {
 		return fmt.Errorf("new worktree name cannot be empty")
 	}
 
-	oldPath := filepath.Join(filepath.Dir(m.repoRoot), m.FullName(oldName))
-	newPath := filepath.Join(filepath.Dir(m.repoRoot), m.FullName(newName))
+	// Look up the actual worktree path instead of constructing it.
+	// Worktrees may live in non-standard locations (e.g. .claude/worktrees/).
+	wt, err := m.Find(oldName)
+	if err != nil {
+		return fmt.Errorf("failed to find worktree %q: %w", oldName, err)
+	}
+	if wt == nil {
+		return fmt.Errorf("worktree %q not found", oldName)
+	}
+	oldPath := wt.Path
+
+	// Place the renamed worktree as a sibling of the original,
+	// preserving the naming convention (with or without project prefix).
+	oldBase := filepath.Base(oldPath)
+	prefix := m.GetProjectName() + "-"
+	var newBase string
+	if strings.HasPrefix(oldBase, prefix) {
+		newBase = prefix + newName
+	} else {
+		newBase = newName
+	}
+	newPath := filepath.Join(filepath.Dir(oldPath), newBase)
 
 	output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"worktree", "move", oldPath, newPath}, m.repoRoot, cmdexec.GitLocal)
 	if err != nil {
@@ -226,6 +246,25 @@ func (m *Manager) List() ([]*Worktree, error) {
 	wg.Wait()
 
 	return trees, nil
+}
+
+// ListNames returns display names for all worktrees without running dirty checks.
+// This is significantly faster than List() and suitable for tab completion.
+func (m *Manager) ListNames() ([]string, error) {
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"worktree", "list", "--porcelain"}, m.repoRoot, cmdexec.GitLocal)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list worktrees: %w", err)
+	}
+
+	projectName := m.GetProjectName()
+	mainPath := m.getMainWorktreePath()
+	trees := parseWorktreeList(string(output), mainPath, projectName)
+
+	names := make([]string, 0, len(trees))
+	for _, t := range trees {
+		names = append(names, t.DisplayName())
+	}
+	return names, nil
 }
 
 // Remove removes a worktree

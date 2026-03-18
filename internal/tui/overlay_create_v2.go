@@ -140,7 +140,12 @@ func renderCreateBranchChoiceV2(s *CreateState, width int) string {
 	}
 
 	content := b.String()
-	footer := "\n" + Styles.Footer.Render(d.indent+"[enter] select  [esc] cancel")
+	var footer string
+	if s.Source != "" {
+		footer = "\n" + Styles.Footer.Render(d.indent+"[enter] select  [shift+tab] back  [esc] cancel")
+	} else {
+		footer = "\n" + Styles.Footer.Render(d.indent+"[enter] select  [esc] cancel")
+	}
 
 	return Styles.OverlayBorderSuccess.Width(d.overlay).Render(
 		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + padToHeight(content, createOverlayMinLines) + footer,
@@ -179,7 +184,12 @@ func renderCreateBranchSelectV2(s *CreateState, width int) string {
 			if i == s.BranchCursor {
 				cursor = Styles.ListCursor.Render("❯ ")
 			}
-			b.WriteString(d.indent + cursor + filtered[i] + "\n")
+			branchName := filtered[i]
+			badge := ""
+			if wtName, inUse := s.WorktreeBranches[branchName]; inUse {
+				badge = " " + Styles.DetailDim.Render("["+wtName+"]")
+			}
+			b.WriteString(d.indent + cursor + branchName + badge + "\n")
 		}
 		if end < totalItems {
 			b.WriteString(d.indent + Styles.DetailDim.Render(fmt.Sprintf("… and %d more", totalItems-end)) + "\n")
@@ -191,7 +201,7 @@ func renderCreateBranchSelectV2(s *CreateState, width int) string {
 	if s.BranchFilterMode == BranchFilterOn {
 		footer = "\n" + Styles.Footer.Render(d.indent+"[enter] accept filter  [esc] clear filter")
 	} else {
-		footer = "\n" + Styles.Footer.Render(d.indent+"[enter] select  [/] filter  [backspace] back  [esc] cancel")
+		footer = "\n" + Styles.Footer.Render(d.indent+"[enter] select  [/] filter  [shift+tab] back  [esc] cancel")
 	}
 
 	return Styles.OverlayBorderSuccess.Width(d.overlay).Render(
@@ -213,7 +223,7 @@ func renderCreateBranchCreateV2(s *CreateState, width int) string {
 	b.WriteString(d.indent + s.BranchNameInput.View() + "\n")
 
 	content := b.String()
-	footer := "\n" + Styles.Footer.Render(d.indent+"[enter] next  [backspace] back  [esc] cancel")
+	footer := "\n" + Styles.Footer.Render(d.indent+"[enter] next  [shift+tab] back  [esc] cancel")
 
 	return Styles.OverlayBorderSuccess.Width(d.overlay).Render(
 		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + padToHeight(content, createOverlayMinLines) + footer,
@@ -270,7 +280,7 @@ func renderCreateNameV2(s *CreateState, width int) string {
 	if s.ExistingWorktree != nil {
 		footer = "\n" + Styles.Footer.Render(d.indent+"[enter] Switch to existing  [tab] edit name  [esc] cancel")
 	} else {
-		footer = "\n" + Styles.Footer.Render(d.indent+"[enter] next  [backspace] back  [esc] cancel")
+		footer = "\n" + Styles.Footer.Render(d.indent+"[enter] next  [shift+tab] back  [esc] cancel")
 	}
 
 	return Styles.OverlayBorderSuccess.Width(d.overlay).Render(
@@ -313,7 +323,7 @@ func renderCreateBranchActionV2(s *CreateState, width int) string {
 	b.WriteString(d.indent + checkbox + " Don't show this again\n")
 
 	content := b.String()
-	footer := "\n" + Styles.Footer.Render(d.indent+"[enter] confirm  [backspace] back  [esc] cancel  [space] toggle")
+	footer := "\n" + Styles.Footer.Render(d.indent+"[enter] confirm  [shift+tab] back  [esc] cancel  [space] toggle")
 
 	return Styles.OverlayBorderSuccess.Width(d.overlay).Render(
 		Styles.OverlayTitle.Render("New Worktree") + "\n\n" + padToHeight(content, createOverlayMinLines) + footer,
@@ -376,10 +386,10 @@ func renderCreateConfirmV2(s *CreateState, width int) string {
 	var footer string
 	if s.Error != "" {
 		b.WriteString("\n" + Styles.ErrorText.Render(d.indent+s.Error) + "\n")
-		footer = "\n" + Styles.Footer.Render(d.indent+"[enter] retry  [backspace] back  [esc] cancel")
+		footer = "\n" + Styles.Footer.Render(d.indent+"[enter] retry  [shift+tab] back  [esc] cancel")
 	} else {
 		b.WriteString("\n" + Styles.SuccessText.Render(d.indent+"Ready to create worktree.") + "\n")
-		footer = "\n" + Styles.Footer.Render(d.indent+"[enter] create  [backspace] back  [esc] cancel")
+		footer = "\n" + Styles.Footer.Render(d.indent+"[enter] create  [shift+tab] back  [esc] cancel")
 	}
 
 	content := b.String()

@@ -157,8 +157,8 @@ func withPRData() testOpt {
 				{Number: 38, Title: "Fix login redirect loop", Author: "bob", Branch: "fix/login", BaseBranch: "main", IsDraft: true, CommitCount: 1, Additions: 8, Deletions: 3},
 				{Number: 35, Title: "Refactor database connection pooling", Author: "carol", Branch: "refactor/db-pool", BaseBranch: "main", CommitCount: 7, Additions: 1203, Deletions: 456},
 			},
-			WorktreeBranches: map[string]bool{
-				"feature/auth": true,
+			WorktreeBranches: map[string]string{
+				"feature/auth": "auth",
 			},
 		}
 	}
