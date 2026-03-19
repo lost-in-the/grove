@@ -3,10 +3,6 @@
   "description": "Go CLI that manages git worktrees with tmux integration, Docker orchestration, credential copying, and shell integration. One command creates a worktree, branch, tmux session, and Docker stack.",
   "folders": [
     "docs",
-    "cmd",
-    "internal",
-    "plugins",
-    "shell",
     "examples"
   ],
   "excludeFolders": [
@@ -23,7 +19,7 @@
     ".goreleaser.yml",
     "go.sum",
     "Makefile",
-    "VISUAL_TESTING.md",
+    "CONTRIBUTING.md",
     "WIZARD_UX_RESEARCH.md"
   ],
   "rules": [
