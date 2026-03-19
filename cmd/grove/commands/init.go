@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -175,10 +176,13 @@ func initializeState(groveDir, cwd, projectName string) error {
 	}
 
 	mainBranch := detectMainBranch(cwd)
+	now := time.Now()
 	mainState := &state.WorktreeState{
-		Path:   cwd,
-		Branch: mainBranch,
-		Root:   true,
+		Path:           cwd,
+		Branch:         mainBranch,
+		Root:           true,
+		CreatedAt:      now,
+		LastAccessedAt: now,
 	}
 	return stateMgr.AddWorktree("main", mainState)
 }
