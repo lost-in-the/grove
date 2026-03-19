@@ -238,7 +238,7 @@ func createWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRo
 	var createFn func() error
 	if baseBranch != "" {
 		logLines = []string{fmt.Sprintf("Creating worktree '%s' from branch '%s'...", name, baseBranch)}
-		createFn = func() error { return mgr.CreateFromExisting(name, baseBranch) }
+		createFn = func() error { return mgr.CreateFromBranch(name, baseBranch) }
 	} else {
 		logLines = []string{
 			fmt.Sprintf("Creating worktree '%s'...", name),
