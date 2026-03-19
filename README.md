@@ -1,5 +1,7 @@
 # Grove
 
+![Status: Beta](https://img.shields.io/badge/status-beta-yellow)
+
 > **One command. Your worktree, branch, tmux session, credentials, and Docker stack — ready to go.**
 
 Grove eliminates the mechanical overhead of context-switching between Git branches. Stop juggling 9 shell commands every time you pick up a PR or start a feature. One command does everything.
@@ -10,6 +12,11 @@ Grove eliminates the mechanical overhead of context-switching between Git branch
 > **Note:** If the GIF above doesn't render, run `make demo` to generate it locally.
 
 ---
+
+> [!NOTE]
+> **Grove is in active development (pre-1.0).** Minor version bumps (`0.X.0`) may include breaking changes to commands, configuration, or behavior. See [CHANGELOG.md](CHANGELOG.md) for migration notes between versions.
+>
+> Found a bug or have feedback? [Open an issue](https://github.com/lost-in-the/grove/issues) — contributions welcome!
 
 ## The Problem
 
