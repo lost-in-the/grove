@@ -7,6 +7,7 @@ Reference for AI agents helping users install, configure, or use Grove. Develope
 - [Shell Integration](SHELL_INTEGRATION.md) — directive protocol details
 - [Configuration Reference](CONFIGURATION_REFERENCE.md) — all config fields
 - [Docker Plugin README](../plugins/docker/README.md) — Docker mode details
+- [Claude Plugin](CLAUDE_PLUGIN.md) — devcontainer sandbox support for Claude Code
 - [Plugin Development](PLUGIN_DEVELOPMENT.md) — hook interfaces
 
 ---
@@ -849,3 +850,50 @@ Or let `grove setup` handle it — it updates the eval line if needed.
 **`grove to` attaches tmux and takes over terminal (agent context)**
 
 Set `GROVE_AGENT_MODE=1` in your environment, or add `mode = "manual"` or `mode = "off"` under `[tmux]` in `.grove/config.toml`. See §7 for the full agent configuration pattern.
+
+---
+
+## 9. Claude Code Sandbox Integration
+
+Grove provides a dedicated plugin for running Claude Code inside network-isolated devcontainers. This makes `--dangerously-skip-permissions` safe for unattended runs.
+
+### Quick Setup
+
+```toml
+# .grove/config.toml
+[plugins.claude]
+enabled = true
+
+[plugins.claude.devcontainer]
+firewall = true
+```
+
+### Sandbox Commands
+
+```bash
+grove sandbox new feature-auth       # Build devcontainer
+grove sandbox start feature-auth     # Start sandbox
+grove sandbox exec feature-auth -- claude --dangerously-skip-permissions
+grove sandbox status --json          # Machine-readable status
+grove sandbox rm feature-auth        # Cleanup
+```
+
+### Agent-Aware Containers
+
+When `inject_grove_context = true` (default), Grove automatically adds tooling instructions to the worktree's CLAUDE.md so agents inside the container can:
+
+- Create additional worktrees (`grove new`)
+- Manage Docker stacks (`grove up --isolated`)
+- Coordinate with other agents (`grove agent-status --json`)
+
+### Permission Control
+
+Restrict agent capabilities via config:
+
+```toml
+[plugins.claude.permissions]
+allowed_tools = ["Bash", "Read", "Write", "Edit"]
+max_turns = 100
+```
+
+See [Claude Plugin docs](CLAUDE_PLUGIN.md) for the full reference.

@@ -150,6 +150,9 @@ Examples:
 
 			// Existing Tier 2 checks (external compose, agent stacks, env files)
 			runExternalModeChecks(w, cfg, &allPassed)
+
+			// Claude Code plugin checks
+			runClaudePluginChecks(w, cfg, &allPassed)
 		}
 
 		_, _ = fmt.Fprintln(w)
@@ -203,6 +206,58 @@ func groveNotFoundError() error {
 	}
 
 	return fmt.Errorf("grove binary not found in PATH")
+}
+
+// runClaudePluginChecks runs Claude Code plugin health checks.
+func runClaudePluginChecks(w *cli.Writer, cfg *config.Config, allPassed *bool) {
+	if cfg == nil || cfg.Plugins.Claude.Enabled == nil || !*cfg.Plugins.Claude.Enabled {
+		runInfo(w, "Claude Code plugin", "not enabled")
+		return
+	}
+
+	_, _ = fmt.Fprintln(w)
+	runInfo(w, "Claude Code plugin", "enabled")
+
+	// Check: Node.js
+	runCheck(w, "Node.js", func() (string, error) {
+		out, err := cmdexec.Output(context.TODO(), "node", []string{"--version"}, "", cmdexec.GitLocal)
+		if err != nil {
+			return "", fmt.Errorf("node not found in PATH (required for Claude Code)")
+		}
+		return strings.TrimSpace(string(out)), nil
+	})
+
+	// Check: claude CLI
+	runCheck(w, "claude CLI", func() (string, error) {
+		if _, err := exec.LookPath("claude"); err != nil {
+			return "", fmt.Errorf("claude not found in PATH — install: npm install -g @anthropic-ai/claude-code")
+		}
+		return "found", nil
+	})
+
+	// Check: ANTHROPIC_API_KEY
+	*allPassed = runCheck(w, "ANTHROPIC_API_KEY", func() (string, error) {
+		if os.Getenv("ANTHROPIC_API_KEY") == "" {
+			return "", fmt.Errorf("not set — required for Claude Code")
+		}
+		return "set", nil
+	}) && *allPassed
+
+	// Devcontainer-specific checks
+	dc := cfg.Plugins.Claude.Devcontainer
+	if dc == nil || dc.Enabled == nil || *dc.Enabled {
+		*allPassed = runCheck(w, "devcontainer CLI", func() (string, error) {
+			if _, err := exec.LookPath("devcontainer"); err != nil {
+				return "", fmt.Errorf("devcontainer not found in PATH — install: npm install -g @devcontainers/cli")
+			}
+			return "found", nil
+		}) && *allPassed
+
+		// Check firewall script if enabled
+		if dc != nil && dc.Firewall != nil && *dc.Firewall {
+			runInfo(w, "Firewall", "enabled — domains will be restricted in sandbox")
+		}
+	}
 }
 
 // checkConfigSymlinks validates .grove/config.toml symlinks across all worktrees.

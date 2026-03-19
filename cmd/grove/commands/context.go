@@ -16,6 +16,7 @@ import (
 	"github.com/lost-in-the/grove/internal/plugins"
 	"github.com/lost-in-the/grove/internal/shell"
 	"github.com/lost-in-the/grove/internal/state"
+	claudeplugin "github.com/lost-in-the/grove/plugins/claude"
 	"github.com/lost-in-the/grove/plugins/docker"
 )
 
@@ -131,6 +132,14 @@ func registerPlugins(cfg *config.Config) *plugins.Manager {
 	if err := dockerPlugin.RegisterHooks(hooks.GlobalRegistry()); err != nil {
 		log.Printf("failed to register docker hooks: %v", err)
 	}
+
+	claudePlugin := claudeplugin.New()
+	if err := mgr.Register(claudePlugin); err == nil && claudePlugin.Enabled() {
+		if err := claudePlugin.RegisterHooks(hooks.GlobalRegistry()); err != nil {
+			log.Printf("failed to register claude hooks: %v", err)
+		}
+	}
+
 	return mgr
 }
 
