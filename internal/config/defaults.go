@@ -37,6 +37,12 @@ func LoadDefaults() *Config {
 				AutoStart: &trueVal,
 				AutoStop:  &falseVal,
 			},
+			Claude: ClaudePluginConfig{
+				Enabled:            &falseVal,
+				AutoStart:          &falseVal,
+				SkipPermissions:    &trueVal,
+				InjectGroveContext: &trueVal,
+			},
 		},
 		Session: SessionConfig{
 			PopupWidth:  "80%",

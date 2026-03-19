@@ -79,6 +79,32 @@ type TmuxConfig struct {
 // PluginsConfig controls plugin behavior
 type PluginsConfig struct {
 	Docker DockerPluginConfig `toml:"docker"`
+	Claude ClaudePluginConfig `toml:"claude"`
+}
+
+// ClaudePluginConfig controls the Claude Code devcontainer plugin behavior
+type ClaudePluginConfig struct {
+	Enabled            *bool                     `toml:"enabled"`
+	AutoStart          *bool                     `toml:"auto_start"`
+	SkipPermissions    *bool                     `toml:"skip_permissions"`
+	Prompt             string                    `toml:"prompt"`
+	InjectGroveContext *bool                     `toml:"inject_grove_context"`
+	Devcontainer       *ClaudeDevcontainerConfig `toml:"devcontainer"`
+	Permissions        *ClaudePermissionsConfig  `toml:"permissions"`
+}
+
+// ClaudeDevcontainerConfig configures the devcontainer sandbox
+type ClaudeDevcontainerConfig struct {
+	Enabled        *bool    `toml:"enabled"`
+	Firewall       *bool    `toml:"firewall"`
+	AllowedDomains []string `toml:"allowed_domains"`
+}
+
+// ClaudePermissionsConfig defines what the agent can do inside the container
+type ClaudePermissionsConfig struct {
+	AllowedTools []string `toml:"allowed_tools"`
+	AllowedMCPs  []string `toml:"allowed_mcps"`
+	MaxTurns     int      `toml:"max_turns"`
 }
 
 // DockerPluginConfig controls docker plugin behavior
@@ -241,6 +267,7 @@ func mergeConfigs(base, override *Config) *Config {
 	mergeSwitchConfig(&result.Switch, &override.Switch)
 	mergeTmuxConfig(&result.Tmux, &override.Tmux)
 	mergeDockerConfig(&result.Plugins.Docker, &override.Plugins.Docker)
+	mergeClaudeConfig(&result.Plugins.Claude, &override.Plugins.Claude)
 	mergeTUIConfig(&result.TUI, &override.TUI)
 	mergeProtectionConfig(&result.Protection, &override.Protection)
 	mergeTestConfig(&result.Test, &override.Test)
@@ -309,6 +336,30 @@ func mergeDockerConfig(result, override *DockerPluginConfig) {
 	}
 	if override.External != nil {
 		result.External = override.External
+	}
+}
+
+func mergeClaudeConfig(result, override *ClaudePluginConfig) {
+	if override.Enabled != nil {
+		result.Enabled = override.Enabled
+	}
+	if override.AutoStart != nil {
+		result.AutoStart = override.AutoStart
+	}
+	if override.SkipPermissions != nil {
+		result.SkipPermissions = override.SkipPermissions
+	}
+	if override.Prompt != "" {
+		result.Prompt = override.Prompt
+	}
+	if override.InjectGroveContext != nil {
+		result.InjectGroveContext = override.InjectGroveContext
+	}
+	if override.Devcontainer != nil {
+		result.Devcontainer = override.Devcontainer
+	}
+	if override.Permissions != nil {
+		result.Permissions = override.Permissions
 	}
 }
 
