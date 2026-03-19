@@ -359,3 +359,41 @@ func DetectRepo() (string, error) {
 	}
 	return strings.TrimSpace(string(output)), nil
 }
+
+// GetPRForBranch looks up the open PR for a given branch name.
+// Returns nil with no error if no PR exists for the branch.
+func (g *GitHubAdapter) GetPRForBranch(branch string) (*PullRequest, error) {
+	args := []string{"pr", "view", "--head", branch, "--json", "number,title,state,url"}
+	if g.repo != "" {
+		args = append(args, "--repo", g.repo)
+	}
+
+	output, err := g.runGH(args...)
+	if err != nil {
+		// gh exits non-zero when no PR is found — treat as "no PR"
+		return nil, nil
+	}
+
+	var ghPR struct {
+		Number int    `json:"number"`
+		Title  string `json:"title"`
+		State  string `json:"state"`
+		URL    string `json:"url"`
+	}
+
+	if err := json.Unmarshal(output, &ghPR); err != nil {
+		return nil, fmt.Errorf("parse pr response: %w", err)
+	}
+
+	return &PullRequest{
+		Number: ghPR.Number,
+		Title:  ghPR.Title,
+		State:  strings.ToLower(ghPR.State),
+		URL:    ghPR.URL,
+	}, nil
+}
+
+// GetRepoViewURL returns the base HTTPS URL of the GitHub repository.
+func GetRepoViewURL(repo string) string {
+	return "https://github.com/" + repo
+}
