@@ -1,13 +1,17 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/lost-in-the/grove/internal/cli"
+	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/exitcode"
 	"github.com/lost-in-the/grove/internal/git"
 	"github.com/lost-in-the/grove/internal/log"
@@ -30,6 +34,7 @@ type CleanCandidate struct {
 	Branch        string
 	LastAccess    time.Time
 	DaysSince     int
+	DaysUnknown   bool // True when age cannot be determined from state or filesystem
 	IsDirty       bool
 	ExcludeReason string // If set, worktree cannot be cleaned
 }
@@ -101,8 +106,14 @@ Examples:
 				candidate.LastAccess = ws.LastAccessedAt
 				candidate.DaysSince = int(now.Sub(ws.LastAccessedAt).Hours() / 24)
 			} else {
-				// If not in state, assume very old
-				candidate.DaysSince = 9999
+				// Not in state: try filesystem fallback to derive age
+				if t, err := worktreeLastModified(tree.Path, now); err == nil {
+					candidate.LastAccess = t
+					candidate.DaysSince = int(now.Sub(t).Hours() / 24)
+				} else {
+					// Age is truly unknown — treat as eligible but display "unknown age"
+					candidate.DaysUnknown = true
+				}
 			}
 
 			// Check exclusions
@@ -116,7 +127,7 @@ Examples:
 				candidate.ExcludeReason = "environment worktree"
 			} else if tree.IsDirty && !cleanIncludeDirty {
 				candidate.ExcludeReason = "dirty (use --include-dirty)"
-			} else if candidate.DaysSince < cleanOlderThan {
+			} else if !candidate.DaysUnknown && candidate.DaysSince < cleanOlderThan {
 				candidate.ExcludeReason = fmt.Sprintf("accessed %d days ago (threshold: %d)", candidate.DaysSince, cleanOlderThan)
 			}
 
@@ -153,7 +164,11 @@ Examples:
 				dirtyMark = " [dirty]"
 			}
 			_, _ = fmt.Fprintf(w, "  %s ", c.Name)
-			cli.Faint(w, "  (%s) - %d days since last access%s", c.Branch, c.DaysSince, dirtyMark)
+			if c.DaysUnknown {
+				cli.Faint(w, "  (%s) - unknown age%s", c.Branch, dirtyMark)
+			} else {
+				cli.Faint(w, "  (%s) - %d days since last access%s", c.Branch, c.DaysSince, dirtyMark)
+			}
 		}
 
 		if cleanDryRun {
@@ -164,13 +179,28 @@ Examples:
 
 		// ALWAYS prompt - mandatory confirmation
 		_, _ = fmt.Fprintln(w)
-		cli.Warning(w, "This will permanently remove %d worktree(s) and their associated tmux sessions.", len(cleanable))
-		fmt.Print("Type 'yes' to confirm: ")
-
-		var response string
-		_, _ = fmt.Scanln(&response)
-		if response != "yes" {
-			fmt.Println("Canceled")
+		confirmDetails := make([]string, 0, len(cleanable))
+		for _, c := range cleanable {
+			if c.DaysUnknown {
+				confirmDetails = append(confirmDetails, fmt.Sprintf("%s (%s) - unknown age", c.Name, c.Branch))
+			} else {
+				confirmDetails = append(confirmDetails, fmt.Sprintf("%s (%s) - %d days", c.Name, c.Branch, c.DaysSince))
+			}
+		}
+		confirmed, err := cli.ConfirmWithDetails(
+			w,
+			fmt.Sprintf("This will permanently remove %d worktree(s) and their associated tmux sessions.", len(cleanable)),
+			confirmDetails,
+			"Proceed?",
+			false,
+		)
+		if err != nil {
+			// Ctrl+C, ESC, or non-interactive — treat as cancellation
+			fmt.Fprintln(os.Stderr, "Canceled")
+			os.Exit(exitcode.UserCancelled)
+		}
+		if !confirmed {
+			fmt.Fprintln(os.Stderr, "Canceled")
 			os.Exit(exitcode.UserCancelled)
 		}
 
@@ -333,6 +363,42 @@ func handleBatchBranchDeletion(repoPath string, branches []string, forceDelete b
 	}
 
 	return nil
+}
+
+// worktreeLastModified returns the best available timestamp for a worktree's
+// last activity. It tries two approaches in order:
+//
+//  1. git log -1 --format=%ct on the worktree path, which gives the commit
+//     timestamp of the most recent commit checked out in that worktree.
+//  2. Stat of the worktree's .git file (a plain file for linked worktrees),
+//     which reflects the last time git touched the worktree metadata.
+//
+// Returns an error when neither source is available.
+func worktreeLastModified(worktreePath string, _ time.Time) (time.Time, error) {
+	// Attempt 1: git log on the worktree
+	out, err := cmdexec.Output(
+		context.Background(),
+		"git",
+		[]string{"log", "-1", "--format=%ct"},
+		worktreePath,
+		cmdexec.GitLocal,
+	)
+	if err == nil {
+		ts := strings.TrimSpace(string(out))
+		if ts != "" {
+			if sec, err := strconv.ParseInt(ts, 10, 64); err == nil && sec > 0 {
+				return time.Unix(sec, 0), nil
+			}
+		}
+	}
+
+	// Attempt 2: mtime of the .git file (linked worktree pointer)
+	gitFile := worktreePath + "/.git"
+	if info, err := os.Stat(gitFile); err == nil {
+		return info.ModTime(), nil
+	}
+
+	return time.Time{}, fmt.Errorf("could not determine age for worktree at %s", worktreePath)
 }
 
 func init() {

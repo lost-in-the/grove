@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/exitcode"
 	"github.com/lost-in-the/grove/internal/state"
 	"github.com/lost-in-the/grove/internal/tmux"
@@ -138,16 +139,18 @@ Examples:
 			return nil
 		}
 
-		// Prompt for confirmation
-		if !isInteractive() {
-			fmt.Fprintln(os.Stderr, "Non-interactive mode: use --dry-run to preview or run interactively to repair")
-			return nil
+		// Prompt for confirmation — cli.Confirm handles non-interactive detection
+		confirmed, err := cli.Confirm("Proceed with repairs?", false)
+		if err != nil {
+			if !cli.IsInteractive() {
+				fmt.Fprintln(os.Stderr, "Non-interactive mode: use --dry-run to preview or run interactively to repair")
+				return nil
+			}
+			// Ctrl+C, ESC, or other cancellation
+			fmt.Fprintln(os.Stderr, "Canceled")
+			os.Exit(exitcode.UserCancelled)
 		}
-
-		fmt.Fprint(os.Stderr, "Proceed with repairs? [y/N]: ")
-		var response string
-		_, _ = fmt.Scanln(&response)
-		if response != "y" && response != "Y" {
+		if !confirmed {
 			fmt.Fprintln(os.Stderr, "Canceled")
 			os.Exit(exitcode.UserCancelled)
 		}
