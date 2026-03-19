@@ -164,3 +164,97 @@ func TestTruncate(t *testing.T) {
 		})
 	}
 }
+
+func TestBrowseCmd(t *testing.T) {
+	if browseCmd == nil {
+		t.Fatal("browseCmd is nil")
+	}
+
+	if browseCmd.Use != "browse" {
+		t.Errorf("browseCmd.Use = %v, want 'browse'", browseCmd.Use)
+	}
+
+	if browseCmd.Short == "" {
+		t.Error("browseCmd.Short is empty")
+	}
+
+	if browseCmd.RunE == nil {
+		t.Error("browseCmd.RunE is nil")
+	}
+
+	// Verify the "b" alias is registered
+	aliases := browseCmd.Aliases
+	found := false
+	for _, a := range aliases {
+		if a == "b" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("browseCmd should have 'b' alias")
+	}
+}
+
+func TestBrowseCmd_HasJSONFlag(t *testing.T) {
+	flag := browseCmd.Flags().Lookup("json")
+	if flag == nil {
+		t.Fatal("browse command should have --json flag")
+	}
+	if flag.DefValue != "false" {
+		t.Errorf("--json should default to false, got %s", flag.DefValue)
+	}
+}
+
+func TestParseIssueNumberFromWorktreeName(t *testing.T) {
+	tests := []struct {
+		name      string
+		shortName string
+		want      int
+	}{
+		{
+			name:      "issue worktree with slug",
+			shortName: "issue-123-fix-auth-bug",
+			want:      123,
+		},
+		{
+			name:      "issue worktree without slug",
+			shortName: "issue-456",
+			want:      456,
+		},
+		{
+			name:      "pr worktree is not an issue",
+			shortName: "pr-789-my-feature",
+			want:      0,
+		},
+		{
+			name:      "feature branch",
+			shortName: "feat-cool-thing",
+			want:      0,
+		},
+		{
+			name:      "bare name",
+			shortName: "main",
+			want:      0,
+		},
+		{
+			name:      "issue prefix but non-numeric",
+			shortName: "issue-abc-something",
+			want:      0,
+		},
+		{
+			name:      "issue prefix with leading zeros",
+			shortName: "issue-007-james-bond",
+			want:      7,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseIssueNumberFromWorktreeName(tt.shortName)
+			if got != tt.want {
+				t.Errorf("parseIssueNumberFromWorktreeName(%q) = %d, want %d", tt.shortName, got, tt.want)
+			}
+		})
+	}
+}
