@@ -117,12 +117,18 @@ func TestLocalRun_DefaultUsesNoDeps(t *testing.T) {
 	s := newLocalStrategy(cfg)
 	args := s.buildRunArgs(tmpDir, "app", "bin/rspec")
 
+	found := false
 	for _, a := range args {
 		if a == "--no-deps" {
-			return // pass
+			found = true
+		}
+		if a == "-v" {
+			t.Errorf("expected no -v flag (no bind_mount configured), got: %v", args)
 		}
 	}
-	t.Errorf("expected --no-deps in args, got: %v", args)
+	if !found {
+		t.Errorf("expected --no-deps in args, got: %v", args)
+	}
 }
 
 func TestLocalRun_IncludeDepsTrueOmitsNoDeps(t *testing.T) {

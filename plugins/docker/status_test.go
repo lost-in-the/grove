@@ -59,7 +59,7 @@ func TestWorktreeStatuses_NilStrategy(t *testing.T) {
 
 func TestLocalStatuses_NoComposeFile(t *testing.T) {
 	dir := t.TempDir()
-	result := localStatuses(&localStrategy{}, []string{dir})
+	result := localStatuses(&localStrategy{cfg: &config.Config{}}, []string{dir})
 	if len(result) != 0 {
 		t.Errorf("expected empty result for dir without compose file, got %v", result)
 	}
@@ -71,7 +71,7 @@ func TestLocalStatuses_WithComposeFile(t *testing.T) {
 		t.Fatalf("failed to create compose file: %v", err)
 	}
 
-	result := localStatuses(&localStrategy{}, []string{dir})
+	result := localStatuses(&localStrategy{cfg: &config.Config{}}, []string{dir})
 	entry, ok := result[dir]
 	if !ok {
 		t.Fatalf("expected entry for dir with compose file, got %v", result)

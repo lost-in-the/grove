@@ -215,14 +215,14 @@ func TestLocalStrategy_GetWorktreePath(t *testing.T) {
 }
 
 func TestLocalStrategy_GetAutoStart(t *testing.T) {
-	s := newLocalStrategy(nil)
+	s := newLocalStrategy(&config.Config{})
 	if !s.getAutoStart() {
 		t.Error("getAutoStart() should default to true")
 	}
 }
 
 func TestLocalStrategy_GetAutoStop(t *testing.T) {
-	s := newLocalStrategy(nil)
+	s := newLocalStrategy(&config.Config{})
 	if s.getAutoStop() {
 		t.Error("getAutoStop() should default to false for local mode")
 	}

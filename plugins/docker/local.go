@@ -127,11 +127,11 @@ func (s *localStrategy) Logs(worktreePath string, service string, follow bool) e
 func (s *localStrategy) buildRunArgs(worktreePath, service, command string) []string {
 	args := []string{"run", "--rm"}
 
-	if s.cfg != nil && !s.cfg.Test.IncludeDeps {
+	if !s.cfg.Test.IncludeDeps {
 		args = append(args, "--no-deps")
 	}
 
-	if s.cfg != nil && s.cfg.Test.BindMount != "" {
+	if s.cfg.Test.BindMount != "" {
 		args = append(args, "-v", fmt.Sprintf("%s:%s", worktreePath, s.cfg.Test.BindMount))
 	}
 
