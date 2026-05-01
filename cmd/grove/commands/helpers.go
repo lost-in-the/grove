@@ -12,9 +12,6 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/config"
-	"github.com/lost-in-the/grove/internal/grove"
-	"github.com/lost-in-the/grove/internal/hooks"
-	"github.com/lost-in-the/grove/internal/state"
 	"github.com/lost-in-the/grove/internal/worktree"
 	"github.com/lost-in-the/grove/plugins/docker"
 )
@@ -115,84 +112,33 @@ type worktreeSetupOpts struct {
 // setupCreatedWorktree runs the shared post-create sequence: find the worktree,
 // symlink config, register state, execute hooks, and auto-start Docker.
 func setupCreatedWorktree(ctx *GroveContext, mgr *worktree.Manager, name, branchName string, opts worktreeSetupOpts, w *cli.Writer) (*worktree.Worktree, error) {
-	// Find the newly created worktree to get its path
 	wt, err := mgr.Find(name)
 	if err != nil || wt == nil {
 		return nil, fmt.Errorf("failed to find created worktree: %w", err)
 	}
 
-	// Symlink config.toml from main worktree
-	if err := grove.EnsureConfigSymlink(ctx.ProjectRoot, wt.Path); err != nil {
-		if !opts.JSONOutput {
-			cli.Warning(w, "Failed to symlink config: %v", err)
-		}
+	if !opts.JSONOutput {
+		cli.Step(w, "Running post-create hooks...")
 	}
 
-	// Register worktree in state
-	now := time.Now()
-	wsState := &state.WorktreeState{
-		Path:           wt.Path,
-		Branch:         branchName,
-		Root:           false,
-		CreatedAt:      now,
-		LastAccessedAt: now,
-		Environment:    opts.IsEnvironment,
+	bootstrapOpts := worktree.BootstrapOpts{
+		Name:          name,
+		Branch:        branchName,
+		WorktreePath:  wt.Path,
+		MainPath:      ctx.ProjectRoot,
+		ProjectName:   mgr.GetProjectName(),
+		Now:           time.Now(),
+		IsEnvironment: opts.IsEnvironment,
+		Mirror:        opts.Mirror,
 	}
-	if opts.IsEnvironment {
-		wsState.Mirror = opts.Mirror
-		wsState.LastSyncedAt = &now
-	}
-	if err := ctx.State.AddWorktree(name, wsState); err != nil {
+	if err := worktree.BootstrapWorktree(ctx.State, ctx.Config, bootstrapOpts); err != nil {
 		if !opts.JSONOutput {
-			cli.Warning(w, "worktree created but state tracking failed: %v", err)
+			cli.Warning(w, "Bootstrap failed: %v", err)
 			cli.Faint(w, "run 'grove repair' to fix")
 		}
 	}
 
-	projectName := mgr.GetProjectName()
-
-	// Execute per-project post-create hooks
-	hookExecutor, hookErr := hooks.NewExecutor()
-	if hookErr != nil {
-		if !opts.JSONOutput {
-			cli.Warning(w, "Failed to load hooks config: %v", hookErr)
-		}
-	} else if hookExecutor.HasHooksForEvent(hooks.EventPostCreate) {
-		hookCtx := &hooks.ExecutionContext{
-			Event:        hooks.EventPostCreate,
-			Worktree:     name,
-			WorktreeFull: projectName + "-" + name,
-			Branch:       branchName,
-			Project:      projectName,
-			MainPath:     ctx.ProjectRoot,
-			NewPath:      wt.Path,
-		}
-		if !opts.JSONOutput {
-			cli.Step(w, "Running post-create hooks...")
-		}
-		if err := hookExecutor.Execute(hooks.EventPostCreate, hookCtx); err != nil {
-			if !opts.JSONOutput {
-				cli.Warning(w, "Hook execution had errors: %v", err)
-			}
-		}
-	}
-
-	// Fire global registry post-create hook (for plugins like docker external)
-	globalHookCtx := &hooks.Context{
-		Worktree:     name,
-		Config:       ctx.Config,
-		WorktreePath: wt.Path,
-		MainPath:     ctx.ProjectRoot,
-	}
-	if err := hooks.Fire(hooks.EventPostCreate, globalHookCtx); err != nil {
-		if !opts.JSONOutput {
-			cli.Warning(w, "Post-create plugin hook failed: %v", err)
-		}
-	}
-
-	// Auto-start Docker when configured
 	autoStartDocker(w, ctx.Config, wt.Path, opts.NoDocker, opts.JSONOutput)
-
 	return wt, nil
 }
 
