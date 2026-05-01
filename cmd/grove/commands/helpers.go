@@ -177,6 +177,16 @@ func setupCreatedWorktree(ctx *GroveContext, mgr *worktree.Manager, name, branch
 		}
 	}
 
+	// File setup runs unconditionally — it's a worktree-level concern, not a
+	// docker concern. Skipping --no-docker should not skip credential copying.
+	if ctx.Config != nil && ctx.Config.Plugins.Docker.External != nil {
+		if err := worktree.SetupFiles(ctx.Config.Plugins.Docker.External, wt.Path, ctx.ProjectRoot); err != nil {
+			if !opts.JSONOutput {
+				cli.Warning(w, "File setup had issues: %v", err)
+			}
+		}
+	}
+
 	// Fire global registry post-create hook (for plugins like docker external)
 	globalHookCtx := &hooks.Context{
 		Worktree:     name,

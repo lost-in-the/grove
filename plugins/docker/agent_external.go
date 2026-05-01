@@ -72,13 +72,10 @@ func (s *agentExternalStrategy) OnPostSwitch(ctx *hooks.Context) error {
 	return nil
 }
 
-// OnPostCreate copies credentials and creates symlinks, same as the human workflow.
-func (s *agentExternalStrategy) OnPostCreate(ctx *hooks.Context) error {
-	if ctx.WorktreePath == "" || ctx.MainPath == "" {
-		return nil
-	}
-
-	return setupWorktreeFiles(s.ext, ctx.WorktreePath, ctx.MainPath)
+// OnPostCreate is a no-op — file setup is handled unconditionally in the worktree
+// setup sequence (cmd/grove/commands/helpers.go) so it runs regardless of docker config.
+func (s *agentExternalStrategy) OnPostCreate(_ *hooks.Context) error {
+	return nil
 }
 
 // Up starts a persistent agent stack for the worktree (full stack mode).
@@ -300,56 +297,6 @@ func resolveComposePath(path string) string {
 		}
 	}
 	return path
-}
-
-// setupWorktreeFiles copies credentials and creates symlinks from the external config.
-// This is shared between externalStrategy and agentExternalStrategy.
-func setupWorktreeFiles(ext *config.ExternalComposeConfig, newPath, mainPath string) error {
-	var firstErr error
-
-	for _, relPath := range ext.CopyFiles {
-		src := filepath.Join(mainPath, relPath)
-		dst := filepath.Join(newPath, relPath)
-
-		if err := copyFile(src, dst); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to copy %s: %v\n", relPath, err)
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
-		fmt.Fprintf(os.Stderr, "  copied %s\n", relPath)
-	}
-
-	for _, relPath := range ext.SymlinkFiles {
-		src := filepath.Join(mainPath, relPath)
-		dst := filepath.Join(newPath, relPath)
-
-		if err := createSymlink(src, dst); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to symlink %s: %v\n", relPath, err)
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
-		fmt.Fprintf(os.Stderr, "  symlinked %s\n", relPath)
-	}
-
-	for _, relPath := range ext.SymlinkDirs {
-		src := filepath.Join(mainPath, relPath)
-		dst := filepath.Join(newPath, relPath)
-
-		if err := createSymlink(src, dst); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to symlink %s: %v\n", relPath, err)
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
-		fmt.Fprintf(os.Stderr, "  symlinked %s\n", relPath)
-	}
-
-	return firstErr
 }
 
 // agentComposeCommand creates a docker compose command with -f and -p flags for agent projects.
