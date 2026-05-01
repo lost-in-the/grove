@@ -118,7 +118,7 @@ func setupCreatedWorktree(ctx *GroveContext, mgr *worktree.Manager, name, branch
 	}
 
 	if !opts.JSONOutput {
-		cli.Step(w, "Running post-create hooks...")
+		cli.Step(w, "Bootstrapping worktree...")
 	}
 
 	bootstrapOpts := worktree.BootstrapOpts{

@@ -86,3 +86,22 @@ func TestBootstrapWorktree_IdempotentOnSecondCall(t *testing.T) {
 		t.Fatalf("second call should not error: %v", err)
 	}
 }
+
+func TestBootstrapWorktree_RejectsEmptyPaths(t *testing.T) {
+	tests := []struct {
+		name string
+		opts BootstrapOpts
+	}{
+		{"empty WorktreePath", BootstrapOpts{MainPath: "/tmp/main"}},
+		{"empty MainPath", BootstrapOpts{WorktreePath: "/tmp/wt"}},
+		{"both empty", BootstrapOpts{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := BootstrapWorktree(nil, nil, tt.opts)
+			if err == nil {
+				t.Errorf("expected error, got nil")
+			}
+		})
+	}
+}

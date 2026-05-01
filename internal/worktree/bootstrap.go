@@ -7,6 +7,7 @@ import (
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/grove"
 	"github.com/lost-in-the/grove/internal/hooks"
+	"github.com/lost-in-the/grove/internal/log"
 	"github.com/lost-in-the/grove/internal/state"
 )
 
@@ -32,7 +33,7 @@ type BootstrapOpts struct {
 // Hook failures are logged via the hooks framework but do not abort the bootstrap.
 func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts BootstrapOpts) error {
 	if opts.WorktreePath == "" || opts.MainPath == "" {
-		return fmt.Errorf("BootstrapWorktree: WorktreePath and MainPath are required")
+		return fmt.Errorf("WorktreePath and MainPath are required")
 	}
 
 	if err := grove.EnsureConfigSymlink(opts.MainPath, opts.WorktreePath); err != nil {
@@ -61,7 +62,9 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 
 	// Per-project post-create hooks
 	hookExecutor, hookErr := hooks.NewExecutor()
-	if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPostCreate) {
+	if hookErr != nil {
+		log.Printf("hooks: failed to load config during bootstrap: %v", hookErr)
+	} else if hookExecutor.HasHooksForEvent(hooks.EventPostCreate) {
 		hookCtx := &hooks.ExecutionContext{
 			Event:        hooks.EventPostCreate,
 			Worktree:     opts.Name,
