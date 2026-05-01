@@ -327,6 +327,12 @@ func mergeConfigs(base, override *Config) *Config {
 	if override.Test.Service != "" {
 		result.Test.Service = override.Test.Service
 	}
+	if override.Test.IncludeDeps {
+		result.Test.IncludeDeps = override.Test.IncludeDeps
+	}
+	if override.Test.BindMount != "" {
+		result.Test.BindMount = override.Test.BindMount
+	}
 
 	// Merge session config
 	if override.Session.Command != "" {

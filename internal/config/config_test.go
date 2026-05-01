@@ -1206,6 +1206,22 @@ bind_mount = "/app"
 	}
 }
 
+func TestMergeConfigs_TestSectionPropagatesNewFields(t *testing.T) {
+	global := LoadDefaults()
+	project := LoadDefaults()
+	project.Test.IncludeDeps = true
+	project.Test.BindMount = "/app"
+
+	merged := mergeConfigs(global, project)
+
+	if !merged.Test.IncludeDeps {
+		t.Error("IncludeDeps not propagated from project config")
+	}
+	if merged.Test.BindMount != "/app" {
+		t.Errorf("BindMount: got %q want /app", merged.Test.BindMount)
+	}
+}
+
 func TestIsExternalDockerMode(t *testing.T) {
 	cfg := &Config{}
 	if cfg.IsExternalDockerMode() {
