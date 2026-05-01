@@ -11,8 +11,8 @@ import (
 type TestConfig struct {
 	Command     string `toml:"command"`
 	Service     string `toml:"service"`
-	IncludeDeps bool   `toml:"include_deps"` // when true, `compose run` resolves depends_on services (default: skip)
-	BindMount   string `toml:"bind_mount"`   // optional container path; when set, `-v <worktree>:<bind_mount>` is added
+	IncludeDeps bool   `toml:"include_deps"` // resolve depends_on services when running compose; default false (skip)
+	BindMount   string `toml:"bind_mount"`   // container path for the worktree bind mount; empty disables
 }
 
 // SessionConfig controls session command behavior for grove open
