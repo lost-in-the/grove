@@ -827,10 +827,16 @@ func TestExternalStrategy_RemoveEnvVar(t *testing.T) {
 			wantContent: "", // still no file
 		},
 		{
-			name:        "removes only entry leaves empty file",
+			name:        "removes only entry deletes file",
 			existing:    "APP_DIR=./myapp-feature-x\n",
 			worktree:    "myapp-feature-x",
-			wantContent: "\n",
+			wantContent: "", // file should not exist
+		},
+		{
+			name:        "preserves user comments and unrelated keys",
+			existing:    "# user comment\nOTHER=value\nAPP_DIR=./myapp-feature-x\n",
+			worktree:    "myapp-feature-x",
+			wantContent: "# user comment\nOTHER=value\n",
 		},
 	}
 
@@ -916,5 +922,78 @@ func TestPlugin_OnPostCreate_External(t *testing.T) {
 	err := plugin.onPostCreate(ctx)
 	if err != nil {
 		t.Fatalf("onPostCreate() error = %v", err)
+	}
+}
+
+// TestPlugin_OnPreRemove_AgentSlotReleasedOnDownFailure verifies that when
+// `grove rm` triggers OnPreRemove and the agent stack's `docker compose down`
+// fails (here: docker isn't installed in the test sandbox), the agent slot
+// is still released. Otherwise the slot would point to the now-deleted
+// worktree forever and consume capacity.
+func TestPlugin_OnPreRemove_AgentSlotReleasedOnDownFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	composeDir := filepath.Join(tmpDir, "compose")
+	if err := os.MkdirAll(filepath.Join(composeDir, "agent-stacks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	enabled := true
+	cfg := &config.Config{
+		ProjectName: "myapp",
+		Plugins: config.PluginsConfig{
+			Docker: config.DockerPluginConfig{
+				Mode: "external",
+				External: &config.ExternalComposeConfig{
+					Path:     composeDir,
+					EnvVar:   "APP_DIR",
+					Services: []string{"app"},
+					Agent: &config.AgentStackConfig{
+						Enabled:      &enabled,
+						MaxSlots:     3,
+						Services:     []string{"app"},
+						TemplatePath: "agent-stacks/template.yml",
+					},
+				},
+			},
+		},
+		AgentMode: true,
+	}
+
+	plugin := New()
+	if err := plugin.Init(cfg); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	agent, ok := plugin.strategy.(*agentExternalStrategy)
+	if !ok {
+		t.Fatalf("expected agent strategy, got %T", plugin.strategy)
+	}
+
+	wtName := "myapp-feature"
+	worktreePath := filepath.Join(tmpDir, wtName)
+	allocatedSlot, err := agent.slots.Allocate(wtName)
+	if err != nil {
+		t.Fatalf("Allocate() error = %v", err)
+	}
+
+	ctx := &hooks.Context{
+		Worktree:     wtName,
+		Config:       cfg,
+		WorktreePath: worktreePath,
+	}
+
+	// Down() will fail because there's no docker daemon / template file in the
+	// sandbox; that's exactly the failure mode we want to test.
+	if err := plugin.onPreRemove(ctx); err == nil {
+		t.Log("note: Down unexpectedly succeeded; slot should still be released")
+	}
+
+	// Slot must be released regardless of Down's outcome.
+	slotAfter, err := agent.slots.FindSlot(wtName)
+	if err != nil {
+		t.Fatalf("FindSlot() error = %v", err)
+	}
+	if slotAfter != 0 {
+		t.Errorf("slot %d still allocated after onPreRemove (originally slot %d) — leaked", slotAfter, allocatedSlot)
 	}
 }

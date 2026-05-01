@@ -18,13 +18,48 @@ func resolveProjectPaths(cfg *Config, projectRoot string) error {
 	if cfg == nil || cfg.Plugins.Docker.External == nil {
 		return nil
 	}
+	ext := cfg.Plugins.Docker.External
 
-	resolved, err := expandConfigPath(cfg.Plugins.Docker.External.Path, projectRoot)
+	resolved, err := expandConfigPath(ext.Path, projectRoot)
 	if err != nil {
 		return fmt.Errorf("plugins.docker.external.path: %w", err)
 	}
-	cfg.Plugins.Docker.External.Path = resolved
+	ext.Path = resolved
+
+	// Expand ~/ in template_path; non-absolute, non-tilde values stay as written
+	// (the docker plugin joins them against the compose directory at exec time,
+	// which is the documented contract).
+	if ext.Agent != nil && ext.Agent.TemplatePath != "" {
+		expanded, err := expandTildePath(ext.Agent.TemplatePath)
+		if err != nil {
+			return fmt.Errorf("plugins.docker.external.agent.template_path: %w", err)
+		}
+		ext.Agent.TemplatePath = expanded
+	}
 	return nil
+}
+
+// expandTildePath expands ~ and ~/ prefixes against $HOME. Other paths
+// (absolute or relative) pass through unchanged.
+func expandTildePath(p string) (string, error) {
+	if p == "" {
+		return p, nil
+	}
+	if p == "~" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("failed to expand ~: %w", err)
+		}
+		return home, nil
+	}
+	if strings.HasPrefix(p, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("failed to expand ~: %w", err)
+		}
+		return filepath.Join(home, p[2:]), nil
+	}
+	return p, nil
 }
 
 // expandConfigPath converts p into a cleaned absolute path. Empty strings pass

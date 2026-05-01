@@ -56,8 +56,9 @@ func (s *agentExternalStrategy) OnPreSwitch(_ *hooks.Context) error {
 	return nil
 }
 
-// OnPostSwitch emits COMPOSE_PROJECT_NAME for the agent stack assigned to this
-// worktree, so the user's shell always has the correct project name after switching.
+// OnPostSwitch emits COMPOSE_PROJECT_NAME and the configured env_var for the
+// agent stack assigned to this worktree, so the user's shell always has the
+// correct project name and worktree path after switching.
 func (s *agentExternalStrategy) OnPostSwitch(ctx *hooks.Context) error {
 	if ctx.WorktreePath == "" {
 		return nil
@@ -76,6 +77,9 @@ func (s *agentExternalStrategy) OnPostSwitch(ctx *hooks.Context) error {
 		return nil
 	}
 	cli.EnvDirective("COMPOSE_PROJECT_NAME", s.composeProjectName(slot))
+	if s.ext.EnvVar != "" {
+		cli.EnvDirective(s.ext.EnvVar, ctx.WorktreePath)
+	}
 	return nil
 }
 
@@ -97,6 +101,9 @@ func (s *agentExternalStrategy) Up(worktreePath string, detach bool) error {
 
 	projectName := s.composeProjectName(slot)
 	cli.EnvDirective("COMPOSE_PROJECT_NAME", projectName)
+	if s.ext.EnvVar != "" {
+		cli.EnvDirective(s.ext.EnvVar, worktreePath)
+	}
 	templatePath := s.resolveTemplatePath()
 	composePath := s.composePath()
 

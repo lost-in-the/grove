@@ -183,9 +183,13 @@ func TestAgentExternalStrategy_OnPostSwitch_WithSlot(t *testing.T) {
 		}
 	})
 
-	wantLine := fmt.Sprintf("env:COMPOSE_PROJECT_NAME=myapp-agent-%d\n", slot)
-	if out != wantLine {
-		t.Errorf("OnPostSwitch emitted %q, want %q", out, wantLine)
+	wantProject := fmt.Sprintf("env:COMPOSE_PROJECT_NAME=myapp-agent-%d\n", slot)
+	wantEnvVar := fmt.Sprintf("env:APP_DIR=/tmp/%s\n", wtName)
+	if !strings.Contains(out, wantProject) {
+		t.Errorf("OnPostSwitch missing %q in output: %q", wantProject, out)
+	}
+	if !strings.Contains(out, wantEnvVar) {
+		t.Errorf("OnPostSwitch missing %q in output: %q (env_var should be emitted alongside COMPOSE_PROJECT_NAME for manual docker compose calls)", wantEnvVar, out)
 	}
 }
 
@@ -207,6 +211,9 @@ func TestAgentExternalStrategy_Up_EmitsEnvDirective(t *testing.T) {
 
 	if !strings.Contains(out, "env:COMPOSE_PROJECT_NAME=myapp-agent-") {
 		t.Errorf("Up() stdout = %q, want env:COMPOSE_PROJECT_NAME=myapp-agent-N line", out)
+	}
+	if !strings.Contains(out, "env:APP_DIR=/tmp/myapp-up-test") {
+		t.Errorf("Up() stdout = %q, want env:APP_DIR=<worktreePath> line", out)
 	}
 }
 

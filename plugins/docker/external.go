@@ -299,8 +299,13 @@ func (s *externalStrategy) removeEnvVar(worktreePath string) error {
 	}
 
 	result := strings.Join(filtered, "\n")
-	if result == "" {
-		result = "\n"
+	// If the file is empty (only grove's entry was in it), remove it entirely
+	// rather than leaving a stale whitespace-only file behind.
+	if strings.TrimSpace(result) == "" {
+		if err := os.Remove(envFile); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to remove empty %s: %w", s.ext.EnvFileName(), err)
+		}
+		return nil
 	}
 	return os.WriteFile(envFile, []byte(result), 0o600)
 }
