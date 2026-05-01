@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/spf13/cobra"
@@ -102,8 +103,33 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 			PluginManager: pluginMgr,
 		}
 
+		// Drift detection: warn if cwd is a worktree that isn't in state.
+		// Skip drift detection for the adopt command itself (it's the resolution).
+		if cmd.Use != "adopt" && cmd.Name() != "adopt" {
+			cwd, err := os.Getwd()
+			if err == nil {
+				mainPath := grove.MustProjectRoot(groveDir)
+				// Determine which worktree we're in. If cwd is the main, skip.
+				if reason := grove.DiagnoseDrift(cwd, mainPath); reason == grove.ReasonDriftedWorktree {
+					worktreeName := filepath.Base(cwd)
+					emitDriftNotice(cli.NewStderr(), worktreeName, reason)
+				}
+			}
+		}
+
 		return fn(cmd, args, ctx)
 	}
+}
+
+// emitDriftNotice prints a non-fatal warning when the cwd is a git worktree
+// that grove doesn't have in its state. The user can ignore the message;
+// it's intended to nudge them toward `grove adopt`.
+func emitDriftNotice(w *cli.Writer, name string, reason grove.DriftReason) {
+	if reason != grove.ReasonDriftedWorktree {
+		return
+	}
+	cli.Warning(w, "this worktree (%s) wasn't created by grove and isn't registered in state", name)
+	cli.Faint(w, "run 'grove adopt' to bootstrap it (symlinks config, runs hooks, registers state)")
 }
 
 var pluginsRegistered bool
