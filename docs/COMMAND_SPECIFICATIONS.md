@@ -1736,6 +1736,11 @@ Arguments:
   args...   Extra arguments appended to the configured test command
 ```
 
+**Flags:**
+
+- `--with-deps` — run `compose run` *with* dependency services started. Overrides `[test] include_deps = false`. Use when a flaky stack pre-check makes you want a full bring-up before testing.
+- `--bind <container-path>` — bind-mount the worktree at the given path inside the container. Overrides `[test] bind_mount`. The path you give must match the compose service's working directory.
+
 **Configuration:**
 
 The test command is configured in `.grove/config.toml`:
@@ -1746,20 +1751,31 @@ command = "bin/rails test"
 
 # Optional: run in a Docker service container
 service = "app"
+
+# Optional: pass --no-deps when running compose (default: true via include_deps = false)
+include_deps = false
+
+# Optional: bind-mount the worktree at this container path
+bind_mount = "/app"
 ```
+
+See [Configuration Reference](CONFIGURATION_REFERENCE.md#test) for full field details.
 
 **Behavior:**
 
 1. Verify `[test] command` is configured — error if missing
 2. Find target worktree by name
-3. Append extra `args` to the configured command
-4. **Local mode** (no `service` configured):
+3. Resolve effective options from CLI flags layered over `[test]` config
+4. Append extra `args` to the configured command
+5. **Local mode** (no `service` configured):
    - Run command directly in the worktree directory via `sh -c`
    - stdout/stderr/stdin pass through
-5. **Docker mode** (`service` configured):
+6. **Docker mode** (`service` configured):
    - Use Docker plugin's `Run()` to execute in an ephemeral container
-   - The container mounts the worktree directory
-6. Exit with the same exit code as the test command
+   - By default passes `--no-deps` so a failing one-shot init service in the shared stack doesn't block tests; opt in with `--with-deps` or `[test] include_deps = true`
+   - When `[test] bind_mount` (or `--bind`) is set, the worktree is bind-mounted at the given container path
+   - Compose dependency-failure errors are rewritten with actionable suggestions
+7. Exit with the same exit code as the test command
 
 **Examples:**
 ```bash
