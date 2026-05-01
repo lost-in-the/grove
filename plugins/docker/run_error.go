@@ -22,7 +22,7 @@ func translateRunError(stderr string, original error) error {
 			"service %q (a dependency of the test target) failed to start.\n"+
 				"This is unrelated to the worktree under test.\n\n"+
 				"Suggestions:\n"+
-				"  • grove already passes --no-deps by default; if you're seeing this, set [test] include_deps = false in .grove/config.toml\n"+
+				"  • If you set include_deps = true in .grove/config.toml (or passed --with-deps), remove it — grove skips dependency services by default\n"+
 				"  • Or run the test command directly in an ephemeral container:\n"+
 				"      docker compose run --rm --no-deps -v $(pwd):/app <service> <test command>\n\n"+
 				"underlying error: %w",
