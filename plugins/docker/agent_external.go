@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/hooks"
@@ -55,8 +56,19 @@ func (s *agentExternalStrategy) OnPreSwitch(_ *hooks.Context) error {
 	return nil
 }
 
-// OnPostSwitch is a no-op for agent mode — agent stacks are independent.
-func (s *agentExternalStrategy) OnPostSwitch(_ *hooks.Context) error {
+// OnPostSwitch emits COMPOSE_PROJECT_NAME for the agent stack assigned to this
+// worktree, so the user's shell always has the correct project name after switching.
+func (s *agentExternalStrategy) OnPostSwitch(ctx *hooks.Context) error {
+	if ctx.WorktreePath == "" {
+		return nil
+	}
+	wtName := filepath.Base(ctx.WorktreePath)
+	slot, _ := s.slots.FindSlot(wtName)
+	if slot == 0 {
+		// No allocated slot — worktree has never had 'grove up --isolated' run.
+		return nil
+	}
+	cli.EnvDirective("COMPOSE_PROJECT_NAME", s.composeProjectName(slot))
 	return nil
 }
 
@@ -79,6 +91,7 @@ func (s *agentExternalStrategy) Up(worktreePath string, detach bool) error {
 	}
 
 	projectName := s.composeProjectName(slot)
+	cli.EnvDirective("COMPOSE_PROJECT_NAME", projectName)
 	templatePath := s.resolveTemplatePath()
 	composePath := s.composePath()
 
