@@ -12,18 +12,21 @@ import (
 	"github.com/lost-in-the/grove/plugins/docker"
 )
 
+// testOptions holds the effective per-invocation test settings after layering
+// CLI flags over [test] config. It mirrors the relevant TestConfig fields so
+// the docker plugin's buildRunArgs sees a single resolved view.
 type testOptions struct {
-	SkipDeps  bool
-	BindMount string
+	IncludeDeps bool
+	BindMount   string
 }
 
 func resolveTestOptions(cfgIncludeDeps bool, cfgBindMount string, flagWithDeps bool, flagBind string) testOptions {
 	opts := testOptions{
-		SkipDeps:  !cfgIncludeDeps,
-		BindMount: cfgBindMount,
+		IncludeDeps: cfgIncludeDeps,
+		BindMount:   cfgBindMount,
 	}
 	if flagWithDeps {
-		opts.SkipDeps = false
+		opts.IncludeDeps = true
 	}
 	if flagBind != "" {
 		opts.BindMount = flagBind
@@ -77,7 +80,7 @@ Extra arguments are appended to the configured command:
 		// Apply resolved options back to config so the docker plugin's buildRunArgs picks them up.
 		// We mutate a *copy* of the test config to avoid persisting CLI overrides.
 		testCfg := ctx.Config.Test
-		testCfg.IncludeDeps = !opts.SkipDeps
+		testCfg.IncludeDeps = opts.IncludeDeps
 		testCfg.BindMount = opts.BindMount
 		ctx.Config.Test = testCfg
 
