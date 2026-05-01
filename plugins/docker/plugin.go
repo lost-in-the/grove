@@ -158,7 +158,18 @@ func (p *Plugin) onPreRemove(ctx *hooks.Context) error {
 		return nil
 	}
 	fmt.Fprintf(os.Stderr, "Stopping agent stack for '%s'...\n", ctx.Worktree)
-	return p.strategy.Down(ctx.WorktreePath)
+	downErr := p.strategy.Down(ctx.WorktreePath)
+	if downErr == nil {
+		// Down() releases the slot itself on success.
+		return nil
+	}
+	// Down failed — the worktree is being removed regardless, so a leaked slot
+	// would point at nothing. Free it so it can be reused. Surface the original
+	// teardown error to the caller.
+	if relErr := agent.slots.Release(wtName); relErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to release agent slot %d after teardown failure: %v\n", slot, relErr)
+	}
+	return downErr
 }
 
 // SetIsolated forces the plugin to use the agent external strategy,

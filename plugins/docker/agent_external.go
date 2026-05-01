@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/hooks"
@@ -55,18 +56,38 @@ func (s *agentExternalStrategy) OnPreSwitch(_ *hooks.Context) error {
 	return nil
 }
 
-// OnPostSwitch is a no-op for agent mode — agent stacks are independent.
-func (s *agentExternalStrategy) OnPostSwitch(_ *hooks.Context) error {
+// OnPostSwitch emits COMPOSE_PROJECT_NAME and the configured env_var for the
+// agent stack assigned to this worktree, so the user's shell always has the
+// correct project name and worktree path after switching.
+func (s *agentExternalStrategy) OnPostSwitch(ctx *hooks.Context) error {
+	if ctx.WorktreePath == "" {
+		return nil
+	}
+	wtName := filepath.Base(ctx.WorktreePath)
+	slot, err := s.slots.FindSlot(wtName)
+	if err != nil {
+		// Slots file unreadable or malformed — surface so the user knows to
+		// investigate rather than silently routing compose commands to the
+		// wrong project. Don't block the switch on it.
+		fmt.Fprintf(os.Stderr, "warning: could not read agent slots: %v\n", err)
+		return nil
+	}
+	if slot == 0 {
+		// No allocated slot — worktree has never had 'grove up --isolated' run.
+		return nil
+	}
+	cli.EnvDirective("COMPOSE_PROJECT_NAME", s.composeProjectName(slot))
+	if s.ext.EnvVar != "" {
+		cli.EnvDirective(s.ext.EnvVar, ctx.WorktreePath)
+	}
 	return nil
 }
 
-// OnPostCreate copies credentials and creates symlinks, same as the human workflow.
-func (s *agentExternalStrategy) OnPostCreate(ctx *hooks.Context) error {
-	if ctx.WorktreePath == "" || ctx.MainPath == "" {
-		return nil
-	}
-
-	return setupWorktreeFiles(s.ext, ctx.WorktreePath, ctx.MainPath)
+// OnPostCreate is a no-op — file setup runs unconditionally via
+// worktree.SetupFiles, called from the post-create paths in helpers.go
+// (grove new, grove open) and fork.go (grove fork) regardless of docker config.
+func (s *agentExternalStrategy) OnPostCreate(_ *hooks.Context) error {
+	return nil
 }
 
 // Up starts a persistent agent stack for the worktree (full stack mode).
@@ -79,6 +100,10 @@ func (s *agentExternalStrategy) Up(worktreePath string, detach bool) error {
 	}
 
 	projectName := s.composeProjectName(slot)
+	cli.EnvDirective("COMPOSE_PROJECT_NAME", projectName)
+	if s.ext.EnvVar != "" {
+		cli.EnvDirective(s.ext.EnvVar, worktreePath)
+	}
 	templatePath := s.resolveTemplatePath()
 	composePath := s.composePath()
 
@@ -290,56 +315,6 @@ func resolveComposePath(path string) string {
 		}
 	}
 	return path
-}
-
-// setupWorktreeFiles copies credentials and creates symlinks from the external config.
-// This is shared between externalStrategy and agentExternalStrategy.
-func setupWorktreeFiles(ext *config.ExternalComposeConfig, newPath, mainPath string) error {
-	var firstErr error
-
-	for _, relPath := range ext.CopyFiles {
-		src := filepath.Join(mainPath, relPath)
-		dst := filepath.Join(newPath, relPath)
-
-		if err := copyFile(src, dst); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to copy %s: %v\n", relPath, err)
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
-		fmt.Fprintf(os.Stderr, "  copied %s\n", relPath)
-	}
-
-	for _, relPath := range ext.SymlinkFiles {
-		src := filepath.Join(mainPath, relPath)
-		dst := filepath.Join(newPath, relPath)
-
-		if err := createSymlink(src, dst); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to symlink %s: %v\n", relPath, err)
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
-		fmt.Fprintf(os.Stderr, "  symlinked %s\n", relPath)
-	}
-
-	for _, relPath := range ext.SymlinkDirs {
-		src := filepath.Join(mainPath, relPath)
-		dst := filepath.Join(newPath, relPath)
-
-		if err := createSymlink(src, dst); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to symlink %s: %v\n", relPath, err)
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
-		fmt.Fprintf(os.Stderr, "  symlinked %s\n", relPath)
-	}
-
-	return firstErr
 }
 
 // agentComposeCommand creates a docker compose command with -f and -p flags for agent projects.

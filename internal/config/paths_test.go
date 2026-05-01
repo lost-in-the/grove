@@ -112,6 +112,61 @@ func TestResolveProjectPaths_NoExternal(t *testing.T) {
 	}
 }
 
+func TestResolveProjectPaths_TildeTemplatePath(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("UserHomeDir() error = %v", err)
+	}
+
+	cfg := &Config{
+		Plugins: PluginsConfig{
+			Docker: DockerPluginConfig{
+				External: &ExternalComposeConfig{
+					Path: "/abs/orchestrator",
+					Agent: &AgentStackConfig{
+						TemplatePath: "~/work/agent.yml",
+					},
+				},
+			},
+		},
+	}
+
+	if err := resolveProjectPaths(cfg, "/abs/orchestrator"); err != nil {
+		t.Fatalf("resolveProjectPaths() error = %v", err)
+	}
+
+	got := cfg.Plugins.Docker.External.Agent.TemplatePath
+	want := filepath.Join(home, "work", "agent.yml")
+	if got != want {
+		t.Errorf("Agent.TemplatePath = %q, want %q", got, want)
+	}
+}
+
+func TestResolveProjectPaths_TemplatePathNonTildeUnchanged(t *testing.T) {
+	cfg := &Config{
+		Plugins: PluginsConfig{
+			Docker: DockerPluginConfig{
+				External: &ExternalComposeConfig{
+					Path: "/abs/orchestrator",
+					Agent: &AgentStackConfig{
+						TemplatePath: "agent-stacks/template.yml",
+					},
+				},
+			},
+		},
+	}
+
+	if err := resolveProjectPaths(cfg, "/abs/orchestrator"); err != nil {
+		t.Fatalf("resolveProjectPaths() error = %v", err)
+	}
+
+	got := cfg.Plugins.Docker.External.Agent.TemplatePath
+	want := "agent-stacks/template.yml"
+	if got != want {
+		t.Errorf("Agent.TemplatePath = %q, want %q (relative paths preserved for compose-dir resolution)", got, want)
+	}
+}
+
 // TestLoadConfigFromPaths_RelativeExternalPath end-to-end tests that a project
 // config with a relative external.path resolves against the project root
 // (parent of .grove/) when loaded via the normal config loading flow.

@@ -312,13 +312,15 @@ Flags:
 
 4. **Register in state** (`AddWorktree`) with path, branch, created/accessed timestamps.
 
-5. **Create tmux session:**
+5. **Copy / symlink worktree files** from `plugins.docker.external.{copy_files, symlink_files, symlink_dirs}`. Runs unconditionally — `--no-docker` does not skip this step.
+
+6. **Create tmux session:**
    - Session name = `{project}-{name}`
    - Start in worktree directory
 
-6. **Execute post-create hooks** (user-configured and plugin hooks).
+7. **Execute post-create hooks** (user-configured and plugin hooks).
 
-7. **Auto-start Docker** (unless `--no-docker`):
+8. **Auto-start Docker** (unless `--no-docker`):
    - Only runs when `shouldAutoDocker()` returns true: agent stacks configured (`plugins.docker.external.agent.enabled = true`) or `plugins.docker.auto_up = true`
    - Calls `docker.Up()` for the new worktree path
 

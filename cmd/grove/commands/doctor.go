@@ -149,7 +149,7 @@ Examples:
 			}) && allPassed
 
 			// Existing Tier 2 checks (external compose, agent stacks, env files)
-			runExternalModeChecks(w, cfg, &allPassed)
+			runExternalModeChecks(w, cfg, filepath.Dir(groveDir), &allPassed)
 		}
 
 		_, _ = fmt.Fprintln(w)
@@ -245,7 +245,7 @@ func checkConfigSymlinks(groveDir string) (string, error) {
 
 // runExternalModeChecks runs all Docker external mode checks.
 // Extracted from the old doctor to keep the restructured command readable.
-func runExternalModeChecks(w *cli.Writer, cfg *config.Config, allPassed *bool) {
+func runExternalModeChecks(w *cli.Writer, cfg *config.Config, projectRoot string, allPassed *bool) {
 	if cfg == nil || !cfg.IsExternalDockerMode() {
 		runInfo(w, "External mode", "not configured (using local compose)")
 		return
@@ -256,8 +256,17 @@ func runExternalModeChecks(w *cli.Writer, cfg *config.Config, allPassed *bool) {
 		if ext.Path == "" {
 			return "", fmt.Errorf("plugins.docker.external.path not set")
 		}
+		info, err := os.Stat(ext.Path)
+		if err != nil {
+			return "", fmt.Errorf("%s: %w", ext.Path, err)
+		}
+		if !info.IsDir() {
+			return "", fmt.Errorf("%s is not a directory", ext.Path)
+		}
 		return ext.Path, nil
 	}) && *allPassed
+
+	checkProvisioningSources(w, ext, projectRoot, allPassed)
 
 	envFileName := ext.EnvFileName()
 	composePath := docker.ResolveComposePath(ext.Path)
@@ -265,6 +274,39 @@ func runExternalModeChecks(w *cli.Writer, cfg *config.Config, allPassed *bool) {
 
 	checkEnvFileChecks(w, envFileName, efResult, allPassed)
 	checkAgentStacks(w, cfg, ext, allPassed)
+}
+
+// checkProvisioningSources verifies that every entry in copy_files /
+// symlink_files / symlink_dirs exists in the project root. Catches typos
+// before the first 'grove new', when the failure would only show up as a
+// silent warning during worktree creation.
+func checkProvisioningSources(w *cli.Writer, ext *config.ExternalComposeConfig, projectRoot string, allPassed *bool) {
+	type entry struct {
+		field string
+		paths []string
+	}
+	groups := []entry{
+		{"copy_files", ext.CopyFiles},
+		{"symlink_files", ext.SymlinkFiles},
+		{"symlink_dirs", ext.SymlinkDirs},
+	}
+	for _, g := range groups {
+		if len(g.paths) == 0 {
+			continue
+		}
+		missing := []string{}
+		for _, rel := range g.paths {
+			if _, err := os.Stat(filepath.Join(projectRoot, rel)); err != nil {
+				missing = append(missing, rel)
+			}
+		}
+		*allPassed = runCheck(w, "Provisioning "+g.field, func() (string, error) {
+			if len(missing) > 0 {
+				return "", fmt.Errorf("missing in main worktree: %s", strings.Join(missing, ", "))
+			}
+			return fmt.Sprintf("%d entries", len(g.paths)), nil
+		}) && *allPassed
+	}
 }
 
 // checkEnvFileChecks runs env file loader and configuration checks.
@@ -313,6 +355,21 @@ func checkAgentStacks(w *cli.Writer, cfg *config.Config, ext *config.ExternalCom
 			return "", fmt.Errorf("agent.template_path not set")
 		}
 		return fmt.Sprintf("%d services, max %d slots", len(ext.Agent.Services), ext.Agent.MaxSlots), nil
+	}) && *allPassed
+
+	*allPassed = runCheck(w, "Agent template path", func() (string, error) {
+		tmpl := ext.Agent.TemplatePath
+		if !filepath.IsAbs(tmpl) {
+			tmpl = filepath.Join(docker.ResolveComposePath(ext.Path), tmpl)
+		}
+		info, err := os.Stat(tmpl)
+		if err != nil {
+			return "", fmt.Errorf("%s: %w", tmpl, err)
+		}
+		if info.IsDir() {
+			return "", fmt.Errorf("%s is a directory, expected a compose file", tmpl)
+		}
+		return tmpl, nil
 	}) && *allPassed
 
 	checkAgentNetwork(w, ext.Agent.Network, allPassed)

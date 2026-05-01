@@ -243,6 +243,8 @@ Examples:
 			cli.Info(w, "run 'grove repair' to fix")
 		}
 
+		runFileSetup(ctx.Config, newTree.Path, ctx.ProjectRoot, w, forkJSON)
+
 		// Fire post-create hook
 		hookCtx := &hooks.Context{
 			Worktree:     name,

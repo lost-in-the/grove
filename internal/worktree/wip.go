@@ -1,4 +1,6 @@
-// Package worktree provides WIP (Work-In-Progress) handling utilities.
+// Package worktree provides utilities for managing git worktrees: creation,
+// naming, post-create file provisioning (copy_files / symlink_files /
+// symlink_dirs), and WIP (Work-In-Progress) handling for safe switching.
 package worktree
 
 import (

@@ -827,10 +827,16 @@ func TestExternalStrategy_RemoveEnvVar(t *testing.T) {
 			wantContent: "", // still no file
 		},
 		{
-			name:        "removes only entry leaves empty file",
+			name:        "removes only entry deletes file",
 			existing:    "APP_DIR=./myapp-feature-x\n",
 			worktree:    "myapp-feature-x",
-			wantContent: "\n",
+			wantContent: "", // file should not exist
+		},
+		{
+			name:        "preserves user comments and unrelated keys",
+			existing:    "# user comment\nOTHER=value\nAPP_DIR=./myapp-feature-x\n",
+			worktree:    "myapp-feature-x",
+			wantContent: "# user comment\nOTHER=value\n",
 		},
 	}
 
@@ -883,164 +889,8 @@ func TestExternalStrategy_RemoveEnvVar(t *testing.T) {
 	}
 }
 
-func TestCopyFile(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	// Create source file
-	srcDir := filepath.Join(tmpDir, "src")
-	_ = os.MkdirAll(srcDir, 0755)
-	srcFile := filepath.Join(srcDir, "test.key")
-	_ = os.WriteFile(srcFile, []byte("secret-key"), 0600)
-
-	// Copy to destination (with nested directory)
-	dstFile := filepath.Join(tmpDir, "dst", "config", "test.key")
-	err := copyFile(srcFile, dstFile)
-	if err != nil {
-		t.Fatalf("copyFile() error = %v", err)
-	}
-
-	// Verify content
-	data, err := os.ReadFile(dstFile)
-	if err != nil {
-		t.Fatalf("Failed to read copied file: %v", err)
-	}
-	if string(data) != "secret-key" {
-		t.Errorf("Expected 'secret-key', got %q", string(data))
-	}
-}
-
-func TestCopyFile_SourceNotFound(t *testing.T) {
-	tmpDir := t.TempDir()
-	err := copyFile(filepath.Join(tmpDir, "nonexistent"), filepath.Join(tmpDir, "dst"))
-	if err == nil {
-		t.Error("Expected error for nonexistent source")
-	}
-}
-
-func TestCreateSymlink(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	// Create source directory
-	srcDir := filepath.Join(tmpDir, "src", "vendor", "bundle")
-	_ = os.MkdirAll(srcDir, 0755)
-	_ = os.WriteFile(filepath.Join(srcDir, "marker"), []byte("here"), 0644)
-
-	// Create symlink
-	dstLink := filepath.Join(tmpDir, "dst", "vendor", "bundle")
-	err := createSymlink(srcDir, dstLink)
-	if err != nil {
-		t.Fatalf("createSymlink() error = %v", err)
-	}
-
-	// Verify it's a symlink
-	info, err := os.Lstat(dstLink)
-	if err != nil {
-		t.Fatalf("Failed to stat symlink: %v", err)
-	}
-	if info.Mode()&os.ModeSymlink == 0 {
-		t.Error("Expected symlink, got regular file/dir")
-	}
-
-	// Verify content is accessible through symlink
-	data, err := os.ReadFile(filepath.Join(dstLink, "marker"))
-	if err != nil {
-		t.Fatalf("Failed to read through symlink: %v", err)
-	}
-	if string(data) != "here" {
-		t.Errorf("Expected 'here', got %q", string(data))
-	}
-}
-
-func TestCreateSymlink_ReplaceExisting(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	srcDir := filepath.Join(tmpDir, "src")
-	_ = os.MkdirAll(srcDir, 0755)
-
-	dstLink := filepath.Join(tmpDir, "link")
-
-	// Create initial symlink
-	_ = os.Symlink(srcDir, dstLink)
-
-	// Replace with new symlink
-	newSrc := filepath.Join(tmpDir, "newsrc")
-	_ = os.MkdirAll(newSrc, 0755)
-
-	err := createSymlink(newSrc, dstLink)
-	if err != nil {
-		t.Fatalf("createSymlink() replace error = %v", err)
-	}
-
-	// Verify it points to new target
-	target, err := os.Readlink(dstLink)
-	if err != nil {
-		t.Fatalf("Failed to readlink: %v", err)
-	}
-	if target != newSrc {
-		t.Errorf("Expected symlink to %q, got %q", newSrc, target)
-	}
-}
-
-func TestExternalStrategy_SetupWorktree(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	// Create main worktree with files to copy/symlink
-	mainPath := filepath.Join(tmpDir, "myapp")
-	_ = os.MkdirAll(filepath.Join(mainPath, "config", "credentials"), 0755)
-	_ = os.WriteFile(filepath.Join(mainPath, "config", "credentials", "development.key"), []byte("dev-key"), 0600)
-
-	_ = os.MkdirAll(filepath.Join(mainPath, "vendor", "bundle"), 0755)
-	_ = os.WriteFile(filepath.Join(mainPath, "vendor", "bundle", "marker"), []byte("gems"), 0644)
-
-	// Create new worktree directory
-	newPath := filepath.Join(tmpDir, "myapp-feature-x")
-	_ = os.MkdirAll(newPath, 0755)
-
-	s := newExternalStrategy(&config.Config{
-		Plugins: config.PluginsConfig{
-			Docker: config.DockerPluginConfig{
-				Mode: "external",
-				External: &config.ExternalComposeConfig{
-					Path:        tmpDir,
-					EnvVar:      "APP_DIR",
-					Services:    []string{"app"},
-					CopyFiles:   []string{"config/credentials/development.key"},
-					SymlinkDirs: []string{"vendor/bundle"},
-				},
-			},
-		},
-	})
-
-	err := setupWorktreeFiles(s.ext, newPath, mainPath)
-	if err != nil {
-		t.Fatalf("setupWorktree() error = %v", err)
-	}
-
-	// Verify copied file
-	data, err := os.ReadFile(filepath.Join(newPath, "config", "credentials", "development.key"))
-	if err != nil {
-		t.Fatalf("Failed to read copied file: %v", err)
-	}
-	if string(data) != "dev-key" {
-		t.Errorf("Expected 'dev-key', got %q", string(data))
-	}
-
-	// Verify symlink
-	info, err := os.Lstat(filepath.Join(newPath, "vendor", "bundle"))
-	if err != nil {
-		t.Fatalf("Failed to stat symlink: %v", err)
-	}
-	if info.Mode()&os.ModeSymlink == 0 {
-		t.Error("Expected vendor/bundle to be a symlink")
-	}
-}
-
 func TestPlugin_OnPostCreate_External(t *testing.T) {
 	tmpDir := t.TempDir()
-
-	mainPath := filepath.Join(tmpDir, "myapp")
-	_ = os.MkdirAll(filepath.Join(mainPath, "config"), 0755)
-	_ = os.WriteFile(filepath.Join(mainPath, "config", "master.key"), []byte("key"), 0600)
 
 	newPath := filepath.Join(tmpDir, "myapp-feature")
 	_ = os.MkdirAll(newPath, 0755)
@@ -1051,10 +901,9 @@ func TestPlugin_OnPostCreate_External(t *testing.T) {
 			Docker: config.DockerPluginConfig{
 				Mode: "external",
 				External: &config.ExternalComposeConfig{
-					Path:      tmpDir,
-					EnvVar:    "APP_DIR",
-					Services:  []string{"app"},
-					CopyFiles: []string{"config/master.key"},
+					Path:     tmpDir,
+					EnvVar:   "APP_DIR",
+					Services: []string{"app"},
 				},
 			},
 		},
@@ -1065,20 +914,86 @@ func TestPlugin_OnPostCreate_External(t *testing.T) {
 		Worktree:     "feature",
 		Config:       cfg,
 		WorktreePath: newPath,
-		MainPath:     mainPath,
+		MainPath:     filepath.Join(tmpDir, "myapp"),
 	}
 
+	// onPostCreate now only persists the env var and emits a directive.
+	// File copying is handled unconditionally in helpers.go (worktree.SetupFiles).
 	err := plugin.onPostCreate(ctx)
 	if err != nil {
 		t.Fatalf("onPostCreate() error = %v", err)
 	}
+}
 
-	// Verify file was copied
-	data, err := os.ReadFile(filepath.Join(newPath, "config", "master.key"))
-	if err != nil {
-		t.Fatalf("Failed to read copied file: %v", err)
+// TestPlugin_OnPreRemove_AgentSlotReleasedOnDownFailure verifies that when
+// `grove rm` triggers OnPreRemove and the agent stack's `docker compose down`
+// fails (here: docker isn't installed in the test sandbox), the agent slot
+// is still released. Otherwise the slot would point to the now-deleted
+// worktree forever and consume capacity.
+func TestPlugin_OnPreRemove_AgentSlotReleasedOnDownFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	composeDir := filepath.Join(tmpDir, "compose")
+	if err := os.MkdirAll(filepath.Join(composeDir, "agent-stacks"), 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if string(data) != "key" {
-		t.Errorf("Expected 'key', got %q", string(data))
+
+	enabled := true
+	cfg := &config.Config{
+		ProjectName: "myapp",
+		Plugins: config.PluginsConfig{
+			Docker: config.DockerPluginConfig{
+				Mode: "external",
+				External: &config.ExternalComposeConfig{
+					Path:     composeDir,
+					EnvVar:   "APP_DIR",
+					Services: []string{"app"},
+					Agent: &config.AgentStackConfig{
+						Enabled:      &enabled,
+						MaxSlots:     3,
+						Services:     []string{"app"},
+						TemplatePath: "agent-stacks/template.yml",
+					},
+				},
+			},
+		},
+		AgentMode: true,
+	}
+
+	plugin := New()
+	if err := plugin.Init(cfg); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	agent, ok := plugin.strategy.(*agentExternalStrategy)
+	if !ok {
+		t.Fatalf("expected agent strategy, got %T", plugin.strategy)
+	}
+
+	wtName := "myapp-feature"
+	worktreePath := filepath.Join(tmpDir, wtName)
+	allocatedSlot, err := agent.slots.Allocate(wtName)
+	if err != nil {
+		t.Fatalf("Allocate() error = %v", err)
+	}
+
+	ctx := &hooks.Context{
+		Worktree:     wtName,
+		Config:       cfg,
+		WorktreePath: worktreePath,
+	}
+
+	// Down() will fail because there's no docker daemon / template file in the
+	// sandbox; that's exactly the failure mode we want to test.
+	if err := plugin.onPreRemove(ctx); err == nil {
+		t.Log("note: Down unexpectedly succeeded; slot should still be released")
+	}
+
+	// Slot must be released regardless of Down's outcome.
+	slotAfter, err := agent.slots.FindSlot(wtName)
+	if err != nil {
+		t.Fatalf("FindSlot() error = %v", err)
+	}
+	if slotAfter != 0 {
+		t.Errorf("slot %d still allocated after onPreRemove (originally slot %d) — leaked", slotAfter, allocatedSlot)
 	}
 }

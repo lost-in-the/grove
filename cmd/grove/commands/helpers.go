@@ -193,6 +193,9 @@ func runPostCreateHooks(w *cli.Writer, ctx *GroveContext, name, branchName, proj
 		}
 	}
 
+	runFileSetup(ctx.Config, wtPath, ctx.ProjectRoot, w, jsonOutput)
+
+	// Fire global registry post-create hook (for plugins like docker external)
 	globalHookCtx := &hooks.Context{
 		Worktree:     name,
 		Config:       ctx.Config,
@@ -202,6 +205,22 @@ func runPostCreateHooks(w *cli.Writer, ctx *GroveContext, name, branchName, proj
 	if err := hooks.Fire(hooks.EventPostCreate, globalHookCtx); err != nil {
 		if !jsonOutput {
 			cli.Warning(w, "Post-create plugin hook failed: %v", err)
+		}
+	}
+}
+
+// runFileSetup runs worktree.SetupFiles when an external docker config is
+// present. Used by both grove new (via setupCreatedWorktree) and grove fork —
+// keeping the call in one helper makes it diff-visible if either caller
+// stops invoking it (the original bug class behind issue #27). Warnings are
+// suppressed in JSON output mode to avoid corrupting machine-readable output.
+func runFileSetup(cfg *config.Config, newPath, mainPath string, w *cli.Writer, jsonOutput bool) {
+	if cfg == nil || cfg.Plugins.Docker.External == nil {
+		return
+	}
+	if err := worktree.SetupFiles(cfg.Plugins.Docker.External, newPath, mainPath); err != nil {
+		if !jsonOutput {
+			cli.Warning(w, "File setup had issues: %v", err)
 		}
 	}
 }
