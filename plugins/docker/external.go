@@ -151,11 +151,30 @@ func (s *externalStrategy) Run(worktreePath string, service string, command stri
 		env = append(env, fmt.Sprintf("TEST_ENV_NUMBER=%d", envNum))
 	}
 
-	cmd := composeCommand(s.composePath(), s.ext.EnvFileName(), env, "run", "--rm", service, "bash", "-cil", command)
+	args := s.buildRunArgs(worktreePath, service, command)
+
+	cmd := composeCommand(s.composePath(), s.ext.EnvFileName(), env, args...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	return cmd.Run()
+}
+
+// buildRunArgs constructs the `docker compose run ...` argument list,
+// applying --no-deps and bind_mount based on TestConfig.
+func (s *externalStrategy) buildRunArgs(worktreePath, service, command string) []string {
+	args := []string{"run", "--rm"}
+
+	if !s.cfg.Test.IncludeDeps {
+		args = append(args, "--no-deps")
+	}
+
+	if s.cfg.Test.BindMount != "" {
+		args = append(args, "-v", fmt.Sprintf("%s:%s", worktreePath, s.cfg.Test.BindMount))
+	}
+
+	args = append(args, service, "bash", "-cil", command)
+	return args
 }
 
 // isTestCommand reports whether the given command string looks like a test invocation.
