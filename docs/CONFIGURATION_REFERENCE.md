@@ -148,7 +148,7 @@ include_deps = false               # bool
 bind_mount = ""                    # string
 ```
 
-**Why `include_deps` defaults to `false`:** in shared external-mode stacks a single failing one-shot init service (asset precompile, DB seed) would otherwise abort every test run. Set `include_deps = true` if your test command genuinely requires another service to be running first.
+**Why `include_deps` defaults to `false`:** one-shot init services (asset precompile, DB seed) in a shared external-mode stack would otherwise abort every test run when they fail. Set `include_deps = true` if your test command genuinely requires another service to be running first.
 
 **When to set `bind_mount`:** if you run multiple worktrees in parallel against the same external compose stack, the env-var-based path resolution can race. Pinning a bind-mount makes each `grove test` invocation read code from its own worktree regardless of the shared env var's current value. The path you specify must match the compose service's `WORKDIR` (or the path source code expects to live at).
 

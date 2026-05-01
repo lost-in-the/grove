@@ -1738,8 +1738,8 @@ Arguments:
 
 **Flags:**
 
-- `--with-deps` — run `compose run` *with* dependency services started. Overrides `[test] include_deps = false`. Use when a flaky stack pre-check makes you want a full bring-up before testing.
-- `--bind <container-path>` — bind-mount the worktree at the given path inside the container. Overrides `[test] bind_mount`. The path you give must match the compose service's working directory.
+- `--with-deps` — override `[test] include_deps` for this invocation, passing `docker compose run` *without* `--no-deps`. Use when your test command needs a `depends_on` service (e.g., a database) running first.
+- `--bind <container-path>` — bind-mount the worktree at the given path inside the container. Overrides `[test] bind_mount`. The path must match the compose service's `WORKDIR`.
 
 **Configuration:**
 
@@ -1752,7 +1752,7 @@ command = "bin/rails test"
 # Optional: run in a Docker service container
 service = "app"
 
-# Optional: pass --no-deps when running compose (default: true via include_deps = false)
+# Optional: skip docker compose dependency services (default: false → --no-deps is passed)
 include_deps = false
 
 # Optional: bind-mount the worktree at this container path
@@ -1774,7 +1774,7 @@ See [Configuration Reference](CONFIGURATION_REFERENCE.md#test) for full field de
    - Use Docker plugin's `Run()` to execute in an ephemeral container
    - By default passes `--no-deps` so a failing one-shot init service in the shared stack doesn't block tests; opt in with `--with-deps` or `[test] include_deps = true`
    - When `[test] bind_mount` (or `--bind`) is set, the worktree is bind-mounted at the given container path
-   - Compose dependency-failure errors are rewritten with actionable suggestions
+   - When `compose run` fails because of a `service "X" didn't complete successfully` dependency error, grove rewrites the message to name the service and suggest `--with-deps` removal or an ephemeral container fallback
 7. Exit with the same exit code as the test command
 
 **Examples:**
