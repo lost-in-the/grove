@@ -177,15 +177,7 @@ func setupCreatedWorktree(ctx *GroveContext, mgr *worktree.Manager, name, branch
 		}
 	}
 
-	// File setup runs unconditionally — it's a worktree-level concern, not a
-	// docker concern. Skipping --no-docker should not skip credential copying.
-	if ctx.Config != nil && ctx.Config.Plugins.Docker.External != nil {
-		if err := worktree.SetupFiles(ctx.Config.Plugins.Docker.External, wt.Path, ctx.ProjectRoot); err != nil {
-			if !opts.JSONOutput {
-				cli.Warning(w, "File setup had issues: %v", err)
-			}
-		}
-	}
+	runFileSetup(ctx.Config, wt.Path, ctx.ProjectRoot, w, opts.JSONOutput)
 
 	// Fire global registry post-create hook (for plugins like docker external)
 	globalHookCtx := &hooks.Context{
@@ -204,6 +196,22 @@ func setupCreatedWorktree(ctx *GroveContext, mgr *worktree.Manager, name, branch
 	autoStartDocker(w, ctx.Config, wt.Path, opts.NoDocker, opts.JSONOutput)
 
 	return wt, nil
+}
+
+// runFileSetup runs worktree.SetupFiles when an external docker config is
+// present. Used by both grove new (via setupCreatedWorktree) and grove fork —
+// keeping the call in one helper makes it diff-visible if either caller
+// stops invoking it (the original bug class behind issue #27). Warnings are
+// suppressed in JSON output mode to avoid corrupting machine-readable output.
+func runFileSetup(cfg *config.Config, newPath, mainPath string, w *cli.Writer, jsonOutput bool) {
+	if cfg == nil || cfg.Plugins.Docker.External == nil {
+		return
+	}
+	if err := worktree.SetupFiles(cfg.Plugins.Docker.External, newPath, mainPath); err != nil {
+		if !jsonOutput {
+			cli.Warning(w, "File setup had issues: %v", err)
+		}
+	}
 }
 
 // autoStartDocker starts the Docker stack for a new worktree if configured.
