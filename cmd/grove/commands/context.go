@@ -104,15 +104,11 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 		}
 
 		// Drift detection: warn if cwd is a worktree that isn't in state.
-		// Skip drift detection for the adopt command itself (it's the resolution).
-		if cmd.Use != "adopt" && cmd.Name() != "adopt" {
-			cwd, err := os.Getwd()
-			if err == nil {
-				mainPath := grove.MustProjectRoot(groveDir)
-				// Determine which worktree we're in. If cwd is the main, skip.
-				if reason := grove.DiagnoseDrift(cwd, mainPath); reason == grove.ReasonDriftedWorktree {
-					worktreeName := filepath.Base(cwd)
-					emitDriftNotice(cli.NewStderr(), worktreeName, reason)
+		// Skip when running `grove adopt` itself — it's the resolution.
+		if cmd.Name() != "adopt" {
+			if cwd, err := os.Getwd(); err == nil {
+				if reason := grove.DiagnoseDrift(cwd, ctx.ProjectRoot); reason == grove.ReasonDriftedWorktree {
+					emitDriftNotice(cli.NewStderr(), filepath.Base(cwd), reason)
 				}
 			}
 		}
