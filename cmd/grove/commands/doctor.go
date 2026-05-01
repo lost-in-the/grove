@@ -148,6 +148,11 @@ Examples:
 				return checkConfigSymlinks(groveDir)
 			}) && allPassed
 
+			// Check: all git worktrees are registered in state.json
+			allPassed = runCheck(w, "Worktree registration", func() (string, error) {
+				return checkWorktreeRegistration(groveDir)
+			}) && allPassed
+
 			// Existing Tier 2 checks (external compose, agent stacks, env files)
 			runExternalModeChecks(w, cfg, &allPassed)
 		}
@@ -237,6 +242,45 @@ func checkConfigSymlinks(groveDir string) (string, error) {
 	}
 
 	return fmt.Sprintf("%d worktrees checked", total), nil
+}
+
+// checkWorktreeRegistration reports drifted worktrees: git worktrees on disk
+// that aren't in state.json. Returns a friendly summary string or an error
+// listing the drifted worktrees.
+func checkWorktreeRegistration(groveDir string) (string, error) {
+	projectRoot := filepath.Dir(groveDir)
+
+	out, err := cmdexec.Output(context.TODO(), "git", []string{"-C", projectRoot, "worktree", "list", "--porcelain"}, "", cmdexec.GitLocal)
+	if err != nil {
+		return "", fmt.Errorf("list worktrees: %w", err)
+	}
+
+	statePath := filepath.Join(projectRoot, ".grove", "state.json")
+	stateData, _ := os.ReadFile(statePath)
+	stateStr := string(stateData)
+
+	var drifted []string
+	var total int
+	for _, line := range strings.Split(string(out), "\n") {
+		path, ok := strings.CutPrefix(line, "worktree ")
+		if !ok {
+			continue
+		}
+		total++
+		// Skip the main worktree
+		if path == projectRoot {
+			continue
+		}
+		// Lightweight check: state.json should contain the worktree path as a value.
+		if !strings.Contains(stateStr, `"`+path+`"`) {
+			drifted = append(drifted, filepath.Base(path))
+		}
+	}
+
+	if len(drifted) > 0 {
+		return "", fmt.Errorf("%d drifted worktree(s): %s — run 'grove adopt' from each", len(drifted), strings.Join(drifted, ", "))
+	}
+	return fmt.Sprintf("%d worktrees registered", total), nil
 }
 
 // runExternalModeChecks runs all Docker external mode checks.
