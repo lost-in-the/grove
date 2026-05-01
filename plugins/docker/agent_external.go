@@ -278,7 +278,10 @@ func (s *agentExternalStrategy) agentEnv(worktreePath string, slot int) []string
 	return env
 }
 
-// resolveComposePath resolves ~ in a compose directory path.
+// resolveComposePath resolves ~ in a compose directory path. Paths loaded
+// through internal/config are already absolute (relative paths in
+// .grove/config.toml resolve against the project root at load time), so this
+// is a defensive fallback for callers that construct configs by hand.
 func resolveComposePath(path string) string {
 	if strings.HasPrefix(path, "~/") {
 		home, err := os.UserHomeDir()
