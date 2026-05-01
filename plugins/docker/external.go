@@ -155,9 +155,13 @@ func (s *externalStrategy) Run(worktreePath string, service string, command stri
 
 	cmd := composeCommand(s.composePath(), s.ext.EnvFileName(), env, args...)
 	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
+	stderrBuf := &teeBuffer{w: os.Stderr}
+	cmd.Stderr = stderrBuf
 	cmd.Stdin = os.Stdin
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return translateRunError(stderrBuf.String(), err)
+	}
+	return nil
 }
 
 // buildRunArgs constructs the `docker compose run ...` argument list,

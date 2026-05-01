@@ -147,9 +147,13 @@ func (s *localStrategy) Run(worktreePath string, service string, command string)
 	args := s.buildRunArgs(worktreePath, service, command)
 	cmd := composeCommand(worktreePath, "", nil, args...)
 	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
+	stderrBuf := &teeBuffer{w: os.Stderr}
+	cmd.Stderr = stderrBuf
 	cmd.Stdin = os.Stdin
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return translateRunError(stderrBuf.String(), err)
+	}
+	return nil
 }
 
 func (s *localStrategy) Restart(worktreePath string, service string) error {
