@@ -3,6 +3,7 @@ package grove
 import (
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // DiagnoseReason describes why a directory isn't a grove project.
@@ -53,4 +54,53 @@ func DiagnoseNoGrove(dir string) DiagnoseResult {
 	}
 
 	return DiagnoseResult{Reason: ReasonNoGroveDir}
+}
+
+// DriftReason describes whether the cwd's worktree is registered in grove state.
+type DriftReason int
+
+const (
+	ReasonRegistered      DriftReason = iota // cwd is the main worktree, or a registered grove worktree
+	ReasonDriftedWorktree                    // cwd is a git worktree but not in state.json
+)
+
+// DiagnoseDrift checks whether the worktree at worktreePath is registered in state.json
+// at mainPath/.grove/state.json. Returns ReasonRegistered when it's the main worktree
+// or appears in state, and ReasonDriftedWorktree otherwise.
+//
+// This is intentionally lightweight (no JSON parsing of complex shapes): it just
+// checks whether the worktree path appears as a value in the state's worktrees map.
+func DiagnoseDrift(worktreePath, mainPath string) DriftReason {
+	resolvedWT, _ := filepath.EvalSymlinks(worktreePath)
+	if resolvedWT == "" {
+		resolvedWT = worktreePath
+	}
+	resolvedMain, _ := filepath.EvalSymlinks(mainPath)
+	if resolvedMain == "" {
+		resolvedMain = mainPath
+	}
+	if resolvedWT == resolvedMain {
+		return ReasonRegistered
+	}
+
+	statePath := filepath.Join(resolvedMain, ".grove", "state.json")
+	data, err := os.ReadFile(statePath)
+	if err != nil {
+		// No state file = brand new project, treat as registered (don't nag).
+		return ReasonRegistered
+	}
+
+	// Look for the worktree path as a substring in the state file.
+	// Full JSON parse would be more robust, but state.go owns that and a
+	// lightweight check here keeps this package's surface area small.
+	// Check both the resolved and unresolved paths to handle symlinked temp
+	// directories (e.g. macOS /var → /private/var).
+	stateStr := string(data)
+	if strings.Contains(stateStr, `"`+resolvedWT+`"`) {
+		return ReasonRegistered
+	}
+	if worktreePath != resolvedWT && strings.Contains(stateStr, `"`+worktreePath+`"`) {
+		return ReasonRegistered
+	}
+	return ReasonDriftedWorktree
 }

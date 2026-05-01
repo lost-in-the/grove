@@ -50,6 +50,64 @@ func TestDiagnoseNoGrove_WorktreeMainMissingGrove(t *testing.T) {
 	}
 }
 
+func TestDiagnoseDrift_WorktreeNotInState(t *testing.T) {
+	// Set up a main repo with a .grove dir, then a worktree that isn't in state.
+	tmpDir := t.TempDir()
+	mainDir := filepath.Join(tmpDir, "main")
+	if err := os.MkdirAll(filepath.Join(mainDir, ".grove"), 0755); err != nil {
+		t.Fatalf("mkdir main/.grove: %v", err)
+	}
+	// Touch a state file with no worktrees registered.
+	stateContent := `{"project": "test", "worktrees": {}}`
+	if err := os.WriteFile(filepath.Join(mainDir, ".grove", "state.json"), []byte(stateContent), 0644); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+
+	worktreePath := filepath.Join(tmpDir, "drifted-wt")
+	if err := os.MkdirAll(worktreePath, 0755); err != nil {
+		t.Fatalf("mkdir worktree: %v", err)
+	}
+
+	got := DiagnoseDrift(worktreePath, mainDir)
+	if got != ReasonDriftedWorktree {
+		t.Errorf("expected ReasonDriftedWorktree, got %v", got)
+	}
+}
+
+func TestDiagnoseDrift_WorktreeInState(t *testing.T) {
+	tmpDir := t.TempDir()
+	mainDir := filepath.Join(tmpDir, "main")
+	if err := os.MkdirAll(filepath.Join(mainDir, ".grove"), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	worktreePath := filepath.Join(tmpDir, "registered-wt")
+	if err := os.MkdirAll(worktreePath, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	stateContent := `{"project": "test", "worktrees": {"registered-wt": {"path": "` + worktreePath + `", "branch": "main"}}}`
+	if err := os.WriteFile(filepath.Join(mainDir, ".grove", "state.json"), []byte(stateContent), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	got := DiagnoseDrift(worktreePath, mainDir)
+	if got != ReasonRegistered {
+		t.Errorf("expected ReasonRegistered, got %v", got)
+	}
+}
+
+func TestDiagnoseDrift_AtMainWorktree(t *testing.T) {
+	tmpDir := t.TempDir()
+	mainDir := filepath.Join(tmpDir, "main")
+	if err := os.MkdirAll(filepath.Join(mainDir, ".grove"), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	got := DiagnoseDrift(mainDir, mainDir)
+	if got != ReasonRegistered {
+		t.Errorf("expected ReasonRegistered for main worktree, got %v", got)
+	}
+}
+
 func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...)
