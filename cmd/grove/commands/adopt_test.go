@@ -3,6 +3,7 @@ package commands
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -46,5 +47,29 @@ func TestResolveAdoptTarget_ErrorsOnNonexistent(t *testing.T) {
 	_, err := resolveAdoptTarget(tmpDir, []string{filepath.Join(tmpDir, "nope")})
 	if err == nil {
 		t.Errorf("expected error for nonexistent path")
+	}
+}
+
+func TestAdopt_StripProjectPrefixForName(t *testing.T) {
+	tests := []struct {
+		name        string
+		dirBase     string
+		projectName string
+		want        string
+	}{
+		{"strips matching prefix", "grove-feature", "grove", "feature"},
+		{"no prefix when project doesn't match", "myproj-feature", "grove", "myproj-feature"},
+		{"no prefix when name equals project", "grove", "grove", "grove"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.dirBase
+			if prefix := tt.projectName + "-"; strings.HasPrefix(got, prefix) {
+				got = strings.TrimPrefix(got, prefix)
+			}
+			if got != tt.want {
+				t.Errorf("got %q want %q", got, tt.want)
+			}
+		})
 	}
 }

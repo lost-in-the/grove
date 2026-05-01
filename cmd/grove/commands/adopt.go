@@ -53,15 +53,28 @@ Examples:
 			return fmt.Errorf("not a git worktree at %s: %w", target, gitErr)
 		}
 
-		name := filepath.Base(target)
-		if existing, err := ctx.State.GetWorktree(name); err == nil && existing != nil && existing.Path == target {
-			cli.Info(w, "worktree %q is already registered (path: %s)", name, target)
-			return nil
-		}
-
 		mgr, err := worktree.NewManager(ctx.ProjectRoot)
 		if err != nil {
 			return fmt.Errorf("worktree manager: %w", err)
+		}
+
+		projectName := mgr.GetProjectName()
+		name := filepath.Base(target)
+		// Strip the project prefix so the state key matches grove's convention
+		// (state stores short names, not full directory names).
+		if prefix := projectName + "-"; strings.HasPrefix(name, prefix) {
+			name = strings.TrimPrefix(name, prefix)
+		}
+
+		if existing, err := ctx.State.GetWorktree(name); err == nil && existing != nil {
+			existingResolved, _ := filepath.EvalSymlinks(existing.Path)
+			if existingResolved == "" {
+				existingResolved = existing.Path
+			}
+			if existingResolved == target {
+				cli.Info(w, "worktree %q is already registered (path: %s)", name, target)
+				return nil
+			}
 		}
 
 		cli.Step(w, "Bootstrapping worktree %q at %s ...", name, target)
@@ -71,7 +84,7 @@ Examples:
 			Branch:       branch,
 			WorktreePath: target,
 			MainPath:     ctx.ProjectRoot,
-			ProjectName:  mgr.GetProjectName(),
+			ProjectName:  projectName,
 			Now:          time.Now(),
 		}
 		if err := worktree.BootstrapWorktree(ctx.State, ctx.Config, bootstrapOpts); err != nil {
