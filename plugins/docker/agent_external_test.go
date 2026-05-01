@@ -108,6 +108,55 @@ func TestAgentExternalStrategy_OnPostSwitch_NoSlot(t *testing.T) {
 	}
 }
 
+func TestAgentExternalStrategy_OnPostSwitch_CorruptedSlotsFile(t *testing.T) {
+	cfg := newTestAgentConfig(t)
+	s := newAgentExternalStrategy(cfg)
+
+	// Write a malformed JSON file at the slots path so FindSlot returns an error.
+	if err := os.MkdirAll(filepath.Dir(s.slots.slotsFile), 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(s.slots.slotsFile, []byte("{not valid json"), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	t.Setenv("GROVE_SHELL", "1")
+
+	// Capture stderr — the warning goes there, not stdout.
+	origStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stderr = w
+	defer func() { os.Stderr = origStderr }()
+
+	stdoutOut := captureStdout(t, func() {
+		ctx := &hooks.Context{
+			Worktree:     "myapp-feature",
+			WorktreePath: "/tmp/myapp-feature",
+		}
+		if err := s.OnPostSwitch(ctx); err != nil {
+			t.Errorf("OnPostSwitch() error = %v, want nil (should not block switch)", err)
+		}
+	})
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("close stderr write end: %v", err)
+	}
+	var stderrBuf bytes.Buffer
+	if _, err := io.Copy(&stderrBuf, r); err != nil {
+		t.Fatalf("read stderr: %v", err)
+	}
+
+	if stdoutOut != "" {
+		t.Errorf("OnPostSwitch with corrupted slots file emitted stdout %q, want nothing", stdoutOut)
+	}
+	if !strings.Contains(stderrBuf.String(), "could not read agent slots") {
+		t.Errorf("expected 'could not read agent slots' warning on stderr, got %q", stderrBuf.String())
+	}
+}
+
 func TestAgentExternalStrategy_OnPostSwitch_WithSlot(t *testing.T) {
 	cfg := newTestAgentConfig(t)
 	s := newAgentExternalStrategy(cfg)

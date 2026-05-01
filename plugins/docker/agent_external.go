@@ -63,7 +63,14 @@ func (s *agentExternalStrategy) OnPostSwitch(ctx *hooks.Context) error {
 		return nil
 	}
 	wtName := filepath.Base(ctx.WorktreePath)
-	slot, _ := s.slots.FindSlot(wtName)
+	slot, err := s.slots.FindSlot(wtName)
+	if err != nil {
+		// Slots file unreadable or malformed — surface so the user knows to
+		// investigate rather than silently routing compose commands to the
+		// wrong project. Don't block the switch on it.
+		fmt.Fprintf(os.Stderr, "warning: could not read agent slots: %v\n", err)
+		return nil
+	}
 	if slot == 0 {
 		// No allocated slot — worktree has never had 'grove up --isolated' run.
 		return nil
@@ -72,8 +79,9 @@ func (s *agentExternalStrategy) OnPostSwitch(ctx *hooks.Context) error {
 	return nil
 }
 
-// OnPostCreate is a no-op — file setup is handled unconditionally in the worktree
-// setup sequence (cmd/grove/commands/helpers.go) so it runs regardless of docker config.
+// OnPostCreate is a no-op — file setup runs unconditionally via
+// worktree.SetupFiles, called from the post-create paths in helpers.go
+// (grove new, grove open) and fork.go (grove fork) regardless of docker config.
 func (s *agentExternalStrategy) OnPostCreate(_ *hooks.Context) error {
 	return nil
 }
