@@ -243,13 +243,7 @@ Examples:
 			cli.Info(w, "run 'grove repair' to fix")
 		}
 
-		// File setup runs unconditionally — it's a worktree-level concern, not a
-		// docker concern. Mirrors setupCreatedWorktree in helpers.go.
-		if ctx.Config != nil && ctx.Config.Plugins.Docker.External != nil {
-			if err := worktree.SetupFiles(ctx.Config.Plugins.Docker.External, newTree.Path, ctx.ProjectRoot); err != nil {
-				cli.Warning(w, "File setup had issues: %v", err)
-			}
-		}
+		runFileSetup(ctx.Config, newTree.Path, ctx.ProjectRoot, w, forkJSON)
 
 		// Fire post-create hook
 		hookCtx := &hooks.Context{
