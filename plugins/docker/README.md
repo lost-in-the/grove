@@ -196,7 +196,10 @@ auto_stop = true
 mode = "external"
 
 [plugins.docker.external]
-# Path to the shared compose directory
+# Path to the shared compose directory. Absolute, ~/-prefixed, or relative
+# to the project root (parent of .grove/). Use a relative path like "../"
+# when the orchestrator lives one level above the app, so the same config
+# works for teammates with different parent directory layouts.
 path = "~/projects/shared-infra"
 
 # Environment variable that the compose YAML reads to find this app
@@ -232,7 +235,7 @@ symlink_dirs = [
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `path` | Yes | Absolute path to the external compose directory (supports `~`) |
+| `path` | Yes | Path to the external compose directory. Accepts absolute paths, `~/`-prefixed paths (expanded against `$HOME`), and relative paths (resolved against the project root — i.e., the parent of `.grove/`). For example, `path = "../"` in `<app>/.grove/config.toml` points to the directory containing the app — useful for committed configs shared across teammates with different parent layouts. |
 | `env_var` | Yes | Environment variable name the compose YAML reads |
 | `env_file` | No | Filename in the compose directory where grove writes the `env_var` value (default: `.env`). For example, with `env_var = "APP_DIR"` and `env_file = ".env.local"`, grove writes `APP_DIR=/abs/path/to/worktree` to `.env.local` and passes `--env-file .env.local` to compose. Set to `.env.local` to avoid dirtying a git-tracked `.env`. See [Env File Loaders](#env-file-loaders-direnv--mise) for optional loader setup. |
 | `services` | Yes | List of service names to manage |

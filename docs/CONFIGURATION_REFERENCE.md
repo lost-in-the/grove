@@ -251,7 +251,15 @@ Required when `mode = "external"`. Configures the shared compose setup.
 ```toml
 [plugins.docker.external]
 # Path to the external Docker Compose directory (the one with docker-compose.yml).
-# Supports ~ expansion. Required.
+# Accepts:
+#   - absolute paths (`/home/user/code/orchestrator`)
+#   - ~ expansion (`~/work/compose-dev`)
+#   - relative paths, resolved against the project root — i.e., the directory
+#     containing `.grove/`. For example, `path = "../"` in
+#     `~/code/orchestrator/app/.grove/config.toml` resolves to
+#     `~/code/orchestrator/`. This makes a committed config portable across
+#     teammates with different parent directory layouts.
+# Required.
 path = "~/work/compose-dev"        # string (required)
 
 # Environment variable name that grove sets to the worktree path.

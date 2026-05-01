@@ -194,6 +194,9 @@ func loadFromPaths(cfg *Config, globalPath, projectPath string) (*Config, error)
 		return nil, err
 	}
 	if globalCfg != nil {
+		if err := resolveProjectPaths(globalCfg, projectRootFor(globalPath)); err != nil {
+			return nil, err
+		}
 		cfg = mergeConfigs(cfg, globalCfg)
 	}
 
@@ -203,6 +206,9 @@ func loadFromPaths(cfg *Config, globalPath, projectPath string) (*Config, error)
 		return nil, err
 	}
 	if projectCfg != nil {
+		if err := resolveProjectPaths(projectCfg, projectRootFor(projectPath)); err != nil {
+			return nil, err
+		}
 		cfg = mergeConfigs(cfg, projectCfg)
 	}
 
