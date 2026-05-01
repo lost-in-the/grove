@@ -32,12 +32,17 @@ func TestExternalRun_DefaultUsesNoDeps(t *testing.T) {
 
 	args := captureRunArgs(t, cfg, "/tmp/wt", "app", "bin/rspec")
 
-	joined := strings.Join(args, " ")
-	if !strings.Contains(joined, "--no-deps") {
-		t.Errorf("expected --no-deps in args, got: %v", args)
+	found := false
+	for _, a := range args {
+		if a == "--no-deps" {
+			found = true
+		}
+		if a == "-v" {
+			t.Errorf("expected no -v flag (no bind_mount configured), got: %v", args)
+		}
 	}
-	if strings.Contains(joined, "-v ") {
-		t.Errorf("expected no -v flag (no bind_mount configured), got: %v", args)
+	if !found {
+		t.Errorf("expected --no-deps in args, got: %v", args)
 	}
 }
 
