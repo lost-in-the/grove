@@ -1,6 +1,9 @@
 package docker
 
 import (
+	"bytes"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,13 +49,115 @@ func TestAgentExternalStrategy_OnPreSwitch(t *testing.T) {
 	}
 }
 
-func TestAgentExternalStrategy_OnPostSwitch(t *testing.T) {
+// captureStdout replaces os.Stdout with a pipe, runs f, then restores os.Stdout
+// and returns everything written to it as a string.
+func captureStdout(t *testing.T, f func()) string {
+	t.Helper()
+	orig := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("captureStdout: os.Pipe: %v", err)
+	}
+	os.Stdout = w
+	defer func() { os.Stdout = orig }()
+
+	f()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("captureStdout: close write end: %v", err)
+	}
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatalf("captureStdout: copy: %v", err)
+	}
+	return buf.String()
+}
+
+func TestAgentExternalStrategy_OnPostSwitch_EmptyPath(t *testing.T) {
 	cfg := newTestAgentConfig(t)
 	s := newAgentExternalStrategy(cfg)
 
-	ctx := &hooks.Context{Worktree: "test"}
-	if err := s.OnPostSwitch(ctx); err != nil {
-		t.Errorf("OnPostSwitch() error = %v, want nil", err)
+	t.Setenv("GROVE_SHELL", "1")
+	out := captureStdout(t, func() {
+		ctx := &hooks.Context{Worktree: "test"} // WorktreePath intentionally empty
+		if err := s.OnPostSwitch(ctx); err != nil {
+			t.Errorf("OnPostSwitch() error = %v, want nil", err)
+		}
+	})
+	if out != "" {
+		t.Errorf("OnPostSwitch with empty WorktreePath emitted %q, want nothing", out)
+	}
+}
+
+func TestAgentExternalStrategy_OnPostSwitch_NoSlot(t *testing.T) {
+	cfg := newTestAgentConfig(t)
+	s := newAgentExternalStrategy(cfg)
+
+	t.Setenv("GROVE_SHELL", "1")
+	out := captureStdout(t, func() {
+		ctx := &hooks.Context{
+			Worktree:     "myapp-feature",
+			WorktreePath: "/tmp/myapp-feature",
+		}
+		if err := s.OnPostSwitch(ctx); err != nil {
+			t.Errorf("OnPostSwitch() error = %v, want nil", err)
+		}
+	})
+	if out != "" {
+		t.Errorf("OnPostSwitch with no allocated slot emitted %q, want nothing", out)
+	}
+}
+
+func TestAgentExternalStrategy_OnPostSwitch_WithSlot(t *testing.T) {
+	cfg := newTestAgentConfig(t)
+	s := newAgentExternalStrategy(cfg)
+
+	// The slots file lives under <compose-path>/agent-stacks/.slots.json — ensure
+	// that directory exists before calling Allocate.
+	_ = os.MkdirAll(filepath.Dir(s.slots.slotsFile), 0755)
+
+	// Pre-allocate a slot for the worktree
+	wtName := "myapp-feature"
+	slot, err := s.slots.Allocate(wtName)
+	if err != nil {
+		t.Fatalf("Allocate() error = %v", err)
+	}
+
+	t.Setenv("GROVE_SHELL", "1")
+	out := captureStdout(t, func() {
+		ctx := &hooks.Context{
+			Worktree:     wtName,
+			WorktreePath: "/tmp/" + wtName,
+		}
+		if err := s.OnPostSwitch(ctx); err != nil {
+			t.Errorf("OnPostSwitch() error = %v, want nil", err)
+		}
+	})
+
+	wantLine := fmt.Sprintf("env:COMPOSE_PROJECT_NAME=myapp-agent-%d\n", slot)
+	if out != wantLine {
+		t.Errorf("OnPostSwitch emitted %q, want %q", out, wantLine)
+	}
+}
+
+func TestAgentExternalStrategy_Up_EmitsEnvDirective(t *testing.T) {
+	cfg := newTestAgentConfig(t)
+	s := newAgentExternalStrategy(cfg)
+
+	// Create the slots directory so Allocate can write the slots file.
+	_ = os.MkdirAll(filepath.Dir(s.slots.slotsFile), 0755)
+
+	t.Setenv("GROVE_SHELL", "1")
+	worktreePath := "/tmp/myapp-up-test"
+
+	// Up will fail because docker compose isn't available/configured, but the
+	// env directive is emitted before compose runs — that's what we're testing.
+	out := captureStdout(t, func() {
+		_ = s.Up(worktreePath, true)
+	})
+
+	if !strings.Contains(out, "env:COMPOSE_PROJECT_NAME=myapp-agent-") {
+		t.Errorf("Up() stdout = %q, want env:COMPOSE_PROJECT_NAME=myapp-agent-N line", out)
 	}
 }
 
