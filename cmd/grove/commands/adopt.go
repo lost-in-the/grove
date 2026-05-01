@@ -1,0 +1,118 @@
+package commands
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/spf13/cobra"
+
+	"github.com/lost-in-the/grove/internal/cli"
+	"github.com/lost-in-the/grove/internal/cmdexec"
+	"github.com/lost-in-the/grove/internal/worktree"
+)
+
+func init() {
+	rootCmd.AddCommand(adoptCmd)
+}
+
+var adoptCmd = &cobra.Command{
+	Use:   "adopt [path]",
+	Short: "Bootstrap a git worktree that grove doesn't know about",
+	Long: `Adopts an existing git worktree into grove's state.
+
+Use when a worktree was created with 'git worktree add' instead of 'grove new':
+the worktree exists, but grove never ran its bootstrap (state registration,
+config symlink, post-create hooks, docker auto-start).
+
+If [path] is omitted, the current directory is adopted.
+
+Examples:
+  grove adopt              # adopt the worktree the user is currently in
+  grove adopt ../other-wt  # adopt by path`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
+		w := cli.NewStdout()
+
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("get cwd: %w", err)
+		}
+
+		target, err := resolveAdoptTarget(cwd, args)
+		if err != nil {
+			return err
+		}
+
+		// Verify target is a git worktree of the main repo
+		branch, gitErr := gitBranchAt(target)
+		if gitErr != nil {
+			return fmt.Errorf("not a git worktree at %s: %w", target, gitErr)
+		}
+
+		name := filepath.Base(target)
+		if existing, err := ctx.State.GetWorktree(name); err == nil && existing != nil && existing.Path == target {
+			cli.Info(w, "worktree %q is already registered (path: %s)", name, target)
+			return nil
+		}
+
+		mgr, err := worktree.NewManager(ctx.ProjectRoot)
+		if err != nil {
+			return fmt.Errorf("worktree manager: %w", err)
+		}
+
+		cli.Step(w, "Bootstrapping worktree %q at %s ...", name, target)
+
+		bootstrapOpts := worktree.BootstrapOpts{
+			Name:         name,
+			Branch:       branch,
+			WorktreePath: target,
+			MainPath:     ctx.ProjectRoot,
+			ProjectName:  mgr.GetProjectName(),
+			Now:          time.Now(),
+		}
+		if err := worktree.BootstrapWorktree(ctx.State, ctx.Config, bootstrapOpts); err != nil {
+			return fmt.Errorf("bootstrap: %w", err)
+		}
+
+		cli.Success(w, "adopted %q (branch: %s)", name, branch)
+		cli.Faint(w, "config symlinked, state registered, post-create hooks fired")
+		return nil
+	}),
+}
+
+// resolveAdoptTarget picks the directory to adopt: explicit arg if given,
+// otherwise cwd. Returns an absolute, EvalSymlinks-resolved path.
+func resolveAdoptTarget(cwd string, args []string) (string, error) {
+	target := cwd
+	if len(args) == 1 {
+		target = args[0]
+	}
+	abs, err := filepath.Abs(target)
+	if err != nil {
+		return "", fmt.Errorf("resolve abs path %s: %w", target, err)
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		return "", fmt.Errorf("stat %s: %w", abs, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("not a directory: %s", abs)
+	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		return resolved, nil
+	}
+	return abs, nil
+}
+
+// gitBranchAt returns the current branch name of the git worktree at dir.
+func gitBranchAt(dir string) (string, error) {
+	out, err := cmdexec.Output(context.TODO(), "git", []string{"rev-parse", "--abbrev-ref", "HEAD"}, dir, cmdexec.GitLocal)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
