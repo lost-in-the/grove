@@ -9,8 +9,10 @@ import (
 
 // TestConfig controls test command behavior
 type TestConfig struct {
-	Command string `toml:"command"`
-	Service string `toml:"service"`
+	Command     string `toml:"command"`
+	Service     string `toml:"service"`
+	IncludeDeps bool   `toml:"include_deps"` // when true, `compose run` resolves depends_on services (default: skip)
+	BindMount   string `toml:"bind_mount"`   // optional container path; when set, `-v <worktree>:<bind_mount>` is added
 }
 
 // SessionConfig controls session command behavior for grove open

@@ -1174,6 +1174,38 @@ func TestLoadFromGroveDir_ValidSymlink(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_TestSection_IncludeDepsAndBindMount(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "config.toml")
+	body := `
+[test]
+command = "bin/rspec"
+service = "app"
+include_deps = true
+bind_mount = "/app"
+`
+	if err := os.WriteFile(path, []byte(body), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := LoadConfigFromPath(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Test.Command != "bin/rspec" {
+		t.Errorf("Command: got %q want bin/rspec", cfg.Test.Command)
+	}
+	if cfg.Test.Service != "app" {
+		t.Errorf("Service: got %q want app", cfg.Test.Service)
+	}
+	if !cfg.Test.IncludeDeps {
+		t.Errorf("IncludeDeps: got false want true")
+	}
+	if cfg.Test.BindMount != "/app" {
+		t.Errorf("BindMount: got %q want /app", cfg.Test.BindMount)
+	}
+}
+
 func TestIsExternalDockerMode(t *testing.T) {
 	cfg := &Config{}
 	if cfg.IsExternalDockerMode() {
