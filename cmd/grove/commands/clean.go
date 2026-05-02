@@ -41,7 +41,7 @@ type CleanCandidate struct {
 
 var cleanCmd = &cobra.Command{
 	Use:     "trim",
-	Aliases: []string{"clean", "tm"},
+	Aliases: []string{"prune", "clean", "tm"},
 	Short:   "Trim old unused worktrees",
 	Long: `Trim worktrees that haven't been accessed recently.
 

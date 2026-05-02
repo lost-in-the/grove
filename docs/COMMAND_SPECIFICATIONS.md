@@ -1946,7 +1946,7 @@ Repaired 1 issue.
 
 ### grove trim
 
-**Purpose:** Trim worktrees that haven't been accessed recently. Aliases: `clean`, `tm`.
+**Purpose:** Trim worktrees that haven't been accessed recently. Aliases: `prune`, `clean`, `tm`.
 
 **Usage:**
 ```
