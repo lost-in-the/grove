@@ -291,6 +291,13 @@ func (m *Manager) Remove(name string) error {
 		return fmt.Errorf("worktree '%s' not found", name)
 	}
 
+	// Defense in depth: refuse to remove the main worktree. Callers (rm/clean/TUI)
+	// already filter this out, but our os.RemoveAll fallback below would happily
+	// wipe the main checkout if a future caller forgot the guard.
+	if targetTree.IsMain {
+		return fmt.Errorf("cannot remove main worktree '%s'", name)
+	}
+
 	// If the worktree is prunable (directory missing), use git worktree prune
 	if targetTree.IsPrunable {
 		output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"worktree", "prune"}, m.repoRoot, cmdexec.GitLocal)
