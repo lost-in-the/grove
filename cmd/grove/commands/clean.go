@@ -1,14 +1,18 @@
 package commands
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/lost-in-the/grove/internal/cli"
+	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/exitcode"
 	"github.com/lost-in-the/grove/internal/git"
 	"github.com/lost-in-the/grove/internal/log"
@@ -96,16 +100,18 @@ Examples:
 				IsDirty: tree.IsDirty,
 			}
 
-			// Get last access time from state, falling back to filesystem mtime
-			// if the worktree is missing from state or has zero-value timestamps.
+			// Get last access time from state, falling back to the worktree's
+			// HEAD commit time when state is missing or has zero-value timestamps.
+			// Commit time is a more honest "last activity" proxy than directory
+			// mtime, which gets bumped by routine churn (e.g. `npm install`).
 			ws, _ := ctx.State.GetWorktree(tree.ShortName)
 			candidate.DaysSince = -1 // sentinel meaning "unknown"
 			if ws != nil && !ws.LastAccessedAt.IsZero() {
 				candidate.LastAccess = ws.LastAccessedAt
 				candidate.DaysSince = int(now.Sub(ws.LastAccessedAt).Hours() / 24)
-			} else if info, err := os.Stat(tree.Path); err == nil {
-				candidate.LastAccess = info.ModTime()
-				candidate.DaysSince = int(now.Sub(info.ModTime()).Hours() / 24)
+			} else if t, ok := worktreeHeadTime(tree.Path); ok {
+				candidate.LastAccess = t
+				candidate.DaysSince = int(now.Sub(t).Hours() / 24)
 			}
 
 			// Check exclusions
@@ -244,6 +250,21 @@ type BranchInfo struct {
 	Status        *git.BranchStatus
 	SafeToDelete  bool
 	StatusSummary string
+}
+
+// worktreeHeadTime returns the commit time of HEAD in the given worktree,
+// used as a fallback "last activity" proxy when state has no timestamp.
+// Returns ok=false if the path is unreadable as a git worktree.
+func worktreeHeadTime(path string) (time.Time, bool) {
+	out, err := cmdexec.Output(context.TODO(), "git", []string{"log", "-1", "--format=%ct", "HEAD"}, path, cmdexec.GitLocal)
+	if err != nil {
+		return time.Time{}, false
+	}
+	secs, err := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return time.Unix(secs, 0), true
 }
 
 func collectBranchInfos(branchMgr *git.BranchManager, branches []string) []BranchInfo {
