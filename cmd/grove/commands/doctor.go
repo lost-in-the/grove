@@ -681,6 +681,31 @@ func fixHostInstallsInDockerProject(projectRoot, groveDir string) (int, error) {
 // raw TOML so user comments and unrelated keys are preserved. Each matching
 // `[[hooks.post_create]]` block has its `type = "command"` line replaced
 // with `type = "docker:compose"` + `service = "..."` + `mode = "run"`.
+//
+// Contract: this is a surgical block edit, not a parse-rewrite-emit pipeline.
+// The textual approach is deliberate — the only TOML library in use,
+// BurntSushi/toml, drops comments and reorders keys on encode, which would
+// silently rewrite parts of the file the user never asked to change. The
+// codebase only ever calls toml.Unmarshal, never Marshal/Encode.
+//
+// Header match is `strings.TrimSpace(line) == "[[hooks.post_create]]"`. A
+// block ends at the next blank line or any line whose trimmed form starts
+// with `[`.
+//
+// Known limitations, pinned by sub-tests in
+// TestRewriteHostInstallsToCompose_EdgeCases:
+//   - Quoted keys (`"type" = "command"`) are not detected and the block is
+//     left untouched.
+//   - Inline array-of-tables (`hooks.post_create = [{...}]`) is not detected;
+//     grove's TOML decoder also rejects this form so it cannot appear in a
+//     real config, but we pin the no-corruption guarantee.
+//   - Multi-line string bodies (`command = """..."""`) whose body contains a
+//     literal `[[hooks.post_create]]` are left untouched (n=0); the embedded
+//     `[` breaks block-walking and the inner block lacks a type line.
+//
+// A future caller adding a second `doctor --fix` rewrite should switch to the
+// hybrid parse-for-validation approach (issue #37 Option 2) instead of
+// extending this textual heuristic.
 func rewriteHostInstallsToCompose(src, service string) (string, int) {
 	var out strings.Builder
 	count := 0

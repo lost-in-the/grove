@@ -255,6 +255,135 @@ command = "bundle install"`
 			t.Errorf("expected service line in output:\n%s", got)
 		}
 	})
+
+	// Pinning tests for issue #37: known fragile TOML shapes. Each asserts
+	// the conservative, non-corrupting behavior the rewriter promises — see
+	// the contract docstring on rewriteHostInstallsToCompose for the full
+	// list of limitations these tests document.
+
+	t.Run("indented header is still detected and rewritten", func(t *testing.T) {
+		// strings.TrimSpace makes the header match position-insensitive.
+		// The 3 emitted replacement lines (type/service/mode) are written
+		// at column 0, which drops indentation on those specific lines.
+		// That's cosmetic — the file is still valid TOML.
+		src := "    [[hooks.post_create]]\n    type = \"command\"\n    command = \"bundle install\"\n"
+		got, n := rewriteHostInstallsToCompose(src, "web")
+		if n != 1 {
+			t.Errorf("expected indented header to be detected, got n=%d", n)
+		}
+		if !strings.Contains(got, `type = "docker:compose"`) {
+			t.Errorf("expected docker:compose type line in output:\n%s", got)
+		}
+	})
+
+	t.Run("quoted keys are left untouched", func(t *testing.T) {
+		// HasPrefix(t, "type") fails on `"type" = ...` because the line
+		// starts with a quote. Block stays verbatim.
+		src := `[[hooks.post_create]]
+"type" = "command"
+"command" = "bundle install"
+`
+		got, n := rewriteHostInstallsToCompose(src, "web")
+		if n != 0 {
+			t.Errorf("quoted-key block should not be rewritten, got n=%d", n)
+		}
+		if got != src {
+			t.Errorf("quoted-key block should be preserved verbatim:\nwant: %q\ngot:  %q", src, got)
+		}
+	})
+
+	t.Run("inline array-of-tables is left untouched", func(t *testing.T) {
+		// `hooks.post_create = [{...}]` is not a `[[hooks.post_create]]`
+		// header, so it never enters the block path. Grove's TOML decoder
+		// (internal/hooks/config.go) also rejects this shape for arrays
+		// of tables, so it cannot appear in a real config — this test
+		// pins the no-corruption guarantee for an unsupported shape.
+		src := `hooks.post_create = [{ type = "command", command = "bundle install" }]
+`
+		got, n := rewriteHostInstallsToCompose(src, "web")
+		if n != 0 {
+			t.Errorf("inline array-of-tables should not be rewritten, got n=%d", n)
+		}
+		if got != src {
+			t.Errorf("inline array-of-tables should be preserved verbatim:\nwant: %q\ngot:  %q", src, got)
+		}
+	})
+
+	t.Run("multi-line string body containing literal header is preserved", func(t *testing.T) {
+		// The inner `[[hooks.post_create]]` line breaks block-walking via
+		// the `[` prefix check, but the resulting "header" has no type
+		// line so the surrounding block falls through unchanged. The
+		// install command inside the string is not detected because
+		// isLikelyHostInstallCommand requires a command-token boundary
+		// which the surrounding `"""` defeats.
+		src := `[[hooks.post_create]]
+type = "command"
+command = """multi-line body
+[[hooks.post_create]]
+echo done"""
+`
+		got, n := rewriteHostInstallsToCompose(src, "web")
+		if n != 0 {
+			t.Errorf("multi-line string with embedded literal header should not trigger a rewrite, got n=%d", n)
+		}
+		if got != src {
+			t.Errorf("multi-line string content should be preserved verbatim:\nwant: %q\ngot:  %q", src, got)
+		}
+	})
+
+	t.Run("weird whitespace in keys is tolerated", func(t *testing.T) {
+		// HasPrefix(t, "type") and HasPrefix(t, "command") tolerate any
+		// amount of whitespace before the `=`. The Trim(`"`) on the
+		// extracted value also handles surrounding quotes regardless of
+		// padding.
+		src := `[[hooks.post_create]]
+type   =   "command"
+command  =  "bundle install"
+`
+		_, n := rewriteHostInstallsToCompose(src, "web")
+		if n != 1 {
+			t.Errorf("loose-whitespace block should still be detected, got n=%d", n)
+		}
+	})
+
+	t.Run("comments on non-replaced lines are preserved verbatim", func(t *testing.T) {
+		// Acceptance criterion for issue #37: "User comments are preserved
+		// verbatim." This test exercises every comment position the
+		// rewriter must preserve: a leading header comment, an inline
+		// comment on the command line, and inline comments on auxiliary
+		// fields (timeout, on_failure). The comment on the type line
+		// itself is intentionally dropped because that whole line is
+		// being replaced — that's the rewrite, not a regression.
+		src := `# Local overrides for the web service.
+[[hooks.post_create]]
+type = "command"  # legacy host install
+command = "bundle install" # keep this
+timeout = 300 # 5m
+on_failure = "warn"  # tolerate flakes
+`
+		got, n := rewriteHostInstallsToCompose(src, "web")
+		if n != 1 {
+			t.Fatalf("expected 1 rewrite, got %d", n)
+		}
+		for _, want := range []string{
+			"# Local overrides for the web service.",
+			`command = "bundle install" # keep this`,
+			"timeout = 300 # 5m",
+			`on_failure = "warn"  # tolerate flakes`,
+		} {
+			if !strings.Contains(got, want) {
+				t.Errorf("expected comment/line preserved verbatim: %q\nfull output:\n%s", want, got)
+			}
+		}
+		// Field ordering of non-replaced lines is preserved (command
+		// before timeout before on_failure).
+		cmdIdx := strings.Index(got, "command =")
+		toIdx := strings.Index(got, "timeout =")
+		ofIdx := strings.Index(got, "on_failure =")
+		if cmdIdx >= toIdx || toIdx >= ofIdx {
+			t.Errorf("non-replaced field ordering should be preserved (command < timeout < on_failure):\n%s", got)
+		}
+	})
 }
 
 func TestCheckEnvFileConfig_NonDefault(t *testing.T) {
