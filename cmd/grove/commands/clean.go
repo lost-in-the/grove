@@ -1,13 +1,18 @@
 package commands
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/lost-in-the/grove/internal/cli"
+	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/exitcode"
 	"github.com/lost-in-the/grove/internal/git"
 	"github.com/lost-in-the/grove/internal/log"
@@ -95,14 +100,18 @@ Examples:
 				IsDirty: tree.IsDirty,
 			}
 
-			// Get last access time from state
+			// Get last access time from state, falling back to the worktree's
+			// HEAD commit time when state is missing or has zero-value timestamps.
+			// Commit time is a more honest "last activity" proxy than directory
+			// mtime, which gets bumped by routine churn (e.g. `npm install`).
 			ws, _ := ctx.State.GetWorktree(tree.ShortName)
-			if ws != nil {
+			candidate.DaysSince = -1 // sentinel meaning "unknown"
+			if ws != nil && !ws.LastAccessedAt.IsZero() {
 				candidate.LastAccess = ws.LastAccessedAt
 				candidate.DaysSince = int(now.Sub(ws.LastAccessedAt).Hours() / 24)
-			} else {
-				// If not in state, assume very old
-				candidate.DaysSince = 9999
+			} else if t, ok := worktreeHeadTime(tree.Path); ok {
+				candidate.LastAccess = t
+				candidate.DaysSince = int(now.Sub(t).Hours() / 24)
 			}
 
 			// Check exclusions
@@ -116,7 +125,7 @@ Examples:
 				candidate.ExcludeReason = "environment worktree"
 			} else if tree.IsDirty && !cleanIncludeDirty {
 				candidate.ExcludeReason = "dirty (use --include-dirty)"
-			} else if candidate.DaysSince < cleanOlderThan {
+			} else if candidate.DaysSince >= 0 && candidate.DaysSince < cleanOlderThan {
 				candidate.ExcludeReason = fmt.Sprintf("accessed %d days ago (threshold: %d)", candidate.DaysSince, cleanOlderThan)
 			}
 
@@ -153,7 +162,11 @@ Examples:
 				dirtyMark = " [dirty]"
 			}
 			_, _ = fmt.Fprintf(w, "  %s ", c.Name)
-			cli.Faint(w, "  (%s) - %d days since last access%s", c.Branch, c.DaysSince, dirtyMark)
+			ageStr := fmt.Sprintf("%d days since last access", c.DaysSince)
+			if c.DaysSince < 0 {
+				ageStr = "last access unknown"
+			}
+			cli.Faint(w, "  (%s) - %s%s", c.Branch, ageStr, dirtyMark)
 		}
 
 		if cleanDryRun {
@@ -162,14 +175,20 @@ Examples:
 			return nil
 		}
 
-		// ALWAYS prompt - mandatory confirmation
+		// ALWAYS prompt - mandatory confirmation. Require typing the literal
+		// word "yes" rather than using cli.Confirm: the operation is permanently
+		// destructive (worktree + tmux removal, no undo), and the trim spec
+		// requires this confirmation to work in non-interactive mode too.
+		// cli.ReadLine handles Ctrl+C/ESC and falls back to cooked-mode read for
+		// piped stdin, so scripted `echo yes | grove trim` still works.
 		_, _ = fmt.Fprintln(w)
 		cli.Warning(w, "This will permanently remove %d worktree(s) and their associated tmux sessions.", len(cleanable))
-		fmt.Print("Type 'yes' to confirm: ")
 
-		var response string
-		_, _ = fmt.Scanln(&response)
-		if response != "yes" {
+		response, err := cli.ReadLine("Type 'yes' to confirm: ")
+		if err != nil || response != "yes" {
+			if err != nil && !errors.Is(err, cli.ErrPromptCanceled) {
+				cli.Error(w, "%v", err)
+			}
 			fmt.Println("Canceled")
 			os.Exit(exitcode.UserCancelled)
 		}
@@ -231,6 +250,21 @@ type BranchInfo struct {
 	Status        *git.BranchStatus
 	SafeToDelete  bool
 	StatusSummary string
+}
+
+// worktreeHeadTime returns the commit time of HEAD in the given worktree,
+// used as a fallback "last activity" proxy when state has no timestamp.
+// Returns ok=false if the path is unreadable as a git worktree.
+func worktreeHeadTime(path string) (time.Time, bool) {
+	out, err := cmdexec.Output(context.TODO(), "git", []string{"log", "-1", "--format=%ct", "HEAD"}, path, cmdexec.GitLocal)
+	if err != nil {
+		return time.Time{}, false
+	}
+	secs, err := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return time.Unix(secs, 0), true
 }
 
 func collectBranchInfos(branchMgr *git.BranchManager, branches []string) []BranchInfo {
