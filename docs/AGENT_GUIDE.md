@@ -188,11 +188,23 @@ grove doctor
 ```bash
 cd ~/projects/myapp
 grove init
-# Creates .grove/config.toml with defaults
+# Auto-detects project type (Rails, Node, Go, Python, Docker), generates
+# .grove/config.toml + .grove/hooks.toml with sensible defaults.
 
 grove doctor
-# Checks git version, tmux, gh CLI, Docker, shell integration, config
+# Checks git version, tmux, gh CLI, Docker, shell integration, config.
 ```
+
+**For scripted / CI / agent use** — pick a mode explicitly so init never blocks on a prompt:
+
+```bash
+grove init --auto --yes      # Generate hooks.toml from detection, skip preview
+grove init --no-hooks         # Initialize state only, no hooks.toml
+```
+
+`--auto` is also the default in non-TTY contexts, but passing it explicitly makes scripts robust against future default changes. `--walkthrough` exists for interactive review of detected hooks but isn't appropriate for headless agents.
+
+**Docker-aware routing.** When `grove init` detects a `docker-compose.yml` alongside a Rails/Node/Python marker, it auto-generates install commands as `docker:compose` hooks rather than host commands — so `bundle install` / `npm install` / `pip install` run inside the container on the next `grove new`. `grove doctor --fix` will rewrite stale host-install commands to `docker:compose` form for projects initialized before this routing existed. See [plugins/docker/README.md](../plugins/docker/README.md#config-driven-action-types) for the action-type reference.
 
 ---
 
