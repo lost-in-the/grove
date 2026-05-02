@@ -171,6 +171,28 @@ The Docker plugin integrates with Grove's hook system to automatically manage co
 
 **External mode**: Copies configured credential files and creates symlinks from the main worktree into the new worktree.
 
+### Config-Driven Action Types
+
+In addition to the automatic plugin hooks above, the Docker plugin registers two action types you can use directly in `.grove/hooks.toml`. These are useful when a setup command needs to run *inside* a container rather than on the host (e.g. `bundle install`, `npm install`).
+
+```toml
+# Run a command in a docker compose service
+[[hooks.post_create]]
+type    = "docker:compose"
+service = "app"
+command = "npm install"
+
+# Exec into an externally-managed container by name
+[[hooks.post_create]]
+type      = "docker:exec"
+container = "shared-app-1"
+command   = "bundle install"
+```
+
+`grove init` auto-generates `docker:compose` hooks for `bundle install`/`npm install`/`pip install` when it detects a `docker-compose.yml` alongside Rails/Node/Python markers, so most users get this routing for free. See [docs/CONFIGURATION_REFERENCE.md](../../docs/CONFIGURATION_REFERENCE.md#docker-compose) for the full action-type reference (all fields, defaults, error handling).
+
+These action types are registered via `hooks.RegisterActionHandler` — see [docs/PLUGIN_DEVELOPMENT.md](../../docs/PLUGIN_DEVELOPMENT.md) if you want to add your own.
+
 ## Configuration
 
 ### Local Mode
