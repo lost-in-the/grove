@@ -105,6 +105,20 @@ func pickAppService(services []string) (string, bool) {
 // nesting depth) and YAML list-form services are not understood and produce
 // an empty list — callers fall back to "service unknown" and prompt or skip.
 //
+// Heuristic limitations (intentional, not bugs):
+//
+//   - YAML anchors (`&name`) and aliases (`*name`) are treated as opaque
+//     text. A service definition reached via an alias won't be expanded.
+//   - Merge keys (`<<: *base`) are ignored.
+//   - Multi-document YAML (`---` separators) is not recognized — only the
+//     first document's top-level `services:` is read.
+//   - Quoted service keys (`"web":`) and folded/flow-mapping forms
+//     (`services: {web: {...}}`) are not matched by the line regex.
+//
+// This is acceptable because the result is only used to *suggest* an app
+// service name during init/doctor; an empty result triggers a manual prompt
+// rather than a wrong inference.
+//
 // Service-name lines look like `  app:` (key, optional whitespace, optional
 // trailing comment); deeper keys (`    image: ruby`) are ignored because
 // they're at a different indent than the first child key.
