@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestMigrateFromLegacy(t *testing.T) {
@@ -108,6 +109,56 @@ func TestMigrateStateVersion(t *testing.T) {
 
 		if state.Worktrees == nil {
 			t.Error("Worktrees should be initialized")
+		}
+	})
+
+	t.Run("backfills zero-valued timestamps", func(t *testing.T) {
+		// Simulates state written by v0.6.1 init, which created the main
+		// worktree without stamping CreatedAt/LastAccessedAt.
+		state := &State{
+			Version: CurrentVersion,
+			Worktrees: map[string]*WorktreeState{
+				"main": {Path: "/test"},
+			},
+		}
+
+		before := time.Now()
+		migrateStateVersion(state)
+		after := time.Now()
+
+		ws := state.Worktrees["main"]
+		if ws.CreatedAt.IsZero() {
+			t.Error("CreatedAt was not backfilled")
+		}
+		if ws.LastAccessedAt.IsZero() {
+			t.Error("LastAccessedAt was not backfilled")
+		}
+		if ws.CreatedAt.Before(before) || ws.CreatedAt.After(after) {
+			t.Errorf("CreatedAt = %v, want between %v and %v", ws.CreatedAt, before, after)
+		}
+	})
+
+	t.Run("preserves non-zero timestamps", func(t *testing.T) {
+		fixed := time.Date(2025, 1, 15, 10, 0, 0, 0, time.UTC)
+		state := &State{
+			Version: CurrentVersion,
+			Worktrees: map[string]*WorktreeState{
+				"main": {
+					Path:           "/test",
+					CreatedAt:      fixed,
+					LastAccessedAt: fixed,
+				},
+			},
+		}
+
+		migrateStateVersion(state)
+
+		ws := state.Worktrees["main"]
+		if !ws.CreatedAt.Equal(fixed) {
+			t.Errorf("CreatedAt = %v, want %v (should not have been overwritten)", ws.CreatedAt, fixed)
+		}
+		if !ws.LastAccessedAt.Equal(fixed) {
+			t.Errorf("LastAccessedAt = %v, want %v (should not have been overwritten)", ws.LastAccessedAt, fixed)
 		}
 	})
 }
