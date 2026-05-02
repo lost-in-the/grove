@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `grove rm --force` now succeeds on worktrees containing non-empty untracked directories (e.g. `node_modules` left by a post-create hook). When git's own `worktree remove --force` refuses, grove falls back to removing the directory itself and pruning git's metadata (issue #24).
 - `Manager.Remove` refuses to remove the main worktree as a defense-in-depth backstop for the new `os.RemoveAll` fallback.
 - `grove trim` no longer reports "9999 days since last access" for worktrees missing state. `grove init` now stamps `created_at`/`last_accessed_at` on the main worktree, and `trim` falls back to the worktree's HEAD commit time (or "last access unknown") when no state timestamp is available (issue #9).
+- State load now backfills zero-valued `created_at`/`last_accessed_at` timestamps on worktrees from earlier versions, so upgraders no longer see lingering `"0001-01-01T00:00:00Z"` in their `state.json`.
+- `docs/COMMAND_SPECIFICATIONS.md` `grove init` section now documents the actual command (it had been showing `grove install <shell>` content). New init flags (`--auto`, `--walkthrough`, `--yes`) and Docker-aware install routing are now discoverable from the spec, the Docker plugin README, and the agent guide.
 
 ## [0.5.0] - 2026-03-10
 
