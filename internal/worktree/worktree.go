@@ -301,13 +301,27 @@ func (m *Manager) Remove(name string) error {
 	}
 
 	// Remove the worktree normally
-	_, err = cmdexec.CombinedOutput(context.TODO(), "git", []string{"worktree", "remove", targetTree.Path}, m.repoRoot, cmdexec.GitLocal)
-	if err != nil {
-		// Try force remove if regular remove fails
-		output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"worktree", "remove", "--force", targetTree.Path}, m.repoRoot, cmdexec.GitLocal)
-		if err != nil {
-			return fmt.Errorf("failed to remove worktree: %s: %w", string(output), err)
-		}
+	if _, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"worktree", "remove", targetTree.Path}, m.repoRoot, cmdexec.GitLocal); err == nil {
+		return nil
+	}
+
+	// Try git's own --force first
+	forceOutput, forceErr := cmdexec.CombinedOutput(context.TODO(), "git", []string{"worktree", "remove", "--force", targetTree.Path}, m.repoRoot, cmdexec.GitLocal)
+	if forceErr == nil {
+		return nil
+	}
+
+	// Final fallback: nuke the directory ourselves and prune git's metadata.
+	// `git worktree remove --force` refuses to delete non-empty untracked
+	// directories (e.g. node_modules left behind by a post-create hook),
+	// so when git has already given up we tear the directory down directly.
+	// targetTree.Path comes from `git worktree list`, so it is bounded to a
+	// known worktree path rather than user input.
+	if rmErr := os.RemoveAll(targetTree.Path); rmErr != nil {
+		return fmt.Errorf("failed to remove worktree: %s: %w", string(forceOutput), forceErr)
+	}
+	if pruneOutput, pruneErr := cmdexec.CombinedOutput(context.TODO(), "git", []string{"worktree", "prune"}, m.repoRoot, cmdexec.GitLocal); pruneErr != nil {
+		return fmt.Errorf("removed worktree directory but failed to prune git metadata: %s: %w", string(pruneOutput), pruneErr)
 	}
 
 	return nil
