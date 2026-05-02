@@ -113,7 +113,7 @@ func runInit() error {
 	fmt.Printf("  Config: %s\n", configPath)
 
 	if !initNoHooks {
-		generateAndWriteHooks(groveDir, cwd)
+		generateAndWriteHooks(groveDir, cwd, cli.StdPrompter{})
 	}
 
 	createInitialWorktrees(cwd, projectName)
@@ -212,7 +212,7 @@ export GROVE_PROJECT="` + projectName + `"
 	}
 }
 
-func generateAndWriteHooks(groveDir, cwd string) {
+func generateAndWriteHooks(groveDir, cwd string, prompter cli.Prompter) {
 	hooksPath := filepath.Join(groveDir, "hooks.toml")
 	if _, err := os.Stat(hooksPath); !os.IsNotExist(err) {
 		return
@@ -228,23 +228,23 @@ func generateAndWriteHooks(groveDir, cwd string) {
 		return
 	}
 
-	decision := resolveInitMode()
+	decision := resolveInitMode(prompter)
 	switch decision.Mode {
 	case initModeSkip:
 		fmt.Println("\nSkipped hooks.toml generation (per --skip / user choice).")
 		return
 	case initModeWalkthrough:
-		profile = walkthroughProfile(profile)
+		profile = walkthroughProfile(profile, prompter)
 	}
 
 	hooksContent := generateHooksToml(profile)
 
-	if decision.Mode == initModeAuto && !decision.SkipConfirm && cli.IsInteractive() {
+	if decision.Mode == initModeAuto && !decision.SkipConfirm && prompter.IsInteractive() {
 		// Show preview, confirm.
 		fmt.Println("\nProposed .grove/hooks.toml:")
 		fmt.Println(strings.TrimRight(indentLines(hooksContent, "  "), "\n"))
 		fmt.Println()
-		ok, err := cli.Confirm("Write this to .grove/hooks.toml?", true)
+		ok, err := prompter.Confirm("Write this to .grove/hooks.toml?", true)
 		if err != nil || !ok {
 			fmt.Println("Skipped hooks.toml generation.")
 			return
@@ -276,7 +276,7 @@ type initModeDecision struct {
 // resolveInitMode picks how init should generate hooks based on flags + TTY.
 // Precedence: explicit flag > interactive prompt > non-TTY default (auto+yes).
 // Reads package-level flag globals (set by cobra) but does NOT write them.
-func resolveInitMode() initModeDecision {
+func resolveInitMode(prompter cli.Prompter) initModeDecision {
 	switch {
 	case initWalkthrough:
 		return initModeDecision{Mode: initModeWalkthrough, SkipConfirm: initYes}
@@ -286,7 +286,7 @@ func resolveInitMode() initModeDecision {
 		// --yes alone implies --auto without confirm.
 		return initModeDecision{Mode: initModeAuto, SkipConfirm: true}
 	}
-	if !cli.IsInteractive() {
+	if !prompter.IsInteractive() {
 		// Non-TTY (CI, pipes): preserve historical zero-prompt behavior.
 		return initModeDecision{Mode: initModeAuto, SkipConfirm: true}
 	}
@@ -297,7 +297,7 @@ func resolveInitMode() initModeDecision {
 		idxWalkthrough
 		idxSkip
 	)
-	idx, err := cli.ChooseIndex(
+	idx, err := prompter.ChooseIndex(
 		"How would you like to configure hooks.toml?",
 		[]string{
 			"auto (generate from detection, with preview)",
@@ -331,20 +331,20 @@ const (
 // walkthroughProfile prompts the user about each detected item so they can
 // keep, route to a different runner, or drop it. Returns a new profile —
 // does not mutate the input.
-func walkthroughProfile(p *detect.ProjectProfile) *detect.ProjectProfile {
+func walkthroughProfile(p *detect.ProjectProfile, prompter cli.Prompter) *detect.ProjectProfile {
 	out := *p
 
 	// Copy/symlink prompts: just keep/skip. filterByPrompt allocates a fresh
 	// slice so the input profile's backing array isn't shared.
-	out.Copy = filterByPrompt(p.Copy, "Copy file from main worktree?")
-	out.Symlinks = filterByPrompt(p.Symlinks, "Symlink dir from main worktree?")
+	out.Copy = filterByPrompt(p.Copy, "Copy file from main worktree?", prompter)
+	out.Symlinks = filterByPrompt(p.Symlinks, "Symlink dir from main worktree?", prompter)
 
 	// Host commands: route host/container/skip.
 	if len(p.Commands) > 0 {
 		keptHost := make([]string, 0, len(p.Commands))
 		var routedToContainer []detect.ContainerCommand
 		for _, cmd := range p.Commands {
-			switch promptCommandRouting(cmd, p.HasDocker, p.DockerService) {
+			switch promptCommandRouting(cmd, p.HasDocker, p.DockerService, prompter) {
 			case routeHost:
 				keptHost = append(keptHost, cmd)
 			case routeContainer:
@@ -370,7 +370,7 @@ func walkthroughProfile(p *detect.ProjectProfile) *detect.ProjectProfile {
 		keptContainer := make([]detect.ContainerCommand, 0, len(p.ContainerCommands))
 		var demoted []string
 		for _, cc := range p.ContainerCommands {
-			switch promptCommandRouting(cc.Command, true, cc.Service) {
+			switch promptCommandRouting(cc.Command, true, cc.Service, prompter) {
 			case routeHost:
 				demoted = append(demoted, cc.Command)
 			case routeContainer:
@@ -389,13 +389,13 @@ func walkthroughProfile(p *detect.ProjectProfile) *detect.ProjectProfile {
 	return &out
 }
 
-func filterByPrompt(items []string, q string) []string {
+func filterByPrompt(items []string, q string, prompter cli.Prompter) []string {
 	if len(items) == 0 {
 		return items
 	}
 	kept := make([]string, 0, len(items))
 	for _, item := range items {
-		ok, err := cli.Confirm(fmt.Sprintf("%s %q", q, item), true)
+		ok, err := prompter.Confirm(fmt.Sprintf("%s %q", q, item), true)
 		if err == nil && ok {
 			kept = append(kept, item)
 		}
@@ -403,7 +403,7 @@ func filterByPrompt(items []string, q string) []string {
 	return kept
 }
 
-func promptCommandRouting(cmd string, hasDocker bool, service string) commandRouting {
+func promptCommandRouting(cmd string, hasDocker bool, service string, prompter cli.Prompter) commandRouting {
 	// Build options + parallel routing slice so dispatch is index-keyed,
 	// not label-text-keyed (label copy can change without breaking dispatch).
 	options := []string{"host (run on host machine)"}
@@ -419,7 +419,7 @@ func promptCommandRouting(cmd string, hasDocker bool, service string) commandRou
 	options = append(options, "skip (don't run this command)")
 	routings = append(routings, routeSkip)
 
-	idx, err := cli.ChooseIndex(fmt.Sprintf("How to run %q?", cmd), options)
+	idx, err := prompter.ChooseIndex(fmt.Sprintf("How to run %q?", cmd), options)
 	if err != nil || idx < 0 || idx >= len(routings) {
 		return routeSkip
 	}

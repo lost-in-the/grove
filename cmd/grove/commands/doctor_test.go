@@ -257,6 +257,240 @@ command = "bundle install"`
 	})
 }
 
+// TestRewriteHostInstallsToCompose_FurtherEdgeCases pins the *current*
+// regex-based behavior on TOML shapes the rewriter doesn't formally
+// understand. Each subtest documents the limitation so that the
+// companion `refactor(doctor): use TOML parser for hook rewrites
+// instead of regex` issue can update the assertions when it lands.
+func TestRewriteHostInstallsToCompose_FurtherEdgeCases(t *testing.T) {
+	t.Run("indented header is currently treated as a header", func(t *testing.T) {
+		// TODO(toml-refactor): a TOML parser would either treat indented
+		// headers as syntax errors or normalize indentation on output.
+		// Today: strings.TrimSpace strips the indent so the header IS
+		// matched, but the injected `service` / `mode` lines come out
+		// unindented while the surrounding `command =` line keeps its
+		// original indent. Asserting the count here so a future change
+		// in either direction surfaces the regression.
+		src := "  [[hooks.post_create]]\n  type = \"command\"\n  command = \"bundle install\"\n"
+		_, n := rewriteHostInstallsToCompose(src, "web")
+		if n != 1 {
+			t.Errorf("indented header: expected n=1 under current behavior, got %d", n)
+		}
+	})
+
+	t.Run("multi-line triple-quoted command is not detected", func(t *testing.T) {
+		// TODO(toml-refactor): a real TOML parser would resolve the
+		// multi-line value to "bundle install" and trigger the rewrite.
+		// Today: the regex extracts the value between the first pair of
+		// `"`, which is empty, so isLikelyHostInstallCommand("") is false.
+		src := "[[hooks.post_create]]\ntype = \"command\"\ncommand = \"\"\"\nbundle install\n\"\"\"\n"
+		got, n := rewriteHostInstallsToCompose(src, "web")
+		if n != 0 {
+			t.Errorf("multi-line command: expected n=0 under current behavior, got %d", n)
+		}
+		if !strings.Contains(got, "bundle install") {
+			t.Errorf("multi-line command should be preserved verbatim, got:\n%s", got)
+		}
+	})
+
+	t.Run("quoted key form \"type\" = \"command\" is not detected", func(t *testing.T) {
+		// TODO(toml-refactor): TOML allows quoted keys; the regex requires
+		// the literal prefix `type` so it misses this shape.
+		src := "[[hooks.post_create]]\n\"type\" = \"command\"\ncommand = \"bundle install\"\n"
+		got, n := rewriteHostInstallsToCompose(src, "web")
+		if n != 0 {
+			t.Errorf("quoted key: expected n=0 under current behavior, got %d", n)
+		}
+		if strings.Contains(got, "docker:compose") {
+			t.Errorf("quoted-key block should not be rewritten, got:\n%s", got)
+		}
+	})
+
+	t.Run("inline-table form is not detected", func(t *testing.T) {
+		// TODO(toml-refactor): inline tables (`hooks = [{...}]`) are valid
+		// TOML; the regex only knows about array-of-tables headers.
+		src := "hooks = [{ type = \"command\", command = \"bundle install\" }]\n"
+		got, n := rewriteHostInstallsToCompose(src, "web")
+		if n != 0 {
+			t.Errorf("inline table: expected n=0 under current behavior, got %d", n)
+		}
+		if got != src {
+			t.Errorf("inline table should be passed through verbatim:\nwant: %q\ngot:  %q", src, got)
+		}
+	})
+}
+
+// projectOpts configures a synthetic project root materialized by
+// testProject. Each string field is the file body; empty means "don't
+// create that file".
+type projectOpts struct {
+	Dockerfile    string
+	Compose       string // written as docker-compose.yml
+	HooksToml     string
+	ReadOnlyGrove bool // chmod 0555 .grove after writing — exercises write failures
+}
+
+// testProject materializes a temporary project root + .grove dir under
+// t.TempDir(). It centralizes the t.TempDir() + os.WriteFile pattern that
+// existed inline in TestCheckHooksDockerRouting_* so doctor tests can
+// declare project shape declaratively.
+func testProject(t *testing.T, opts projectOpts) (root, groveDir string) {
+	t.Helper()
+	root = t.TempDir()
+	groveDir = filepath.Join(root, ".grove")
+	if err := os.MkdirAll(groveDir, 0755); err != nil {
+		t.Fatalf("mkdir .grove: %v", err)
+	}
+	if opts.Dockerfile != "" {
+		if err := os.WriteFile(filepath.Join(root, "Dockerfile"), []byte(opts.Dockerfile), 0644); err != nil {
+			t.Fatalf("write Dockerfile: %v", err)
+		}
+	}
+	if opts.Compose != "" {
+		if err := os.WriteFile(filepath.Join(root, "docker-compose.yml"), []byte(opts.Compose), 0644); err != nil {
+			t.Fatalf("write compose: %v", err)
+		}
+	}
+	if opts.HooksToml != "" {
+		if err := os.WriteFile(filepath.Join(groveDir, "hooks.toml"), []byte(opts.HooksToml), 0644); err != nil {
+			t.Fatalf("write hooks.toml: %v", err)
+		}
+	}
+	if opts.ReadOnlyGrove {
+		if err := os.Chmod(groveDir, 0555); err != nil {
+			t.Fatalf("chmod readonly: %v", err)
+		}
+		// Restore writable perms so t.TempDir's auto-cleanup can rm -r.
+		t.Cleanup(func() { _ = os.Chmod(groveDir, 0755) })
+	}
+	return root, groveDir
+}
+
+// TestFixHostInstallsInDockerProject covers the early-return and error
+// paths that the inline t.TempDir() pattern in
+// TestCheckHooksDockerRouting_* didn't reach.
+func TestFixHostInstallsInDockerProject(t *testing.T) {
+	t.Run("not a docker project returns (0, nil)", func(t *testing.T) {
+		root, groveDir := testProject(t, projectOpts{
+			HooksToml: `[[hooks.post_create]]` + "\n" + `type = "command"` + "\n" + `command = "bundle install"` + "\n",
+		})
+		n, err := fixHostInstallsInDockerProject(root, groveDir)
+		if err != nil {
+			t.Errorf("expected nil error in non-docker dir, got %v", err)
+		}
+		if n != 0 {
+			t.Errorf("expected 0 rewrites in non-docker dir, got %d", n)
+		}
+	})
+
+	t.Run("dockerfile present but no compose file returns (0, nil)", func(t *testing.T) {
+		root, groveDir := testProject(t, projectOpts{
+			Dockerfile: "FROM ruby",
+			HooksToml:  `[[hooks.post_create]]` + "\n" + `type = "command"` + "\n" + `command = "bundle install"` + "\n",
+		})
+		n, err := fixHostInstallsInDockerProject(root, groveDir)
+		if err != nil {
+			t.Errorf("expected nil error when no compose file, got %v", err)
+		}
+		if n != 0 {
+			t.Errorf("expected 0 rewrites when no compose, got %d", n)
+		}
+	})
+
+	t.Run("compose with only infra services can't infer app, returns error", func(t *testing.T) {
+		// All services in infraServiceNames → pickAppService returns
+		// ("", false), so InferAppService fails.
+		compose := `services:
+  postgres:
+    image: postgres:15
+  redis:
+    image: redis:7
+`
+		root, groveDir := testProject(t, projectOpts{
+			Dockerfile: "FROM ruby",
+			Compose:    compose,
+			HooksToml:  `[[hooks.post_create]]` + "\n" + `type = "command"` + "\n" + `command = "bundle install"` + "\n",
+		})
+		_, err := fixHostInstallsInDockerProject(root, groveDir)
+		if err == nil {
+			t.Fatal("expected error when no app service can be inferred")
+		}
+		if !strings.Contains(err.Error(), "can't infer app service") {
+			t.Errorf("error should mention inference failure, got %v", err)
+		}
+	})
+
+	t.Run("missing hooks.toml returns wrapped read error", func(t *testing.T) {
+		compose := "services:\n  web:\n    image: ruby\n"
+		root, groveDir := testProject(t, projectOpts{
+			Dockerfile: "FROM ruby",
+			Compose:    compose,
+			// HooksToml intentionally omitted.
+		})
+		_, err := fixHostInstallsInDockerProject(root, groveDir)
+		if err == nil {
+			t.Fatal("expected error for missing hooks.toml")
+		}
+		if !strings.Contains(err.Error(), "read hooks.toml") {
+			t.Errorf("error should be wrapped as read failure, got %v", err)
+		}
+	})
+
+	t.Run("read-only .grove returns wrapped write error", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("chmod 0555 is bypassed when running as root")
+		}
+		compose := "services:\n  web:\n    image: ruby\n"
+		hooks := `[[hooks.post_create]]
+type = "command"
+command = "bundle install"
+`
+		root, groveDir := testProject(t, projectOpts{
+			Dockerfile:    "FROM ruby",
+			Compose:       compose,
+			HooksToml:     hooks,
+			ReadOnlyGrove: true,
+		})
+		_, err := fixHostInstallsInDockerProject(root, groveDir)
+		if err == nil {
+			t.Fatal("expected write error on read-only .grove")
+		}
+		if !strings.Contains(err.Error(), "write hooks.toml") {
+			t.Errorf("error should be wrapped as write failure, got %v", err)
+		}
+	})
+
+	t.Run("happy path rewrites and reports count", func(t *testing.T) {
+		compose := "services:\n  web:\n    image: ruby\n"
+		hooks := `[[hooks.post_create]]
+type = "command"
+command = "bundle install --quiet"
+`
+		root, groveDir := testProject(t, projectOpts{
+			Dockerfile: "FROM ruby",
+			Compose:    compose,
+			HooksToml:  hooks,
+		})
+		n, err := fixHostInstallsInDockerProject(root, groveDir)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if n != 1 {
+			t.Errorf("expected 1 rewrite, got %d", n)
+		}
+		got, err := os.ReadFile(filepath.Join(groveDir, "hooks.toml"))
+		if err != nil {
+			t.Fatalf("read back hooks.toml: %v", err)
+		}
+		if !strings.Contains(string(got), `type = "docker:compose"`) {
+			t.Errorf("hooks.toml not rewritten:\n%s", got)
+		}
+		if !strings.Contains(string(got), `service = "web"`) {
+			t.Errorf("hooks.toml missing service=web:\n%s", got)
+		}
+	})
+}
+
 func TestCheckEnvFileConfig_NonDefault(t *testing.T) {
 	direnvFound := func(name string) (string, error) {
 		if name == "direnv" {
