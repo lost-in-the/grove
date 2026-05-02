@@ -25,6 +25,7 @@ type modeStrategy interface {
 	Logs(worktreePath string, service string, follow bool) error
 	Restart(worktreePath string, service string) error
 	Run(worktreePath string, service string, command string) error
+	Exec(worktreePath string, service string, command string) error
 }
 
 // Plugin implements the docker plugin for grove
@@ -75,6 +76,11 @@ func (p *Plugin) Init(cfg *config.Config) error {
 	} else {
 		p.strategy = newLocalStrategy(cfg)
 	}
+
+	// Register config-hook action handlers. Idempotent (last write wins) so
+	// repeated Init across tests rebinds the closure to the current plugin.
+	hooks.RegisterActionHandler("docker:compose", p.composeHandler)
+	hooks.RegisterActionHandler("docker:exec", p.dockerExecHandler)
 
 	return nil
 }

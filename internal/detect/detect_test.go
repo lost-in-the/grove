@@ -123,6 +123,120 @@ func TestDetect_DeduplicatesCopyEntries(t *testing.T) {
 	}
 }
 
+func TestDetect_RailsWithDockerRoutesToContainer(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "Gemfile", "source 'https://rubygems.org'")
+	writeFile(t, dir, "docker-compose.yml", `services:
+  web:
+    image: ruby:3
+  postgres:
+    image: postgres:15
+`)
+
+	profile := Detect(dir)
+
+	if !profile.HasDocker {
+		t.Error("expected HasDocker=true")
+	}
+	if len(profile.Commands) != 0 {
+		t.Errorf("expected no host commands when Docker detected, got %v", profile.Commands)
+	}
+	if len(profile.ContainerCommands) == 0 {
+		t.Fatal("expected ContainerCommands populated")
+	}
+	cc := profile.ContainerCommands[0]
+	if cc.Service != "web" {
+		t.Errorf("expected service=web, got %q", cc.Service)
+	}
+	if cc.Command != "bundle install --quiet" {
+		t.Errorf("expected bundle install, got %q", cc.Command)
+	}
+	// Symlinks remain (they're host-side, vendor/bundle is the symlink target).
+	assertContains(t, profile.Symlinks, "vendor/bundle")
+}
+
+func TestDetect_NodeWithDockerfileOnlyKeepsHostCommands(t *testing.T) {
+	// Dockerfile-only (no compose file) projects don't get docker:compose
+	// hooks auto-generated — those would error every grove new since there's
+	// no compose project to run against. Host commands stay; renderer flags
+	// the situation so the user can switch them to docker:exec.
+	dir := t.TempDir()
+	writeFile(t, dir, "package.json", "{}")
+	writeFile(t, dir, "Dockerfile", "FROM node:20")
+
+	profile := Detect(dir)
+
+	if !profile.HasDocker {
+		t.Error("expected HasDocker=true (Dockerfile alone)")
+	}
+	if !profile.DockerComposeMissing {
+		t.Error("expected DockerComposeMissing=true for Dockerfile-only project")
+	}
+	if len(profile.ContainerCommands) != 0 {
+		t.Errorf("expected NO container commands (no compose to run against), got %v", profile.ContainerCommands)
+	}
+	if len(profile.Commands) == 0 {
+		t.Errorf("expected host commands preserved, got empty")
+	}
+}
+
+func TestDetect_AllInfraComposeKeepsHostCommands(t *testing.T) {
+	// A compose file with only db/redis (no app service) shouldn't reroute
+	// install commands into a service we'd be guessing at.
+	dir := t.TempDir()
+	writeFile(t, dir, "Gemfile", "")
+	writeFile(t, dir, "docker-compose.yml", `services:
+  postgres:
+    image: postgres:15
+  redis:
+    image: redis:7
+`)
+	profile := Detect(dir)
+
+	if !profile.DockerComposeMissing {
+		t.Error("expected DockerComposeMissing=true when no app service inferable")
+	}
+	if len(profile.ContainerCommands) != 0 {
+		t.Errorf("expected no container commands when service unknown, got %v", profile.ContainerCommands)
+	}
+	if len(profile.Commands) == 0 {
+		t.Error("expected host commands preserved when service unknown")
+	}
+}
+
+func TestDetect_NoDockerKeepsHostCommands(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "Gemfile", "source 'https://rubygems.org'")
+
+	profile := Detect(dir)
+
+	if profile.HasDocker {
+		t.Error("expected HasDocker=false")
+	}
+	if len(profile.Commands) == 0 {
+		t.Fatal("expected host commands preserved without docker")
+	}
+	if len(profile.ContainerCommands) != 0 {
+		t.Errorf("expected no container commands without docker, got %v", profile.ContainerCommands)
+	}
+}
+
+func TestDetect_SingleServiceComposeNotFlaggedInferred(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "Gemfile", "")
+	writeFile(t, dir, "docker-compose.yml", `services:
+  app:
+    image: ruby:3
+`)
+	profile := Detect(dir)
+	if profile.DockerService != "app" {
+		t.Errorf("expected service=app, got %q", profile.DockerService)
+	}
+	if profile.DockerServiceInferred {
+		t.Error("single-service compose should not be flagged as inferred")
+	}
+}
+
 func writeFile(t *testing.T, dir, name, content string) {
 	t.Helper()
 	path := filepath.Join(dir, name)

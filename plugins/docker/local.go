@@ -134,6 +134,19 @@ func (s *localStrategy) Run(worktreePath string, service string, command string)
 	return cmd.Run()
 }
 
+// Exec runs a command in an already-running container (compose exec).
+func (s *localStrategy) Exec(worktreePath string, service string, command string) error {
+	if !hasDockerCompose(worktreePath) {
+		return ErrNoComposeFile
+	}
+
+	cmd := composeCommand(worktreePath, "", nil, "exec", service, "bash", "-cil", command)
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	return cmd.Run()
+}
+
 func (s *localStrategy) Restart(worktreePath string, service string) error {
 	if !hasDockerCompose(worktreePath) {
 		return fmt.Errorf("no docker-compose file found in %s", worktreePath)

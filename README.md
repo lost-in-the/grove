@@ -331,9 +331,12 @@ on_failure = "warn"
 **Hook types:**
 - `copy` — copies a file from the main worktree into the new one
 - `symlink` — symlinks a shared directory (e.g., `node_modules`, `vendor/bundle`) to avoid reinstalling
-- `command` — runs an arbitrary shell command inside the worktree
+- `command` — runs an arbitrary shell command **on the host**
+- `docker:compose` — runs a command inside a docker compose service (`bundle install`, `npm install`, etc. for Docker-based projects)
+- `docker:exec` — runs a command inside an externally-managed container by name
+- `template` — renders a template file with `{{.variable}}` interpolation
 
-See [docs/PLUGIN_DEVELOPMENT.md](docs/PLUGIN_DEVELOPMENT.md) for writing custom plugins.
+For Docker-based projects, `grove init` auto-routes install commands as `docker:compose` hooks so they run inside the container instead of failing on the host. See [docs/CONFIGURATION_REFERENCE.md](docs/CONFIGURATION_REFERENCE.md#hooks-configuration-grovehookstoml) for the full schema and [docs/PLUGIN_DEVELOPMENT.md](docs/PLUGIN_DEVELOPMENT.md) for writing custom plugins (including how to add new hook types).
 
 ---
 
@@ -423,6 +426,7 @@ path = "~/projects/shared-infra"
 env_var = "APP_DIR"
 services = ["app", "app_worker"]
 copy_files = ["config/master.key"]
+symlink_files = ["config/credentials/development.key"]  # files symlinked from main worktree
 symlink_dirs = ["vendor/bundle", "node_modules"]
 ```
 

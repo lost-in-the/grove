@@ -14,13 +14,18 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/detect"
 	"github.com/lost-in-the/grove/internal/grove"
+	"github.com/lost-in-the/grove/internal/hooks"
 	"github.com/lost-in-the/grove/internal/shell"
 	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/plugins/docker"
 )
 
+var doctorFix bool
+
 func init() {
+	doctorCmd.Flags().BoolVar(&doctorFix, "fix", false, "Apply automatic fixes for detected issues (currently: rewrites host install hooks to docker:compose)")
 	rootCmd.AddCommand(doctorCmd)
 }
 
@@ -32,6 +37,10 @@ are set up correctly.
 
 System checks (binary, PATH, shell integration, git, tmux) run anywhere.
 Project checks (Docker, config, symlinks) run when inside a grove project.
+
+Pass --fix to apply automatic fixes for detected issues. Currently fixable:
+  - Host bundle/npm/pip-install hooks in a Docker project are rewritten to
+    docker:compose hooks.
 
 Examples:
   grove doctor`,
@@ -150,6 +159,26 @@ Examples:
 
 			// Existing Tier 2 checks (external compose, agent stacks, env files)
 			runExternalModeChecks(w, cfg, filepath.Dir(groveDir), &allPassed)
+
+			// Detect host install hooks in a Docker project (issue #28).
+			projectRoot := filepath.Dir(groveDir)
+			allPassed = runCheck(w, "Hooks Docker-routing", func() (string, error) {
+				return checkHooksDockerRouting(projectRoot, groveDir)
+			}) && allPassed
+
+			// Auto-fix host installs when --fix is set.
+			if doctorFix {
+				if changed, err := fixHostInstallsInDockerProject(projectRoot, groveDir); err != nil {
+					cli.Warning(w, "auto-fix failed: %v", err)
+				} else if changed > 0 {
+					cli.Success(w, "Rewrote %d host install hook(s) to docker:compose", changed)
+				}
+			}
+
+			// Warn on stray .grove-backup directories (issue #28).
+			allPassed = runCheck(w, "Backup directory", func() (string, error) {
+				return checkStrayBackup(groveDir)
+			}) && allPassed
 		}
 
 		_, _ = fmt.Fprintln(w)
@@ -529,4 +558,227 @@ func checkConfigExists(composePath, envFileName string) (exists bool, errMsg str
 		}
 	}
 	return false, fmt.Sprintf("no .envrc or .mise.toml found in %s — needed only for manual docker compose commands (grove handles env files automatically)", composePath)
+}
+
+// checkHooksDockerRouting flags host install commands (bundle/npm/pip install)
+// in a Docker-based project — the original symptom from issue #28.
+func checkHooksDockerRouting(projectRoot, groveDir string) (string, error) {
+	if !detect.HasDocker(projectRoot) {
+		return "no docker — n/a", nil
+	}
+
+	cfg, err := hooks.LoadHooksConfig(groveDir)
+	if err != nil || cfg == nil {
+		return "", fmt.Errorf("could not load hooks: %v", err)
+	}
+
+	var offenders []string
+	for _, a := range cfg.Hooks.PostCreate {
+		if a.Type != "command" {
+			continue
+		}
+		if isLikelyHostInstallCommand(a.Command) {
+			offenders = append(offenders, a.Command)
+		}
+	}
+	if len(offenders) > 0 {
+		return "", fmt.Errorf(
+			"host install command(s) in a Docker project: %s — convert to type=\"docker:compose\" hooks (or run `grove doctor --fix`)",
+			strings.Join(offenders, "; "),
+		)
+	}
+	return "no host installs detected", nil
+}
+
+// hostInstallPrograms is the set of command tokens that, when they appear at
+// a real shell-command boundary, indicate a host-side install. Matching is
+// boundary-aware (start of string, after `&&`, `||`, `;`, `|`) so that
+// `echo "to set up: bundle install"` does NOT match.
+var hostInstallPrograms = []string{
+	"bundle install",
+	"npm install",
+	"yarn install",
+	"pnpm install",
+	"pip install",
+	"pip3 install",
+	"poetry install",
+}
+
+func isLikelyHostInstallCommand(cmd string) bool {
+	for _, prog := range hostInstallPrograms {
+		if hasCommandTokenBoundary(cmd, prog) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasCommandTokenBoundary reports whether `prog` appears in `cmd` at a real
+// command boundary (start, or after &&, ||, ;, |, with optional whitespace).
+// This rejects matches inside string literals and echo/comment positions.
+func hasCommandTokenBoundary(cmd, prog string) bool {
+	separators := []string{"", "&&", "||", ";", "|"}
+	for _, sep := range separators {
+		// Prefix patterns: "<sep> <prog>" or "<sep><prog>" at any position.
+		if sep == "" {
+			// Start of string only.
+			trimmed := strings.TrimLeft(cmd, " \t")
+			if strings.HasPrefix(trimmed, prog) {
+				return true
+			}
+			continue
+		}
+		idx := 0
+		for idx < len(cmd) {
+			j := strings.Index(cmd[idx:], sep)
+			if j == -1 {
+				break
+			}
+			rest := strings.TrimLeft(cmd[idx+j+len(sep):], " \t")
+			if strings.HasPrefix(rest, prog) {
+				return true
+			}
+			idx += j + len(sep)
+		}
+	}
+	return false
+}
+
+// fixHostInstallsInDockerProject rewrites host install hooks to docker:compose
+// hooks in place. Returns the number of hooks changed and any error.
+//
+// Conservative: only rewrites within `[[hooks.post_create]]`, only when the
+// command is in hostInstallPrograms, and only for type = "command".
+func fixHostInstallsInDockerProject(projectRoot, groveDir string) (int, error) {
+	if !detect.HasDocker(projectRoot) {
+		return 0, nil
+	}
+	composePath := detect.FindComposeFile(projectRoot)
+	if composePath == "" {
+		return 0, nil
+	}
+	service, ok := detect.InferAppService(composePath)
+	if !ok {
+		return 0, fmt.Errorf("can't infer app service from %s — fix manually", composePath)
+	}
+
+	hooksPath := filepath.Join(groveDir, "hooks.toml")
+	original, err := os.ReadFile(hooksPath)
+	if err != nil {
+		return 0, fmt.Errorf("read hooks.toml: %w", err)
+	}
+	rewritten, n := rewriteHostInstallsToCompose(string(original), service)
+	if n == 0 {
+		return 0, nil
+	}
+	if err := os.WriteFile(hooksPath, []byte(rewritten), 0644); err != nil {
+		return 0, fmt.Errorf("write hooks.toml: %w", err)
+	}
+	return n, nil
+}
+
+// rewriteHostInstallsToCompose performs the textual rewrite. Operates on the
+// raw TOML so user comments and unrelated keys are preserved. Each matching
+// `[[hooks.post_create]]` block has its `type = "command"` line replaced
+// with `type = "docker:compose"` + `service = "..."` + `mode = "run"`.
+func rewriteHostInstallsToCompose(src, service string) (string, int) {
+	var out strings.Builder
+	count := 0
+	lines := strings.Split(src, "\n")
+
+	// Walk blocks: start at each `[[hooks.post_create]]` header and look at
+	// the keys until the next blank line or section.
+	i := 0
+	for i < len(lines) {
+		line := lines[i]
+		header := strings.TrimSpace(line) == "[[hooks.post_create]]"
+		if !header {
+			out.WriteString(line)
+			if i < len(lines)-1 {
+				out.WriteString("\n")
+			}
+			i++
+			continue
+		}
+
+		// Collect block lines until next blank or new section.
+		blockEnd := i + 1
+		for blockEnd < len(lines) {
+			t := strings.TrimSpace(lines[blockEnd])
+			if t == "" || strings.HasPrefix(t, "[") {
+				break
+			}
+			blockEnd++
+		}
+		block := lines[i:blockEnd]
+
+		// Inspect: type=command + command matches hostInstallPrograms.
+		typeLine, cmdLine := -1, -1
+		isCommand := false
+		matchedInstall := false
+		for k := i + 1; k < blockEnd; k++ {
+			t := strings.TrimSpace(lines[k])
+			if strings.HasPrefix(t, "type") && strings.Contains(t, `"command"`) {
+				typeLine = k
+				isCommand = true
+			} else if strings.HasPrefix(t, "command") {
+				cmdLine = k
+				// Extract value between quotes.
+				if eq := strings.Index(t, "="); eq >= 0 {
+					val := strings.TrimSpace(t[eq+1:])
+					val = strings.Trim(val, "\"")
+					if isLikelyHostInstallCommand(val) {
+						matchedInstall = true
+					}
+				}
+			}
+		}
+
+		if isCommand && matchedInstall && typeLine >= 0 && cmdLine >= 0 {
+			count++
+			for k, bl := range block {
+				if k == typeLine-i {
+					out.WriteString(`type = "docker:compose"`)
+					out.WriteString("\n")
+					out.WriteString(fmt.Sprintf("service = %q\n", service))
+					out.WriteString("mode = \"run\"\n")
+					continue
+				}
+				out.WriteString(bl)
+				out.WriteString("\n")
+			}
+		} else {
+			for _, bl := range block {
+				out.WriteString(bl)
+				out.WriteString("\n")
+			}
+		}
+		// Trailing newline behavior preserved by always writing \n above.
+		i = blockEnd
+	}
+
+	result := out.String()
+	// Strip the trailing newline we may have added past the original end.
+	if !strings.HasSuffix(src, "\n") && strings.HasSuffix(result, "\n") {
+		result = result[:len(result)-1]
+	}
+	return result, count
+}
+
+// checkStrayBackup warns when an unexplained .grove/.grove-backup/ directory
+// exists. Grove does not create this directory; if present it likely came
+// from manual experimentation or an editor's autosave.
+func checkStrayBackup(groveDir string) (string, error) {
+	backup := filepath.Join(groveDir, ".grove-backup")
+	info, err := os.Stat(backup)
+	if err != nil {
+		return "no stray backup directory", nil
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf(
+			"%s exists but is not grove-managed — safe to remove if you don't recognize it",
+			backup,
+		)
+	}
+	return "no stray backup directory", nil
 }

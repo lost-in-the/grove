@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- New hook action types `docker:compose` and `docker:exec` for routing config-driven hooks into containers (see `docs/CONFIGURATION_REFERENCE.md`). Action type names use a `pluginname:action` namespace convention.
+- Pluggable hook action handler registry — plugins can register custom action types via `hooks.RegisterActionHandler` (idempotent, last-write-wins). See `docs/PLUGIN_DEVELOPMENT.md`.
+- `grove init` now picks between `auto` (preview + confirm) and `walkthrough` (step-by-step) modes when running interactively. New flags: `--auto`, `--walkthrough`, `--yes`. Non-TTY behavior preserved as silent auto.
+- Docker-aware project detection: when a compose file is present alongside Rails/Node/Python markers, install commands (`bundle install`, `npm install`, `pip install`) are auto-generated as `docker:compose` hooks instead of host commands. Service name inferred from `docker-compose.yml` (single service used, or first non-infra service). Dockerfile-only projects (no compose file) keep host commands and emit a manual-setup note rather than generating broken compose hooks.
+- `grove doctor` now detects host install commands inside a Docker project and stray `.grove/.grove-backup/` directories. New `grove doctor --fix` rewrites flagged host install commands to `docker:compose` hooks in place.
+- `symlink_files` documented in top-level README and CONFIGURATION_REFERENCE alongside `symlink_dirs`.
+
+### Changed
+- Hook execution order on worktree create: plugin Go hooks now fire **before** config-driven `[[hooks.post_create]]` so containers are up by the time user setup commands run. This removes a workaround in the new `docker:compose` handler and lets `mode = "exec"` work without a stealth `compose up`.
+
+### Fixed
+- `bundle install`/`npm install` post-create hooks no longer fail on the host for Docker-based dev stacks (issue #28). Downstream: `grove rm --force` no longer hits non-empty `node_modules` conflicts when `symlink_dirs` is configured (issue #24).
+
 ## [0.5.0] - 2026-03-10
 
 ### Added

@@ -284,6 +284,12 @@ services = ["web", "worker"]       # string array (required)
 # Default: [] (nothing copied)
 copy_files = [".env.local", "config/master.key"]  # string array
 
+# Files to symlink from the main worktree into each new worktree on create.
+# Symlinks (vs copies) propagate edits in real time — use for files you actively
+# rotate, like decrypted credentials. Paths are relative to the worktree root.
+# Default: [] (nothing symlinked)
+symlink_files = ["config/credentials/development.key"]  # string array
+
 # Directories to symlink from the main worktree into each new worktree on create.
 # Useful for large build caches (node_modules, vendor/) that should be shared.
 # Paths are relative to the worktree root.
@@ -459,6 +465,46 @@ from = ".env.template"         # template source, relative to main worktree
 to   = ".env"                  # rendered output, relative to new worktree
 vars = { APP_PORT = "{{.port}}", ENV = "development" }  # extra variables
 ```
+
+#### docker:compose
+
+Runs a command inside a docker compose service. Use this for projects whose
+toolchain (Ruby, Node, Python, etc.) lives in a container — `bundle install`
+on the host fails when the host lacks the build deps. Registered by the
+docker plugin; requires the plugin to be enabled.
+
+```toml
+[[hooks.post_create]]
+type    = "docker:compose"
+service = "app"                # required: compose service name; {{.variable}} interpolated
+command = "bundle install"     # required: command to run; {{.variable}} interpolated
+mode    = "run"                # "run" (default, ephemeral via `compose run --rm`)
+                               # or "exec" (`compose exec`, requires running container)
+timeout = 900                  # seconds (default 60; 900 recommended for first install)
+on_failure = "warn"
+```
+
+`mode = "exec"` requires the container to already be running. Plugin
+post-create hooks fire before config hooks, so a stack with `auto_start = true`
+will be up by the time this hook runs. If exec is called when no container is
+running, the error suggests using `mode = "run"` or starting the stack with
+`grove up`.
+
+#### docker:exec
+
+Runs a command inside an externally-managed container (one grove doesn't
+lifecycle, e.g. a long-running dev shell). Bypasses compose entirely.
+
+```toml
+[[hooks.post_create]]
+type      = "docker:exec"
+container = "my-dev-shell"     # required: container name; {{.variable}} interpolated
+command   = "bundle install"   # required; {{.variable}} interpolated
+shell     = "bash -lc"         # optional, default "bash -lc"; quoted args are rejected — use a wrapper script for complex shell invocations
+timeout   = 900
+```
+
+Errors with an actionable message if the named container isn't running.
 
 ### Template Variables
 
@@ -727,8 +773,9 @@ path     = "~/work/compose-dev"
 env_var  = "APP_DIR"
 env_file = ".env.local"
 services = ["web", "worker", "jobs"]
-copy_files   = [".env.local", "config/master.key", "config/credentials.yml.enc"]
-symlink_dirs = ["storage"]
+copy_files    = [".env.local", "config/master.key", "config/credentials.yml.enc"]
+symlink_files = ["config/credentials/development.key"]
+symlink_dirs  = ["storage"]
 ```
 
 ### Multi-Agent CI (Agent Stacks)

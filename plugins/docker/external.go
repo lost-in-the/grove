@@ -157,6 +157,27 @@ func (s *externalStrategy) Run(worktreePath string, service string, command stri
 	return cmd.Run()
 }
 
+// Exec runs a command in an already-running container of the external compose.
+func (s *externalStrategy) Exec(worktreePath string, service string, command string) error {
+	if err := s.persistEnvVar(worktreePath); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to persist %s to %s: %v\n", s.ext.EnvVar, s.ext.EnvFileName(), err)
+	}
+	s.emitEnvDirective(worktreePath)
+
+	env := s.envForWorktree(worktreePath)
+	if isTestCommand(command) {
+		wtName := filepath.Base(worktreePath)
+		envNum := worktree.TestEnvNumber(wtName)
+		env = append(env, fmt.Sprintf("TEST_ENV_NUMBER=%d", envNum))
+	}
+
+	cmd := composeCommand(s.composePath(), s.ext.EnvFileName(), env, "exec", service, "bash", "-cil", command)
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	return cmd.Run()
+}
+
 // isTestCommand reports whether the given command string looks like a test invocation.
 func isTestCommand(cmd string) bool {
 	testPatterns := []string{

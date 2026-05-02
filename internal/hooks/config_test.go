@@ -235,6 +235,75 @@ timeout = 30
 			t.Error("loadHooksConfigFromPath() expected error for missing file, got nil")
 		}
 	})
+
+	t.Run("docker:compose action decodes service/mode/timeout", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "hooks.toml")
+		content := `
+[[hooks.post_create]]
+type = "docker:compose"
+service = "web"
+command = "bundle install"
+mode = "run"
+timeout = 900
+`
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		cfg, err := loadHooksConfigFromPath(path)
+		if err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		a := cfg.Hooks.PostCreate[0]
+		if a.Type != "docker:compose" || a.Service != "web" || a.Command != "bundle install" || a.Mode != "run" || a.Timeout != 900 {
+			t.Errorf("decoded fields wrong: %+v", a)
+		}
+	})
+
+	t.Run("docker:exec action decodes container/shell", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "hooks.toml")
+		content := `
+[[hooks.post_create]]
+type = "docker:exec"
+container = "my-shell"
+command = "ls"
+shell = "bash -lc"
+`
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		cfg, err := loadHooksConfigFromPath(path)
+		if err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		a := cfg.Hooks.PostCreate[0]
+		if a.Type != "docker:exec" || a.Container != "my-shell" || a.Shell != "bash -lc" {
+			t.Errorf("decoded fields wrong: %+v", a)
+		}
+	})
+
+	t.Run("legacy action without new fields decodes cleanly", func(t *testing.T) {
+		// Verifies omitempty additions don't change parsing of existing files.
+		dir := t.TempDir()
+		path := filepath.Join(dir, "hooks.toml")
+		content := `
+[[hooks.post_create]]
+type = "command"
+command = "echo hi"
+`
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		cfg, err := loadHooksConfigFromPath(path)
+		if err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		a := cfg.Hooks.PostCreate[0]
+		if a.Service != "" || a.Container != "" || a.Mode != "" || a.Shell != "" {
+			t.Errorf("expected new fields to be empty, got: %+v", a)
+		}
+	})
 }
 
 func TestSetDefaultsForActions(t *testing.T) {

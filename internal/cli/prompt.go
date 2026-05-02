@@ -163,12 +163,23 @@ func ConfirmWithDetails(w *Writer, header string, details []string, question str
 
 // Choose presents a numbered selection menu and returns the chosen option.
 func Choose(title string, options []string) (string, error) {
+	idx, err := ChooseIndex(title, options)
+	if err != nil {
+		return "", err
+	}
+	return options[idx], nil
+}
+
+// ChooseIndex is like Choose but returns the 0-based index of the chosen
+// option. Prefer this when dispatch logic depends on identity rather than
+// the label text — labels are user-facing copy and may change.
+func ChooseIndex(title string, options []string) (int, error) {
 	if !IsInteractive() {
-		return "", fmt.Errorf("not an interactive terminal")
+		return -1, fmt.Errorf("not an interactive terminal")
 	}
 
 	if len(options) == 0 {
-		return "", fmt.Errorf("no options provided")
+		return -1, fmt.Errorf("no options provided")
 	}
 
 	_, _ = fmt.Fprintf(os.Stderr, "%s\n", title)
@@ -178,13 +189,13 @@ func Choose(title string, options []string) (string, error) {
 
 	input, err := ReadLine(fmt.Sprintf("Choice [1-%d]: ", len(options)))
 	if err != nil {
-		return "", err
+		return -1, err
 	}
 
 	var choice int
 	if _, err := fmt.Sscanf(input, "%d", &choice); err != nil || choice < 1 || choice > len(options) {
-		return "", fmt.Errorf("invalid choice %q: expected a number between 1 and %d", input, len(options))
+		return -1, fmt.Errorf("invalid choice %q: expected a number between 1 and %d", input, len(options))
 	}
 
-	return options[choice-1], nil
+	return choice - 1, nil
 }

@@ -1,0 +1,98 @@
+package detect
+
+import (
+	"path/filepath"
+	"testing"
+)
+
+func TestInferAppService_SingleService(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "docker-compose.yml", `services:
+  app:
+    image: ruby:3
+`)
+	got, ok := InferAppService(filepath.Join(dir, "docker-compose.yml"))
+	if !ok || got != "app" {
+		t.Fatalf("got %q,%v; want app,true", got, ok)
+	}
+}
+
+func TestInferAppService_SkipsInfra(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "docker-compose.yml", `version: "3"
+services:
+  postgres:
+    image: postgres:15
+  redis:
+    image: redis:7
+  web:
+    image: ruby:3
+    depends_on:
+      - postgres
+`)
+	got, ok := InferAppService(filepath.Join(dir, "docker-compose.yml"))
+	if !ok || got != "web" {
+		t.Fatalf("got %q,%v; want web,true", got, ok)
+	}
+}
+
+func TestInferAppService_AllInfraReturnsFalse(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "docker-compose.yml", `services:
+  postgres:
+    image: postgres:15
+  redis:
+    image: redis:7
+`)
+	_, ok := InferAppService(filepath.Join(dir, "docker-compose.yml"))
+	if ok {
+		t.Fatal("expected ok=false when all services are infra")
+	}
+}
+
+func TestInferAppService_MissingFile(t *testing.T) {
+	_, ok := InferAppService(filepath.Join(t.TempDir(), "nope.yml"))
+	if ok {
+		t.Fatal("expected ok=false for missing file")
+	}
+}
+
+func TestInferAppService_IgnoresNestedKeys(t *testing.T) {
+	// Nested keys like `image:`, `ports:` under a service must not be treated
+	// as new services.
+	dir := t.TempDir()
+	writeFile(t, dir, "compose.yml", `services:
+  app:
+    image: ruby
+    ports:
+      - "3000:3000"
+    environment:
+      RAILS_ENV: development
+`)
+	got, ok := InferAppService(filepath.Join(dir, "compose.yml"))
+	if !ok || got != "app" {
+		t.Fatalf("got %q,%v; want app,true", got, ok)
+	}
+}
+
+func TestFindComposeFile(t *testing.T) {
+	dir := t.TempDir()
+	if FindComposeFile(dir) != "" {
+		t.Fatal("expected empty for no compose file")
+	}
+	writeFile(t, dir, "compose.yaml", "services: {}")
+	if got := FindComposeFile(dir); got == "" {
+		t.Fatal("expected non-empty after creating compose.yaml")
+	}
+}
+
+func TestHasDocker(t *testing.T) {
+	dir := t.TempDir()
+	if HasDocker(dir) {
+		t.Fatal("empty dir should not have docker")
+	}
+	writeFile(t, dir, "Dockerfile", "FROM scratch")
+	if !HasDocker(dir) {
+		t.Fatal("Dockerfile should be detected")
+	}
+}

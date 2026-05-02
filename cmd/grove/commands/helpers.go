@@ -165,6 +165,18 @@ func setupCreatedWorktree(ctx *GroveContext, mgr *worktree.Manager, name, branch
 }
 
 // runPostCreateHooks executes per-project and global post-create hooks.
+//
+// Order matters:
+//  1. File setup (copy/symlink external compose artifacts) — must precede
+//     plugin Up() so symlinked dirs exist before container mount.
+//  2. Plugin Go hooks (docker plugin emits env vars and may Up containers
+//     when auto_start is on).
+//  3. Config-driven hooks from hooks.toml (user setup commands, including
+//     docker:compose hooks that need containers running).
+//
+// This ordering lets users declare `bundle install` as a docker:compose hook
+// and have it run after the container is up, without each handler having to
+// self-Up().
 func runPostCreateHooks(w *cli.Writer, ctx *GroveContext, name, branchName, projectName, wtPath string, jsonOutput bool) {
 	hookExecutor, hookErr := hooks.NewExecutor()
 	if hookErr != nil {
@@ -173,6 +185,21 @@ func runPostCreateHooks(w *cli.Writer, ctx *GroveContext, name, branchName, proj
 		}
 		return
 	}
+
+	runFileSetup(ctx.Config, wtPath, ctx.ProjectRoot, w, jsonOutput)
+
+	globalHookCtx := &hooks.Context{
+		Worktree:     name,
+		Config:       ctx.Config,
+		WorktreePath: wtPath,
+		MainPath:     ctx.ProjectRoot,
+	}
+	if err := hooks.Fire(hooks.EventPostCreate, globalHookCtx); err != nil {
+		if !jsonOutput {
+			cli.Warning(w, "Post-create plugin hook failed: %v", err)
+		}
+	}
+
 	if hookExecutor.HasHooksForEvent(hooks.EventPostCreate) {
 		hookCtx := &hooks.ExecutionContext{
 			Event:        hooks.EventPostCreate,
@@ -190,21 +217,6 @@ func runPostCreateHooks(w *cli.Writer, ctx *GroveContext, name, branchName, proj
 			if !jsonOutput {
 				cli.Warning(w, "Hook execution had errors: %v", err)
 			}
-		}
-	}
-
-	runFileSetup(ctx.Config, wtPath, ctx.ProjectRoot, w, jsonOutput)
-
-	// Fire global registry post-create hook (for plugins like docker external)
-	globalHookCtx := &hooks.Context{
-		Worktree:     name,
-		Config:       ctx.Config,
-		WorktreePath: wtPath,
-		MainPath:     ctx.ProjectRoot,
-	}
-	if err := hooks.Fire(hooks.EventPostCreate, globalHookCtx); err != nil {
-		if !jsonOutput {
-			cli.Warning(w, "Post-create plugin hook failed: %v", err)
 		}
 	}
 }

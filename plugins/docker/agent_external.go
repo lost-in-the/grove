@@ -223,6 +223,23 @@ func (s *agentExternalStrategy) Run(worktreePath string, service string, command
 	return cmd.Run()
 }
 
+// Exec runs a command in an already-running agent container.
+func (s *agentExternalStrategy) Exec(worktreePath string, service string, command string) error {
+	ac := s.agentContext(worktreePath)
+
+	env := ac.env
+	if isTestCommand(command) {
+		envNum := worktree.TestEnvNumber(ac.wtName)
+		env = append(env, fmt.Sprintf("TEST_ENV_NUMBER=%d", envNum))
+	}
+
+	cmd := agentComposeCommand(ac.composePath, ac.templatePath, ac.projectName, env, "exec", service, "bash", "-cil", command)
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	return cmd.Run()
+}
+
 // Logs tails logs for agent-specific containers.
 func (s *agentExternalStrategy) Logs(worktreePath string, service string, follow bool) error {
 	ac := s.agentContext(worktreePath)

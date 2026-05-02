@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/detect"
 	"github.com/lost-in-the/grove/internal/exitcode"
@@ -20,6 +21,9 @@ var (
 	initWithScratch bool
 	initFull        bool
 	initNoHooks     bool
+	initAuto        bool
+	initWalkthrough bool
+	initYes         bool
 )
 
 func initArgs(_ *cobra.Command, args []string) error {
@@ -42,19 +46,29 @@ This command creates a .grove directory with configuration and state files.
 It must be run from the root of a git repository (not from a worktree).
 
 Auto-detects project type (Rails, Node, Go, Python, Docker) and generates
-a .grove/hooks.toml with sensible defaults for file copying, symlinks,
-and setup commands.
+a .grove/hooks.toml with sensible defaults. When Docker is also detected,
+install commands (bundle/npm/pip) are routed as compose hooks rather than
+host commands so they run inside the container.
+
+By default in an interactive terminal, you'll be asked whether to use auto
+generation (with a preview confirm) or step through a walkthrough. Pass
+--auto/--walkthrough/--yes to skip the prompt for scripted use.
 
 Flags:
   --with-testing  Also create a 'testing' worktree
   --with-scratch  Also create a 'scratch' worktree
   --full          Create testing, scratch, and hotfix worktrees
   --no-hooks      Skip hooks.toml generation
+  --auto          Generate hooks.toml from detection (default for non-TTY)
+  --walkthrough   Step through detected items interactively
+  --yes           Skip the preview/confirm prompt (CI mode)
 
 Example:
   cd my-project
-  grove init
-  grove init --full
+  grove init                  # interactive: pick auto or walkthrough
+  grove init --auto           # auto, with confirm preview
+  grove init --auto --yes     # CI / scripted
+  grove init --walkthrough    # step-by-step
   grove init --no-hooks`,
 	Args: initArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -206,11 +220,33 @@ func generateAndWriteHooks(groveDir, cwd string) {
 		filterProfileForExternalDocker(profile, cfg.Plugins.Docker.External)
 	}
 
-	if profile.Type == "unknown" {
+	if profile.Type == "unknown" && !profile.HasDocker {
 		return
 	}
 
+	decision := resolveInitMode()
+	switch decision.Mode {
+	case initModeSkip:
+		fmt.Println("\nSkipped hooks.toml generation (per --skip / user choice).")
+		return
+	case initModeWalkthrough:
+		profile = walkthroughProfile(profile)
+	}
+
 	hooksContent := generateHooksToml(profile)
+
+	if decision.Mode == initModeAuto && !decision.SkipConfirm && cli.IsInteractive() {
+		// Show preview, confirm.
+		fmt.Println("\nProposed .grove/hooks.toml:")
+		fmt.Println(strings.TrimRight(indentLines(hooksContent, "  "), "\n"))
+		fmt.Println()
+		ok, err := cli.Confirm("Write this to .grove/hooks.toml?", true)
+		if err != nil || !ok {
+			fmt.Println("Skipped hooks.toml generation.")
+			return
+		}
+	}
+
 	if err := os.WriteFile(hooksPath, []byte(hooksContent), 0644); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to create hooks.toml: %v\n", err)
 		return
@@ -219,10 +255,197 @@ func generateAndWriteHooks(groveDir, cwd string) {
 	printHooksSummary(profile)
 }
 
+// init UX modes
+const (
+	initModeAuto        = "auto"
+	initModeWalkthrough = "walkthrough"
+	initModeSkip        = "skip"
+)
+
+// initModeDecision captures the resolved mode plus the confirm-skip decision.
+// Returned (vs mutating package globals) so runInit is reentrant.
+type initModeDecision struct {
+	Mode        string // initModeAuto / initModeWalkthrough / initModeSkip
+	SkipConfirm bool   // true = don't show preview/confirm prompt (CI mode)
+}
+
+// resolveInitMode picks how init should generate hooks based on flags + TTY.
+// Precedence: explicit flag > interactive prompt > non-TTY default (auto+yes).
+// Reads package-level flag globals (set by cobra) but does NOT write them.
+func resolveInitMode() initModeDecision {
+	switch {
+	case initWalkthrough:
+		return initModeDecision{Mode: initModeWalkthrough, SkipConfirm: initYes}
+	case initAuto:
+		return initModeDecision{Mode: initModeAuto, SkipConfirm: initYes}
+	case initYes:
+		// --yes alone implies --auto without confirm.
+		return initModeDecision{Mode: initModeAuto, SkipConfirm: true}
+	}
+	if !cli.IsInteractive() {
+		// Non-TTY (CI, pipes): preserve historical zero-prompt behavior.
+		return initModeDecision{Mode: initModeAuto, SkipConfirm: true}
+	}
+	// Interactive without flags: ask. Index-based dispatch — labels are
+	// user-facing copy and may evolve; we rely on stable positions.
+	const (
+		idxAuto = iota
+		idxWalkthrough
+		idxSkip
+	)
+	idx, err := cli.ChooseIndex(
+		"How would you like to configure hooks.toml?",
+		[]string{
+			"auto (generate from detection, with preview)",
+			"walkthrough (review each item interactively)",
+			"skip (don't generate hooks.toml)",
+		},
+	)
+	if err != nil {
+		// Canceled/error → safest path is skip.
+		return initModeDecision{Mode: initModeSkip}
+	}
+	switch idx {
+	case idxAuto:
+		return initModeDecision{Mode: initModeAuto}
+	case idxWalkthrough:
+		return initModeDecision{Mode: initModeWalkthrough}
+	default:
+		return initModeDecision{Mode: initModeSkip}
+	}
+}
+
+// commandRouting is the resolved choice from a routing prompt.
+type commandRouting int
+
+const (
+	routeHost commandRouting = iota
+	routeContainer
+	routeSkip
+)
+
+// walkthroughProfile prompts the user about each detected item so they can
+// keep, route to a different runner, or drop it. Returns a new profile —
+// does not mutate the input.
+func walkthroughProfile(p *detect.ProjectProfile) *detect.ProjectProfile {
+	out := *p
+
+	// Copy/symlink prompts: just keep/skip. filterByPrompt allocates a fresh
+	// slice so the input profile's backing array isn't shared.
+	out.Copy = filterByPrompt(p.Copy, "Copy file from main worktree?")
+	out.Symlinks = filterByPrompt(p.Symlinks, "Symlink dir from main worktree?")
+
+	// Host commands: route host/container/skip.
+	if len(p.Commands) > 0 {
+		keptHost := make([]string, 0, len(p.Commands))
+		var routedToContainer []detect.ContainerCommand
+		for _, cmd := range p.Commands {
+			switch promptCommandRouting(cmd, p.HasDocker, p.DockerService) {
+			case routeHost:
+				keptHost = append(keptHost, cmd)
+			case routeContainer:
+				svc := p.DockerService
+				if svc == "" {
+					svc = "app"
+				}
+				routedToContainer = append(routedToContainer, detect.ContainerCommand{Service: svc, Command: cmd})
+			case routeSkip:
+				// drop
+			}
+		}
+		out.Commands = keptHost
+		// out.ContainerCommands may share backing array with p; allocate fresh.
+		merged := make([]detect.ContainerCommand, 0, len(out.ContainerCommands)+len(routedToContainer))
+		merged = append(merged, out.ContainerCommands...)
+		merged = append(merged, routedToContainer...)
+		out.ContainerCommands = merged
+	}
+
+	// Container commands: keep/route-to-host/skip.
+	if len(p.ContainerCommands) > 0 {
+		keptContainer := make([]detect.ContainerCommand, 0, len(p.ContainerCommands))
+		var demoted []string
+		for _, cc := range p.ContainerCommands {
+			switch promptCommandRouting(cc.Command, true, cc.Service) {
+			case routeHost:
+				demoted = append(demoted, cc.Command)
+			case routeContainer:
+				keptContainer = append(keptContainer, cc)
+			case routeSkip:
+				// drop
+			}
+		}
+		out.ContainerCommands = keptContainer
+		merged := make([]string, 0, len(out.Commands)+len(demoted))
+		merged = append(merged, out.Commands...)
+		merged = append(merged, demoted...)
+		out.Commands = merged
+	}
+
+	return &out
+}
+
+func filterByPrompt(items []string, q string) []string {
+	if len(items) == 0 {
+		return items
+	}
+	kept := make([]string, 0, len(items))
+	for _, item := range items {
+		ok, err := cli.Confirm(fmt.Sprintf("%s %q", q, item), true)
+		if err == nil && ok {
+			kept = append(kept, item)
+		}
+	}
+	return kept
+}
+
+func promptCommandRouting(cmd string, hasDocker bool, service string) commandRouting {
+	// Build options + parallel routing slice so dispatch is index-keyed,
+	// not label-text-keyed (label copy can change without breaking dispatch).
+	options := []string{"host (run on host machine)"}
+	routings := []commandRouting{routeHost}
+	if hasDocker {
+		opt := "container (run via docker compose)"
+		if service != "" {
+			opt = fmt.Sprintf("container (run via docker compose, service: %s)", service)
+		}
+		options = append(options, opt)
+		routings = append(routings, routeContainer)
+	}
+	options = append(options, "skip (don't run this command)")
+	routings = append(routings, routeSkip)
+
+	idx, err := cli.ChooseIndex(fmt.Sprintf("How to run %q?", cmd), options)
+	if err != nil || idx < 0 || idx >= len(routings) {
+		return routeSkip
+	}
+	return routings[idx]
+}
+
+func indentLines(s, prefix string) string {
+	if s == "" {
+		return s
+	}
+	var b strings.Builder
+	for _, line := range strings.Split(s, "\n") {
+		if line == "" {
+			b.WriteString("\n")
+			continue
+		}
+		b.WriteString(prefix)
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
 func printHooksSummary(profile *detect.ProjectProfile) {
 	typeName := profile.Type
 	if profile.Type == "mixed" {
 		typeName = "mixed (" + strings.Join(profile.Types, ", ") + ")"
+	}
+	if profile.HasDocker && !strings.Contains(typeName, "docker") {
+		typeName += " + docker"
 	}
 	fmt.Printf("\nDetected: %s project\n", typeName)
 	fmt.Printf("  Generated: .grove/hooks.toml\n")
@@ -231,6 +454,9 @@ func printHooksSummary(profile *detect.ProjectProfile) {
 	}
 	for _, s := range profile.Symlinks {
 		fmt.Printf("    • symlink %s\n", s)
+	}
+	for _, cc := range profile.ContainerCommands {
+		fmt.Printf("    • compose run (%s): %s\n", cc.Service, cc.Command)
 	}
 	for _, c := range profile.Commands {
 		fmt.Printf("    • run: %s\n", c)
@@ -306,6 +532,17 @@ func filterProfileForExternalDocker(profile *detect.ProjectProfile, ext *config.
 		}
 	}
 	profile.Commands = filteredCmds
+
+	// Same for compose-routed commands.
+	if len(profile.ContainerCommands) > 0 {
+		filtered := profile.ContainerCommands[:0]
+		for _, cc := range profile.ContainerCommands {
+			if !shouldSkipCommand(symlinkSet, cc.Command) {
+				filtered = append(filtered, cc)
+			}
+		}
+		profile.ContainerCommands = filtered
+	}
 }
 
 // shouldSkipCommand returns true if a command is redundant because the
@@ -324,8 +561,13 @@ func shouldSkipCommand(symlinkSet map[string]bool, cmd string) bool {
 func generateHooksToml(profile *detect.ProjectProfile) string {
 	var b strings.Builder
 
+	header := "# Auto-generated for detected project type: " + profile.Type
+	if profile.HasDocker {
+		header += " (Docker detected)"
+	}
+
 	b.WriteString("# Grove hooks configuration\n")
-	b.WriteString("# Auto-generated for detected project type: " + profile.Type + "\n")
+	b.WriteString(header + "\n")
 	b.WriteString("#\n")
 	b.WriteString("# Edit: grove config --hooks -e\n")
 	b.WriteString("# Docs: https://github.com/lost-in-the/grove#hooks\n\n")
@@ -346,6 +588,29 @@ func generateHooksToml(profile *detect.ProjectProfile) string {
 		b.WriteString("\n")
 	}
 
+	if len(profile.ContainerCommands) > 0 && profile.DockerServiceInferred {
+		b.WriteString("# NOTE: service name was inferred. If your compose file uses a different\n")
+		b.WriteString("# name for the application service, edit the `service = ...` lines below.\n\n")
+	}
+	for _, cc := range profile.ContainerCommands {
+		b.WriteString("[[hooks.post_create]]\n")
+		b.WriteString("type = \"docker:compose\"\n")
+		fmt.Fprintf(&b, "service = %q\n", cc.Service)
+		fmt.Fprintf(&b, "command = %q\n", cc.Command)
+		b.WriteString("mode = \"run\"\n")
+		b.WriteString("timeout = 900\n")
+		b.WriteString("on_failure = \"warn\"\n\n")
+	}
+
+	if profile.DockerComposeMissing && len(profile.Commands) > 0 {
+		b.WriteString("# NOTE: Docker detected but no compose file found (or no app service\n")
+		b.WriteString("# could be inferred). The commands below are kept as host commands.\n")
+		b.WriteString("# If your toolchain lives in a container, replace each with a\n")
+		b.WriteString("# `type = \"docker:compose\"` block (with service = \"...\") or a\n")
+		b.WriteString("# `type = \"docker:exec\"` block (with container = \"...\").\n")
+		b.WriteString("# See: docs/CONFIGURATION_REFERENCE.md\n\n")
+	}
+
 	for _, c := range profile.Commands {
 		b.WriteString("[[hooks.post_create]]\n")
 		b.WriteString("type = \"command\"\n")
@@ -362,5 +627,11 @@ func init() {
 	initCmd.Flags().BoolVar(&initWithScratch, "with-scratch", false, "Also create a scratch worktree")
 	initCmd.Flags().BoolVar(&initFull, "full", false, "Create testing, scratch, and hotfix worktrees")
 	initCmd.Flags().BoolVar(&initNoHooks, "no-hooks", false, "Skip hooks.toml generation")
+	initCmd.Flags().BoolVar(&initAuto, "auto", false, "Auto-generate hooks.toml from detection (default for non-TTY)")
+	initCmd.Flags().BoolVar(&initWalkthrough, "walkthrough", false, "Step through detected items interactively")
+	initCmd.Flags().BoolVar(&initYes, "yes", false, "Skip the preview/confirm prompt (CI mode)")
+	initCmd.MarkFlagsMutuallyExclusive("auto", "walkthrough")
+	initCmd.MarkFlagsMutuallyExclusive("no-hooks", "auto")
+	initCmd.MarkFlagsMutuallyExclusive("no-hooks", "walkthrough")
 	rootCmd.AddCommand(initCmd)
 }

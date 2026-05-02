@@ -9,6 +9,154 @@ import (
 	"testing"
 )
 
+func TestCheckHooksDockerRouting_FlagsHostBundleInstall(t *testing.T) {
+	root := t.TempDir()
+	groveDir := filepath.Join(root, ".grove")
+	if err := os.MkdirAll(groveDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Make it a Docker project
+	if err := os.WriteFile(filepath.Join(root, "Dockerfile"), []byte("FROM ruby"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	hooksToml := `[[hooks.post_create]]
+type = "command"
+command = "bundle install --quiet"
+`
+	if err := os.WriteFile(filepath.Join(groveDir, "hooks.toml"), []byte(hooksToml), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := checkHooksDockerRouting(root, groveDir)
+	if err == nil {
+		t.Fatal("expected error for host bundle install in docker project")
+	}
+	if !strings.Contains(err.Error(), "bundle install") {
+		t.Errorf("expected error to mention bundle install, got %v", err)
+	}
+}
+
+func TestCheckHooksDockerRouting_HappyPath(t *testing.T) {
+	root := t.TempDir()
+	groveDir := filepath.Join(root, ".grove")
+	if err := os.MkdirAll(groveDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "Dockerfile"), []byte("FROM ruby"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	hooksToml := `[[hooks.post_create]]
+type = "docker:compose"
+service = "app"
+command = "bundle install --quiet"
+`
+	if err := os.WriteFile(filepath.Join(groveDir, "hooks.toml"), []byte(hooksToml), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := checkHooksDockerRouting(root, groveDir); err != nil {
+		t.Errorf("expected pass for compose-typed hook, got %v", err)
+	}
+}
+
+func TestCheckHooksDockerRouting_NoDockerNoOp(t *testing.T) {
+	root := t.TempDir()
+	groveDir := filepath.Join(root, ".grove")
+	_ = os.MkdirAll(groveDir, 0755)
+
+	got, err := checkHooksDockerRouting(root, groveDir)
+	if err != nil {
+		t.Fatalf("unexpected error in no-docker dir: %v", err)
+	}
+	if !strings.Contains(got, "n/a") {
+		t.Errorf("expected n/a hint, got %q", got)
+	}
+}
+
+func TestCheckStrayBackup_FlagsExistingDir(t *testing.T) {
+	groveDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(groveDir, ".grove-backup"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	_, err := checkStrayBackup(groveDir)
+	if err == nil {
+		t.Fatal("expected error when .grove-backup exists")
+	}
+	if !strings.Contains(err.Error(), "not grove-managed") {
+		t.Errorf("expected explanation, got %v", err)
+	}
+}
+
+func TestCheckStrayBackup_HappyPath(t *testing.T) {
+	groveDir := t.TempDir()
+	if _, err := checkStrayBackup(groveDir); err != nil {
+		t.Errorf("expected no error on clean dir, got %v", err)
+	}
+}
+
+func TestIsLikelyHostInstallCommand(t *testing.T) {
+	cases := []struct {
+		cmd  string
+		want bool
+	}{
+		{"bundle install", true},
+		{"bundle install --quiet", true},
+		{"npm install && npm test", true},
+		{"npm test && npm install", true},
+		{"yarn install --frozen-lockfile", true},
+		{"pip install -r requirements.txt", true},
+		{"echo \"to set up: bundle install\"", false},
+		{"echo bundle install required", false}, // false positive risk; we want to NOT match
+		{"bundle exec rspec", false},
+		{"bundlerinstall", false}, // pattern guard against substring matches
+		{"", false},
+	}
+	for _, c := range cases {
+		got := isLikelyHostInstallCommand(c.cmd)
+		if got != c.want {
+			t.Errorf("isLikelyHostInstallCommand(%q) = %v, want %v", c.cmd, got, c.want)
+		}
+	}
+}
+
+func TestRewriteHostInstallsToCompose(t *testing.T) {
+	src := `# Grove hooks
+[[hooks.post_create]]
+type = "copy"
+from = ".env"
+to = ".env"
+
+[[hooks.post_create]]
+type = "command"
+command = "bundle install --quiet"
+timeout = 300
+on_failure = "warn"
+
+[[hooks.post_create]]
+type = "command"
+command = "echo unrelated"
+timeout = 60
+`
+	got, n := rewriteHostInstallsToCompose(src, "web")
+	if n != 1 {
+		t.Errorf("expected 1 rewrite, got %d", n)
+	}
+	if !strings.Contains(got, `type = "docker:compose"`) {
+		t.Errorf("expected docker:compose type in output, got:\n%s", got)
+	}
+	if !strings.Contains(got, `service = "web"`) {
+		t.Errorf("expected service=web in output")
+	}
+	// Untouched blocks preserved.
+	if !strings.Contains(got, `command = "echo unrelated"`) {
+		t.Errorf("non-install command should be untouched")
+	}
+	// User comment preserved.
+	if !strings.Contains(got, "# Grove hooks") {
+		t.Errorf("user comment should be preserved")
+	}
+}
+
 func TestCheckEnvFileConfig_NonDefault(t *testing.T) {
 	direnvFound := func(name string) (string, error) {
 		if name == "direnv" {
