@@ -1854,59 +1854,71 @@ Docker:
 
 ### grove init
 
-**Purpose:** Generate shell integration code.
+**Purpose:** Initialize the current git repository as a grove project. Creates a `.grove/` directory with `config.toml`, `state.json`, and (unless `--no-hooks`) `hooks.toml` generated from project-type detection.
 
 **Usage:**
 ```
-grove init <shell>
+grove init [flags]
 
-Arguments:
-  shell    Shell to generate for: zsh, bash
+Flags:
+      --with-testing   Also create a 'testing' worktree
+      --with-scratch   Also create a 'scratch' worktree
+      --full           Create testing, scratch, and hotfix worktrees
+      --no-hooks       Skip hooks.toml generation
+      --auto           Auto-generate hooks.toml from detection (default for non-TTY)
+      --walkthrough    Step through detected items interactively
+      --yes            Skip the preview/confirm prompt (CI mode)
 ```
 
-**Output (zsh):**
-```bash
-# Grove shell integration
-# Add to ~/.zshrc: eval "$(grove install zsh)"
+**Behavior:**
 
-export GROVE_SHELL=1
+1. Verify cwd is the root of a git repo (not a worktree). Refuse otherwise.
+2. Create `.grove/` and write `config.toml` with the detected project name (priority: existing config → git remote origin → directory name).
+3. Initialize state for the main worktree, stamping `created_at` and `last_accessed_at`.
+4. Detect project type (Rails, Node, Go, Python, Docker — see `internal/detect/`).
+5. Pick an init mode based on flags and TTY:
+   - **`--auto`**: generate `hooks.toml` from detection. In a TTY, show a preview and ask for confirmation; `--yes` skips the prompt for CI/scripted use.
+   - **`--walkthrough`**: step through detected hooks interactively, accepting or rejecting each.
+   - **No flag, TTY**: prompt the user to pick `auto` or `walkthrough`.
+   - **No flag, non-TTY**: defaults to `auto` (silent — no preview).
+6. **Docker-aware routing:** when a `docker-compose.yml` is present alongside a Rails/Node/Python marker, install commands (`bundle install`, `npm install`, `pip install`) are auto-generated as `docker:compose` hooks instead of host commands. Service name inferred from the compose file (single service used as-is, or first non-infra service when multiple). Dockerfile-only projects (no compose file) keep host commands and emit a manual-setup note.
+7. Optionally create starter worktrees with `--with-testing`, `--with-scratch`, or `--full`.
 
-grove() {
-    local output
-    output=$(__grove_bin "$@")
-    local exit_code=$?
-    
-    # Handle cd directives
-    if [[ "$output" == cd:* ]]; then
-        cd "${output#cd:}"
-    elif [[ -n "$output" ]]; then
-        echo "$output"
-    fi
-    
-    return $exit_code
-}
+**Mode selection precedence:**
 
-# Alias
-alias w='grove'
+| Condition | Mode |
+|---|---|
+| `--auto` (with or without `--yes`) | auto |
+| `--walkthrough` | walkthrough |
+| Interactive TTY, no flag | prompt user |
+| Non-TTY, no flag | auto (silent) |
 
-# Completions
-source <(__grove_bin completion zsh)
+`--auto` and `--walkthrough` are mutually exclusive.
 
-__grove_bin() {
-    command grove "$@"
-}
+**Output (auto mode, TTY):**
+```
+✓ Created .grove/config.toml
+✓ Detected project type: Node + Docker
+
+Generated hooks.toml preview:
+  [[hooks.post_create]]
+  type = "copy"
+  from = ".env.example"
+  to = ".env"
+
+  [[hooks.post_create]]
+  type = "docker:compose"
+  service = "app"
+  command = "npm install"
+
+Apply this configuration? [Y/n]: y
+✓ Wrote .grove/hooks.toml
+✓ Initialized grove project 'my-app'
 ```
 
-**Usage Instructions:**
-```
-# Add to your shell config:
-
-# For zsh (~/.zshrc):
-eval "$(grove install zsh)"
-
-# For bash (~/.bashrc):
-eval "$(grove install bash)"
-```
+**Notes:**
+- Re-running `grove init` in an already-initialized project refuses with a pointer to `grove config --hooks -e` for editing.
+- `grove init <shell>` (e.g. `grove init zsh`) is rejected with a hint to use `grove install <shell>` instead — that's the shell-integration command, distinct from project init.
 
 ---
 
