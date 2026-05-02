@@ -104,7 +104,7 @@ func (s *agentExternalStrategy) Up(worktreePath string, detach bool) error {
 	if s.ext.EnvVar != "" {
 		cli.EnvDirective(s.ext.EnvVar, worktreePath)
 	}
-	templatePath := s.resolveTemplatePath()
+	templatePaths := s.resolveTemplatePaths()
 	composePath := s.composePath()
 
 	// Check that the required external Docker network exists (if configured)
@@ -134,7 +134,7 @@ func (s *agentExternalStrategy) Up(worktreePath string, detach bool) error {
 	}
 	args = append(args, s.agent.Services...)
 
-	cmd := agentComposeCommand(composePath, templatePath, projectName, env, args...)
+	cmd := agentComposeCommand(composePath, templatePaths, projectName, env, args...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -162,12 +162,12 @@ func (s *agentExternalStrategy) Down(worktreePath string) error {
 	}
 
 	projectName := s.composeProjectName(slot)
-	templatePath := s.resolveTemplatePath()
+	templatePaths := s.resolveTemplatePaths()
 	composePath := s.composePath()
 
 	env := s.agentEnv(worktreePath, slot)
 
-	cmd := agentComposeCommand(composePath, templatePath, projectName, env, "down")
+	cmd := agentComposeCommand(composePath, templatePaths, projectName, env, "down")
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -184,11 +184,11 @@ func (s *agentExternalStrategy) Down(worktreePath string) error {
 
 // agentCtx holds the resolved context needed to run agent compose commands.
 type agentCtx struct {
-	composePath  string
-	templatePath string
-	projectName  string
-	env          []string
-	wtName       string
+	composePath   string
+	templatePaths []string
+	projectName   string
+	env           []string
+	wtName        string
 }
 
 // agentContext resolves compose paths, project name, and base env for a worktree.
@@ -197,11 +197,11 @@ func (s *agentExternalStrategy) agentContext(worktreePath string) agentCtx {
 	wtName := filepath.Base(worktreePath)
 	slot, _ := s.slots.FindSlot(wtName)
 	return agentCtx{
-		composePath:  s.composePath(),
-		templatePath: s.resolveTemplatePath(),
-		projectName:  s.composeProjectName(slot),
-		env:          s.agentEnv(worktreePath, slot),
-		wtName:       wtName,
+		composePath:   s.composePath(),
+		templatePaths: s.resolveTemplatePaths(),
+		projectName:   s.composeProjectName(slot),
+		env:           s.agentEnv(worktreePath, slot),
+		wtName:        wtName,
 	}
 }
 
@@ -216,7 +216,7 @@ func (s *agentExternalStrategy) Run(worktreePath string, service string, command
 		env = append(env, fmt.Sprintf("TEST_ENV_NUMBER=%d", envNum))
 	}
 
-	cmd := agentComposeCommand(ac.composePath, ac.templatePath, ac.projectName, env, "run", "--rm", service, "bash", "-cil", command)
+	cmd := agentComposeCommand(ac.composePath, ac.templatePaths, ac.projectName, env, "run", "--rm", service, "bash", "-cil", command)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
@@ -233,7 +233,7 @@ func (s *agentExternalStrategy) Exec(worktreePath string, service string, comman
 		env = append(env, fmt.Sprintf("TEST_ENV_NUMBER=%d", envNum))
 	}
 
-	cmd := agentComposeCommand(ac.composePath, ac.templatePath, ac.projectName, env, "exec", service, "bash", "-cil", command)
+	cmd := agentComposeCommand(ac.composePath, ac.templatePaths, ac.projectName, env, "exec", service, "bash", "-cil", command)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
@@ -254,7 +254,7 @@ func (s *agentExternalStrategy) Logs(worktreePath string, service string, follow
 		args = append(args, s.agent.Services...)
 	}
 
-	cmd := agentComposeCommand(ac.composePath, ac.templatePath, ac.projectName, ac.env, args...)
+	cmd := agentComposeCommand(ac.composePath, ac.templatePaths, ac.projectName, ac.env, args...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
@@ -272,7 +272,7 @@ func (s *agentExternalStrategy) Restart(worktreePath string, service string) err
 		args = append(args, s.agent.Services...)
 	}
 
-	cmd := agentComposeCommand(ac.composePath, ac.templatePath, ac.projectName, ac.env, args...)
+	cmd := agentComposeCommand(ac.composePath, ac.templatePaths, ac.projectName, ac.env, args...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -300,13 +300,24 @@ func (s *agentExternalStrategy) composePath() string {
 	return resolveComposePath(s.ext.Path)
 }
 
-// resolveTemplatePath returns the absolute path to the agent compose template.
-func (s *agentExternalStrategy) resolveTemplatePath() string {
-	tmpl := s.agent.TemplatePath
-	if filepath.IsAbs(tmpl) {
-		return tmpl
+// resolveTemplatePaths returns the absolute paths to the agent compose template
+// and its overlays in declared order. The base template is always element 0,
+// followed by each overlay. Relative paths are joined against the compose
+// directory; absolute paths are returned as-is.
+func (s *agentExternalStrategy) resolveTemplatePaths() []string {
+	composeDir := s.composePath()
+	resolve := func(p string) string {
+		if filepath.IsAbs(p) {
+			return p
+		}
+		return filepath.Join(composeDir, p)
 	}
-	return filepath.Join(s.composePath(), tmpl)
+	paths := make([]string, 0, 1+len(s.agent.TemplateOverlays))
+	paths = append(paths, resolve(s.agent.TemplatePath))
+	for _, overlay := range s.agent.TemplateOverlays {
+		paths = append(paths, resolve(overlay))
+	}
+	return paths
 }
 
 // agentEnv builds the environment variables for agent compose commands.
@@ -334,10 +345,16 @@ func resolveComposePath(path string) string {
 	return path
 }
 
-// agentComposeCommand creates a docker compose command with -f and -p flags for agent projects.
-func agentComposeCommand(composePath string, templateFile string, projectName string, env []string, args ...string) *exec.Cmd {
-	cmdArgs := make([]string, 0, 5+len(args))
-	cmdArgs = append(cmdArgs, "compose", "-f", templateFile, "-p", projectName)
+// agentComposeCommand creates a docker compose command with one -f flag per
+// template file (in order) and a -p project flag. The base template plus any
+// overlays merge via docker compose's standard `-f a.yml -f b.yml` semantics.
+func agentComposeCommand(composePath string, templateFiles []string, projectName string, env []string, args ...string) *exec.Cmd {
+	cmdArgs := make([]string, 0, 3+2*len(templateFiles)+len(args))
+	cmdArgs = append(cmdArgs, "compose")
+	for _, tmpl := range templateFiles {
+		cmdArgs = append(cmdArgs, "-f", tmpl)
+	}
+	cmdArgs = append(cmdArgs, "-p", projectName)
 	cmdArgs = append(cmdArgs, args...)
 
 	cmd := exec.Command("docker", cmdArgs...)

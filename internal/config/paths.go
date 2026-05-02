@@ -26,15 +26,27 @@ func resolveProjectPaths(cfg *Config, projectRoot string) error {
 	}
 	ext.Path = resolved
 
-	// Expand ~/ in template_path; non-absolute, non-tilde values stay as written
-	// (the docker plugin joins them against the compose directory at exec time,
-	// which is the documented contract).
+	// Expand ~/ in template_path and each template_overlays entry; non-absolute,
+	// non-tilde values stay as written (the docker plugin joins them against the
+	// compose directory at exec time, which is the documented contract).
 	if ext.Agent != nil && ext.Agent.TemplatePath != "" {
 		expanded, err := expandTildePath(ext.Agent.TemplatePath)
 		if err != nil {
 			return fmt.Errorf("plugins.docker.external.agent.template_path: %w", err)
 		}
 		ext.Agent.TemplatePath = expanded
+	}
+	if ext.Agent != nil {
+		for i, overlay := range ext.Agent.TemplateOverlays {
+			if overlay == "" {
+				continue
+			}
+			expanded, err := expandTildePath(overlay)
+			if err != nil {
+				return fmt.Errorf("plugins.docker.external.agent.template_overlays[%d]: %w", i, err)
+			}
+			ext.Agent.TemplateOverlays[i] = expanded
+		}
 	}
 	return nil
 }

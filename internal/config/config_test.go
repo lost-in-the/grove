@@ -853,6 +853,7 @@ enabled = true
 max_slots = 3
 services = ["agent"]
 template_path = "/tmp/agent-template"
+template_overlays = ["/tmp/overlay-a.yml", "/tmp/overlay-b.yml"]
 url_pattern = "http://localhost:{port}"
 `
 	configPath := filepath.Join(tmpDir, "config.toml")
@@ -885,8 +886,56 @@ url_pattern = "http://localhost:{port}"
 	if agent.TemplatePath != "/tmp/agent-template" {
 		t.Errorf("Expected template_path '/tmp/agent-template', got %q", agent.TemplatePath)
 	}
+	wantOverlays := []string{"/tmp/overlay-a.yml", "/tmp/overlay-b.yml"}
+	if len(agent.TemplateOverlays) != len(wantOverlays) {
+		t.Fatalf("Expected %d overlays, got %d (%v)", len(wantOverlays), len(agent.TemplateOverlays), agent.TemplateOverlays)
+	}
+	for i, want := range wantOverlays {
+		if agent.TemplateOverlays[i] != want {
+			t.Errorf("template_overlays[%d] = %q, want %q", i, agent.TemplateOverlays[i], want)
+		}
+	}
 	if agent.URLPattern != "http://localhost:{port}" {
 		t.Errorf("Expected url_pattern 'http://localhost:{port}', got %q", agent.URLPattern)
+	}
+}
+
+func TestLoadAgentStackConfig_NoOverlays(t *testing.T) {
+	tmpDir := t.TempDir()
+	composePath := filepath.Join(tmpDir, "shared-infra")
+	if err := os.MkdirAll(composePath, 0755); err != nil {
+		t.Fatalf("Failed to create compose dir: %v", err)
+	}
+
+	configData := `
+[plugins.docker]
+enabled = true
+mode = "external"
+
+[plugins.docker.external]
+path = "` + composePath + `"
+env_var = "APP_DIR"
+services = ["app"]
+
+[plugins.docker.external.agent]
+enabled = true
+max_slots = 3
+services = ["agent"]
+template_path = "/tmp/agent-template"
+`
+	configPath := filepath.Join(tmpDir, "config.toml")
+	if err := os.WriteFile(configPath, []byte(configData), 0644); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
+
+	cfg, err := LoadConfigFromPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfigFromPath() error = %v", err)
+	}
+
+	agent := cfg.Plugins.Docker.External.Agent
+	if len(agent.TemplateOverlays) != 0 {
+		t.Errorf("Expected no overlays without template_overlays key, got %v", agent.TemplateOverlays)
 	}
 }
 
@@ -977,6 +1026,31 @@ func TestValidateAgentConfig(t *testing.T) {
 				}
 			},
 			wantErr: false,
+		},
+		{
+			name: "agent enabled with template_overlays is valid",
+			modify: func(c *Config) {
+				c.Plugins.Docker.External.Agent = &AgentStackConfig{
+					Enabled:          &boolTrue,
+					Services:         []string{"agent"},
+					TemplatePath:     "/tmp/tpl",
+					TemplateOverlays: []string{"/tmp/overlay.yml"},
+				}
+			},
+			wantErr: false,
+		},
+		{
+			name: "agent enabled with empty-string overlay is invalid",
+			modify: func(c *Config) {
+				c.Plugins.Docker.External.Agent = &AgentStackConfig{
+					Enabled:          &boolTrue,
+					Services:         []string{"agent"},
+					TemplatePath:     "/tmp/tpl",
+					TemplateOverlays: []string{"/tmp/overlay.yml", ""},
+				}
+			},
+			wantErr: true,
+			errMsg:  "agent.template_overlays",
 		},
 	}
 
