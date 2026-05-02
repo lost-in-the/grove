@@ -54,6 +54,65 @@ type Context struct {
 }
 ```
 
+## Adding a Custom Action Type to hooks.toml
+
+Beyond the built-in lifecycle hooks above, plugins can extend the
+**config-driven** hooks system (`hooks.toml`) with custom action types. The
+docker plugin uses this to add `type = "docker:compose"` and `type =
+"docker:exec"`.
+
+Register a handler in your plugin's `Init()`:
+
+```go
+import "github.com/lost-in-the/grove/internal/hooks"
+
+func (p *MyPlugin) Init(cfg *config.Config) error {
+    // ... your existing init ...
+    hooks.RegisterActionHandler("myplugin:run", p.runHandler)
+    return nil
+}
+
+func (p *MyPlugin) runHandler(
+    action *hooks.HookAction,
+    ctx *hooks.ExecutionContext,
+    vars *hooks.Variables,
+) error {
+    if action.Command == "" {
+        return fmt.Errorf("myplugin:run hook: 'command' is required")
+    }
+    command := vars.Interpolate(action.Command)
+    // ... do work ...
+    return nil
+}
+```
+
+Users can then write:
+
+```toml
+[[hooks.post_create]]
+type    = "myplugin:run"
+command = "echo hello"
+```
+
+**Naming convention.** Use `pluginname:action` (colon-separated namespace).
+This keeps user-facing types attributable and avoids collisions when multiple
+plugins implement similar runners (`docker:exec` vs a hypothetical
+`podman:exec`). The colon is purely a convention enforced by docs, not a
+parser hook.
+
+**Idempotent registration.** `RegisterActionHandler` is last-write-wins: re-
+registering the same type swaps in the new handler. Plugin `Init()` can run
+repeatedly across tests without bookkeeping, and the trade-off is that two
+plugins claiming the same name will silently overwrite each other (use
+namespaced names to avoid this).
+
+**Disabled-plugin diagnostics.** If a user references your action type but
+the plugin isn't loaded, the executor returns a generic "unknown hook action
+type" error. The docker plugin extends `disabledTypeHint` in
+`internal/hooks/executor.go` to give a more actionable hint for
+`docker:compose` and `docker:exec` — consider adding to that switch if your
+plugin is similarly load-conditional.
+
 ## Creating a Plugin
 
 ### 1. Create Plugin Package

@@ -103,26 +103,39 @@ type EventHooks struct {
 	OverridePostRemove bool `toml:"override_post_remove"`
 }
 
-// HookAction represents a single hook action configuration
+// HookAction represents a single hook action configuration.
+//
+// All fields are flat / tagged-union: a `copy` action only uses From/To,
+// a `command` action only uses Command/WorkingDir/Timeout, etc. Inert
+// fields are tagged `omitempty` so encoder round-trips don't pollute
+// user-edited hooks.toml with empty `service = ""` lines.
 type HookAction struct {
-	// Type of action: copy, symlink, command, template
+	// Type of action: copy, symlink, command, template, docker:compose, docker:exec
 	Type string `toml:"type"`
 
 	// For copy, symlink, template actions
-	From string `toml:"from"` // Source path (relative to main worktree or absolute)
-	To   string `toml:"to"`   // Destination path (relative to new worktree or absolute)
+	From string `toml:"from,omitempty"` // Source path (relative to main worktree or absolute)
+	To   string `toml:"to,omitempty"`   // Destination path (relative to new worktree or absolute)
 
-	// For command action
-	Command    string `toml:"command"`     // Shell command to execute
-	WorkingDir string `toml:"working_dir"` // "new" (default), "main", or absolute path
-	Timeout    int    `toml:"timeout"`     // Timeout in seconds (default: 60)
+	// For command, docker:compose, docker:exec actions
+	Command    string `toml:"command,omitempty"`     // Shell command to execute
+	WorkingDir string `toml:"working_dir,omitempty"` // "new" (default), "main", or absolute path (command type)
+	Timeout    int    `toml:"timeout,omitempty"`     // Timeout in seconds (default: 60)
+
+	// For docker:compose action
+	Service string `toml:"service,omitempty"` // Compose service name to run command in
+	Mode    string `toml:"mode,omitempty"`    // "run" (ephemeral, default) or "exec" (existing container)
+
+	// For docker:exec action
+	Container string `toml:"container,omitempty"` // Docker container name to exec into
+	Shell     string `toml:"shell,omitempty"`     // Shell wrapper, default "bash -lc"
 
 	// For template action
-	Vars map[string]string `toml:"vars"` // Additional template variables
+	Vars map[string]string `toml:"vars,omitempty"` // Additional template variables
 
 	// Error handling
-	Required  bool   `toml:"required"`   // If true, failure aborts the operation
-	OnFailure string `toml:"on_failure"` // "warn" (default), "fail", "ignore"
+	Required  bool   `toml:"required,omitempty"`   // If true, failure aborts the operation
+	OnFailure string `toml:"on_failure,omitempty"` // "warn" (default), "fail", "ignore"
 }
 
 // GetHooksConfigPaths returns the paths for hooks configuration files.

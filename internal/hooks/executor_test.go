@@ -156,7 +156,7 @@ func TestExecuteCopy(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		if err := e.executeCopy(action, ctx, vars); err != nil {
+		if err := builtinCopy(action, ctx, vars); err != nil {
 			t.Fatalf("executeCopy() error = %v", err)
 		}
 
@@ -179,7 +179,7 @@ func TestExecuteCopy(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		err := e.executeCopy(action, ctx, vars)
+		err := builtinCopy(action, ctx, vars)
 		if err == nil {
 			t.Error("executeCopy() with missing source = nil, want error")
 		}
@@ -200,7 +200,7 @@ func TestExecuteCopy(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		if err := e.executeCopy(action, ctx, vars); err != nil {
+		if err := builtinCopy(action, ctx, vars); err != nil {
 			t.Fatalf("executeCopy() error = %v", err)
 		}
 
@@ -229,7 +229,7 @@ func TestExecuteSymlink(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		if err := e.executeSymlink(action, ctx, vars); err != nil {
+		if err := builtinSymlink(action, ctx, vars); err != nil {
 			t.Fatalf("executeSymlink() error = %v", err)
 		}
 
@@ -261,7 +261,7 @@ func TestExecuteSymlink(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		if err := e.executeSymlink(action, ctx, vars); err != nil {
+		if err := builtinSymlink(action, ctx, vars); err != nil {
 			t.Fatalf("executeSymlink() error = %v", err)
 		}
 
@@ -284,7 +284,7 @@ func TestExecuteSymlink(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		err := e.executeSymlink(action, ctx, vars)
+		err := builtinSymlink(action, ctx, vars)
 		if err == nil {
 			t.Error("executeSymlink() with missing source = nil, want error")
 		}
@@ -301,7 +301,7 @@ func TestExecuteCommand(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		if err := e.executeCommand(action, ctx, vars); err != nil {
+		if err := builtinCommand(action, ctx, vars); err != nil {
 			t.Fatalf("executeCommand() error = %v", err)
 		}
 	})
@@ -320,7 +320,7 @@ func TestExecuteCommand(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		if err := e.executeCommand(action, ctx, vars); err != nil {
+		if err := builtinCommand(action, ctx, vars); err != nil {
 			t.Errorf("executeCommand() with main working dir = %v, want nil", err)
 		}
 	})
@@ -339,7 +339,7 @@ func TestExecuteCommand(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		if err := e.executeCommand(action, ctx, vars); err != nil {
+		if err := builtinCommand(action, ctx, vars); err != nil {
 			t.Errorf("executeCommand() with new working dir = %v, want nil", err)
 		}
 	})
@@ -353,7 +353,7 @@ func TestExecuteCommand(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		err := e.executeCommand(action, ctx, vars)
+		err := builtinCommand(action, ctx, vars)
 		if err == nil {
 			t.Error("executeCommand() with failing command = nil, want error")
 		}
@@ -376,7 +376,7 @@ func TestExecuteTemplate(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		if err := e.executeTemplate(action, ctx, vars); err != nil {
+		if err := builtinTemplate(action, ctx, vars); err != nil {
 			t.Fatalf("executeTemplate() error = %v", err)
 		}
 
@@ -408,7 +408,7 @@ func TestExecuteTemplate(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		if err := e.executeTemplate(action, ctx, vars); err != nil {
+		if err := builtinTemplate(action, ctx, vars); err != nil {
 			t.Fatalf("executeTemplate() error = %v", err)
 		}
 
@@ -431,7 +431,7 @@ func TestExecuteTemplate(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		err := e.executeTemplate(action, ctx, vars)
+		err := builtinTemplate(action, ctx, vars)
 		if err == nil {
 			t.Error("executeTemplate() with missing source = nil, want error")
 		}
@@ -451,7 +451,7 @@ func TestExecuteTemplate(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		if err := e.executeTemplate(action, ctx, vars); err != nil {
+		if err := builtinTemplate(action, ctx, vars); err != nil {
 			t.Fatalf("executeTemplate() error = %v", err)
 		}
 
