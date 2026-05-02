@@ -142,6 +142,50 @@ func TestResolveProjectPaths_TildeTemplatePath(t *testing.T) {
 	}
 }
 
+func TestResolveProjectPaths_TildeTemplateOverlays(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("UserHomeDir() error = %v", err)
+	}
+
+	cfg := &Config{
+		Plugins: PluginsConfig{
+			Docker: DockerPluginConfig{
+				External: &ExternalComposeConfig{
+					Path: "/abs/orchestrator",
+					Agent: &AgentStackConfig{
+						TemplatePath: "agent-stacks/template.yml",
+						TemplateOverlays: []string{
+							"~/work/overlay-a.yml",
+							"overlay-b.yml",
+							"/abs/overlay-c.yml",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := resolveProjectPaths(cfg, "/abs/orchestrator"); err != nil {
+		t.Fatalf("resolveProjectPaths() error = %v", err)
+	}
+
+	overlays := cfg.Plugins.Docker.External.Agent.TemplateOverlays
+	want := []string{
+		filepath.Join(home, "work", "overlay-a.yml"),
+		"overlay-b.yml",
+		"/abs/overlay-c.yml",
+	}
+	if len(overlays) != len(want) {
+		t.Fatalf("TemplateOverlays length = %d, want %d", len(overlays), len(want))
+	}
+	for i, w := range want {
+		if overlays[i] != w {
+			t.Errorf("TemplateOverlays[%d] = %q, want %q", i, overlays[i], w)
+		}
+	}
+}
+
 func TestResolveProjectPaths_TemplatePathNonTildeUnchanged(t *testing.T) {
 	cfg := &Config{
 		Plugins: PluginsConfig{

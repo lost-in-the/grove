@@ -401,6 +401,25 @@ func checkAgentStacks(w *cli.Writer, cfg *config.Config, ext *config.ExternalCom
 		return tmpl, nil
 	}) && *allPassed
 
+	if len(ext.Agent.TemplateOverlays) > 0 {
+		*allPassed = runCheck(w, "Agent template overlays", func() (string, error) {
+			for i, overlay := range ext.Agent.TemplateOverlays {
+				p := overlay
+				if !filepath.IsAbs(p) {
+					p = filepath.Join(docker.ResolveComposePath(ext.Path), p)
+				}
+				info, err := os.Stat(p)
+				if err != nil {
+					return "", fmt.Errorf("overlay[%d] %s: %w", i, p, err)
+				}
+				if info.IsDir() {
+					return "", fmt.Errorf("overlay[%d] %s is a directory, expected a compose file", i, p)
+				}
+			}
+			return fmt.Sprintf("%d overlay(s) ok", len(ext.Agent.TemplateOverlays)), nil
+		}) && *allPassed
+	}
+
 	checkAgentNetwork(w, ext.Agent.Network, allPassed)
 
 	slots, err := docker.ListActiveSlots(cfg)

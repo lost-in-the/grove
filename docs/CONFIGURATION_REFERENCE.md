@@ -320,6 +320,14 @@ services = ["web", "worker"]       # string array (required when enabled)
 # Required when enabled = true.
 template_path = "~/work/compose-dev/agent-compose.yml"  # string (required when enabled)
 
+# Optional overlay compose files merged on top of template_path in declared
+# order. Each becomes an extra `-f` flag on `docker compose` invocations.
+# Useful for per-project overrides (per-slot volume mounts, env files, service
+# tweaks) without forking the base template. Relative paths resolve against
+# plugins.docker.external.path, same as template_path. ~/ expands to $HOME.
+# Default: [] (no overlays)
+template_overlays = ["overrides/dev.yml"]  # string array (optional)
+
 # URL pattern for accessing agent services.
 # {port} is replaced with the allocated port.
 # Default: "http://localhost:{port}"

@@ -263,21 +263,50 @@ func TestAgentExternalStrategy_ComposeProjectName_DefaultProject(t *testing.T) {
 	}
 }
 
-func TestAgentExternalStrategy_ResolveTemplatePath(t *testing.T) {
+func TestAgentExternalStrategy_ResolveTemplatePaths(t *testing.T) {
 	cfg := newTestAgentConfig(t)
 	s := newAgentExternalStrategy(cfg)
 
 	// Relative path should be joined with compose path
-	got := s.resolveTemplatePath()
-	if !strings.HasSuffix(got, "agent-stacks/template.yml") {
-		t.Errorf("resolveTemplatePath() = %q, want suffix 'agent-stacks/template.yml'", got)
+	got := s.resolveTemplatePaths()
+	if len(got) != 1 {
+		t.Fatalf("resolveTemplatePaths() returned %d paths, want 1", len(got))
+	}
+	if !strings.HasSuffix(got[0], "agent-stacks/template.yml") {
+		t.Errorf("resolveTemplatePaths()[0] = %q, want suffix 'agent-stacks/template.yml'", got[0])
 	}
 
 	// Absolute path should be returned as-is
 	s.agent.TemplatePath = "/abs/path/template.yml"
-	got = s.resolveTemplatePath()
-	if got != "/abs/path/template.yml" {
-		t.Errorf("resolveTemplatePath() = %q, want '/abs/path/template.yml'", got)
+	got = s.resolveTemplatePaths()
+	if len(got) != 1 || got[0] != "/abs/path/template.yml" {
+		t.Errorf("resolveTemplatePaths() = %v, want ['/abs/path/template.yml']", got)
+	}
+}
+
+func TestAgentExternalStrategy_ResolveTemplatePaths_WithOverlays(t *testing.T) {
+	cfg := newTestAgentConfig(t)
+	s := newAgentExternalStrategy(cfg)
+
+	// Mix of relative and absolute overlays.
+	s.agent.TemplatePath = "agent-stacks/template.yml"
+	s.agent.TemplateOverlays = []string{
+		"agent-stacks/dev.yml",
+		"/abs/overlay.yml",
+	}
+
+	got := s.resolveTemplatePaths()
+	if len(got) != 3 {
+		t.Fatalf("resolveTemplatePaths() returned %d paths, want 3 (base + 2 overlays)", len(got))
+	}
+	if !strings.HasSuffix(got[0], "agent-stacks/template.yml") {
+		t.Errorf("base path = %q, want suffix 'agent-stacks/template.yml'", got[0])
+	}
+	if !strings.HasSuffix(got[1], "agent-stacks/dev.yml") {
+		t.Errorf("overlay[0] = %q, want suffix 'agent-stacks/dev.yml'", got[1])
+	}
+	if got[2] != "/abs/overlay.yml" {
+		t.Errorf("overlay[1] = %q, want '/abs/overlay.yml'", got[2])
 	}
 }
 
@@ -313,7 +342,7 @@ func TestAgentExternalStrategy_AgentEnv(t *testing.T) {
 }
 
 func TestAgentComposeCommand(t *testing.T) {
-	cmd := agentComposeCommand("/tmp/compose", "/tmp/compose/template.yml", "myapp-agent-1", []string{"APP_DIR=/app"}, "up", "-d", "app")
+	cmd := agentComposeCommand("/tmp/compose", []string{"/tmp/compose/template.yml"}, "myapp-agent-1", []string{"APP_DIR=/app"}, "up", "-d", "app")
 
 	if cmd.Dir != "/tmp/compose" {
 		t.Errorf("cmd.Dir = %q, want /tmp/compose", cmd.Dir)
@@ -330,15 +359,42 @@ func TestAgentComposeCommand(t *testing.T) {
 	}
 }
 
+func TestAgentComposeCommand_MultipleTemplates(t *testing.T) {
+	cmd := agentComposeCommand(
+		"/tmp/compose",
+		[]string{"/tmp/compose/base.yml", "/tmp/compose/overlay-a.yml", "/tmp/compose/overlay-b.yml"},
+		"myapp-agent-1",
+		nil,
+		"up", "-d",
+	)
+
+	wantArgs := []string{
+		"docker", "compose",
+		"-f", "/tmp/compose/base.yml",
+		"-f", "/tmp/compose/overlay-a.yml",
+		"-f", "/tmp/compose/overlay-b.yml",
+		"-p", "myapp-agent-1",
+		"up", "-d",
+	}
+	if len(cmd.Args) != len(wantArgs) {
+		t.Fatalf("cmd.Args = %v, want %v", cmd.Args, wantArgs)
+	}
+	for i, want := range wantArgs {
+		if cmd.Args[i] != want {
+			t.Errorf("cmd.Args[%d] = %q, want %q", i, cmd.Args[i], want)
+		}
+	}
+}
+
 func TestAgentComposeCommand_WithEnv(t *testing.T) {
-	cmd := agentComposeCommand("/tmp", "/tmp/template.yml", "test-agent-1", []string{"FOO=bar"}, "up")
+	cmd := agentComposeCommand("/tmp", []string{"/tmp/template.yml"}, "test-agent-1", []string{"FOO=bar"}, "up")
 	if len(cmd.Env) == 0 {
 		t.Error("Expected env vars to be set")
 	}
 }
 
 func TestAgentComposeCommand_WithoutEnv(t *testing.T) {
-	cmd := agentComposeCommand("/tmp", "/tmp/template.yml", "test-agent-1", nil, "up")
+	cmd := agentComposeCommand("/tmp", []string{"/tmp/template.yml"}, "test-agent-1", nil, "up")
 	if len(cmd.Env) != 0 {
 		t.Errorf("Expected no env override, got %d vars", len(cmd.Env))
 	}

@@ -114,12 +114,18 @@ func (e *ExternalComposeConfig) EnvFileName() string {
 
 // AgentStackConfig configures agent stack support for external compose mode.
 type AgentStackConfig struct {
-	Enabled      *bool    `toml:"enabled"`
-	MaxSlots     int      `toml:"max_slots"`
-	Services     []string `toml:"services"`
-	TemplatePath string   `toml:"template_path"`
-	URLPattern   string   `toml:"url_pattern"`
-	Network      string   `toml:"network"` // External Docker network that must exist for agent stacks
+	Enabled  *bool    `toml:"enabled"`
+	MaxSlots int      `toml:"max_slots"`
+	Services []string `toml:"services"`
+	// TemplatePath is the base compose file for an agent stack. Required.
+	TemplatePath string `toml:"template_path"`
+	// TemplateOverlays are additional compose files merged on top of TemplatePath
+	// in declared order. Each becomes an extra `-f` flag on docker compose
+	// invocations — useful for per-project overrides (volume mounts, env files,
+	// per-slot tweaks) without forking the base template.
+	TemplateOverlays []string `toml:"template_overlays"`
+	URLPattern       string   `toml:"url_pattern"`
+	Network          string   `toml:"network"` // External Docker network that must exist for agent stacks
 }
 
 // GetConfigPaths returns the paths to check for config files

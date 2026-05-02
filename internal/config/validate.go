@@ -145,5 +145,10 @@ func validateExternalAgent(ext *ExternalComposeConfig) error {
 	if ext.Agent.TemplatePath == "" {
 		return fmt.Errorf("plugins.docker.external.agent.template_path is required when agent mode is enabled")
 	}
+	for i, overlay := range ext.Agent.TemplateOverlays {
+		if overlay == "" {
+			return fmt.Errorf("plugins.docker.external.agent.template_overlays[%d] must be a non-empty path", i)
+		}
+	}
 	return nil
 }
