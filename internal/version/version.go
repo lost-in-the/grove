@@ -5,7 +5,7 @@ import "runtime"
 // Version information set by build flags or defaults
 var (
 	// Version is the semantic version of the application
-	Version = "0.5.0"
+	Version = "0.7.0-dev"
 	// Commit is the git commit hash
 	Commit = "unknown"
 	// BuildDate is the date the binary was built
