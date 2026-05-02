@@ -157,6 +157,106 @@ timeout = 60
 	}
 }
 
+// TestRewriteHostInstallsToCompose_EdgeCases covers malformed and unusual TOML
+// shapes that the textual rewriter must tolerate without panicking or
+// corrupting the file. The rewriter is deliberately conservative: when in
+// doubt, it leaves the block untouched.
+func TestRewriteHostInstallsToCompose_EdgeCases(t *testing.T) {
+	t.Run("empty input returns empty with zero count", func(t *testing.T) {
+		got, n := rewriteHostInstallsToCompose("", "web")
+		if got != "" || n != 0 {
+			t.Errorf("empty input: got (%q, %d), want (\"\", 0)", got, n)
+		}
+	})
+
+	t.Run("no post_create hooks leaves input unchanged", func(t *testing.T) {
+		src := "[[hooks.pre_create]]\ntype = \"command\"\ncommand = \"bundle install\"\n"
+		got, n := rewriteHostInstallsToCompose(src, "web")
+		if n != 0 {
+			t.Errorf("expected 0 rewrites for non-post_create hook, got %d", n)
+		}
+		if got != src {
+			t.Errorf("input mutated when no post_create blocks present:\nwant: %q\ngot:  %q", src, got)
+		}
+	})
+
+	t.Run("preserves trailing-newline absence", func(t *testing.T) {
+		// No trailing newline on input — output should match.
+		src := `[[hooks.post_create]]
+type = "command"
+command = "echo hi"`
+		got, _ := rewriteHostInstallsToCompose(src, "web")
+		if strings.HasSuffix(got, "\n") {
+			t.Errorf("output gained trailing newline that input didn't have:\n%q", got)
+		}
+	})
+
+	t.Run("type = command without matching install command is untouched", func(t *testing.T) {
+		src := `[[hooks.post_create]]
+type = "command"
+command = "rake db:migrate"
+`
+		got, n := rewriteHostInstallsToCompose(src, "web")
+		if n != 0 {
+			t.Errorf("non-install command should not be rewritten, got n=%d", n)
+		}
+		if strings.Contains(got, "docker:compose") {
+			t.Error("non-install command should not be converted to docker:compose")
+		}
+	})
+
+	t.Run("malformed block without type line is untouched", func(t *testing.T) {
+		// Block declares header but no type=command line — rewriter should
+		// not touch it (no typeLine match).
+		src := `[[hooks.post_create]]
+command = "bundle install"
+`
+		got, n := rewriteHostInstallsToCompose(src, "web")
+		if n != 0 {
+			t.Errorf("malformed block (no type line) should be skipped, got n=%d", n)
+		}
+		if !strings.Contains(got, `command = "bundle install"`) {
+			t.Error("original command line should be preserved verbatim")
+		}
+	})
+
+	t.Run("multiple matching blocks all rewritten", func(t *testing.T) {
+		src := `[[hooks.post_create]]
+type = "command"
+command = "bundle install"
+
+[[hooks.post_create]]
+type = "command"
+command = "npm install"
+`
+		got, n := rewriteHostInstallsToCompose(src, "app")
+		if n != 2 {
+			t.Errorf("expected 2 rewrites, got %d", n)
+		}
+		if strings.Count(got, `type = "docker:compose"`) != 2 {
+			t.Errorf("expected two docker:compose type lines, got:\n%s", got)
+		}
+		if strings.Count(got, `service = "app"`) != 2 {
+			t.Errorf("expected two service=app lines, got:\n%s", got)
+		}
+	})
+
+	t.Run("block terminated by EOF (no trailing blank/section) is handled", func(t *testing.T) {
+		// blockEnd only advances past blank lines or new sections; a block
+		// at EOF must still be rewritten.
+		src := `[[hooks.post_create]]
+type = "command"
+command = "bundle install"`
+		got, n := rewriteHostInstallsToCompose(src, "web")
+		if n != 1 {
+			t.Errorf("expected 1 rewrite for EOF-terminated block, got %d", n)
+		}
+		if !strings.Contains(got, `service = "web"`) {
+			t.Errorf("expected service line in output:\n%s", got)
+		}
+	})
+}
+
 func TestCheckEnvFileConfig_NonDefault(t *testing.T) {
 	direnvFound := func(name string) (string, error) {
 		if name == "direnv" {

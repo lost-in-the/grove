@@ -85,6 +85,81 @@ func TestGenerateHooksToml_MixedHostAndContainer(t *testing.T) {
 	}
 }
 
+// TestResolveInitMode_FlagPrecedence covers the non-interactive precedence
+// rules of resolveInitMode. The interactive prompt path is not exercised
+// because cli.IsInteractive reads os.Stdin.Fd() directly; in `go test`
+// stdin is not a TTY, so IsInteractive() is false and the prompt branch
+// is unreachable from a test process. That branch is covered manually.
+func TestResolveInitMode_FlagPrecedence(t *testing.T) {
+	// Save and restore package-level flag globals so cases don't leak.
+	origAuto, origWalkthrough, origYes := initAuto, initWalkthrough, initYes
+	t.Cleanup(func() {
+		initAuto, initWalkthrough, initYes = origAuto, origWalkthrough, origYes
+	})
+
+	cases := []struct {
+		name            string
+		auto            bool
+		walkthrough     bool
+		yes             bool
+		wantMode        string
+		wantSkipConfirm bool
+	}{
+		{
+			name:            "walkthrough flag wins over auto and yes",
+			walkthrough:     true,
+			auto:            true,
+			yes:             true,
+			wantMode:        initModeWalkthrough,
+			wantSkipConfirm: true,
+		},
+		{
+			name:            "walkthrough alone keeps confirm",
+			walkthrough:     true,
+			wantMode:        initModeWalkthrough,
+			wantSkipConfirm: false,
+		},
+		{
+			name:            "auto with yes skips confirm",
+			auto:            true,
+			yes:             true,
+			wantMode:        initModeAuto,
+			wantSkipConfirm: true,
+		},
+		{
+			name:            "auto alone keeps confirm",
+			auto:            true,
+			wantMode:        initModeAuto,
+			wantSkipConfirm: false,
+		},
+		{
+			name:            "yes alone implies auto and skips confirm",
+			yes:             true,
+			wantMode:        initModeAuto,
+			wantSkipConfirm: true,
+		},
+		{
+			// In `go test`, stdin is not a TTY, so this falls through to
+			// the non-TTY default rather than the interactive prompt.
+			name:            "no flags in non-TTY defaults to auto+skipconfirm",
+			wantMode:        initModeAuto,
+			wantSkipConfirm: true,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			initAuto, initWalkthrough, initYes = c.auto, c.walkthrough, c.yes
+			got := resolveInitMode()
+			if got.Mode != c.wantMode {
+				t.Errorf("Mode = %q, want %q", got.Mode, c.wantMode)
+			}
+			if got.SkipConfirm != c.wantSkipConfirm {
+				t.Errorf("SkipConfirm = %v, want %v", got.SkipConfirm, c.wantSkipConfirm)
+			}
+		})
+	}
+}
+
 func TestFilterProfileForExternalDocker_StripsContainerCommands(t *testing.T) {
 	// When vendor/bundle is symlinked from external compose, the matching
 	// container `bundle install` should also be skipped.
