@@ -169,13 +169,17 @@ Examples:
 			return nil
 		}
 
-		// ALWAYS prompt - mandatory confirmation
+		// ALWAYS prompt - mandatory confirmation. Require typing the literal
+		// word "yes" rather than using cli.Confirm: the operation is permanently
+		// destructive (worktree + tmux removal, no undo), and the trim spec
+		// requires this confirmation to work in non-interactive mode too.
+		// cli.ReadLine handles Ctrl+C/ESC and falls back to cooked-mode read for
+		// piped stdin, so scripted `echo yes | grove trim` still works.
 		_, _ = fmt.Fprintln(w)
 		cli.Warning(w, "This will permanently remove %d worktree(s) and their associated tmux sessions.", len(cleanable))
 
-		question := fmt.Sprintf("Remove %d worktree(s)?", len(cleanable))
-		confirmed, err := cli.Confirm(question, false)
-		if err != nil || !confirmed {
+		response, err := cli.ReadLine("Type 'yes' to confirm: ")
+		if err != nil || response != "yes" {
 			if err != nil && !errors.Is(err, cli.ErrPromptCanceled) {
 				cli.Error(w, "%v", err)
 			}
