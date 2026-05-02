@@ -95,14 +95,16 @@ Examples:
 				IsDirty: tree.IsDirty,
 			}
 
-			// Get last access time from state
+			// Get last access time from state, falling back to filesystem mtime
+			// if the worktree is missing from state or has zero-value timestamps.
 			ws, _ := ctx.State.GetWorktree(tree.ShortName)
-			if ws != nil {
+			candidate.DaysSince = -1 // sentinel meaning "unknown"
+			if ws != nil && !ws.LastAccessedAt.IsZero() {
 				candidate.LastAccess = ws.LastAccessedAt
 				candidate.DaysSince = int(now.Sub(ws.LastAccessedAt).Hours() / 24)
-			} else {
-				// If not in state, assume very old
-				candidate.DaysSince = 9999
+			} else if info, err := os.Stat(tree.Path); err == nil {
+				candidate.LastAccess = info.ModTime()
+				candidate.DaysSince = int(now.Sub(info.ModTime()).Hours() / 24)
 			}
 
 			// Check exclusions
@@ -116,7 +118,7 @@ Examples:
 				candidate.ExcludeReason = "environment worktree"
 			} else if tree.IsDirty && !cleanIncludeDirty {
 				candidate.ExcludeReason = "dirty (use --include-dirty)"
-			} else if candidate.DaysSince < cleanOlderThan {
+			} else if candidate.DaysSince >= 0 && candidate.DaysSince < cleanOlderThan {
 				candidate.ExcludeReason = fmt.Sprintf("accessed %d days ago (threshold: %d)", candidate.DaysSince, cleanOlderThan)
 			}
 
@@ -153,7 +155,11 @@ Examples:
 				dirtyMark = " [dirty]"
 			}
 			_, _ = fmt.Fprintf(w, "  %s ", c.Name)
-			cli.Faint(w, "  (%s) - %d days since last access%s", c.Branch, c.DaysSince, dirtyMark)
+			ageStr := fmt.Sprintf("%d days since last access", c.DaysSince)
+			if c.DaysSince < 0 {
+				ageStr = "last access unknown"
+			}
+			cli.Faint(w, "  (%s) - %s%s", c.Branch, ageStr, dirtyMark)
 		}
 
 		if cleanDryRun {
