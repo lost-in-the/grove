@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -171,11 +172,13 @@ Examples:
 		// ALWAYS prompt - mandatory confirmation
 		_, _ = fmt.Fprintln(w)
 		cli.Warning(w, "This will permanently remove %d worktree(s) and their associated tmux sessions.", len(cleanable))
-		fmt.Print("Type 'yes' to confirm: ")
 
-		var response string
-		_, _ = fmt.Scanln(&response)
-		if response != "yes" {
+		question := fmt.Sprintf("Remove %d worktree(s)?", len(cleanable))
+		confirmed, err := cli.Confirm(question, false)
+		if err != nil || !confirmed {
+			if err != nil && !errors.Is(err, cli.ErrPromptCanceled) {
+				cli.Error(w, "%v", err)
+			}
 			fmt.Println("Canceled")
 			os.Exit(exitcode.UserCancelled)
 		}
