@@ -324,10 +324,10 @@ func TestRewriteHostInstallsToCompose_FurtherEdgeCases(t *testing.T) {
 // testProject. Each string field is the file body; empty means "don't
 // create that file".
 type projectOpts struct {
-	Dockerfile    string
-	Compose       string // written as docker-compose.yml
-	HooksToml     string
-	ReadOnlyGrove bool // chmod 0555 .grove after writing — exercises write failures
+	Dockerfile        string
+	Compose           string // written as docker-compose.yml
+	HooksToml         string
+	ReadOnlyHooksFile bool // chmod 0444 hooks.toml after writing — exercises write failures
 }
 
 // testProject materializes a temporary project root + .grove dir under
@@ -356,12 +356,17 @@ func testProject(t *testing.T, opts projectOpts) (root, groveDir string) {
 			t.Fatalf("write hooks.toml: %v", err)
 		}
 	}
-	if opts.ReadOnlyGrove {
-		if err := os.Chmod(groveDir, 0555); err != nil {
+	if opts.ReadOnlyHooksFile {
+		// chmod the file (not the dir): Linux file write needs write perm
+		// on the file itself + execute on path components, NOT write on
+		// the parent dir. Chmod'ing the dir to 0555 still lets OpenFile
+		// open and truncate an existing file inside it.
+		hooksPath := filepath.Join(groveDir, "hooks.toml")
+		if err := os.Chmod(hooksPath, 0444); err != nil {
 			t.Fatalf("chmod readonly: %v", err)
 		}
 		// Restore writable perms so t.TempDir's auto-cleanup can rm -r.
-		t.Cleanup(func() { _ = os.Chmod(groveDir, 0755) })
+		t.Cleanup(func() { _ = os.Chmod(hooksPath, 0644) })
 	}
 	return root, groveDir
 }
@@ -436,9 +441,9 @@ func TestFixHostInstallsInDockerProject(t *testing.T) {
 		}
 	})
 
-	t.Run("read-only .grove returns wrapped write error", func(t *testing.T) {
+	t.Run("read-only hooks.toml returns wrapped write error", func(t *testing.T) {
 		if os.Geteuid() == 0 {
-			t.Skip("chmod 0555 is bypassed when running as root")
+			t.Skip("chmod 0444 is bypassed when running as root")
 		}
 		compose := "services:\n  web:\n    image: ruby\n"
 		hooks := `[[hooks.post_create]]
@@ -446,10 +451,10 @@ type = "command"
 command = "bundle install"
 `
 		root, groveDir := testProject(t, projectOpts{
-			Dockerfile:    "FROM ruby",
-			Compose:       compose,
-			HooksToml:     hooks,
-			ReadOnlyGrove: true,
+			Dockerfile:        "FROM ruby",
+			Compose:           compose,
+			HooksToml:         hooks,
+			ReadOnlyHooksFile: true,
 		})
 		_, err := fixHostInstallsInDockerProject(root, groveDir)
 		if err == nil {
