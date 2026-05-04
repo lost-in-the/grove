@@ -228,8 +228,14 @@ func builtinCopy(action *HookAction, ctx *ExecutionContext, vars *Variables) err
 	from := vars.Interpolate(action.From)
 	to := vars.Interpolate(action.To)
 
-	srcPath := resolvePath(from, ctx.MainPath)
-	dstPath := resolvePath(to, ctx.NewPath)
+	srcPath, err := resolvePathSafe(from, ctx.MainPath)
+	if err != nil {
+		return fmt.Errorf("copy source path: %w", err)
+	}
+	dstPath, err := resolvePathSafe(to, ctx.NewPath)
+	if err != nil {
+		return fmt.Errorf("copy destination path: %w", err)
+	}
 
 	srcInfo, err := os.Stat(srcPath)
 	if err != nil {
@@ -258,8 +264,14 @@ func builtinSymlink(action *HookAction, ctx *ExecutionContext, vars *Variables) 
 	from := vars.Interpolate(action.From)
 	to := vars.Interpolate(action.To)
 
-	srcPath := resolvePath(from, ctx.MainPath)
-	linkPath := resolvePath(to, ctx.NewPath)
+	srcPath, err := resolvePathSafe(from, ctx.MainPath)
+	if err != nil {
+		return fmt.Errorf("symlink source path: %w", err)
+	}
+	linkPath, err := resolvePathSafe(to, ctx.NewPath)
+	if err != nil {
+		return fmt.Errorf("symlink destination path: %w", err)
+	}
 
 	if _, err := os.Lstat(srcPath); err != nil {
 		if os.IsNotExist(err) {
@@ -314,8 +326,14 @@ func builtinTemplate(action *HookAction, ctx *ExecutionContext, vars *Variables)
 	from := vars.Interpolate(action.From)
 	to := vars.Interpolate(action.To)
 
-	srcPath := resolvePath(from, ctx.MainPath)
-	dstPath := resolvePath(to, ctx.NewPath)
+	srcPath, err := resolvePathSafe(from, ctx.MainPath)
+	if err != nil {
+		return fmt.Errorf("template source path: %w", err)
+	}
+	dstPath, err := resolvePathSafe(to, ctx.NewPath)
+	if err != nil {
+		return fmt.Errorf("template destination path: %w", err)
+	}
 
 	content, err := os.ReadFile(srcPath)
 	if err != nil {

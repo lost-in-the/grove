@@ -156,3 +156,58 @@ func TestSetupFiles_SymlinkMissingSource(t *testing.T) {
 		t.Errorf("Expected 'source not found' in error, got %q", err.Error())
 	}
 }
+
+func TestSetupFiles_PathTraversal(t *testing.T) {
+	mainPath := t.TempDir()
+	newPath := t.TempDir()
+
+	t.Run("legitimate symlink_files entry succeeds", func(t *testing.T) {
+		_ = os.WriteFile(filepath.Join(mainPath, "config.yml"), []byte("ok"), 0644)
+		ext := &config.ExternalComposeConfig{
+			SymlinkFiles: []string{"config.yml"},
+		}
+		err := SetupFiles(ext, newPath, mainPath)
+		if err != nil {
+			t.Errorf("SetupFiles() legitimate entry = %v, want nil", err)
+		}
+	})
+
+	t.Run("dotdot in copy_files rejected", func(t *testing.T) {
+		ext := &config.ExternalComposeConfig{
+			CopyFiles: []string{"../../etc/passwd"},
+		}
+		err := SetupFiles(ext, newPath, mainPath)
+		if err == nil {
+			t.Error("SetupFiles() with traversal copy_files = nil, want error")
+		}
+		if !strings.Contains(err.Error(), "escapes base directory") {
+			t.Errorf("expected 'escapes base directory' in error, got %q", err.Error())
+		}
+	})
+
+	t.Run("dotdot in symlink_files rejected", func(t *testing.T) {
+		ext := &config.ExternalComposeConfig{
+			SymlinkFiles: []string{"../../.ssh/id_rsa"},
+		}
+		err := SetupFiles(ext, newPath, mainPath)
+		if err == nil {
+			t.Error("SetupFiles() with traversal symlink_files = nil, want error")
+		}
+		if !strings.Contains(err.Error(), "escapes base directory") {
+			t.Errorf("expected 'escapes base directory' in error, got %q", err.Error())
+		}
+	})
+
+	t.Run("dotdot in symlink_dirs rejected", func(t *testing.T) {
+		ext := &config.ExternalComposeConfig{
+			SymlinkDirs: []string{"../../../secret_dir"},
+		}
+		err := SetupFiles(ext, newPath, mainPath)
+		if err == nil {
+			t.Error("SetupFiles() with traversal symlink_dirs = nil, want error")
+		}
+		if !strings.Contains(err.Error(), "escapes base directory") {
+			t.Errorf("expected 'escapes base directory' in error, got %q", err.Error())
+		}
+	})
+}

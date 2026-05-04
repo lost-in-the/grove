@@ -140,6 +140,70 @@ func TestExecute(t *testing.T) {
 	})
 }
 
+func TestBuiltinCopyPathTraversal(t *testing.T) {
+	mainDir := t.TempDir()
+	newDir := t.TempDir()
+	vars := &Variables{}
+
+	t.Run("legitimate copy succeeds", func(t *testing.T) {
+		_ = os.WriteFile(filepath.Join(mainDir, "app.yml"), []byte("ok"), 0644)
+		action := &HookAction{From: "app.yml", To: "app.yml"}
+		ctx := &ExecutionContext{MainPath: mainDir, NewPath: newDir}
+		if err := builtinCopy(action, ctx, vars); err != nil {
+			t.Errorf("builtinCopy() legitimate path = %v, want nil", err)
+		}
+	})
+
+	t.Run("dotdot escape in From rejected", func(t *testing.T) {
+		action := &HookAction{From: "../../.ssh/id_rsa", To: "dest.txt"}
+		ctx := &ExecutionContext{MainPath: mainDir, NewPath: newDir}
+		if err := builtinCopy(action, ctx, vars); err == nil {
+			t.Error("builtinCopy() with traversal From = nil, want error")
+		}
+	})
+
+	t.Run("dotdot escape in To rejected", func(t *testing.T) {
+		_ = os.WriteFile(filepath.Join(mainDir, "source.txt"), []byte("ok"), 0644)
+		action := &HookAction{From: "source.txt", To: "../../etc/passwd"}
+		ctx := &ExecutionContext{MainPath: mainDir, NewPath: newDir}
+		if err := builtinCopy(action, ctx, vars); err == nil {
+			t.Error("builtinCopy() with traversal To = nil, want error")
+		}
+	})
+}
+
+func TestBuiltinSymlinkPathTraversal(t *testing.T) {
+	mainDir := t.TempDir()
+	newDir := t.TempDir()
+	vars := &Variables{}
+
+	t.Run("legitimate symlink succeeds", func(t *testing.T) {
+		_ = os.WriteFile(filepath.Join(mainDir, "node_modules"), []byte("ok"), 0644)
+		action := &HookAction{From: "node_modules", To: "node_modules"}
+		ctx := &ExecutionContext{MainPath: mainDir, NewPath: newDir}
+		if err := builtinSymlink(action, ctx, vars); err != nil {
+			t.Errorf("builtinSymlink() legitimate path = %v, want nil", err)
+		}
+	})
+
+	t.Run("dotdot escape in From rejected", func(t *testing.T) {
+		action := &HookAction{From: "../../.ssh/id_rsa", To: "link"}
+		ctx := &ExecutionContext{MainPath: mainDir, NewPath: newDir}
+		if err := builtinSymlink(action, ctx, vars); err == nil {
+			t.Error("builtinSymlink() with traversal From = nil, want error")
+		}
+	})
+
+	t.Run("dotdot escape in To rejected", func(t *testing.T) {
+		_ = os.WriteFile(filepath.Join(mainDir, "src"), []byte("ok"), 0644)
+		action := &HookAction{From: "src", To: "../../evil"}
+		ctx := &ExecutionContext{MainPath: mainDir, NewPath: newDir}
+		if err := builtinSymlink(action, ctx, vars); err == nil {
+			t.Error("builtinSymlink() with traversal To = nil, want error")
+		}
+	})
+}
+
 func TestExecuteCopy(t *testing.T) {
 	t.Run("file copy", func(t *testing.T) {
 		mainDir := t.TempDir()

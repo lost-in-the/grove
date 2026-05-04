@@ -19,8 +19,22 @@ func SetupFiles(ext *config.ExternalComposeConfig, newPath, mainPath string) err
 	var firstErr error
 
 	for _, relPath := range ext.CopyFiles {
-		src := filepath.Join(mainPath, relPath)
-		dst := filepath.Join(newPath, relPath)
+		src, err := fsutil.SafeJoin(mainPath, relPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: skipping copy_files entry %q: %v\n", relPath, err)
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		dst, err := fsutil.SafeJoin(newPath, relPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: skipping copy_files entry %q: %v\n", relPath, err)
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
 
 		if err := copyFile(src, dst); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: failed to copy %s: %v\n", relPath, err)
@@ -33,8 +47,22 @@ func SetupFiles(ext *config.ExternalComposeConfig, newPath, mainPath string) err
 	}
 
 	for _, relPath := range ext.SymlinkFiles {
-		src := filepath.Join(mainPath, relPath)
-		dst := filepath.Join(newPath, relPath)
+		src, err := fsutil.SafeJoin(mainPath, relPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: skipping symlink_files entry %q: %v\n", relPath, err)
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		dst, err := fsutil.SafeJoin(newPath, relPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: skipping symlink_files entry %q: %v\n", relPath, err)
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
 
 		if err := createSymlink(src, dst); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: failed to symlink %s: %v\n", relPath, err)
@@ -47,8 +75,22 @@ func SetupFiles(ext *config.ExternalComposeConfig, newPath, mainPath string) err
 	}
 
 	for _, relPath := range ext.SymlinkDirs {
-		src := filepath.Join(mainPath, relPath)
-		dst := filepath.Join(newPath, relPath)
+		src, err := fsutil.SafeJoin(mainPath, relPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: skipping symlink_dirs entry %q: %v\n", relPath, err)
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		dst, err := fsutil.SafeJoin(newPath, relPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: skipping symlink_dirs entry %q: %v\n", relPath, err)
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
 
 		if err := createSymlink(src, dst); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: failed to symlink %s: %v\n", relPath, err)

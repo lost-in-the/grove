@@ -12,8 +12,9 @@ import (
 	"github.com/lost-in-the/grove/internal/fsutil"
 )
 
-// resolvePath resolves a path that may be relative or absolute
-// If the path is relative, it's resolved against basePath
+// resolvePath resolves a path that may be relative or absolute.
+// If the path is relative, it is resolved against basePath using filepath.Join
+// with no containment check. Use resolvePathSafe for user-controlled paths.
 func resolvePath(path, basePath string) string {
 	if path == "" {
 		return basePath
@@ -22,6 +23,20 @@ func resolvePath(path, basePath string) string {
 		return path
 	}
 	return filepath.Join(basePath, path)
+}
+
+// resolvePathSafe resolves a user-supplied path against basePath.
+// Absolute paths (e.g. credential sources from grove internals) pass through
+// unchanged. Relative paths are sandboxed inside basePath via fsutil.SafeJoin,
+// rejecting traversal attempts such as "../../.ssh/id_rsa".
+func resolvePathSafe(path, basePath string) (string, error) {
+	if path == "" {
+		return basePath, nil
+	}
+	if filepath.IsAbs(path) {
+		return path, nil
+	}
+	return fsutil.SafeJoin(basePath, path)
 }
 
 // copyFile copies a single file from src to dst
