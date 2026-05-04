@@ -57,7 +57,17 @@ func MigrateFromLegacy(groveDir string, legacyPath string) (bool, error) {
 
 // migrateStateVersion handles in-place migration of state.json between versions
 // This is called when loading state to ensure it's up to date.
-func migrateStateVersion(state *State) {
+//
+// Returns an error if state.Version is newer than CurrentVersion — that
+// signals the user has downgraded grove after upgrading, and silently
+// parsing a future-version file as the current schema risks data loss.
+func migrateStateVersion(state *State) error {
+	if state.Version > CurrentVersion {
+		return fmt.Errorf("state.json version %d is newer than supported version %d; "+
+			"upgrade grove or restore state from .grove/state.json.bak",
+			state.Version, CurrentVersion)
+	}
+
 	if state.Version != CurrentVersion {
 		// Future version migrations would go here.
 		// For now, we only have version 1.
@@ -91,6 +101,8 @@ func migrateStateVersion(state *State) {
 			ws.LastAccessedAt = now
 		}
 	}
+
+	return nil
 }
 
 // BackupState creates a backup of the current state file

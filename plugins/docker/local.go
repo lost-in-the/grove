@@ -1,7 +1,6 @@
 package docker
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -104,7 +103,7 @@ func (s *localStrategy) Down(worktreePath string) error {
 
 func (s *localStrategy) Logs(worktreePath string, service string, follow bool) error {
 	if !hasDockerCompose(worktreePath) {
-		return fmt.Errorf("no docker-compose file found in %s", worktreePath)
+		return ErrNoComposeFile
 	}
 
 	args := []string{"logs"}
@@ -149,7 +148,7 @@ func (s *localStrategy) Exec(worktreePath string, service string, command string
 
 func (s *localStrategy) Restart(worktreePath string, service string) error {
 	if !hasDockerCompose(worktreePath) {
-		return fmt.Errorf("no docker-compose file found in %s", worktreePath)
+		return ErrNoComposeFile
 	}
 
 	args := []string{"restart"}

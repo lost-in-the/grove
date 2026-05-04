@@ -6,6 +6,11 @@ import (
 
 // ActionHandler is the function signature for hook action handlers.
 // Plugins register handlers for new action types via RegisterActionHandler.
+//
+// Stability: this signature is the stable plugin extension point as of
+// v0.7.0. Adding fields to HookAction, ExecutionContext, or Variables is
+// backwards-compatible; renaming or removing fields is not. Breaking
+// changes will bump grove's minor version and be called out in CHANGELOG.
 type ActionHandler func(action *HookAction, ctx *ExecutionContext, vars *Variables) error
 
 // actionHandlerRegistry is the in-process registry of action handlers.
@@ -48,6 +53,9 @@ var globalActionHandlers = newActionHandlerRegistry()
 // the cost is silently masking conflicts between two plugins claiming the
 // same name. Use namespaced type names (`pluginname:action`) to avoid
 // collisions, e.g. "docker:compose", "docker:exec".
+//
+// Stability: this is the stable plugin extension point as of v0.7.0. See
+// the ActionHandler type for the compatibility contract.
 func RegisterActionHandler(typeName string, h ActionHandler) {
 	globalActionHandlers.register(typeName, h)
 }

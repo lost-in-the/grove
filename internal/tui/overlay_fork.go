@@ -307,6 +307,10 @@ func (m Model) handleForkConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := m.forkState
 
 	switch {
+	case key.Matches(msg, m.keys.Escape):
+		m.activeView = ViewDashboard
+		m.forkState = nil
+		return m, nil
 	case key.Matches(msg, m.keys.Back):
 		if s.HasWIP {
 			s.Step = ForkStepWIP

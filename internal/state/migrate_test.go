@@ -73,7 +73,9 @@ func TestMigrateStateVersion(t *testing.T) {
 			Version: 0,
 		}
 
-		migrateStateVersion(state)
+		if err := migrateStateVersion(state); err != nil {
+			t.Fatalf("migrateStateVersion() error = %v", err)
+		}
 
 		if state.Version != CurrentVersion {
 			t.Errorf("Version = %d, want %d", state.Version, CurrentVersion)
@@ -89,7 +91,9 @@ func TestMigrateStateVersion(t *testing.T) {
 			Worktrees: map[string]*WorktreeState{"test": {Path: "/test"}},
 		}
 
-		migrateStateVersion(state)
+		if err := migrateStateVersion(state); err != nil {
+			t.Fatalf("migrateStateVersion() error = %v", err)
+		}
 
 		if state.Version != CurrentVersion {
 			t.Errorf("Version changed unexpectedly")
@@ -105,15 +109,30 @@ func TestMigrateStateVersion(t *testing.T) {
 			Worktrees: nil,
 		}
 
-		migrateStateVersion(state)
+		if err := migrateStateVersion(state); err != nil {
+			t.Fatalf("migrateStateVersion() error = %v", err)
+		}
 
 		if state.Worktrees == nil {
 			t.Error("Worktrees should be initialized")
 		}
 	})
 
+	t.Run("rejects future-version state files", func(t *testing.T) {
+		// Guards against silent data corruption when a user upgrades grove
+		// (writing a newer-version state.json) and then downgrades back.
+		state := &State{
+			Version: CurrentVersion + 1,
+		}
+
+		err := migrateStateVersion(state)
+		if err == nil {
+			t.Fatal("expected error for future-version state, got nil")
+		}
+	})
+
 	t.Run("backfills zero-valued timestamps", func(t *testing.T) {
-		// Simulates state written by v0.6.1 init, which created the main
+		// Simulates state written by an earlier grove init that created the main
 		// worktree without stamping CreatedAt/LastAccessedAt.
 		state := &State{
 			Version: CurrentVersion,
@@ -123,7 +142,9 @@ func TestMigrateStateVersion(t *testing.T) {
 		}
 
 		before := time.Now()
-		migrateStateVersion(state)
+		if err := migrateStateVersion(state); err != nil {
+			t.Fatalf("migrateStateVersion() error = %v", err)
+		}
 		after := time.Now()
 
 		ws := state.Worktrees["main"]
@@ -151,7 +172,9 @@ func TestMigrateStateVersion(t *testing.T) {
 			},
 		}
 
-		migrateStateVersion(state)
+		if err := migrateStateVersion(state); err != nil {
+			t.Fatalf("migrateStateVersion() error = %v", err)
+		}
 
 		ws := state.Worktrees["main"]
 		if !ws.CreatedAt.Equal(fixed) {
