@@ -298,7 +298,7 @@ func runExternalModeChecks(w *cli.Writer, cfg *config.Config, projectRoot string
 	checkProvisioningSources(w, ext, projectRoot, allPassed)
 
 	envFileName := ext.EnvFileName()
-	composePath := docker.ResolveComposePath(ext.Path)
+	composePath := ext.Path
 	efResult := checkEnvFileConfig(envFileName, composePath, exec.LookPath)
 
 	checkEnvFileChecks(w, envFileName, efResult, allPassed)
@@ -389,7 +389,7 @@ func checkAgentStacks(w *cli.Writer, cfg *config.Config, ext *config.ExternalCom
 	*allPassed = runCheck(w, "Agent template path", func() (string, error) {
 		tmpl := ext.Agent.TemplatePath
 		if !filepath.IsAbs(tmpl) {
-			tmpl = filepath.Join(docker.ResolveComposePath(ext.Path), tmpl)
+			tmpl = filepath.Join(ext.Path, tmpl)
 		}
 		info, err := os.Stat(tmpl)
 		if err != nil {
@@ -406,7 +406,7 @@ func checkAgentStacks(w *cli.Writer, cfg *config.Config, ext *config.ExternalCom
 			for i, overlay := range ext.Agent.TemplateOverlays {
 				p := overlay
 				if !filepath.IsAbs(p) {
-					p = filepath.Join(docker.ResolveComposePath(ext.Path), p)
+					p = filepath.Join(ext.Path, p)
 				}
 				info, err := os.Stat(p)
 				if err != nil {
