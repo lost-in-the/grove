@@ -1,0 +1,11 @@
+services:
+  # Tiny image with bash on PATH so `docker compose run web bash -cil <cmd>`
+  # (the form grove's local strategy uses) works. Entrypoint is cleared so
+  # the user-supplied bash invocation isn't double-prefixed.
+  web:
+    image: bash:5
+    entrypoint: []
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: ["sleep", "infinity"]
