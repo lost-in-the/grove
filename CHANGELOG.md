@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+## [0.7.0] - 2026-05-04
+
+> **Upgrading:** No breaking config changes. Docker users should run `grove doctor` to surface host install commands that should now be `docker:compose` hooks (`grove doctor --fix` rewrites them automatically).
+
+### Added
 - New hook action types `docker:compose` and `docker:exec` for routing config-driven hooks into containers (see `docs/CONFIGURATION_REFERENCE.md`). Action type names use a `pluginname:action` namespace convention.
 - Pluggable hook action handler registry — plugins can register custom action types via `hooks.RegisterActionHandler` (idempotent, last-write-wins). See `docs/PLUGIN_DEVELOPMENT.md`.
 - `grove init` now picks between `auto` (preview + confirm) and `walkthrough` (step-by-step) modes when running interactively. New flags: `--auto`, `--walkthrough`, `--yes`. Non-TTY behavior preserved as silent auto.
@@ -16,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `symlink_files` documented in top-level README and CONFIGURATION_REFERENCE alongside `symlink_dirs`.
 - `grove trim` now accepts `prune` as an alias for git-flavored discoverability (issue #10).
 - README beta notice, edge install path (`go install ...@main`), and per-install-method update guidance (issue #11).
+- TUI branch selector now includes remote-only branches; selecting a remote-only branch fetches from origin automatically.
 
 ### Changed
 - Hook execution order on worktree create: plugin Go hooks now fire **before** config-driven `[[hooks.post_create]]` so containers are up by the time user setup commands run. This removes a workaround in the new `docker:compose` handler and lets `mode = "exec"` work without a stealth `compose up`.

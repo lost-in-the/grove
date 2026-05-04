@@ -784,7 +784,7 @@ func rewriteHostInstallsToCompose(src, service string) (string, int) {
 				if k == typeLine-i {
 					out.WriteString(`type = "docker:compose"`)
 					out.WriteString("\n")
-					out.WriteString(fmt.Sprintf("service = %q\n", service))
+					fmt.Fprintf(&out, "service = %q\n", service)
 					out.WriteString("mode = \"run\"\n")
 					continue
 				}

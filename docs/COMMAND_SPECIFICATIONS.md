@@ -19,11 +19,9 @@ This document provides exhaustive specifications for each grove command. Every b
    - [grove rename](#grove-rename)
    - [grove here](#grove-here)
    - [grove last](#grove-last)
-   - [grove attach](#grove-attach)
+   - [grove join](#grove-join)
    - [grove which](#grove-which)
 4. [State Commands](#state-commands)
-   - [grove freeze](#grove-freeze)
-   - [grove resume](#grove-resume)
 5. [Docker Commands](#docker-commands)
    - [grove up](#grove-up)
    - [grove down](#grove-down)
@@ -964,17 +962,18 @@ Use 'grove ls' to see available worktrees.
 
 ---
 
-### grove attach
+### grove join
 
 **Purpose:** Attach to (or create) a tmux session for a worktree without changing the shell's current directory.
 
+**Aliases:** `attach`, `a`, `j`
+
 **Usage:**
 ```
-grove attach [name] [flags]
-Alias: a
+grove join [name] [flags]
 
 Arguments:
-  name    Worktree to attach to (default: current worktree)
+  name    Worktree to join (default: current worktree)
 
 Flags:
   -j, --json    Output as JSON
@@ -1076,84 +1075,7 @@ When no Docker is configured, the `services` field is `null`/omitted.
 
 ## State Commands
 
-### grove freeze
-
-**Purpose:** Freeze a worktree to conserve resources (stop containers, mark session).
-
-**Usage:**
-```
-grove freeze [name] [flags]
-
-Arguments:
-  name    Worktree to freeze (default: current)
-
-Flags:
-      --all    Freeze all worktrees except current
-```
-
-**Behavior:**
-
-1. Stop Docker containers (if docker plugin enabled)
-2. Mark tmux session as frozen (custom variable)
-3. Optionally detach from session
-4. Record freeze state
-
-**Output (Success):**
-```
-✓ Stopped 3 Docker containers
-✓ Froze worktree 'testing'
-
-To resume: grove resume testing
-```
-
-**Output (Already frozen):**
-```
-Worktree 'testing' is already frozen
-
-To resume: grove resume testing
-```
-
-**Exit Codes:**
-- 0: Success or already frozen
-- 1: Worktree not found
-
----
-
-### grove resume
-
-**Purpose:** Resume a frozen worktree.
-
-**Usage:**
-```
-grove resume <name> [flags]
-
-Arguments:
-  name    Worktree to resume (required)
-```
-
-**Behavior:**
-
-1. Clear frozen state
-2. Start Docker containers (if docker plugin)
-3. Switch to worktree (equivalent to `grove to`)
-
-**Output (Success):**
-```
-✓ Resumed worktree 'testing'
-✓ Started 3 Docker containers
-✓ Switched to 'testing'
-```
-
-**Output (Not frozen):**
-```
-Worktree 'testing' is not frozen
-
-To switch to it: grove to testing
-```
-
-**Exit Codes:**
-- 0: Success
-- 1: Worktree not found or not frozen
+> No user-facing state commands are currently registered. The `internal/state` package exposes freeze/resume logic, but no cobra commands wire it to the CLI. See the [Planned Commands](#planned-not-yet-implemented) section for the design.
 
 ---
 
@@ -2037,7 +1959,12 @@ Excluded worktrees:
 **Usage:**
 ```
 grove doctor [flags]
+
+Flags:
+      --fix    Apply automatic fixes for detected issues
 ```
+
+**`--fix` flag:** When passed, `grove doctor` rewrites host install commands (e.g., `bundle install`, `npm install`, `pip install`) in `hooks.toml` to `docker:compose` hooks in place. The rewrite is idempotent — running it again when already converted is a no-op. This is a surgical text-based edit; user comments and unrelated keys are preserved. Currently, `--fix` only handles the install-command rewrite; other detected issues still require manual remediation.
 
 **Two-tier design:**
 
@@ -2186,6 +2113,121 @@ func hasShellIntegration() bool {
 
 ---
 
+
+## Other Commands
+
+These commands are fully implemented and available in the CLI. Full flag details are available via `--help`.
+
+### grove prs
+
+Opens the TUI's PR browser directly (same as pressing `p` from the dashboard). Fetches open pull requests from GitHub via the `gh` CLI. Requires `gh` to be installed and authenticated. See `grove prs --help`.
+
+### grove issues
+
+Opens the TUI's issue browser directly (same as pressing `i` from the dashboard). Fetches open GitHub issues via the `gh` CLI. Requires `gh` to be installed and authenticated. See `grove issues --help`.
+
+### grove agent-help
+
+Prints a quick-reference guide for AI agent workflows — worktree lifecycle, Docker strategies, and multi-agent patterns. Intended for agents that need context about grove's conventions without reading the full docs. See `grove agent-help --help`.
+
+### grove setup
+
+Interactive shell integration setup. Detects your shell, prints the `eval` line to add to your shell profile, and optionally writes it for you. See `grove setup --help`.
+
+### grove install
+
+Generates the shell integration snippet for a given shell (`grove install zsh`, `grove install bash`). The output is designed for `eval "$(grove install <shell>)"` in your shell profile. See `grove install --help`.
+
+### grove version
+
+Prints the grove version string. See `grove version --help`.
+
+---
+
+## Planned (not yet implemented)
+
+These commands are referenced in `internal/state` but not yet wired to user-facing cobra commands. The spec is preserved here so the design is recoverable when implementation lands.
+
+### grove freeze
+
+**Purpose:** Freeze a worktree to conserve resources (stop containers, mark session).
+
+**Usage:**
+```
+grove freeze [name] [flags]
+
+Arguments:
+  name    Worktree to freeze (default: current)
+
+Flags:
+      --all    Freeze all worktrees except current
+```
+
+**Behavior:**
+
+1. Stop Docker containers (if docker plugin enabled)
+2. Mark tmux session as frozen (custom variable)
+3. Optionally detach from session
+4. Record freeze state
+
+**Output (Success):**
+```
+✓ Stopped 3 Docker containers
+✓ Froze worktree 'testing'
+
+To resume: grove resume testing
+```
+
+**Output (Already frozen):**
+```
+Worktree 'testing' is already frozen
+
+To resume: grove resume testing
+```
+
+**Exit Codes:**
+- 0: Success or already frozen
+- 1: Worktree not found
+
+---
+
+### grove resume
+
+**Purpose:** Resume a frozen worktree.
+
+**Usage:**
+```
+grove resume <name> [flags]
+
+Arguments:
+  name    Worktree to resume (required)
+```
+
+**Behavior:**
+
+1. Clear frozen state
+2. Start Docker containers (if docker plugin)
+3. Switch to worktree (equivalent to `grove to`)
+
+**Output (Success):**
+```
+✓ Resumed worktree 'testing'
+✓ Started 3 Docker containers
+✓ Switched to 'testing'
+```
+
+**Output (Not frozen):**
+```
+Worktree 'testing' is not frozen
+
+To switch to it: grove to testing
+```
+
+**Exit Codes:**
+- 0: Success
+- 1: Worktree not found or not frozen
+
+---
 
 ## Commands Not Speced
 

@@ -901,6 +901,59 @@ func TestIsDirtyWithWorktree(t *testing.T) {
 	}
 }
 
+// TestRemove_ForceWithNonEmptyDir exercises the os.RemoveAll fallback path
+// introduced for issue #24. `git worktree remove --force` refuses to delete
+// a worktree directory that contains untracked subdirectories (e.g. a
+// node_modules dir left by a post-create hook). Grove's Remove() falls back
+// to os.RemoveAll + git worktree prune in that case.
+func TestRemove_ForceWithNonEmptyDir(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	tmpDir, _ := setupTestRepo(t)
+	m := &Manager{repoRoot: tmpDir}
+
+	// Create a worktree we can then pollute with an untracked directory.
+	if err := m.Create("nm-test", "nm-test-branch"); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	projectName := m.GetProjectName()
+	fullName := projectName + "-nm-test"
+
+	wt, err := m.Find(fullName)
+	if err != nil || wt == nil {
+		t.Fatalf("Find() expected worktree, got error=%v, wt=%v", err, wt)
+	}
+
+	// Plant a non-empty untracked directory inside the worktree. This makes
+	// `git worktree remove --force` refuse to proceed, forcing the fallback.
+	nodeModules := filepath.Join(wt.Path, "node_modules")
+	if err := os.MkdirAll(filepath.Join(nodeModules, "some-pkg"), 0755); err != nil {
+		t.Fatalf("MkdirAll node_modules: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(nodeModules, "some-pkg", "index.js"), []byte("module.exports={}"), 0644); err != nil {
+		t.Fatalf("WriteFile index.js: %v", err)
+	}
+
+	// Remove should succeed via the os.RemoveAll fallback.
+	if err := m.Remove(fullName); err != nil {
+		t.Fatalf("Remove() with non-empty untracked dir error = %v", err)
+	}
+
+	// Verify the directory is gone.
+	if _, statErr := os.Stat(wt.Path); !os.IsNotExist(statErr) {
+		t.Errorf("worktree directory still exists after Remove(): %s", wt.Path)
+	}
+
+	// Verify git no longer lists it.
+	wtAfter, _ := m.Find(fullName)
+	if wtAfter != nil {
+		t.Error("worktree should not be found after Remove()")
+	}
+}
+
 func TestGetCommitInfo(t *testing.T) {
 	tmpDir, _ := setupTestRepo(t)
 

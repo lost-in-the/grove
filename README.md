@@ -127,6 +127,19 @@ Edge builds may include breaking changes that haven't been documented yet. Pin t
 
 ---
 
+## Upgrading from v0.6.x
+
+No breaking config changes in v0.7.0 — all new fields have defaults and existing configs continue to work.
+
+**What to check after upgrading:**
+
+- **`grove doctor --fix` is new.** If your project uses Docker and was initialized before v0.7.0, run `grove doctor` — it will flag any host install commands that should now be `docker:compose` hooks. `grove doctor --fix` rewrites them automatically.
+- **`prune` is a new alias for `grove trim`.** Scripts using `grove trim` or `grove clean` continue to work unchanged.
+- **State backfill runs automatically on first load.** Worktrees with zero-valued timestamps (from pre-v0.5.1 installs) are silently corrected the first time `grove ls` or the TUI runs. No action required.
+- **Shell integration is now version 5.** If `grove doctor` warns about a shell version mismatch, re-run `eval "$(grove install zsh)"` (or `bash`) and reload your shell. `grove setup` handles this automatically.
+
+---
+
 ## Quick Start
 
 ### 1 — Shell integration
@@ -564,16 +577,17 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development guide — CI pip
 
 ## Documentation
 
-| Document | What's in it |
-|----------|-------------|
-| [docs/TUI.md](docs/TUI.md) | Full TUI reference — keybindings, overlays, sort modes, layout |
-| [docs/SHELL_INTEGRATION.md](docs/SHELL_INTEGRATION.md) | Directive protocol, tab completion internals, troubleshooting |
-| [docs/AGENT_GUIDE.md](docs/AGENT_GUIDE.md) | AI agent patterns, Docker strategies, before/after comparisons |
-| [docs/CONFIGURATION_REFERENCE.md](docs/CONFIGURATION_REFERENCE.md) | All config.toml fields with defaults |
-| [docs/COMMAND_SPECIFICATIONS.md](docs/COMMAND_SPECIFICATIONS.md) | Exhaustive command behavior specs |
-| [docs/PLUGIN_DEVELOPMENT.md](docs/PLUGIN_DEVELOPMENT.md) | Writing custom hooks and plugins |
-| [plugins/docker/README.md](plugins/docker/README.md) | Docker plugin full reference |
-| [plugins/tracker/README.md](plugins/tracker/README.md) | GitHub tracker plugin reference |
+| Reference | Purpose |
+|-----------|---------|
+| [Command Specifications](docs/COMMAND_SPECIFICATIONS.md) | Every command, flag, output format |
+| [Configuration Reference](docs/CONFIGURATION_REFERENCE.md) | All config.toml and hooks.toml options |
+| [Agent Guide](docs/AGENT_GUIDE.md) | Installing and using grove from scripts/AI agents |
+| [Shell Integration](docs/SHELL_INTEGRATION.md) | Directive protocol, recursion guard, version bumps |
+| [TUI Dashboard](docs/TUI.md) | Layout, keybindings, overlays |
+| [Plugin Development](docs/PLUGIN_DEVELOPMENT.md) | Hook interfaces, custom action types |
+| [Visual Testing](docs/VISUAL_TESTING.md) | Golden files, tmux capture, VHS tapes |
+| [Docker Plugin](plugins/docker/README.md) | Docker plugin full reference |
+| [Tracker Plugin](plugins/tracker/README.md) | GitHub tracker plugin reference |
 
 ---
 

@@ -381,9 +381,11 @@ Protected worktrees (`main`, `develop`, or any name in `[protection] protected`)
 
 **Remove stale worktrees in bulk:**
 ```bash
-grove clean           # removes worktrees not accessed in 30 days
-grove clean --days 7  # shorter threshold
+grove trim           # removes worktrees not accessed in 30 days
+grove trim --days 7  # shorter threshold
 ```
+
+The `clean` alias also works (`grove clean --days 7`), but `trim` is the canonical name.
 
 Stale = `LastAccessedAt` older than threshold and no dirty changes. Protected worktrees are skipped.
 
