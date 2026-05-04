@@ -288,12 +288,18 @@ copy_files = [".env.local", "config/master.key"]  # string array
 # Symlinks (vs copies) propagate edits in real time — use for files you actively
 # rotate, like decrypted credentials. Paths are relative to the worktree root.
 # Default: [] (nothing symlinked)
+# NOTE: On Windows, symlinks require Developer Mode or administrator privileges.
+# Use copy_files / copy_dirs instead for Windows-friendly setups.
+# See CONTRIBUTING.md — Platform Notes for details.
 symlink_files = ["config/credentials/development.key"]  # string array
 
 # Directories to symlink from the main worktree into each new worktree on create.
 # Useful for large build caches (node_modules, vendor/) that should be shared.
 # Paths are relative to the worktree root.
 # Default: [] (nothing symlinked)
+# NOTE: On Windows, symlinks require Developer Mode or administrator privileges.
+# Use copy_dirs instead for Windows-friendly setups.
+# See CONTRIBUTING.md — Platform Notes for details.
 symlink_dirs = ["node_modules", "vendor"]         # string array
 ```
 
@@ -342,6 +348,8 @@ network = "shared"                 # string
 ---
 
 ## Hooks Configuration (.grove/hooks.toml)
+
+> **Trust model:** `command` hooks run via `sh -c` with your full parent-process environment forwarded. Treat `hooks.toml` like a `Makefile` or `package.json` scripts block — trusted for repos you own, but worth reviewing when pulling from third-party repos. See [README.md — Hooks: trust model](../README.md#hooks-trust-model) for details, and [AGENT_GUIDE.md — Security](AGENT_GUIDE.md#security) for AI-agent-specific guidance.
 
 Hooks run shell commands, copy files, or render templates at worktree lifecycle events.
 Hooks are defined in a separate file from main config.

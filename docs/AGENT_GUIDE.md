@@ -717,6 +717,20 @@ export GROVE_NONINTERACTIVE=1    # auto-accept all prompts
 
 `GROVE_AGENT_MODE=1` is the lowest-friction option — it suppresses tmux attachment in `grove to` and activates isolated Docker without requiring config changes. Note that `grove new` still creates tmux sessions; set `[tmux] mode = "off"` in config to fully disable tmux.
 
+### Security
+
+Grove runs `command` hooks via `sh -c` with the full parent-process environment forwarded. There is no sandboxing — hook commands can read environment variables, write files, make network requests, and spawn subprocesses.
+
+**For agents running grove autonomously on unfamiliar repositories:**
+
+- **Treat `hooks.toml` as untrusted input until reviewed.** A malicious or misconfigured hooks file can exfiltrate secrets, modify files outside the worktree, or run arbitrary code — the same risk as running `make` or `npm install` in an unknown repo.
+- **Run `grove doctor` before `grove new` on unknown repos.** `grove doctor` validates config and hooks file syntax; reviewing its output gives you a chance to inspect what hooks will fire before any worktree is created.
+- **Inspect `.grove/hooks.toml` before the first `grove new` or `grove to`.** Pay particular attention to `type = "command"` hooks, which are the most open-ended.
+- **Environment variables are visible to hooks.** If your agent session has credentials or API tokens in the environment, `command` hooks can read them. Scope credentials to the minimum needed for the task.
+- **`copy` and `symlink` hooks are lower risk** but can still expose sensitive files from the main worktree. Verify paths in `copy_files`, `symlink_files`, and `symlink_dirs` if security matters.
+
+For the general (non-agent) trust model, see [Trust model in README.md](../README.md#hooks-trust-model).
+
 ---
 
 ## 8. Troubleshooting
