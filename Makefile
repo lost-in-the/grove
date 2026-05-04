@@ -1,4 +1,4 @@
-.PHONY: build test test-integration test-all lint fmt clean install help test-fixture test-update-golden demo golden-diff golden-view tui-capture tui-capture-keys
+.PHONY: build test test-integration test-integration-tui test-integration-docker test-all lint fmt clean install help test-fixture test-update-golden demo golden-diff golden-view tui-capture tui-capture-keys
 
 # Variables
 BINARY_NAME=grove
@@ -65,11 +65,17 @@ install: build ## Install the binary to $GOPATH/bin
 	@codesign -s - "$$(go env GOPATH)/bin/$(BINARY_NAME)" 2>/dev/null || true
 	@echo "$(BINARY_NAME) installed to $$(go env GOPATH)/bin/$(BINARY_NAME)"
 
-test-integration: ## Run integration tests (requires git, slower)
-	@echo "Running integration tests..."
+test-integration: test-integration-tui test-integration-docker ## Run all integration tests (tui + docker)
+
+test-integration-tui: ## Run TUI integration tests (requires git, slower)
+	@echo "Running TUI integration tests..."
 	@go test -v -race -tags=integration -timeout 60s ./internal/tui/
 
-test-all: test test-integration ## Run unit + integration tests
+test-integration-docker: ## Run Docker-aware integration tests (requires git; Docker optional)
+	@echo "Running Docker integration tests..."
+	@go test -v -race -tags=integration -timeout 300s ./tests/integration/
+
+test-all: test test-integration-tui test-integration-docker ## Run unit + all integration tests
 
 test-fixture: ## Create persistent test fixture for TUI testing
 	@./scripts/create-fixture.sh
