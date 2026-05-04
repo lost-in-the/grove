@@ -376,6 +376,17 @@ on_failure = "warn"
 
 For Docker-based projects, `grove init` auto-routes install commands as `docker:compose` hooks so they run inside the container instead of failing on the host. See [docs/CONFIGURATION_REFERENCE.md](docs/CONFIGURATION_REFERENCE.md#hooks-configuration-grovehookstoml) for the full schema and [docs/PLUGIN_DEVELOPMENT.md](docs/PLUGIN_DEVELOPMENT.md) for writing custom plugins (including how to add new hook types).
 
+### Hooks: trust model
+
+Grove runs `command` hooks via `sh -c` with your full parent-process environment forwarded. Treat `.grove/hooks.toml` the same way you would a `Makefile` or `package.json` scripts block: it is trusted code.
+
+- **Your own repos:** hooks you wrote are inherently trusted.
+- **Third-party or cloned repos:** review `.grove/hooks.toml` before running `grove new` or `grove to`, just as you would review a `Makefile` before running `make`.
+- **Environment inheritance:** any secrets in your shell environment (API keys, credentials, tokens) are visible to hook commands. Hooks can read, write, and exfiltrate them.
+- **No sandboxing:** grove does not restrict what hooks can do — network access, file writes, and subprocess spawning are all available.
+
+See [docs/AGENT_GUIDE.md](docs/AGENT_GUIDE.md#security) for guidance specific to AI agents running grove autonomously.
+
 ---
 
 ## Configuration

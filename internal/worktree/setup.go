@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/fsutil"
@@ -90,5 +91,11 @@ func createSymlink(src, dst string) error {
 		}
 	}
 
-	return os.Symlink(src, dst)
+	if err := os.Symlink(src, dst); err != nil {
+		if runtime.GOOS == "windows" {
+			return fmt.Errorf("%w\n  hint: symlinks on Windows require Developer Mode or administrator privileges; consider using copy_files / copy_dirs instead", err)
+		}
+		return err
+	}
+	return nil
 }

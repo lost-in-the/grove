@@ -320,6 +320,26 @@ grove/
 - **Complex logic**: Add inline comments explaining "why", not "what"
 - **Examples**: Add to README.md for new features
 
+## Platform Notes
+
+### Windows
+
+Grove is distributed for Windows (amd64) via GoReleaser, but a few features have OS-level constraints.
+
+**Symlinks require elevated privileges.** `os.Symlink` on Windows fails unless either Developer Mode is enabled or the process is running as an administrator. This affects:
+
+- `symlink_files` in `[plugins.docker.external]` config
+- `symlink_dirs` in `[plugins.docker.external]` config
+- The `type = "symlink"` hook action in `hooks.toml`
+
+**Recommendation for Windows users and contributors:**
+
+- Use `copy_files` / `copy_dirs` (external config) or `type = "copy"` hooks instead of their symlink counterparts. Copies work without elevation and are functionally equivalent for most workflows.
+- If symlinks are important for your setup, enable Developer Mode in Windows Settings → Privacy & Security → For Developers, or run grove from an elevated terminal.
+- When writing platform-sensitive tests, use `//go:build !windows` to skip symlink assertions on Windows, or use `t.Skip` with a runtime GOOS check.
+
+See [docs/CONFIGURATION_REFERENCE.md](docs/CONFIGURATION_REFERENCE.md#pluginsdockerexternal) for the `symlink_files` / `symlink_dirs` reference and the cross-link to this section.
+
 ## Getting Help
 
 - **Questions**: Open a [Discussion](https://github.com/lost-in-the/grove/discussions)
