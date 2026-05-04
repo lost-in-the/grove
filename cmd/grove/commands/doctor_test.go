@@ -9,13 +9,23 @@ package commands
 // See release-audit/coverage-gaps.md §"grove doctor orchestration smoke test".
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lost-in-the/grove/internal/cli"
+	"github.com/lost-in-the/grove/internal/config"
 )
+
+// newTestWriter returns a *cli.Writer backed by a bytes.Buffer for capturing
+// output in tests. Color is disabled (isTTY=false) so output is plain text.
+func newTestWriter(buf *bytes.Buffer) *cli.Writer {
+	return cli.NewWriter(buf, false)
+}
 
 func TestCheckHooksDockerRouting_FlagsHostBundleInstall(t *testing.T) {
 	root := t.TempDir()
@@ -1000,4 +1010,398 @@ func TestCheckConfigSymlinks(t *testing.T) {
 			t.Errorf("expected '1 worktrees checked', got %q", detail)
 		}
 	})
+}
+
+// ── runCheck / runInfo ─────────────────────────────────────────────────────
+
+func TestRunCheck(t *testing.T) {
+	t.Run("passing check emits success line", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := newTestWriter(&buf)
+		ok := runCheck(w, "My check", func() (string, error) {
+			return "detail text", nil
+		})
+		if !ok {
+			t.Error("expected runCheck to return true on success")
+		}
+		if !strings.Contains(buf.String(), "My check") {
+			t.Errorf("expected 'My check' in output, got %q", buf.String())
+		}
+		if !strings.Contains(buf.String(), "detail text") {
+			t.Errorf("expected detail in output, got %q", buf.String())
+		}
+	})
+
+	t.Run("passing check with empty detail", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := newTestWriter(&buf)
+		ok := runCheck(w, "No detail", func() (string, error) {
+			return "", nil
+		})
+		if !ok {
+			t.Error("expected runCheck to return true")
+		}
+		if !strings.Contains(buf.String(), "No detail") {
+			t.Errorf("expected check name in output, got %q", buf.String())
+		}
+	})
+
+	t.Run("failing check emits error line and returns false", func(t *testing.T) {
+		var buf bytes.Buffer
+		w := newTestWriter(&buf)
+		ok := runCheck(w, "Bad check", func() (string, error) {
+			return "", fmt.Errorf("something went wrong")
+		})
+		if ok {
+			t.Error("expected runCheck to return false on error")
+		}
+		if !strings.Contains(buf.String(), "Bad check") {
+			t.Errorf("expected check name in output, got %q", buf.String())
+		}
+		if !strings.Contains(buf.String(), "something went wrong") {
+			t.Errorf("expected error text in output, got %q", buf.String())
+		}
+	})
+}
+
+func TestRunInfo(t *testing.T) {
+	var buf bytes.Buffer
+	w := newTestWriter(&buf)
+	runInfo(w, "Project", "not in a grove project")
+	out := buf.String()
+	if !strings.Contains(out, "Project") {
+		t.Errorf("expected 'Project' in output, got %q", out)
+	}
+	if !strings.Contains(out, "not in a grove project") {
+		t.Errorf("expected detail in output, got %q", out)
+	}
+}
+
+// ── runExternalModeChecks ──────────────────────────────────────────────────
+
+func TestRunExternalModeChecks_LocalMode(t *testing.T) {
+	var buf bytes.Buffer
+	w := newTestWriter(&buf)
+	cfg := config.LoadDefaults() // Mode defaults to "" (local)
+	allPassed := true
+	runExternalModeChecks(w, cfg, t.TempDir(), &allPassed)
+	out := buf.String()
+	if !strings.Contains(out, "not configured") {
+		t.Errorf("expected 'not configured' info line for local mode, got %q", out)
+	}
+	if !allPassed {
+		t.Error("expected allPassed to remain true in local mode")
+	}
+}
+
+func TestRunExternalModeChecks_NilConfig(t *testing.T) {
+	var buf bytes.Buffer
+	w := newTestWriter(&buf)
+	allPassed := true
+	runExternalModeChecks(w, nil, t.TempDir(), &allPassed)
+	out := buf.String()
+	if !strings.Contains(out, "not configured") {
+		t.Errorf("expected 'not configured' for nil config, got %q", out)
+	}
+}
+
+func TestRunExternalModeChecks_ExternalModeClean(t *testing.T) {
+	// A clean external-mode project: path exists, no provisioning files.
+	extDir := t.TempDir()
+	projectRoot := t.TempDir()
+
+	cfg := config.LoadDefaults()
+	cfg.Plugins.Docker.Mode = "external"
+	cfg.Plugins.Docker.External = &config.ExternalComposeConfig{
+		Path: extDir,
+	}
+
+	var buf bytes.Buffer
+	w := newTestWriter(&buf)
+	allPassed := true
+	runExternalModeChecks(w, cfg, projectRoot, &allPassed)
+	out := buf.String()
+
+	if !strings.Contains(out, "External compose path") {
+		t.Errorf("expected 'External compose path' check in output, got %q", out)
+	}
+	if !allPassed {
+		t.Errorf("expected allPassed=true for clean external project, output:\n%s", out)
+	}
+}
+
+func TestRunExternalModeChecks_ExternalPathMissing(t *testing.T) {
+	// Path is set but does not exist.
+	projectRoot := t.TempDir()
+	cfg := config.LoadDefaults()
+	cfg.Plugins.Docker.Mode = "external"
+	cfg.Plugins.Docker.External = &config.ExternalComposeConfig{
+		Path: filepath.Join(projectRoot, "nonexistent"),
+	}
+
+	var buf bytes.Buffer
+	w := newTestWriter(&buf)
+	allPassed := true
+	runExternalModeChecks(w, cfg, projectRoot, &allPassed)
+	out := buf.String()
+
+	if allPassed {
+		t.Errorf("expected allPassed=false when ext path is missing, output:\n%s", out)
+	}
+	if !strings.Contains(out, "External compose path") {
+		t.Errorf("expected 'External compose path' check in output, got %q", out)
+	}
+}
+
+func TestRunExternalModeChecks_ExternalPathIsFile(t *testing.T) {
+	// Path exists but is a file, not a directory.
+	projectRoot := t.TempDir()
+	filePath := filepath.Join(projectRoot, "not-a-dir")
+	if err := os.WriteFile(filePath, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.LoadDefaults()
+	cfg.Plugins.Docker.Mode = "external"
+	cfg.Plugins.Docker.External = &config.ExternalComposeConfig{
+		Path: filePath,
+	}
+
+	var buf bytes.Buffer
+	w := newTestWriter(&buf)
+	allPassed := true
+	runExternalModeChecks(w, cfg, projectRoot, &allPassed)
+	if allPassed {
+		t.Error("expected allPassed=false when ext path is a file, not a directory")
+	}
+}
+
+// ── checkProvisioningSources ───────────────────────────────────────────────
+
+func TestCheckProvisioningSources_AllPresent(t *testing.T) {
+	projectRoot := t.TempDir()
+	// Create the files referenced in copy_files and symlink_files.
+	for _, name := range []string{".env", "credentials.json"} {
+		if err := os.WriteFile(filepath.Join(projectRoot, name), []byte(""), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ext := &config.ExternalComposeConfig{
+		CopyFiles:    []string{".env"},
+		SymlinkFiles: []string{"credentials.json"},
+	}
+	var buf bytes.Buffer
+	w := newTestWriter(&buf)
+	allPassed := true
+	checkProvisioningSources(w, ext, projectRoot, &allPassed)
+	if !allPassed {
+		t.Errorf("expected allPassed=true when all files present, output:\n%s", buf.String())
+	}
+}
+
+func TestCheckProvisioningSources_MissingFile(t *testing.T) {
+	projectRoot := t.TempDir()
+	// Do NOT create the file — it should be flagged as missing.
+	ext := &config.ExternalComposeConfig{
+		CopyFiles: []string{"credentials.json"},
+	}
+	var buf bytes.Buffer
+	w := newTestWriter(&buf)
+	allPassed := true
+	checkProvisioningSources(w, ext, projectRoot, &allPassed)
+	if allPassed {
+		t.Errorf("expected allPassed=false when file is missing, output:\n%s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "credentials.json") {
+		t.Errorf("expected missing file name in output, got %q", buf.String())
+	}
+}
+
+func TestCheckProvisioningSources_Empty(t *testing.T) {
+	// No provisioning entries — no checks emitted.
+	ext := &config.ExternalComposeConfig{}
+	var buf bytes.Buffer
+	w := newTestWriter(&buf)
+	allPassed := true
+	checkProvisioningSources(w, ext, t.TempDir(), &allPassed)
+	if buf.Len() != 0 {
+		t.Errorf("expected no output for empty provisioning config, got %q", buf.String())
+	}
+	if !allPassed {
+		t.Error("expected allPassed unchanged (true) for empty provisioning config")
+	}
+}
+
+func TestCheckProvisioningSources_SymlinkDirMissing(t *testing.T) {
+	projectRoot := t.TempDir()
+	ext := &config.ExternalComposeConfig{
+		SymlinkDirs: []string{"vendor"},
+	}
+	var buf bytes.Buffer
+	w := newTestWriter(&buf)
+	allPassed := true
+	checkProvisioningSources(w, ext, projectRoot, &allPassed)
+	if allPassed {
+		t.Errorf("expected allPassed=false for missing symlink_dirs entry, output:\n%s", buf.String())
+	}
+}
+
+// ── checkEnvFileChecks ─────────────────────────────────────────────────────
+
+func TestCheckEnvFileChecks_DefaultEnvSkips(t *testing.T) {
+	// Default .env with no hint: function should emit nothing.
+	var buf bytes.Buffer
+	w := newTestWriter(&buf)
+	allPassed := true
+	checkEnvFileChecks(w, ".env", envFileCheckResult{hintAvailable: false}, &allPassed)
+	if buf.Len() != 0 {
+		t.Errorf("expected no output for default .env without hint, got %q", buf.String())
+	}
+}
+
+func TestCheckEnvFileChecks_DefaultEnvHint(t *testing.T) {
+	// Default .env with hint: should emit an info line, not fail.
+	var buf bytes.Buffer
+	w := newTestWriter(&buf)
+	allPassed := true
+	checkEnvFileChecks(w, ".env", envFileCheckResult{hintAvailable: true}, &allPassed)
+	out := buf.String()
+	if !strings.Contains(out, "Env file hint") {
+		t.Errorf("expected 'Env file hint' in output, got %q", out)
+	}
+	if !allPassed {
+		t.Error("expected allPassed unchanged (true) for hint-only case")
+	}
+}
+
+func TestCheckEnvFileChecks_CustomEnvLoaderFound(t *testing.T) {
+	// Custom env file, loader present, config loads the file.
+	var buf bytes.Buffer
+	w := newTestWriter(&buf)
+	allPassed := true
+	result := envFileCheckResult{
+		loaderInstalled: true,
+		loaderName:      "direnv",
+		configExists:    true,
+		configLoadsFile: true,
+	}
+	checkEnvFileChecks(w, ".env.local", result, &allPassed)
+	out := buf.String()
+	if !strings.Contains(out, "Env file target") {
+		t.Errorf("expected 'Env file target' check, got %q", out)
+	}
+	if !allPassed {
+		t.Errorf("expected allPassed=true, output:\n%s", out)
+	}
+}
+
+func TestCheckEnvFileChecks_CustomEnvLoaderMissing(t *testing.T) {
+	// Loader not found — runCheck emits an error (non-fatal, result not gated).
+	var buf bytes.Buffer
+	w := newTestWriter(&buf)
+	allPassed := true
+	result := envFileCheckResult{
+		loaderInstalled: false,
+		loaderErr:       "neither direnv nor mise found",
+		configLoadsFile: false,
+		configErr:       "no .envrc or .mise.toml found",
+	}
+	checkEnvFileChecks(w, ".env.local", result, &allPassed)
+	out := buf.String()
+	if !strings.Contains(out, "Env file loader") {
+		t.Errorf("expected 'Env file loader' check in output, got %q", out)
+	}
+}
+
+// ── checkAgentStacks ───────────────────────────────────────────────────────
+
+func TestCheckAgentStacks_NotEnabled(t *testing.T) {
+	// Agent section absent — should emit "not enabled" info and return.
+	var buf bytes.Buffer
+	w := newTestWriter(&buf)
+	allPassed := true
+	ext := &config.ExternalComposeConfig{} // Agent is nil
+	cfg := config.LoadDefaults()
+	cfg.Plugins.Docker.Mode = "external"
+	cfg.Plugins.Docker.External = ext
+	checkAgentStacks(w, cfg, ext, &allPassed)
+	if !strings.Contains(buf.String(), "not enabled") {
+		t.Errorf("expected 'not enabled' info, got %q", buf.String())
+	}
+	if !allPassed {
+		t.Error("expected allPassed unchanged when agent not enabled")
+	}
+}
+
+func TestCheckAgentStacks_EnabledMissingTemplate(t *testing.T) {
+	// Agent enabled but template_path missing — should fail.
+	extDir := t.TempDir()
+	enabled := true
+	ext := &config.ExternalComposeConfig{
+		Path: extDir,
+		Agent: &config.AgentStackConfig{
+			Enabled:      &enabled,
+			Services:     []string{"app"},
+			TemplatePath: "agent-compose.yml", // does not exist
+		},
+	}
+	cfg := config.LoadDefaults()
+	cfg.Plugins.Docker.Mode = "external"
+	cfg.Plugins.Docker.External = ext
+
+	var buf bytes.Buffer
+	w := newTestWriter(&buf)
+	allPassed := true
+	checkAgentStacks(w, cfg, ext, &allPassed)
+	out := buf.String()
+	if allPassed {
+		t.Errorf("expected allPassed=false when template missing, output:\n%s", out)
+	}
+	if !strings.Contains(out, "Agent template path") {
+		t.Errorf("expected 'Agent template path' check in output, got %q", out)
+	}
+}
+
+func TestCheckAgentStacks_EnabledNoServices(t *testing.T) {
+	// Agent enabled but services list is empty — should fail agent config check.
+	extDir := t.TempDir()
+	enabled := true
+	ext := &config.ExternalComposeConfig{
+		Path: extDir,
+		Agent: &config.AgentStackConfig{
+			Enabled:      &enabled,
+			Services:     []string{}, // empty
+			TemplatePath: "agent.yml",
+		},
+	}
+	cfg := config.LoadDefaults()
+	cfg.Plugins.Docker.Mode = "external"
+	cfg.Plugins.Docker.External = ext
+
+	var buf bytes.Buffer
+	w := newTestWriter(&buf)
+	allPassed := true
+	checkAgentStacks(w, cfg, ext, &allPassed)
+	out := buf.String()
+	if allPassed {
+		t.Errorf("expected allPassed=false for empty services, output:\n%s", out)
+	}
+	if !strings.Contains(out, "agent.services is empty") {
+		t.Errorf("expected 'agent.services is empty' in output, got %q", out)
+	}
+}
+
+// ── checkAgentNetwork ─────────────────────────────────────────────────────
+
+func TestCheckAgentNetwork_EmptyNetworkNoOp(t *testing.T) {
+	// Empty network string: function should return immediately without output.
+	var buf bytes.Buffer
+	w := newTestWriter(&buf)
+	allPassed := true
+	checkAgentNetwork(w, "", &allPassed)
+	if buf.Len() != 0 {
+		t.Errorf("expected no output for empty network, got %q", buf.String())
+	}
+	if !allPassed {
+		t.Error("expected allPassed unchanged for empty network")
+	}
 }
