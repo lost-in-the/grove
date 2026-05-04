@@ -18,6 +18,29 @@ func IsInteractive() bool {
 	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
+// Prompter is the surface used by interactive command flows. Production code
+// uses StdPrompter; tests inject fakes so prompt branches are reachable
+// without raw-TTY stdin.
+type Prompter interface {
+	ChooseIndex(title string, options []string) (int, error)
+	Confirm(question string, defaultYes bool) (bool, error)
+	IsInteractive() bool
+}
+
+// StdPrompter delegates to the package-level prompt functions, which read
+// from os.Stdin.
+type StdPrompter struct{}
+
+func (StdPrompter) ChooseIndex(title string, options []string) (int, error) {
+	return ChooseIndex(title, options)
+}
+
+func (StdPrompter) Confirm(question string, defaultYes bool) (bool, error) {
+	return Confirm(question, defaultYes)
+}
+
+func (StdPrompter) IsInteractive() bool { return IsInteractive() }
+
 // ReadLine reads a single line of input from stdin, displaying the given prompt.
 // Uses raw terminal mode to properly handle Escape and Ctrl+C as cancellation.
 // Returns ErrPromptCanceled if the user cancels.

@@ -56,3 +56,25 @@ func TestChoose_NonInteractive(t *testing.T) {
 		t.Error("Choose() expected error in non-interactive mode, got nil")
 	}
 }
+
+// TestStdPrompter_DelegatesToFreeFunctions verifies the default Prompter
+// implementation forwards to the package-level helpers — IsInteractive,
+// Confirm, ChooseIndex — so behavior in production code matches what
+// tests see when they substitute a fake.
+func TestStdPrompter_DelegatesToFreeFunctions(t *testing.T) {
+	p := StdPrompter{}
+
+	if got, want := p.IsInteractive(), IsInteractive(); got != want {
+		t.Errorf("StdPrompter.IsInteractive() = %v, want %v (must match free function)", got, want)
+	}
+
+	if IsInteractive() {
+		t.Skip("stdin is a TTY — skipping non-interactive delegation checks")
+	}
+	if _, err := p.Confirm("continue?", false); err == nil {
+		t.Error("StdPrompter.Confirm() expected error in non-interactive mode")
+	}
+	if _, err := p.ChooseIndex("pick", []string{"a", "b"}); err == nil {
+		t.Error("StdPrompter.ChooseIndex() expected error in non-interactive mode")
+	}
+}
