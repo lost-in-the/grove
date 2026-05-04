@@ -1,5 +1,13 @@
 package commands
 
+// TODO(v0.7.1): Add orchestration smoke test for runExternalModeChecks,
+// checkProvisioningSources, and runCheck/runInfo (all at 0.0% coverage).
+// The test should call the doctor RunE with a mock filesystem representing
+// an external-mode project and assert the check output contains expected
+// messages. This was deferred from v0.7.0 due to scope — the RunE function
+// pulls in live filesystem, env, and git checks that need a full fixture.
+// See release-audit/coverage-gaps.md §"grove doctor orchestration smoke test".
+
 import (
 	"fmt"
 	"os"

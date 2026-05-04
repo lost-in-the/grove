@@ -175,6 +175,41 @@ func TestComposeHandler_InvalidMode(t *testing.T) {
 	}
 }
 
+func TestComposeHandler_RunError(t *testing.T) {
+	// fakeStrategy.runErr is defined but was never exercised. Verify that a
+	// strategy-level run error propagates through composeHandler.
+	p, fs := newFakePlugin()
+	syntheticErr := errors.New("bundle install failed with exit 1")
+	fs.runErr = syntheticErr
+	action := &hooks.HookAction{Type: "docker:compose", Service: "web", Command: "bundle install"}
+	ctx := &hooks.ExecutionContext{NewPath: "/tmp/wt"}
+
+	err := p.composeHandler(action, ctx, &hooks.Variables{})
+	if err == nil {
+		t.Fatal("expected error when Run fails, got nil")
+	}
+	if !strings.Contains(err.Error(), "web") {
+		t.Errorf("error should reference the service name, got %v", err)
+	}
+}
+
+func TestComposeHandler_ExecError(t *testing.T) {
+	// Symmetric test for exec mode: strategy-level exec error must propagate.
+	p, fs := newFakePlugin()
+	syntheticErr := errors.New("rails db:migrate failed")
+	fs.execErr = syntheticErr
+	action := &hooks.HookAction{Type: "docker:compose", Service: "app", Command: "rails db:migrate", Mode: "exec"}
+	ctx := &hooks.ExecutionContext{NewPath: "/tmp/wt"}
+
+	err := p.composeHandler(action, ctx, &hooks.Variables{})
+	if err == nil {
+		t.Fatal("expected error when Exec fails, got nil")
+	}
+	if !strings.Contains(err.Error(), "app") {
+		t.Errorf("error should reference the service name, got %v", err)
+	}
+}
+
 func TestComposeHandler_VariableInterpolation(t *testing.T) {
 	// Interpolation applies to service AND command (both can be per-worktree).
 	p, fs := newFakePlugin()
