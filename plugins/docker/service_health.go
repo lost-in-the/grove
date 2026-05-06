@@ -108,6 +108,20 @@ func classifyHealth(statuses []ServiceStatus, nonBlocking []string) (bool, []str
 	return len(blockers) == 0, blockers
 }
 
+// finalizeUpResult inspects post-up service health and decides whether the
+// reported cmdErr (from `compose up`) should propagate. If only non-blocking
+// services failed, returns nil. Otherwise wraps cmdErr with blocker context.
+func finalizeUpResult(cmdErr error, statuses []ServiceStatus, nonBlocking []string) error {
+	if cmdErr == nil {
+		return nil
+	}
+	healthy, blockers := classifyHealth(statuses, nonBlocking)
+	if healthy {
+		return nil
+	}
+	return fmt.Errorf("up failed; blocking service(s) not healthy: %s (underlying: %w)", strings.Join(blockers, ", "), cmdErr)
+}
+
 // probeServiceHealth runs `docker compose ps --all --format json` and returns parsed statuses.
 // composePath is the directory containing the compose file; envFile is the env file name
 // (e.g., ".env" or ".env.local") to pass via --env-file.

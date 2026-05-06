@@ -110,7 +110,11 @@ func (s *externalStrategy) Up(worktreePath string, detach bool) error {
 	cmd := composeCommand(s.composePath(), s.ext.EnvFileName(), s.envForWorktree(worktreePath), args...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	cmdErr := cmd.Run()
+
+	// Even if up returned non-zero, check whether only non-blocking services failed.
+	statuses, _ := probeServiceHealth(s.composePath(), s.ext.EnvFileName(), s.envForWorktree(worktreePath))
+	return finalizeUpResult(cmdErr, statuses, s.ext.NonBlockingServices)
 }
 
 func (s *externalStrategy) Down(_ string) error {
