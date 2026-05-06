@@ -110,10 +110,10 @@ func TestDiagnoseDrift_AtMainWorktree(t *testing.T) {
 
 func TestIsWorktreeInState(t *testing.T) {
 	tests := []struct {
-		name          string
-		stateData     []byte
-		worktreePath  string
-		want          bool
+		name         string
+		stateData    []byte
+		worktreePath string
+		want         bool
 	}{
 		{
 			name:         "present",
