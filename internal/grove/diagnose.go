@@ -64,6 +64,29 @@ const (
 	ReasonDriftedWorktree                    // cwd is a git worktree but not in state.json
 )
 
+// IsWorktreeInState checks whether a worktree path appears as a registered path
+// value in a state.json byte slice. The check is intentionally lightweight
+// (substring match, no full JSON parse) and handles symlink-resolved paths by
+// accepting either the raw or resolved form of worktreePath.
+//
+// Returns false when stateData is empty or nil.
+func IsWorktreeInState(stateData []byte, worktreePath string) bool {
+	if len(stateData) == 0 {
+		return false
+	}
+	stateStr := string(stateData)
+	if strings.Contains(stateStr, `"`+worktreePath+`"`) {
+		return true
+	}
+	// Also check the symlink-resolved path (e.g. macOS /var → /private/var).
+	if resolved, err := filepath.EvalSymlinks(worktreePath); err == nil && resolved != worktreePath {
+		if strings.Contains(stateStr, `"`+resolved+`"`) {
+			return true
+		}
+	}
+	return false
+}
+
 // DiagnoseDrift checks whether the worktree at worktreePath is registered in state.json
 // at mainPath/.grove/state.json. Returns ReasonRegistered when it's the main worktree
 // or appears in state, and ReasonDriftedWorktree otherwise.
@@ -90,16 +113,9 @@ func DiagnoseDrift(worktreePath, mainPath string) DriftReason {
 		return ReasonRegistered
 	}
 
-	// Look for the worktree path as a substring in the state file.
-	// Full JSON parse would be more robust, but state.go owns that and a
-	// lightweight check here keeps this package's surface area small.
-	// Check both the resolved and unresolved paths to handle symlinked temp
-	// directories (e.g. macOS /var → /private/var).
-	stateStr := string(data)
-	if strings.Contains(stateStr, `"`+resolvedWT+`"`) {
-		return ReasonRegistered
-	}
-	if worktreePath != resolvedWT && strings.Contains(stateStr, `"`+worktreePath+`"`) {
+	// Pass the original (unresolved) path so IsWorktreeInState can match both
+	// the stored form and the resolved form (handles macOS /var → /private/var).
+	if IsWorktreeInState(data, worktreePath) {
 		return ReasonRegistered
 	}
 	return ReasonDriftedWorktree

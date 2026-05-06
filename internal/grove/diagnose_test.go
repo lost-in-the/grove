@@ -108,6 +108,54 @@ func TestDiagnoseDrift_AtMainWorktree(t *testing.T) {
 	}
 }
 
+func TestIsWorktreeInState(t *testing.T) {
+	tests := []struct {
+		name          string
+		stateData     []byte
+		worktreePath  string
+		want          bool
+	}{
+		{
+			name:         "present",
+			stateData:    []byte(`{"worktrees":{"feature":{"path":"/repos/proj-feature","branch":"feature"}}}`),
+			worktreePath: "/repos/proj-feature",
+			want:         true,
+		},
+		{
+			name:         "absent",
+			stateData:    []byte(`{"worktrees":{"feature":{"path":"/repos/proj-feature","branch":"feature"}}}`),
+			worktreePath: "/repos/proj-other",
+			want:         false,
+		},
+		{
+			name:         "prefix collision: /foo vs /foo-bar",
+			stateData:    []byte(`{"worktrees":{"foo":{"path":"/repos/proj-foo","branch":"foo"}}}`),
+			worktreePath: "/repos/proj-foo-bar",
+			want:         false,
+		},
+		{
+			name:         "nil data returns false",
+			stateData:    nil,
+			worktreePath: "/repos/proj-feature",
+			want:         false,
+		},
+		{
+			name:         "empty data returns false",
+			stateData:    []byte{},
+			worktreePath: "/repos/proj-feature",
+			want:         false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsWorktreeInState(tt.stateData, tt.worktreePath)
+			if got != tt.want {
+				t.Errorf("IsWorktreeInState(%q) = %v, want %v", tt.worktreePath, got, tt.want)
+			}
+		})
+	}
+}
+
 func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...)
