@@ -286,6 +286,14 @@ env_file = ".env"                  # string
 # Required.
 services = ["web", "worker"]       # string array (required)
 
+# Subset of `services` that may legitimately exit (one-shot init: asset
+# precompile, DB seed) without making the stack appear unhealthy. Failures in
+# these services do not block `grove up` and do not downgrade `grove ps` from
+# "up" to "degraded". Long-running services (web, db, redis) should NOT appear
+# here — listing them masks real failures.
+# Default: [] (every configured service is treated as long-running)
+non_blocking_services = ["asset_precompile", "db_seed"]  # string array
+
 # Files to copy from the main worktree into each new worktree on create.
 # Useful for credential files, local config, etc. that are gitignored.
 # Paths are relative to the worktree root.
