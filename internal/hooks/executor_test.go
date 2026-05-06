@@ -140,6 +140,70 @@ func TestExecute(t *testing.T) {
 	})
 }
 
+func TestBuiltinCopyPathTraversal(t *testing.T) {
+	mainDir := t.TempDir()
+	newDir := t.TempDir()
+	vars := &Variables{}
+
+	t.Run("legitimate copy succeeds", func(t *testing.T) {
+		_ = os.WriteFile(filepath.Join(mainDir, "app.yml"), []byte("ok"), 0644)
+		action := &HookAction{From: "app.yml", To: "app.yml"}
+		ctx := &ExecutionContext{MainPath: mainDir, NewPath: newDir}
+		if err := builtinCopy(action, ctx, vars); err != nil {
+			t.Errorf("builtinCopy() legitimate path = %v, want nil", err)
+		}
+	})
+
+	t.Run("dotdot escape in From rejected", func(t *testing.T) {
+		action := &HookAction{From: "../../.ssh/id_rsa", To: "dest.txt"}
+		ctx := &ExecutionContext{MainPath: mainDir, NewPath: newDir}
+		if err := builtinCopy(action, ctx, vars); err == nil {
+			t.Error("builtinCopy() with traversal From = nil, want error")
+		}
+	})
+
+	t.Run("dotdot escape in To rejected", func(t *testing.T) {
+		_ = os.WriteFile(filepath.Join(mainDir, "source.txt"), []byte("ok"), 0644)
+		action := &HookAction{From: "source.txt", To: "../../etc/passwd"}
+		ctx := &ExecutionContext{MainPath: mainDir, NewPath: newDir}
+		if err := builtinCopy(action, ctx, vars); err == nil {
+			t.Error("builtinCopy() with traversal To = nil, want error")
+		}
+	})
+}
+
+func TestBuiltinSymlinkPathTraversal(t *testing.T) {
+	mainDir := t.TempDir()
+	newDir := t.TempDir()
+	vars := &Variables{}
+
+	t.Run("legitimate symlink succeeds", func(t *testing.T) {
+		_ = os.WriteFile(filepath.Join(mainDir, "node_modules"), []byte("ok"), 0644)
+		action := &HookAction{From: "node_modules", To: "node_modules"}
+		ctx := &ExecutionContext{MainPath: mainDir, NewPath: newDir}
+		if err := builtinSymlink(action, ctx, vars); err != nil {
+			t.Errorf("builtinSymlink() legitimate path = %v, want nil", err)
+		}
+	})
+
+	t.Run("dotdot escape in From rejected", func(t *testing.T) {
+		action := &HookAction{From: "../../.ssh/id_rsa", To: "link"}
+		ctx := &ExecutionContext{MainPath: mainDir, NewPath: newDir}
+		if err := builtinSymlink(action, ctx, vars); err == nil {
+			t.Error("builtinSymlink() with traversal From = nil, want error")
+		}
+	})
+
+	t.Run("dotdot escape in To rejected", func(t *testing.T) {
+		_ = os.WriteFile(filepath.Join(mainDir, "src"), []byte("ok"), 0644)
+		action := &HookAction{From: "src", To: "../../evil"}
+		ctx := &ExecutionContext{MainPath: mainDir, NewPath: newDir}
+		if err := builtinSymlink(action, ctx, vars); err == nil {
+			t.Error("builtinSymlink() with traversal To = nil, want error")
+		}
+	})
+}
+
 func TestExecuteCopy(t *testing.T) {
 	t.Run("file copy", func(t *testing.T) {
 		mainDir := t.TempDir()
@@ -156,7 +220,7 @@ func TestExecuteCopy(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		if err := e.executeCopy(action, ctx, vars); err != nil {
+		if err := builtinCopy(action, ctx, vars); err != nil {
 			t.Fatalf("executeCopy() error = %v", err)
 		}
 
@@ -179,7 +243,7 @@ func TestExecuteCopy(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		err := e.executeCopy(action, ctx, vars)
+		err := builtinCopy(action, ctx, vars)
 		if err == nil {
 			t.Error("executeCopy() with missing source = nil, want error")
 		}
@@ -200,7 +264,7 @@ func TestExecuteCopy(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		if err := e.executeCopy(action, ctx, vars); err != nil {
+		if err := builtinCopy(action, ctx, vars); err != nil {
 			t.Fatalf("executeCopy() error = %v", err)
 		}
 
@@ -229,7 +293,7 @@ func TestExecuteSymlink(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		if err := e.executeSymlink(action, ctx, vars); err != nil {
+		if err := builtinSymlink(action, ctx, vars); err != nil {
 			t.Fatalf("executeSymlink() error = %v", err)
 		}
 
@@ -261,7 +325,7 @@ func TestExecuteSymlink(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		if err := e.executeSymlink(action, ctx, vars); err != nil {
+		if err := builtinSymlink(action, ctx, vars); err != nil {
 			t.Fatalf("executeSymlink() error = %v", err)
 		}
 
@@ -284,7 +348,7 @@ func TestExecuteSymlink(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		err := e.executeSymlink(action, ctx, vars)
+		err := builtinSymlink(action, ctx, vars)
 		if err == nil {
 			t.Error("executeSymlink() with missing source = nil, want error")
 		}
@@ -301,7 +365,7 @@ func TestExecuteCommand(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		if err := e.executeCommand(action, ctx, vars); err != nil {
+		if err := builtinCommand(action, ctx, vars); err != nil {
 			t.Fatalf("executeCommand() error = %v", err)
 		}
 	})
@@ -320,7 +384,7 @@ func TestExecuteCommand(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		if err := e.executeCommand(action, ctx, vars); err != nil {
+		if err := builtinCommand(action, ctx, vars); err != nil {
 			t.Errorf("executeCommand() with main working dir = %v, want nil", err)
 		}
 	})
@@ -339,7 +403,7 @@ func TestExecuteCommand(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		if err := e.executeCommand(action, ctx, vars); err != nil {
+		if err := builtinCommand(action, ctx, vars); err != nil {
 			t.Errorf("executeCommand() with new working dir = %v, want nil", err)
 		}
 	})
@@ -353,7 +417,7 @@ func TestExecuteCommand(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		err := e.executeCommand(action, ctx, vars)
+		err := builtinCommand(action, ctx, vars)
 		if err == nil {
 			t.Error("executeCommand() with failing command = nil, want error")
 		}
@@ -376,7 +440,7 @@ func TestExecuteTemplate(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		if err := e.executeTemplate(action, ctx, vars); err != nil {
+		if err := builtinTemplate(action, ctx, vars); err != nil {
 			t.Fatalf("executeTemplate() error = %v", err)
 		}
 
@@ -408,7 +472,7 @@ func TestExecuteTemplate(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		if err := e.executeTemplate(action, ctx, vars); err != nil {
+		if err := builtinTemplate(action, ctx, vars); err != nil {
 			t.Fatalf("executeTemplate() error = %v", err)
 		}
 
@@ -431,7 +495,7 @@ func TestExecuteTemplate(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		err := e.executeTemplate(action, ctx, vars)
+		err := builtinTemplate(action, ctx, vars)
 		if err == nil {
 			t.Error("executeTemplate() with missing source = nil, want error")
 		}
@@ -451,7 +515,7 @@ func TestExecuteTemplate(t *testing.T) {
 		e := NewExecutorWithConfig(&HooksConfig{})
 		var buf bytes.Buffer
 		e.Output = &buf
-		if err := e.executeTemplate(action, ctx, vars); err != nil {
+		if err := builtinTemplate(action, ctx, vars); err != nil {
 			t.Fatalf("executeTemplate() error = %v", err)
 		}
 

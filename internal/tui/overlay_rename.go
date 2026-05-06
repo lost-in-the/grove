@@ -87,36 +87,34 @@ func renderRename(s *RenameState, width int) string {
 		return ""
 	}
 
-	overlayWidth := calcOverlayWidth(width)
-	indent := overlayIndent
+	d := calcOverlayDims(width)
 
 	if s.Renaming {
 		var b strings.Builder
-		b.WriteString(indent + "Renaming worktree " + Styles.DetailValue.Render(s.Item.ShortName) + "...\n")
-		b.WriteString("\n" + Styles.Footer.Render(indent+"Please wait..."))
-		return Styles.OverlayBorder.Width(overlayWidth).Render(
+		b.WriteString(d.indent + "Renaming worktree " + Styles.DetailValue.Render(s.Item.ShortName) + "...\n")
+		b.WriteString("\n" + Styles.Footer.Render(d.indent+"Please wait..."))
+		return Styles.OverlayBorder.Width(d.overlay).Render(
 			Styles.OverlayTitle.Render("Rename Worktree") + "\n\n" + b.String(),
 		)
 	}
 
 	var b strings.Builder
 
-	b.WriteString(indent + "Current name: " + Styles.DetailValue.Render(s.Item.ShortName) + "\n\n")
-	b.WriteString(indent + s.Input.View() + "\n")
+	b.WriteString(d.indent + "Current name: " + Styles.DetailValue.Render(s.Item.ShortName) + "\n\n")
+	b.WriteString(d.indent + s.Input.View() + "\n")
 
 	newName := s.Input.Value()
 	if newName != "" && s.Item.ShortName != newName {
-		// Show what the full name will look like
-		b.WriteString(indent + Styles.DetailDim.Render("→ directory will be renamed") + "\n")
+		b.WriteString(d.indent + Styles.DetailDim.Render("→ directory will be renamed") + "\n")
 	}
 
 	if s.Error != "" {
-		b.WriteString("\n" + indent + Styles.ErrorText.Render(s.Error) + "\n")
+		b.WriteString("\n" + d.indent + Styles.ErrorText.Render(s.Error) + "\n")
 	}
 
-	b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] rename  [esc] cancel"))
+	b.WriteString("\n" + Styles.Footer.Render(d.indent+"[enter] rename  [esc] cancel"))
 
-	return Styles.OverlayBorder.Width(overlayWidth).Render(
+	return Styles.OverlayBorder.Width(d.overlay).Render(
 		Styles.OverlayTitle.Render("Rename Worktree") + "\n\n" + b.String(),
 	)
 }

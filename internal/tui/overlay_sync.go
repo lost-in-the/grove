@@ -140,89 +140,113 @@ func (m Model) handleSyncKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	s := m.syncState
-
-	if s.Syncing {
+	if m.syncState.Syncing {
 		return m, nil
 	}
 
-	switch s.Step {
+	switch m.syncState.Step {
 	case SyncStepSource:
-		switch {
-		case key.Matches(msg, m.keys.Escape):
-			m.activeView = ViewDashboard
-			m.syncState = nil
-			return m, nil
-
-		case key.Matches(msg, m.keys.Up):
-			if s.Selected > 0 {
-				s.Selected--
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.Down):
-			if len(s.Sources) > 0 && s.Selected < len(s.Sources)-1 {
-				s.Selected++
-			}
-			return m, nil
-
-		case key.Matches(msg, m.keys.Enter):
-			src := s.selectedSource()
-			if src == nil {
-				return m, nil
-			}
-			if src.CheckErr != nil {
-				s.Err = fmt.Errorf("cannot sync: WIP check failed for %s", src.Item.ShortName)
-				return m, nil
-			}
-			if !src.HasWIP {
-				s.Err = fmt.Errorf("no uncommitted changes in %s", src.Item.ShortName)
-				return m, nil
-			}
-			s.Err = nil
-			s.Step = SyncStepPreview
-			s.Stepper.Current = 1
-			return m, nil
-		}
-
+		return m.handleSyncSourceKey(msg)
 	case SyncStepPreview:
-		switch {
-		case key.Matches(msg, m.keys.Escape):
-			m.activeView = ViewDashboard
-			m.syncState = nil
-			return m, nil
-
-		case key.Matches(msg, m.keys.Back):
-			s.Step = SyncStepSource
-			s.Stepper.Current = 0
-			return m, nil
-
-		case key.Matches(msg, m.keys.Enter):
-			s.Step = SyncStepConfirm
-			s.Stepper.Current = 2
-			return m, nil
-		}
-
+		return m.handleSyncPreviewKey(msg)
 	case SyncStepConfirm:
-		switch {
-		case key.Matches(msg, m.keys.Escape):
-			m.activeView = ViewDashboard
-			m.syncState = nil
-			return m, nil
+		return m.handleSyncConfirmKey(msg)
+	}
 
-		case key.Matches(msg, m.keys.Back):
-			s.Step = SyncStepPreview
-			s.Stepper.Current = 1
-			return m, nil
+	return m, nil
+}
 
-		case key.Matches(msg, m.keys.Enter):
-			src := s.selectedSource()
-			if src == nil {
-				return m, nil
-			}
-			s.Syncing = true
-			return m, tea.Batch(m.spinner.Tick, syncWorktreeCmd(*src, s.Target))
+// dismissSync closes the sync overlay and returns to the dashboard.
+func (m Model) dismissSync() (tea.Model, tea.Cmd) {
+	m.activeView = ViewDashboard
+	m.syncState = nil
+	return m, nil
+}
+
+// handleSyncSourceKey handles key input for the source selection step.
+func (m Model) handleSyncSourceKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	s := m.syncState
+
+	switch {
+	case key.Matches(msg, m.keys.Escape):
+		return m.dismissSync()
+
+	case key.Matches(msg, m.keys.Up):
+		if s.Selected > 0 {
+			s.Selected--
 		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.Down):
+		if len(s.Sources) > 0 && s.Selected < len(s.Sources)-1 {
+			s.Selected++
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keys.Enter):
+		src := s.selectedSource()
+		if src == nil {
+			return m, nil
+		}
+		if src.CheckErr != nil {
+			s.Err = fmt.Errorf("cannot sync: WIP check failed for %s", src.Item.ShortName)
+			return m, nil
+		}
+		if !src.HasWIP {
+			s.Err = fmt.Errorf("no uncommitted changes in %s", src.Item.ShortName)
+			return m, nil
+		}
+		s.Err = nil
+		s.Step = SyncStepPreview
+		s.Stepper.Current = 1
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// handleSyncPreviewKey handles key input for the preview step.
+func (m Model) handleSyncPreviewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	s := m.syncState
+
+	switch {
+	case key.Matches(msg, m.keys.Escape):
+		return m.dismissSync()
+
+	case key.Matches(msg, m.keys.Back):
+		s.Step = SyncStepSource
+		s.Stepper.Current = 0
+		return m, nil
+
+	case key.Matches(msg, m.keys.Enter):
+		s.Step = SyncStepConfirm
+		s.Stepper.Current = 2
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// handleSyncConfirmKey handles key input for the confirm step.
+func (m Model) handleSyncConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	s := m.syncState
+
+	switch {
+	case key.Matches(msg, m.keys.Escape):
+		return m.dismissSync()
+
+	case key.Matches(msg, m.keys.Back):
+		s.Step = SyncStepPreview
+		s.Stepper.Current = 1
+		return m, nil
+
+	case key.Matches(msg, m.keys.Enter):
+		src := s.selectedSource()
+		if src == nil {
+			return m, nil
+		}
+		s.Syncing = true
+		return m, tea.Batch(m.spinner.Tick, syncWorktreeCmd(*src, s.Target))
 	}
 
 	return m, nil
@@ -230,93 +254,114 @@ func (m Model) handleSyncKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // renderSync renders the sync overlay.
 func renderSync(s *SyncState, width int) string {
-	overlayWidth := calcOverlayWidth(width)
-	contentWidth := overlayWidth - 6
-	indent := overlayIndent
-	innerWidth := contentWidth - len(indent)*2
+	d := calcOverlayDims(width)
 
 	var b strings.Builder
 
-	// Stepper
-	b.WriteString(indentBlock(s.Stepper.View(innerWidth), indent) + "\n\n")
+	b.WriteString(indentBlock(s.Stepper.View(d.inner), d.indent) + "\n\n")
 
 	if s.Syncing {
-		b.WriteString(indent + "⏳ Syncing changes...\n")
-		if s.Err != nil {
-			b.WriteString("\n" + indent + Styles.ErrorText.Render(s.Err.Error()) + "\n")
-		}
-		b.WriteString("\n" + Styles.Footer.Render(indent+"Please wait..."))
-		return Styles.OverlayBorderInfo.Width(overlayWidth).Render(
-			Styles.OverlayTitle.Render("Sync Changes") + "\n\n" + b.String(),
-		)
+		return renderSyncBusy(s, d, b.String())
 	}
 
 	if s.Err != nil {
-		b.WriteString(indent + Styles.ErrorText.Render("Error: "+s.Err.Error()) + "\n\n")
+		b.WriteString(d.indent + Styles.ErrorText.Render("Error: "+s.Err.Error()) + "\n\n")
 	}
 
+	var footer string
 	switch s.Step {
 	case SyncStepSource:
-		b.WriteString(indent + "Pull uncommitted changes from another worktree\n")
-		b.WriteString(indent + "into " + Styles.DetailValue.Render(s.Target.ShortName) + ".\n\n")
-
-		if len(s.Sources) == 0 {
-			b.WriteString(indent + Styles.DetailDim.Render("No other worktrees found.") + "\n")
-		} else {
-			for i, src := range s.Sources {
-				cursor := "  "
-				if i == s.Selected {
-					cursor = Styles.ListCursor.Render("❯ ")
-				}
-
-				name := src.Item.ShortName
-				var status string
-				if src.CheckErr != nil {
-					status = Styles.ErrorText.Render("error")
-				} else if src.HasWIP {
-					status = Styles.WarningText.Render(fmt.Sprintf("%d files changed", len(src.Files)))
-				} else {
-					status = Styles.DetailDim.Render("clean")
-				}
-
-				b.WriteString(indent + cursor + name + "    " + status + "\n")
-			}
-		}
-
-		b.WriteString("\n" + Styles.Footer.Render(indent+"↑↓ navigate  enter select  esc cancel"))
-
+		footer = renderSyncSourceStep(s, d, &b)
 	case SyncStepPreview:
-		src := s.selectedSource()
-		if src == nil {
-			break
-		}
-		b.WriteString(indent + Styles.DetailLabel.Render("From: ") + Styles.DetailValue.Render(src.Item.ShortName) + " → " + Styles.DetailValue.Render(s.Target.ShortName) + "\n\n")
-		b.WriteString(indent + "Modified:\n")
-		maxShow := 12
-		for i, f := range src.Files {
-			if i >= maxShow {
-				b.WriteString(indent + Styles.DetailDim.Render(fmt.Sprintf("  … and %d more", len(src.Files)-maxShow)) + "\n")
-				break
-			}
-			b.WriteString(indent + "  " + f + "\n")
-		}
-
-		b.WriteString("\n" + Styles.Footer.Render(indent+"enter confirm  backspace back  esc cancel"))
-
+		footer = renderSyncPreviewStep(s, d, &b)
 	case SyncStepConfirm:
-		src := s.selectedSource()
-		if src == nil {
-			break
-		}
-		b.WriteString(indent + Styles.DetailLabel.Render("From:   ") + Styles.DetailValue.Render(src.Item.ShortName) + "\n")
-		b.WriteString(indent + Styles.DetailLabel.Render("To:     ") + Styles.DetailValue.Render(s.Target.ShortName) + "\n")
-		b.WriteString(indent + Styles.DetailLabel.Render("Files:  ") + Styles.DetailValue.Render(fmt.Sprintf("%d", len(src.Files))) + "\n")
-
-		b.WriteString("\n" + Styles.SuccessText.Render(indent+"Ready to sync.") + "\n")
-		b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] sync  [backspace] back  [esc] cancel"))
+		footer = renderSyncConfirmStep(s, d, &b)
 	}
 
-	return Styles.OverlayBorderInfo.Width(overlayWidth).Render(
+	return Styles.OverlayBorderInfo.Width(d.overlay).Render(
+		Styles.OverlayTitle.Render("Sync Changes") + "\n\n" + padToHeight(b.String(), syncOverlayMinLines) + footer,
+	)
+}
+
+func renderSyncBusy(s *SyncState, d overlayDims, header string) string {
+	var b strings.Builder
+	b.WriteString(header)
+	b.WriteString(d.indent + "⏳ Syncing changes...\n")
+	if s.Err != nil {
+		b.WriteString("\n" + d.indent + Styles.ErrorText.Render(s.Err.Error()) + "\n")
+	}
+	b.WriteString("\n" + Styles.Footer.Render(d.indent+"Please wait..."))
+	return Styles.OverlayBorderInfo.Width(d.overlay).Render(
 		Styles.OverlayTitle.Render("Sync Changes") + "\n\n" + b.String(),
 	)
 }
+
+func renderSyncSourceStep(s *SyncState, d overlayDims, b *strings.Builder) string {
+	b.WriteString(d.indent + "Pull uncommitted changes from another worktree\n")
+	b.WriteString(d.indent + "into " + Styles.DetailValue.Render(s.Target.ShortName) + ".\n\n")
+
+	if len(s.Sources) == 0 {
+		b.WriteString(d.indent + Styles.DetailDim.Render("No other worktrees found.") + "\n")
+	} else {
+		for i, src := range s.Sources {
+			renderSyncSourceItem(d, b, i, s.Selected, src)
+		}
+	}
+
+	return "\n" + Styles.Footer.Render(d.indent+"↑↓ navigate  enter select  esc cancel")
+}
+
+func renderSyncSourceItem(d overlayDims, b *strings.Builder, idx, selected int, src WorktreeWIPInfo) {
+	cursor := "  "
+	if idx == selected {
+		cursor = Styles.ListCursor.Render("❯ ")
+	}
+
+	var status string
+	switch {
+	case src.CheckErr != nil:
+		status = Styles.ErrorText.Render("error")
+	case src.HasWIP:
+		status = Styles.WarningText.Render(fmt.Sprintf("%d files changed", len(src.Files)))
+	default:
+		status = Styles.DetailDim.Render("clean")
+	}
+
+	b.WriteString(d.indent + cursor + src.Item.ShortName + "    " + status + "\n")
+}
+
+func renderSyncPreviewStep(s *SyncState, d overlayDims, b *strings.Builder) string {
+	src := s.selectedSource()
+	if src == nil {
+		return ""
+	}
+	b.WriteString(d.indent + Styles.DetailLabel.Render("From: ") + Styles.DetailValue.Render(src.Item.ShortName) + " → " + Styles.DetailValue.Render(s.Target.ShortName) + "\n\n")
+	b.WriteString(d.indent + "Modified:\n")
+	maxShow := 12
+	for i, f := range src.Files {
+		if i >= maxShow {
+			b.WriteString(d.indent + Styles.DetailDim.Render(fmt.Sprintf("  … and %d more", len(src.Files)-maxShow)) + "\n")
+			break
+		}
+		b.WriteString(d.indent + "  " + f + "\n")
+	}
+
+	return "\n" + Styles.Footer.Render(d.indent+"enter confirm  backspace back  esc cancel")
+}
+
+func renderSyncConfirmStep(s *SyncState, d overlayDims, b *strings.Builder) string {
+	src := s.selectedSource()
+	if src == nil {
+		return ""
+	}
+	b.WriteString(d.indent + Styles.DetailLabel.Render("From:   ") + Styles.DetailValue.Render(src.Item.ShortName) + "\n")
+	b.WriteString(d.indent + Styles.DetailLabel.Render("To:     ") + Styles.DetailValue.Render(s.Target.ShortName) + "\n")
+	b.WriteString(d.indent + Styles.DetailLabel.Render("Files:  ") + Styles.DetailValue.Render(fmt.Sprintf("%d", len(src.Files))) + "\n")
+	b.WriteString("\n" + Styles.SuccessText.Render(d.indent+"Ready to sync.") + "\n")
+
+	return "\n" + Styles.Footer.Render(d.indent+"[enter] sync  [backspace] back  [esc] cancel")
+}
+
+// syncOverlayMinLines is the fixed content height for the sync wizard.
+// Set to accommodate the tallest step (preview with file list).
+const syncOverlayMinLines = 18

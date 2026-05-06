@@ -54,7 +54,7 @@ func CombinedOutput(ctx context.Context, name string, args []string, dir string,
 		return nil, fmt.Errorf("%s timed out after %v", name, timeout)
 	}
 	if err != nil {
-		return nil, err
+		return out, err
 	}
 	return out, nil
 }

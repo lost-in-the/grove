@@ -10,7 +10,7 @@ Be respectful, inclusive, and professional. We're all here to build something gr
 
 ### Prerequisites
 
-- Go 1.24 or later
+- Go 1.25 or later
 - Git 2.30 or later
 - Tmux 3.0 or later (for testing tmux features)
 - Make
@@ -255,7 +255,7 @@ CI runs on push to `main` (and `copilot/**` branches) and on PRs to `main`. Thre
 | **Lint** | golangci-lint (version pinned in CI) + `go vet` + `gofmt -s` check |
 | **Build** | `make build` (binary compilation) |
 
-All three use Go 1.24 with module cache keyed by `go.sum`. All three must pass for a PR to merge.
+All three use Go 1.25 with module cache keyed by `go.sum`. All three must pass for a PR to merge.
 
 ### Releases & Distribution
 
@@ -319,6 +319,26 @@ grove/
 - **Packages**: Should have package-level documentation
 - **Complex logic**: Add inline comments explaining "why", not "what"
 - **Examples**: Add to README.md for new features
+
+## Platform Notes
+
+### Windows
+
+Grove is distributed for Windows (amd64) via GoReleaser, but a few features have OS-level constraints.
+
+**Symlinks require elevated privileges.** `os.Symlink` on Windows fails unless either Developer Mode is enabled or the process is running as an administrator. This affects:
+
+- `symlink_files` in `[plugins.docker.external]` config
+- `symlink_dirs` in `[plugins.docker.external]` config
+- The `type = "symlink"` hook action in `hooks.toml`
+
+**Recommendation for Windows users and contributors:**
+
+- Use `copy_files` / `copy_dirs` (external config) or `type = "copy"` hooks instead of their symlink counterparts. Copies work without elevation and are functionally equivalent for most workflows.
+- If symlinks are important for your setup, enable Developer Mode in Windows Settings → Privacy & Security → For Developers, or run grove from an elevated terminal.
+- When writing platform-sensitive tests, use `//go:build !windows` to skip symlink assertions on Windows, or use `t.Skip` with a runtime GOOS check.
+
+See [docs/CONFIGURATION_REFERENCE.md](docs/CONFIGURATION_REFERENCE.md#pluginsdockerexternal) for the `symlink_files` / `symlink_dirs` reference and the cross-link to this section.
 
 ## Getting Help
 

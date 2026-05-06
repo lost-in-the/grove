@@ -12,6 +12,17 @@ import (
 	"github.com/lost-in-the/grove/internal/plugins"
 )
 
+const (
+	tmuxStatusAttached     = "attached"
+	tmuxStatusDetached     = "detached"
+	checkboxUnchecked      = "[ ]"
+	checkboxChecked        = "[x]"
+	boolTrue               = "true"
+	boolFalse              = "false"
+	reviewApproved         = "APPROVED"
+	reviewChangesRequested = "CHANGES_REQUESTED"
+)
+
 // WorktreeDelegate implements list.ItemDelegate for rendering worktree items.
 // Column widths are pre-computed by computeColumnWidths() and stored here
 // so Render() can lay out rows without re-scanning items each frame.
@@ -241,9 +252,9 @@ func syncStatusSymbol(item WorktreeItem, syncWidth int) string {
 // ⬢ purple = attached, ⬡ purple = detached, space = none.
 func tmuxStatusSymbol(item WorktreeItem) string {
 	switch item.TmuxStatus {
-	case "attached":
+	case tmuxStatusAttached:
 		return Styles.TmuxBadge.Render("⬢")
-	case "detached":
+	case tmuxStatusDetached:
 		return Styles.TmuxBadge.Render("⬡")
 	default:
 		return " "

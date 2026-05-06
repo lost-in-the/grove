@@ -43,12 +43,10 @@ type CheckoutState struct {
 
 // NewCheckoutState creates a new CheckoutState for the given worktree item.
 func NewCheckoutState(item WorktreeItem) *CheckoutState {
-	ti := newBranchFilterInput()
-	ti.Placeholder = "type to filter branches"
 	return &CheckoutState{
 		Step:              CheckoutStepBranch,
 		Item:              item,
-		BranchFilterInput: ti,
+		BranchFilterInput: newFilterInput("type to filter branches"),
 		Stepper:           NewStepper("Branch", "WIP", "Confirm"),
 	}
 }
@@ -60,13 +58,6 @@ type checkoutBranchesMsg struct {
 	branches     []string
 	usedBranches map[string]bool // branches used by other worktrees
 	err          error
-}
-
-// checkoutWIPCheckMsg is sent after checking for WIP in the worktree.
-type checkoutWIPCheckMsg struct {
-	hasWIP bool
-	files  []string
-	err    error
 }
 
 // checkoutCompleteMsg is sent after the branch switch completes.
@@ -109,25 +100,6 @@ func listCheckoutBranchesCmd(projectRoot string, currentWorktreePath string) tea
 		}
 
 		return checkoutBranchesMsg{branches: branches, usedBranches: usedBranches}
-	}
-}
-
-// checkoutWIPCmd checks for uncommitted changes in the worktree.
-func checkoutWIPCmd(item WorktreeItem) tea.Cmd {
-	return func() tea.Msg {
-		wip := worktree.NewWIPHandler(item.Path)
-		hasWIP, err := wip.HasWIP()
-		if err != nil {
-			return checkoutWIPCheckMsg{err: err}
-		}
-		var files []string
-		if hasWIP {
-			files, err = wip.ListWIPFiles()
-			if err != nil {
-				return checkoutWIPCheckMsg{hasWIP: hasWIP, err: fmt.Errorf("failed to list WIP files: %w", err)}
-			}
-		}
-		return checkoutWIPCheckMsg{hasWIP: hasWIP, files: files}
 	}
 }
 
@@ -317,110 +289,127 @@ func (m Model) handleCheckoutConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd
 
 // renderCheckout renders the checkout overlay.
 func renderCheckout(s *CheckoutState, width int) string {
-	overlayWidth := calcOverlayWidth(width)
-	contentWidth := overlayWidth - 6
-	indent := overlayIndent
-	innerWidth := contentWidth - len(indent)*2
+	d := calcOverlayDims(width)
 
 	var b strings.Builder
 
 	// Stepper
-	b.WriteString(indentBlock(s.Stepper.View(innerWidth), indent) + "\n\n")
+	b.WriteString(indentBlock(s.Stepper.View(d.inner), d.indent) + "\n\n")
 
 	if s.Switching {
-		b.WriteString(indent + "Switching to " + Styles.DetailValue.Render(s.SelectedBranch) + "...\n")
+		b.WriteString(d.indent + "Switching to " + Styles.DetailValue.Render(s.SelectedBranch) + "...\n")
 		if s.Stash {
-			b.WriteString(indent + Styles.DetailDim.Render("(changes stashed)") + "\n")
+			b.WriteString(d.indent + Styles.DetailDim.Render("(changes stashed)") + "\n")
 		}
 		if s.Err != nil {
-			b.WriteString("\n" + indent + Styles.ErrorText.Render(s.Err.Error()) + "\n")
+			b.WriteString("\n" + d.indent + Styles.ErrorText.Render(s.Err.Error()) + "\n")
 		}
-		b.WriteString("\n" + Styles.Footer.Render(indent+"Please wait..."))
-		return Styles.OverlayBorderSuccess.Width(overlayWidth).Render(
+		b.WriteString("\n" + Styles.Footer.Render(d.indent+"Please wait..."))
+		return Styles.OverlayBorderSuccess.Width(d.overlay).Render(
 			Styles.OverlayTitle.Render("Switch Branch") + "\n\n" + b.String(),
 		)
 	}
 
 	if s.Err != nil {
-		b.WriteString(indent + Styles.ErrorText.Render("Error: "+s.Err.Error()) + "\n\n")
+		b.WriteString(d.indent + Styles.ErrorText.Render("Error: "+s.Err.Error()) + "\n\n")
 	}
+
+	var footer string
 
 	switch s.Step {
 	case CheckoutStepBranch:
-		// Worktree context
-		b.WriteString(indent + Styles.DetailLabel.Render("Worktree: ") + Styles.DetailValue.Render(s.Item.ShortName) + "\n")
-		b.WriteString(indent + Styles.DetailLabel.Render("Current:  ") + Styles.DetailValue.Render(s.Item.Branch) + "\n\n")
-
-		if s.Branches == nil {
-			b.WriteString(indent + "Loading branches...\n")
-		} else if len(s.Branches) == 0 {
-			b.WriteString(indent + Styles.DetailDim.Render("(no other branches available)") + "\n")
-		} else {
-			// Filter input
-			filter := s.BranchFilterInput.Value()
-			if filter != "" {
-				b.WriteString(indent + s.BranchFilterInput.View() + "\n\n")
-			} else {
-				b.WriteString(indent + "Select a branch to switch to\n\n")
-			}
-
-			filtered := filteredBranches(s.Branches, filter)
-			if len(filtered) == 0 {
-				b.WriteString(indent + Styles.DetailDim.Render("(no matching branches)") + "\n")
-			} else {
-				start, end := scrollWindow(len(filtered), s.BranchCursor, 10)
-				for i := start; i < end; i++ {
-					cursor := "  "
-					if i == s.BranchCursor {
-						cursor = Styles.ListCursor.Render("❯ ")
-					}
-					b.WriteString(indent + cursor + filtered[i] + "\n")
-				}
-				if end < len(filtered) {
-					b.WriteString(indent + Styles.DetailDim.Render(fmt.Sprintf("… and %d more", len(filtered)-end)) + "\n")
-				}
-			}
-		}
-
-		if !s.WIPCheckDone {
-			b.WriteString("\n" + indent + Styles.DetailDim.Render("Checking for uncommitted changes...") + "\n")
-		}
-		b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] select  [esc] cancel  type to filter"))
-
+		footer = renderCheckoutBranchStep(&b, s, d)
 	case CheckoutStepWIP:
-		// Context summary
-		b.WriteString(indent + Styles.DetailLabel.Render("Worktree: ") + Styles.DetailValue.Render(s.Item.ShortName) + "\n")
-		b.WriteString(indent + Styles.DetailLabel.Render("Switch:   ") + Styles.DetailValue.Render(s.Item.Branch+" → "+s.SelectedBranch) + "\n")
-		b.WriteString(indent + Styles.DetailLabel.Render("WIP:      ") + Styles.WarningText.Render(fmt.Sprintf("%d files changed", len(s.WIPFiles))) + "\n\n")
-
-		b.WriteString(indent + "Handle Uncommitted Changes\n\n")
-		wipOptions := []string{
-			"Stash changes before switching",
-			"Cancel (keep current branch)",
-		}
-		for i, opt := range wipOptions {
-			cursor := "  "
-			if i == s.WIPCursor {
-				cursor = Styles.ListCursor.Render("❯ ")
-			}
-			b.WriteString(indent + cursor + opt + "\n")
-		}
-		b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] select  [backspace] back  [esc] cancel"))
-
+		footer = renderCheckoutWIPStep(&b, s, d)
 	case CheckoutStepConfirm:
-		b.WriteString(indent + Styles.DetailLabel.Render("Worktree: ") + Styles.DetailValue.Render(s.Item.ShortName) + "\n")
-		b.WriteString(indent + Styles.DetailLabel.Render("Current:  ") + Styles.DetailValue.Render(s.Item.Branch) + "\n")
-		b.WriteString(indent + Styles.DetailLabel.Render("Target:   ") + Styles.DetailValue.Render(s.SelectedBranch) + "\n")
-
-		if s.HasWIP && s.Stash {
-			b.WriteString(indent + Styles.DetailLabel.Render("WIP:      ") + Styles.DetailValue.Render(fmt.Sprintf("%d files → stash before switching", len(s.WIPFiles))) + "\n")
-		}
-
-		b.WriteString("\n" + Styles.SuccessText.Render(indent+"Ready to switch.") + "\n")
-		b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] switch  [backspace] back  [esc] cancel"))
+		footer = renderCheckoutConfirmStep(&b, s, d)
 	}
 
-	return Styles.OverlayBorderSuccess.Width(overlayWidth).Render(
-		Styles.OverlayTitle.Render("Switch Branch") + "\n\n" + b.String(),
+	content := b.String()
+
+	return Styles.OverlayBorderSuccess.Width(d.overlay).Render(
+		Styles.OverlayTitle.Render("Switch Branch") + "\n\n" + padToHeight(content, checkoutOverlayMinLines) + footer,
 	)
 }
+
+func renderCheckoutBranchStep(b *strings.Builder, s *CheckoutState, d overlayDims) string {
+	b.WriteString(d.indent + Styles.DetailLabel.Render("Worktree: ") + Styles.DetailValue.Render(s.Item.ShortName) + "\n")
+	b.WriteString(d.indent + Styles.DetailLabel.Render("Current:  ") + Styles.DetailValue.Render(s.Item.Branch) + "\n\n")
+
+	if s.Branches == nil {
+		b.WriteString(d.indent + "Loading branches...\n")
+	} else if len(s.Branches) == 0 {
+		b.WriteString(d.indent + Styles.DetailDim.Render("(no other branches available)") + "\n")
+	} else {
+		renderCheckoutBranchList(b, s, d)
+	}
+
+	if !s.WIPCheckDone {
+		b.WriteString("\n" + d.indent + Styles.DetailDim.Render("Checking for uncommitted changes...") + "\n")
+	}
+	return "\n" + Styles.Footer.Render(d.indent+"[enter] select  [esc] cancel  type to filter")
+}
+
+func renderCheckoutBranchList(b *strings.Builder, s *CheckoutState, d overlayDims) {
+	filter := s.BranchFilterInput.Value()
+	if filter != "" {
+		b.WriteString(d.indent + s.BranchFilterInput.View() + "\n\n")
+	} else {
+		b.WriteString(d.indent + "Select a branch to switch to\n\n")
+	}
+
+	filtered := filteredBranches(s.Branches, filter)
+	if len(filtered) == 0 {
+		b.WriteString(d.indent + Styles.DetailDim.Render("(no matching branches)") + "\n")
+		return
+	}
+
+	start, end := scrollWindow(len(filtered), s.BranchCursor, 10)
+	for i := start; i < end; i++ {
+		cursor := "  "
+		if i == s.BranchCursor {
+			cursor = Styles.ListCursor.Render("❯ ")
+		}
+		b.WriteString(d.indent + cursor + filtered[i] + "\n")
+	}
+	if end < len(filtered) {
+		b.WriteString(d.indent + Styles.DetailDim.Render(fmt.Sprintf("… and %d more", len(filtered)-end)) + "\n")
+	}
+}
+
+func renderCheckoutWIPStep(b *strings.Builder, s *CheckoutState, d overlayDims) string {
+	b.WriteString(d.indent + Styles.DetailLabel.Render("Worktree: ") + Styles.DetailValue.Render(s.Item.ShortName) + "\n")
+	b.WriteString(d.indent + Styles.DetailLabel.Render("Switch:   ") + Styles.DetailValue.Render(s.Item.Branch+" → "+s.SelectedBranch) + "\n")
+	b.WriteString(d.indent + Styles.DetailLabel.Render("WIP:      ") + Styles.WarningText.Render(fmt.Sprintf("%d files changed", len(s.WIPFiles))) + "\n\n")
+
+	b.WriteString(d.indent + "Handle Uncommitted Changes\n\n")
+	wipOptions := []string{
+		"Stash changes before switching",
+		"Cancel (keep current branch)",
+	}
+	for i, opt := range wipOptions {
+		cursor := "  "
+		if i == s.WIPCursor {
+			cursor = Styles.ListCursor.Render("❯ ")
+		}
+		b.WriteString(d.indent + cursor + opt + "\n")
+	}
+	return "\n" + Styles.Footer.Render(d.indent+"[enter] select  [backspace] back  [esc] cancel")
+}
+
+func renderCheckoutConfirmStep(b *strings.Builder, s *CheckoutState, d overlayDims) string {
+	b.WriteString(d.indent + Styles.DetailLabel.Render("Worktree: ") + Styles.DetailValue.Render(s.Item.ShortName) + "\n")
+	b.WriteString(d.indent + Styles.DetailLabel.Render("Current:  ") + Styles.DetailValue.Render(s.Item.Branch) + "\n")
+	b.WriteString(d.indent + Styles.DetailLabel.Render("Target:   ") + Styles.DetailValue.Render(s.SelectedBranch) + "\n")
+
+	if s.HasWIP && s.Stash {
+		b.WriteString(d.indent + Styles.DetailLabel.Render("WIP:      ") + Styles.DetailValue.Render(fmt.Sprintf("%d files → stash before switching", len(s.WIPFiles))) + "\n")
+	}
+
+	b.WriteString("\n" + Styles.SuccessText.Render(d.indent+"Ready to switch.") + "\n")
+	return "\n" + Styles.Footer.Render(d.indent+"[enter] switch  [backspace] back  [esc] cancel")
+}
+
+// checkoutOverlayMinLines is the fixed content height for the checkout wizard.
+// Set to accommodate the tallest step (branch selector with scroll window).
+const checkoutOverlayMinLines = 20

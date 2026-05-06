@@ -24,7 +24,7 @@ _grove_completion() {
     case "${words[1]}" in
         to|rm|resume)
             # Complete with worktree names
-            local worktrees=$(git worktree list --porcelain 2>/dev/null | awk '/^worktree / {print $2}' | xargs -n1 basename)
+            local worktrees=$(grove ls -q 2>/dev/null)
             COMPREPLY=($(compgen -W "$worktrees" -- "$cur"))
             ;;
         freeze)
@@ -32,7 +32,7 @@ _grove_completion() {
             if [[ "$cur" == -* ]]; then
                 COMPREPLY=($(compgen -W "--all" -- "$cur"))
             else
-                local worktrees=$(git worktree list --porcelain 2>/dev/null | awk '/^worktree / {print $2}' | xargs -n1 basename)
+                local worktrees=$(grove ls -q 2>/dev/null)
                 COMPREPLY=($(compgen -W "$worktrees" -- "$cur"))
             fi
             ;;

@@ -69,7 +69,7 @@ Selecting a worktree updates the detail panel with:
 
 ### Footer
 
-A compact hint bar at the bottom shows context-sensitive keybindings. Press `?` to expand a full Quick Reference panel.
+A compact hint bar at the bottom shows essential keybindings. Press `?` to open a scrollable, context-sensitive help overlay with the full reference for the current view.
 
 ### Toast Notifications
 
@@ -127,11 +127,14 @@ Each overlay opens centered over the dimmed dashboard background. Press `esc` to
 
 A multi-step wizard:
 
-1. **Name** — Enter a short name (e.g., `my-feature`). Grove displays the full name preview (`project-my-feature`) as you type and warns about conflicts with existing worktrees.
-2. **Branch** — Choose to create a new branch or select an existing one. Start typing to filter the branch list.
+1. **Branch** — Choose "Select an existing branch" or "Create a new branch."
+   - *Select existing:* A navigable branch list. Press `/` to filter by name (`j`/`k` navigate, all keys reach the filter input). Press `esc` to exit filter mode. Remote-only branches (those that exist on `origin` but not locally) appear in the list; selecting one fetches it from origin automatically.
+   - *Create new:* A focused text input for the new branch name (all keys including `j`/`k` are typed as text).
+   - If you select an existing branch, Grove asks whether to use it as-is (split) or create a new branch from it (fork). You can save this preference to skip the prompt.
+2. **Name** — Enter a short name (e.g., `my-feature`). Grove displays the full name preview (`project-my-feature`) as you type and warns about conflicts with existing worktrees.
 3. **Confirm** — Review the name and branch, then press `enter` to create.
 
-If you select an existing branch, Grove asks whether to use it as-is (split) or create a new branch from it (fork). You can save this preference to skip the prompt in the future.
+Press `shift+tab` at any step to navigate backwards through the wizard. Press `esc` to cancel.
 
 ### Delete Worktree (`d`)
 
@@ -174,7 +177,7 @@ Steps:
 Changes which branch a worktree has checked out — without needing to delete and recreate it.
 
 Steps:
-1. **Branch** — Select a target branch from a filterable list. Branches already used by other worktrees are excluded.
+1. **Branch** — Select a target branch from a filterable list. Branches already used by other worktrees are excluded. Remote-only branches appear in the list; selecting one fetches it from origin automatically.
 2. **WIP** (skipped if worktree is clean) — Choose how to handle uncommitted changes:
    - **Stash** — Stash changes before switching (`git stash`).
    - **Cancel** — Abort the branch switch.
@@ -235,6 +238,7 @@ Controls:
 - `↑` / `↓` — Navigate
 - `tab` — Toggle PR detail preview (rendered markdown body)
 - `enter` — Create a new worktree from the PR branch
+- `B` — Open the selected PR in your default browser
 - Type to filter by title, author, number, or labels
 - `esc` — Close
 
@@ -250,6 +254,7 @@ Controls:
 - `↑` / `↓` — Navigate
 - `tab` — Toggle issue detail preview (rendered markdown body)
 - `enter` — Create a new worktree for the issue
+- `B` — Open the selected issue in your default browser
 - Type to filter by title, author, number, or labels
 - `esc` — Close
 
@@ -277,7 +282,9 @@ Grove checks for high-contrast mode. If the `GROVE_HIGH_CONTRAST` environment va
 
 ## Agent Notes
 
-Reference for AI agents working on TUI code. The TUI uses **Bubbletea v2** (Elm Architecture):
+Reference for AI agents working on TUI code. For design rationale behind the New Worktree wizard, see `docs/WIZARD_UX_RESEARCH.md`.
+
+The TUI uses **Bubbletea v2** (Elm Architecture):
 - `charm.land/bubbletea/v2` — framework (Model/Update/View)
 - `charm.land/lipgloss/v2` — styling (ANSI-aware widths, colors, borders)
 - `charm.land/bubbles/v2` — components (list, textinput, viewport)

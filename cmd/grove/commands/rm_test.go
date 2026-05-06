@@ -10,8 +10,8 @@ func TestRmCmd(t *testing.T) {
 		t.Fatal("rmCmd is nil")
 	}
 
-	if rmCmd.Use != "rm <name>" {
-		t.Errorf("rmCmd.Use = %v, want 'rm <name>'", rmCmd.Use)
+	if rmCmd.Use != "rm [name]" {
+		t.Errorf("rmCmd.Use = %v, want 'rm [name]'", rmCmd.Use)
 	}
 
 	if rmCmd.RunE == nil {

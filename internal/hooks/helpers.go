@@ -12,8 +12,9 @@ import (
 	"github.com/lost-in-the/grove/internal/fsutil"
 )
 
-// resolvePath resolves a path that may be relative or absolute
-// If the path is relative, it's resolved against basePath
+// resolvePath resolves a path that may be relative or absolute.
+// If the path is relative, it is resolved against basePath using filepath.Join
+// with no containment check. Use resolvePathSafe for user-controlled paths.
 func resolvePath(path, basePath string) string {
 	if path == "" {
 		return basePath
@@ -24,25 +25,48 @@ func resolvePath(path, basePath string) string {
 	return filepath.Join(basePath, path)
 }
 
+// resolvePathSafe resolves a user-supplied path against basePath.
+// Absolute paths (e.g. credential sources from grove internals) pass through
+// unchanged. Relative paths are sandboxed inside basePath via fsutil.SafeJoin,
+// rejecting traversal attempts such as "../../.ssh/id_rsa".
+func resolvePathSafe(path, basePath string) (string, error) {
+	if path == "" {
+		return basePath, nil
+	}
+	if filepath.IsAbs(path) {
+		return path, nil
+	}
+	return fsutil.SafeJoin(basePath, path)
+}
+
 // copyFile copies a single file from src to dst
 func copyFile(src, dst string) error {
 	return fsutil.CopyFile(src, dst)
 }
 
+// copyDirEntry copies a single directory entry (file or symlink) from srcPath to dstPath.
+func copyDirEntry(srcPath, dstPath string, info os.FileInfo) error {
+	if info.Mode()&os.ModeSymlink != 0 {
+		link, err := os.Readlink(srcPath)
+		if err != nil {
+			return err
+		}
+		return os.Symlink(link, dstPath)
+	}
+	return copyFile(srcPath, dstPath)
+}
+
 // copyDir recursively copies a directory from src to dst
 func copyDir(src, dst string) error {
-	// Get source directory info
 	srcInfo, err := os.Stat(src)
 	if err != nil {
 		return err
 	}
 
-	// Create destination directory
 	if err := os.MkdirAll(dst, srcInfo.Mode()); err != nil {
 		return err
 	}
 
-	// Read source directory
 	entries, err := os.ReadDir(src)
 	if err != nil {
 		return err
@@ -56,26 +80,15 @@ func copyDir(src, dst string) error {
 			if err := copyDir(srcPath, dstPath); err != nil {
 				return err
 			}
-		} else {
-			// Handle symlinks
-			info, err := entry.Info()
-			if err != nil {
-				return err
-			}
-			if info.Mode()&os.ModeSymlink != 0 {
-				// Copy symlink as symlink
-				link, err := os.Readlink(srcPath)
-				if err != nil {
-					return err
-				}
-				if err := os.Symlink(link, dstPath); err != nil {
-					return err
-				}
-			} else {
-				if err := copyFile(srcPath, dstPath); err != nil {
-					return err
-				}
-			}
+			continue
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if err := copyDirEntry(srcPath, dstPath, info); err != nil {
+			return err
 		}
 	}
 

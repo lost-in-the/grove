@@ -32,8 +32,9 @@ var (
 )
 
 var testCmd = &cobra.Command{
-	Use:   "test <name> [args...]",
-	Short: "Run the configured test command in a worktree",
+	Use:     "test <name> [args...]",
+	Aliases: []string{"tt"},
+	Short:   "Run the configured test command in a worktree",
 	Long: `Run the configured test command in a specified worktree's directory.
 
 The test command is configured in .grove/config.toml:

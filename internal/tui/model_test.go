@@ -9,6 +9,7 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/lost-in-the/grove/internal/theme"
 	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
@@ -41,11 +42,11 @@ func TestUpdateDashboardNavigation(t *testing.T) {
 			},
 		},
 		{
-			name: "? toggles help footer",
+			name: "? opens help overlay",
 			key:  "?",
 			assert: func(t *testing.T, m Model) {
-				if !m.helpFooter.Expanded {
-					t.Error("expected helpFooter.Expanded=true after ?")
+				if !m.helpOverlay.Active {
+					t.Error("expected helpOverlay.Active=true after ?")
 				}
 			},
 		},
@@ -59,8 +60,8 @@ func TestUpdateDashboardNavigation(t *testing.T) {
 				if m.createState == nil {
 					t.Fatal("expected createState to be set")
 				}
-				if m.createState.Step != CreateStepBranch {
-					t.Errorf("expected CreateStepBranch, got %d", m.createState.Step)
+				if m.createState.Step != CreateStepBranchChoice {
+					t.Errorf("expected CreateStepBranchChoice, got %d", m.createState.Step)
 				}
 			},
 		},
@@ -192,9 +193,10 @@ func TestDeleteFlow(t *testing.T) {
 }
 
 func TestCreateWizardFlow(t *testing.T) {
-	t.Run("branch step: typing adds to filter", func(t *testing.T) {
+	t.Run("branch select: / then typing adds to filter", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
 		m = enterCreateManual(m)
+		m = sendKey(m, "/") // enter filter mode
 		m = sendKey(m, "d")
 		m = sendKey(m, "e")
 		m = sendKey(m, "v")
@@ -203,7 +205,7 @@ func TestCreateWizardFlow(t *testing.T) {
 		}
 	})
 
-	t.Run("branch step: selecting existing branch advances to action", func(t *testing.T) {
+	t.Run("branch select: selecting existing branch advances to action", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
 		m = enterCreateManual(m)
 		// Select first branch (main)
@@ -216,10 +218,15 @@ func TestCreateWizardFlow(t *testing.T) {
 		}
 	})
 
-	t.Run("branch step: create new branch advances to name", func(t *testing.T) {
+	t.Run("branch create: typing and enter advances to name", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
-		m = enterCreateManual(m)
-		// Type a name that doesn't match any branch
+		m = sendKey(m, "n") // open wizard at BranchChoice
+		m.createState.Branches = []string{"main", "develop", "feature/auth"}
+		m = sendKey(m, "j")     // move to "Create new branch"
+		m = sendKey(m, "enter") // enter BranchCreate step
+		if m.createState.Step != CreateStepBranchCreate {
+			t.Fatalf("expected BranchCreate, got %d", m.createState.Step)
+		}
 		m = sendKey(m, "m")
 		m = sendKey(m, "y")
 		m = sendKey(m, "-")
@@ -227,8 +234,6 @@ func TestCreateWizardFlow(t *testing.T) {
 		m = sendKey(m, "e")
 		m = sendKey(m, "a")
 		m = sendKey(m, "t")
-		// Move cursor down to "Create new branch" option (past the 0 filtered results)
-		// With filter "my-feat", no branches match, so cursor 0 = "Create new branch"
 		m = sendKey(m, "enter")
 		if m.createState.Step != CreateStepName {
 			t.Errorf("expected CreateStepName, got %d", m.createState.Step)
@@ -280,8 +285,8 @@ func TestCreateWizardFlow(t *testing.T) {
 		m = enterCreateManual(m)
 		m = enterNameStep(m)
 		m = sendKey(m, "backspace")
-		if m.createState.Step != CreateStepBranch {
-			t.Errorf("expected CreateStepBranch after backspace, got %d", m.createState.Step)
+		if m.createState.Step != CreateStepBranchChoice {
+			t.Errorf("expected CreateStepBranchChoice after backspace, got %d", m.createState.Step)
 		}
 	})
 
@@ -298,16 +303,16 @@ func TestCreateWizardFlow(t *testing.T) {
 	})
 }
 
-func TestHelpFooterToggleFromDashboard(t *testing.T) {
+func TestHelpOverlayToggleFromDashboard(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
 	m = sendKey(m, "?")
-	if !m.helpFooter.Expanded {
-		t.Fatal("expected helpFooter.Expanded=true after first ?")
+	if !m.helpOverlay.Active {
+		t.Fatal("expected helpOverlay.Active=true after first ?")
 	}
-	// Second ? should collapse
+	// Second ? should close
 	m = sendKey(m, "?")
-	if m.helpFooter.Expanded {
-		t.Error("expected helpFooter.Expanded=false after second ?")
+	if m.helpOverlay.Active {
+		t.Error("expected helpOverlay.Active=false after second ?")
 	}
 }
 
@@ -485,7 +490,7 @@ func TestToastSuperseding(t *testing.T) {
 	m = sendMsg(m, worktreeDeletedMsg{name: "first", err: nil})
 
 	// Second action supersedes
-	m = sendMsg(m, worktreeCreatedMsg{name: "second", path: "/tmp/second"})
+	m = sendMsg(m, worktreeCreatedMsg{name: "second"})
 	if m.toast.Message() == "" || m.toast.Message() == `Deleted "first"` {
 		t.Error("expected second toast to replace first")
 	}
@@ -586,7 +591,7 @@ func TestAgeText(t *testing.T) {
 func TestRenderCreateOverlayWithError(t *testing.T) {
 	s := createStateWithName("bad/name", "proj")
 	s.Error = "invalid character"
-	v := renderCreate(s, 80, "")
+	v := renderCreateV2(s, 80, "")
 	if !strings.Contains(v, "invalid") {
 		t.Error("expected error in create overlay")
 	}
@@ -594,7 +599,7 @@ func TestRenderCreateOverlayWithError(t *testing.T) {
 
 func TestRenderCreateBranchActionWithDontShowAgain(t *testing.T) {
 	s := &CreateState{Step: CreateStepBranchAction, BaseBranch: "dev", DontShowAgain: true}
-	v := renderCreate(s, 80, "")
+	v := renderCreateV2(s, 80, "")
 	if !strings.Contains(v, "[x]") {
 		t.Error("expected checked checkbox for DontShowAgain")
 	}
@@ -603,39 +608,33 @@ func TestRenderCreateBranchActionWithDontShowAgain(t *testing.T) {
 func TestRenderCreateOverlaySteps(t *testing.T) {
 	t.Run("name step", func(t *testing.T) {
 		s := createStateWithName("test", "proj")
-		v := renderCreate(s, 80, "")
+		v := renderCreateV2(s, 80, "")
 		if !strings.Contains(v, "Name") {
 			t.Error("expected 'Name' in create name step")
 		}
 	})
 
 	t.Run("branch step", func(t *testing.T) {
-		s := &CreateState{Step: CreateStepBranch, Branches: []string{"main", "develop"}, BranchFilterInput: newBranchFilterInput()}
-		v := renderCreate(s, 80, "")
+		s := &CreateState{Step: CreateStepBranchChoice, Branches: []string{"main", "develop"}, BranchFilterInput: newBranchFilterInput()}
+		v := renderCreateV2(s, 80, "")
 		if !strings.Contains(v, "Branch") {
 			t.Error("expected 'Branch' in create branch step")
 		}
 	})
 
 	t.Run("branch step with filter", func(t *testing.T) {
-		s := createStateWithBranchFilter([]string{"main", "develop"}, "dev")
-		v := renderCreate(s, 80, "")
+		bfi := newBranchFilterInput()
+		bfi.SetValue("dev")
+		s := &CreateState{Step: CreateStepBranchSelect, Branches: []string{"main", "develop"}, BranchFilterInput: bfi, BranchFilterMode: BranchFilterOn}
+		v := renderCreateV2(s, 80, "")
 		if !strings.Contains(v, "Filter") {
 			t.Error("expected 'Filter' label in filtered branch list")
 		}
 	})
 
-	t.Run("branch step no matches shows create new", func(t *testing.T) {
-		s := createStateWithBranchFilter([]string{"main"}, "nonexistent")
-		v := renderCreate(s, 80, "")
-		if !strings.Contains(v, "Create new branch") {
-			t.Error("expected 'Create new branch' option")
-		}
-	})
-
 	t.Run("branch action step", func(t *testing.T) {
 		s := &CreateState{Step: CreateStepBranchAction, BaseBranch: "develop"}
-		v := renderCreate(s, 80, "")
+		v := renderCreateV2(s, 80, "")
 		if !strings.Contains(v, "already exists") {
 			t.Error("expected 'already exists' in branch action step")
 		}
@@ -645,7 +644,7 @@ func TestRenderCreateOverlaySteps(t *testing.T) {
 func TestRenderDeleteOverlay(t *testing.T) {
 	item := &WorktreeItem{ShortName: "testing", Branch: "testing"}
 	s := &DeleteState{Item: item, Warnings: []string{"dirty"}, DeleteBranch: true}
-	v := renderDelete(s, 80)
+	v := renderDeleteV2(s, 80)
 	if !strings.Contains(v, "testing") {
 		t.Error("expected item name in delete overlay")
 	}
@@ -657,7 +656,7 @@ func TestRenderDeleteOverlay(t *testing.T) {
 func TestRenderBulkOverlay(t *testing.T) {
 	t.Run("empty items", func(t *testing.T) {
 		s := &BulkState{Items: nil, Selected: nil}
-		v := renderBulk(s, 80)
+		v := renderBulk(s)
 		if !strings.Contains(v, "No merged") {
 			t.Error("expected empty message")
 		}
@@ -665,7 +664,7 @@ func TestRenderBulkOverlay(t *testing.T) {
 
 	t.Run("deleting state", func(t *testing.T) {
 		s := &BulkState{Deleting: true, Progress: "Deleting 2/3..."}
-		v := renderBulk(s, 80)
+		v := renderBulk(s)
 		if !strings.Contains(v, "Deleting 2/3") {
 			t.Error("expected progress text")
 		}
@@ -677,7 +676,7 @@ func TestRenderBulkOverlay(t *testing.T) {
 			Items:    items,
 			Selected: []bool{true, false, false},
 		}
-		v := renderBulk(s, 80)
+		v := renderBulk(s)
 		if !strings.Contains(v, "1/3 selected") {
 			t.Error("expected selection count")
 		}
@@ -745,15 +744,15 @@ func TestGatherDeleteWarnings(t *testing.T) {
 func TestNoColor(t *testing.T) {
 	// Ensure env is clean
 	t.Setenv("NO_COLOR", "1")
-	if !isNoColor() {
-		t.Error("expected isNoColor()=true when NO_COLOR set")
+	if !theme.IsNoColor() {
+		t.Error("expected theme.IsNoColor()=true when NO_COLOR set")
 	}
 }
 
 func TestNoColorGrove(t *testing.T) {
 	t.Setenv("GROVE_NO_COLOR", "1")
-	if !isNoColor() {
-		t.Error("expected isNoColor()=true when GROVE_NO_COLOR set")
+	if !theme.IsNoColor() {
+		t.Error("expected theme.IsNoColor()=true when GROVE_NO_COLOR set")
 	}
 }
 
@@ -948,15 +947,15 @@ func TestCreateNameBackspaceOnEmpty(t *testing.T) {
 	m = enterNameStep(m)
 	m = sendKey(m, "backspace")
 	// Backspace with empty name goes back to branch step
-	if m.createState.Step != CreateStepBranch {
-		t.Errorf("expected CreateStepBranch after backspace on empty name, got %d", m.createState.Step)
+	if m.createState.Step != CreateStepBranchChoice {
+		t.Errorf("expected CreateStepBranchChoice after backspace on empty name, got %d", m.createState.Step)
 	}
 }
 
 func TestCreateBranchEsc(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
 	m = enterCreateManual(m)
-	m.createState.Step = CreateStepBranch
+	m.createState.Step = CreateStepBranchChoice
 	m = sendKey(m, "esc")
 	if m.activeView != ViewDashboard {
 		t.Errorf("expected ViewDashboard, got %d", m.activeView)
@@ -981,7 +980,7 @@ func TestCreateNameEnterWithInvalidName(t *testing.T) {
 func TestBranchStepUpAtZero(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
 	m = enterCreateManual(m)
-	m.createState.Step = CreateStepBranch
+	m.createState.Step = CreateStepBranchChoice
 	m.createState.BranchCursor = 0
 	m = sendKey(m, "k")
 	if m.createState.BranchCursor != 0 {
@@ -992,7 +991,7 @@ func TestBranchStepUpAtZero(t *testing.T) {
 func TestBranchSelectorUpAtZero(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
 	m = enterCreateManual(m)
-	m.createState.Step = CreateStepBranch
+	m.createState.Step = CreateStepBranchChoice
 	m.createState.Branches = []string{"main", "dev"}
 	m.createState.BranchCursor = 0
 	m = sendKey(m, "up")
@@ -1093,58 +1092,51 @@ func TestCreateWizardBranchActionNavigation(t *testing.T) {
 		t.Error("expected DontShowAgain=true after toggle")
 	}
 
-	// Backspace goes back to branch selector
+	// Backspace goes back to branch select
 	m = sendKey(m, "backspace")
-	if m.createState.Step != CreateStepBranch {
-		t.Errorf("expected CreateStepBranch, got %d", m.createState.Step)
+	if m.createState.Step != CreateStepBranchSelect {
+		t.Errorf("expected CreateStepBranchSelect, got %d", m.createState.Step)
 	}
 }
 
 func TestCreateWizardBranchFilterAndNavigation(t *testing.T) {
-	t.Run("typing adds to filter", func(t *testing.T) {
+	t.Run("/ then typing adds to filter", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
 		m = enterCreateManual(m)
-		m.createState.Step = CreateStepBranch
-		m.createState.Branches = []string{"main", "develop", "feature/auth"}
 
+		m = sendKey(m, "/") // enter filter mode
 		m = sendKey(m, "d")
 		if m.createState.BranchFilterInput.Value() != "d" {
 			t.Errorf("expected filter 'd', got %q", m.createState.BranchFilterInput.Value())
 		}
 	})
 
-	t.Run("backspace removes filter char", func(t *testing.T) {
+	t.Run("backspace removes filter char in filter mode", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
 		m = enterCreateManual(m)
-		m.createState.Step = CreateStepBranch
-		m.createState.Branches = []string{"main", "develop"}
-		m.createState.BranchFilterInput.SetValue("de")
 
+		m = sendKey(m, "/") // enter filter mode
+		m = sendKey(m, "d")
+		m = sendKey(m, "e")
 		m = sendKey(m, "backspace")
 		if m.createState.BranchFilterInput.Value() != "d" {
 			t.Errorf("expected filter 'd', got %q", m.createState.BranchFilterInput.Value())
 		}
 	})
 
-	t.Run("backspace with empty filter is no-op on branch step", func(t *testing.T) {
+	t.Run("backspace with empty filter goes back to choice", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
 		m = enterCreateManual(m)
-		m.createState.Step = CreateStepBranch
-		m.createState.Branches = []string{"main"}
 
 		m = sendKey(m, "backspace")
-		// Branch is step 0, so backspace with empty filter stays on branch
-		if m.createState.Step != CreateStepBranch {
-			t.Errorf("expected CreateStepBranch, got %d", m.createState.Step)
+		if m.createState.Step != CreateStepBranchChoice {
+			t.Errorf("expected CreateStepBranchChoice, got %d", m.createState.Step)
 		}
 	})
 
-	t.Run("arrow down moves cursor", func(t *testing.T) {
+	t.Run("arrow down moves cursor in branch select", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
 		m = enterCreateManual(m)
-		m.createState.Step = CreateStepBranch
-		m.createState.Branches = []string{"main", "develop", "feature/auth"}
-		m.createState.BranchCursor = 0
 
 		m = sendKey(m, "down")
 		if m.createState.BranchCursor != 1 {
@@ -1176,7 +1168,7 @@ func TestBulkSelectedItems(t *testing.T) {
 func TestCreateWizardEscFromBranchSelector(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
 	m = enterCreateManual(m)
-	m.createState.Step = CreateStepBranch
+	m.createState.Step = CreateStepBranchChoice
 	m.createState.Branches = []string{"main"}
 	m = sendKey(m, "esc")
 	if m.activeView != ViewDashboard {
@@ -1260,54 +1252,6 @@ func TestHandleIssueKeyNilState(t *testing.T) {
 	}
 }
 
-func TestPRWorktreeCreatedMsg_Error(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(80, 24))
-	m.activeView = ViewPRs
-	m.prState = &PRViewState{Creating: true}
-	m = sendMsg(m, prWorktreeCreatedMsg{name: "pr-123", err: errTest})
-	if m.prState == nil {
-		t.Fatal("expected prState preserved on error")
-	}
-	if m.prState.Creating {
-		t.Error("expected Creating=false after error")
-	}
-	if m.prState.Error == "" {
-		t.Error("expected error message on prState")
-	}
-}
-
-func TestPRWorktreeCreatedMsg_Success(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(80, 24))
-	m.activeView = ViewPRs
-	m.prState = &PRViewState{Creating: true}
-	m = sendMsg(m, prWorktreeCreatedMsg{name: "pr-123", path: "/tmp/pr-123"})
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard, got %d", m.activeView)
-	}
-	if m.prState != nil {
-		t.Error("expected prState nil after success")
-	}
-	if m.pendingSelect != "pr-123" {
-		t.Errorf("expected pendingSelect=pr-123, got %q", m.pendingSelect)
-	}
-}
-
-func TestIssueWorktreeCreatedMsg_Error(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(80, 24))
-	m.activeView = ViewIssues
-	m.issueState = &IssueViewState{Creating: true}
-	m = sendMsg(m, issueWorktreeCreatedMsg{name: "issue-42", err: errTest})
-	if m.issueState == nil {
-		t.Fatal("expected issueState preserved on error")
-	}
-	if m.issueState.Creating {
-		t.Error("expected Creating=false after error")
-	}
-	if m.issueState.Error == "" {
-		t.Error("expected error message on issueState")
-	}
-}
-
 func TestDeleteConfirmNilItem(t *testing.T) {
 	m := newTestModel(withSize(80, 24))
 	m.activeView = ViewDelete
@@ -1358,14 +1302,28 @@ func TestPRFilterTypingThroughUpdate(t *testing.T) {
 		{Number: 2, Title: "Beta bugfix", Branch: "beta", Author: "user"},
 	}
 
-	t.Run("typing populates filter", func(t *testing.T) {
+	t.Run("typing populates filter after / activation", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
 		m = enterPRViewLoaded(m, prs)
 
+		m = sendKey(m, "/") // activate filter mode
 		m = sendKey(m, "a")
 		m = sendKey(m, "l")
 		if m.prState.FilterInput.Value() != "al" {
 			t.Errorf("expected filter 'al', got %q", m.prState.FilterInput.Value())
+		}
+		if !m.prState.Filtering {
+			t.Error("expected Filtering to be true")
+		}
+	})
+
+	t.Run("typing without / does not filter", func(t *testing.T) {
+		m := newTestModel(withItems(1), withSize(80, 24))
+		m = enterPRViewLoaded(m, prs)
+
+		m = sendKey(m, "a")
+		if m.prState.FilterInput.Value() != "" {
+			t.Errorf("expected empty filter without /, got %q", m.prState.FilterInput.Value())
 		}
 	})
 
@@ -1373,6 +1331,7 @@ func TestPRFilterTypingThroughUpdate(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
 		m = enterPRViewLoaded(m, prs)
 
+		m = sendKey(m, "/")
 		m = sendKey(m, "a")
 		m = sendKey(m, "l")
 		m = sendKey(m, "p")
@@ -1386,11 +1345,43 @@ func TestPRFilterTypingThroughUpdate(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
 		m = enterPRViewLoaded(m, prs)
 
+		m = sendKey(m, "/")
 		m = sendKey(m, "a")
 		m = sendKey(m, "b")
 		m = sendKey(m, "backspace")
 		if m.prState.FilterInput.Value() != "a" {
 			t.Errorf("expected filter 'a', got %q", m.prState.FilterInput.Value())
+		}
+	})
+
+	t.Run("esc clears filter and exits filter mode", func(t *testing.T) {
+		m := newTestModel(withItems(1), withSize(80, 24))
+		m = enterPRViewLoaded(m, prs)
+
+		m = sendKey(m, "/")
+		m = sendKey(m, "a")
+		m = sendKey(m, "esc")
+		if m.prState.FilterInput.Value() != "" {
+			t.Errorf("expected empty filter after esc, got %q", m.prState.FilterInput.Value())
+		}
+		if m.prState.Filtering {
+			t.Error("expected Filtering to be false after esc")
+		}
+	})
+
+	t.Run("enter keeps filter value and exits filter mode", func(t *testing.T) {
+		m := newTestModel(withItems(1), withSize(80, 24))
+		m = enterPRViewLoaded(m, prs)
+
+		m = sendKey(m, "/")
+		m = sendKey(m, "a")
+		m = sendKey(m, "l")
+		m = sendKey(m, "enter")
+		if m.prState.FilterInput.Value() != "al" {
+			t.Errorf("expected filter 'al' after enter, got %q", m.prState.FilterInput.Value())
+		}
+		if m.prState.Filtering {
+			t.Error("expected Filtering to be false after enter")
 		}
 	})
 }
@@ -1401,14 +1392,28 @@ func TestIssueFilterTypingThroughUpdate(t *testing.T) {
 		{Number: 2, Title: "Signup slow"},
 	}
 
-	t.Run("typing populates filter", func(t *testing.T) {
+	t.Run("typing populates filter after / activation", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
 		m = enterIssueViewLoaded(m, issues)
 
+		m = sendKey(m, "/") // activate filter mode
 		m = sendKey(m, "l")
 		m = sendKey(m, "o")
 		if m.issueState.FilterInput.Value() != "lo" {
 			t.Errorf("expected filter 'lo', got %q", m.issueState.FilterInput.Value())
+		}
+		if !m.issueState.Filtering {
+			t.Error("expected Filtering to be true")
+		}
+	})
+
+	t.Run("typing without / does not filter", func(t *testing.T) {
+		m := newTestModel(withItems(1), withSize(80, 24))
+		m = enterIssueViewLoaded(m, issues)
+
+		m = sendKey(m, "l")
+		if m.issueState.FilterInput.Value() != "" {
+			t.Errorf("expected empty filter without /, got %q", m.issueState.FilterInput.Value())
 		}
 	})
 
@@ -1416,6 +1421,7 @@ func TestIssueFilterTypingThroughUpdate(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
 		m = enterIssueViewLoaded(m, issues)
 
+		m = sendKey(m, "/")
 		m = sendKey(m, "l")
 		m = sendKey(m, "o")
 		m = sendKey(m, "g")
@@ -1424,23 +1430,66 @@ func TestIssueFilterTypingThroughUpdate(t *testing.T) {
 			t.Errorf("expected 1 filtered issue, got %d", len(filtered))
 		}
 	})
+
+	t.Run("esc clears filter and exits filter mode", func(t *testing.T) {
+		m := newTestModel(withItems(1), withSize(80, 24))
+		m = enterIssueViewLoaded(m, issues)
+
+		m = sendKey(m, "/")
+		m = sendKey(m, "l")
+		m = sendKey(m, "esc")
+		if m.issueState.FilterInput.Value() != "" {
+			t.Errorf("expected empty filter after esc, got %q", m.issueState.FilterInput.Value())
+		}
+		if m.issueState.Filtering {
+			t.Error("expected Filtering to be false after esc")
+		}
+	})
 }
 
 func TestCreateBranchFilterTypingThroughUpdate(t *testing.T) {
 	t.Run("typing via Update populates filter", func(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
-		m = sendKey(m, "n") // enter create wizard
+		m = sendKey(m, "n") // enter create wizard at BranchChoice
 		if m.createState == nil {
 			t.Fatal("expected createState after 'n'")
 		}
+		if m.createState.Step != CreateStepBranchChoice {
+			t.Fatalf("expected BranchChoice step, got %d", m.createState.Step)
+		}
 		m.createState.Branches = []string{"main", "develop", "feature/auth"}
-		// Focus is called on the stored reference by our fix, so sendKey("n")
-		// already focused BranchFilterInput via m.createState.BranchFilterInput.Focus()
 
+		// Select "Select existing branch" to enter BranchSelect
+		m = sendKey(m, "enter")
+		if m.createState.Step != CreateStepBranchSelect {
+			t.Fatalf("expected BranchSelect step, got %d", m.createState.Step)
+		}
+
+		// Press / to enter filter mode
+		m = sendKey(m, "/")
+		if m.createState.BranchFilterMode != BranchFilterOn {
+			t.Fatal("expected BranchFilterOn after /")
+		}
+
+		// Now type — j and k should reach the textinput
 		m = sendKey(m, "d")
 		m = sendKey(m, "e")
 		if m.createState.BranchFilterInput.Value() != "de" {
 			t.Errorf("expected filter 'de', got %q", m.createState.BranchFilterInput.Value())
+		}
+	})
+
+	t.Run("j and k are typed in filter mode", func(t *testing.T) {
+		m := newTestModel(withItems(1), withSize(80, 24))
+		m = sendKey(m, "n")
+		m.createState.Branches = []string{"main", "jk-branch"}
+
+		m = sendKey(m, "enter") // select existing
+		m = sendKey(m, "/")     // enter filter mode
+		m = sendKey(m, "j")
+		m = sendKey(m, "k")
+		if m.createState.BranchFilterInput.Value() != "jk" {
+			t.Errorf("expected filter 'jk', got %q", m.createState.BranchFilterInput.Value())
 		}
 	})
 }
@@ -1462,4 +1511,36 @@ func TestCreateNameTypingThroughUpdate(t *testing.T) {
 			t.Errorf("expected createState.Name 'mywt', got %q", m.createState.Name)
 		}
 	})
+}
+
+func TestDashboardKey_B_NoOpWithoutPR(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 24))
+	m = sendKey(m, "B")
+	if m.activeView != ViewDashboard {
+		t.Errorf("expected ViewDashboard after B with no PR, got %d", m.activeView)
+	}
+}
+
+func TestDashboardKey_B_WithPR(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 24))
+	// Set an AssociatedPR on the first item
+	items := m.list.Items()
+	item := items[0].(WorktreeItem)
+	item.AssociatedPR = &PRInfo{Number: 42, Title: "Test PR"}
+	items[0] = item
+	m.list.SetItems(items)
+
+	// Sending B should not panic even with an associated PR
+	m = sendKey(m, "B")
+	if m.activeView != ViewDashboard {
+		t.Errorf("expected ViewDashboard after B, got %d", m.activeView)
+	}
+}
+
+func TestDashboardKey_Tab(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 24))
+	m = sendKey(m, "tab")
+	if !m.detailFocused {
+		t.Error("expected detailFocused=true after tab")
+	}
 }

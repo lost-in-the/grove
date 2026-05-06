@@ -1,24 +1,24 @@
-[2m [1m[1mtest-project[m  ·  3 worktrees  ·  on root                                ● root[m [m
-[2m                                                                                [m
-[2m 1 ❯ root ────────────────────────────────────────────────────────────── 2h ago [m
           ╭──────────────────────────────────────────────────────────╮
           │                                                          │
           │  [1mConfiguration[m                                           │
           │                                                          │
-          │    [1;4;4mG[m[1;4;4me[m[1;4;4mn[m[1;4;4me[m[1;4;4mr[m[1;4;4ma[m[1;4;4ml[m  Behavior  Plugins  Protection                │
+          │  [1mGeneral[m                                                 │
+          │  ┃ [1mproject_name[m                                          │
+          │  ┃ Project name                                          │
+          │  ┃ > grove-cli[7m [m                                          │
           │                                                          │
-          │  ──────────────────────────────────────────────────────  │
+          │    [1malias[m                                                 │
+          │    Short name for display                                │
+          │    [37m> [m[37m[m [37m                                                 [m  │
           │                                                          │
-          │    ❯ project_name    grove-cli                           │
-          │        Project name                                      │
-          │      alias           (empty)                             │
-          │      projects_dir    /home/dev/projects                  │
-          │      default_branch  main                                │
+          │    [1mprojects_dir[m                                          │
+          │    Where worktrees are created                           │
+          │    [37m> [m[37m/home/dev/projects[m [37m                               [m  │
           │                                                          │
-          │    tab/shift+tab sections  ↑↓ navigate  enter edit  esc  │
-          │  close                                                   │
+          │    [1mdefault_branch[m                                        │
+          │    Base branch for new worktrees                         │
+          │    [37m> [m[37mmain[m [37m                                             [m  │
           │                                                          │
-          ╰──────────────────────────────────────────────────────────╯
-[2m                                                                                [m
-[2m                                                                                [m
-[2m  [1m↑↓[m navigate · [1menter[m switch · [1mn[m new · [1md[m delete · [1mR[m rename · [1mf[m fork · [1mb[m branch  [m
+          │  [38;2;98;98;98menter[m [38;2;74;74;74mnext[m                                              │
+          │    esc close                                             │
+          │                                                          │

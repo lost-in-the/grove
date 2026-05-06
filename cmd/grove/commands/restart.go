@@ -15,9 +15,10 @@ func init() {
 }
 
 var restartCmd = &cobra.Command{
-	Use:   "restart [service]",
-	Short: "Restart container services",
-	Long: `Restart Docker container services for the current worktree.
+	Use:     "kick [service]",
+	Aliases: []string{"restart", "k"},
+	Short:   "Kick (restart) container services",
+	Long: `Kick (restart) Docker container services for the current worktree.
 
 If no service is specified, restarts all services.
 
@@ -25,9 +26,9 @@ If the worktree has an isolated stack running, the restart targets
 that stack's containers automatically.
 
 Examples:
-  grove restart        # Restart all services
-  grove restart web    # Restart 'web' service only
-  w restart db         # Using alias`,
+  grove kick           # Restart all services
+  grove kick web       # Restart 'web' service only
+  w kick db            # Using alias`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		w := cli.NewStdout()
 

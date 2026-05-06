@@ -14,13 +14,18 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/detect"
 	"github.com/lost-in-the/grove/internal/grove"
+	"github.com/lost-in-the/grove/internal/hooks"
 	"github.com/lost-in-the/grove/internal/shell"
 	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/plugins/docker"
 )
 
+var doctorFix bool
+
 func init() {
+	doctorCmd.Flags().BoolVar(&doctorFix, "fix", false, "Apply automatic fixes for detected issues (currently: rewrites host install hooks to docker:compose)")
 	rootCmd.AddCommand(doctorCmd)
 }
 
@@ -32,6 +37,10 @@ are set up correctly.
 
 System checks (binary, PATH, shell integration, git, tmux) run anywhere.
 Project checks (Docker, config, symlinks) run when inside a grove project.
+
+Pass --fix to apply automatic fixes for detected issues. Currently fixable:
+  - Host bundle/npm/pip-install hooks in a Docker project are rewritten to
+    docker:compose hooks.
 
 Examples:
   grove doctor`,
@@ -154,7 +163,27 @@ Examples:
 			}) && allPassed
 
 			// Existing Tier 2 checks (external compose, agent stacks, env files)
-			runExternalModeChecks(w, cfg, &allPassed)
+			runExternalModeChecks(w, cfg, filepath.Dir(groveDir), &allPassed)
+
+			// Detect host install hooks in a Docker project (issue #28).
+			projectRoot := filepath.Dir(groveDir)
+			allPassed = runCheck(w, "Hooks Docker-routing", func() (string, error) {
+				return checkHooksDockerRouting(projectRoot, groveDir)
+			}) && allPassed
+
+			// Auto-fix host installs when --fix is set.
+			if doctorFix {
+				if changed, err := fixHostInstallsInDockerProject(projectRoot, groveDir); err != nil {
+					cli.Warning(w, "auto-fix failed: %v", err)
+				} else if changed > 0 {
+					cli.Success(w, "Rewrote %d host install hook(s) to docker:compose", changed)
+				}
+			}
+
+			// Warn on stray .grove-backup directories (issue #28).
+			allPassed = runCheck(w, "Backup directory", func() (string, error) {
+				return checkStrayBackup(groveDir)
+			}) && allPassed
 		}
 
 		_, _ = fmt.Fprintln(w)
@@ -173,30 +202,7 @@ Examples:
 func checkGroveBinary(lookPath func(string) (string, error)) (string, error) {
 	path, err := lookPath("grove")
 	if err != nil {
-		// Check common install locations for a helpful hint
-		hints := []string{
-			"/opt/homebrew/bin/grove", // Homebrew (Apple Silicon)
-			"/usr/local/bin/grove",    // Homebrew (Intel) / manual
-		}
-		for _, hint := range hints {
-			if _, statErr := os.Stat(hint); statErr == nil {
-				return "", fmt.Errorf("grove not found in PATH, but exists at %s — add its directory to PATH in ~/.zshenv", hint)
-			}
-		}
-
-		// Check GOPATH/bin
-		if gopath := os.Getenv("GOPATH"); gopath != "" {
-			gobin := filepath.Join(gopath, "bin", "grove")
-			if _, statErr := os.Stat(gobin); statErr == nil {
-				return "", fmt.Errorf("grove not found in PATH, but exists at %s — add $GOPATH/bin to PATH", gobin)
-			}
-		}
-		homeGobin := filepath.Join(os.Getenv("HOME"), "go", "bin", "grove")
-		if _, statErr := os.Stat(homeGobin); statErr == nil {
-			return "", fmt.Errorf("grove not found in PATH, but exists at %s — add ~/go/bin to PATH", homeGobin)
-		}
-
-		return "", fmt.Errorf("grove binary not found in PATH")
+		return "", groveNotFoundError()
 	}
 
 	// Resolve symlinks for display
@@ -204,6 +210,33 @@ func checkGroveBinary(lookPath func(string) (string, error)) (string, error) {
 		path = resolved
 	}
 	return path, nil
+}
+
+func groveNotFoundError() error {
+	// Check common install locations for a helpful hint
+	hints := []string{
+		"/opt/homebrew/bin/grove", // Homebrew (Apple Silicon)
+		"/usr/local/bin/grove",    // Homebrew (Intel) / manual
+	}
+	for _, hint := range hints {
+		if _, statErr := os.Stat(hint); statErr == nil {
+			return fmt.Errorf("grove not found in PATH, but exists at %s — add its directory to PATH in ~/.zshenv", hint)
+		}
+	}
+
+	// Check GOPATH/bin
+	if gopath := os.Getenv("GOPATH"); gopath != "" {
+		gobin := filepath.Join(gopath, "bin", "grove")
+		if _, statErr := os.Stat(gobin); statErr == nil {
+			return fmt.Errorf("grove not found in PATH, but exists at %s — add $GOPATH/bin to PATH", gobin)
+		}
+	}
+	homeGobin := filepath.Join(os.Getenv("HOME"), "go", "bin", "grove")
+	if _, statErr := os.Stat(homeGobin); statErr == nil {
+		return fmt.Errorf("grove not found in PATH, but exists at %s — add ~/go/bin to PATH", homeGobin)
+	}
+
+	return fmt.Errorf("grove binary not found in PATH")
 }
 
 // checkConfigSymlinks validates .grove/config.toml symlinks across all worktrees.
@@ -284,7 +317,7 @@ func checkWorktreeRegistration(groveDir string) (string, error) {
 
 // runExternalModeChecks runs all Docker external mode checks.
 // Extracted from the old doctor to keep the restructured command readable.
-func runExternalModeChecks(w *cli.Writer, cfg *config.Config, allPassed *bool) {
+func runExternalModeChecks(w *cli.Writer, cfg *config.Config, projectRoot string, allPassed *bool) {
 	if cfg == nil || !cfg.IsExternalDockerMode() {
 		runInfo(w, "External mode", "not configured (using local compose)")
 		return
@@ -295,79 +328,176 @@ func runExternalModeChecks(w *cli.Writer, cfg *config.Config, allPassed *bool) {
 		if ext.Path == "" {
 			return "", fmt.Errorf("plugins.docker.external.path not set")
 		}
+		info, err := os.Stat(ext.Path)
+		if err != nil {
+			return "", fmt.Errorf("%s: %w", ext.Path, err)
+		}
+		if !info.IsDir() {
+			return "", fmt.Errorf("%s is not a directory", ext.Path)
+		}
 		return ext.Path, nil
 	}) && *allPassed
 
+	checkProvisioningSources(w, ext, projectRoot, allPassed)
+
 	envFileName := ext.EnvFileName()
-	composePath := docker.ResolveComposePath(ext.Path)
+	composePath := ext.Path
 	efResult := checkEnvFileConfig(envFileName, composePath, exec.LookPath)
 
-	if envFileName != ".env" {
-		*allPassed = runCheck(w, "Env file target", func() (string, error) {
-			return envFileName, nil
-		}) && *allPassed
-
-		runCheck(w, "Env file loader", func() (string, error) {
-			if !efResult.loaderInstalled {
-				return "", fmt.Errorf("%s", efResult.loaderErr)
-			}
-			return efResult.loaderName + " found in PATH", nil
-		})
-
-		runCheck(w, "Env file loader configured", func() (string, error) {
-			if efResult.configErr != "" {
-				return "", fmt.Errorf("%s", efResult.configErr)
-			}
-			if !efResult.configLoadsFile {
-				return "", fmt.Errorf("no loader config references %s", envFileName)
-			}
-			return "configured", nil
-		})
-	} else if efResult.hintAvailable {
-		runInfo(w, "Env file hint", "direnv/mise is configured for .env.local — consider setting env_file = \".env.local\" to avoid dirtying tracked .env")
-	}
+	checkEnvFileChecks(w, envFileName, efResult, allPassed)
 
 	if len(ext.NonBlockingServices) > 0 {
 		runInfo(w, "Non-blocking services", strings.Join(ext.NonBlockingServices, ", "))
 	}
 
+	checkAgentStacks(w, cfg, ext, allPassed)
+}
+
+// checkProvisioningSources verifies that every entry in copy_files /
+// symlink_files / symlink_dirs exists in the project root. Catches typos
+// before the first 'grove new', when the failure would only show up as a
+// silent warning during worktree creation.
+func checkProvisioningSources(w *cli.Writer, ext *config.ExternalComposeConfig, projectRoot string, allPassed *bool) {
+	type entry struct {
+		field string
+		paths []string
+	}
+	groups := []entry{
+		{"copy_files", ext.CopyFiles},
+		{"symlink_files", ext.SymlinkFiles},
+		{"symlink_dirs", ext.SymlinkDirs},
+	}
+	for _, g := range groups {
+		if len(g.paths) == 0 {
+			continue
+		}
+		missing := []string{}
+		for _, rel := range g.paths {
+			if _, err := os.Stat(filepath.Join(projectRoot, rel)); err != nil {
+				missing = append(missing, rel)
+			}
+		}
+		*allPassed = runCheck(w, "Provisioning "+g.field, func() (string, error) {
+			if len(missing) > 0 {
+				return "", fmt.Errorf("missing in main worktree: %s", strings.Join(missing, ", "))
+			}
+			return fmt.Sprintf("%d entries", len(g.paths)), nil
+		}) && *allPassed
+	}
+}
+
+// checkEnvFileChecks runs env file loader and configuration checks.
+func checkEnvFileChecks(w *cli.Writer, envFileName string, efResult envFileCheckResult, allPassed *bool) {
+	if envFileName == ".env" {
+		if efResult.hintAvailable {
+			runInfo(w, "Env file hint", "direnv/mise is configured for .env.local — consider setting env_file = \".env.local\" to avoid dirtying tracked .env")
+		}
+		return
+	}
+
+	*allPassed = runCheck(w, "Env file target", func() (string, error) {
+		return envFileName, nil
+	}) && *allPassed
+
+	runCheck(w, "Env file loader", func() (string, error) {
+		if !efResult.loaderInstalled {
+			return "", fmt.Errorf("%s", efResult.loaderErr)
+		}
+		return efResult.loaderName + " found in PATH", nil
+	})
+
+	runCheck(w, "Env file loader configured", func() (string, error) {
+		if efResult.configErr != "" {
+			return "", fmt.Errorf("%s", efResult.configErr)
+		}
+		if !efResult.configLoadsFile {
+			return "", fmt.Errorf("no loader config references %s", envFileName)
+		}
+		return "configured", nil
+	})
+}
+
+// checkAgentStacks runs agent stack configuration and network checks.
+func checkAgentStacks(w *cli.Writer, cfg *config.Config, ext *config.ExternalComposeConfig, allPassed *bool) {
 	if ext.Agent == nil || ext.Agent.Enabled == nil || !*ext.Agent.Enabled {
 		runInfo(w, "Agent stacks", "not enabled")
-	} else {
-		*allPassed = runCheck(w, "Agent config", func() (string, error) {
-			if len(ext.Agent.Services) == 0 {
-				return "", fmt.Errorf("agent.services is empty")
-			}
-			if ext.Agent.TemplatePath == "" {
-				return "", fmt.Errorf("agent.template_path not set")
-			}
-			return fmt.Sprintf("%d services, max %d slots", len(ext.Agent.Services), ext.Agent.MaxSlots), nil
-		}) && *allPassed
-
-		if ext.Agent.Network != "" {
-			*allPassed = runCheck(w, "Docker network '"+ext.Agent.Network+"'", func() (string, error) {
-				out, err := cmdexec.Output(context.TODO(), "docker", []string{"network", "ls", "--format", "{{.Name}}"}, "", cmdexec.Docker)
-				if err != nil {
-					return "", fmt.Errorf("failed to list networks: %w", err)
-				}
-				for _, line := range strings.Split(string(out), "\n") {
-					if strings.TrimSpace(line) == ext.Agent.Network {
-						return "exists", nil
-					}
-				}
-				return "", fmt.Errorf("network not found (is the main stack running?)")
-			}) && *allPassed
-		}
-
-		slots, err := docker.ListActiveSlots(cfg)
-		if err == nil {
-			maxSlots := ext.Agent.MaxSlots
-			if maxSlots <= 0 {
-				maxSlots = 5
-			}
-			runInfo(w, "Active stacks", fmt.Sprintf("%d/%d slots in use", len(slots), maxSlots))
-		}
+		return
 	}
+
+	*allPassed = runCheck(w, "Agent config", func() (string, error) {
+		if len(ext.Agent.Services) == 0 {
+			return "", fmt.Errorf("agent.services is empty")
+		}
+		if ext.Agent.TemplatePath == "" {
+			return "", fmt.Errorf("agent.template_path not set")
+		}
+		return fmt.Sprintf("%d services, max %d slots", len(ext.Agent.Services), ext.Agent.MaxSlots), nil
+	}) && *allPassed
+
+	*allPassed = runCheck(w, "Agent template path", func() (string, error) {
+		tmpl := ext.Agent.TemplatePath
+		if !filepath.IsAbs(tmpl) {
+			tmpl = filepath.Join(ext.Path, tmpl)
+		}
+		info, err := os.Stat(tmpl)
+		if err != nil {
+			return "", fmt.Errorf("%s: %w", tmpl, err)
+		}
+		if info.IsDir() {
+			return "", fmt.Errorf("%s is a directory, expected a compose file", tmpl)
+		}
+		return tmpl, nil
+	}) && *allPassed
+
+	if len(ext.Agent.TemplateOverlays) > 0 {
+		*allPassed = runCheck(w, "Agent template overlays", func() (string, error) {
+			for i, overlay := range ext.Agent.TemplateOverlays {
+				p := overlay
+				if !filepath.IsAbs(p) {
+					p = filepath.Join(ext.Path, p)
+				}
+				info, err := os.Stat(p)
+				if err != nil {
+					return "", fmt.Errorf("overlay[%d] %s: %w", i, p, err)
+				}
+				if info.IsDir() {
+					return "", fmt.Errorf("overlay[%d] %s is a directory, expected a compose file", i, p)
+				}
+			}
+			return fmt.Sprintf("%d overlay(s) ok", len(ext.Agent.TemplateOverlays)), nil
+		}) && *allPassed
+	}
+
+	checkAgentNetwork(w, ext.Agent.Network, allPassed)
+
+	slots, err := docker.ListActiveSlots(cfg)
+	if err != nil {
+		return
+	}
+	maxSlots := ext.Agent.MaxSlots
+	if maxSlots <= 0 {
+		maxSlots = 5
+	}
+	runInfo(w, "Active stacks", fmt.Sprintf("%d/%d slots in use", len(slots), maxSlots))
+}
+
+// checkAgentNetwork verifies the Docker network exists.
+func checkAgentNetwork(w *cli.Writer, network string, allPassed *bool) {
+	if network == "" {
+		return
+	}
+	*allPassed = runCheck(w, "Docker network '"+network+"'", func() (string, error) {
+		out, err := cmdexec.Output(context.TODO(), "docker", []string{"network", "ls", "--format", "{{.Name}}"}, "", cmdexec.Docker)
+		if err != nil {
+			return "", fmt.Errorf("failed to list networks: %w", err)
+		}
+		for _, line := range strings.Split(string(out), "\n") {
+			if strings.TrimSpace(line) == network {
+				return "exists", nil
+			}
+		}
+		return "", fmt.Errorf("network not found (is the main stack running?)")
+	}) && *allPassed
 }
 
 func runCheck(w *cli.Writer, name string, check func() (string, error)) bool {
@@ -403,44 +533,49 @@ type envFileCheckResult struct {
 // It checks for direnv (.envrc) and mise (.mise.toml/mise.toml) as env file loaders.
 // lookPath is injected for testability (pass exec.LookPath in production).
 func checkEnvFileConfig(envFileName, composePath string, lookPath func(string) (string, error)) envFileCheckResult {
+	if envFileName != ".env" {
+		return checkCustomEnvFile(envFileName, composePath, lookPath)
+	}
+	return checkDefaultEnvFile(composePath)
+}
+
+func checkCustomEnvFile(envFileName, composePath string, lookPath func(string) (string, error)) envFileCheckResult {
 	var result envFileCheckResult
 
-	if envFileName != ".env" {
-		// Non-default env file: check for direnv or mise
-		if _, err := lookPath("direnv"); err == nil {
-			result.loaderInstalled = true
-			result.loaderName = "direnv"
-		} else if _, err := lookPath("mise"); err == nil {
-			result.loaderInstalled = true
-			result.loaderName = "mise"
-		} else {
-			result.loaderErr = fmt.Sprintf("neither direnv nor mise found — install one if you run manual docker compose commands in %s", composePath)
-		}
-
-		// Check for config file: .envrc (direnv) or .mise.toml/mise.toml (mise)
-		if checkEnvrcFile(composePath, envFileName) {
-			result.configExists = true
-			result.configLoadsFile = true
-		} else if checkMiseFile(composePath, envFileName) {
-			result.configExists = true
-			result.configLoadsFile = true
-		} else {
-			// Check if config files exist but don't reference the env file
-			result.configExists, result.configErr = checkConfigExists(composePath, envFileName)
-		}
+	// Check for direnv or mise
+	if _, err := lookPath("direnv"); err == nil {
+		result.loaderInstalled = true
+		result.loaderName = "direnv"
+	} else if _, err := lookPath("mise"); err == nil {
+		result.loaderInstalled = true
+		result.loaderName = "mise"
 	} else {
-		// Default .env: check if .env.local setup is available via direnv or mise
-		envrcPath := filepath.Join(composePath, ".envrc")
-		if data, err := os.ReadFile(envrcPath); err == nil {
-			if strings.Contains(string(data), ".env.local") {
-				result.hintAvailable = true
-			}
-		}
-		if !result.hintAvailable {
-			if checkMiseFile(composePath, ".env.local") {
-				result.hintAvailable = true
-			}
-		}
+		result.loaderErr = fmt.Sprintf("neither direnv nor mise found — install one if you run manual docker compose commands in %s", composePath)
+	}
+
+	// Check for config file: .envrc (direnv) or .mise.toml/mise.toml (mise)
+	if checkEnvrcFile(composePath, envFileName) {
+		result.configExists = true
+		result.configLoadsFile = true
+	} else if checkMiseFile(composePath, envFileName) {
+		result.configExists = true
+		result.configLoadsFile = true
+	} else {
+		result.configExists, result.configErr = checkConfigExists(composePath, envFileName)
+	}
+
+	return result
+}
+
+func checkDefaultEnvFile(composePath string) envFileCheckResult {
+	var result envFileCheckResult
+
+	envrcPath := filepath.Join(composePath, ".envrc")
+	if data, err := os.ReadFile(envrcPath); err == nil && strings.Contains(string(data), ".env.local") {
+		result.hintAvailable = true
+	}
+	if !result.hintAvailable && checkMiseFile(composePath, ".env.local") {
+		result.hintAvailable = true
 	}
 
 	return result
@@ -486,4 +621,252 @@ func checkConfigExists(composePath, envFileName string) (exists bool, errMsg str
 		}
 	}
 	return false, fmt.Sprintf("no .envrc or .mise.toml found in %s — needed only for manual docker compose commands (grove handles env files automatically)", composePath)
+}
+
+// checkHooksDockerRouting flags host install commands (bundle/npm/pip install)
+// in a Docker-based project — the original symptom from issue #28.
+func checkHooksDockerRouting(projectRoot, groveDir string) (string, error) {
+	if !detect.HasDocker(projectRoot) {
+		return "no docker — n/a", nil
+	}
+
+	cfg, err := hooks.LoadHooksConfig(groveDir)
+	if err != nil || cfg == nil {
+		return "", fmt.Errorf("could not load hooks: %v", err)
+	}
+
+	var offenders []string
+	for _, a := range cfg.Hooks.PostCreate {
+		if a.Type != "command" {
+			continue
+		}
+		if isLikelyHostInstallCommand(a.Command) {
+			offenders = append(offenders, a.Command)
+		}
+	}
+	if len(offenders) > 0 {
+		return "", fmt.Errorf(
+			"host install command(s) in a Docker project: %s — convert to type=\"docker:compose\" hooks (or run `grove doctor --fix`)",
+			strings.Join(offenders, "; "),
+		)
+	}
+	return "no host installs detected", nil
+}
+
+// hostInstallPrograms is the set of command tokens that, when they appear at
+// a real shell-command boundary, indicate a host-side install. Matching is
+// boundary-aware (start of string, after `&&`, `||`, `;`, `|`) so that
+// `echo "to set up: bundle install"` does NOT match.
+var hostInstallPrograms = []string{
+	"bundle install",
+	"npm install",
+	"yarn install",
+	"pnpm install",
+	"pip install",
+	"pip3 install",
+	"poetry install",
+}
+
+func isLikelyHostInstallCommand(cmd string) bool {
+	for _, prog := range hostInstallPrograms {
+		if hasCommandTokenBoundary(cmd, prog) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasCommandTokenBoundary reports whether `prog` appears in `cmd` at a real
+// command boundary (start, or after &&, ||, ;, |, with optional whitespace).
+// This rejects matches inside string literals and echo/comment positions.
+func hasCommandTokenBoundary(cmd, prog string) bool {
+	separators := []string{"", "&&", "||", ";", "|"}
+	for _, sep := range separators {
+		// Prefix patterns: "<sep> <prog>" or "<sep><prog>" at any position.
+		if sep == "" {
+			// Start of string only.
+			trimmed := strings.TrimLeft(cmd, " \t")
+			if strings.HasPrefix(trimmed, prog) {
+				return true
+			}
+			continue
+		}
+		idx := 0
+		for idx < len(cmd) {
+			j := strings.Index(cmd[idx:], sep)
+			if j == -1 {
+				break
+			}
+			rest := strings.TrimLeft(cmd[idx+j+len(sep):], " \t")
+			if strings.HasPrefix(rest, prog) {
+				return true
+			}
+			idx += j + len(sep)
+		}
+	}
+	return false
+}
+
+// fixHostInstallsInDockerProject rewrites host install hooks to docker:compose
+// hooks in place. Returns the number of hooks changed and any error.
+//
+// Conservative: only rewrites within `[[hooks.post_create]]`, only when the
+// command is in hostInstallPrograms, and only for type = "command".
+func fixHostInstallsInDockerProject(projectRoot, groveDir string) (int, error) {
+	if !detect.HasDocker(projectRoot) {
+		return 0, nil
+	}
+	composePath := detect.FindComposeFile(projectRoot)
+	if composePath == "" {
+		return 0, nil
+	}
+	service, ok := detect.InferAppService(composePath)
+	if !ok {
+		return 0, fmt.Errorf("can't infer app service from %s — fix manually", composePath)
+	}
+
+	hooksPath := filepath.Join(groveDir, "hooks.toml")
+	original, err := os.ReadFile(hooksPath)
+	if err != nil {
+		return 0, fmt.Errorf("read hooks.toml: %w", err)
+	}
+	rewritten, n := rewriteHostInstallsToCompose(string(original), service)
+	if n == 0 {
+		return 0, nil
+	}
+	if err := os.WriteFile(hooksPath, []byte(rewritten), 0644); err != nil {
+		return 0, fmt.Errorf("write hooks.toml: %w", err)
+	}
+	return n, nil
+}
+
+// rewriteHostInstallsToCompose performs the textual rewrite. Operates on the
+// raw TOML so user comments and unrelated keys are preserved. Each matching
+// `[[hooks.post_create]]` block has its `type = "command"` line replaced
+// with `type = "docker:compose"` + `service = "..."` + `mode = "run"`.
+//
+// Contract: this is a surgical block edit, not a parse-rewrite-emit pipeline.
+// The textual approach is deliberate — the only TOML library in use,
+// BurntSushi/toml, drops comments and reorders keys on encode, which would
+// silently rewrite parts of the file the user never asked to change. The
+// codebase only ever calls toml.Unmarshal, never Marshal/Encode.
+//
+// Header match is `strings.TrimSpace(line) == "[[hooks.post_create]]"`. A
+// block ends at the next blank line or any line whose trimmed form starts
+// with `[`.
+//
+// Known limitations, pinned by sub-tests in
+// TestRewriteHostInstallsToCompose_EdgeCases:
+//   - Quoted keys (`"type" = "command"`) are not detected and the block is
+//     left untouched.
+//   - Inline array-of-tables (`hooks.post_create = [{...}]`) is not detected;
+//     grove's TOML decoder also rejects this form so it cannot appear in a
+//     real config, but we pin the no-corruption guarantee.
+//   - Multi-line string bodies (`command = """..."""`) whose body contains a
+//     literal `[[hooks.post_create]]` are left untouched (n=0); the embedded
+//     `[` breaks block-walking and the inner block lacks a type line.
+//
+// A future caller adding a second `doctor --fix` rewrite should switch to the
+// hybrid parse-for-validation approach (issue #37 Option 2) instead of
+// extending this textual heuristic.
+func rewriteHostInstallsToCompose(src, service string) (string, int) {
+	var out strings.Builder
+	count := 0
+	lines := strings.Split(src, "\n")
+
+	// Walk blocks: start at each `[[hooks.post_create]]` header and look at
+	// the keys until the next blank line or section.
+	i := 0
+	for i < len(lines) {
+		line := lines[i]
+		header := strings.TrimSpace(line) == "[[hooks.post_create]]"
+		if !header {
+			out.WriteString(line)
+			if i < len(lines)-1 {
+				out.WriteString("\n")
+			}
+			i++
+			continue
+		}
+
+		// Collect block lines until next blank or new section.
+		blockEnd := i + 1
+		for blockEnd < len(lines) {
+			t := strings.TrimSpace(lines[blockEnd])
+			if t == "" || strings.HasPrefix(t, "[") {
+				break
+			}
+			blockEnd++
+		}
+		block := lines[i:blockEnd]
+
+		// Inspect: type=command + command matches hostInstallPrograms.
+		typeLine, cmdLine := -1, -1
+		isCommand := false
+		matchedInstall := false
+		for k := i + 1; k < blockEnd; k++ {
+			t := strings.TrimSpace(lines[k])
+			if strings.HasPrefix(t, "type") && strings.Contains(t, `"command"`) {
+				typeLine = k
+				isCommand = true
+			} else if strings.HasPrefix(t, "command") {
+				cmdLine = k
+				// Extract value between quotes.
+				if eq := strings.Index(t, "="); eq >= 0 {
+					val := strings.TrimSpace(t[eq+1:])
+					val = strings.Trim(val, "\"")
+					if isLikelyHostInstallCommand(val) {
+						matchedInstall = true
+					}
+				}
+			}
+		}
+
+		if isCommand && matchedInstall && typeLine >= 0 && cmdLine >= 0 {
+			count++
+			for k, bl := range block {
+				if k == typeLine-i {
+					out.WriteString(`type = "docker:compose"`)
+					out.WriteString("\n")
+					fmt.Fprintf(&out, "service = %q\n", service)
+					out.WriteString("mode = \"run\"\n")
+					continue
+				}
+				out.WriteString(bl)
+				out.WriteString("\n")
+			}
+		} else {
+			for _, bl := range block {
+				out.WriteString(bl)
+				out.WriteString("\n")
+			}
+		}
+		// Trailing newline behavior preserved by always writing \n above.
+		i = blockEnd
+	}
+
+	result := out.String()
+	// Strip the trailing newline we may have added past the original end.
+	if !strings.HasSuffix(src, "\n") && strings.HasSuffix(result, "\n") {
+		result = result[:len(result)-1]
+	}
+	return result, count
+}
+
+// checkStrayBackup warns when an unexplained .grove/.grove-backup/ directory
+// exists. Grove does not create this directory; if present it likely came
+// from manual experimentation or an editor's autosave.
+func checkStrayBackup(groveDir string) (string, error) {
+	backup := filepath.Join(groveDir, ".grove-backup")
+	info, err := os.Stat(backup)
+	if err != nil {
+		return "no stray backup directory", nil
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf(
+			"%s exists but is not grove-managed — safe to remove if you don't recognize it",
+			backup,
+		)
+	}
+	return "no stray backup directory", nil
 }

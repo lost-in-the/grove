@@ -54,9 +54,9 @@ func renderDeleteV2(s *DeleteState, width int) string {
 	b.WriteString("\n\n")
 
 	// Checkbox for branch deletion
-	checkbox := "[ ]"
+	checkbox := checkboxUnchecked
 	if s.DeleteBranch {
-		checkbox = "[x]"
+		checkbox = checkboxChecked
 	}
 	checkboxLine := fmt.Sprintf("%s Also delete branch %s",
 		checkbox, Styles.DetailValue.Render(s.Item.Branch))

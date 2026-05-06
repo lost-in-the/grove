@@ -1,21 +1,24 @@
 package version
 
+import "runtime"
+
 // Version information set by build flags or defaults
 var (
 	// Version is the semantic version of the application
-	Version = "0.5.0"
+	Version = "0.7.0-dev"
 	// Commit is the git commit hash
 	Commit = "unknown"
 	// BuildDate is the date the binary was built
 	BuildDate = "unknown"
 )
 
-// GetVersion returns the full version string
+// GetVersion returns the version string with platform info.
 func GetVersion() string {
-	return Version
+	return "grove " + Version + " " + runtime.GOOS + "/" + runtime.GOARCH
 }
 
-// GetFullVersion returns version with commit and build date
+// GetFullVersion returns version with commit and build date.
 func GetFullVersion() string {
-	return Version + " (commit: " + Commit + ", built: " + BuildDate + ")"
+	return "grove " + Version + " (" + runtime.GOOS + "/" + runtime.GOARCH +
+		", " + runtime.Version() + ", commit: " + Commit + ", built: " + BuildDate + ")"
 }

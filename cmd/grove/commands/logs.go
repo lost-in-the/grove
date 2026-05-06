@@ -19,8 +19,9 @@ func init() {
 }
 
 var logsCmd = &cobra.Command{
-	Use:   "logs [service]",
-	Short: "View container logs",
+	Use:     "logs [service]",
+	Aliases: []string{"lo"},
+	Short:   "View container logs",
 	Long: `View logs from Docker containers for the current worktree.
 
 If no service is specified, shows logs from all services.

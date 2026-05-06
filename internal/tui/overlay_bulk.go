@@ -36,7 +36,7 @@ func (b *BulkState) SelectedItems() []WorktreeItem {
 	return result
 }
 
-func renderBulk(s *BulkState, width int) string {
+func renderBulk(s *BulkState) string {
 	var b strings.Builder
 
 	if s.Deleting {
@@ -66,9 +66,9 @@ func renderBulk(s *BulkState, width int) string {
 			cursor = Styles.ListCursor.Render("❯ ")
 		}
 
-		checkbox := "[ ]"
+		checkbox := checkboxUnchecked
 		if s.Selected[i] {
-			checkbox = "[x]"
+			checkbox = checkboxChecked
 		}
 
 		name := item.ShortName

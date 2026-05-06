@@ -52,10 +52,18 @@ func (t *Table) Render() {
 		return
 	}
 
-	cs := theme.Colors
 	useColor := t.w.UseColor()
+	widths := t.computeWidths()
 
-	// Compute column widths from headers and data using visual width
+	_, _ = fmt.Fprintln(t.w, t.renderHeader(widths, useColor))
+	_, _ = fmt.Fprintln(t.w, t.renderSeparator(widths, useColor))
+
+	for _, row := range t.rows {
+		_, _ = fmt.Fprintln(t.w, t.renderRow(row, widths, useColor))
+	}
+}
+
+func (t *Table) computeWidths() []int {
 	widths := make([]int, len(t.columns))
 	for i, col := range t.columns {
 		widths[i] = lipgloss.Width(col.Title)
@@ -70,77 +78,77 @@ func (t *Table) Render() {
 			}
 		}
 	}
-	// Apply max width constraints
 	for i, col := range t.columns {
 		if col.MaxWidth > 0 && widths[i] > col.MaxWidth {
 			widths[i] = col.MaxWidth
 		}
 	}
+	return widths
+}
 
-	// Print header
+func (t *Table) renderHeader(widths []int, useColor bool) string {
+	cs := theme.Colors
 	headerStyle := lipgloss.NewStyle()
 	if useColor {
 		headerStyle = headerStyle.Foreground(cs.TextMuted).Bold(true)
 	}
 
-	var headerParts []string
+	parts := make([]string, 0, len(t.columns))
 	for i, col := range t.columns {
 		cell := col.Title + strings.Repeat(" ", max(0, widths[i]-lipgloss.Width(col.Title)))
 		if useColor {
 			cell = headerStyle.Render(cell)
 		}
-		headerParts = append(headerParts, cell)
+		parts = append(parts, cell)
 	}
-	_, _ = fmt.Fprintln(t.w, strings.Join(headerParts, "  "))
+	return strings.Join(parts, "  ")
+}
 
-	// Print separator
-	var sepParts []string
+func (t *Table) renderSeparator(widths []int, useColor bool) string {
+	parts := make([]string, 0, len(widths))
 	for _, w := range widths {
-		sepParts = append(sepParts, strings.Repeat("─", w))
+		parts = append(parts, strings.Repeat("─", w))
 	}
-	sep := strings.Join(sepParts, "──")
+	sep := strings.Join(parts, "──")
 	if useColor {
-		sep = lipgloss.NewStyle().Foreground(cs.SurfaceDim).Render(sep)
+		sep = lipgloss.NewStyle().Foreground(theme.Colors.SurfaceDim).Render(sep)
 	}
-	_, _ = fmt.Fprintln(t.w, sep)
+	return sep
+}
 
-	// Print rows
-	for _, row := range t.rows {
-		var parts []string
-		for i, val := range row {
-			if i >= len(t.columns) {
-				break
-			}
-
-			// Truncate if needed (rune-aware)
-			display := val
-			if t.columns[i].MaxWidth > 0 && lipgloss.Width(display) > widths[i] {
-				display = truncateToWidth(display, widths[i])
-			}
-
-			displayWidth := lipgloss.Width(display)
-
-			// Apply color function if available.
-			// ColorFn receives the truncated display string so the rendered
-			// width matches the column. Callers that need status-based coloring
-			// (e.g., "clean" → green) pass short values that won't be truncated.
-			if useColor && t.columns[i].ColorFn != nil {
-				colored := t.columns[i].ColorFn(display)
-				padding := widths[i] - displayWidth
-				if padding > 0 {
-					colored += strings.Repeat(" ", padding)
-				}
-				parts = append(parts, colored)
-			} else {
-				padding := widths[i] - displayWidth
-				if padding > 0 {
-					display += strings.Repeat(" ", padding)
-				}
-				parts = append(parts, display)
-			}
+func (t *Table) renderRow(row []string, widths []int, useColor bool) string {
+	var parts []string
+	for i, val := range row {
+		if i >= len(t.columns) {
+			break
 		}
-		_, _ = fmt.Fprintln(t.w, strings.Join(parts, "  "))
+		parts = append(parts, t.formatCell(i, val, widths[i], useColor))
 	}
+	return strings.Join(parts, "  ")
+}
+
+func (t *Table) formatCell(colIdx int, val string, width int, useColor bool) string {
+	col := t.columns[colIdx]
+	display := val
+	if col.MaxWidth > 0 && lipgloss.Width(display) > width {
+		display = truncateToWidth(display, width)
+	}
+
+	displayWidth := lipgloss.Width(display)
+	padding := width - displayWidth
+
+	if useColor && col.ColorFn != nil {
+		colored := col.ColorFn(display)
+		if padding > 0 {
+			colored += strings.Repeat(" ", padding)
+		}
+		return colored
+	}
+
+	if padding > 0 {
+		display += strings.Repeat(" ", padding)
+	}
+	return display
 }
 
 // truncateToWidth truncates a string to fit within maxWidth visual cells,

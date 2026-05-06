@@ -1,21 +1,35 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 	lipgloss "charm.land/lipgloss/v2"
+
+	"github.com/lost-in-the/grove/internal/worktree"
+	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
-func filterItems(items []WorktreeItem, query string) []WorktreeItem {
-	query = strings.ToLower(query)
-	var result []WorktreeItem
-	for _, item := range items {
-		if strings.Contains(strings.ToLower(item.ShortName), query) ||
-			strings.Contains(strings.ToLower(item.Branch), query) {
-			result = append(result, item)
+// renderFilterBar writes the filter/count bar used by list views (Issues, PRs).
+// When filtering is active or a filter is set, it shows the filter input view
+// with a "N of M" count. Otherwise it shows "N open" or an empty line.
+func renderFilterBar(b *strings.Builder, filterView string, filtering bool, filter string, filteredCount, totalCount int) {
+	if filtering || filter != "" {
+		b.WriteString(filterView)
+		if filter != "" {
+			fmt.Fprintf(b, "  %s", Styles.DetailDim.Render(fmt.Sprintf("%d of %d", filteredCount, totalCount)))
+		}
+		b.WriteString("\n\n")
+	} else {
+		if totalCount > 0 {
+			b.WriteString(Styles.DetailDim.Render(fmt.Sprintf("%d open", totalCount)) + "\n\n")
+		} else {
+			b.WriteString("\n\n")
 		}
 	}
-	return result
 }
 
 func truncate(s string, max int) string {
@@ -86,31 +100,6 @@ func ValidateWorktreeName(name string) string {
 	return ""
 }
 
-// exactBranchMatch returns true if any branch exactly matches the given name.
-func exactBranchMatch(branches []string, name string) bool {
-	for _, b := range branches {
-		if b == name {
-			return true
-		}
-	}
-	return false
-}
-
-// isPrintableText returns true if s is non-empty and contains only printable
-// characters (no control codes). Used to filter tea.KeyPressMsg.Text so that
-// control key combinations don't leak into input buffers.
-func isPrintableText(s string) bool {
-	if s == "" {
-		return false
-	}
-	for _, r := range s {
-		if r < 0x20 || r == 0x7f {
-			return false
-		}
-	}
-	return true
-}
-
 // scrollWindow computes the visible start/end indices for a cursor-following
 // scroll window. Given a total item count, the current cursor position, and the
 // max number of items to display, it returns (start, end) such that the cursor
@@ -129,10 +118,189 @@ func scrollWindow(total, cursor, maxVisible int) (start, end int) {
 	return start, end
 }
 
+// wipCheckMsg is sent after checking a worktree for uncommitted changes.
+// Used by both the checkout and fork overlays.
+type wipCheckMsg struct {
+	hasWIP bool
+	files  []string
+	err    error
+}
+
+// wipCheckCmd checks the given worktree path for uncommitted changes.
+func wipCheckCmd(path string) tea.Cmd {
+	return func() tea.Msg {
+		wip := worktree.NewWIPHandler(path)
+		hasWIP, err := wip.HasWIP()
+		if err != nil {
+			return wipCheckMsg{err: err}
+		}
+		var files []string
+		if hasWIP {
+			files, err = wip.ListWIPFiles()
+			if err != nil {
+				return wipCheckMsg{hasWIP: hasWIP, err: fmt.Errorf("failed to list WIP files: %w", err)}
+			}
+		}
+		return wipCheckMsg{hasWIP: hasWIP, files: files}
+	}
+}
+
 func padRight(s string, n int) string {
 	w := lipgloss.Width(s)
 	if w >= n {
 		return s
 	}
 	return s + strings.Repeat(" ", n-w)
+}
+
+// calcDisplaySlots computes how many 3-line item slots fit in the remaining
+// height after headerLines have been rendered, and a clamped content width.
+// Used by both renderPRList and renderIssueList.
+func calcDisplaySlots(headerLines, maxHeight, width int) (slots, contentWidth int) {
+	availableLines := maxHeight - headerLines
+	if availableLines < 3 {
+		availableLines = 3
+	}
+	slots = (availableLines + 1) / 3
+	if slots < 3 {
+		slots = 3
+	}
+	contentWidth = width - 2
+	if contentWidth < 40 {
+		contentWidth = 40
+	}
+	return slots, contentWidth
+}
+
+// newFilterInput creates a configured textinput for list filtering.
+// All list filter inputs share the same prompt and char limit; only placeholder varies.
+func newFilterInput(placeholder string) textinput.Model {
+	ti := textinput.New()
+	ti.Prompt = "Filter: "
+	ti.Placeholder = placeholder
+	ti.CharLimit = 100
+	return ti
+}
+
+// handleListFilterKey handles key routing when a list view's filter input is
+// active. Returns the updated textinput, cursor, tea.Cmd, and whether filtering
+// should stop (true when Escape or Enter is pressed).
+func handleListFilterKey(msg tea.KeyPressMsg, keys KeyMap, ti textinput.Model, cursor int) (textinput.Model, int, tea.Cmd, bool) {
+	switch {
+	case key.Matches(msg, keys.Escape):
+		ti.Blur()
+		ti.SetValue("")
+		return ti, 0, nil, true
+	case key.Matches(msg, keys.Enter):
+		ti.Blur()
+		return ti, cursor, nil, true
+	default:
+		prevVal := ti.Value()
+		var cmd tea.Cmd
+		ti, cmd = ti.Update(msg)
+		if ti.Value() != prevVal {
+			cursor = 0
+		}
+		return ti, cursor, cmd, false
+	}
+}
+
+// ExistingWorktreePrompt holds state for the "worktree already exists" popup
+// shown in PR and issue views when a user tries to create a duplicate.
+type ExistingWorktreePrompt struct {
+	WorktreeName string // short name to highlight on dashboard
+	Branch       string // branch that matched
+	ItemLabel    string // e.g. "PR #42" or "Issue #101"
+}
+
+// renderExistingWorktreePrompt renders a popup offering to go to the existing
+// worktree or create a new one (fork).
+func renderExistingWorktreePrompt(p *ExistingWorktreePrompt, width int) string {
+	d := calcOverlayDims(width)
+
+	var b strings.Builder
+	b.WriteString(d.indent + p.ItemLabel + " uses branch " + Styles.DetailValue.Render(p.Branch) + "\n")
+	b.WriteString(d.indent + "which already has a worktree:\n\n")
+	b.WriteString(d.indent + "  → " + Styles.SuccessText.Render(p.WorktreeName) + "\n")
+
+	content := b.String()
+	footer := "\n" + Styles.Footer.Render(d.indent+"[enter] go to worktree  [n] fork  [esc] back")
+
+	return Styles.OverlayBorder.Width(d.overlay).Render(
+		Styles.OverlayTitle.Render("Worktree Exists") + "\n\n" + padToHeight(content, 8) + footer,
+	)
+}
+
+// handleExistsPromptKey handles key input for the "worktree exists" popup.
+// Enter navigates to the existing worktree. N opens the fork overlay. Esc dismisses.
+func (m Model) handleExistsPromptKey(msg tea.KeyPressMsg, prompt *ExistingWorktreePrompt, dismiss func()) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.keys.Escape):
+		dismiss()
+		return m, nil
+	case key.Matches(msg, m.keys.Enter):
+		m.activeView = ViewDashboard
+		m.prState = nil
+		m.issueState = nil
+		m.pendingSelect = prompt.WorktreeName
+		m.toast.Show(NewToast(fmt.Sprintf("Focused worktree %q", prompt.WorktreeName), ToastInfo))
+		return m, m.fetchWorktrees
+	case msg.String() == "n" || key.Matches(msg, m.keys.New):
+		// Open the fork overlay for the existing worktree
+		item := m.findWorktreeByName(prompt.WorktreeName)
+		if item == nil {
+			dismiss()
+			return m, nil
+		}
+		m.prState = nil
+		m.issueState = nil
+		m.activeView = ViewFork
+		m.forkState = NewForkState(*item)
+		return m, wipCheckCmd(item.Path)
+	}
+	return m, nil
+}
+
+// findWorktreeByName returns the WorktreeItem with the given short name, or nil.
+func (m Model) findWorktreeByName(name string) *WorktreeItem {
+	for _, li := range m.list.Items() {
+		if item, ok := li.(WorktreeItem); ok && item.ShortName == name {
+			return &item
+		}
+	}
+	return nil
+}
+
+// prefillCreateStateForPR creates a CreateState pre-filled from a PR,
+// skipping directly to the name step.
+func prefillCreateStateForPR(pr *tracker.PullRequest, projectName string, branches []string) *CreateState {
+	suggestion := worktree.DeriveWorktreeName(pr.Branch, "")
+	ni := newNameInput("")
+	return &CreateState{
+		Step:              CreateStepName,
+		Source:            "pr",
+		ProjectName:       projectName,
+		BaseBranch:        pr.Branch,
+		NameSuggestion:    suggestion,
+		NameInput:         ni,
+		Branches:          branches,
+		BranchFilterInput: newBranchFilterInput(),
+		BranchNameInput:   newBranchNameInput(),
+	}
+}
+
+// prefillCreateStateForIssue creates a CreateState pre-filled from an issue,
+// starting at the branch choice step so the user can pick a base branch.
+// The issue-derived name is carried as NameSuggestion for the Name step.
+func prefillCreateStateForIssue(issue *tracker.Issue, projectName string, branches []string) *CreateState {
+	name := fmt.Sprintf("issue-%d", issue.Number)
+	return &CreateState{
+		Step:              CreateStepBranchChoice,
+		Source:            "issue",
+		ProjectName:       projectName,
+		NameSuggestion:    name,
+		Branches:          branches,
+		BranchFilterInput: newBranchFilterInput(),
+		BranchNameInput:   newBranchNameInput(),
+	}
 }

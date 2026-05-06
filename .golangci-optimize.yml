@@ -1,0 +1,93 @@
+# Strict golangci-lint config for the optimization loop.
+# Enables linters that detect duplication, complexity, and missed optimizations.
+version: "2"
+
+run:
+  timeout: 5m
+  tests: false  # Focus on production code
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+        - github.com/lost-in-the/grove
+
+linters:
+  enable:
+    # Duplication & constants
+    - dupl           # Detects copy-pasted code blocks
+    - goconst        # Finds repeated strings/numbers that should be constants
+
+    # Complexity
+    - gocyclo        # Cyclomatic complexity
+    - gocognit       # Cognitive complexity
+    - funlen         # Function length
+    - nestif         # Deeply nested ifs
+
+    # Performance
+    - prealloc       # Slice preallocation opportunities
+    - unconvert      # Unnecessary type conversions
+
+    # Code quality
+    - misspell       # Misspelled words
+    - unparam        # Unused function parameters
+    - nakedret       # Naked returns in long functions
+    - nolintlint     # Ill-formed nolint directives
+
+  settings:
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+
+    dupl:
+      threshold: 100  # Token threshold for duplicate detection
+
+    funlen:
+      lines: 80       # Flag functions longer than 80 lines
+      statements: 50
+
+    gocyclo:
+      min-complexity: 15
+
+    gocognit:
+      min-complexity: 20
+
+    nestif:
+      min-complexity: 4
+
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+
+    misspell:
+      locale: US
+
+    errcheck:
+      exclude-functions:
+        - (*bufio.Writer).Flush
+        - (*bufio.Writer).WriteString
+        - (*os.File).Close
+        - io.Closer.Close
+
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - dupl
+          - funlen
+          - gocyclo
+          - gocognit
+      - linters:
+          - govet
+        text: "shadow: declaration of \"err\""
+
+issues:
+  max-issues-per-linter: 0   # Report ALL issues (no cap)
+  max-same-issues: 0

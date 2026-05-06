@@ -1,7 +1,7 @@
 # Grove - Worktree Flow Manager
 **Unreleased. Do not hesitate to refactor if it can be improved.**
 
-Go 1.24 CLI for managing git worktrees with tmux integration. Config: `.grove/config.toml`.
+Go CLI for managing git worktrees with tmux integration. Config: `.grove/config.toml`.
 
 ## For Agents Using Grove
 

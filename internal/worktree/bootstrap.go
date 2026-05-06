@@ -26,10 +26,16 @@ type BootstrapOpts struct {
 // BootstrapWorktree runs the post-git-worktree-add bootstrap sequence:
 //  1. Symlink config.toml from main worktree
 //  2. Register the worktree in state.json (idempotent — re-registers on second call)
-//  3. Fire post-create hooks (per-project hooks.toml, then global plugin hooks)
+//  3. Copy/symlink external compose artifacts (SetupFiles) so plugin Up() sees them
+//  4. Fire global plugin post-create hooks (docker container Up, etc.)
+//  5. Run config-driven post-create hooks (hooks.toml — bundle install, etc.)
+//
+// Hook ordering matters: plugin Go hooks fire before config-driven hooks so
+// containers are up by the time user setup commands (which may target them
+// via docker:compose handlers) run.
 //
 // Returns an error only if state registration or symlinking fails irrecoverably.
-// Hook failures are logged but do not abort the bootstrap.
+// Hook and SetupFiles failures are logged but do not abort the bootstrap.
 func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts BootstrapOpts) error {
 	if opts.WorktreePath == "" || opts.MainPath == "" {
 		return fmt.Errorf("WorktreePath and MainPath are required")
@@ -56,7 +62,28 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 		return fmt.Errorf("register worktree: %w", err)
 	}
 
-	// Per-project post-create hooks
+	// File setup (copy/symlink external compose artifacts) — must precede
+	// plugin hooks so symlinked dirs exist before any container mount.
+	if cfg != nil && cfg.Plugins.Docker.External != nil {
+		if err := SetupFiles(cfg.Plugins.Docker.External, opts.WorktreePath, opts.MainPath); err != nil {
+			log.Printf("file setup: %v", err)
+		}
+	}
+
+	// Global plugin post-create hook (e.g., docker external) — runs before
+	// config-driven hooks so containers are up by the time user setup commands run.
+	globalHookCtx := &hooks.Context{
+		Worktree:     opts.Name,
+		Config:       cfg,
+		WorktreePath: opts.WorktreePath,
+		MainPath:     opts.MainPath,
+	}
+	if err := hooks.Fire(hooks.EventPostCreate, globalHookCtx); err != nil {
+		log.Printf("hooks: global post-create plugin hook failed: %v", err)
+	}
+
+	// Per-project (config-driven) post-create hooks last — these may target
+	// containers via docker:compose handlers and need them already running.
 	hookExecutor, hookErr := hooks.NewExecutor()
 	if hookErr != nil {
 		log.Printf("hooks: failed to load config during bootstrap: %v", hookErr)
@@ -73,17 +100,6 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 		if err := hookExecutor.Execute(hooks.EventPostCreate, hookCtx); err != nil {
 			log.Printf("hooks: post-create project hook failed: %v", err)
 		}
-	}
-
-	// Global plugin post-create hook (e.g., docker external)
-	globalHookCtx := &hooks.Context{
-		Worktree:     opts.Name,
-		Config:       cfg,
-		WorktreePath: opts.WorktreePath,
-		MainPath:     opts.MainPath,
-	}
-	if err := hooks.Fire(hooks.EventPostCreate, globalHookCtx); err != nil {
-		log.Printf("hooks: global post-create plugin hook failed: %v", err)
 	}
 
 	return nil

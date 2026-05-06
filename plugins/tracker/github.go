@@ -104,7 +104,8 @@ func (g *GitHubAdapter) FetchPR(number int) (*PullRequest, error) {
 		BaseRefName string `json:"baseRefName"`
 		IsDraft     bool   `json:"isDraft"`
 		Commits     []struct {
-			Oid string `json:"oid"`
+			Oid             string `json:"oid"`
+			MessageHeadline string `json:"messageHeadline"`
 		} `json:"commits"`
 		Additions      int       `json:"additions"`
 		Deletions      int       `json:"deletions"`
@@ -123,6 +124,15 @@ func (g *GitHubAdapter) FetchPR(number int) (*PullRequest, error) {
 		labels[i] = l.Name
 	}
 
+	commits := make([]PRCommit, len(ghPR.Commits))
+	for i, c := range ghPR.Commits {
+		sha := c.Oid
+		if len(sha) > 7 {
+			sha = sha[:7]
+		}
+		commits[i] = PRCommit{SHA: sha, Message: c.MessageHeadline}
+	}
+
 	return &PullRequest{
 		Number:         ghPR.Number,
 		Title:          ghPR.Title,
@@ -134,6 +144,7 @@ func (g *GitHubAdapter) FetchPR(number int) (*PullRequest, error) {
 		BaseBranch:     ghPR.BaseRefName,
 		IsDraft:        ghPR.IsDraft,
 		CommitCount:    len(ghPR.Commits),
+		Commits:        commits,
 		Additions:      ghPR.Additions,
 		Deletions:      ghPR.Deletions,
 		ReviewDecision: ghPR.ReviewDecision,
@@ -145,7 +156,7 @@ func (g *GitHubAdapter) FetchPR(number int) (*PullRequest, error) {
 
 // ListIssues retrieves issues with optional filtering.
 func (g *GitHubAdapter) ListIssues(opts ListOptions) ([]*Issue, error) {
-	args := []string{"issue", "list", "--json", "number,title,state,author,labels,createdAt,updatedAt,url"}
+	args := []string{"issue", "list", "--json", "number,title,body,state,author,labels,createdAt,updatedAt,url"}
 
 	if opts.State != "" && opts.State != "all" {
 		args = append(args, "--state", opts.State)
@@ -179,6 +190,7 @@ func (g *GitHubAdapter) ListIssues(opts ListOptions) ([]*Issue, error) {
 	var ghIssues []struct {
 		Number int    `json:"number"`
 		Title  string `json:"title"`
+		Body   string `json:"body"`
 		State  string `json:"state"`
 		Author struct {
 			Login string `json:"login"`
@@ -205,6 +217,7 @@ func (g *GitHubAdapter) ListIssues(opts ListOptions) ([]*Issue, error) {
 		issues[i] = &Issue{
 			Number:    gh.Number,
 			Title:     gh.Title,
+			Body:      gh.Body,
 			State:     strings.ToLower(gh.State),
 			Author:    gh.Author.Login,
 			Labels:    labels,
@@ -265,7 +278,8 @@ func (g *GitHubAdapter) ListPRs(opts ListOptions) ([]*PullRequest, error) {
 		BaseRefName string `json:"baseRefName"`
 		IsDraft     bool   `json:"isDraft"`
 		Commits     []struct {
-			Oid string `json:"oid"`
+			Oid             string `json:"oid"`
+			MessageHeadline string `json:"messageHeadline"`
 		} `json:"commits"`
 		Additions      int       `json:"additions"`
 		Deletions      int       `json:"deletions"`
@@ -286,6 +300,15 @@ func (g *GitHubAdapter) ListPRs(opts ListOptions) ([]*PullRequest, error) {
 			labels[j] = l.Name
 		}
 
+		commits := make([]PRCommit, len(gh.Commits))
+		for j, c := range gh.Commits {
+			sha := c.Oid
+			if len(sha) > 7 {
+				sha = sha[:7]
+			}
+			commits[j] = PRCommit{SHA: sha, Message: c.MessageHeadline}
+		}
+
 		prs[i] = &PullRequest{
 			Number:         gh.Number,
 			Title:          gh.Title,
@@ -297,6 +320,7 @@ func (g *GitHubAdapter) ListPRs(opts ListOptions) ([]*PullRequest, error) {
 			BaseBranch:     gh.BaseRefName,
 			IsDraft:        gh.IsDraft,
 			CommitCount:    len(gh.Commits),
+			Commits:        commits,
 			Additions:      gh.Additions,
 			Deletions:      gh.Deletions,
 			ReviewDecision: gh.ReviewDecision,
@@ -334,4 +358,42 @@ func DetectRepo() (string, error) {
 		return "", fmt.Errorf("detect repo: %w", err)
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+// GetPRForBranch looks up the open PR for a given branch name.
+// Returns nil with no error if no PR exists for the branch.
+func (g *GitHubAdapter) GetPRForBranch(branch string) (*PullRequest, error) {
+	args := []string{"pr", "view", "--head", branch, "--json", "number,title,state,url"}
+	if g.repo != "" {
+		args = append(args, "--repo", g.repo)
+	}
+
+	output, err := g.runGH(args...)
+	if err != nil {
+		// gh exits non-zero when no PR is found — treat as "no PR"
+		return nil, nil
+	}
+
+	var ghPR struct {
+		Number int    `json:"number"`
+		Title  string `json:"title"`
+		State  string `json:"state"`
+		URL    string `json:"url"`
+	}
+
+	if err := json.Unmarshal(output, &ghPR); err != nil {
+		return nil, fmt.Errorf("parse pr response: %w", err)
+	}
+
+	return &PullRequest{
+		Number: ghPR.Number,
+		Title:  ghPR.Title,
+		State:  strings.ToLower(ghPR.State),
+		URL:    ghPR.URL,
+	}, nil
+}
+
+// GetRepoViewURL returns the base HTTPS URL of the GitHub repository.
+func GetRepoViewURL(repo string) string {
+	return "https://github.com/" + repo
 }

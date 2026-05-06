@@ -13,7 +13,7 @@ import (
 )
 
 var renameCmd = &cobra.Command{
-	Use:   "rename <old> <new>",
+	Use:   "rename [old] [new]",
 	Short: "Rename a worktree",
 	Long: `Rename a git worktree, updating its directory, state entry, and tmux session.
 
@@ -25,17 +25,42 @@ Protected and main worktrees cannot be renamed.
 Examples:
   grove rename feature-auth auth-v2
   grove rename old-name new-name`,
-	Args: cobra.ExactArgs(2),
+	Args:              cobra.RangeArgs(0, 2),
+	ValidArgsFunction: completeWorktreeNamesFirstArg,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
-		oldName := args[0]
-		newName := args[1]
+		w := cli.NewStdout()
+		stderr := cli.NewStderr()
+
+		var oldName, newName string
+		switch len(args) {
+		case 0:
+			selected, err := selectWorktree(ctx, "Rename which worktree?")
+			if err != nil {
+				return err
+			}
+			oldName = selected
+			newName, err = cli.ReadLine("New name: ")
+			if err != nil {
+				return err
+			}
+		case 1:
+			oldName = args[0]
+			if !cli.IsInteractive() {
+				return fmt.Errorf("new name required: grove rename %s <new-name>", args[0])
+			}
+			var err error
+			newName, err = cli.ReadLine(fmt.Sprintf("New name for '%s': ", oldName))
+			if err != nil {
+				return err
+			}
+		case 2:
+			oldName = args[0]
+			newName = args[1]
+		}
 
 		if oldName == "" || newName == "" {
 			return fmt.Errorf("both old and new names are required")
 		}
-
-		w := cli.NewStdout()
-		stderr := cli.NewStderr()
 
 		mgr, err := worktree.NewManager(ctx.ProjectRoot)
 		if err != nil {

@@ -122,7 +122,7 @@ func TestCheckoutOverlay_WIPCheckMsg(t *testing.T) {
 	m.activeView = ViewCheckout
 	m.checkoutState = NewCheckoutState(WorktreeItem{ShortName: "test", Branch: "test"})
 
-	m = sendMsg(m, checkoutWIPCheckMsg{hasWIP: true, files: []string{"file.go", "other.go"}})
+	m = sendMsg(m, wipCheckMsg{hasWIP: true, files: []string{"file.go", "other.go"}})
 	if !m.checkoutState.HasWIP {
 		t.Error("expected HasWIP=true")
 	}
@@ -136,7 +136,7 @@ func TestCheckoutOverlay_WIPCheckMsgError(t *testing.T) {
 	m.activeView = ViewCheckout
 	m.checkoutState = NewCheckoutState(WorktreeItem{ShortName: "test"})
 
-	m = sendMsg(m, checkoutWIPCheckMsg{err: errTest})
+	m = sendMsg(m, wipCheckMsg{err: errTest})
 	if m.checkoutState.Err == nil {
 		t.Error("expected error to be set on WIP check failure")
 	}
@@ -233,7 +233,7 @@ func TestCheckoutOverlay_EnterBlockedBeforeWIPCheck(t *testing.T) {
 	}
 
 	// After WIP check arrives, Enter should work
-	m = sendMsg(m, checkoutWIPCheckMsg{hasWIP: false})
+	m = sendMsg(m, wipCheckMsg{hasWIP: false})
 	if !m.checkoutState.WIPCheckDone {
 		t.Error("expected WIPCheckDone=true after msg")
 	}

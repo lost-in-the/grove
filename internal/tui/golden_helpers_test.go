@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lost-in-the/grove/internal/theme"
 	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
@@ -43,7 +44,7 @@ func goldenModel(t *testing.T, size termSize, opts ...testOpt) Model {
 
 	// Force NO_COLOR mode for structural golden tests
 	t.Setenv("NO_COLOR", "1")
-	Colors = noColorScheme()
+	Colors = theme.NoColorScheme()
 	Styles = NewStyleSet(Colors)
 
 	t.Cleanup(func() {
@@ -57,13 +58,13 @@ func goldenModel(t *testing.T, size termSize, opts ...testOpt) Model {
 }
 
 // goldenModelThemed creates a test model with full color output for themed golden tests.
-// Uses defaultColorScheme() directly for deterministic color output.
+// Uses theme.DefaultColorScheme() directly for deterministic color output.
 func goldenModelThemed(t *testing.T, size termSize, opts ...testOpt) Model {
 	t.Helper()
 
 	goldenMu.Lock()
 
-	Colors = defaultColorScheme()
+	Colors = theme.DefaultColorScheme()
 	Styles = NewStyleSet(Colors)
 
 	t.Cleanup(func() {
@@ -99,6 +100,7 @@ func withCreateStep(step CreateStep) testOpt {
 			Branches:          []string{"main", "develop", "feature/auth", "fix/login-bug", "release/v2"},
 			ProjectName:       m.projectName,
 			BranchFilterInput: newBranchFilterInput(),
+			BranchNameInput:   newBranchNameInput(),
 		}
 		switch step {
 		case CreateStepName:
@@ -147,7 +149,7 @@ func withBulkOverlay(n int) testOpt {
 func withPRData() testOpt {
 	return func(m *Model) {
 		m.activeView = ViewPRs
-		fi := newPRFilterInput()
+		fi := newFilterInput("")
 		m.prState = &PRViewState{
 			FilterInput: fi,
 			PRs: []*tracker.PullRequest{
@@ -155,8 +157,8 @@ func withPRData() testOpt {
 				{Number: 38, Title: "Fix login redirect loop", Author: "bob", Branch: "fix/login", BaseBranch: "main", IsDraft: true, CommitCount: 1, Additions: 8, Deletions: 3},
 				{Number: 35, Title: "Refactor database connection pooling", Author: "carol", Branch: "refactor/db-pool", BaseBranch: "main", CommitCount: 7, Additions: 1203, Deletions: 456},
 			},
-			WorktreeBranches: map[string]bool{
-				"feature/auth": true,
+			WorktreeBranches: map[string]string{
+				"feature/auth": "auth",
 			},
 		}
 	}
@@ -166,7 +168,7 @@ func withPRData() testOpt {
 func withIssueData() testOpt {
 	return func(m *Model) {
 		m.activeView = ViewIssues
-		ifi := newIssueFilterInput()
+		ifi := newFilterInput("")
 		m.issueState = &IssueViewState{
 			FilterInput: ifi,
 			Issues: []*tracker.Issue{
@@ -235,6 +237,19 @@ func withConfigOverlay() testOpt {
 		cs.Fields[ConfigTabProtection] = []ConfigField{
 			{Key: "protection.protected", Label: "protected", Value: "main, staging", Default: "main, staging", Type: ConfigList, Description: "Protected worktrees (comma-separated)"},
 		}
+		// Build the Huh form so renderConfig shows the form view
+		overlayWidth := 80 * 60 / 100
+		if overlayWidth < 60 {
+			overlayWidth = 60
+		}
+		if overlayWidth > 80 {
+			overlayWidth = 80
+		}
+		contentWidth := overlayWidth - 6
+		form, vals := buildConfigForm(cs.Fields, contentWidth)
+		form.Init()
+		cs.Form = form
+		cs.FormValues = vals
 		m.configState = cs
 	}
 }
@@ -251,10 +266,10 @@ func withToastVisible(msg string, level ToastLevel) testOpt {
 	}
 }
 
-// withHelpExpanded expands the help footer overlay.
+// withHelpExpanded opens the help overlay for the current view.
 func withHelpExpanded() testOpt {
 	return func(m *Model) {
-		m.helpFooter.Expanded = true
+		m.helpOverlay.Open(m.activeView, m.width, m.height)
 	}
 }
 
@@ -269,7 +284,6 @@ func withSortMode(mode SortMode) testOpt {
 func withCompactMode() testOpt {
 	return func(m *Model) {
 		m.compactMode = true
-		m.helpFooter.CompactMode = true
 		d := ComputeDelegateWidths(m.list.Items(), m.list.Width())
 		m.listDelegate = d
 		m.list.SetDelegate(d)

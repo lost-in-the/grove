@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/exitcode"
 	"github.com/lost-in-the/grove/internal/state"
 	"github.com/lost-in-the/grove/internal/tmux"
@@ -144,10 +146,11 @@ Examples:
 			return nil
 		}
 
-		fmt.Fprint(os.Stderr, "Proceed with repairs? [y/N]: ")
-		var response string
-		_, _ = fmt.Scanln(&response)
-		if response != "y" && response != "Y" {
+		confirmed, err := cli.Confirm("Proceed with repairs?", false)
+		if err != nil || !confirmed {
+			if err != nil && !errors.Is(err, cli.ErrPromptCanceled) {
+				fmt.Fprintf(os.Stderr, "%v\n", err)
+			}
 			fmt.Fprintln(os.Stderr, "Canceled")
 			os.Exit(exitcode.UserCancelled)
 		}

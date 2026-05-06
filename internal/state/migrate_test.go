@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestMigrateFromLegacy(t *testing.T) {
@@ -114,6 +115,73 @@ func TestMigrateStateVersion(t *testing.T) {
 
 		if state.Worktrees == nil {
 			t.Error("Worktrees should be initialized")
+		}
+	})
+
+	t.Run("rejects future-version state files", func(t *testing.T) {
+		// Guards against silent data corruption when a user upgrades grove
+		// (writing a newer-version state.json) and then downgrades back.
+		state := &State{
+			Version: CurrentVersion + 1,
+		}
+
+		err := migrateStateVersion(state)
+		if err == nil {
+			t.Fatal("expected error for future-version state, got nil")
+		}
+	})
+
+	t.Run("backfills zero-valued timestamps", func(t *testing.T) {
+		// Simulates state written by an earlier grove init that created the main
+		// worktree without stamping CreatedAt/LastAccessedAt.
+		state := &State{
+			Version: CurrentVersion,
+			Worktrees: map[string]*WorktreeState{
+				"main": {Path: "/test"},
+			},
+		}
+
+		before := time.Now()
+		if err := migrateStateVersion(state); err != nil {
+			t.Fatalf("migrateStateVersion() error = %v", err)
+		}
+		after := time.Now()
+
+		ws := state.Worktrees["main"]
+		if ws.CreatedAt.IsZero() {
+			t.Error("CreatedAt was not backfilled")
+		}
+		if ws.LastAccessedAt.IsZero() {
+			t.Error("LastAccessedAt was not backfilled")
+		}
+		if ws.CreatedAt.Before(before) || ws.CreatedAt.After(after) {
+			t.Errorf("CreatedAt = %v, want between %v and %v", ws.CreatedAt, before, after)
+		}
+	})
+
+	t.Run("preserves non-zero timestamps", func(t *testing.T) {
+		fixed := time.Date(2025, 1, 15, 10, 0, 0, 0, time.UTC)
+		state := &State{
+			Version: CurrentVersion,
+			Worktrees: map[string]*WorktreeState{
+				"main": {
+					Path:           "/test",
+					CreatedAt:      fixed,
+					LastAccessedAt: fixed,
+				},
+			},
+		}
+
+		if err := migrateStateVersion(state); err != nil {
+			t.Fatalf("migrateStateVersion() error = %v", err)
+		}
+
+		ws := state.Worktrees["main"]
+		if !ws.CreatedAt.Equal(fixed) {
+			t.Errorf("CreatedAt = %v, want %v (should not have been overwritten)", ws.CreatedAt, fixed)
+		}
+		if !ws.LastAccessedAt.Equal(fixed) {
+			t.Errorf("LastAccessedAt = %v, want %v (should not have been overwritten)", ws.LastAccessedAt, fixed)
 		}
 	})
 }

@@ -16,3 +16,9 @@ type = "symlink"
 from = ".claude"
 to = ".claude"
 
+[[hooks.post_create]]
+type        = "command"
+command     = "mise trust"
+working_dir = "new"
+on_failure  = "warn"
+

@@ -19,28 +19,26 @@ This document provides exhaustive specifications for each grove command. Every b
    - [grove rename](#grove-rename)
    - [grove here](#grove-here)
    - [grove last](#grove-last)
-   - [grove attach](#grove-attach)
+   - [grove join](#grove-join)
    - [grove which](#grove-which)
 4. [State Commands](#state-commands)
-   - [grove freeze](#grove-freeze)
-   - [grove resume](#grove-resume)
 5. [Docker Commands](#docker-commands)
    - [grove up](#grove-up)
    - [grove down](#grove-down)
    - [grove logs](#grove-logs)
-   - [grove restart](#grove-restart)
+   - [grove kick](#grove-kick)
    - [grove ps](#grove-ps)
 6. [Worktree Flow Commands](#worktree-flow-commands)
    - [grove fork](#grove-fork)
    - [grove sync](#grove-sync)
-   - [grove compare](#grove-compare)
-   - [grove apply](#grove-apply)
+   - [grove diff](#grove-diff)
+   - [grove graft](#grove-graft)
    - [grove test](#grove-test)
 7. [Utility Commands](#utility-commands)
    - [grove config](#grove-config)
    - [grove init](#grove-init)
    - [grove repair](#grove-repair)
-   - [grove clean](#grove-clean)
+   - [grove trim](#grove-trim)
    - [grove doctor](#grove-doctor)
 8. [Exit Codes](#exit-codes)
 9. [Output Formatting](#output-formatting)
@@ -312,13 +310,15 @@ Flags:
 
 4. **Register in state** (`AddWorktree`) with path, branch, created/accessed timestamps.
 
-5. **Create tmux session:**
+5. **Copy / symlink worktree files** from `plugins.docker.external.{copy_files, symlink_files, symlink_dirs}`. Runs unconditionally — `--no-docker` does not skip this step.
+
+6. **Create tmux session:**
    - Session name = `{project}-{name}`
    - Start in worktree directory
 
-6. **Execute post-create hooks** (user-configured and plugin hooks).
+7. **Execute post-create hooks** (user-configured and plugin hooks).
 
-7. **Auto-start Docker** (unless `--no-docker`):
+8. **Auto-start Docker** (unless `--no-docker`):
    - Only runs when `shouldAutoDocker()` returns true: agent stacks configured (`plugins.docker.external.agent.enabled = true`) or `plugins.docker.auto_up = true`
    - Calls `docker.Up()` for the new worktree path
 
@@ -962,17 +962,18 @@ Use 'grove ls' to see available worktrees.
 
 ---
 
-### grove attach
+### grove join
 
 **Purpose:** Attach to (or create) a tmux session for a worktree without changing the shell's current directory.
 
+**Aliases:** `attach`, `a`, `j`
+
 **Usage:**
 ```
-grove attach [name] [flags]
-Alias: a
+grove join [name] [flags]
 
 Arguments:
-  name    Worktree to attach to (default: current worktree)
+  name    Worktree to join (default: current worktree)
 
 Flags:
   -j, --json    Output as JSON
@@ -1074,84 +1075,7 @@ When no Docker is configured, the `services` field is `null`/omitted.
 
 ## State Commands
 
-### grove freeze
-
-**Purpose:** Freeze a worktree to conserve resources (stop containers, mark session).
-
-**Usage:**
-```
-grove freeze [name] [flags]
-
-Arguments:
-  name    Worktree to freeze (default: current)
-
-Flags:
-      --all    Freeze all worktrees except current
-```
-
-**Behavior:**
-
-1. Stop Docker containers (if docker plugin enabled)
-2. Mark tmux session as frozen (custom variable)
-3. Optionally detach from session
-4. Record freeze state
-
-**Output (Success):**
-```
-✓ Stopped 3 Docker containers
-✓ Froze worktree 'testing'
-
-To resume: grove resume testing
-```
-
-**Output (Already frozen):**
-```
-Worktree 'testing' is already frozen
-
-To resume: grove resume testing
-```
-
-**Exit Codes:**
-- 0: Success or already frozen
-- 1: Worktree not found
-
----
-
-### grove resume
-
-**Purpose:** Resume a frozen worktree.
-
-**Usage:**
-```
-grove resume <name> [flags]
-
-Arguments:
-  name    Worktree to resume (required)
-```
-
-**Behavior:**
-
-1. Clear frozen state
-2. Start Docker containers (if docker plugin)
-3. Switch to worktree (equivalent to `grove to`)
-
-**Output (Success):**
-```
-✓ Resumed worktree 'testing'
-✓ Started 3 Docker containers
-✓ Switched to 'testing'
-```
-
-**Output (Not frozen):**
-```
-Worktree 'testing' is not frozen
-
-To switch to it: grove to testing
-```
-
-**Exit Codes:**
-- 0: Success
-- 1: Worktree not found or not frozen
+> No user-facing state commands are currently registered. The `internal/state` package exposes freeze/resume logic, but no cobra commands wire it to the CLI. See the [Planned Commands](#planned-not-yet-implemented) section for the design.
 
 ---
 
@@ -1253,13 +1177,13 @@ Pass through to `docker compose logs` with appropriate project name.
 
 ---
 
-### grove restart
+### grove kick
 
-**Purpose:** Restart Docker containers.
+**Purpose:** Kick (restart) Docker containers. Aliases: `restart`, `k`.
 
 **Usage:**
 ```
-grove restart [services...] [flags]
+grove kick [services...] [flags]
 
 Arguments:
   services    Services to restart (default: all)
@@ -1516,16 +1440,16 @@ Flags:
 
 ---
 
-### grove compare
+### grove diff
 
-**Purpose:** Compare the current worktree with another, showing commit and WIP differences.
+**Purpose:** Diff the current worktree against another, showing commit and WIP differences. Aliases: `compare`, `d`.
 
 **Usage:**
 ```
-grove compare <name> [flags]
+grove diff <name> [flags]
 
 Arguments:
-  name    Target worktree to compare against (required)
+  name    Target worktree to diff against (required)
 
 Flags:
       --stat        Show diffstat summary
@@ -1609,16 +1533,16 @@ No differences found
 
 ---
 
-### grove apply
+### grove graft
 
-**Purpose:** Apply commits or uncommitted changes from another worktree to the current one.
+**Purpose:** Graft commits or uncommitted changes from another worktree to the current one. Aliases: `apply`, `g`.
 
 **Usage:**
 ```
-grove apply <name> [flags]
+grove graft <name> [flags]
 
 Arguments:
-  name    Source worktree to apply changes from (required)
+  name    Source worktree to graft changes from (required)
 
 Flags:
       --commits         Apply only committed changes (cherry-pick)
@@ -1868,59 +1792,71 @@ Docker:
 
 ### grove init
 
-**Purpose:** Generate shell integration code.
+**Purpose:** Initialize the current git repository as a grove project. Creates a `.grove/` directory with `config.toml`, `state.json`, and (unless `--no-hooks`) `hooks.toml` generated from project-type detection.
 
 **Usage:**
 ```
-grove init <shell>
+grove init [flags]
 
-Arguments:
-  shell    Shell to generate for: zsh, bash
+Flags:
+      --with-testing   Also create a 'testing' worktree
+      --with-scratch   Also create a 'scratch' worktree
+      --full           Create testing, scratch, and hotfix worktrees
+      --no-hooks       Skip hooks.toml generation
+      --auto           Auto-generate hooks.toml from detection (default for non-TTY)
+      --walkthrough    Step through detected items interactively
+      --yes            Skip the preview/confirm prompt (CI mode)
 ```
 
-**Output (zsh):**
-```bash
-# Grove shell integration
-# Add to ~/.zshrc: eval "$(grove install zsh)"
+**Behavior:**
 
-export GROVE_SHELL=1
+1. Verify cwd is the root of a git repo (not a worktree). Refuse otherwise.
+2. Create `.grove/` and write `config.toml` with the detected project name (priority: existing config → git remote origin → directory name).
+3. Initialize state for the main worktree, stamping `created_at` and `last_accessed_at`.
+4. Detect project type (Rails, Node, Go, Python, Docker — see `internal/detect/`).
+5. Pick an init mode based on flags and TTY:
+   - **`--auto`**: generate `hooks.toml` from detection. In a TTY, show a preview and ask for confirmation; `--yes` skips the prompt for CI/scripted use.
+   - **`--walkthrough`**: step through detected hooks interactively, accepting or rejecting each.
+   - **No flag, TTY**: prompt the user to pick `auto` or `walkthrough`.
+   - **No flag, non-TTY**: defaults to `auto` (silent — no preview).
+6. **Docker-aware routing:** when a `docker-compose.yml` is present alongside a Rails/Node/Python marker, install commands (`bundle install`, `npm install`, `pip install`) are auto-generated as `docker:compose` hooks instead of host commands. Service name inferred from the compose file (single service used as-is, or first non-infra service when multiple). Dockerfile-only projects (no compose file) keep host commands and emit a manual-setup note.
+7. Optionally create starter worktrees with `--with-testing`, `--with-scratch`, or `--full`.
 
-grove() {
-    local output
-    output=$(__grove_bin "$@")
-    local exit_code=$?
-    
-    # Handle cd directives
-    if [[ "$output" == cd:* ]]; then
-        cd "${output#cd:}"
-    elif [[ -n "$output" ]]; then
-        echo "$output"
-    fi
-    
-    return $exit_code
-}
+**Mode selection precedence:**
 
-# Alias
-alias w='grove'
+| Condition | Mode |
+|---|---|
+| `--auto` (with or without `--yes`) | auto |
+| `--walkthrough` | walkthrough |
+| Interactive TTY, no flag | prompt user |
+| Non-TTY, no flag | auto (silent) |
 
-# Completions
-source <(__grove_bin completion zsh)
+`--auto` and `--walkthrough` are mutually exclusive.
 
-__grove_bin() {
-    command grove "$@"
-}
+**Output (auto mode, TTY):**
+```
+✓ Created .grove/config.toml
+✓ Detected project type: Node + Docker
+
+Generated hooks.toml preview:
+  [[hooks.post_create]]
+  type = "copy"
+  from = ".env.example"
+  to = ".env"
+
+  [[hooks.post_create]]
+  type = "docker:compose"
+  service = "app"
+  command = "npm install"
+
+Apply this configuration? [Y/n]: y
+✓ Wrote .grove/hooks.toml
+✓ Initialized grove project 'my-app'
 ```
 
-**Usage Instructions:**
-```
-# Add to your shell config:
-
-# For zsh (~/.zshrc):
-eval "$(grove install zsh)"
-
-# For bash (~/.bashrc):
-eval "$(grove install bash)"
-```
+**Notes:**
+- Re-running `grove init` in an already-initialized project refuses with a pointer to `grove config --hooks -e` for editing.
+- `grove init <shell>` (e.g. `grove init zsh`) is rejected with a hint to use `grove install <shell>` instead — that's the shell-integration command, distinct from project init.
 
 ---
 
@@ -1996,13 +1932,13 @@ When already registered:
 
 ---
 
-### grove clean
+### grove trim
 
-**Purpose:** Remove worktrees that haven't been accessed recently.
+**Purpose:** Trim worktrees that haven't been accessed recently. Aliases: `prune`, `clean`, `tm`.
 
 **Usage:**
 ```
-grove clean [flags]
+grove trim [flags]
 
 Flags:
       --older-than N      Remove worktrees not accessed in N days (default: 30)
@@ -2077,7 +2013,12 @@ Excluded worktrees:
 **Usage:**
 ```
 grove doctor [flags]
+
+Flags:
+      --fix    Apply automatic fixes for detected issues
 ```
+
+**`--fix` flag:** When passed, `grove doctor` rewrites host install commands (e.g., `bundle install`, `npm install`, `pip install`) in `hooks.toml` to `docker:compose` hooks in place. The rewrite is idempotent — running it again when already converted is a no-op. This is a surgical text-based edit; user comments and unrelated keys are preserved. Currently, `--fix` only handles the install-command rewrite; other detected issues still require manual remediation.
 
 **Two-tier design:**
 
@@ -2233,6 +2174,121 @@ func hasShellIntegration() bool {
 
 ---
 
+
+## Other Commands
+
+These commands are fully implemented and available in the CLI. Full flag details are available via `--help`.
+
+### grove prs
+
+Opens the TUI's PR browser directly (same as pressing `p` from the dashboard). Fetches open pull requests from GitHub via the `gh` CLI. Requires `gh` to be installed and authenticated. See `grove prs --help`.
+
+### grove issues
+
+Opens the TUI's issue browser directly (same as pressing `i` from the dashboard). Fetches open GitHub issues via the `gh` CLI. Requires `gh` to be installed and authenticated. See `grove issues --help`.
+
+### grove agent-help
+
+Prints a quick-reference guide for AI agent workflows — worktree lifecycle, Docker strategies, and multi-agent patterns. Intended for agents that need context about grove's conventions without reading the full docs. See `grove agent-help --help`.
+
+### grove setup
+
+Interactive shell integration setup. Detects your shell, prints the `eval` line to add to your shell profile, and optionally writes it for you. See `grove setup --help`.
+
+### grove install
+
+Generates the shell integration snippet for a given shell (`grove install zsh`, `grove install bash`). The output is designed for `eval "$(grove install <shell>)"` in your shell profile. See `grove install --help`.
+
+### grove version
+
+Prints the grove version string. See `grove version --help`.
+
+---
+
+## Planned (not yet implemented)
+
+These commands are referenced in `internal/state` but not yet wired to user-facing cobra commands. The spec is preserved here so the design is recoverable when implementation lands.
+
+### grove freeze
+
+**Purpose:** Freeze a worktree to conserve resources (stop containers, mark session).
+
+**Usage:**
+```
+grove freeze [name] [flags]
+
+Arguments:
+  name    Worktree to freeze (default: current)
+
+Flags:
+      --all    Freeze all worktrees except current
+```
+
+**Behavior:**
+
+1. Stop Docker containers (if docker plugin enabled)
+2. Mark tmux session as frozen (custom variable)
+3. Optionally detach from session
+4. Record freeze state
+
+**Output (Success):**
+```
+✓ Stopped 3 Docker containers
+✓ Froze worktree 'testing'
+
+To resume: grove resume testing
+```
+
+**Output (Already frozen):**
+```
+Worktree 'testing' is already frozen
+
+To resume: grove resume testing
+```
+
+**Exit Codes:**
+- 0: Success or already frozen
+- 1: Worktree not found
+
+---
+
+### grove resume
+
+**Purpose:** Resume a frozen worktree.
+
+**Usage:**
+```
+grove resume <name> [flags]
+
+Arguments:
+  name    Worktree to resume (required)
+```
+
+**Behavior:**
+
+1. Clear frozen state
+2. Start Docker containers (if docker plugin)
+3. Switch to worktree (equivalent to `grove to`)
+
+**Output (Success):**
+```
+✓ Resumed worktree 'testing'
+✓ Started 3 Docker containers
+✓ Switched to 'testing'
+```
+
+**Output (Not frozen):**
+```
+Worktree 'testing' is not frozen
+
+To switch to it: grove to testing
+```
+
+**Exit Codes:**
+- 0: Success
+- 1: Worktree not found or not frozen
+
+---
 
 ## Commands Not Speced
 

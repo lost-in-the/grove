@@ -16,10 +16,10 @@ import (
 var attachJSON bool
 
 var attachCmd = &cobra.Command{
-	Use:     "attach [name]",
-	Aliases: []string{"a"},
-	Short:   "Attach to a tmux session for a worktree",
-	Long: `Attach to or create a tmux session for a worktree without changing the
+	Use:     "join [name]",
+	Aliases: []string{"attach", "a", "j"},
+	Short:   "Join a tmux session for a worktree",
+	Long: `Join (attach to) or create a tmux session for a worktree without changing the
 current shell directory. If no name is given, uses the current worktree.
 
 This is a tmux-only command — it does not emit cd: directives.`,
@@ -63,11 +63,11 @@ This is a tmux-only command — it does not emit cd: directives.`,
 		cfg := ctx.Config
 		tmuxMode := cfg.Tmux.Mode
 		if tmuxMode == "" {
-			tmuxMode = "auto"
+			tmuxMode = tmuxModeAuto
 		}
 		useCC := tmux.ShouldUseControlMode(cfg.Tmux.ControlMode)
 
-		if tmuxMode == "off" {
+		if tmuxMode == tmuxModeOff {
 			return fmt.Errorf("tmux is disabled in grove configuration (mode: off)")
 		}
 

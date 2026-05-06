@@ -1,9 +1,13 @@
-.PHONY: build test test-integration test-all lint fmt clean install help test-fixture test-update-golden demo golden-diff golden-view tui-capture tui-capture-keys
+.PHONY: build test test-integration test-integration-tui test-integration-docker test-all lint fmt clean install help test-fixture test-update-golden demo golden-diff golden-view tui-capture tui-capture-keys
 
 # Variables
 BINARY_NAME=grove
 MAIN_PATH=./cmd/grove
 BUILD_DIR=./bin
+VERSION_PKG=github.com/lost-in-the/grove/internal/version
+GIT_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+LDFLAGS=-X $(VERSION_PKG).Commit=$(GIT_COMMIT) -X $(VERSION_PKG).BuildDate=$(BUILD_DATE)
 
 # Default target
 .DEFAULT_GOAL := help
@@ -17,7 +21,7 @@ help: ## Show this help message
 build: ## Build the binary
 	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p $(BUILD_DIR)
-	@go build -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
+	@go build -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
 	@echo "Binary built at $(BUILD_DIR)/$(BINARY_NAME)"
 
 test: ## Run all tests
@@ -61,11 +65,17 @@ install: build ## Install the binary to $GOPATH/bin
 	@codesign -s - "$$(go env GOPATH)/bin/$(BINARY_NAME)" 2>/dev/null || true
 	@echo "$(BINARY_NAME) installed to $$(go env GOPATH)/bin/$(BINARY_NAME)"
 
-test-integration: ## Run integration tests (requires git, slower)
-	@echo "Running integration tests..."
+test-integration: test-integration-tui test-integration-docker ## Run all integration tests (tui + docker)
+
+test-integration-tui: ## Run TUI integration tests (requires git, slower)
+	@echo "Running TUI integration tests..."
 	@go test -v -race -tags=integration -timeout 60s ./internal/tui/
 
-test-all: test test-integration ## Run unit + integration tests
+test-integration-docker: ## Run Docker-aware integration tests (requires git; Docker optional)
+	@echo "Running Docker integration tests..."
+	@go test -v -race -tags=integration -timeout 300s ./tests/integration/
+
+test-all: test test-integration-tui test-integration-docker ## Run unit + all integration tests
 
 test-fixture: ## Create persistent test fixture for TUI testing
 	@./scripts/create-fixture.sh

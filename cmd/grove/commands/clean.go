@@ -1,13 +1,18 @@
 package commands
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/lost-in-the/grove/internal/cli"
+	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/exitcode"
 	"github.com/lost-in-the/grove/internal/git"
 	"github.com/lost-in-the/grove/internal/log"
@@ -35,9 +40,10 @@ type CleanCandidate struct {
 }
 
 var cleanCmd = &cobra.Command{
-	Use:   "clean",
-	Short: "Remove old unused worktrees",
-	Long: `Remove worktrees that haven't been accessed recently.
+	Use:     "trim",
+	Aliases: []string{"prune", "clean", "tm"},
+	Short:   "Trim old unused worktrees",
+	Long: `Trim worktrees that haven't been accessed recently.
 
 By default, targets worktrees not accessed in 30 days.
 Dirty worktrees are excluded unless --include-dirty is specified.
@@ -52,12 +58,12 @@ Always excludes:
 This command ALWAYS prompts for confirmation, even in non-interactive mode.
 
 Examples:
-  grove clean                      # Clean worktrees older than 30 days
-  grove clean --older-than 7       # Clean worktrees older than 7 days
-  grove clean --include-dirty      # Include dirty worktrees
-  grove clean --delete-branches    # Delete branches without prompting
-  grove clean --keep-branches      # Keep all branches
-  grove clean --dry-run            # Show what would be cleaned`,
+  grove trim                      # Trim worktrees older than 30 days
+  grove trim --older-than 7       # Trim worktrees older than 7 days
+  grove trim --include-dirty      # Include dirty worktrees
+  grove trim --delete-branches    # Delete branches without prompting
+  grove trim --keep-branches      # Keep all branches
+  grove trim --dry-run            # Show what would be trimmed`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		w := cli.NewStdout()
 
@@ -94,14 +100,18 @@ Examples:
 				IsDirty: tree.IsDirty,
 			}
 
-			// Get last access time from state
+			// Get last access time from state, falling back to the worktree's
+			// HEAD commit time when state is missing or has zero-value timestamps.
+			// Commit time is a more honest "last activity" proxy than directory
+			// mtime, which gets bumped by routine churn (e.g. `npm install`).
 			ws, _ := ctx.State.GetWorktree(tree.ShortName)
-			if ws != nil {
+			candidate.DaysSince = -1 // sentinel meaning "unknown"
+			if ws != nil && !ws.LastAccessedAt.IsZero() {
 				candidate.LastAccess = ws.LastAccessedAt
 				candidate.DaysSince = int(now.Sub(ws.LastAccessedAt).Hours() / 24)
-			} else {
-				// If not in state, assume very old
-				candidate.DaysSince = 9999
+			} else if t, ok := worktreeHeadTime(tree.Path); ok {
+				candidate.LastAccess = t
+				candidate.DaysSince = int(now.Sub(t).Hours() / 24)
 			}
 
 			// Check exclusions
@@ -115,7 +125,7 @@ Examples:
 				candidate.ExcludeReason = "environment worktree"
 			} else if tree.IsDirty && !cleanIncludeDirty {
 				candidate.ExcludeReason = "dirty (use --include-dirty)"
-			} else if candidate.DaysSince < cleanOlderThan {
+			} else if candidate.DaysSince >= 0 && candidate.DaysSince < cleanOlderThan {
 				candidate.ExcludeReason = fmt.Sprintf("accessed %d days ago (threshold: %d)", candidate.DaysSince, cleanOlderThan)
 			}
 
@@ -152,7 +162,11 @@ Examples:
 				dirtyMark = " [dirty]"
 			}
 			_, _ = fmt.Fprintf(w, "  %s ", c.Name)
-			cli.Faint(w, "  (%s) - %d days since last access%s", c.Branch, c.DaysSince, dirtyMark)
+			ageStr := fmt.Sprintf("%d days since last access", c.DaysSince)
+			if c.DaysSince < 0 {
+				ageStr = "last access unknown"
+			}
+			cli.Faint(w, "  (%s) - %s%s", c.Branch, ageStr, dirtyMark)
 		}
 
 		if cleanDryRun {
@@ -161,14 +175,20 @@ Examples:
 			return nil
 		}
 
-		// ALWAYS prompt - mandatory confirmation
+		// ALWAYS prompt - mandatory confirmation. Require typing the literal
+		// word "yes" rather than using cli.Confirm: the operation is permanently
+		// destructive (worktree + tmux removal, no undo), and the trim spec
+		// requires this confirmation to work in non-interactive mode too.
+		// cli.ReadLine handles Ctrl+C/ESC and falls back to cooked-mode read for
+		// piped stdin, so scripted `echo yes | grove trim` still works.
 		_, _ = fmt.Fprintln(w)
 		cli.Warning(w, "This will permanently remove %d worktree(s) and their associated tmux sessions.", len(cleanable))
-		fmt.Print("Type 'yes' to confirm: ")
 
-		var response string
-		_, _ = fmt.Scanln(&response)
-		if response != "yes" {
+		response, err := cli.ReadLine("Type 'yes' to confirm: ")
+		if err != nil || response != "yes" {
+			if err != nil && !errors.Is(err, cli.ErrPromptCanceled) {
+				cli.Error(w, "%v", err)
+			}
 			fmt.Println("Canceled")
 			os.Exit(exitcode.UserCancelled)
 		}
@@ -232,6 +252,86 @@ type BranchInfo struct {
 	StatusSummary string
 }
 
+// worktreeHeadTime returns the commit time of HEAD in the given worktree,
+// used as a fallback "last activity" proxy when state has no timestamp.
+// Returns ok=false if the path is unreadable as a git worktree.
+func worktreeHeadTime(path string) (time.Time, bool) {
+	out, err := cmdexec.Output(context.TODO(), "git", []string{"log", "-1", "--format=%ct", "HEAD"}, path, cmdexec.GitLocal)
+	if err != nil {
+		return time.Time{}, false
+	}
+	secs, err := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return time.Unix(secs, 0), true
+}
+
+func collectBranchInfos(branchMgr *git.BranchManager, branches []string) []BranchInfo {
+	var infos []BranchInfo
+	for _, branch := range branches {
+		status, err := branchMgr.GetStatus(branch, "")
+		if err != nil {
+			log.Printf("skipping branch %q during cleanup: %v", branch, err)
+			continue
+		}
+		if status.UsedByWorktree != "" {
+			continue
+		}
+		infos = append(infos, classifyBranch(branch, status))
+	}
+	return infos
+}
+
+func classifyBranch(name string, status *git.BranchStatus) BranchInfo {
+	info := BranchInfo{Name: name, Status: status}
+	switch {
+	case status.IsMerged && status.UnpushedCount == 0:
+		info.SafeToDelete = true
+		info.StatusSummary = "merged, safe to delete"
+	case status.UnpushedCount > 0:
+		info.StatusSummary = fmt.Sprintf("%d unpushed commit(s)", status.UnpushedCount)
+	default:
+		info.StatusSummary = "not merged"
+	}
+	return info
+}
+
+func deleteBranches(w *cli.Writer, branchMgr *git.BranchManager, infos []BranchInfo, forceAll bool) {
+	deleted := 0
+	for _, info := range infos {
+		force := forceAll || !info.SafeToDelete
+		if err := branchMgr.Delete(info.Name, force); err != nil {
+			cli.Warning(w, "Failed to delete branch '%s': %v", info.Name, err)
+		} else {
+			cli.Success(w, "Deleted branch '%s'", info.Name)
+			deleted++
+		}
+	}
+	if deleted > 0 {
+		cli.Info(w, "Deleted %d branch(es)", deleted)
+	}
+}
+
+func displayBranchSummary(w *cli.Writer, infos []BranchInfo) {
+	_, _ = fmt.Fprintln(w)
+	cli.Header(w, "Associated branches")
+	hasUnsafe := false
+	for _, info := range infos {
+		if !info.SafeToDelete {
+			hasUnsafe = true
+			cli.Warning(w, "%s (%s)", info.Name, info.StatusSummary)
+		} else {
+			_, _ = fmt.Fprintf(w, "  • %s ", info.Name)
+			cli.Faint(w, "  (%s)", info.StatusSummary)
+		}
+	}
+	if hasUnsafe {
+		_, _ = fmt.Fprintln(w)
+		cli.Warning(w, "Some branches have unpushed commits or are not merged")
+	}
+}
+
 // handleBatchBranchDeletion handles batch deletion of branches after grove clean
 func handleBatchBranchDeletion(repoPath string, branches []string, forceDelete bool) error {
 	w := cli.NewStdout()
@@ -241,103 +341,27 @@ func handleBatchBranchDeletion(repoPath string, branches []string, forceDelete b
 		return fmt.Errorf("failed to initialize branch manager: %w", err)
 	}
 
-	// Collect branch info
-	branchInfos := []BranchInfo{}
-	for _, branch := range branches {
-		status, err := branchMgr.GetStatus(branch, "")
-		if err != nil {
-			log.Printf("skipping branch %q during cleanup: %v", branch, err)
-			continue
-		}
-
-		// Skip branches used by other worktrees
-		if status.UsedByWorktree != "" {
-			continue
-		}
-
-		info := BranchInfo{
-			Name:   branch,
-			Status: status,
-		}
-
-		// Determine if safe to delete and build summary
-		if status.IsMerged && status.UnpushedCount == 0 {
-			info.SafeToDelete = true
-			info.StatusSummary = "merged, safe to delete"
-		} else if status.UnpushedCount > 0 {
-			info.SafeToDelete = false
-			info.StatusSummary = fmt.Sprintf("%d unpushed commit(s)", status.UnpushedCount)
-		} else if !status.IsMerged {
-			info.SafeToDelete = false
-			info.StatusSummary = "not merged"
-		}
-
-		branchInfos = append(branchInfos, info)
-	}
-
+	branchInfos := collectBranchInfos(branchMgr, branches)
 	if len(branchInfos) == 0 {
 		return nil
 	}
 
-	// Force delete - no prompting
 	if forceDelete {
-		deleted := 0
-		for _, info := range branchInfos {
-			if err := branchMgr.Delete(info.Name, true); err != nil {
-				cli.Warning(w, "Failed to delete branch '%s': %v", info.Name, err)
-			} else {
-				cli.Success(w, "Deleted branch '%s'", info.Name)
-				deleted++
-			}
-		}
-		if deleted > 0 {
-			cli.Info(w, "Deleted %d branch(es)", deleted)
-		}
+		deleteBranches(w, branchMgr, branchInfos, true)
 		return nil
 	}
 
-	// Interactive mode - show summary and prompt
-	_, _ = fmt.Fprintln(w)
-	cli.Header(w, "Associated branches")
-	hasUnsafe := false
-	for _, info := range branchInfos {
-		if !info.SafeToDelete {
-			hasUnsafe = true
-			cli.Warning(w, "%s (%s)", info.Name, info.StatusSummary)
-		} else {
-			_, _ = fmt.Fprintf(w, "  • %s ", info.Name)
-			cli.Faint(w, "  (%s)", info.StatusSummary)
-		}
-	}
+	displayBranchSummary(w, branchInfos)
 
-	if hasUnsafe {
-		_, _ = fmt.Fprintln(w)
-		cli.Warning(w, "Some branches have unpushed commits or are not merged")
-	}
-
-	// Ask for confirmation
 	question := fmt.Sprintf("Delete %d associated branch(es)?", len(branchInfos))
 	confirmed, err := cli.Confirm(question, false)
 	if err != nil {
-		// Non-interactive
 		cli.Info(w, "Branches not deleted (use --delete-branches or --keep-branches)")
 		return nil
 	}
 
 	if confirmed {
-		deleted := 0
-		for _, info := range branchInfos {
-			// Force delete if not safe (user confirmed)
-			if err := branchMgr.Delete(info.Name, !info.SafeToDelete); err != nil {
-				cli.Warning(w, "Failed to delete branch '%s': %v", info.Name, err)
-			} else {
-				cli.Success(w, "Deleted branch '%s'", info.Name)
-				deleted++
-			}
-		}
-		if deleted > 0 {
-			cli.Info(w, "Deleted %d branch(es)", deleted)
-		}
+		deleteBranches(w, branchMgr, branchInfos, false)
 	} else {
 		cli.Info(w, "Kept all branches")
 	}

@@ -171,6 +171,28 @@ The Docker plugin integrates with Grove's hook system to automatically manage co
 
 **External mode**: Copies configured credential files and creates symlinks from the main worktree into the new worktree.
 
+### Config-Driven Action Types
+
+In addition to the automatic plugin hooks above, the Docker plugin registers two action types you can use directly in `.grove/hooks.toml`. These are useful when a setup command needs to run *inside* a container rather than on the host (e.g. `bundle install`, `npm install`).
+
+```toml
+# Run a command in a docker compose service
+[[hooks.post_create]]
+type    = "docker:compose"
+service = "app"
+command = "npm install"
+
+# Exec into an externally-managed container by name
+[[hooks.post_create]]
+type      = "docker:exec"
+container = "shared-app-1"
+command   = "bundle install"
+```
+
+`grove init` auto-generates `docker:compose` hooks for `bundle install`/`npm install`/`pip install` when it detects a `docker-compose.yml` alongside Rails/Node/Python markers, so most users get this routing for free. See [docs/CONFIGURATION_REFERENCE.md](../../docs/CONFIGURATION_REFERENCE.md#docker-compose) for the full action-type reference (all fields, defaults, error handling).
+
+These action types are registered via `hooks.RegisterActionHandler` — see [docs/PLUGIN_DEVELOPMENT.md](../../docs/PLUGIN_DEVELOPMENT.md) if you want to add your own.
+
 ## Configuration
 
 ### Local Mode
@@ -196,7 +218,10 @@ auto_stop = true
 mode = "external"
 
 [plugins.docker.external]
-# Path to the shared compose directory
+# Path to the shared compose directory. Absolute, ~/-prefixed, or relative
+# to the project root (parent of .grove/). Use a relative path like "../"
+# when the orchestrator lives one level above the app, so the same config
+# works for teammates with different parent directory layouts.
 path = "~/projects/shared-infra"
 
 # Environment variable that the compose YAML reads to find this app
@@ -232,7 +257,7 @@ symlink_dirs = [
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `path` | Yes | Absolute path to the external compose directory (supports `~`) |
+| `path` | Yes | Path to the external compose directory. Accepts absolute paths, `~/`-prefixed paths (expanded against `$HOME`), and relative paths (resolved against the project root — i.e., the parent of `.grove/`). For example, `path = "../"` in `<app>/.grove/config.toml` points to the directory containing the app — useful for committed configs shared across teammates with different parent layouts. |
 | `env_var` | Yes | Environment variable name the compose YAML reads |
 | `env_file` | No | Filename in the compose directory where grove writes the `env_var` value (default: `.env`). For example, with `env_var = "APP_DIR"` and `env_file = ".env.local"`, grove writes `APP_DIR=/abs/path/to/worktree` to `.env.local` and passes `--env-file .env.local` to compose. Set to `.env.local` to avoid dirtying a git-tracked `.env`. See [Env File Loaders](#env-file-loaders-direnv--mise) for optional loader setup. |
 | `services` | Yes | List of service names to manage |

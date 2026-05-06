@@ -58,9 +58,9 @@ Running `eval "$(grove install <shell>)"` installs three things:
 
 The wrapper uses a **directives protocol** — the grove binary writes special lines to stdout that the shell function intercepts and acts on.
 
-### Directive Commands (`grove to`, `grove last`, `grove fork`, `grove fetch`, `grove attach`, `grove open`, `grove up`, `grove run`, `grove restart`)
+### Directive Commands (`grove to`, `grove last`, `grove fork`, `grove fetch`, `grove join`, `grove open`, `grove up`, `grove run`, `grove kick`)
 
-These commands can emit `cd:`, `tmux-attach:`, `tmux-attach-cc:`, or `env:` directives. The wrapper captures their stdout (stderr passes through to the terminal), scans it line-by-line, separates directives from normal output, and then:
+These commands (and their aliases) can emit `cd:`, `tmux-attach:`, `tmux-attach-cc:`, or `env:` directives. The wrapper captures their stdout (stderr passes through to the terminal), scans it line-by-line, separates directives from normal output, and then:
 
 1. Exports any environment variables
 2. Executes any directory change
@@ -115,11 +115,12 @@ The grove binary communicates with the shell wrapper through directive lines —
 
 | Directive | Example | Action |
 |-----------|---------|--------|
-| `GROVE_CD:` | `GROVE_CD:/path/to/dir` | Change directory (current) |
-| `cd:` | `cd:/path/to/dir` | Change directory (legacy, same effect) |
+| `cd:` | `cd:/path/to/dir` | Change directory |
 | `tmux-attach:` | `tmux-attach:myproject-feature` | Attach to named tmux session |
 | `tmux-attach-cc:` | `tmux-attach-cc:myproject-feature` | Attach using `tmux -CC` (iTerm2 control mode) |
 | `env:` | `env:ADMIN_DIR=./admin-feature` | Export environment variable in shell |
+
+> **Note:** `GROVE_CD:` appeared in older documentation but is not used by the current shell templates. The active directive is `cd:`. If you have scripts or tooling that rely on `GROVE_CD:`, update them to use `cd:` instead.
 
 Lines that do not match any directive prefix are treated as normal output and printed to the terminal as-is.
 
@@ -155,7 +156,7 @@ Uses `complete -F _grove_completion grove`. Works with or without bash-completio
 | Position | Completions |
 |----------|-------------|
 | First argument | All grove commands |
-| Second argument (after `to`, `rm`, `compare`, `sync`, `test`, `apply`, `attach`, `open`) | Worktree short names |
+| Second argument (after `to`, `rm`, `diff`, `sync`, `test`, `graft`, `join`, `open`) | Worktree short names |
 | Second argument (after `install`) | `zsh`, `bash` |
 
 Worktree names are fetched by running `grove ls -q` (quiet mode), which lists short names only.
@@ -168,6 +169,51 @@ The integration sets `w` as an alias for `grove`:
 w to feature       # same as: grove to feature
 w                  # same as: grove (opens TUI)
 ```
+
+## Recursion Guard
+
+Both shell templates (`grove.zsh` and `grove.bash`) open with a guard that prevents infinite recursion:
+
+```bash
+if [[ -z "$__GROVE_BIN" || "$__GROVE_BIN" == "grove" ]]; then
+    echo "grove: binary not found (is grove on your PATH?)" >&2
+    return 127
+fi
+```
+
+**What `__GROVE_BIN` is:** When `grove install <shell>` runs, it emits shell code that sets `__GROVE_BIN` to the resolved path of the grove binary (via `command -v grove`). The shell function uses `$__GROVE_BIN` — not the bare word `grove` — to call the real binary.
+
+**What the guard prevents:** If the binary is not on `$PATH`, `command -v grove` returns nothing and `__GROVE_BIN` ends up empty or is literally the string `"grove"`. Without the guard, calling `$__GROVE_BIN` would invoke the shell function again, looping forever.
+
+**What users see:** When the guard fires, the shell prints `grove: binary not found (is grove on your PATH?)` to stderr and returns exit code 127. The command is a silent no-op from the user's perspective.
+
+**How to diagnose:** If you see this error, the grove binary is not in `$PATH` at the time the shell integration was evaluated. Check:
+
+```bash
+which grove          # should print the binary path
+echo "$__GROVE_BIN"  # should match the above path
+```
+
+If `which grove` works but `$__GROVE_BIN` is wrong, re-evaluate the integration:
+
+```bash
+eval "$(grove install zsh)"   # or bash
+```
+
+## Version Bumps
+
+The constant `ShellVersion` in `internal/shell/version.go` tracks the shell integration template version. It is currently **5**.
+
+When the shell wrapper behavior changes incompatibly — new directives, changed passthrough logic, new env vars — increment `ShellVersion`. The grove binary reads `GROVE_SHELL_VERSION` (set by the wrapper) on every invocation and emits a warning when the running shell integration is older than `ShellVersion`.
+
+**What users must do after a version bump:**
+
+```bash
+eval "$(grove install zsh)"   # or bash
+source ~/.zshrc               # (or ~/.bashrc)
+```
+
+`grove setup` handles this automatically if run again. `grove doctor` will surface a version mismatch as a warning with the re-run command included in its output.
 
 ## Troubleshooting
 

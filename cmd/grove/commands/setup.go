@@ -102,17 +102,17 @@ func detectShellAndRC() (string, string) {
 	}
 
 	switch shellName {
-	case "zsh":
-		return "zsh", filepath.Join(home, ".zshrc")
-	case "bash":
+	case shellZsh:
+		return shellZsh, filepath.Join(home, ".zshrc")
+	case shellBash:
 		// On macOS, bash uses .bash_profile for login shells
 		if runtime.GOOS == "darwin" {
 			profile := filepath.Join(home, ".bash_profile")
 			if _, err := os.Stat(profile); err == nil {
-				return "bash", profile
+				return shellBash, profile
 			}
 		}
-		return "bash", filepath.Join(home, ".bashrc")
+		return shellBash, filepath.Join(home, ".bashrc")
 	default:
 		return "", ""
 	}

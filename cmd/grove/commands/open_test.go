@@ -9,8 +9,8 @@ func TestOpenCmd(t *testing.T) {
 		t.Fatal("openCmd is nil")
 	}
 
-	if openCmd.Use != "open <name>" {
-		t.Errorf("openCmd.Use = %v, want 'open <name>'", openCmd.Use)
+	if openCmd.Use != "open [name]" {
+		t.Errorf("openCmd.Use = %v, want 'open [name]'", openCmd.Use)
 	}
 
 	if openCmd.Short == "" {

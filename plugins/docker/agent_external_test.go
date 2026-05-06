@@ -1,6 +1,9 @@
 package docker
 
 import (
+	"bytes"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,13 +49,171 @@ func TestAgentExternalStrategy_OnPreSwitch(t *testing.T) {
 	}
 }
 
-func TestAgentExternalStrategy_OnPostSwitch(t *testing.T) {
+// captureStdout replaces os.Stdout with a pipe, runs f, then restores os.Stdout
+// and returns everything written to it as a string.
+func captureStdout(t *testing.T, f func()) string {
+	t.Helper()
+	orig := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("captureStdout: os.Pipe: %v", err)
+	}
+	os.Stdout = w
+	defer func() { os.Stdout = orig }()
+
+	f()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("captureStdout: close write end: %v", err)
+	}
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatalf("captureStdout: copy: %v", err)
+	}
+	return buf.String()
+}
+
+func TestAgentExternalStrategy_OnPostSwitch_EmptyPath(t *testing.T) {
 	cfg := newTestAgentConfig(t)
 	s := newAgentExternalStrategy(cfg)
 
-	ctx := &hooks.Context{Worktree: "test"}
-	if err := s.OnPostSwitch(ctx); err != nil {
-		t.Errorf("OnPostSwitch() error = %v, want nil", err)
+	t.Setenv("GROVE_SHELL", "1")
+	out := captureStdout(t, func() {
+		ctx := &hooks.Context{Worktree: "test"} // WorktreePath intentionally empty
+		if err := s.OnPostSwitch(ctx); err != nil {
+			t.Errorf("OnPostSwitch() error = %v, want nil", err)
+		}
+	})
+	if out != "" {
+		t.Errorf("OnPostSwitch with empty WorktreePath emitted %q, want nothing", out)
+	}
+}
+
+func TestAgentExternalStrategy_OnPostSwitch_NoSlot(t *testing.T) {
+	cfg := newTestAgentConfig(t)
+	s := newAgentExternalStrategy(cfg)
+
+	t.Setenv("GROVE_SHELL", "1")
+	out := captureStdout(t, func() {
+		ctx := &hooks.Context{
+			Worktree:     "myapp-feature",
+			WorktreePath: "/tmp/myapp-feature",
+		}
+		if err := s.OnPostSwitch(ctx); err != nil {
+			t.Errorf("OnPostSwitch() error = %v, want nil", err)
+		}
+	})
+	if out != "" {
+		t.Errorf("OnPostSwitch with no allocated slot emitted %q, want nothing", out)
+	}
+}
+
+func TestAgentExternalStrategy_OnPostSwitch_CorruptedSlotsFile(t *testing.T) {
+	cfg := newTestAgentConfig(t)
+	s := newAgentExternalStrategy(cfg)
+
+	// Write a malformed JSON file at the slots path so FindSlot returns an error.
+	if err := os.MkdirAll(filepath.Dir(s.slots.slotsFile), 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(s.slots.slotsFile, []byte("{not valid json"), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	t.Setenv("GROVE_SHELL", "1")
+
+	// Capture stderr — the warning goes there, not stdout.
+	origStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stderr = w
+	defer func() { os.Stderr = origStderr }()
+
+	stdoutOut := captureStdout(t, func() {
+		ctx := &hooks.Context{
+			Worktree:     "myapp-feature",
+			WorktreePath: "/tmp/myapp-feature",
+		}
+		if err := s.OnPostSwitch(ctx); err != nil {
+			t.Errorf("OnPostSwitch() error = %v, want nil (should not block switch)", err)
+		}
+	})
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("close stderr write end: %v", err)
+	}
+	var stderrBuf bytes.Buffer
+	if _, err := io.Copy(&stderrBuf, r); err != nil {
+		t.Fatalf("read stderr: %v", err)
+	}
+
+	if stdoutOut != "" {
+		t.Errorf("OnPostSwitch with corrupted slots file emitted stdout %q, want nothing", stdoutOut)
+	}
+	if !strings.Contains(stderrBuf.String(), "could not read agent slots") {
+		t.Errorf("expected 'could not read agent slots' warning on stderr, got %q", stderrBuf.String())
+	}
+}
+
+func TestAgentExternalStrategy_OnPostSwitch_WithSlot(t *testing.T) {
+	cfg := newTestAgentConfig(t)
+	s := newAgentExternalStrategy(cfg)
+
+	// The slots file lives under <compose-path>/agent-stacks/.slots.json — ensure
+	// that directory exists before calling Allocate.
+	_ = os.MkdirAll(filepath.Dir(s.slots.slotsFile), 0755)
+
+	// Pre-allocate a slot for the worktree
+	wtName := "myapp-feature"
+	slot, err := s.slots.Allocate(wtName)
+	if err != nil {
+		t.Fatalf("Allocate() error = %v", err)
+	}
+
+	t.Setenv("GROVE_SHELL", "1")
+	out := captureStdout(t, func() {
+		ctx := &hooks.Context{
+			Worktree:     wtName,
+			WorktreePath: "/tmp/" + wtName,
+		}
+		if err := s.OnPostSwitch(ctx); err != nil {
+			t.Errorf("OnPostSwitch() error = %v, want nil", err)
+		}
+	})
+
+	wantProject := fmt.Sprintf("env:COMPOSE_PROJECT_NAME=myapp-agent-%d\n", slot)
+	wantEnvVar := fmt.Sprintf("env:APP_DIR=/tmp/%s\n", wtName)
+	if !strings.Contains(out, wantProject) {
+		t.Errorf("OnPostSwitch missing %q in output: %q", wantProject, out)
+	}
+	if !strings.Contains(out, wantEnvVar) {
+		t.Errorf("OnPostSwitch missing %q in output: %q (env_var should be emitted alongside COMPOSE_PROJECT_NAME for manual docker compose calls)", wantEnvVar, out)
+	}
+}
+
+func TestAgentExternalStrategy_Up_EmitsEnvDirective(t *testing.T) {
+	cfg := newTestAgentConfig(t)
+	s := newAgentExternalStrategy(cfg)
+
+	// Create the slots directory so Allocate can write the slots file.
+	_ = os.MkdirAll(filepath.Dir(s.slots.slotsFile), 0755)
+
+	t.Setenv("GROVE_SHELL", "1")
+	worktreePath := "/tmp/myapp-up-test"
+
+	// Up will fail because docker compose isn't available/configured, but the
+	// env directive is emitted before compose runs — that's what we're testing.
+	out := captureStdout(t, func() {
+		_ = s.Up(worktreePath, true)
+	})
+
+	if !strings.Contains(out, "env:COMPOSE_PROJECT_NAME=myapp-agent-") {
+		t.Errorf("Up() stdout = %q, want env:COMPOSE_PROJECT_NAME=myapp-agent-N line", out)
+	}
+	if !strings.Contains(out, "env:APP_DIR=/tmp/myapp-up-test") {
+		t.Errorf("Up() stdout = %q, want env:APP_DIR=<worktreePath> line", out)
 	}
 }
 
@@ -63,58 +224,6 @@ func TestAgentExternalStrategy_OnPostCreate_NoPaths(t *testing.T) {
 	ctx := &hooks.Context{Worktree: "test"}
 	if err := s.OnPostCreate(ctx); err != nil {
 		t.Errorf("OnPostCreate() with no paths error = %v, want nil", err)
-	}
-}
-
-func TestAgentExternalStrategy_OnPostCreate_CopiesFiles(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	mainPath := filepath.Join(tmpDir, "main")
-	_ = os.MkdirAll(filepath.Join(mainPath, "config"), 0755)
-	_ = os.WriteFile(filepath.Join(mainPath, "config", "secret.key"), []byte("secret"), 0600)
-
-	newPath := filepath.Join(tmpDir, "worktree")
-	_ = os.MkdirAll(newPath, 0755)
-
-	enabled := true
-	cfg := &config.Config{
-		ProjectName: "myapp",
-		Plugins: config.PluginsConfig{
-			Docker: config.DockerPluginConfig{
-				Mode: "external",
-				External: &config.ExternalComposeConfig{
-					Path:      tmpDir,
-					EnvVar:    "APP_DIR",
-					Services:  []string{"app"},
-					CopyFiles: []string{"config/secret.key"},
-					Agent: &config.AgentStackConfig{
-						Enabled:      &enabled,
-						MaxSlots:     3,
-						Services:     []string{"app"},
-						TemplatePath: "agent-stacks/template.yml",
-					},
-				},
-			},
-		},
-	}
-
-	s := newAgentExternalStrategy(cfg)
-	ctx := &hooks.Context{
-		Worktree:     "worktree",
-		WorktreePath: newPath,
-		MainPath:     mainPath,
-	}
-
-	if err := s.OnPostCreate(ctx); err != nil {
-		t.Fatalf("OnPostCreate() error = %v", err)
-	}
-
-	data, err := os.ReadFile(filepath.Join(newPath, "config", "secret.key"))
-	if err != nil {
-		t.Fatalf("Failed to read copied file: %v", err)
-	}
-	if string(data) != "secret" {
-		t.Errorf("Expected 'secret', got %q", string(data))
 	}
 }
 
@@ -154,21 +263,50 @@ func TestAgentExternalStrategy_ComposeProjectName_DefaultProject(t *testing.T) {
 	}
 }
 
-func TestAgentExternalStrategy_ResolveTemplatePath(t *testing.T) {
+func TestAgentExternalStrategy_ResolveTemplatePaths(t *testing.T) {
 	cfg := newTestAgentConfig(t)
 	s := newAgentExternalStrategy(cfg)
 
 	// Relative path should be joined with compose path
-	got := s.resolveTemplatePath()
-	if !strings.HasSuffix(got, "agent-stacks/template.yml") {
-		t.Errorf("resolveTemplatePath() = %q, want suffix 'agent-stacks/template.yml'", got)
+	got := s.resolveTemplatePaths()
+	if len(got) != 1 {
+		t.Fatalf("resolveTemplatePaths() returned %d paths, want 1", len(got))
+	}
+	if !strings.HasSuffix(got[0], "agent-stacks/template.yml") {
+		t.Errorf("resolveTemplatePaths()[0] = %q, want suffix 'agent-stacks/template.yml'", got[0])
 	}
 
 	// Absolute path should be returned as-is
 	s.agent.TemplatePath = "/abs/path/template.yml"
-	got = s.resolveTemplatePath()
-	if got != "/abs/path/template.yml" {
-		t.Errorf("resolveTemplatePath() = %q, want '/abs/path/template.yml'", got)
+	got = s.resolveTemplatePaths()
+	if len(got) != 1 || got[0] != "/abs/path/template.yml" {
+		t.Errorf("resolveTemplatePaths() = %v, want ['/abs/path/template.yml']", got)
+	}
+}
+
+func TestAgentExternalStrategy_ResolveTemplatePaths_WithOverlays(t *testing.T) {
+	cfg := newTestAgentConfig(t)
+	s := newAgentExternalStrategy(cfg)
+
+	// Mix of relative and absolute overlays.
+	s.agent.TemplatePath = "agent-stacks/template.yml"
+	s.agent.TemplateOverlays = []string{
+		"agent-stacks/dev.yml",
+		"/abs/overlay.yml",
+	}
+
+	got := s.resolveTemplatePaths()
+	if len(got) != 3 {
+		t.Fatalf("resolveTemplatePaths() returned %d paths, want 3 (base + 2 overlays)", len(got))
+	}
+	if !strings.HasSuffix(got[0], "agent-stacks/template.yml") {
+		t.Errorf("base path = %q, want suffix 'agent-stacks/template.yml'", got[0])
+	}
+	if !strings.HasSuffix(got[1], "agent-stacks/dev.yml") {
+		t.Errorf("overlay[0] = %q, want suffix 'agent-stacks/dev.yml'", got[1])
+	}
+	if got[2] != "/abs/overlay.yml" {
+		t.Errorf("overlay[1] = %q, want '/abs/overlay.yml'", got[2])
 	}
 }
 
@@ -204,7 +342,7 @@ func TestAgentExternalStrategy_AgentEnv(t *testing.T) {
 }
 
 func TestAgentComposeCommand(t *testing.T) {
-	cmd := agentComposeCommand("/tmp/compose", "/tmp/compose/template.yml", "myapp-agent-1", []string{"APP_DIR=/app"}, "up", "-d", "app")
+	cmd := agentComposeCommand("/tmp/compose", []string{"/tmp/compose/template.yml"}, "myapp-agent-1", []string{"APP_DIR=/app"}, "up", "-d", "app")
 
 	if cmd.Dir != "/tmp/compose" {
 		t.Errorf("cmd.Dir = %q, want /tmp/compose", cmd.Dir)
@@ -221,15 +359,42 @@ func TestAgentComposeCommand(t *testing.T) {
 	}
 }
 
+func TestAgentComposeCommand_MultipleTemplates(t *testing.T) {
+	cmd := agentComposeCommand(
+		"/tmp/compose",
+		[]string{"/tmp/compose/base.yml", "/tmp/compose/overlay-a.yml", "/tmp/compose/overlay-b.yml"},
+		"myapp-agent-1",
+		nil,
+		"up", "-d",
+	)
+
+	wantArgs := []string{
+		"docker", "compose",
+		"-f", "/tmp/compose/base.yml",
+		"-f", "/tmp/compose/overlay-a.yml",
+		"-f", "/tmp/compose/overlay-b.yml",
+		"-p", "myapp-agent-1",
+		"up", "-d",
+	}
+	if len(cmd.Args) != len(wantArgs) {
+		t.Fatalf("cmd.Args = %v, want %v", cmd.Args, wantArgs)
+	}
+	for i, want := range wantArgs {
+		if cmd.Args[i] != want {
+			t.Errorf("cmd.Args[%d] = %q, want %q", i, cmd.Args[i], want)
+		}
+	}
+}
+
 func TestAgentComposeCommand_WithEnv(t *testing.T) {
-	cmd := agentComposeCommand("/tmp", "/tmp/template.yml", "test-agent-1", []string{"FOO=bar"}, "up")
+	cmd := agentComposeCommand("/tmp", []string{"/tmp/template.yml"}, "test-agent-1", []string{"FOO=bar"}, "up")
 	if len(cmd.Env) == 0 {
 		t.Error("Expected env vars to be set")
 	}
 }
 
 func TestAgentComposeCommand_WithoutEnv(t *testing.T) {
-	cmd := agentComposeCommand("/tmp", "/tmp/template.yml", "test-agent-1", nil, "up")
+	cmd := agentComposeCommand("/tmp", []string{"/tmp/template.yml"}, "test-agent-1", nil, "up")
 	if len(cmd.Env) != 0 {
 		t.Errorf("Expected no env override, got %d vars", len(cmd.Env))
 	}
@@ -254,65 +419,6 @@ func TestResolveComposePath(t *testing.T) {
 				t.Errorf("resolveComposePath(%q) = %q, want %q", tt.path, got, tt.path)
 			}
 		})
-	}
-}
-
-func TestSetupWorktreeFiles(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	mainPath := filepath.Join(tmpDir, "main")
-	_ = os.MkdirAll(filepath.Join(mainPath, "config"), 0755)
-	_ = os.WriteFile(filepath.Join(mainPath, "config", "secret.key"), []byte("secret"), 0600)
-	_ = os.MkdirAll(filepath.Join(mainPath, "vendor", "bundle"), 0755)
-
-	newPath := filepath.Join(tmpDir, "worktree")
-	_ = os.MkdirAll(newPath, 0755)
-
-	ext := &config.ExternalComposeConfig{
-		CopyFiles:   []string{"config/secret.key"},
-		SymlinkDirs: []string{"vendor/bundle"},
-	}
-
-	err := setupWorktreeFiles(ext, newPath, mainPath)
-	if err != nil {
-		t.Fatalf("setupWorktreeFiles() error = %v", err)
-	}
-
-	// Verify copied file
-	data, err := os.ReadFile(filepath.Join(newPath, "config", "secret.key"))
-	if err != nil {
-		t.Fatalf("Failed to read copied file: %v", err)
-	}
-	if string(data) != "secret" {
-		t.Errorf("Expected 'secret', got %q", string(data))
-	}
-
-	// Verify symlink
-	info, err := os.Lstat(filepath.Join(newPath, "vendor", "bundle"))
-	if err != nil {
-		t.Fatalf("Failed to stat symlink: %v", err)
-	}
-	if info.Mode()&os.ModeSymlink == 0 {
-		t.Error("Expected vendor/bundle to be a symlink")
-	}
-}
-
-func TestSetupWorktreeFiles_MissingSource(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	mainPath := filepath.Join(tmpDir, "main")
-	_ = os.MkdirAll(mainPath, 0755)
-
-	newPath := filepath.Join(tmpDir, "worktree")
-	_ = os.MkdirAll(newPath, 0755)
-
-	ext := &config.ExternalComposeConfig{
-		CopyFiles: []string{"nonexistent.key"},
-	}
-
-	err := setupWorktreeFiles(ext, newPath, mainPath)
-	if err == nil {
-		t.Error("Expected error for missing source file, got nil")
 	}
 }
 
@@ -632,118 +738,6 @@ func TestHasActiveAgentSlot_NoAgentConfig(t *testing.T) {
 
 	if HasActiveAgentSlot(cfg, "/tmp/wt") {
 		t.Error("HasActiveAgentSlot should be false without agent config")
-	}
-}
-
-func TestSetupWorktreeFiles_SymlinkFiles(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	mainPath := filepath.Join(tmpDir, "main")
-	_ = os.MkdirAll(filepath.Join(mainPath, "config", "credentials"), 0755)
-	_ = os.WriteFile(filepath.Join(mainPath, "config", "credentials", "dev.key"), []byte("devkey"), 0600)
-
-	newPath := filepath.Join(tmpDir, "worktree")
-	_ = os.MkdirAll(newPath, 0755)
-
-	ext := &config.ExternalComposeConfig{
-		SymlinkFiles: []string{"config/credentials/dev.key"},
-	}
-
-	err := setupWorktreeFiles(ext, newPath, mainPath)
-	if err != nil {
-		t.Fatalf("setupWorktreeFiles() error = %v", err)
-	}
-
-	// Verify it's a symlink, not a copy
-	dst := filepath.Join(newPath, "config", "credentials", "dev.key")
-	info, err := os.Lstat(dst)
-	if err != nil {
-		t.Fatalf("Failed to stat symlinked file: %v", err)
-	}
-	if info.Mode()&os.ModeSymlink == 0 {
-		t.Error("Expected config/credentials/dev.key to be a symlink")
-	}
-
-	// Verify content is accessible through the symlink
-	data, err := os.ReadFile(dst)
-	if err != nil {
-		t.Fatalf("Failed to read through symlink: %v", err)
-	}
-	if string(data) != "devkey" {
-		t.Errorf("Expected 'devkey', got %q", string(data))
-	}
-}
-
-func TestSetupWorktreeFiles_AllThreeTypes(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	mainPath := filepath.Join(tmpDir, "main")
-	_ = os.MkdirAll(filepath.Join(mainPath, "config"), 0755)
-	_ = os.WriteFile(filepath.Join(mainPath, "config", "settings.yml"), []byte("settings"), 0644)
-	_ = os.WriteFile(filepath.Join(mainPath, "config", "secret.key"), []byte("secret"), 0600)
-	_ = os.MkdirAll(filepath.Join(mainPath, "vendor", "bundle"), 0755)
-
-	newPath := filepath.Join(tmpDir, "worktree")
-	_ = os.MkdirAll(newPath, 0755)
-
-	ext := &config.ExternalComposeConfig{
-		CopyFiles:    []string{"config/settings.yml"},
-		SymlinkFiles: []string{"config/secret.key"},
-		SymlinkDirs:  []string{"vendor/bundle"},
-	}
-
-	err := setupWorktreeFiles(ext, newPath, mainPath)
-	if err != nil {
-		t.Fatalf("setupWorktreeFiles() error = %v", err)
-	}
-
-	// Verify copied file is a regular file
-	copyInfo, err := os.Lstat(filepath.Join(newPath, "config", "settings.yml"))
-	if err != nil {
-		t.Fatalf("Failed to stat copied file: %v", err)
-	}
-	if copyInfo.Mode()&os.ModeSymlink != 0 {
-		t.Error("Expected config/settings.yml to be a regular file (copy), not a symlink")
-	}
-
-	// Verify symlinked file
-	fileInfo, err := os.Lstat(filepath.Join(newPath, "config", "secret.key"))
-	if err != nil {
-		t.Fatalf("Failed to stat symlinked file: %v", err)
-	}
-	if fileInfo.Mode()&os.ModeSymlink == 0 {
-		t.Error("Expected config/secret.key to be a symlink")
-	}
-
-	// Verify symlinked directory
-	dirInfo, err := os.Lstat(filepath.Join(newPath, "vendor", "bundle"))
-	if err != nil {
-		t.Fatalf("Failed to stat symlinked dir: %v", err)
-	}
-	if dirInfo.Mode()&os.ModeSymlink == 0 {
-		t.Error("Expected vendor/bundle to be a symlink")
-	}
-}
-
-func TestSetupWorktreeFiles_SymlinkFiles_MissingSource(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	mainPath := filepath.Join(tmpDir, "main")
-	_ = os.MkdirAll(mainPath, 0755)
-
-	newPath := filepath.Join(tmpDir, "worktree")
-	_ = os.MkdirAll(newPath, 0755)
-
-	ext := &config.ExternalComposeConfig{
-		SymlinkFiles: []string{"nonexistent.key"},
-	}
-
-	err := setupWorktreeFiles(ext, newPath, mainPath)
-	if err == nil {
-		t.Error("Expected error for missing source file, got nil")
-	}
-	if !strings.Contains(err.Error(), "source not found") {
-		t.Errorf("Expected 'source not found' in error, got %q", err.Error())
 	}
 }
 

@@ -40,6 +40,7 @@ func newTestModel(opts ...testOpt) Model {
 		help:        h,
 		toast:       NewToastModel(),
 		helpFooter:  NewHelpFooter(),
+		helpOverlay: NewHelpOverlay(),
 		detail:      viewport.New(viewport.WithWidth(80), viewport.WithHeight(20)),
 		activeView:  ViewDashboard,
 		loading:     false,
@@ -146,13 +147,12 @@ func sendMsg(m Model, msg tea.Msg) Model {
 	return result.(Model)
 }
 
-// enterCreateManual enters the create wizard for manual key handling tests.
+// enterCreateManual enters the create wizard and navigates to the branch select step.
 func enterCreateManual(m Model) Model {
-	m = sendKey(m, "n")
+	m = sendKey(m, "n") // opens wizard at BranchChoice
 	if m.createState != nil {
 		m.createState.Branches = []string{"main", "develop", "feature/auth"}
-		// Focus the branch filter input (sendKey discards the Focus cmd)
-		m.createState.BranchFilterInput.Focus()
+		m = sendKey(m, "enter") // select "Select existing branch" → BranchSelect
 	}
 	return m
 }

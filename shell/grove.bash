@@ -1,5 +1,12 @@
 # Grove function wrapper for bash
 grove() {
+    # Recursion guard: if __GROVE_BIN is empty or the bare word "grove",
+    # calling it would invoke this function again — infinite recursion.
+    if [[ -z "$__GROVE_BIN" || "$__GROVE_BIN" == "grove" ]]; then
+        echo "grove: binary not found (is grove on your PATH?)" >&2
+        return 127
+    fi
+
     # Bare "grove" with no args launches TUI — run directly, no capture
     if [[ $# -eq 0 ]]; then
         local cd_file=$(mktemp "${TMPDIR:-/tmp}/grove-cd.XXXXXX")

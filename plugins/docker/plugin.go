@@ -25,6 +25,7 @@ type modeStrategy interface {
 	Logs(worktreePath string, service string, follow bool) error
 	Restart(worktreePath string, service string) error
 	Run(worktreePath string, service string, command string) error
+	Exec(worktreePath string, service string, command string) error
 }
 
 // Plugin implements the docker plugin for grove
@@ -75,6 +76,11 @@ func (p *Plugin) Init(cfg *config.Config) error {
 	} else {
 		p.strategy = newLocalStrategy(cfg)
 	}
+
+	// Register config-hook action handlers. Idempotent (last write wins) so
+	// repeated Init across tests rebinds the closure to the current plugin.
+	hooks.RegisterActionHandler("docker:compose", p.composeHandler)
+	hooks.RegisterActionHandler("docker:exec", p.dockerExecHandler)
 
 	return nil
 }
@@ -158,7 +164,18 @@ func (p *Plugin) onPreRemove(ctx *hooks.Context) error {
 		return nil
 	}
 	fmt.Fprintf(os.Stderr, "Stopping agent stack for '%s'...\n", ctx.Worktree)
-	return p.strategy.Down(ctx.WorktreePath)
+	downErr := p.strategy.Down(ctx.WorktreePath)
+	if downErr == nil {
+		// Down() releases the slot itself on success.
+		return nil
+	}
+	// Down failed — the worktree is being removed regardless, so a leaked slot
+	// would point at nothing. Free it so it can be reused. Surface the original
+	// teardown error to the caller.
+	if relErr := agent.slots.Release(wtName); relErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to release agent slot %d after teardown failure: %v\n", slot, relErr)
+	}
+	return downErr
 }
 
 // SetIsolated forces the plugin to use the agent external strategy,
@@ -245,11 +262,6 @@ func buildSlotManager(cfg *config.Config) *SlotManager {
 	}
 	slotsFile := filepath.Join(resolveComposePath(ext.Path), filepath.Dir(ext.Agent.TemplatePath), ".slots.json")
 	return NewSlotManager(slotsFile, maxSlots)
-}
-
-// ResolveComposePath resolves a compose path, expanding ~ to home directory.
-func ResolveComposePath(path string) string {
-	return resolveComposePath(path)
 }
 
 // isAgentMode returns true when the agent mode env var is set and the config

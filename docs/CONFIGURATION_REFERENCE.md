@@ -267,7 +267,15 @@ Required when `mode = "external"`. Configures the shared compose setup.
 ```toml
 [plugins.docker.external]
 # Path to the external Docker Compose directory (the one with docker-compose.yml).
-# Supports ~ expansion. Required.
+# Accepts:
+#   - absolute paths (`/home/user/code/orchestrator`)
+#   - ~ expansion (`~/work/compose-dev`)
+#   - relative paths, resolved against the project root — i.e., the directory
+#     containing `.grove/`. For example, `path = "../"` in
+#     `~/code/orchestrator/app/.grove/config.toml` resolves to
+#     `~/code/orchestrator/`. This makes a committed config portable across
+#     teammates with different parent directory layouts.
+# Required.
 path = "~/work/compose-dev"        # string (required)
 
 # Environment variable name that grove sets to the worktree path.
@@ -300,10 +308,22 @@ non_blocking_services = ["asset_precompile", "db_seed"]  # string array
 # Default: [] (nothing copied)
 copy_files = [".env.local", "config/master.key"]  # string array
 
+# Files to symlink from the main worktree into each new worktree on create.
+# Symlinks (vs copies) propagate edits in real time — use for files you actively
+# rotate, like decrypted credentials. Paths are relative to the worktree root.
+# Default: [] (nothing symlinked)
+# NOTE: On Windows, symlinks require Developer Mode or administrator privileges.
+# Use copy_files / copy_dirs instead for Windows-friendly setups.
+# See CONTRIBUTING.md — Platform Notes for details.
+symlink_files = ["config/credentials/development.key"]  # string array
+
 # Directories to symlink from the main worktree into each new worktree on create.
 # Useful for large build caches (node_modules, vendor/) that should be shared.
 # Paths are relative to the worktree root.
 # Default: [] (nothing symlinked)
+# NOTE: On Windows, symlinks require Developer Mode or administrator privileges.
+# Use copy_dirs instead for Windows-friendly setups.
+# See CONTRIBUTING.md — Platform Notes for details.
 symlink_dirs = ["node_modules", "vendor"]         # string array
 ```
 
@@ -330,6 +350,14 @@ services = ["web", "worker"]       # string array (required when enabled)
 # Required when enabled = true.
 template_path = "~/work/compose-dev/agent-compose.yml"  # string (required when enabled)
 
+# Optional overlay compose files merged on top of template_path in declared
+# order. Each becomes an extra `-f` flag on `docker compose` invocations.
+# Useful for per-project overrides (per-slot volume mounts, env files, service
+# tweaks) without forking the base template. Relative paths resolve against
+# plugins.docker.external.path, same as template_path. ~/ expands to $HOME.
+# Default: [] (no overlays)
+template_overlays = ["overrides/dev.yml"]  # string array (optional)
+
 # URL pattern for accessing agent services.
 # {port} is replaced with the allocated port.
 # Default: "http://localhost:{port}"
@@ -344,6 +372,8 @@ network = "shared"                 # string
 ---
 
 ## Hooks Configuration (.grove/hooks.toml)
+
+> **Trust model:** `command` hooks run via `sh -c` with your full parent-process environment forwarded. Treat `hooks.toml` like a `Makefile` or `package.json` scripts block — trusted for repos you own, but worth reviewing when pulling from third-party repos. See [README.md — Hooks: trust model](../README.md#hooks-trust-model) for details, and [AGENT_GUIDE.md — Security](AGENT_GUIDE.md#security) for AI-agent-specific guidance.
 
 Hooks run shell commands, copy files, or render templates at worktree lifecycle events.
 Hooks are defined in a separate file from main config.
@@ -475,6 +505,46 @@ from = ".env.template"         # template source, relative to main worktree
 to   = ".env"                  # rendered output, relative to new worktree
 vars = { APP_PORT = "{{.port}}", ENV = "development" }  # extra variables
 ```
+
+#### docker:compose
+
+Runs a command inside a docker compose service. Use this for projects whose
+toolchain (Ruby, Node, Python, etc.) lives in a container — `bundle install`
+on the host fails when the host lacks the build deps. Registered by the
+docker plugin; requires the plugin to be enabled.
+
+```toml
+[[hooks.post_create]]
+type    = "docker:compose"
+service = "app"                # required: compose service name; {{.variable}} interpolated
+command = "bundle install"     # required: command to run; {{.variable}} interpolated
+mode    = "run"                # "run" (default, ephemeral via `compose run --rm`)
+                               # or "exec" (`compose exec`, requires running container)
+timeout = 900                  # seconds (default 60; 900 recommended for first install)
+on_failure = "warn"
+```
+
+`mode = "exec"` requires the container to already be running. Plugin
+post-create hooks fire before config hooks, so a stack with `auto_start = true`
+will be up by the time this hook runs. If exec is called when no container is
+running, the error suggests using `mode = "run"` or starting the stack with
+`grove up`.
+
+#### docker:exec
+
+Runs a command inside an externally-managed container (one grove doesn't
+lifecycle, e.g. a long-running dev shell). Bypasses compose entirely.
+
+```toml
+[[hooks.post_create]]
+type      = "docker:exec"
+container = "my-dev-shell"     # required: container name; {{.variable}} interpolated
+command   = "bundle install"   # required; {{.variable}} interpolated
+shell     = "bash -lc"         # optional, default "bash -lc"; quoted args are rejected — use a wrapper script for complex shell invocations
+timeout   = 900
+```
+
+Errors with an actionable message if the named container isn't running.
 
 ### Template Variables
 
@@ -743,8 +813,9 @@ path     = "~/work/compose-dev"
 env_var  = "APP_DIR"
 env_file = ".env.local"
 services = ["web", "worker", "jobs"]
-copy_files   = [".env.local", "config/master.key", "config/credentials.yml.enc"]
-symlink_dirs = ["storage"]
+copy_files    = [".env.local", "config/master.key", "config/credentials.yml.enc"]
+symlink_files = ["config/credentials/development.key"]
+symlink_dirs  = ["storage"]
 ```
 
 ### Multi-Agent CI (Agent Stacks)

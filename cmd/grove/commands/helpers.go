@@ -23,19 +23,23 @@ func isGitRepo(dir string) bool {
 
 func detectProjectName(dir string) string {
 	output, err := cmdexec.Output(context.TODO(), "git", []string{"remote", "get-url", "origin"}, dir, cmdexec.GitLocal)
-	if err == nil {
-		url := strings.TrimSpace(string(output))
-		url = strings.TrimSuffix(url, ".git")
-		parts := strings.Split(url, "/")
-		if len(parts) > 0 {
-			name := parts[len(parts)-1]
-			if idx := strings.LastIndex(name, ":"); idx != -1 {
-				name = name[idx+1:]
-			}
-			if name != "" {
-				return name
-			}
-		}
+	if err != nil {
+		return filepath.Base(dir)
+	}
+
+	url := strings.TrimSpace(string(output))
+	url = strings.TrimSuffix(url, ".git")
+	parts := strings.Split(url, "/")
+	if len(parts) == 0 {
+		return filepath.Base(dir)
+	}
+
+	name := parts[len(parts)-1]
+	if idx := strings.LastIndex(name, ":"); idx != -1 {
+		name = name[idx+1:]
+	}
+	if name != "" {
+		return name
 	}
 
 	return filepath.Base(dir)
@@ -138,6 +142,20 @@ func setupCreatedWorktree(ctx *GroveContext, mgr *worktree.Manager, name, branch
 
 	autoStartDocker(w, ctx.Config, wt.Path, opts.NoDocker, opts.JSONOutput)
 	return wt, nil
+}
+
+// runFileSetup runs worktree.SetupFiles when an external docker config is
+// present. Kept as a separate helper so callers like `grove fork` (which
+// don't go through BootstrapWorktree) can reuse it.
+func runFileSetup(cfg *config.Config, newPath, mainPath string, w *cli.Writer, jsonOutput bool) {
+	if cfg == nil || cfg.Plugins.Docker.External == nil {
+		return
+	}
+	if err := worktree.SetupFiles(cfg.Plugins.Docker.External, newPath, mainPath); err != nil {
+		if !jsonOutput {
+			cli.Warning(w, "File setup had issues: %v", err)
+		}
+	}
 }
 
 // autoStartDocker starts the Docker stack for a new worktree if configured.

@@ -8,7 +8,6 @@ import (
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/config"
-	"github.com/lost-in-the/grove/internal/fsutil"
 	"github.com/lost-in-the/grove/internal/hooks"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
@@ -91,7 +90,7 @@ func (s *externalStrategy) OnPostCreate(ctx *hooks.Context) error {
 	}
 	s.emitEnvDirective(ctx.WorktreePath)
 
-	return setupWorktreeFiles(s.ext, ctx.WorktreePath, ctx.MainPath)
+	return nil
 }
 
 func (s *externalStrategy) Up(worktreePath string, detach bool) error {
@@ -173,6 +172,27 @@ func (s *externalStrategy) Run(worktreePath string, service string, command stri
 		return translateRunError(stderrBuf.String(), err)
 	}
 	return nil
+}
+
+// Exec runs a command in an already-running container of the external compose.
+func (s *externalStrategy) Exec(worktreePath string, service string, command string) error {
+	if err := s.persistEnvVar(worktreePath); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to persist %s to %s: %v\n", s.ext.EnvVar, s.ext.EnvFileName(), err)
+	}
+	s.emitEnvDirective(worktreePath)
+
+	env := s.envForWorktree(worktreePath)
+	if isTestCommand(command) {
+		wtName := filepath.Base(worktreePath)
+		envNum := worktree.TestEnvNumber(wtName)
+		env = append(env, fmt.Sprintf("TEST_ENV_NUMBER=%d", envNum))
+	}
+
+	cmd := composeCommand(s.composePath(), s.ext.EnvFileName(), env, "exec", service, "bash", "-cil", command)
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	return cmd.Run()
 }
 
 // isTestCommand reports whether the given command string looks like a test invocation.
@@ -317,8 +337,13 @@ func (s *externalStrategy) removeEnvVar(worktreePath string) error {
 	}
 
 	result := strings.Join(filtered, "\n")
-	if result == "" {
-		result = "\n"
+	// If the file is empty (only grove's entry was in it), remove it entirely
+	// rather than leaving a stale whitespace-only file behind.
+	if strings.TrimSpace(result) == "" {
+		if err := os.Remove(envFile); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to remove empty %s: %w", s.ext.EnvFileName(), err)
+		}
+		return nil
 	}
 	return os.WriteFile(envFile, []byte(result), 0o600)
 }
@@ -366,34 +391,4 @@ func (s *externalStrategy) getAutoStop() bool {
 	}
 	// External mode defaults to true for auto_stop (unlike local's false)
 	return true
-}
-
-// copyFile copies a single file from src to dst, creating parent directories as needed.
-func copyFile(src, dst string) error {
-	return fsutil.CopyFile(src, dst)
-}
-
-// createSymlink creates a symbolic link from src to dst, creating parent directories
-// as needed. If dst already exists and is a symlink, it is replaced.
-func createSymlink(src, dst string) error {
-	if _, err := os.Lstat(src); err != nil {
-		return fmt.Errorf("source not found: %w", err)
-	}
-
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return fmt.Errorf("failed to create parent directory: %w", err)
-	}
-
-	// Remove existing symlink if present
-	if info, err := os.Lstat(dst); err == nil {
-		if info.Mode()&os.ModeSymlink != 0 {
-			if err := os.Remove(dst); err != nil {
-				return fmt.Errorf("failed to remove existing symlink %s: %w", dst, err)
-			}
-		} else {
-			return fmt.Errorf("%s already exists and is not a symlink", dst)
-		}
-	}
-
-	return os.Symlink(src, dst)
 }

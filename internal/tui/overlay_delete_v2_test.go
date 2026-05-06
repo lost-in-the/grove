@@ -164,13 +164,13 @@ func TestRenderDelete_DeletingState(t *testing.T) {
 		Deleting: true,
 	}
 
-	view := renderDelete(s, 70)
+	view := renderDeleteV2(s, 70)
 
 	if !strings.Contains(view, "Deleting") {
-		t.Error("expected 'Deleting' text in V1 view during deletion")
+		t.Error("expected 'Deleting' text in view during deletion")
 	}
 	if !strings.Contains(view, "feature-auth") {
-		t.Error("expected worktree name in V1 deleting view")
+		t.Error("expected worktree name in deleting view")
 	}
 	// Should NOT contain confirmation UI
 	if strings.Contains(view, "confirm") {

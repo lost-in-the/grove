@@ -7,31 +7,34 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/lost-in-the/grove/internal/state"
-	"github.com/lost-in-the/grove/internal/worktree"
+	"github.com/lost-in-the/grove/internal/git"
 	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
 // IssueViewState holds the state for the issue browser view.
 type IssueViewState struct {
-	Issues      []*tracker.Issue
-	Cursor      int
-	Loading     bool
-	Error       string
-	Creating    bool
-	FilterInput textinput.Model
-	ShowPreview bool
+	Issues           []*tracker.Issue
+	Cursor           int
+	Loading          bool
+	Error            string
+	Creating         bool
+	ActivityLog      *ActivityLog // streaming creation progress
+	FilterInput      textinput.Model
+	Filtering        bool // true when filter input is active (activated by /)
+	DetailFocused    bool // true when detail panel has focus (Tab to toggle)
+	DetailViewport   viewport.Model
+	lastCursor       int               // tracks cursor changes to update viewport content
+	WorktreeBranches map[string]string // branch → worktree short name
+	ExistsPrompt     *ExistingWorktreePrompt
 }
 
-// newIssueFilterInput creates a configured textinput for issue filtering.
-func newIssueFilterInput() textinput.Model {
-	ti := textinput.New()
-	ti.Prompt = "Filter: "
-	ti.Placeholder = ""
-	ti.CharLimit = 100
-	return ti
+func (s *IssueViewState) getActivityLog() *ActivityLog { return s.ActivityLog }
+func (s *IssueViewState) setCreatingDone(errMsg string) {
+	s.Creating = false
+	s.Error = errMsg
 }
 
 func (m Model) fetchIssuesCmd() tea.Msg {
@@ -57,6 +60,12 @@ func (m Model) handleIssueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	s := m.issueState
 
+	if s.ExistsPrompt != nil {
+		return m.handleExistsPromptKey(msg, s.ExistsPrompt,
+			func() { s.ExistsPrompt = nil },
+		)
+	}
+
 	if s.Loading || s.Creating {
 		if key.Matches(msg, m.keys.Escape) {
 			m.activeView = ViewDashboard
@@ -68,6 +77,32 @@ func (m Model) handleIssueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	filtered := filteredIssues(s.Issues, s.FilterInput.Value())
 
+	// When filtering is active, route keys to the textinput
+	if s.Filtering {
+		var cmd tea.Cmd
+		var stop bool
+		s.FilterInput, s.Cursor, cmd, stop = handleListFilterKey(msg, m.keys, s.FilterInput, s.Cursor)
+		if stop {
+			s.Filtering = false
+		}
+		return m, cmd
+	}
+
+	// When detail panel is focused, route keys for scrolling
+	if s.DetailFocused {
+		if key.Matches(msg, m.keys.Escape) || key.Matches(msg, m.keys.Tab) {
+			s.DetailFocused = false
+			return m, nil
+		}
+		if msg.String() == "B" {
+			m.openSelectedIssueURL(filtered)
+			return m, nil
+		}
+		handleDetailFocusedKey(msg, m.keys, &s.DetailViewport)
+		return m, nil
+	}
+
+	// Normal mode (not filtering, list focused)
 	switch {
 	case key.Matches(msg, m.keys.Escape):
 		m.activeView = ViewDashboard
@@ -87,186 +122,96 @@ func (m Model) handleIssueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.keys.Tab):
-		s.ShowPreview = !s.ShowPreview
+		s.DetailFocused = true
 		return m, nil
+
+	case msg.String() == "B":
+		m.openSelectedIssueURL(filtered)
+		return m, nil
+
+	case key.Matches(msg, m.keys.Filter):
+		s.Filtering = true
+		return m, s.FilterInput.Focus()
 
 	case key.Matches(msg, m.keys.Enter):
 		if len(filtered) > 0 && s.Cursor < len(filtered) {
 			issue := filtered[s.Cursor]
-			s.Creating = true
-			s.Error = ""
-			name := tracker.GenerateWorktreeName("issue", issue.Number, issue.Title)
-			return m, tea.Batch(m.spinner.Tick, createIssueWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, name))
+			name := fmt.Sprintf("issue-%d", issue.Number)
+
+			// Check if a worktree already exists with this name
+			if existing := checkDuplicateWorktree(name, m.existingWorktreeItems()); existing != nil {
+				s.ExistsPrompt = &ExistingWorktreePrompt{
+					WorktreeName: existing.ShortName,
+					Branch:       existing.Branch,
+					ItemLabel:    fmt.Sprintf("Issue #%d", issue.Number),
+				}
+				return m, nil
+			}
+
+			return m.openCreateWizardForIssue(issue)
 		}
 		return m, nil
-
-	default:
-		// Route remaining keys through the filter textinput
-		prevVal := s.FilterInput.Value()
-		var cmd tea.Cmd
-		s.FilterInput, cmd = s.FilterInput.Update(msg)
-		if s.FilterInput.Value() != prevVal {
-			s.Cursor = 0
-		}
-		return m, cmd
 	}
+
+	return m, nil
 }
 
-func createIssueWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot, name string) tea.Cmd {
-	return func() tea.Msg {
-		err := mgr.Create(name, name)
-		if err != nil {
-			return issueWorktreeCreatedMsg{name: name, err: err}
-		}
-		wt, err := mgr.Find(name)
-		if err != nil || wt == nil {
-			return issueWorktreeCreatedMsg{name: name, err: errWorktreeNotFound}
-		}
-
-		result := runPostCreate(mgr, stateMgr, projectRoot, name, wt)
-		return issueWorktreeCreatedMsg{name: name, path: wt.Path, hookOutput: result.hookOutput, hookErr: result.hookErr}
-	}
+func (m Model) openCreateWizardForIssue(issue *tracker.Issue) (tea.Model, tea.Cmd) {
+	branches, _ := git.ListAllBranches(m.projectRoot)
+	m.createState = prefillCreateStateForIssue(issue, m.projectName, branches)
+	m.createState.ReturnView = ViewIssues
+	m.createState.WorktreeBranches = m.worktreeBranchMap()
+	m.activeView = ViewCreate
+	return m, nil
 }
 
-// renderIssueView renders the issue browser overlay.
-func renderIssueView(s *IssueViewState, width int, spinnerView string) string {
-	if s.Loading {
-		return Styles.OverlayBorderInfo.Render(
-			Styles.OverlayTitle.Render("Issues") + "\n\n" +
-				spinnerView + " Loading issues...",
-		)
-	}
-
-	if s.Creating {
-		return Styles.OverlayBorderInfo.Render(
-			Styles.OverlayTitle.Render("Issues") + "\n\n" +
-				spinnerView + " Creating worktree from issue...",
-		)
-	}
-
+// renderIssueItemList renders a scrollable list of issue items with cursor, scroll window, and overflow indicator.
+func renderIssueItemList(issues []*tracker.Issue, cursor int, scrollSize int, contentWidth int) string {
 	var b strings.Builder
-
-	if s.Error != "" {
-		b.WriteString(Styles.ErrorText.Render(s.Error) + "\n\n")
-	}
-
-	filter := s.FilterInput.Value()
-	filtered := filteredIssues(s.Issues, filter)
-
-	// If preview mode and we have a selected issue, render preview
-	if s.ShowPreview && len(filtered) > 0 && s.Cursor < len(filtered) {
-		return renderIssuePreview(filtered[s.Cursor], width)
-	}
-
-	total := len(s.Issues)
-
-	// Filter bar with count
-	if filter != "" {
-		b.WriteString(s.FilterInput.View())
-		fmt.Fprintf(&b, "  %s", Styles.DetailDim.Render(fmt.Sprintf("%d of %d", len(filtered), total)))
-		b.WriteString("\n\n")
-	} else if total > 0 {
-		b.WriteString(Styles.DetailDim.Render(fmt.Sprintf("%d open", total)) + "\n\n")
-	}
-
-	if len(filtered) == 0 {
+	if len(issues) == 0 {
 		b.WriteString(Styles.DetailDim.Render("  (no matching issues)") + "\n")
-	} else {
-		start, end := scrollWindow(len(filtered), s.Cursor, 10)
+		return b.String()
+	}
 
-		contentWidth := width - 8
-		if contentWidth < 40 {
-			contentWidth = 40
+	start, end := scrollWindow(len(issues), cursor, scrollSize)
+
+	for i := start; i < end; i++ {
+		issue := issues[i]
+
+		cur := "  "
+		if i == cursor {
+			cur = Styles.ListCursor.Render("❯ ")
 		}
 
-		for i := start; i < end; i++ {
-			issue := filtered[i]
+		number := Styles.DetailDim.Render(fmt.Sprintf("#%-5d", issue.Number))
+		titleStr := truncate(issue.Title, contentWidth-20)
+		fmt.Fprintf(&b, "%s%s %s\n", cur, number, titleStr)
 
-			cursor := "  "
-			if i == s.Cursor {
-				cursor = Styles.ListCursor.Render("❯ ")
-			}
+		indent := "         "
+		author := Styles.DetailDim.Render("@" + issue.Author)
+		age := Styles.DetailDim.Render(formatIssueAge(issue.CreatedAt))
 
-			// Line 1: cursor + #number + title
-			number := Styles.DetailDim.Render(fmt.Sprintf("#%-5d", issue.Number))
-			titleStr := truncate(issue.Title, contentWidth-20)
-			fmt.Fprintf(&b, "%s%s %s\n", cursor, number, titleStr)
-
-			// Line 2: metadata indent + author + age + labels
-			indent := "         "
-			author := Styles.DetailDim.Render("@" + issue.Author)
-			age := Styles.DetailDim.Render(formatIssueAge(issue.CreatedAt))
-
-			var labelParts []string
-			for _, l := range issue.Labels {
-				labelParts = append(labelParts, Styles.WarningText.Render(l))
-			}
-			labels := ""
-			if len(labelParts) > 0 {
-				labels = "  " + strings.Join(labelParts, ", ")
-			}
-
-			fmt.Fprintf(&b, "%s%s · %s%s\n", indent, author, age, labels)
-
-			// Blank line between items (except last)
-			if i < end-1 {
-				b.WriteString("\n")
-			}
+		var labelParts []string
+		for _, l := range issue.Labels {
+			labelParts = append(labelParts, Styles.WarningText.Render(l))
+		}
+		labels := ""
+		if len(labelParts) > 0 {
+			labels = "  " + strings.Join(labelParts, ", ")
 		}
 
-		if end < len(filtered) {
-			b.WriteString(Styles.DetailDim.Render(fmt.Sprintf("\n  … and %d more", len(filtered)-end)) + "\n")
+		fmt.Fprintf(&b, "%s%s · %s%s\n", indent, author, age, labels)
+
+		if i < end-1 {
+			b.WriteString("\n")
 		}
 	}
 
-	b.WriteString("\n" + Styles.Footer.Render("[enter] create worktree  [tab] preview  [esc] close  type to filter"))
-
-	return Styles.OverlayBorderInfo.Render(
-		Styles.OverlayTitle.Render("Issues") + "\n\n" + b.String(),
-	)
-}
-
-// renderIssuePreview renders a detailed preview panel for a single issue.
-func renderIssuePreview(issue *tracker.Issue, width int) string {
-	contentWidth := max(width-6, 30)
-
-	var b strings.Builder
-
-	// Title
-	b.WriteString(Styles.OverlayTitle.Render(fmt.Sprintf("#%d  %s", issue.Number, issue.Title)))
-	b.WriteString("\n\n")
-
-	// Metadata row
-	meta := []string{
-		Styles.DetailDim.Render("Author: ") + "@" + issue.Author,
-	}
-	if len(issue.Labels) > 0 {
-		labelStrs := make([]string, len(issue.Labels))
-		for i, l := range issue.Labels {
-			labelStrs[i] = Styles.WarningText.Render(l)
-		}
-		meta = append(meta, Styles.DetailDim.Render("Labels: ")+strings.Join(labelStrs, ", "))
-	}
-	if !issue.CreatedAt.IsZero() {
-		meta = append(meta, Styles.DetailDim.Render("Opened: ")+formatIssueAge(issue.CreatedAt))
-	}
-	b.WriteString(strings.Join(meta, "  ·  "))
-	b.WriteString("\n")
-	b.WriteString(Styles.DetailDim.Render(strings.Repeat("─", contentWidth)))
-	b.WriteString("\n\n")
-
-	// Body
-	if issue.Body == "" {
-		b.WriteString(Styles.DetailDim.Render("No description provided."))
-	} else {
-		rendered := renderMarkdown(issue.Body, contentWidth)
-		b.WriteString(rendered)
+	if end < len(issues) {
+		b.WriteString(Styles.DetailDim.Render(fmt.Sprintf("\n  … and %d more", len(issues)-end)) + "\n")
 	}
 
-	b.WriteString("\n\n")
-	b.WriteString(Styles.Footer.Render("[enter] Create worktree  [tab] Back  [esc] Close"))
-
-	return Styles.OverlayBorderInfo.Render(b.String())
+	return b.String()
 }
 
 func filteredIssues(issues []*tracker.Issue, filter string) []*tracker.Issue {
@@ -307,4 +252,152 @@ func formatIssueAge(t time.Time) string {
 	default:
 		return fmt.Sprintf("%dw ago", int(d.Hours()/(24*7)))
 	}
+}
+
+// renderIssuePanel renders the issue view as a full-screen panel layout
+// with a list on one side and a detail preview on the other.
+func (m Model) renderIssuePanel() string {
+	s := m.issueState
+	if s == nil {
+		return ""
+	}
+
+	filter := s.FilterInput.Value()
+	filtered := filteredIssues(s.Issues, filter)
+
+	separatorName := ""
+	if len(filtered) > 0 && s.Cursor < len(filtered) {
+		issue := filtered[s.Cursor]
+		separatorName = fmt.Sprintf("#%d %s", issue.Number, truncate(issue.Title, m.width-22))
+	}
+
+	panel := m.renderContextPanel(contextPanelConfig{
+		contextLabel: "Issues",
+		footer:       m.renderIssueFooter(),
+		renderList: func(width int, spinnerView string, maxHeight int) string {
+			return renderIssueList(s, width, spinnerView, maxHeight)
+		},
+		renderDetail: func(width, height int) string {
+			if s.Loading {
+				return ""
+			}
+			if s.Creating {
+				return renderCreatingDetail(s.ActivityLog, m.spinner.View(), "Creating worktree from issue...")
+			}
+			if len(filtered) > 0 && s.Cursor < len(filtered) {
+				return m.renderIssueDetailViewport(filtered[s.Cursor], width, height)
+			}
+			return Styles.DetailDim.Render("No issue selected")
+		},
+		separatorName: separatorName,
+	})
+
+	if s.ExistsPrompt != nil {
+		return centerOverlay(panel, renderExistingWorktreePrompt(s.ExistsPrompt, m.width), m.width, m.height)
+	}
+	return panel
+}
+
+// renderIssueList renders the issue list content for the panel layout.
+func renderIssueList(s *IssueViewState, width int, spinnerView string, maxHeight int) string {
+	var b strings.Builder
+
+	if s.Loading {
+		b.WriteString(spinnerView + " Loading issues...")
+		return b.String()
+	}
+
+	if s.Error != "" {
+		b.WriteString(Styles.ErrorText.Render(s.Error) + "\n")
+	}
+
+	filter := s.FilterInput.Value()
+	filtered := filteredIssues(s.Issues, filter)
+	total := len(s.Issues)
+
+	// Filter/count bar
+	renderFilterBar(&b, s.FilterInput.View(), s.Filtering, filter, len(filtered), total)
+
+	displaySlots, contentWidth := calcDisplaySlots(strings.Count(b.String(), "\n"), maxHeight, width)
+	b.WriteString(renderIssueItemList(filtered, s.Cursor, displaySlots, contentWidth))
+
+	return b.String()
+}
+
+// renderIssueDetailContent renders the inner content of an issue detail panel.
+// Used for viewport content.
+func renderIssueDetailContent(issue *tracker.Issue, width int) string {
+	innerWidth := max(width-6, 16)
+
+	var sections []string
+
+	// Title
+	sections = append(sections, Styles.DetailTitle.Render(truncate(issue.Title, innerWidth)))
+
+	// Metadata grid
+	const labelWidth = 10
+	label := func(s string) string {
+		return Styles.DetailLabel.Render(padRight(s, labelWidth))
+	}
+
+	var metaRows []string
+	metaRows = append(metaRows, renderSectionHeader("Issue Info", innerWidth))
+	metaRows = append(metaRows, label("Author")+Styles.DetailValue.Render("@"+issue.Author))
+
+	if len(issue.Labels) > 0 {
+		labelStrs := make([]string, len(issue.Labels))
+		for i, l := range issue.Labels {
+			labelStrs[i] = Styles.WarningText.Render(l)
+		}
+		metaRows = append(metaRows, label("Labels")+strings.Join(labelStrs, ", "))
+	}
+	if !issue.CreatedAt.IsZero() {
+		metaRows = append(metaRows, label("Opened")+Styles.DetailValue.Render(formatIssueAge(issue.CreatedAt)))
+	}
+	sections = append(sections, strings.Join(metaRows, "\n"))
+
+	// Body
+	if issue.Body != "" {
+		bodyHeader := renderSectionHeader("Description", innerWidth)
+		rendered := renderMarkdown(issue.Body, innerWidth)
+		sections = append(sections, bodyHeader+"\n"+rendered)
+	}
+
+	return strings.Join(sections, "\n\n")
+}
+
+// renderIssueDetailViewport renders the issue detail using the viewport for scrolling.
+func (m Model) renderIssueDetailViewport(issue *tracker.Issue, width, height int) string {
+	s := m.issueState
+	return renderDetailViewportCard(detailViewportConfig{
+		vp:         &s.DetailViewport,
+		cursor:     s.Cursor,
+		lastCursor: &s.lastCursor,
+		focused:    s.DetailFocused,
+		itemNumber: issue.Number,
+		contentFunc: func(w int) string {
+			return renderIssueDetailContent(issue, w)
+		},
+		width:  width,
+		height: height,
+	})
+}
+
+// openSelectedIssueURL opens the URL of the currently selected issue in the browser.
+func (m *Model) openSelectedIssueURL(filtered []*tracker.Issue) {
+	s := m.issueState
+	if s != nil && len(filtered) > 0 && s.Cursor < len(filtered) {
+		if url := filtered[s.Cursor].URL; url != "" {
+			openURL(url)
+		}
+	}
+}
+
+// renderIssueFooter returns context-aware footer hints for the issue view.
+func (m Model) renderIssueFooter() string {
+	s := m.issueState
+	if s != nil && s.DetailFocused {
+		return m.helpFooter.RenderCompactWithHints(detailFocusedHints(), m.width-4)
+	}
+	return m.helpFooter.RenderCompact(ViewIssues, m.width-4)
 }

@@ -31,8 +31,10 @@ func init() {
 }
 
 var openCmd = &cobra.Command{
-	Use:   "open <name>",
-	Short: "Open a worktree session (create if needed)",
+	Use:               "open [name]",
+	Aliases:           []string{"o"},
+	Short:             "Open a worktree session (create if needed)",
+	ValidArgsFunction: completeWorktreeNames,
 	Long: `Open a worktree by creating it if needed, ensuring a tmux session exists,
 launching the configured session command, and attaching.
 
@@ -51,11 +53,21 @@ Examples:
   grove open feature-x              # Create if needed + attach + launch command
   grove open feature-x --no-create  # Attach only, error if doesn't exist
   grove open feature-x --command sh # Override the session command`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.MaximumNArgs(1),
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
-		name := args[0]
 		w := cli.NewStdout()
 		stderr := cli.NewStderr()
+
+		var name string
+		if len(args) == 0 {
+			selected, err := selectWorktree(ctx, "Open which worktree?")
+			if err != nil {
+				return err
+			}
+			name = selected
+		} else {
+			name = args[0]
+		}
 
 		if name == "" {
 			return fmt.Errorf("worktree name cannot be empty")

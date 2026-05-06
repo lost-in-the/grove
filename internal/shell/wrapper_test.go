@@ -261,6 +261,93 @@ func TestWrapper_BareInvocation_NoCd_WhenEmpty(t *testing.T) {
 	}
 }
 
+func TestWrapper_RecursionGuard_BinaryNotFound(t *testing.T) {
+	if _, err := exec.LookPath("zsh"); err != nil {
+		t.Skip("zsh not available")
+	}
+
+	// Simulate the failure mode: __GROVE_BIN set to bare "grove" (what
+	// happens when command -v grove fails and falls back to echo grove).
+	// Without the guard, the grove() function calls itself infinitely.
+	funcEnd := strings.Index(zshTemplate, "\n# Tab completion")
+	wrapperFunc := zshTemplate
+	if funcEnd > 0 {
+		wrapperFunc = zshTemplate[:funcEnd]
+	}
+
+	script := `__GROVE_BIN="grove"
+` + wrapperFunc + `
+grove version 2>/tmp/grove-recursion-test-stderr
+echo "exit:$?"
+`
+	cmd := exec.Command("zsh", "-c", script)
+	var stdout strings.Builder
+	cmd.Stdout = &stdout
+
+	_ = cmd.Run()
+
+	stderrBytes, _ := os.ReadFile("/tmp/grove-recursion-test-stderr")
+	stderr := string(stderrBytes)
+	_ = os.Remove("/tmp/grove-recursion-test-stderr")
+
+	t.Logf("stdout: %q", stdout.String())
+	t.Logf("stderr: %q", stderr)
+
+	// Must NOT get the recursion error
+	if strings.Contains(stderr, "job table full") || strings.Contains(stderr, "recursion") {
+		t.Errorf("recursion guard failed — got infinite recursion error")
+	}
+
+	// Should get the clean error message from the guard
+	if !strings.Contains(stderr, "binary not found") {
+		t.Errorf("expected 'binary not found' warning from recursion guard, got stderr: %q", stderr)
+	}
+
+	// Exit code should be 127 (command not found convention)
+	if !strings.Contains(stdout.String(), "exit:127") {
+		t.Errorf("expected exit code 127 from recursion guard, got stdout: %q", stdout.String())
+	}
+}
+
+func TestWrapper_RecursionGuard_EmptyBin(t *testing.T) {
+	if _, err := exec.LookPath("zsh"); err != nil {
+		t.Skip("zsh not available")
+	}
+
+	// Empty __GROVE_BIN should also be caught
+	funcEnd := strings.Index(zshTemplate, "\n# Tab completion")
+	wrapperFunc := zshTemplate
+	if funcEnd > 0 {
+		wrapperFunc = zshTemplate[:funcEnd]
+	}
+
+	script := `__GROVE_BIN=""
+` + wrapperFunc + `
+grove version 2>/tmp/grove-empty-bin-stderr
+echo "exit:$?"
+`
+	cmd := exec.Command("zsh", "-c", script)
+	var stdout strings.Builder
+	cmd.Stdout = &stdout
+
+	_ = cmd.Run()
+
+	stderrBytes, _ := os.ReadFile("/tmp/grove-empty-bin-stderr")
+	stderr := string(stderrBytes)
+	_ = os.Remove("/tmp/grove-empty-bin-stderr")
+
+	t.Logf("stdout: %q", stdout.String())
+	t.Logf("stderr: %q", stderr)
+
+	if strings.Contains(stderr, "job table full") || strings.Contains(stderr, "recursion") {
+		t.Errorf("recursion guard failed for empty __GROVE_BIN")
+	}
+
+	if !strings.Contains(stderr, "binary not found") {
+		t.Errorf("expected 'binary not found' warning, got stderr: %q", stderr)
+	}
+}
+
 func TestWrapper_FailCommand_PropagatesExitCode(t *testing.T) {
 	binPath := buildFakeGrove(t)
 

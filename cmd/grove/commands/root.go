@@ -14,6 +14,7 @@ import (
 	"github.com/lost-in-the/grove/internal/state"
 	"github.com/lost-in-the/grove/internal/tui"
 	"github.com/lost-in-the/grove/internal/worktree"
+	"github.com/lost-in-the/grove/plugins/docker"
 )
 
 var rootCmd = &cobra.Command{
@@ -75,8 +76,19 @@ Use 'grove install --help' for details.`,
 		}
 		pluginMgr := registerPlugins(cfg)
 
-		_, err = tui.Run(mgr, stateMgr, projectRoot, pluginMgr)
-		return err
+		switchPath, forceUp, err := tui.Run(mgr, stateMgr, projectRoot, pluginMgr)
+		if err != nil {
+			return err
+		}
+
+		if forceUp && switchPath != "" {
+			dockerPlugin := docker.New()
+			if initErr := dockerPlugin.Init(cfg); initErr == nil {
+				_ = dockerPlugin.Up(switchPath, true)
+			}
+		}
+
+		return nil
 	},
 }
 

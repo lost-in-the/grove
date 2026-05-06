@@ -17,9 +17,10 @@ import (
 var lastJSON bool
 
 var lastCmd = &cobra.Command{
-	Use:   "last",
-	Short: "Switch to the previous worktree",
-	Long:  `Switch to the last worktree you were working in.`,
+	Use:     "last",
+	Aliases: []string{"la"},
+	Short:   "Switch to the previous worktree",
+	Long:    `Switch to the last worktree you were working in.`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		stderr := cli.NewStderr()
 

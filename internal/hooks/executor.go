@@ -30,6 +30,18 @@ type ExecutionContext struct {
 
 	// Optional extras
 	Port int // Allocated port (if any)
+
+	// Output is where handlers should print status messages. nil means stdout.
+	Output io.Writer
+}
+
+// Out returns the context's output writer, falling back to stdout. Exported
+// so plugin handlers can use the same fallback rule as built-ins.
+func (c *ExecutionContext) Out() io.Writer {
+	if c == nil || c.Output == nil {
+		return os.Stdout
+	}
+	return c.Output
 }
 
 // Executor runs user-configured hooks for lifecycle events
@@ -84,6 +96,9 @@ func (e *Executor) Execute(event string, ctx *ExecutionContext) error {
 		}
 	}
 
+	if ctx.Output == nil {
+		ctx.Output = e.Output
+	}
 	vars := e.buildVariables(ctx)
 	var firstRequiredErr error
 
@@ -117,20 +132,29 @@ func (e *Executor) HasHooksForEvent(event string) bool {
 	return e.config.HasActionsForEvent(event)
 }
 
-// executeAction runs a single hook action
+// executeAction runs a single hook action by looking up its handler in the
+// global registry. Built-in handlers (copy/symlink/command/template) are
+// registered at package init; plugins register their own types during Init().
 func (e *Executor) executeAction(action *HookAction, ctx *ExecutionContext, vars *Variables) error {
-	switch action.Type {
-	case "copy":
-		return e.executeCopy(action, ctx, vars)
-	case "symlink":
-		return e.executeSymlink(action, ctx, vars)
-	case "command":
-		return e.executeCommand(action, ctx, vars)
-	case "template":
-		return e.executeTemplate(action, ctx, vars)
-	default:
-		return fmt.Errorf("unknown hook action type: %s", action.Type)
+	if h, ok := LookupActionHandler(action.Type); ok {
+		return h(action, ctx, vars)
 	}
+	// Distinguish "type belongs to a known plugin that's disabled" from "typo".
+	if hint, ok := disabledTypeHint(action.Type); ok {
+		return fmt.Errorf("unknown hook action type %q (%s)", action.Type, hint)
+	}
+	return fmt.Errorf("unknown hook action type: %s", action.Type)
+}
+
+// disabledTypeHint returns a hint when a known-but-not-registered type is
+// referenced. Plugins claim names via RegisterActionHandler at startup; if
+// nothing's registered, the plugin is likely disabled or unavailable.
+func disabledTypeHint(typeName string) (string, bool) {
+	switch typeName {
+	case "docker:compose", "docker:exec":
+		return "docker plugin disabled or unavailable", true
+	}
+	return "", false
 }
 
 // buildVariables creates the variable context for interpolation
@@ -199,16 +223,20 @@ func (v *Variables) Interpolate(s string) string {
 	return result
 }
 
-// executeCopy performs a copy action
-func (e *Executor) executeCopy(action *HookAction, ctx *ExecutionContext, vars *Variables) error {
+// builtinCopy performs a copy action
+func builtinCopy(action *HookAction, ctx *ExecutionContext, vars *Variables) error {
 	from := vars.Interpolate(action.From)
 	to := vars.Interpolate(action.To)
 
-	// Resolve paths
-	srcPath := resolvePath(from, ctx.MainPath)
-	dstPath := resolvePath(to, ctx.NewPath)
+	srcPath, err := resolvePathSafe(from, ctx.MainPath)
+	if err != nil {
+		return fmt.Errorf("copy source path: %w", err)
+	}
+	dstPath, err := resolvePathSafe(to, ctx.NewPath)
+	if err != nil {
+		return fmt.Errorf("copy destination path: %w", err)
+	}
 
-	// Check if source exists
 	srcInfo, err := os.Stat(srcPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -217,7 +245,6 @@ func (e *Executor) executeCopy(action *HookAction, ctx *ExecutionContext, vars *
 		return fmt.Errorf("copy: cannot access source %s: %w", srcPath, err)
 	}
 
-	// Perform copy
 	if srcInfo.IsDir() {
 		if err := copyDir(srcPath, dstPath); err != nil {
 			return fmt.Errorf("copy directory %s to %s: %w", from, to, err)
@@ -228,20 +255,24 @@ func (e *Executor) executeCopy(action *HookAction, ctx *ExecutionContext, vars *
 		}
 	}
 
-	e.printf("✓ Copied %s\n", to)
+	_, _ = fmt.Fprintf(ctx.Out(), "✓ Copied %s\n", to)
 	return nil
 }
 
-// executeSymlink performs a symlink action
-func (e *Executor) executeSymlink(action *HookAction, ctx *ExecutionContext, vars *Variables) error {
+// builtinSymlink performs a symlink action
+func builtinSymlink(action *HookAction, ctx *ExecutionContext, vars *Variables) error {
 	from := vars.Interpolate(action.From)
 	to := vars.Interpolate(action.To)
 
-	// Resolve paths
-	srcPath := resolvePath(from, ctx.MainPath)
-	linkPath := resolvePath(to, ctx.NewPath)
+	srcPath, err := resolvePathSafe(from, ctx.MainPath)
+	if err != nil {
+		return fmt.Errorf("symlink source path: %w", err)
+	}
+	linkPath, err := resolvePathSafe(to, ctx.NewPath)
+	if err != nil {
+		return fmt.Errorf("symlink destination path: %w", err)
+	}
 
-	// Check if source exists (Lstat avoids following symlink chains)
 	if _, err := os.Lstat(srcPath); err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("symlink source does not exist: %s", srcPath)
@@ -249,27 +280,24 @@ func (e *Executor) executeSymlink(action *HookAction, ctx *ExecutionContext, var
 		return fmt.Errorf("symlink: cannot access source %s: %w", srcPath, err)
 	}
 
-	// Remove existing file/link at destination if exists
 	if _, err := os.Lstat(linkPath); err == nil {
 		if err := os.Remove(linkPath); err != nil {
 			return fmt.Errorf("symlink: cannot remove existing %s: %w", linkPath, err)
 		}
 	}
 
-	// Create symlink
 	if err := os.Symlink(srcPath, linkPath); err != nil {
 		return fmt.Errorf("symlink %s -> %s: %w", to, from, err)
 	}
 
-	e.printf("✓ Symlinked %s\n", to)
+	_, _ = fmt.Fprintf(ctx.Out(), "✓ Symlinked %s\n", to)
 	return nil
 }
 
-// executeCommand performs a command action
-func (e *Executor) executeCommand(action *HookAction, ctx *ExecutionContext, vars *Variables) error {
+// builtinCommand performs a command action
+func builtinCommand(action *HookAction, ctx *ExecutionContext, vars *Variables) error {
 	command := vars.Interpolate(action.Command)
 
-	// Determine working directory
 	var workDir string
 	switch action.WorkingDir {
 	case "main":
@@ -280,33 +308,33 @@ func (e *Executor) executeCommand(action *HookAction, ctx *ExecutionContext, var
 		workDir = vars.Interpolate(action.WorkingDir)
 	}
 
-	// Execute command with timeout
 	timeout := time.Duration(action.Timeout) * time.Second
 	start := time.Now()
 
-	w := e.Output
-	if w == nil {
-		w = os.Stdout
-	}
+	w := ctx.Out()
 	if err := runCommand(command, workDir, timeout, w, w); err != nil {
 		return fmt.Errorf("command '%s': %w", command, err)
 	}
 
 	elapsed := time.Since(start)
-	e.printf("✓ Ran: %s (%.1fs)\n", command, elapsed.Seconds())
+	_, _ = fmt.Fprintf(w, "✓ Ran: %s (%.1fs)\n", command, elapsed.Seconds())
 	return nil
 }
 
-// executeTemplate performs a template action
-func (e *Executor) executeTemplate(action *HookAction, ctx *ExecutionContext, vars *Variables) error {
+// builtinTemplate performs a template action
+func builtinTemplate(action *HookAction, ctx *ExecutionContext, vars *Variables) error {
 	from := vars.Interpolate(action.From)
 	to := vars.Interpolate(action.To)
 
-	// Resolve paths
-	srcPath := resolvePath(from, ctx.MainPath)
-	dstPath := resolvePath(to, ctx.NewPath)
+	srcPath, err := resolvePathSafe(from, ctx.MainPath)
+	if err != nil {
+		return fmt.Errorf("template source path: %w", err)
+	}
+	dstPath, err := resolvePathSafe(to, ctx.NewPath)
+	if err != nil {
+		return fmt.Errorf("template destination path: %w", err)
+	}
 
-	// Read template file
 	content, err := os.ReadFile(srcPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -315,31 +343,33 @@ func (e *Executor) executeTemplate(action *HookAction, ctx *ExecutionContext, va
 		return fmt.Errorf("template: cannot read %s: %w", srcPath, err)
 	}
 
-	// Create extended variables with action-specific vars
 	extVars := *vars
 	result := string(content)
 
-	// Apply action-specific vars first
 	for k, v := range action.Vars {
 		pattern := "{{." + k + "}}"
 		result = strings.ReplaceAll(result, pattern, vars.Interpolate(v))
 	}
 
-	// Apply standard variables
 	result = extVars.Interpolate(result)
 
-	// Ensure destination directory exists
 	if dir := filepath.Dir(dstPath); dir != "" {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return fmt.Errorf("template: cannot create directory: %w", err)
 		}
 	}
 
-	// Write output file
 	if err := os.WriteFile(dstPath, []byte(result), 0644); err != nil {
 		return fmt.Errorf("template: cannot write %s: %w", dstPath, err)
 	}
 
-	e.printf("✓ Generated %s from template\n", to)
+	_, _ = fmt.Fprintf(ctx.Out(), "✓ Generated %s from template\n", to)
 	return nil
+}
+
+func init() {
+	RegisterActionHandler("copy", builtinCopy)
+	RegisterActionHandler("symlink", builtinSymlink)
+	RegisterActionHandler("command", builtinCommand)
+	RegisterActionHandler("template", builtinTemplate)
 }

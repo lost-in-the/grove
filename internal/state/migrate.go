@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // LegacyState represents the V0/V1 state schema (frozen.json)
@@ -56,21 +57,49 @@ func MigrateFromLegacy(groveDir string, legacyPath string) (bool, error) {
 
 // migrateStateVersion handles in-place migration of state.json between versions
 // This is called when loading state to ensure it's up to date.
+//
+// Returns an error if state.Version is newer than CurrentVersion — that
+// signals the user has downgraded grove after upgrading, and silently
+// parsing a future-version file as the current schema risks data loss.
 func migrateStateVersion(state *State) error {
-	if state.Version == CurrentVersion {
-		return nil // Already current
+	if state.Version > CurrentVersion {
+		return fmt.Errorf("state.json version %d is newer than supported version %d; "+
+			"upgrade grove or restore state from .grove/state.json.bak",
+			state.Version, CurrentVersion)
 	}
 
-	// Future version migrations would go here
-	// For now, we only have version 1
-	if state.Version == 0 {
-		// V0 -> V1: Just set version, structure is compatible
-		state.Version = CurrentVersion
+	if state.Version != CurrentVersion {
+		// Future version migrations would go here.
+		// For now, we only have version 1.
+		if state.Version == 0 {
+			// V0 -> V1: Just set version, structure is compatible
+			state.Version = CurrentVersion
+		}
 	}
 
 	// Ensure maps are initialized
 	if state.Worktrees == nil {
 		state.Worktrees = make(map[string]*WorktreeState)
+	}
+
+	// Backfill zero-valued timestamps from earlier versions of grove that
+	// initialized worktree state without stamping CreatedAt/LastAccessedAt
+	// (e.g. v0.6.1 and earlier created the main worktree's state without
+	// either field). Without this, state.json keeps "0001-01-01T00:00:00Z"
+	// values until the next operation touches the worktree, and `grove trim`
+	// has to rely on its filesystem-fallback path. Stamping time.Now() here
+	// gives upgraders a clean trim clock from the moment of the load.
+	now := time.Now()
+	for _, ws := range state.Worktrees {
+		if ws == nil {
+			continue
+		}
+		if ws.CreatedAt.IsZero() {
+			ws.CreatedAt = now
+		}
+		if ws.LastAccessedAt.IsZero() {
+			ws.LastAccessedAt = now
+		}
 	}
 
 	return nil

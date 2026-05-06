@@ -165,14 +165,14 @@ func TestStressOverlayCycling(t *testing.T) {
 			for i := range tt.cycles {
 				// Open help
 				m = sendKey(m, tt.key)
-				if !m.helpFooter.Expanded {
-					t.Fatalf("cycle %d: expected helpFooter.Expanded=true after open", i)
+				if !m.helpOverlay.Active {
+					t.Fatalf("cycle %d: expected helpOverlay.Active=true after open", i)
 				}
 
 				// Close help
 				m = sendKey(m, tt.key)
-				if m.helpFooter.Expanded {
-					t.Fatalf("cycle %d: expected helpFooter.Expanded=false after close", i)
+				if m.helpOverlay.Active {
+					t.Fatalf("cycle %d: expected helpOverlay.Active=false after close", i)
 				}
 			}
 
@@ -722,12 +722,12 @@ func TestStressMixedOverlaySequence(t *testing.T) {
 	}
 
 	m = sendKey(m, "?")
-	if !m.helpFooter.Expanded {
-		t.Fatal("expected help expanded")
+	if !m.helpOverlay.Active {
+		t.Fatal("expected help overlay active")
 	}
 	m = sendKey(m, "?")
-	if m.helpFooter.Expanded {
-		t.Fatal("expected help collapsed")
+	if m.helpOverlay.Active {
+		t.Fatal("expected help overlay closed")
 	}
 
 	m = sendKey(m, "j")

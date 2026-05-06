@@ -278,7 +278,7 @@ func (m *Manager) load() error {
 
 	// Migrate state if needed
 	if err := migrateStateVersion(&state); err != nil {
-		return fmt.Errorf("failed to migrate state: %w", err)
+		return err
 	}
 
 	m.state = &state

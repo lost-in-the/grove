@@ -352,6 +352,44 @@ Golden files can also serve this role without requiring tmux:
 
 ---
 
+## Integration Tests (teatest)
+
+### Overview
+
+The `internal/tui/` package includes integration tests (build tag `//go:build integration`) that drive the full Bubbletea program using [`teatest/v2`](https://pkg.go.dev/github.com/charmbracelet/x/exp/teatest/v2). These test real key sequences against a live git fixture, unlike golden tests which render static model snapshots.
+
+Import path: `github.com/charmbracelet/x/exp/teatest/v2`
+
+### Key v2 API shapes
+
+```go
+// Create a running TestModel from a bubbletea Model
+tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(120, 40))
+
+// Wait for output to match a predicate (polls tm.Output())
+teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+    return strings.Contains(string(bts), "expected text")
+}, teatest.WithDuration(5*time.Second))
+
+// Send a key press
+tm.Send(tea.KeyPressMsg{Code: 'q', Text: "q"})
+
+// Wait for the program to exit cleanly
+tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
+```
+
+Note: `teatest/v2` uses `NewTestModel` (not `RunModel`) and `WaitFor` (not `FinalModel`). The v1 API shapes (`teatest.FinalModel`, `teatest.RunTest`) are not present in v2.
+
+### Running integration tests
+
+```bash
+go test ./internal/tui/ -tags integration -run TestProgram_
+```
+
+Integration tests require a real git repository on disk. The `setupRailsFixture` and `setupRailsFixtureWithWorktrees` helpers (in `internal/tui/`) create temporary fixtures automatically.
+
+---
+
 ## VHS Tapes
 
 ### When to use

@@ -188,11 +188,23 @@ grove doctor
 ```bash
 cd ~/projects/myapp
 grove init
-# Creates .grove/config.toml with defaults
+# Auto-detects project type (Rails, Node, Go, Python, Docker), generates
+# .grove/config.toml + .grove/hooks.toml with sensible defaults.
 
 grove doctor
-# Checks git version, tmux, gh CLI, Docker, shell integration, config
+# Checks git version, tmux, gh CLI, Docker, shell integration, config.
 ```
+
+**For scripted / CI / agent use** — pick a mode explicitly so init never blocks on a prompt:
+
+```bash
+grove init --auto --yes      # Generate hooks.toml from detection, skip preview
+grove init --no-hooks         # Initialize state only, no hooks.toml
+```
+
+`--auto` is also the default in non-TTY contexts, but passing it explicitly makes scripts robust against future default changes. `--walkthrough` exists for interactive review of detected hooks but isn't appropriate for headless agents.
+
+**Docker-aware routing.** When `grove init` detects a `docker-compose.yml` alongside a Rails/Node/Python marker, it auto-generates install commands as `docker:compose` hooks rather than host commands — so `bundle install` / `npm install` / `pip install` run inside the container on the next `grove new`. `grove doctor --fix` will rewrite stale host-install commands to `docker:compose` form for projects initialized before this routing existed. See [plugins/docker/README.md](../plugins/docker/README.md#config-driven-action-types) for the action-type reference.
 
 ---
 
@@ -320,15 +332,15 @@ Hooks fired: `post_create`
 
 ### Share Changes Between Worktrees
 
-**Compare:**
+**Diff:**
 ```bash
-grove compare <name>
+grove diff <name>
 # Shows diff between current worktree and <name>
 ```
 
-**Apply commits or WIP from another worktree:**
+**Graft commits or WIP from another worktree:**
 ```bash
-grove apply <name>
+grove graft <name>
 # Cherry-picks commits from <name> onto current branch,
 # or applies stashed WIP if no commits differ
 ```
@@ -369,9 +381,11 @@ Protected worktrees (`main`, `develop`, or any name in `[protection] protected`)
 
 **Remove stale worktrees in bulk:**
 ```bash
-grove clean           # removes worktrees not accessed in 30 days
-grove clean --days 7  # shorter threshold
+grove trim           # removes worktrees not accessed in 30 days
+grove trim --days 7  # shorter threshold
 ```
+
+The `clean` alias also works (`grove clean --days 7`), but `trim` is the canonical name.
 
 Stale = `LastAccessedAt` older than threshold and no dirty changes. Protected worktrees are skipped.
 
@@ -733,6 +747,20 @@ export GROVE_NONINTERACTIVE=1    # auto-accept all prompts
 ```
 
 `GROVE_AGENT_MODE=1` is the lowest-friction option — it suppresses tmux attachment in `grove to` and activates isolated Docker without requiring config changes. Note that `grove new` still creates tmux sessions; set `[tmux] mode = "off"` in config to fully disable tmux.
+
+### Security
+
+Grove runs `command` hooks via `sh -c` with the full parent-process environment forwarded. There is no sandboxing — hook commands can read environment variables, write files, make network requests, and spawn subprocesses.
+
+**For agents running grove autonomously on unfamiliar repositories:**
+
+- **Treat `hooks.toml` as untrusted input until reviewed.** A malicious or misconfigured hooks file can exfiltrate secrets, modify files outside the worktree, or run arbitrary code — the same risk as running `make` or `npm install` in an unknown repo.
+- **Run `grove doctor` before `grove new` on unknown repos.** `grove doctor` validates config and hooks file syntax; reviewing its output gives you a chance to inspect what hooks will fire before any worktree is created.
+- **Inspect `.grove/hooks.toml` before the first `grove new` or `grove to`.** Pay particular attention to `type = "command"` hooks, which are the most open-ended.
+- **Environment variables are visible to hooks.** If your agent session has credentials or API tokens in the environment, `command` hooks can read them. Scope credentials to the minimum needed for the task.
+- **`copy` and `symlink` hooks are lower risk** but can still expose sensitive files from the main worktree. Verify paths in `copy_files`, `symlink_files`, and `symlink_dirs` if security matters.
+
+For the general (non-agent) trust model, see [Trust model in README.md](../README.md#hooks-trust-model).
 
 ---
 
