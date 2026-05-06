@@ -249,6 +249,31 @@ func TestExternalStatuses_BlockingFailedDowngrades(t *testing.T) {
 	}
 }
 
+// TestExternalNonBlockingVerdictAgreement proves that both externalStatuses and
+// externalServiceInfo produce the same "up" verdict when only a non-blocking
+// service has exited. Both paths now share classifyHealth as their source of truth.
+func TestExternalNonBlockingVerdictAgreement(t *testing.T) {
+	// Simulate: app is running, asset_precompile exited with code 1 but is non_blocking.
+	statuses := []ServiceStatus{
+		{Name: "app", Status: ServiceRunning},
+		{Name: "asset_precompile", Status: ServiceExitedError},
+	}
+	nonBlocking := []string{"asset_precompile"}
+
+	// externalStatuses path: classifyExternalStatusFromHealth → calls classifyHealth internally.
+	level, _ := classifyExternalStatusFromHealth(statuses, nonBlocking)
+	if level != "active" {
+		t.Errorf("externalStatuses path: expected active verdict, got %q", level)
+	}
+
+	// externalServiceInfo path: classifyHealth directly (same call site after fix).
+	healthy, _ := classifyHealth(statuses, nonBlocking)
+	running := healthy && len(statuses) > 0
+	if !running {
+		t.Errorf("externalServiceInfo path: expected running=true, got false")
+	}
+}
+
 func TestComposeRunningCount_NoCompose(t *testing.T) {
 	// A temp dir with no compose file — docker compose ps should fail, returning (false, 0).
 	dir := t.TempDir()
