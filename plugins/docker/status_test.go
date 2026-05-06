@@ -34,18 +34,39 @@ EMPTY_VAR=
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := readEnvVar(dir, tt.key)
+			// empty envFileName should default to ".env"
+			got := readEnvVar(dir, "", tt.key)
 			if got != tt.want {
-				t.Errorf("readEnvVar(%q, %q) = %q, want %q", dir, tt.key, got, tt.want)
+				t.Errorf("readEnvVar(%q, %q, %q) = %q, want %q", dir, "", tt.key, got, tt.want)
 			}
 		})
 	}
 }
 
 func TestReadEnvVar_NoFile(t *testing.T) {
-	got := readEnvVar(t.TempDir(), "KEY")
+	got := readEnvVar(t.TempDir(), "", "KEY")
 	if got != "" {
 		t.Errorf("expected empty string for missing .env, got %q", got)
+	}
+}
+
+func TestReadEnvVar_NonDefaultEnvFile(t *testing.T) {
+	dir := t.TempDir()
+	envContent := "APP_DIR=/custom/path\n"
+	if err := os.WriteFile(filepath.Join(dir, ".env.local"), []byte(envContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Should find value in non-default env file
+	got := readEnvVar(dir, ".env.local", "APP_DIR")
+	if got != "/custom/path" {
+		t.Errorf("readEnvVar with .env.local: got %q, want %q", got, "/custom/path")
+	}
+
+	// Should return empty when looking in default .env (which doesn't exist)
+	got = readEnvVar(dir, "", "APP_DIR")
+	if got != "" {
+		t.Errorf("readEnvVar with default .env (absent): got %q, want empty", got)
 	}
 }
 
@@ -59,7 +80,7 @@ func TestWorktreeStatuses_NilStrategy(t *testing.T) {
 
 func TestLocalStatuses_NoComposeFile(t *testing.T) {
 	dir := t.TempDir()
-	result := localStatuses(&localStrategy{}, []string{dir})
+	result := localStatuses(&localStrategy{cfg: &config.Config{}}, []string{dir})
 	if len(result) != 0 {
 		t.Errorf("expected empty result for dir without compose file, got %v", result)
 	}
@@ -71,7 +92,7 @@ func TestLocalStatuses_WithComposeFile(t *testing.T) {
 		t.Fatalf("failed to create compose file: %v", err)
 	}
 
-	result := localStatuses(&localStrategy{}, []string{dir})
+	result := localStatuses(&localStrategy{cfg: &config.Config{}}, []string{dir})
 	entry, ok := result[dir]
 	if !ok {
 		t.Fatalf("expected entry for dir with compose file, got %v", result)
@@ -128,9 +149,9 @@ func TestExternalStatuses_MatchingPath(t *testing.T) {
 	if entry.ProviderName != "docker" {
 		t.Errorf("expected ProviderName 'docker', got %q", entry.ProviderName)
 	}
-	// docker may not be running — expect StatusWarning (pointed but not running) or StatusActive
-	if entry.Level != plugins.StatusWarning && entry.Level != plugins.StatusActive {
-		t.Errorf("expected StatusWarning or StatusActive, got %v", entry.Level)
+	// docker may not be running — expect StatusInfo (no services), StatusWarning, or StatusActive
+	if entry.Level != plugins.StatusInfo && entry.Level != plugins.StatusWarning && entry.Level != plugins.StatusActive {
+		t.Errorf("expected StatusInfo, StatusWarning, or StatusActive, got %v", entry.Level)
 	}
 }
 
@@ -199,6 +220,32 @@ func TestAgentStatuses_URLPattern(t *testing.T) {
 	expectedURL := "http://localhost:8082"
 	if !strings.Contains(entry.Detail, expectedURL) {
 		t.Errorf("expected Detail to contain URL %q, got %q", expectedURL, entry.Detail)
+	}
+}
+
+func TestExternalStatuses_NonBlockingExitedDoesNotDowngrade(t *testing.T) {
+	// Simulate: app running, asset_precompile exited(0), and asset_precompile is non-blocking.
+	// classifyExternalStatusFromHealth should return StatusActive, not StatusWarning.
+	statuses := []ServiceStatus{
+		{Name: "app", Status: ServiceRunning},
+		{Name: "asset_precompile", Status: ServiceExitedClean},
+	}
+	level, _ := classifyExternalStatusFromHealth(statuses, []string{"asset_precompile"})
+	if level != "active" {
+		t.Errorf("expected active, got %s", level)
+	}
+}
+
+func TestExternalStatuses_BlockingFailedDowngrades(t *testing.T) {
+	statuses := []ServiceStatus{
+		{Name: "app", Status: ServiceExitedError},
+	}
+	level, detail := classifyExternalStatusFromHealth(statuses, nil)
+	if level != "warning" {
+		t.Errorf("expected warning, got %s", level)
+	}
+	if !strings.Contains(detail, "app") {
+		t.Errorf("expected detail to name 'app', got %q", detail)
 	}
 }
 

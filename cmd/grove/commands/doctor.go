@@ -157,6 +157,11 @@ Examples:
 				return checkConfigSymlinks(groveDir)
 			}) && allPassed
 
+			// Check: all git worktrees are registered in state.json
+			allPassed = runCheck(w, "Worktree registration", func() (string, error) {
+				return checkWorktreeRegistration(groveDir)
+			}) && allPassed
+
 			// Existing Tier 2 checks (external compose, agent stacks, env files)
 			runExternalModeChecks(w, cfg, filepath.Dir(groveDir), &allPassed)
 
@@ -272,6 +277,44 @@ func checkConfigSymlinks(groveDir string) (string, error) {
 	return fmt.Sprintf("%d worktrees checked", total), nil
 }
 
+// checkWorktreeRegistration reports drifted worktrees: git worktrees on disk
+// that aren't in state.json. Returns a friendly summary string or an error
+// listing the drifted worktrees.
+func checkWorktreeRegistration(groveDir string) (string, error) {
+	projectRoot := filepath.Dir(groveDir)
+
+	out, err := cmdexec.Output(context.TODO(), "git", []string{"-C", projectRoot, "worktree", "list", "--porcelain"}, "", cmdexec.GitLocal)
+	if err != nil {
+		return "", fmt.Errorf("list worktrees: %w", err)
+	}
+
+	statePath := filepath.Join(projectRoot, ".grove", "state.json")
+	stateData, _ := os.ReadFile(statePath)
+
+	var drifted []string
+	var total int
+	for _, line := range strings.Split(string(out), "\n") {
+		path, ok := strings.CutPrefix(line, "worktree ")
+		if !ok {
+			continue
+		}
+		total++
+		// Skip the main worktree
+		if path == projectRoot {
+			continue
+		}
+		// Lightweight check: state.json should contain the worktree path as a value.
+		if !grove.IsWorktreeInState(stateData, path) {
+			drifted = append(drifted, filepath.Base(path))
+		}
+	}
+
+	if len(drifted) > 0 {
+		return "", fmt.Errorf("%d drifted worktree(s): %s — run 'grove adopt' from each", len(drifted), strings.Join(drifted, ", "))
+	}
+	return fmt.Sprintf("%d worktrees registered", total), nil
+}
+
 // runExternalModeChecks runs all Docker external mode checks.
 // Extracted from the old doctor to keep the restructured command readable.
 func runExternalModeChecks(w *cli.Writer, cfg *config.Config, projectRoot string, allPassed *bool) {
@@ -302,6 +345,11 @@ func runExternalModeChecks(w *cli.Writer, cfg *config.Config, projectRoot string
 	efResult := checkEnvFileConfig(envFileName, composePath, exec.LookPath)
 
 	checkEnvFileChecks(w, envFileName, efResult, allPassed)
+
+	if len(ext.NonBlockingServices) > 0 {
+		runInfo(w, "Non-blocking services", strings.Join(ext.NonBlockingServices, ", "))
+	}
+
 	checkAgentStacks(w, cfg, ext, allPassed)
 }
 
@@ -506,10 +554,9 @@ func checkCustomEnvFile(envFileName, composePath string, lookPath func(string) (
 	}
 
 	// Check for config file: .envrc (direnv) or .mise.toml/mise.toml (mise)
-	if found, name := checkEnvrcFile(composePath, envFileName); found {
+	if checkEnvrcFile(composePath, envFileName) {
 		result.configExists = true
 		result.configLoadsFile = true
-		_ = name
 	} else if checkMiseFile(composePath, envFileName) {
 		result.configExists = true
 		result.configLoadsFile = true
@@ -535,15 +582,12 @@ func checkDefaultEnvFile(composePath string) envFileCheckResult {
 }
 
 // checkEnvrcFile checks if .envrc exists and references the env file.
-func checkEnvrcFile(composePath, envFileName string) (found bool, name string) {
+func checkEnvrcFile(composePath, envFileName string) bool {
 	data, err := os.ReadFile(filepath.Join(composePath, ".envrc"))
 	if err != nil {
-		return false, ""
+		return false
 	}
-	if strings.Contains(string(data), envFileName) {
-		return true, ".envrc"
-	}
-	return false, ""
+	return strings.Contains(string(data), envFileName)
 }
 
 // checkMiseFile checks if .mise.toml or mise.toml exists and references the env file.

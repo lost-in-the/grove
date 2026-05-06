@@ -134,7 +134,23 @@ command = "go test ./..."          # string
 # When set, grove runs the command via `docker compose exec <service> <command>`.
 # Requires the docker plugin to be configured.
 service = "app"                    # string
+
+# When false (the default), grove passes `--no-deps` to `docker compose run`
+# so a failing one-shot init service in the shared stack doesn't block tests.
+# Set true if your test command genuinely needs depends_on services started.
+# Override per-invocation via `grove test --with-deps`.
+include_deps = false               # bool
+
+# Container path to bind-mount the worktree at, e.g. "/app". Empty disables.
+# Useful in external-mode setups where parallel `grove test` runs would
+# otherwise race on a shared env-var pointing the stack at one worktree.
+# Override per-invocation via `grove test --bind <path>`.
+bind_mount = ""                    # string
 ```
+
+**Why `include_deps` defaults to `false`:** one-shot init services (asset precompile, DB seed) in a shared external-mode stack would otherwise abort every test run when they fail. Set `include_deps = true` if your test command genuinely requires another service to be running first.
+
+**When to set `bind_mount`:** if you run multiple worktrees in parallel against the same external compose stack, the env-var-based path resolution can race. Pinning a bind-mount makes each `grove test` invocation read code from its own worktree regardless of the shared env var's current value. The path you specify must match the compose service's `WORKDIR` (or the path source code expects to live at).
 
 ---
 
@@ -277,6 +293,14 @@ env_file = ".env"                  # string
 # Docker Compose service names that grove manages (start/stop) for this worktree.
 # Required.
 services = ["web", "worker"]       # string array (required)
+
+# Subset of `services` that may legitimately exit (one-shot init: asset
+# precompile, DB seed) without making the stack appear unhealthy. Failures in
+# these services do not block `grove up` and do not downgrade `grove ps` from
+# "up" to "degraded". Long-running services (web, db, redis) should NOT appear
+# here — listing them masks real failures.
+# Default: [] (every configured service is treated as long-running)
+non_blocking_services = ["asset_precompile", "db_seed"]  # string array
 
 # Files to copy from the main worktree into each new worktree on create.
 # Useful for credential files, local config, etc. that are gitignored.

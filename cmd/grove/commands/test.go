@@ -8,8 +8,27 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/worktree"
 	"github.com/lost-in-the/grove/plugins/docker"
+)
+
+// resolveTestOptions layers --with-deps and --bind flags over [test] config defaults.
+func resolveTestOptions(cfg config.TestConfig, flagWithDeps bool, flagBind string) (includeDeps bool, bindMount string) {
+	includeDeps = cfg.IncludeDepsValue()
+	if flagWithDeps {
+		includeDeps = true
+	}
+	bindMount = cfg.BindMount
+	if flagBind != "" {
+		bindMount = flagBind
+	}
+	return
+}
+
+var (
+	testWithDeps bool
+	testBind     string
 )
 
 var testCmd = &cobra.Command{
@@ -48,6 +67,16 @@ Extra arguments are appended to the configured command:
 		if targetTree == nil {
 			return fmt.Errorf("worktree '%s' not found", name)
 		}
+
+		includeDeps, bindMount := resolveTestOptions(ctx.Config.Test, testWithDeps, testBind)
+
+		// Apply resolved options back to config so the docker plugin's buildRunArgs picks them up.
+		// We mutate a *copy* of the test config to avoid persisting CLI overrides.
+		testCfg := ctx.Config.Test
+		v := includeDeps
+		testCfg.IncludeDeps = &v
+		testCfg.BindMount = bindMount
+		ctx.Config.Test = testCfg
 
 		fullCommand := ctx.Config.Test.Command
 		if len(extraArgs) > 0 {
@@ -89,5 +118,7 @@ Extra arguments are appended to the configured command:
 
 func init() {
 	testCmd.Flags().SetInterspersed(false)
+	testCmd.Flags().BoolVar(&testWithDeps, "with-deps", false, "Run dependency services before the test command (overrides [test] include_deps)")
+	testCmd.Flags().StringVar(&testBind, "bind", "", "Bind-mount the worktree at the given container path (overrides [test] bind_mount)")
 	rootCmd.AddCommand(testCmd)
 }

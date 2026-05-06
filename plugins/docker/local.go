@@ -126,11 +126,16 @@ func (s *localStrategy) Run(worktreePath string, service string, command string)
 		return ErrNoComposeFile
 	}
 
-	cmd := composeCommand(worktreePath, "", nil, "run", "--rm", service, "bash", "-cil", command)
+	args := buildRunArgs(s.cfg, worktreePath, service, command)
+	cmd := composeCommand(worktreePath, "", nil, args...)
 	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
+	stderrBuf := &teeBuffer{w: os.Stderr}
+	cmd.Stderr = stderrBuf
 	cmd.Stdin = os.Stdin
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return translateRunError(stderrBuf.String(), err)
+	}
+	return nil
 }
 
 // Exec runs a command in an already-running container (compose exec).

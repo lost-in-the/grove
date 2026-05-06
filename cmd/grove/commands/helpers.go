@@ -7,14 +7,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/config"
-	"github.com/lost-in-the/grove/internal/grove"
-	"github.com/lost-in-the/grove/internal/hooks"
-	"github.com/lost-in-the/grove/internal/state"
 	"github.com/lost-in-the/grove/internal/worktree"
 	"github.com/lost-in-the/grove/plugins/docker"
 )
@@ -119,113 +115,38 @@ type worktreeSetupOpts struct {
 // setupCreatedWorktree runs the shared post-create sequence: find the worktree,
 // symlink config, register state, execute hooks, and auto-start Docker.
 func setupCreatedWorktree(ctx *GroveContext, mgr *worktree.Manager, name, branchName string, opts worktreeSetupOpts, w *cli.Writer) (*worktree.Worktree, error) {
-	// Find the newly created worktree to get its path
 	wt, err := mgr.Find(name)
 	if err != nil || wt == nil {
 		return nil, fmt.Errorf("failed to find created worktree: %w", err)
 	}
 
-	// Symlink config.toml from main worktree
-	if err := grove.EnsureConfigSymlink(ctx.ProjectRoot, wt.Path); err != nil {
-		if !opts.JSONOutput {
-			cli.Warning(w, "Failed to symlink config: %v", err)
-		}
+	if !opts.JSONOutput {
+		cli.Step(w, "Bootstrapping worktree...")
 	}
 
-	// Register worktree in state
-	now := time.Now()
-	wsState := &state.WorktreeState{
-		Path:           wt.Path,
-		Branch:         branchName,
-		Root:           false,
-		CreatedAt:      now,
-		LastAccessedAt: now,
-		Environment:    opts.IsEnvironment,
+	bootstrapOpts := worktree.BootstrapOpts{
+		Name:          name,
+		Branch:        branchName,
+		WorktreePath:  wt.Path,
+		MainPath:      ctx.ProjectRoot,
+		ProjectName:   mgr.GetProjectName(),
+		IsEnvironment: opts.IsEnvironment,
+		Mirror:        opts.Mirror,
 	}
-	if opts.IsEnvironment {
-		wsState.Mirror = opts.Mirror
-		wsState.LastSyncedAt = &now
-	}
-	if err := ctx.State.AddWorktree(name, wsState); err != nil {
+	if err := worktree.BootstrapWorktree(ctx.State, ctx.Config, bootstrapOpts); err != nil {
 		if !opts.JSONOutput {
-			cli.Warning(w, "worktree created but state tracking failed: %v", err)
+			cli.Warning(w, "Bootstrap failed: %v", err)
 			cli.Faint(w, "run 'grove repair' to fix")
 		}
 	}
 
-	projectName := mgr.GetProjectName()
-
-	// Execute post-create hooks (per-project and global)
-	runPostCreateHooks(w, ctx, name, branchName, projectName, wt.Path, opts.JSONOutput)
-
-	// Auto-start Docker when configured
 	autoStartDocker(w, ctx.Config, wt.Path, opts.NoDocker, opts.JSONOutput)
-
 	return wt, nil
 }
 
-// runPostCreateHooks executes per-project and global post-create hooks.
-//
-// Order matters:
-//  1. File setup (copy/symlink external compose artifacts) — must precede
-//     plugin Up() so symlinked dirs exist before container mount.
-//  2. Plugin Go hooks (docker plugin emits env vars and may Up containers
-//     when auto_start is on).
-//  3. Config-driven hooks from hooks.toml (user setup commands, including
-//     docker:compose hooks that need containers running).
-//
-// This ordering lets users declare `bundle install` as a docker:compose hook
-// and have it run after the container is up, without each handler having to
-// self-Up().
-func runPostCreateHooks(w *cli.Writer, ctx *GroveContext, name, branchName, projectName, wtPath string, jsonOutput bool) {
-	hookExecutor, hookErr := hooks.NewExecutor()
-	if hookErr != nil {
-		if !jsonOutput {
-			cli.Warning(w, "Failed to load hooks config: %v", hookErr)
-		}
-		return
-	}
-
-	runFileSetup(ctx.Config, wtPath, ctx.ProjectRoot, w, jsonOutput)
-
-	globalHookCtx := &hooks.Context{
-		Worktree:     name,
-		Config:       ctx.Config,
-		WorktreePath: wtPath,
-		MainPath:     ctx.ProjectRoot,
-	}
-	if err := hooks.Fire(hooks.EventPostCreate, globalHookCtx); err != nil {
-		if !jsonOutput {
-			cli.Warning(w, "Post-create plugin hook failed: %v", err)
-		}
-	}
-
-	if hookExecutor.HasHooksForEvent(hooks.EventPostCreate) {
-		hookCtx := &hooks.ExecutionContext{
-			Event:        hooks.EventPostCreate,
-			Worktree:     name,
-			WorktreeFull: projectName + "-" + name,
-			Branch:       branchName,
-			Project:      projectName,
-			MainPath:     ctx.ProjectRoot,
-			NewPath:      wtPath,
-		}
-		if !jsonOutput {
-			cli.Step(w, "Running post-create hooks...")
-		}
-		if err := hookExecutor.Execute(hooks.EventPostCreate, hookCtx); err != nil {
-			if !jsonOutput {
-				cli.Warning(w, "Hook execution had errors: %v", err)
-			}
-		}
-	}
-}
-
 // runFileSetup runs worktree.SetupFiles when an external docker config is
-// present. Used by both grove new (via setupCreatedWorktree) and grove fork —
-// keeping the call in one helper makes it diff-visible if either caller
-// stops invoking it (the original bug class behind issue #27). Warnings are
-// suppressed in JSON output mode to avoid corrupting machine-readable output.
+// present. Kept as a separate helper so callers like `grove fork` (which
+// don't go through BootstrapWorktree) can reuse it.
 func runFileSetup(cfg *config.Config, newPath, mainPath string, w *cli.Writer, jsonOutput bool) {
 	if cfg == nil || cfg.Plugins.Docker.External == nil {
 		return

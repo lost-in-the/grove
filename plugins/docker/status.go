@@ -68,28 +68,41 @@ func externalStatuses(s *externalStrategy, paths []string) map[string]plugins.St
 	result := make(map[string]plugins.StatusEntry)
 
 	composePath := s.composePath()
-	activeWorktree := readEnvVar(composePath, s.ext.EnvVar)
-	running, count := composeRunningCount(composePath)
+	activeWorktree := readEnvVar(composePath, s.ext.EnvFileName(), s.ext.EnvVar)
+
+	// Probe service health once for the whole stack. Probe errors are intentionally
+	// ignored here: status display is informational and a nil result downgrades to
+	// "configured" via classifyExternalStatusFromHealth, which is correct for
+	// "stack not running yet" — surfacing the error would just be noise on the dashboard.
+	statuses, _ := probeServiceHealth(composePath, s.ext.EnvFileName(), nil)
 
 	for _, path := range paths {
-		if !pathMatchesEnv(path, activeWorktree, composePath) {
+		matches := pathMatchesEnv(path, activeWorktree, composePath)
+		if !matches {
 			continue
 		}
 
-		if running {
-			result[path] = plugins.StatusEntry{
-				ProviderName: "docker",
-				Level:        plugins.StatusActive,
-				Short:        fmt.Sprintf("up (%d)", count),
-				Detail:       fmt.Sprintf("%d service(s) running, pointed to this worktree", count),
-			}
-		} else {
-			result[path] = plugins.StatusEntry{
-				ProviderName: "docker",
-				Level:        plugins.StatusWarning,
-				Short:        "pointed",
-				Detail:       "Configured as active worktree but services not running",
-			}
+		level, detail := classifyExternalStatusFromHealth(statuses, s.ext.NonBlockingServices)
+
+		var statusLevel plugins.StatusLevel
+		var short string
+		switch level {
+		case "active":
+			statusLevel = plugins.StatusActive
+			short = "up"
+		case "warning":
+			statusLevel = plugins.StatusWarning
+			short = "degraded"
+		default:
+			statusLevel = plugins.StatusInfo
+			short = "configured"
+		}
+
+		result[path] = plugins.StatusEntry{
+			ProviderName: "docker",
+			Level:        statusLevel,
+			Short:        short,
+			Detail:       detail,
 		}
 	}
 
@@ -133,10 +146,14 @@ func agentStatuses(s *agentExternalStrategy, paths []string) map[string]plugins.
 	return result
 }
 
-// readEnvVar reads a specific variable from the .env file in composePath.
-func readEnvVar(composePath, key string) string {
-	envFile := filepath.Join(composePath, ".env")
-	content, err := os.ReadFile(envFile)
+// readEnvVar reads a specific variable from the env file in composePath.
+// envFileName is the file name (e.g., ".env" or ".env.local"); if empty, ".env" is used.
+func readEnvVar(composePath, envFileName, key string) string {
+	if envFileName == "" {
+		envFileName = ".env"
+	}
+	p := filepath.Join(composePath, envFileName)
+	content, err := os.ReadFile(p)
 	if err != nil {
 		return ""
 	}
@@ -234,7 +251,7 @@ func externalServiceInfo(cfg *config.Config, currentPath string) *ServiceInfo {
 	}
 
 	composePath := resolveComposePath(ext.Path)
-	activeWorktree := readEnvVar(composePath, ext.EnvVar)
+	activeWorktree := readEnvVar(composePath, ext.EnvFileName(), ext.EnvVar)
 	running, _ := composeRunningCount(composePath)
 	matches := pathMatchesEnv(currentPath, activeWorktree, composePath)
 
@@ -286,4 +303,32 @@ func composeRunningCount(composePath string) (bool, int) {
 		}
 	}
 	return count > 0, count
+}
+
+// classifyExternalStatusFromHealth maps a service-health snapshot to the
+// status entry level + detail surfaced via WorktreeStatuses.
+//
+// Returns ("active", detail) when all non-skipped services are healthy,
+// ("warning", detail) when blockers exist, ("info", detail) when nothing
+// is running but no failures either.
+func classifyExternalStatusFromHealth(statuses []ServiceStatus, nonBlocking []string) (string, string) {
+	if len(statuses) == 0 {
+		return "info", "Configured as active worktree but no services reported"
+	}
+
+	healthy, blockers := classifyHealth(statuses, nonBlocking)
+	runningCount := 0
+	for _, s := range statuses {
+		if s.Status == ServiceRunning {
+			runningCount++
+		}
+	}
+
+	if healthy {
+		if runningCount == 0 {
+			return "info", "Configured as active worktree but no services running"
+		}
+		return "active", fmt.Sprintf("%d service(s) running, pointed to this worktree", runningCount)
+	}
+	return "warning", fmt.Sprintf("blocking service(s) failed: %s", strings.Join(blockers, ", "))
 }

@@ -1660,6 +1660,11 @@ Arguments:
   args...   Extra arguments appended to the configured test command
 ```
 
+**Flags:**
+
+- `--with-deps` — override `[test] include_deps` for this invocation, passing `docker compose run` *without* `--no-deps`. Use when your test command needs a `depends_on` service (e.g., a database) running first.
+- `--bind <container-path>` — bind-mount the worktree at the given path inside the container. Overrides `[test] bind_mount`. The path must match the compose service's `WORKDIR`.
+
 **Configuration:**
 
 The test command is configured in `.grove/config.toml`:
@@ -1670,20 +1675,31 @@ command = "bin/rails test"
 
 # Optional: run in a Docker service container
 service = "app"
+
+# Optional: skip docker compose dependency services (default: false → --no-deps is passed)
+include_deps = false
+
+# Optional: bind-mount the worktree at this container path
+bind_mount = "/app"
 ```
+
+See [Configuration Reference](CONFIGURATION_REFERENCE.md#test) for full field details.
 
 **Behavior:**
 
 1. Verify `[test] command` is configured — error if missing
 2. Find target worktree by name
-3. Append extra `args` to the configured command
-4. **Local mode** (no `service` configured):
+3. Resolve effective options from CLI flags layered over `[test]` config
+4. Append extra `args` to the configured command
+5. **Local mode** (no `service` configured):
    - Run command directly in the worktree directory via `sh -c`
    - stdout/stderr/stdin pass through
-5. **Docker mode** (`service` configured):
+6. **Docker mode** (`service` configured):
    - Use Docker plugin's `Run()` to execute in an ephemeral container
-   - The container mounts the worktree directory
-6. Exit with the same exit code as the test command
+   - By default passes `--no-deps` so a failing one-shot init service in the shared stack doesn't block tests; opt in with `--with-deps` or `[test] include_deps = true`
+   - When `[test] bind_mount` (or `--bind`) is set, the worktree is bind-mounted at the given container path
+   - When `compose run` fails because of a `service "X" didn't complete successfully` dependency error, grove rewrites the message to name the service and suggest `--with-deps` removal or an ephemeral container fallback
+7. Exit with the same exit code as the test command
 
 **Examples:**
 ```bash
@@ -1878,6 +1894,44 @@ Repaired 1 issue.
 
 ---
 
+### grove adopt
+
+**Purpose:** Bootstrap a git worktree that grove doesn't know about. Equivalent to the post-`git worktree add` portion of `grove new` — symlinks `config.toml`, registers state, fires post-create hooks.
+
+**Usage:**
+```
+grove adopt [path]
+
+Arguments:
+  path    Worktree to adopt (default: current directory)
+```
+
+**When to use:** A worktree was created with `git worktree add` directly instead of `grove new`. The directory exists, the branch exists, but grove never ran its bootstrap, so the worktree is missing from `grove ls` and downstream commands fail with state-related errors.
+
+**Behavior:**
+
+1. Resolve target (cwd or explicit path) to an absolute, symlink-resolved directory.
+2. Read the current branch via `git rev-parse --abbrev-ref HEAD`. If the directory isn't a git worktree, abort with an actionable error.
+3. Derive the short name by stripping the project prefix from the directory name (e.g., `grove-feature` → `feature`).
+4. If the worktree is already registered with the same path, print an info message and exit successfully (idempotent).
+5. Run the shared bootstrap: symlink `config.toml`, register state, fire per-project and global post-create hooks.
+
+**Drift detection:** Running any grove command from a drifted worktree prints a non-fatal warning suggesting `grove adopt`. `grove doctor` also reports drift in its Tier-2 project checks.
+
+**Output:**
+```
+↪ Bootstrapping worktree "feature" at /path/to/project-feature ...
+✓ adopted "feature" (branch: feature)
+  config symlinked, state registered, post-create hooks fired
+```
+
+When already registered:
+```
+ℹ worktree "feature" is already registered (path: /path/to/project-feature)
+```
+
+---
+
 ### grove trim
 
 **Purpose:** Trim worktrees that haven't been accessed recently. Aliases: `prune`, `clean`, `tm`.
@@ -1969,7 +2023,7 @@ Flags:
 **Two-tier design:**
 
 - **Tier 1 (System checks):** Always run, regardless of project context. Checks grove binary resolution, shell integration version, git, tmux, GitHub CLI, Docker availability.
-- **Tier 2 (Project checks):** Only run when inside a grove project. Checks config loading, config symlinks across worktrees, Docker external mode, env file loaders, agent stacks.
+- **Tier 2 (Project checks):** Only run when inside a grove project. Checks config loading, config symlinks across worktrees, worktree registration (drift detection), Docker external mode, env file loaders, agent stacks.
 
 Tier 1 checks for tmux, GitHub CLI, and Docker are informational — failures do not affect the overall pass/fail result. Git and grove binary are required.
 
@@ -2007,10 +2061,17 @@ grove doctor
   ℹ Project: /path/to/project
   ✓ Config (loaded)
   ✓ Config symlinks (4 worktrees checked)
+  ✓ Worktree registration (4 worktrees registered)
   ✓ External compose path (/path/to/compose-dev)
   ✓ Env file target (.env.local)
 
   ✓ All checks passed
+```
+
+When a worktree was created with `git worktree add` directly (bypassing `grove new`), the registration check fails:
+
+```
+  ✗ Worktree registration: 1 drifted worktree(s): grove-feature — run 'grove adopt' from each
 ```
 
 ---

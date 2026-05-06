@@ -109,7 +109,18 @@ func (s *externalStrategy) Up(worktreePath string, detach bool) error {
 	cmd := composeCommand(s.composePath(), s.ext.EnvFileName(), s.envForWorktree(worktreePath), args...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	cmdErr := cmd.Run()
+	if cmdErr == nil {
+		return nil
+	}
+
+	// compose up returned non-zero — check whether only non-blocking services failed.
+	statuses, probeErr := probeServiceHealth(s.composePath(), s.ext.EnvFileName(), s.envForWorktree(worktreePath))
+	if probeErr != nil {
+		// Probe failed — surface the original cmd error rather than swallowing it.
+		return cmdErr
+	}
+	return finalizeUpResult(cmdErr, statuses, s.ext.NonBlockingServices)
 }
 
 func (s *externalStrategy) Down(_ string) error {
@@ -150,11 +161,17 @@ func (s *externalStrategy) Run(worktreePath string, service string, command stri
 		env = append(env, fmt.Sprintf("TEST_ENV_NUMBER=%d", envNum))
 	}
 
-	cmd := composeCommand(s.composePath(), s.ext.EnvFileName(), env, "run", "--rm", service, "bash", "-cil", command)
+	args := buildRunArgs(s.cfg, worktreePath, service, command)
+
+	cmd := composeCommand(s.composePath(), s.ext.EnvFileName(), env, args...)
 	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
+	stderrBuf := &teeBuffer{w: os.Stderr}
+	cmd.Stderr = stderrBuf
 	cmd.Stdin = os.Stdin
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return translateRunError(stderrBuf.String(), err)
+	}
+	return nil
 }
 
 // Exec runs a command in an already-running container of the external compose.

@@ -9,8 +9,18 @@ import (
 
 // TestConfig controls test command behavior
 type TestConfig struct {
-	Command string `toml:"command"`
-	Service string `toml:"service"`
+	Command     string `toml:"command"`
+	Service     string `toml:"service"`
+	IncludeDeps *bool  `toml:"include_deps"` // resolve depends_on services when running compose; default false (skip)
+	BindMount   string `toml:"bind_mount"`   // container path for the worktree bind mount; empty disables
+}
+
+// IncludeDepsValue returns the effective IncludeDeps value, defaulting to false.
+func (t TestConfig) IncludeDepsValue() bool {
+	if t.IncludeDeps == nil {
+		return false
+	}
+	return *t.IncludeDeps
 }
 
 // SessionConfig controls session command behavior for grove open
@@ -94,14 +104,15 @@ type DockerPluginConfig struct {
 // ExternalComposeConfig configures external Docker Compose mode where services
 // are defined in a shared compose setup outside the project directory.
 type ExternalComposeConfig struct {
-	Path         string            `toml:"path"`          // Path to external compose directory
-	EnvVar       string            `toml:"env_var"`       // Environment variable name (e.g., "APP_DIR")
-	EnvFile      string            `toml:"env_file"`      // File to write env vars to (default: ".env")
-	Services     []string          `toml:"services"`      // Service names to manage
-	CopyFiles    []string          `toml:"copy_files"`    // Files to copy from main on worktree create
-	SymlinkFiles []string          `toml:"symlink_files"` // Files to symlink from main on create
-	SymlinkDirs  []string          `toml:"symlink_dirs"`  // Directories to symlink from main on create
-	Agent        *AgentStackConfig `toml:"agent"`         // Optional agent stack configuration
+	Path                string            `toml:"path"`                  // Path to external compose directory
+	EnvVar              string            `toml:"env_var"`               // Environment variable name (e.g., "APP_DIR")
+	EnvFile             string            `toml:"env_file"`              // File to write env vars to (default: ".env")
+	Services            []string          `toml:"services"`              // Service names to manage
+	NonBlockingServices []string          `toml:"non_blocking_services"` // Services allowed to exit (one-shot init, etc.) without marking stack unhealthy
+	CopyFiles           []string          `toml:"copy_files"`            // Files to copy from main on worktree create
+	SymlinkFiles        []string          `toml:"symlink_files"`         // Files to symlink from main on create
+	SymlinkDirs         []string          `toml:"symlink_dirs"`          // Directories to symlink from main on create
+	Agent               *AgentStackConfig `toml:"agent"`                 // Optional agent stack configuration
 }
 
 // EnvFileName returns the configured env file name, defaulting to ".env".
@@ -354,6 +365,12 @@ func mergeTestConfig(result, override *TestConfig) {
 	}
 	if override.Service != "" {
 		result.Service = override.Service
+	}
+	if override.IncludeDeps != nil {
+		result.IncludeDeps = override.IncludeDeps
+	}
+	if override.BindMount != "" {
+		result.BindMount = override.BindMount
 	}
 }
 

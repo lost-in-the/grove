@@ -1248,6 +1248,66 @@ func TestLoadFromGroveDir_ValidSymlink(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_TestSection_IncludeDepsAndBindMount(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "config.toml")
+	body := `
+[test]
+command = "bin/rspec"
+service = "app"
+include_deps = true
+bind_mount = "/app"
+`
+	if err := os.WriteFile(path, []byte(body), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := LoadConfigFromPath(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.Test.Command != "bin/rspec" {
+		t.Errorf("Command: got %q want bin/rspec", cfg.Test.Command)
+	}
+	if cfg.Test.Service != "app" {
+		t.Errorf("Service: got %q want app", cfg.Test.Service)
+	}
+	if !cfg.Test.IncludeDepsValue() {
+		t.Errorf("IncludeDeps: got false want true")
+	}
+	if cfg.Test.BindMount != "/app" {
+		t.Errorf("BindMount: got %q want /app", cfg.Test.BindMount)
+	}
+}
+
+func TestMergeConfigs_TestSectionPropagatesNewFields(t *testing.T) {
+	trueVal := true
+	global := LoadDefaults()
+	project := LoadDefaults()
+	project.Test.IncludeDeps = &trueVal
+	project.Test.BindMount = "/app"
+
+	merged := mergeConfigs(global, project)
+
+	if !merged.Test.IncludeDepsValue() {
+		t.Error("IncludeDeps not propagated from project config")
+	}
+	if merged.Test.BindMount != "/app" {
+		t.Errorf("BindMount: got %q want /app", merged.Test.BindMount)
+	}
+}
+
+func TestMergeConfigs_TestIncludeDepsOverridableByProject(t *testing.T) {
+	trueVal := true
+	falseVal := false
+	global := &Config{Test: TestConfig{IncludeDeps: &trueVal}}
+	project := &Config{Test: TestConfig{IncludeDeps: &falseVal}}
+	merged := mergeConfigs(global, project)
+	if merged.Test.IncludeDepsValue() {
+		t.Errorf("project-level false should override global-level true")
+	}
+}
+
 func TestIsExternalDockerMode(t *testing.T) {
 	cfg := &Config{}
 	if cfg.IsExternalDockerMode() {
@@ -1262,5 +1322,41 @@ func TestIsExternalDockerMode(t *testing.T) {
 	cfg.Plugins.Docker.Mode = "external"
 	if !cfg.IsExternalDockerMode() {
 		t.Error("external mode should be external")
+	}
+}
+
+func TestLoadConfig_ExternalNonBlockingServices(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "config.toml")
+	body := `
+[plugins.docker]
+mode = "external"
+
+[plugins.docker.external]
+path = "/tmp/compose"
+env_var = "APP_DIR"
+services = ["app", "asset_precompile", "db_seed"]
+non_blocking_services = ["asset_precompile", "db_seed"]
+`
+	if err := os.WriteFile(path, []byte(body), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	cfg, err := LoadConfigFromPath(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ext := cfg.Plugins.Docker.External
+	if ext == nil {
+		t.Fatal("External config nil")
+	}
+	want := []string{"asset_precompile", "db_seed"}
+	if len(ext.NonBlockingServices) != len(want) {
+		t.Fatalf("NonBlockingServices length: got %d want %d", len(ext.NonBlockingServices), len(want))
+	}
+	for i, w := range want {
+		if ext.NonBlockingServices[i] != w {
+			t.Errorf("NonBlockingServices[%d]: got %q want %q", i, ext.NonBlockingServices[i], w)
+		}
 	}
 }

@@ -1,6 +1,8 @@
 package docker
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/lost-in-the/grove/internal/config"
@@ -100,5 +102,48 @@ func TestLocalStrategy_GetAutoStop_ExplicitValues(t *testing.T) {
 				t.Errorf("getAutoStop() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestLocalRun_DefaultUsesNoDeps(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "docker-compose.yml"), []byte("services:\n  app: {}\n"), 0644); err != nil {
+		t.Fatalf("write compose: %v", err)
+	}
+
+	cfg := &config.Config{
+		Test: config.TestConfig{Command: "bin/rspec", Service: "app"},
+	}
+	args := buildRunArgs(cfg, tmpDir, "app", "bin/rspec")
+
+	found := false
+	for _, a := range args {
+		if a == "--no-deps" {
+			found = true
+		}
+		if a == "-v" {
+			t.Errorf("expected no -v flag (no bind_mount configured), got: %v", args)
+		}
+	}
+	if !found {
+		t.Errorf("expected --no-deps in args, got: %v", args)
+	}
+}
+
+func TestLocalRun_IncludeDepsTrueOmitsNoDeps(t *testing.T) {
+	trueVal := true
+	cfg := &config.Config{
+		Test: config.TestConfig{
+			Command:     "bin/rspec",
+			Service:     "app",
+			IncludeDeps: &trueVal,
+		},
+	}
+	args := buildRunArgs(cfg, "/tmp", "app", "bin/rspec")
+
+	for _, a := range args {
+		if a == "--no-deps" {
+			t.Errorf("expected --no-deps omitted, got: %v", args)
+		}
 	}
 }
