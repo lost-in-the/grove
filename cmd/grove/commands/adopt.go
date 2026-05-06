@@ -52,7 +52,14 @@ Examples:
 			return fmt.Errorf("not a git worktree at %s: %w", target, gitErr)
 		}
 
-		if target == ctx.ProjectRoot {
+		// Resolve symlinks on ProjectRoot since target is already EvalSymlinks-resolved
+		// (resolveAdoptTarget). On macOS, /var/folders → /private/var/folders would
+		// otherwise leak the main worktree into the adopt path.
+		resolvedRoot, err := filepath.EvalSymlinks(ctx.ProjectRoot)
+		if err != nil {
+			resolvedRoot = ctx.ProjectRoot
+		}
+		if target == resolvedRoot {
 			cli.Info(w, "the main worktree is always registered; nothing to adopt")
 			return nil
 		}

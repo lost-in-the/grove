@@ -7,13 +7,6 @@ import (
 	"github.com/lost-in-the/grove/internal/config"
 )
 
-// captureRunArgs intercepts the compose command construction so we can assert
-// on the arg list without actually invoking docker.
-func captureRunArgs(t *testing.T, cfg *config.Config, worktreePath, service, command string) []string {
-	t.Helper()
-	return buildRunArgs(cfg, worktreePath, service, command)
-}
-
 func TestExternalRun_DefaultUsesNoDeps(t *testing.T) {
 	cfg := &config.Config{
 		Plugins: config.PluginsConfig{
@@ -28,7 +21,7 @@ func TestExternalRun_DefaultUsesNoDeps(t *testing.T) {
 		Test: config.TestConfig{Command: "bin/rspec", Service: "app"},
 	}
 
-	args := captureRunArgs(t, cfg, "/tmp/wt", "app", "bin/rspec")
+	args := buildRunArgs(cfg, "/tmp/wt", "app", "bin/rspec")
 
 	found := false
 	for _, a := range args {
@@ -63,7 +56,7 @@ func TestExternalRun_IncludeDepsTrueOmitsNoDeps(t *testing.T) {
 		},
 	}
 
-	args := captureRunArgs(t, cfg, "/tmp/wt", "app", "bin/rspec")
+	args := buildRunArgs(cfg, "/tmp/wt", "app", "bin/rspec")
 
 	for _, a := range args {
 		if a == "--no-deps" {
@@ -90,7 +83,7 @@ func TestExternalRun_BindMountAddsVolumeFlag(t *testing.T) {
 		},
 	}
 
-	args := captureRunArgs(t, cfg, "/tmp/wt", "app", "bin/rspec")
+	args := buildRunArgs(cfg, "/tmp/wt", "app", "bin/rspec")
 
 	joined := strings.Join(args, " ")
 	if !strings.Contains(joined, "-v /tmp/wt:/app") {

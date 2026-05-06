@@ -70,7 +70,10 @@ func externalStatuses(s *externalStrategy, paths []string) map[string]plugins.St
 	composePath := s.composePath()
 	activeWorktree := readEnvVar(composePath, s.ext.EnvFileName(), s.ext.EnvVar)
 
-	// Probe service health once for the whole stack.
+	// Probe service health once for the whole stack. Probe errors are intentionally
+	// ignored here: status display is informational and a nil result downgrades to
+	// "configured" via classifyExternalStatusFromHealth, which is correct for
+	// "stack not running yet" — surfacing the error would just be noise on the dashboard.
 	statuses, _ := probeServiceHealth(composePath, s.ext.EnvFileName(), nil)
 
 	for _, path := range paths {

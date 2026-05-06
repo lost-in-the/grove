@@ -71,7 +71,7 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 			NewPath:      opts.WorktreePath,
 		}
 		if err := hookExecutor.Execute(hooks.EventPostCreate, hookCtx); err != nil {
-			log.Printf("hooks: post-create execution failed: %v", err)
+			log.Printf("hooks: post-create project hook failed: %v", err)
 		}
 	}
 
