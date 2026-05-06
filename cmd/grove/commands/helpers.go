@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
@@ -127,7 +126,6 @@ func setupCreatedWorktree(ctx *GroveContext, mgr *worktree.Manager, name, branch
 		WorktreePath:  wt.Path,
 		MainPath:      ctx.ProjectRoot,
 		ProjectName:   mgr.GetProjectName(),
-		Now:           time.Now(),
 		IsEnvironment: opts.IsEnvironment,
 		Mirror:        opts.Mirror,
 	}

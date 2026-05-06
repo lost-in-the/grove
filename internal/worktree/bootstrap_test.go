@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/state"
@@ -34,7 +33,6 @@ func TestBootstrapWorktree_RegistersInState(t *testing.T) {
 		WorktreePath: wtPath,
 		MainPath:     mainDir,
 		ProjectName:  "test-proj",
-		Now:          time.Now(),
 	}
 
 	if err := BootstrapWorktree(stateMgr, cfg, opts); err != nil {
@@ -76,7 +74,6 @@ func TestBootstrapWorktree_IdempotentOnSecondCall(t *testing.T) {
 		WorktreePath: wtPath,
 		MainPath:     mainDir,
 		ProjectName:  "test-proj",
-		Now:          time.Now(),
 	}
 
 	if err := BootstrapWorktree(stateMgr, cfg, opts); err != nil {
