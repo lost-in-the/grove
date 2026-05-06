@@ -257,7 +257,6 @@ func checkWorktreeRegistration(groveDir string) (string, error) {
 
 	statePath := filepath.Join(projectRoot, ".grove", "state.json")
 	stateData, _ := os.ReadFile(statePath)
-	stateStr := string(stateData)
 
 	var drifted []string
 	var total int
@@ -272,7 +271,7 @@ func checkWorktreeRegistration(groveDir string) (string, error) {
 			continue
 		}
 		// Lightweight check: state.json should contain the worktree path as a value.
-		if !strings.Contains(stateStr, `"`+path+`"`) {
+		if !grove.IsWorktreeInState(stateData, path) {
 			drifted = append(drifted, filepath.Base(path))
 		}
 	}
@@ -419,14 +418,12 @@ func checkEnvFileConfig(envFileName, composePath string, lookPath func(string) (
 		}
 
 		// Check for config file: .envrc (direnv) or .mise.toml/mise.toml (mise)
-		if found, name := checkEnvrcFile(composePath, envFileName); found {
+		if checkEnvrcFile(composePath, envFileName) {
 			result.configExists = true
 			result.configLoadsFile = true
-			_ = name
-		} else if found, name := checkMiseFile(composePath, envFileName); found {
+		} else if checkMiseFile(composePath, envFileName) {
 			result.configExists = true
 			result.configLoadsFile = true
-			_ = name
 		} else {
 			// Check if config files exist but don't reference the env file
 			result.configExists, result.configErr = checkConfigExists(composePath, envFileName)
@@ -440,7 +437,7 @@ func checkEnvFileConfig(envFileName, composePath string, lookPath func(string) (
 			}
 		}
 		if !result.hintAvailable {
-			if found, _ := checkMiseFile(composePath, ".env.local"); found {
+			if checkMiseFile(composePath, ".env.local") {
 				result.hintAvailable = true
 			}
 		}
@@ -450,29 +447,26 @@ func checkEnvFileConfig(envFileName, composePath string, lookPath func(string) (
 }
 
 // checkEnvrcFile checks if .envrc exists and references the env file.
-func checkEnvrcFile(composePath, envFileName string) (found bool, name string) {
+func checkEnvrcFile(composePath, envFileName string) bool {
 	data, err := os.ReadFile(filepath.Join(composePath, ".envrc"))
 	if err != nil {
-		return false, ""
+		return false
 	}
-	if strings.Contains(string(data), envFileName) {
-		return true, ".envrc"
-	}
-	return false, ""
+	return strings.Contains(string(data), envFileName)
 }
 
 // checkMiseFile checks if .mise.toml or mise.toml exists and references the env file.
-func checkMiseFile(composePath, envFileName string) (found bool, name string) {
+func checkMiseFile(composePath, envFileName string) bool {
 	for _, fname := range []string{".mise.toml", "mise.toml"} {
 		data, err := os.ReadFile(filepath.Join(composePath, fname))
 		if err != nil {
 			continue
 		}
 		if strings.Contains(string(data), envFileName) {
-			return true, fname
+			return true
 		}
 	}
-	return false, ""
+	return false
 }
 
 // checkConfigExists checks if any env loader config file exists but doesn't reference the env file.
