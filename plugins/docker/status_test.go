@@ -34,18 +34,39 @@ EMPTY_VAR=
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := readEnvVar(dir, tt.key)
+			// empty envFileName should default to ".env"
+			got := readEnvVar(dir, "", tt.key)
 			if got != tt.want {
-				t.Errorf("readEnvVar(%q, %q) = %q, want %q", dir, tt.key, got, tt.want)
+				t.Errorf("readEnvVar(%q, %q, %q) = %q, want %q", dir, "", tt.key, got, tt.want)
 			}
 		})
 	}
 }
 
 func TestReadEnvVar_NoFile(t *testing.T) {
-	got := readEnvVar(t.TempDir(), "KEY")
+	got := readEnvVar(t.TempDir(), "", "KEY")
 	if got != "" {
 		t.Errorf("expected empty string for missing .env, got %q", got)
+	}
+}
+
+func TestReadEnvVar_NonDefaultEnvFile(t *testing.T) {
+	dir := t.TempDir()
+	envContent := "APP_DIR=/custom/path\n"
+	if err := os.WriteFile(filepath.Join(dir, ".env.local"), []byte(envContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Should find value in non-default env file
+	got := readEnvVar(dir, ".env.local", "APP_DIR")
+	if got != "/custom/path" {
+		t.Errorf("readEnvVar with .env.local: got %q, want %q", got, "/custom/path")
+	}
+
+	// Should return empty when looking in default .env (which doesn't exist)
+	got = readEnvVar(dir, "", "APP_DIR")
+	if got != "" {
+		t.Errorf("readEnvVar with default .env (absent): got %q, want empty", got)
 	}
 }
 
@@ -209,7 +230,7 @@ func TestExternalStatuses_NonBlockingExitedDoesNotDowngrade(t *testing.T) {
 		{Name: "app", Status: ServiceRunning},
 		{Name: "asset_precompile", Status: ServiceExitedClean},
 	}
-	level, _ := classifyExternalStatusFromHealth(statuses, []string{"asset_precompile"}, true /* matchesActive */)
+	level, _ := classifyExternalStatusFromHealth(statuses, []string{"asset_precompile"})
 	if level != "active" {
 		t.Errorf("expected active, got %s", level)
 	}
@@ -219,7 +240,7 @@ func TestExternalStatuses_BlockingFailedDowngrades(t *testing.T) {
 	statuses := []ServiceStatus{
 		{Name: "app", Status: ServiceExitedError},
 	}
-	level, detail := classifyExternalStatusFromHealth(statuses, nil, true)
+	level, detail := classifyExternalStatusFromHealth(statuses, nil)
 	if level != "warning" {
 		t.Errorf("expected warning, got %s", level)
 	}

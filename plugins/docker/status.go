@@ -68,7 +68,7 @@ func externalStatuses(s *externalStrategy, paths []string) map[string]plugins.St
 	result := make(map[string]plugins.StatusEntry)
 
 	composePath := s.composePath()
-	activeWorktree := readEnvVar(composePath, s.ext.EnvVar)
+	activeWorktree := readEnvVar(composePath, s.ext.EnvFileName(), s.ext.EnvVar)
 
 	// Probe service health once for the whole stack.
 	statuses, _ := probeServiceHealth(composePath, s.ext.EnvFileName(), nil)
@@ -79,7 +79,7 @@ func externalStatuses(s *externalStrategy, paths []string) map[string]plugins.St
 			continue
 		}
 
-		level, detail := classifyExternalStatusFromHealth(statuses, s.ext.NonBlockingServices, true)
+		level, detail := classifyExternalStatusFromHealth(statuses, s.ext.NonBlockingServices)
 
 		var statusLevel plugins.StatusLevel
 		var short string
@@ -143,10 +143,14 @@ func agentStatuses(s *agentExternalStrategy, paths []string) map[string]plugins.
 	return result
 }
 
-// readEnvVar reads a specific variable from the .env file in composePath.
-func readEnvVar(composePath, key string) string {
-	envFile := filepath.Join(composePath, ".env")
-	content, err := os.ReadFile(envFile)
+// readEnvVar reads a specific variable from the env file in composePath.
+// envFileName is the file name (e.g., ".env" or ".env.local"); if empty, ".env" is used.
+func readEnvVar(composePath, envFileName, key string) string {
+	if envFileName == "" {
+		envFileName = ".env"
+	}
+	p := filepath.Join(composePath, envFileName)
+	content, err := os.ReadFile(p)
 	if err != nil {
 		return ""
 	}
@@ -244,7 +248,7 @@ func externalServiceInfo(cfg *config.Config, currentPath string) *ServiceInfo {
 	}
 
 	composePath := resolveComposePath(ext.Path)
-	activeWorktree := readEnvVar(composePath, ext.EnvVar)
+	activeWorktree := readEnvVar(composePath, ext.EnvFileName(), ext.EnvVar)
 	running, _ := composeRunningCount(composePath, nil)
 	matches := pathMatchesEnv(currentPath, activeWorktree, composePath)
 
@@ -307,10 +311,7 @@ func composeRunningCount(composePath string, env []string) (bool, int) {
 // Returns ("active", detail) when all non-skipped services are healthy,
 // ("warning", detail) when blockers exist, ("info", detail) when nothing
 // is running but no failures either.
-func classifyExternalStatusFromHealth(statuses []ServiceStatus, nonBlocking []string, matchesActive bool) (string, string) {
-	if !matchesActive {
-		return "info", "Configured but not the active worktree"
-	}
+func classifyExternalStatusFromHealth(statuses []ServiceStatus, nonBlocking []string) (string, string) {
 	if len(statuses) == 0 {
 		return "info", "Configured as active worktree but no services reported"
 	}
