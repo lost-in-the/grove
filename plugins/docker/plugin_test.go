@@ -997,3 +997,83 @@ func TestPlugin_OnPreRemove_AgentSlotReleasedOnDownFailure(t *testing.T) {
 		t.Errorf("slot %d still allocated after onPreRemove (originally slot %d) — leaked", slotAfter, allocatedSlot)
 	}
 }
+
+// TestPlugin_OnPreRemove_AgentSlotReleasedWithoutAgentMode covers issue #57:
+// when `grove rm` runs from a shell that didn't set GROVE_AGENT_MODE=1, the
+// plugin selects the plain external strategy at Init time. Before the fix,
+// OnPreRemove early-returned through the external-strategy branch and the
+// agent slot teardown never ran, so a worktree that owned a slot leaked it
+// when removed. The fix added a transient agent-strategy fallback in
+// agentStrategyForTeardown so slot release happens regardless of which
+// strategy was selected at Init.
+func TestPlugin_OnPreRemove_AgentSlotReleasedWithoutAgentMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	composeDir := filepath.Join(tmpDir, "compose")
+	if err := os.MkdirAll(filepath.Join(composeDir, "agent-stacks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	enabled := true
+	cfg := &config.Config{
+		ProjectName: "myapp",
+		Plugins: config.PluginsConfig{
+			Docker: config.DockerPluginConfig{
+				Mode: "external",
+				External: &config.ExternalComposeConfig{
+					Path:     composeDir,
+					EnvVar:   "APP_DIR",
+					Services: []string{"app"},
+					Agent: &config.AgentStackConfig{
+						Enabled:      &enabled,
+						MaxSlots:     3,
+						Services:     []string{"app"},
+						TemplatePath: "agent-stacks/template.yml",
+					},
+				},
+			},
+		},
+		// AgentMode intentionally NOT set — this is the bug scenario.
+	}
+
+	// Make sure GROVE_AGENT_MODE is unset so isAgentMode() returns false and
+	// the plugin selects the plain external strategy.
+	t.Setenv("GROVE_AGENT_MODE", "")
+
+	plugin := New()
+	if err := plugin.Init(cfg); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	if _, ok := plugin.strategy.(*externalStrategy); !ok {
+		t.Fatalf("expected external strategy when AgentMode is unset, got %T", plugin.strategy)
+	}
+
+	// Allocate a slot directly so the test doesn't depend on the create flow.
+	wtName := "myapp-leak-test"
+	worktreePath := filepath.Join(tmpDir, wtName)
+	slotsFile := filepath.Join(composeDir, "agent-stacks", ".slots.json")
+	slots := NewSlotManager(slotsFile, 3)
+	allocatedSlot, err := slots.Allocate(wtName)
+	if err != nil {
+		t.Fatalf("Allocate() error = %v", err)
+	}
+
+	ctx := &hooks.Context{
+		Worktree:     wtName,
+		Config:       cfg,
+		WorktreePath: worktreePath,
+	}
+
+	// onPreRemove will try Down on a fresh agent strategy; it'll fail because
+	// there's no daemon / template, but the slot should still be released.
+	_ = plugin.onPreRemove(ctx)
+
+	slotAfter, err := slots.FindSlot(wtName)
+	if err != nil {
+		t.Fatalf("FindSlot() error = %v", err)
+	}
+	if slotAfter != 0 {
+		t.Errorf("slot %d still allocated after onPreRemove (originally slot %d) — leaked because external strategy didn't run agent teardown",
+			slotAfter, allocatedSlot)
+	}
+}

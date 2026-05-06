@@ -35,6 +35,24 @@ var infraServiceNames = map[string]bool{
 	"minio":         true,
 }
 
+// appServicePriorityNames are canonical names for the "main" application
+// service. When a compose file declares one of these alongside other
+// non-infra services, we prefer it. Order in the slice is preference order:
+// `web` is the most common Rails convention, `app` covers Django/Node, etc.
+//
+// This exists because the previous heuristic ("first non-infra in declaration
+// order") got confused by stacks like Rails+webpack: `webpack` declared
+// before `web` would win, even though `bundle install` belongs in `web`.
+var appServicePriorityNames = []string{
+	"web",
+	"app",
+	"rails",
+	"backend",
+	"api",
+	"server",
+	"application",
+}
+
 // FindComposeFile returns the path to the first compose file present in dir,
 // or empty string if none.
 func FindComposeFile(dir string) string {
@@ -78,6 +96,14 @@ func InferAppService(composePath string) (string, bool) {
 }
 
 // pickAppService applies the inference heuristic to a service list.
+//
+// Order:
+//  1. Single service → return it.
+//  2. Service name matches one of appServicePriorityNames (case-insensitive)
+//     → return it. This catches the common case where a Rails app has a
+//     `web` service alongside `webpack` / `worker` / `mailer`.
+//  3. First non-infra service in declaration order.
+//  4. No services or all infra → ("", false).
 func pickAppService(services []string) (string, bool) {
 	if len(services) == 0 {
 		return "", false
@@ -85,6 +111,21 @@ func pickAppService(services []string) (string, bool) {
 	if len(services) == 1 {
 		return services[0], true
 	}
+
+	// Build a set for O(1) lookup of the declared services.
+	declared := make(map[string]string, len(services))
+	for _, s := range services {
+		declared[strings.ToLower(s)] = s
+	}
+
+	// First pass: prefer canonical app names if any are declared.
+	for _, name := range appServicePriorityNames {
+		if original, ok := declared[name]; ok {
+			return original, true
+		}
+	}
+
+	// Second pass: first non-infra in declaration order.
 	for _, s := range services {
 		if !infraServiceNames[strings.ToLower(s)] {
 			return s, true
