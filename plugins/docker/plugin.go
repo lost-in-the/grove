@@ -144,22 +144,18 @@ func (p *Plugin) onPreRemove(ctx *hooks.Context) error {
 		return nil
 	}
 
-	// Phase 1: env var cleanup runs whenever an external strategy is active.
+	// Clean up env var entry for external strategy
 	if ext, ok := p.strategy.(*externalStrategy); ok {
 		if err := ext.removeEnvVar(ctx.WorktreePath); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: failed to clean %s from %s: %v\n",
 				ext.ext.EnvVar, ext.ext.EnvFileName(), err)
 		}
+		return nil
 	}
 
-	// Phase 2: agent slot teardown. Runs whenever the project has agent stacks
-	// configured, even if the active strategy is plain external — covers
-	// `grove rm` from a shell that didn't set GROVE_AGENT_MODE=1, where the
-	// non-agent strategy was selected at plugin init but the worktree being
-	// removed still owns a slot in .slots.json. Without this, the slot would
-	// leak whenever rm was invoked without the env var.
-	agent := p.agentStrategyForTeardown()
-	if agent == nil {
+	// Tear down agent stack if running
+	agent, ok := p.strategy.(*agentExternalStrategy)
+	if !ok {
 		return nil
 	}
 	wtName := filepath.Base(ctx.WorktreePath)
@@ -168,7 +164,7 @@ func (p *Plugin) onPreRemove(ctx *hooks.Context) error {
 		return nil
 	}
 	fmt.Fprintf(os.Stderr, "Stopping agent stack for '%s'...\n", ctx.Worktree)
-	downErr := agent.Down(ctx.WorktreePath)
+	downErr := p.strategy.Down(ctx.WorktreePath)
 	if downErr == nil {
 		// Down() releases the slot itself on success.
 		return nil
@@ -180,30 +176,6 @@ func (p *Plugin) onPreRemove(ctx *hooks.Context) error {
 		fmt.Fprintf(os.Stderr, "warning: failed to release agent slot %d after teardown failure: %v\n", slot, relErr)
 	}
 	return downErr
-}
-
-// agentStrategyForTeardown returns the agent strategy to use for slot
-// teardown during pre-remove. Falls back to constructing a transient agent
-// strategy when the active strategy is plain external but the project has
-// agent stacks configured — necessary so `grove rm` releases slots even when
-// invoked without GROVE_AGENT_MODE=1 set.
-//
-// Returns nil when the project doesn't use agent stacks at all.
-func (p *Plugin) agentStrategyForTeardown() *agentExternalStrategy {
-	if a, ok := p.strategy.(*agentExternalStrategy); ok {
-		return a
-	}
-	if p.cfg == nil {
-		return nil
-	}
-	ext := p.cfg.Plugins.Docker.External
-	if ext == nil || ext.Agent == nil {
-		return nil
-	}
-	if ext.Agent.Enabled == nil || !*ext.Agent.Enabled {
-		return nil
-	}
-	return newAgentExternalStrategy(p.cfg)
 }
 
 // SetIsolated forces the plugin to use the agent external strategy,
