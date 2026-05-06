@@ -128,9 +128,9 @@ func TestExternalStatuses_MatchingPath(t *testing.T) {
 	if entry.ProviderName != "docker" {
 		t.Errorf("expected ProviderName 'docker', got %q", entry.ProviderName)
 	}
-	// docker may not be running — expect StatusWarning (pointed but not running) or StatusActive
-	if entry.Level != plugins.StatusWarning && entry.Level != plugins.StatusActive {
-		t.Errorf("expected StatusWarning or StatusActive, got %v", entry.Level)
+	// docker may not be running — expect StatusInfo (no services), StatusWarning, or StatusActive
+	if entry.Level != plugins.StatusInfo && entry.Level != plugins.StatusWarning && entry.Level != plugins.StatusActive {
+		t.Errorf("expected StatusInfo, StatusWarning, or StatusActive, got %v", entry.Level)
 	}
 }
 
@@ -199,6 +199,32 @@ func TestAgentStatuses_URLPattern(t *testing.T) {
 	expectedURL := "http://localhost:8082"
 	if !strings.Contains(entry.Detail, expectedURL) {
 		t.Errorf("expected Detail to contain URL %q, got %q", expectedURL, entry.Detail)
+	}
+}
+
+func TestExternalStatuses_NonBlockingExitedDoesNotDowngrade(t *testing.T) {
+	// Simulate: app running, asset_precompile exited(0), and asset_precompile is non-blocking.
+	// classifyExternalStatusFromHealth should return StatusActive, not StatusWarning.
+	statuses := []ServiceStatus{
+		{Name: "app", Status: ServiceRunning},
+		{Name: "asset_precompile", Status: ServiceExitedClean},
+	}
+	level, _ := classifyExternalStatusFromHealth(statuses, []string{"asset_precompile"}, true /* matchesActive */)
+	if level != "active" {
+		t.Errorf("expected active, got %s", level)
+	}
+}
+
+func TestExternalStatuses_BlockingFailedDowngrades(t *testing.T) {
+	statuses := []ServiceStatus{
+		{Name: "app", Status: ServiceExitedError},
+	}
+	level, detail := classifyExternalStatusFromHealth(statuses, nil, true)
+	if level != "warning" {
+		t.Errorf("expected warning, got %s", level)
+	}
+	if !strings.Contains(detail, "app") {
+		t.Errorf("expected detail to name 'app', got %q", detail)
 	}
 }
 
