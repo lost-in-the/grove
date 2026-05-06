@@ -1958,6 +1958,44 @@ Repaired 1 issue.
 
 ---
 
+### grove adopt
+
+**Purpose:** Bootstrap a git worktree that grove doesn't know about. Equivalent to the post-`git worktree add` portion of `grove new` — symlinks `config.toml`, registers state, fires post-create hooks.
+
+**Usage:**
+```
+grove adopt [path]
+
+Arguments:
+  path    Worktree to adopt (default: current directory)
+```
+
+**When to use:** A worktree was created with `git worktree add` directly instead of `grove new`. The directory exists, the branch exists, but grove never ran its bootstrap, so the worktree is missing from `grove ls` and downstream commands fail with state-related errors.
+
+**Behavior:**
+
+1. Resolve target (cwd or explicit path) to an absolute, symlink-resolved directory.
+2. Read the current branch via `git rev-parse --abbrev-ref HEAD`. If the directory isn't a git worktree, abort with an actionable error.
+3. Derive the short name by stripping the project prefix from the directory name (e.g., `grove-feature` → `feature`).
+4. If the worktree is already registered with the same path, print an info message and exit successfully (idempotent).
+5. Run the shared bootstrap: symlink `config.toml`, register state, fire per-project and global post-create hooks.
+
+**Drift detection:** Running any grove command from a drifted worktree prints a non-fatal warning suggesting `grove adopt`. `grove doctor` also reports drift in its Tier-2 project checks.
+
+**Output:**
+```
+↪ Bootstrapping worktree "feature" at /path/to/project-feature ...
+✓ adopted "feature" (branch: feature)
+  config symlinked, state registered, post-create hooks fired
+```
+
+When already registered:
+```
+ℹ worktree "feature" is already registered (path: /path/to/project-feature)
+```
+
+---
+
 ### grove clean
 
 **Purpose:** Remove worktrees that haven't been accessed recently.
@@ -2044,7 +2082,7 @@ grove doctor [flags]
 **Two-tier design:**
 
 - **Tier 1 (System checks):** Always run, regardless of project context. Checks grove binary resolution, shell integration version, git, tmux, GitHub CLI, Docker availability.
-- **Tier 2 (Project checks):** Only run when inside a grove project. Checks config loading, config symlinks across worktrees, Docker external mode, env file loaders, agent stacks.
+- **Tier 2 (Project checks):** Only run when inside a grove project. Checks config loading, config symlinks across worktrees, worktree registration (drift detection), Docker external mode, env file loaders, agent stacks.
 
 Tier 1 checks for tmux, GitHub CLI, and Docker are informational — failures do not affect the overall pass/fail result. Git and grove binary are required.
 
@@ -2082,10 +2120,17 @@ grove doctor
   ℹ Project: /path/to/project
   ✓ Config (loaded)
   ✓ Config symlinks (4 worktrees checked)
+  ✓ Worktree registration (4 worktrees registered)
   ✓ External compose path (/path/to/compose-dev)
   ✓ Env file target (.env.local)
 
   ✓ All checks passed
+```
+
+When a worktree was created with `git worktree add` directly (bypassing `grove new`), the registration check fails:
+
+```
+  ✗ Worktree registration: 1 drifted worktree(s): grove-feature — run 'grove adopt' from each
 ```
 
 ---

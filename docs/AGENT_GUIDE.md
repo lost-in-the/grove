@@ -375,6 +375,37 @@ grove clean --days 7  # shorter threshold
 
 Stale = `LastAccessedAt` older than threshold and no dirty changes. Protected worktrees are skipped.
 
+### When a Worktree Drifts (created via `git worktree add`)
+
+If a worktree was created outside grove (typically by running `git worktree add` directly), grove won't have it in state and won't have run its bootstrap hooks. Symptoms:
+
+- Missing config symlink, so commands that resolve config from the worktree fail.
+- `grove ls` doesn't list the worktree.
+- Docker auto-start and post-create hooks never ran, so credentials/env files may be missing.
+
+Grove detects drift automatically — running any command from a drifted worktree prints a non-fatal warning:
+
+```
+⚠ this worktree (project-feature) wasn't created by grove and isn't registered in state
+  run 'grove adopt' to bootstrap it (symlinks config, runs hooks, registers state)
+```
+
+`grove doctor` also reports drift in its Tier-2 project checks.
+
+**Fix:** `cd` into the worktree and run:
+
+```bash
+grove adopt
+```
+
+`grove adopt` is idempotent — running it twice on the same worktree prints "already registered" and exits successfully. To adopt a worktree from outside it:
+
+```bash
+grove adopt /path/to/other-worktree
+```
+
+The short name is derived from the directory by stripping the project prefix (`project-feature` → `feature`), matching the convention `grove new` produces.
+
 ---
 
 ## 4. Docker Strategies
