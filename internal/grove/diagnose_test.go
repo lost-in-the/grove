@@ -145,6 +145,32 @@ func TestIsWorktreeInState(t *testing.T) {
 			worktreePath: "/repos/proj-feature",
 			want:         false,
 		},
+		{
+			name:         "malformed JSON returns false",
+			stateData:    []byte(`not json at all`),
+			worktreePath: "/repos/proj-feature",
+			want:         false,
+		},
+		{
+			name:         "path with backslash characters",
+			stateData:    []byte(`{"worktrees":{"wt":{"path":"/repos/back\\slash","branch":"main"}}}`),
+			worktreePath: `/repos/back\slash`,
+			want:         true,
+		},
+		{
+			name:         "path with non-ASCII characters",
+			stateData:    []byte(`{"worktrees":{"wt":{"path":"/repos/кириллица","branch":"main"}}}`),
+			worktreePath: "/repos/кириллица",
+			want:         true,
+		},
+		{
+			name: "path absent even when it appears as substring of another field",
+			// "/repos/proj" appears inside the branch field value "/repos/proj-extra"
+			// but must NOT match worktreePath "/repos/proj".
+			stateData:    []byte(`{"worktrees":{"wt":{"path":"/repos/proj-other","branch":"/repos/proj"}}}`),
+			worktreePath: "/repos/proj",
+			want:         false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
