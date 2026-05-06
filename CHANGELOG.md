@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `grove adopt [path]` command — bootstraps a git worktree that grove doesn't know about (config symlink, state registration, post-create hooks)
+- Drift detection — running any grove command from a worktree not in `state.json` prints a non-fatal warning suggesting `grove adopt`
+- `grove doctor` Tier-2 "Worktree registration" check — reports drifted worktrees with a `grove adopt` hint
+- `[test]` config: `include_deps` (bool, default false) and `bind_mount` (string) — control `compose run` dependency resolution and worktree bind-mount path
+- `grove test --with-deps` and `--bind` flags — per-invocation overrides of `[test]` config
+- `[plugins.docker.external]` config: `non_blocking_services` — services allowed to exit (one-shot init, etc.) without marking the stack unhealthy
+- `grove doctor` now lists configured non-blocking services for external compose stacks
+- `internal/grove.IsWorktreeInState` — shared helper for state.json drift detection
+
+### Changed
+- **Behavior change:** `grove test` now passes `--no-deps` to `compose run` by default. Tests that rely on dependency services starting (e.g., a database) need either `[test] include_deps = true` in config or the `--with-deps` flag.
+- **Behavior change:** `grove up` against an external stack tolerates failures of services listed in `non_blocking_services` — the command no longer exits non-zero when only one-shot init services failed.
+- **Behavior change:** `grove ps` external-stack status is now driven by `docker compose ps --format json` and the `non_blocking_services` list. A stack with only non-blocking services exited cleanly is `up`, not `degraded`.
+- `TestConfig.IncludeDeps` is now `*bool` so a project-level `false` can override a global `true`
+- `BootstrapWorktree` extracted from `setupCreatedWorktree` so `grove new` and `grove adopt` share the same post-`git worktree add` sequence
+- `grove adopt` strips the project prefix from directory names (e.g., `myproj-feature` → `feature`) so adopted worktrees match grove's naming convention
+- Service-health probe timeout raised from 1s to 3s to tolerate slow systems
+- Compose `--env-file` is honored when reading the active-worktree env var (previously hardcoded to `.env`)
+
+### Fixed
+- `grove test` now translates `compose run` "service didn't complete successfully" errors into actionable grove-styled messages
+- `grove up` no longer silently swallows compose-up failures when the post-up health probe returns no statuses
+- `grove up` skips the post-up health probe when compose-up succeeded (previously paid up to 1s on every successful run)
+- Post-create hook execution failures are now logged to grove's debug log (previously discarded silently)
+- `grove adopt` refuses to "adopt" the main worktree (it is always registered)
+- `grove adopt` errors out on detached HEAD instead of storing the literal `"HEAD"` as a branch name
+- Removed unused `matchesActive` parameter from external-status classifier; removed `_ = name` dead wiring in env-loader doctor checks; removed dead `BootstrapOpts.Now` injection field
+
 ## [0.5.0] - 2026-03-10
 
 ### Added
