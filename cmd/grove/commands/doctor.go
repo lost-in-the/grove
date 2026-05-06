@@ -328,6 +328,10 @@ func runExternalModeChecks(w *cli.Writer, cfg *config.Config, allPassed *bool) {
 		runInfo(w, "Env file hint", "direnv/mise is configured for .env.local — consider setting env_file = \".env.local\" to avoid dirtying tracked .env")
 	}
 
+	if len(ext.NonBlockingServices) > 0 {
+		runInfo(w, "Non-blocking services", strings.Join(ext.NonBlockingServices, ", "))
+	}
+
 	if ext.Agent == nil || ext.Agent.Enabled == nil || !*ext.Agent.Enabled {
 		runInfo(w, "Agent stacks", "not enabled")
 	} else {
