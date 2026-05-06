@@ -1238,3 +1238,39 @@ func TestIsExternalDockerMode(t *testing.T) {
 		t.Error("external mode should be external")
 	}
 }
+
+func TestLoadConfig_ExternalNonBlockingServices(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "config.toml")
+	body := `
+[plugins.docker]
+mode = "external"
+
+[plugins.docker.external]
+path = "/tmp/compose"
+env_var = "APP_DIR"
+services = ["app", "asset_precompile", "db_seed"]
+non_blocking_services = ["asset_precompile", "db_seed"]
+`
+	if err := os.WriteFile(path, []byte(body), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	cfg, err := LoadConfigFromPath(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ext := cfg.Plugins.Docker.External
+	if ext == nil {
+		t.Fatal("External config nil")
+	}
+	want := []string{"asset_precompile", "db_seed"}
+	if len(ext.NonBlockingServices) != len(want) {
+		t.Fatalf("NonBlockingServices length: got %d want %d", len(ext.NonBlockingServices), len(want))
+	}
+	for i, w := range want {
+		if ext.NonBlockingServices[i] != w {
+			t.Errorf("NonBlockingServices[%d]: got %q want %q", i, ext.NonBlockingServices[i], w)
+		}
+	}
+}
