@@ -78,8 +78,8 @@ func TestProgram_HelpOverlay(t *testing.T) {
 		return regexp.MustCompile(`(?i)keybindings|navigation`).MatchString(s)
 	}, teatest.WithDuration(5*time.Second))
 
-	// Any key closes help, then q quits
-	tm.Send(tea.KeyPressMsg{Code: ' ', Text: " "})
+	// esc closes the help overlay; then q quits
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEscape})
 	tm.Send(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
 }
