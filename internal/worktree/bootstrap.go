@@ -14,14 +14,13 @@ import (
 // BootstrapOpts holds the inputs needed to bootstrap a worktree (whether
 // freshly created via grove new or adopted post-hoc via grove adopt).
 type BootstrapOpts struct {
-	Name          string    // short worktree name (e.g., "feature")
-	Branch        string    // branch the worktree is on
-	WorktreePath  string    // absolute path to the worktree directory
-	MainPath      string    // absolute path to the main worktree (parent of .grove)
-	ProjectName   string    // project name for hook context
-	Now           time.Time // injected for testability
-	IsEnvironment bool      // true for environment worktrees
-	Mirror        string    // mirror name when IsEnvironment is true
+	Name          string // short worktree name (e.g., "feature")
+	Branch        string // branch the worktree is on
+	WorktreePath  string // absolute path to the worktree directory
+	MainPath      string // absolute path to the main worktree (parent of .grove)
+	ProjectName   string // project name for hook context
+	IsEnvironment bool   // true for environment worktrees
+	Mirror        string // mirror name when IsEnvironment is true
 }
 
 // BootstrapWorktree runs the post-git-worktree-add bootstrap sequence:
@@ -30,7 +29,7 @@ type BootstrapOpts struct {
 //  3. Fire post-create hooks (per-project hooks.toml, then global plugin hooks)
 //
 // Returns an error only if state registration or symlinking fails irrecoverably.
-// Hook failures are logged via the hooks framework but do not abort the bootstrap.
+// Hook failures are logged but do not abort the bootstrap.
 func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts BootstrapOpts) error {
 	if opts.WorktreePath == "" || opts.MainPath == "" {
 		return fmt.Errorf("WorktreePath and MainPath are required")
@@ -40,10 +39,7 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 		return fmt.Errorf("symlink config: %w", err)
 	}
 
-	now := opts.Now
-	if now.IsZero() {
-		now = time.Now()
-	}
+	now := time.Now()
 	wsState := &state.WorktreeState{
 		Path:           opts.WorktreePath,
 		Branch:         opts.Branch,
@@ -74,7 +70,9 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 			MainPath:     opts.MainPath,
 			NewPath:      opts.WorktreePath,
 		}
-		_ = hookExecutor.Execute(hooks.EventPostCreate, hookCtx)
+		if err := hookExecutor.Execute(hooks.EventPostCreate, hookCtx); err != nil {
+			log.Printf("hooks: post-create execution failed: %v", err)
+		}
 	}
 
 	// Global plugin post-create hook (e.g., docker external)
@@ -84,7 +82,9 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 		WorktreePath: opts.WorktreePath,
 		MainPath:     opts.MainPath,
 	}
-	_ = hooks.Fire(hooks.EventPostCreate, globalHookCtx)
+	if err := hooks.Fire(hooks.EventPostCreate, globalHookCtx); err != nil {
+		log.Printf("hooks: global post-create plugin hook failed: %v", err)
+	}
 
 	return nil
 }
