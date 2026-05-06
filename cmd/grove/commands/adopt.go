@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -53,6 +52,11 @@ Examples:
 			return fmt.Errorf("not a git worktree at %s: %w", target, gitErr)
 		}
 
+		if target == ctx.ProjectRoot {
+			cli.Info(w, "the main worktree is always registered; nothing to adopt")
+			return nil
+		}
+
 		mgr, err := worktree.NewManager(ctx.ProjectRoot)
 		if err != nil {
 			return fmt.Errorf("worktree manager: %w", err)
@@ -85,7 +89,6 @@ Examples:
 			WorktreePath: target,
 			MainPath:     ctx.ProjectRoot,
 			ProjectName:  projectName,
-			Now:          time.Now(),
 		}
 		if err := worktree.BootstrapWorktree(ctx.State, ctx.Config, bootstrapOpts); err != nil {
 			return fmt.Errorf("bootstrap: %w", err)
@@ -122,10 +125,15 @@ func resolveAdoptTarget(cwd string, args []string) (string, error) {
 }
 
 // gitBranchAt returns the current branch name of the git worktree at dir.
+// Returns an error if the worktree is in detached HEAD state.
 func gitBranchAt(dir string) (string, error) {
 	out, err := cmdexec.Output(context.TODO(), "git", []string{"rev-parse", "--abbrev-ref", "HEAD"}, dir, cmdexec.GitLocal)
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(string(out)), nil
+	branch := strings.TrimSpace(string(out))
+	if branch == "HEAD" {
+		return "", fmt.Errorf("worktree is in detached HEAD state; check out a branch first")
+	}
+	return branch, nil
 }
