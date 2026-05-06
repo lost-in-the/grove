@@ -111,9 +111,16 @@ func (s *externalStrategy) Up(worktreePath string, detach bool) error {
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	cmdErr := cmd.Run()
+	if cmdErr == nil {
+		return nil
+	}
 
-	// Even if up returned non-zero, check whether only non-blocking services failed.
-	statuses, _ := probeServiceHealth(s.composePath(), s.ext.EnvFileName(), s.envForWorktree(worktreePath))
+	// compose up returned non-zero — check whether only non-blocking services failed.
+	statuses, probeErr := probeServiceHealth(s.composePath(), s.ext.EnvFileName(), s.envForWorktree(worktreePath))
+	if probeErr != nil {
+		// Probe failed — surface the original cmd error rather than swallowing it.
+		return cmdErr
+	}
 	return finalizeUpResult(cmdErr, statuses, s.ext.NonBlockingServices)
 }
 

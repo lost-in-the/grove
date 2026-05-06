@@ -115,6 +115,11 @@ func finalizeUpResult(cmdErr error, statuses []ServiceStatus, nonBlocking []stri
 	if cmdErr == nil {
 		return nil
 	}
+	if len(statuses) == 0 {
+		// No probe data — can't decide whether non-blocking services masked the failure.
+		// Propagate the original error.
+		return cmdErr
+	}
 	healthy, blockers := classifyHealth(statuses, nonBlocking)
 	if healthy {
 		return nil
@@ -122,11 +127,16 @@ func finalizeUpResult(cmdErr error, statuses []ServiceStatus, nonBlocking []stri
 	return fmt.Errorf("up failed; blocking service(s) not healthy: %s (underlying: %w)", strings.Join(blockers, ", "), cmdErr)
 }
 
+// probeTimeout is longer than statusTimeout (300ms) because Up() can tolerate a
+// slower probe — docker compose ps can be slow on busy systems (NFS, heavy disk I/O)
+// and 1s caused false-empty probes that fed the silent-failure bug in finalizeUpResult.
+const probeTimeout = 3 * time.Second
+
 // probeServiceHealth runs `docker compose ps --all --format json` and returns parsed statuses.
 // composePath is the directory containing the compose file; envFile is the env file name
 // (e.g., ".env" or ".env.local") to pass via --env-file.
 func probeServiceHealth(composePath, envFile string, env []string) ([]ServiceStatus, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
 	defer cancel()
 
 	args := []string{"compose"}

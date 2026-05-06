@@ -37,3 +37,15 @@ func TestUpResult_NilOnNoCmdError(t *testing.T) {
 		t.Errorf("expected nil, got: %v", got)
 	}
 }
+
+func TestUpResult_PreservesErrWhenProbeReturnsNoStatuses(t *testing.T) {
+	cmdErr := errors.New("compose up failed")
+	// Empty statuses simulates probe success but no services — finalizeUpResult
+	// currently treats this as healthy=true and returns nil. Verify behavior:
+	// with an empty status list and no non-blocking config, finalizeUpResult
+	// should NOT swallow the cmdErr.
+	got := finalizeUpResult(cmdErr, nil, nil)
+	if got == nil {
+		t.Errorf("expected cmdErr propagated when no statuses available, got nil")
+	}
+}
