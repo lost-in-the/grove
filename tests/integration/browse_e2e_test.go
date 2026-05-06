@@ -2,9 +2,9 @@
 
 // End-to-end coverage for `grove browse --json` covering the three
 // resolution paths from PR #53 (cherry-picked from release/v0.7.0):
-//   1. open PR found for the current branch  → source = "pr"
-//   2. worktree name "issue-<n>-..." parses out a known issue → "issue"
-//   3. neither — compare-page fallback                       → "compare"
+//  1. open PR found for the current branch  → source = "pr"
+//  2. worktree name "issue-<n>-..." parses out a known issue → "issue"
+//  3. neither — compare-page fallback                       → "compare"
 //
 // gh is stubbed on PATH so the test runs offline; `auth status`, `repo view`,
 // `pr view`, and `issue view` are scripted per scenario via the GROVE_TEST_GH
