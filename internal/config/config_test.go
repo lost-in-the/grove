@@ -1198,7 +1198,7 @@ bind_mount = "/app"
 	if cfg.Test.Service != "app" {
 		t.Errorf("Service: got %q want app", cfg.Test.Service)
 	}
-	if !cfg.Test.IncludeDeps {
+	if !cfg.Test.IncludeDepsValue() {
 		t.Errorf("IncludeDeps: got false want true")
 	}
 	if cfg.Test.BindMount != "/app" {
@@ -1207,18 +1207,30 @@ bind_mount = "/app"
 }
 
 func TestMergeConfigs_TestSectionPropagatesNewFields(t *testing.T) {
+	trueVal := true
 	global := LoadDefaults()
 	project := LoadDefaults()
-	project.Test.IncludeDeps = true
+	project.Test.IncludeDeps = &trueVal
 	project.Test.BindMount = "/app"
 
 	merged := mergeConfigs(global, project)
 
-	if !merged.Test.IncludeDeps {
+	if !merged.Test.IncludeDepsValue() {
 		t.Error("IncludeDeps not propagated from project config")
 	}
 	if merged.Test.BindMount != "/app" {
 		t.Errorf("BindMount: got %q want /app", merged.Test.BindMount)
+	}
+}
+
+func TestMergeConfigs_TestIncludeDepsOverridableByProject(t *testing.T) {
+	trueVal := true
+	falseVal := false
+	global := &Config{Test: TestConfig{IncludeDeps: &trueVal}}
+	project := &Config{Test: TestConfig{IncludeDeps: &falseVal}}
+	merged := mergeConfigs(global, project)
+	if merged.Test.IncludeDepsValue() {
+		t.Errorf("project-level false should override global-level true")
 	}
 }
 

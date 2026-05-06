@@ -8,30 +8,22 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/worktree"
 	"github.com/lost-in-the/grove/plugins/docker"
 )
 
-// testOptions holds the effective per-invocation test settings after layering
-// CLI flags over [test] config. It mirrors the relevant TestConfig fields so
-// the docker plugin's buildRunArgs sees a single resolved view.
-type testOptions struct {
-	IncludeDeps bool
-	BindMount   string
-}
-
-func resolveTestOptions(cfgIncludeDeps bool, cfgBindMount string, flagWithDeps bool, flagBind string) testOptions {
-	opts := testOptions{
-		IncludeDeps: cfgIncludeDeps,
-		BindMount:   cfgBindMount,
-	}
+// resolveTestOptions layers --with-deps and --bind flags over [test] config defaults.
+func resolveTestOptions(cfg config.TestConfig, flagWithDeps bool, flagBind string) (includeDeps bool, bindMount string) {
+	includeDeps = cfg.IncludeDepsValue()
 	if flagWithDeps {
-		opts.IncludeDeps = true
+		includeDeps = true
 	}
+	bindMount = cfg.BindMount
 	if flagBind != "" {
-		opts.BindMount = flagBind
+		bindMount = flagBind
 	}
-	return opts
+	return
 }
 
 var (
@@ -75,13 +67,14 @@ Extra arguments are appended to the configured command:
 			return fmt.Errorf("worktree '%s' not found", name)
 		}
 
-		opts := resolveTestOptions(ctx.Config.Test.IncludeDeps, ctx.Config.Test.BindMount, testWithDeps, testBind)
+		includeDeps, bindMount := resolveTestOptions(ctx.Config.Test, testWithDeps, testBind)
 
 		// Apply resolved options back to config so the docker plugin's buildRunArgs picks them up.
 		// We mutate a *copy* of the test config to avoid persisting CLI overrides.
 		testCfg := ctx.Config.Test
-		testCfg.IncludeDeps = opts.IncludeDeps
-		testCfg.BindMount = opts.BindMount
+		v := includeDeps
+		testCfg.IncludeDeps = &v
+		testCfg.BindMount = bindMount
 		ctx.Config.Test = testCfg
 
 		fullCommand := ctx.Config.Test.Command

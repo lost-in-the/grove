@@ -11,9 +11,7 @@ import (
 // on the arg list without actually invoking docker.
 func captureRunArgs(t *testing.T, cfg *config.Config, worktreePath, service, command string) []string {
 	t.Helper()
-	s := newExternalStrategy(cfg)
-	args := s.buildRunArgs(worktreePath, service, command)
-	return args
+	return buildRunArgs(cfg, worktreePath, service, command)
 }
 
 func TestExternalRun_DefaultUsesNoDeps(t *testing.T) {
@@ -47,6 +45,7 @@ func TestExternalRun_DefaultUsesNoDeps(t *testing.T) {
 }
 
 func TestExternalRun_IncludeDepsTrueOmitsNoDeps(t *testing.T) {
+	trueVal := true
 	cfg := &config.Config{
 		Plugins: config.PluginsConfig{
 			Docker: config.DockerPluginConfig{
@@ -60,7 +59,7 @@ func TestExternalRun_IncludeDepsTrueOmitsNoDeps(t *testing.T) {
 		Test: config.TestConfig{
 			Command:     "bin/rspec",
 			Service:     "app",
-			IncludeDeps: true,
+			IncludeDeps: &trueVal,
 		},
 	}
 

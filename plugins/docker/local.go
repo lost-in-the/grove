@@ -122,29 +122,12 @@ func (s *localStrategy) Logs(worktreePath string, service string, follow bool) e
 	return cmd.Run()
 }
 
-// buildRunArgs constructs the `docker compose run ...` argument list,
-// applying --no-deps and bind_mount based on TestConfig.
-func (s *localStrategy) buildRunArgs(worktreePath, service, command string) []string {
-	args := []string{"run", "--rm"}
-
-	if !s.cfg.Test.IncludeDeps {
-		args = append(args, "--no-deps")
-	}
-
-	if s.cfg.Test.BindMount != "" {
-		args = append(args, "-v", fmt.Sprintf("%s:%s", worktreePath, s.cfg.Test.BindMount))
-	}
-
-	args = append(args, service, "bash", "-cil", command)
-	return args
-}
-
 func (s *localStrategy) Run(worktreePath string, service string, command string) error {
 	if !hasDockerCompose(worktreePath) {
 		return ErrNoComposeFile
 	}
 
-	args := s.buildRunArgs(worktreePath, service, command)
+	args := buildRunArgs(s.cfg, worktreePath, service, command)
 	cmd := composeCommand(worktreePath, "", nil, args...)
 	cmd.Stdout = os.Stderr
 	stderrBuf := &teeBuffer{w: os.Stderr}

@@ -11,8 +11,16 @@ import (
 type TestConfig struct {
 	Command     string `toml:"command"`
 	Service     string `toml:"service"`
-	IncludeDeps bool   `toml:"include_deps"` // resolve depends_on services when running compose; default false (skip)
+	IncludeDeps *bool  `toml:"include_deps"` // resolve depends_on services when running compose; default false (skip)
 	BindMount   string `toml:"bind_mount"`   // container path for the worktree bind mount; empty disables
+}
+
+// IncludeDepsValue returns the effective IncludeDeps value, defaulting to false.
+func (t TestConfig) IncludeDepsValue() bool {
+	if t.IncludeDeps == nil {
+		return false
+	}
+	return *t.IncludeDeps
 }
 
 // SessionConfig controls session command behavior for grove open
@@ -328,7 +336,7 @@ func mergeConfigs(base, override *Config) *Config {
 	if override.Test.Service != "" {
 		result.Test.Service = override.Test.Service
 	}
-	if override.Test.IncludeDeps {
+	if override.Test.IncludeDeps != nil {
 		result.Test.IncludeDeps = override.Test.IncludeDeps
 	}
 	if override.Test.BindMount != "" {
