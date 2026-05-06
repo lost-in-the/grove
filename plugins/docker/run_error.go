@@ -42,8 +42,12 @@ type teeBuffer struct {
 }
 
 func (t *teeBuffer) Write(p []byte) (int, error) {
+	n := len(p)
 	if t.w != nil {
 		_, _ = t.w.Write(p)
+	}
+	if len(p) > stderrBufferLimit {
+		p = p[len(p)-stderrBufferLimit:]
 	}
 	if len(t.buf)+len(p) > stderrBufferLimit {
 		excess := len(t.buf) + len(p) - stderrBufferLimit
@@ -54,7 +58,7 @@ func (t *teeBuffer) Write(p []byte) (int, error) {
 		}
 	}
 	t.buf = append(t.buf, p...)
-	return len(p), nil
+	return n, nil
 }
 
 func (t *teeBuffer) String() string { return string(t.buf) }
