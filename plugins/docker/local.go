@@ -128,14 +128,7 @@ func (s *localStrategy) Run(worktreePath string, service string, command string)
 
 	args := buildRunArgs(s.cfg, worktreePath, service, command)
 	cmd := composeCommand(worktreePath, "", nil, args...)
-	cmd.Stdout = os.Stderr
-	stderrBuf := &teeBuffer{w: os.Stderr}
-	cmd.Stderr = stderrBuf
-	cmd.Stdin = os.Stdin
-	if err := cmd.Run(); err != nil {
-		return translateRunError(stderrBuf.String(), err, s.cfg.Test.IncludeDepsValue())
-	}
-	return nil
+	return runWithErrorTranslation(cmd, s.cfg.Test.IncludeDepsValue())
 }
 
 // Exec runs a command in an already-running container (compose exec).
