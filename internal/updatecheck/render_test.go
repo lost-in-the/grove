@@ -1,6 +1,9 @@
 package updatecheck
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestCompareSemver(t *testing.T) {
 	cases := []struct {
@@ -45,5 +48,38 @@ func TestParseSemver_EdgeCases(t *testing.T) {
 				t.Errorf("parseSemver(%q) ok=%v, want %v", tc.in, got, tc.ok)
 			}
 		})
+	}
+}
+
+func TestRenderBox_Plain(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	out := RenderBox("0.5.0", "0.6.0",
+		"https://github.com/lost-in-the/grove/releases/tag/v0.6.0",
+		"brew upgrade lost-in-the/tap/grove",
+	)
+	// Plain mode: no ANSI escape codes
+	if strings.Contains(out, "\x1b[") {
+		t.Errorf("expected no ANSI escape sequences in plain output, got:\n%s", out)
+	}
+	mustContain(t, out, "Update available")
+	mustContain(t, out, "0.5.0")
+	mustContain(t, out, "0.6.0")
+	mustContain(t, out, "brew upgrade lost-in-the/tap/grove")
+	mustContain(t, out, "github.com/lost-in-the/grove/releases/tag/v0.6.0")
+}
+
+func TestRenderBox_ColoredEmitsAnsi(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("CLICOLOR_FORCE", "1") // hint to lipgloss to render colors even when not a TTY
+	out := RenderBox("0.5.0", "1.0.0", "https://x", "brew upgrade x")
+	if !strings.Contains(out, "\x1b[") {
+		t.Errorf("expected ANSI escape sequences in colored output, got: %q", out)
+	}
+}
+
+func mustContain(t *testing.T, haystack, needle string) {
+	t.Helper()
+	if !strings.Contains(haystack, needle) {
+		t.Errorf("expected %q in output, got:\n%s", needle, haystack)
 	}
 }
