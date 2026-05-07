@@ -148,3 +148,37 @@ func TestRefresh_FetchFailureLeavesCacheAlone(t *testing.T) {
 }
 
 var errFakeNetwork = fmt.Errorf("simulated network failure")
+
+func TestCheckNow_FetchesAndPrintsNotification(t *testing.T) {
+	fetcher := func() (Release, error) {
+		return Release{TagName: "v0.6.0", HTMLURL: "https://x"}, nil
+	}
+	var buf bytes.Buffer
+	if err := checkNowWithDeps(&buf, "0.5.0", fetcher); err != nil {
+		t.Fatalf("checkNowWithDeps: %v", err)
+	}
+	if !strings.Contains(buf.String(), "0.6.0") {
+		t.Errorf("expected '0.6.0' in output, got:\n%s", buf.String())
+	}
+}
+
+func TestCheckNow_UpToDateMessage(t *testing.T) {
+	fetcher := func() (Release, error) {
+		return Release{TagName: "v0.5.0", HTMLURL: "https://x"}, nil
+	}
+	var buf bytes.Buffer
+	if err := checkNowWithDeps(&buf, "0.5.0", fetcher); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "up to date") {
+		t.Errorf("expected 'up to date' message, got: %q", buf.String())
+	}
+}
+
+func TestCheckNow_FetchFailureReturnsError(t *testing.T) {
+	fetcher := func() (Release, error) { return Release{}, errFakeNetwork }
+	var buf bytes.Buffer
+	if err := checkNowWithDeps(&buf, "0.5.0", fetcher); err == nil {
+		t.Error("expected error on fetch failure")
+	}
+}

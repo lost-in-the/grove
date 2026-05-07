@@ -55,3 +55,25 @@ func refreshFromPathWithFetcher(path, currentVersion string, interval time.Durat
 		LatestURL:     rel.HTMLURL,
 	})
 }
+
+// CheckNow synchronously fetches the latest release and prints the result to w.
+// Bypasses the cache and the interval. Used by --check-update.
+func CheckNow(w io.Writer, currentVersion string) error {
+	return checkNowWithDeps(w, currentVersion, func() (Release, error) {
+		return FetchLatest(context.Background())
+	})
+}
+
+func checkNowWithDeps(w io.Writer, currentVersion string, fetcher func() (Release, error)) error {
+	rel, err := fetcher()
+	if err != nil {
+		return err
+	}
+	if CompareSemver(currentVersion, rel.Version()) == SeverityNone {
+		_, _ = io.WriteString(w, "grove is up to date ("+currentVersion+")\n")
+		return nil
+	}
+	method := DetectInstall()
+	_, _ = io.WriteString(w, RenderBox(currentVersion, rel.Version(), rel.HTMLURL, UpdateCommand(method)))
+	return nil
+}
