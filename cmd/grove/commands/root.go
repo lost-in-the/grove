@@ -13,8 +13,15 @@ import (
 	"github.com/lost-in-the/grove/internal/log"
 	"github.com/lost-in-the/grove/internal/state"
 	"github.com/lost-in-the/grove/internal/tui"
+	"github.com/lost-in-the/grove/internal/updatecheck"
+	"github.com/lost-in-the/grove/internal/version"
 	"github.com/lost-in-the/grove/internal/worktree"
 	"github.com/lost-in-the/grove/plugins/docker"
+)
+
+var (
+	noUpdateNotifierFlag bool
+	checkUpdateFlag      bool
 )
 
 var rootCmd = &cobra.Command{
@@ -90,6 +97,17 @@ Use 'grove install --help' for details.`,
 
 		return nil
 	},
+	PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
+		if checkUpdateFlag {
+			return updatecheck.CheckNow(os.Stderr, version.Version)
+		}
+		if updatecheck.Skip(noUpdateNotifierFlag, version.Version) {
+			return nil
+		}
+		updatecheck.MaybeNotify(os.Stderr, version.Version)
+		updatecheck.RefreshAsync()
+		return nil
+	},
 }
 
 // Execute runs the root command with the given context.
@@ -98,5 +116,8 @@ func Execute(ctx context.Context) error {
 }
 
 func init() {
-	// Global flags can be added here if needed
+	rootCmd.PersistentFlags().BoolVar(&noUpdateNotifierFlag, "no-update-notifier", false,
+		"suppress the new-release notification on this run")
+	rootCmd.PersistentFlags().BoolVar(&checkUpdateFlag, "check-update", false,
+		"force a synchronous check for a newer grove release and exit")
 }
