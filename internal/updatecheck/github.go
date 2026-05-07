@@ -11,11 +11,11 @@ import (
 	"github.com/lost-in-the/grove/internal/version"
 )
 
-// LatestReleaseURL is the canonical GitHub Releases API endpoint for grove.
-const LatestReleaseURL = "https://api.github.com/repos/lost-in-the/grove/releases/latest"
+// latestReleaseURL is the canonical GitHub Releases API endpoint for grove.
+const latestReleaseURL = "https://api.github.com/repos/lost-in-the/grove/releases/latest"
 
-// FetchTimeout is the hard cap on the HTTP request.
-const FetchTimeout = 2 * time.Second
+// fetchTimeout is the hard cap on the HTTP request.
+const fetchTimeout = 2 * time.Second
 
 // Release is the subset of the GitHub release JSON we care about.
 type Release struct {
@@ -30,7 +30,7 @@ func (r Release) Version() string {
 
 // FetchLatest queries the GitHub Releases API for the latest release.
 func FetchLatest(ctx context.Context) (Release, error) {
-	return fetchLatestFromURL(ctx, LatestReleaseURL, FetchTimeout)
+	return fetchLatestFromURL(ctx, latestReleaseURL, fetchTimeout)
 }
 
 func fetchLatestFromURL(ctx context.Context, url string, timeout time.Duration) (Release, error) {

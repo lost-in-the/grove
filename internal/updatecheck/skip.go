@@ -19,23 +19,17 @@ var skipEnvVars = []string{
 // Honors CI env vars, grove-specific opt-out, the --no-update-notifier flag,
 // non-TTY stdout, and dev/unknown/non-semver versions.
 func Skip(noUpdateNotifierFlag bool, currentVersion string) bool {
-	env := map[string]string{}
-	for _, k := range skipEnvVars {
-		if v := os.Getenv(k); v != "" {
-			env[k] = v
-		}
-	}
 	stdoutIsTTY := term.IsTerminal(int(os.Stdout.Fd()))
-	return skipWithDeps(env, noUpdateNotifierFlag, currentVersion, stdoutIsTTY)
+	return skipWithDeps(os.Getenv, noUpdateNotifierFlag, currentVersion, stdoutIsTTY)
 }
 
 // skipWithDeps is the testable core of Skip — pure function over its inputs.
-func skipWithDeps(env map[string]string, flag bool, version string, stdoutIsTTY bool) bool {
+func skipWithDeps(getenv func(string) string, flag bool, version string, stdoutIsTTY bool) bool {
 	if flag {
 		return true
 	}
 	for _, k := range skipEnvVars {
-		if env[k] != "" {
+		if getenv(k) != "" {
 			return true
 		}
 	}

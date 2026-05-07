@@ -105,7 +105,7 @@ Use 'grove install --help' for details.`,
 			return nil
 		}
 		updatecheck.MaybeNotify(os.Stderr, version.Version)
-		updatecheck.RefreshAsync(version.Version)
+		updatecheck.RefreshAsync()
 		return nil
 	},
 }

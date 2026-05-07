@@ -32,7 +32,7 @@ func TestSkip(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := skipWithDeps(tc.env, tc.flag, tc.version, tc.stdoutIsTTY)
+			got := skipWithDeps(func(k string) string { return tc.env[k] }, tc.flag, tc.version, tc.stdoutIsTTY)
 			if got != tc.want {
 				t.Errorf("Skip() = %v, want %v", got, tc.want)
 			}

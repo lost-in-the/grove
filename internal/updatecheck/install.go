@@ -16,7 +16,6 @@ const (
 	InstallBinary
 )
 
-// String renders the method as a human-readable name (used in test output and logs).
 func (m InstallMethod) String() string {
 	switch m {
 	case InstallBrew:

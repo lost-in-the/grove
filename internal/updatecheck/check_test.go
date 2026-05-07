@@ -13,7 +13,6 @@ func TestMaybeNotify_NewerCachedVersionPrintsBox(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "update-check.json")
 	_ = WriteCacheToPath(path, Cache{
-		Version:       1,
 		LastCheckedAt: time.Now().Add(-1 * time.Hour),
 		LatestVersion: "0.6.0",
 		LatestURL:     "https://github.com/lost-in-the/grove/releases/tag/v0.6.0",
@@ -72,7 +71,6 @@ func TestRefresh_WithinIntervalSkips(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "update-check.json")
 	original := Cache{
-		Version:       1,
 		LastCheckedAt: time.Now(), // brand new
 		LatestVersion: "0.5.0",
 		LatestURL:     "https://example/old",
@@ -84,7 +82,7 @@ func TestRefresh_WithinIntervalSkips(t *testing.T) {
 		called = true
 		return Release{TagName: "v9.9.9", HTMLURL: "https://example/new"}, nil
 	}
-	refreshFromPathWithFetcher(path, "0.5.0", time.Hour, fetcher)
+	refreshFromPathWithFetcher(path, time.Hour, fetcher)
 	if called {
 		t.Error("fetcher should not be called within the interval")
 	}
@@ -98,7 +96,6 @@ func TestRefresh_BeyondIntervalUpdatesCache(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "update-check.json")
 	_ = WriteCacheToPath(path, Cache{
-		Version:       1,
 		LastCheckedAt: time.Now().Add(-48 * time.Hour),
 		LatestVersion: "0.5.0",
 	})
@@ -106,7 +103,7 @@ func TestRefresh_BeyondIntervalUpdatesCache(t *testing.T) {
 	fetcher := func() (Release, error) {
 		return Release{TagName: "v0.6.0", HTMLURL: "https://example/new"}, nil
 	}
-	refreshFromPathWithFetcher(path, "0.5.0", 24*time.Hour, fetcher)
+	refreshFromPathWithFetcher(path, 24*time.Hour, fetcher)
 
 	got, err := ReadCacheFromPath(path)
 	if err != nil {
@@ -124,7 +121,6 @@ func TestRefresh_FetchFailureLeavesCacheAlone(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "update-check.json")
 	original := Cache{
-		Version:       1,
 		LastCheckedAt: time.Now().Add(-48 * time.Hour),
 		LatestVersion: "0.5.0",
 		LatestURL:     "https://example/old",
@@ -134,7 +130,7 @@ func TestRefresh_FetchFailureLeavesCacheAlone(t *testing.T) {
 	fetcher := func() (Release, error) {
 		return Release{}, errFakeNetwork
 	}
-	refreshFromPathWithFetcher(path, "0.5.0", 24*time.Hour, fetcher)
+	refreshFromPathWithFetcher(path, 24*time.Hour, fetcher)
 
 	got, _ := ReadCacheFromPath(path)
 	// Compare ignoring LastCheckedAt (atomic write may have nanosecond drift).

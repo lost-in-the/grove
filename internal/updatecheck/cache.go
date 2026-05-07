@@ -11,7 +11,6 @@ import (
 
 // Cache is the on-disk representation of the last update check.
 type Cache struct {
-	Version       int       `json:"version"`
 	LastCheckedAt time.Time `json:"last_checked_at"`
 	LatestVersion string    `json:"latest_version"`
 	LatestURL     string    `json:"latest_url"`

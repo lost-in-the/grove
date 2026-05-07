@@ -12,7 +12,6 @@ func TestCache_RoundtripJSON(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "update-check.json")
 	c := Cache{
-		Version:       1,
 		LastCheckedAt: time.Date(2026, 5, 7, 12, 34, 56, 0, time.UTC),
 		LatestVersion: "0.6.0",
 		LatestURL:     "https://github.com/lost-in-the/grove/releases/tag/v0.6.0",
@@ -59,7 +58,7 @@ func TestCache_CorruptFileReturnsZeroValue(t *testing.T) {
 func TestCache_AtomicWriteCleansUpTempFiles(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "update-check.json")
-	c := Cache{Version: 1, LatestVersion: "0.6.0"}
+	c := Cache{LatestVersion: "0.6.0"}
 	if err := WriteCacheToPath(path, c); err != nil {
 		t.Fatalf("WriteCacheToPath: %v", err)
 	}

@@ -56,6 +56,7 @@ func TestRenderBox_Plain(t *testing.T) {
 	out := RenderBox("0.5.0", "0.6.0",
 		"https://github.com/lost-in-the/grove/releases/tag/v0.6.0",
 		"brew upgrade lost-in-the/tap/grove",
+		SeverityMinor,
 	)
 	// Plain mode: no ANSI escape codes
 	if strings.Contains(out, "\x1b[") {
@@ -71,7 +72,7 @@ func TestRenderBox_Plain(t *testing.T) {
 func TestRenderBox_ColoredEmitsAnsi(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
 	t.Setenv("CLICOLOR_FORCE", "1") // hint to lipgloss to render colors even when not a TTY
-	out := RenderBox("0.5.0", "1.0.0", "https://x", "brew upgrade x")
+	out := RenderBox("0.5.0", "1.0.0", "https://x", "brew upgrade x", SeverityMajor)
 	if !strings.Contains(out, "\x1b[") {
 		t.Errorf("expected ANSI escape sequences in colored output, got: %q", out)
 	}
@@ -82,6 +83,7 @@ func TestRenderBox_PlainPaddingAlignsForUTF8(t *testing.T) {
 	out := RenderBox("0.5.0", "0.6.0",
 		"https://x",
 		"brew upgrade x",
+		SeverityMinor,
 	)
 	// Verify each line between the top and bottom borders has identical visual width.
 	// In plain mode, lines are ASCII-only after the arrow swap, so byte length == rune count

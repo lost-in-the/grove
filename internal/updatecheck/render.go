@@ -20,7 +20,6 @@ const (
 	SeverityMajor
 )
 
-// String renders the severity as a human-readable name.
 func (s Severity) String() string {
 	switch s {
 	case SeverityPatch:
@@ -65,8 +64,7 @@ func CompareSemver(current, latest string) Severity {
 
 // RenderBox returns the formatted box notification as a string.
 // When NO_COLOR is set, the output is plain ASCII (no ANSI escapes).
-func RenderBox(currentVersion, latestVersion, latestURL, updateCmd string) string {
-	severity := CompareSemver(currentVersion, latestVersion)
+func RenderBox(currentVersion, latestVersion, latestURL, updateCmd string, severity Severity) string {
 	arrow := "→"
 	if os.Getenv("NO_COLOR") != "" {
 		arrow = "->"
