@@ -18,6 +18,7 @@ This document provides exhaustive specifications for each grove command. Every b
    - [grove rm](#grove-rm)
    - [grove rename](#grove-rename)
    - [grove here](#grove-here)
+   - [grove context](#grove-context)
    - [grove last](#grove-last)
    - [grove join](#grove-join)
    - [grove which](#grove-which)
@@ -898,6 +899,115 @@ To create a new worktree: grove new <name>
 **Exit Codes:**
 - 0: Success (in a worktree)
 - 1: Not in a worktree
+
+---
+
+### grove context
+
+**Purpose:** Print full worktree context details — like the TUI sidebar, but for CLI/scripting use.
+
+**Usage:**
+```
+grove context [flags]
+
+Flags:
+  -j, --json     Output as JSON
+```
+
+**Behavior:**
+
+1. Require grove project context (exits non-zero if not in a grove project)
+2. Determine the current worktree from `$PWD`
+3. Gather: branch, HEAD commit, remote tracking/sync, working-tree status, stash count, recent commits
+4. Display in a human-readable format or emit structured JSON
+
+**Output (Default):**
+```
+my-feature (feat/my-feature)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Path:       ~/projects/myapp-my-feature
+Branch:     feat/my-feature
+Tracking:   origin/feat/my-feature  ↑2 ↓0
+Commit:     abc1234 Add authentication middleware
+Status:     ✓ clean
+Recent:
+  abc1234 Add authentication middleware
+  def5678 Scaffold user model
+  ghi9012 Initial commit
+```
+
+**Output (Dirty):**
+```
+my-feature (feat/my-feature)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Path:       ~/projects/myapp-my-feature
+Branch:     feat/my-feature
+Tracking:   origin/feat/my-feature  ↑1 ↓3
+Commit:     abc1234 Add authentication middleware
+Status:     ● dirty
+            M  internal/auth/handler.go
+            ?? internal/auth/token.go
+Stash:      2
+Recent:
+  abc1234 Add authentication middleware
+  def5678 Scaffold user model
+  ghi9012 Initial commit
+```
+
+**Output (--json):**
+```json
+{
+  "name": "my-feature",
+  "path": "/home/user/projects/myapp-my-feature",
+  "branch": "feat/my-feature",
+  "commit": {
+    "sha": "abc1234",
+    "message": "Add authentication middleware"
+  },
+  "tracking_branch": "origin/feat/my-feature",
+  "status": "clean",
+  "ahead": 2,
+  "behind": 0,
+  "stash_count": 0,
+  "recent_commits": [
+    {"sha": "abc1234", "message": "Add authentication middleware"},
+    {"sha": "def5678", "message": "Scaffold user model"},
+    {"sha": "ghi9012", "message": "Initial commit"}
+  ]
+}
+```
+
+**JSON Field Reference:**
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `name` | string | Short display name (without project prefix) |
+| `path` | string | Absolute path to the worktree |
+| `branch` | string | Current branch; `"(detached HEAD at <sha>)"` when detached |
+| `commit.sha` | string | 7-char short hash of HEAD |
+| `commit.message` | string | Subject line of HEAD commit |
+| `tracking_branch` | string | Remote tracking ref (field omitted when not set) |
+| `status` | string | `"clean"` or `"dirty"` |
+| `changes` | []string | Modified files from `git status --porcelain` (field omitted when clean) |
+| `ahead` | int | Commits ahead of remote (0 when no remote) |
+| `behind` | int | Commits behind remote (0 when no remote) |
+| `stash_count` | int | Number of stashes |
+| `recent_commits` | []object | Last 5 commits, each `{sha, message}` |
+
+**Edge Cases:**
+
+| Scenario | Behavior |
+|----------|----------|
+| No remote tracking branch | Omit `Tracking:` line in human output; omit `tracking_branch` key in JSON |
+| Detached HEAD | Branch shows `(detached HEAD at <sha>)` |
+| Dirty worktree | Shows modified files (up to 5 shown; remainder counted) |
+| No stashes | `Stash:` line omitted in human output; `stash_count: 0` in JSON |
+| No commits yet | Recent commits section omitted |
+| Not in grove project | Exit non-zero with "not a grove project" error |
+
+**Exit Codes:**
+- 0: Success
+- 10: Not in a grove project
 
 ---
 
@@ -2300,8 +2410,8 @@ Two command names surfaced during a documentation audit but were confirmed to **
 
 If a `grove browse` command is added in the future, it should be documented here and in README.md.
 
-### `grove context` (not implemented)
+### `grove context` (implemented in v0.8.0)
 
-`cmd/grove/commands/context.go` exists but contains the `GroveContext` struct and `RequireGroveContext` middleware helper — shared infrastructure used by nearly every command. There is no user-facing `grove context` cobra command.
+`cmd/grove/commands/context.go` contains the `GroveContext` struct and `RequireGroveContext` middleware helper — shared infrastructure used by nearly every command.
 
-If a `grove context` command is added in the future (e.g., to print current project/worktree context for scripting), it should be documented here and in README.md.
+The user-facing `grove context` command lives in `cmd/grove/commands/context_cmd.go` and is documented in [grove context](#grove-context) above.
