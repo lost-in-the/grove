@@ -106,59 +106,86 @@ func TestBootstrapWorktree_RejectsEmptyPaths(t *testing.T) {
 	}
 }
 
-// TestBootstrapWorktree_HookFailureSurfacesToWriter verifies that a failing
-// post-create hook writes a warning to the supplied writer without requiring
-// GROVE_LOG=1 to be set.
-func TestBootstrapWorktree_HookFailureSurfacesToWriter(t *testing.T) {
-	tmpDir := t.TempDir()
-	mainDir := filepath.Join(tmpDir, "main")
-	groveDir := filepath.Join(mainDir, ".grove")
-	if err := os.MkdirAll(groveDir, 0755); err != nil {
-		t.Fatalf("mkdir grove: %v", err)
-	}
-	wtPath := filepath.Join(tmpDir, "feature")
-	if err := os.MkdirAll(wtPath, 0755); err != nil {
-		t.Fatalf("mkdir wt: %v", err)
+// TestBootstrapWorktree_HookFailure covers both the writer and nil-writer paths
+// for a failing post-create hook.
+//   - withWriter: warning must appear in the buffer, function must return nil
+//   - nilWriter:  function must return nil and must not panic (regression guard
+//     against future callers dropping a w != nil guard)
+func TestBootstrapWorktree_HookFailure(t *testing.T) {
+	tests := []struct {
+		name        string
+		useWriter   bool
+		wantWarning string
+	}{
+		{
+			name:        "withWriter surfaces warning to stderr",
+			useWriter:   true,
+			wantWarning: "post-create hook failed",
+		},
+		{
+			name:      "nilWriter does not panic",
+			useWriter: false,
+		},
 	}
 
-	// Write a hooks.toml with a required command that always fails.
-	hooksToml := `[hooks]
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			mainDir := filepath.Join(tmpDir, "main")
+			groveDir := filepath.Join(mainDir, ".grove")
+			if err := os.MkdirAll(groveDir, 0755); err != nil {
+				t.Fatalf("mkdir grove: %v", err)
+			}
+			wtPath := filepath.Join(tmpDir, "feature")
+			if err := os.MkdirAll(wtPath, 0755); err != nil {
+				t.Fatalf("mkdir wt: %v", err)
+			}
+
+			// Write a hooks.toml with a required command that always fails.
+			hooksToml := `[hooks]
 [[hooks.post_create]]
 type = "command"
 command = "false"
 required = true
 `
-	if err := os.WriteFile(filepath.Join(groveDir, "hooks.toml"), []byte(hooksToml), 0644); err != nil {
-		t.Fatalf("write hooks.toml: %v", err)
-	}
+			if err := os.WriteFile(filepath.Join(groveDir, "hooks.toml"), []byte(hooksToml), 0644); err != nil {
+				t.Fatalf("write hooks.toml: %v", err)
+			}
 
-	// hooks.NewExecutor() uses cwd to find .grove/hooks.toml, so chdir to mainDir.
-	t.Chdir(mainDir)
+			// hooks.NewExecutor() uses cwd to find .grove/hooks.toml, so chdir to mainDir.
+			t.Chdir(mainDir)
 
-	stateMgr, err := state.NewManager(groveDir)
-	if err != nil {
-		t.Fatalf("state mgr: %v", err)
-	}
+			stateMgr, err := state.NewManager(groveDir)
+			if err != nil {
+				t.Fatalf("state mgr: %v", err)
+			}
 
-	var buf bytes.Buffer
-	w := cli.NewWriter(&buf, false)
+			var buf bytes.Buffer
+			var w *cli.Writer
+			if tt.useWriter {
+				w = cli.NewWriter(&buf, false)
+			}
 
-	cfg := config.LoadDefaults()
-	opts := BootstrapOpts{
-		Name:         "feature",
-		Branch:       "feature",
-		WorktreePath: wtPath,
-		MainPath:     mainDir,
-		ProjectName:  "test-proj",
-	}
+			cfg := config.LoadDefaults()
+			opts := BootstrapOpts{
+				Name:         "feature",
+				Branch:       "feature",
+				WorktreePath: wtPath,
+				MainPath:     mainDir,
+				ProjectName:  "test-proj",
+			}
 
-	// BootstrapWorktree must return nil (hook failures are non-fatal).
-	if err := BootstrapWorktree(stateMgr, cfg, opts, w); err != nil {
-		t.Fatalf("BootstrapWorktree returned unexpected error: %v", err)
-	}
+			// Hook failures are non-fatal — must always return nil.
+			if err := BootstrapWorktree(stateMgr, cfg, opts, w); err != nil {
+				t.Fatalf("BootstrapWorktree returned unexpected error: %v", err)
+			}
 
-	got := buf.String()
-	if !strings.Contains(got, "post-create hook failed") {
-		t.Errorf("expected warning about post-create hook failure on writer, got: %q", got)
+			if tt.wantWarning != "" {
+				got := buf.String()
+				if !strings.Contains(got, tt.wantWarning) {
+					t.Errorf("expected warning %q on writer, got: %q", tt.wantWarning, got)
+				}
+			}
+		})
 	}
 }

@@ -36,9 +36,12 @@ type BootstrapOpts struct {
 // via docker:compose handlers) run.
 //
 // Returns an error only if state registration or symlinking fails irrecoverably.
-// Hook and SetupFiles failures are always printed via w (stderr) so the user
-// sees them, and are also written to grove.log when GROVE_LOG=1 is set.
-// Pass a nil w to suppress the stderr output (e.g. in tests that don't care).
+// Hook and SetupFiles failures are non-fatal; they are reported via w so the
+// user sees them on stderr. Pass a non-nil w for interactive callers (grove new,
+// grove adopt). Pass nil for JSON-mode callers where stderr would corrupt
+// machine-readable output, or for tests that don't assert on warning output.
+// With nil, hook failures are still written to grove.log when GROVE_LOG=1 is
+// set, but are otherwise invisible.
 func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts BootstrapOpts, w *cli.Writer) error {
 	if opts.WorktreePath == "" || opts.MainPath == "" {
 		return fmt.Errorf("WorktreePath and MainPath are required")
