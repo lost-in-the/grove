@@ -11,7 +11,7 @@ func TestTranslateRunError_DependencyDidntComplete(t *testing.T) {
 service "asset_precompile" didn't complete successfully: exit 1`
 	original := errors.New("exit status 1")
 
-	got := translateRunError(stderr, original)
+	got := translateRunError(stderr, original, false)
 
 	if got == nil {
 		t.Fatal("expected translated error, got nil")
@@ -29,7 +29,7 @@ func TestTranslateRunError_PassThroughOnUnknownPattern(t *testing.T) {
 	stderr := "some other docker error"
 	original := errors.New("exit status 1")
 
-	got := translateRunError(stderr, original)
+	got := translateRunError(stderr, original, false)
 
 	if got != original {
 		t.Errorf("expected original error pass-through, got: %v", got)
@@ -38,9 +38,70 @@ func TestTranslateRunError_PassThroughOnUnknownPattern(t *testing.T) {
 
 func TestTranslateRunError_PassThroughOnEmptyStderr(t *testing.T) {
 	original := errors.New("exit status 1")
-	got := translateRunError("", original)
+	got := translateRunError("", original, false)
 	if got != original {
 		t.Errorf("expected original error pass-through, got: %v", got)
+	}
+}
+
+// Tests for the --no-deps connection-error hint (issue #62).
+
+func TestTranslateRunError_ConnectionRefused_NoIncludeDeps_HintAppended(t *testing.T) {
+	stderr := "dial tcp 127.0.0.1:5432: connect: connection refused"
+	original := errors.New("exit status 1")
+
+	got := translateRunError(stderr, original, false)
+
+	if got == nil {
+		t.Fatal("expected error with hint, got nil")
+	}
+	msg := got.Error()
+	if !strings.Contains(msg, "exit status 1") {
+		t.Errorf("expected original error text preserved, got: %s", msg)
+	}
+	if !strings.Contains(msg, "--with-deps") {
+		t.Errorf("expected --with-deps hint in message, got: %s", msg)
+	}
+	if !strings.Contains(msg, "include_deps") {
+		t.Errorf("expected include_deps hint in message, got: %s", msg)
+	}
+}
+
+func TestTranslateRunError_ConnectionRefused_IncludeDeps_NoHint(t *testing.T) {
+	stderr := "dial tcp 127.0.0.1:5432: connect: connection refused"
+	original := errors.New("exit status 1")
+
+	got := translateRunError(stderr, original, true)
+
+	// When the user already opted into include_deps, no hint should be added.
+	if got != original {
+		t.Errorf("expected original error pass-through (no hint), got: %v", got)
+	}
+}
+
+func TestTranslateRunError_NoSuchHost_NoIncludeDeps_HintAppended(t *testing.T) {
+	stderr := "Error response from daemon: no such host: db"
+	original := errors.New("exit status 1")
+
+	got := translateRunError(stderr, original, false)
+
+	if got == nil {
+		t.Fatal("expected error with hint, got nil")
+	}
+	msg := got.Error()
+	if !strings.Contains(msg, "--with-deps") {
+		t.Errorf("expected --with-deps hint, got: %s", msg)
+	}
+}
+
+func TestTranslateRunError_UnrelatedError_NoIncludeDeps_NoHint(t *testing.T) {
+	stderr := "ERROR: Service 'web' failed to build: dockerfile parse error"
+	original := errors.New("exit status 1")
+
+	got := translateRunError(stderr, original, false)
+
+	if got != original {
+		t.Errorf("expected original error pass-through for unrelated error, got: %v", got)
 	}
 }
 

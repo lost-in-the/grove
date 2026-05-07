@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Behavior change:** `grove test` now passes `--no-deps` to `compose run` by default. Tests that rely on dependency services starting (e.g., a database) need either `[test] include_deps = true` in config or the `--with-deps` flag.
+- When `grove test` exits non-zero with a connection-refused or DNS error (e.g. "connection refused", "no such host") and the user has not opted into `include_deps`, grove appends a hint pointing at `--with-deps` and `[test] include_deps = true`.
 - **Behavior change:** `grove up` against an external stack tolerates failures of services listed in `non_blocking_services` — the command no longer exits non-zero when only one-shot init services failed.
 - **Behavior change:** `grove ps` external-stack status is now driven by `docker compose ps --format json` and the `non_blocking_services` list. A stack with only non-blocking services exited cleanly is `up`, not `degraded`.
 - `TestConfig.IncludeDeps` is now `*bool` so a project-level `false` can override a global `true`
