@@ -41,6 +41,7 @@ func buildContextOutput(overrides func(*contextOutput)) contextOutput {
 			Message: "initial commit",
 		},
 		TrackingBranch: "origin/feat/my-feature",
+		HasRemote:      true,
 		Status:         "clean",
 		Ahead:          2,
 		Behind:         0,
@@ -68,7 +69,7 @@ func TestContextOutput_JSONSchema(t *testing.T) {
 		{
 			name:       "clean worktree",
 			build:      nil,
-			wantFields: []string{`"name"`, `"path"`, `"branch"`, `"commit"`, `"tracking_branch"`, `"status"`, `"ahead"`, `"behind"`, `"stash_count"`, `"recent_commits"`},
+			wantFields: []string{`"name"`, `"path"`, `"branch"`, `"commit"`, `"tracking_branch"`, `"has_remote"`, `"status"`, `"ahead"`, `"behind"`, `"stash_count"`, `"recent_commits"`},
 			absentKeys: []string{`"changes"`},
 		},
 		{
@@ -249,13 +250,16 @@ func TestContextOutput_PrintJSON(t *testing.T) {
 }
 
 // TestContextOutput_NoRemote_OmitsTrackingFields verifies that when hasRemote
-// is false, the JSON output omits tracking_branch and emits 0 for ahead/behind.
+// is false, the JSON output omits tracking_branch, emits has_remote: false,
+// and still includes ahead/behind as 0. Consumers can use has_remote to
+// distinguish "no remote" from "remote, perfectly in sync".
 // This mirrors the TUI's hasRemote contract in internal/tui/data.go.
 func TestContextOutput_NoRemote_OmitsTrackingFields(t *testing.T) {
 	// Simulate what contextCmd does when hasRemote=false: tracking_branch is
-	// left as zero value ("") so omitempty drops it; ahead/behind stay 0.
+	// left as zero value ("") so omitempty drops it; HasRemote=false; ahead/behind stay 0.
 	obj := buildContextOutput(func(o *contextOutput) {
 		o.TrackingBranch = ""
+		o.HasRemote = false
 		o.Ahead = 0
 		o.Behind = 0
 	})
@@ -268,6 +272,46 @@ func TestContextOutput_NoRemote_OmitsTrackingFields(t *testing.T) {
 
 	if strings.Contains(js, `"tracking_branch"`) {
 		t.Errorf("expected tracking_branch to be absent when no remote, got:\n%s", js)
+	}
+	if !strings.Contains(js, `"has_remote": false`) {
+		t.Errorf("expected has_remote: false in JSON when no remote, got:\n%s", js)
+	}
+	// ahead and behind are always present (0 is valid)
+	if !strings.Contains(js, `"ahead"`) {
+		t.Errorf("expected ahead field present even when no remote, got:\n%s", js)
+	}
+	if !strings.Contains(js, `"behind"`) {
+		t.Errorf("expected behind field present even when no remote, got:\n%s", js)
+	}
+}
+
+// TestContextOutput_HasRemote_AheadBehind verifies that when hasRemote is true,
+// has_remote: true and non-zero ahead/behind values are present in JSON output.
+func TestContextOutput_HasRemote_AheadBehind(t *testing.T) {
+	obj := buildContextOutput(func(o *contextOutput) {
+		o.HasRemote = true
+		o.TrackingBranch = "origin/feat/my-feature"
+		o.Ahead = 3
+		o.Behind = 1
+	})
+
+	data, err := json.MarshalIndent(obj, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent: %v", err)
+	}
+	js := string(data)
+
+	if !strings.Contains(js, `"has_remote": true`) {
+		t.Errorf("expected has_remote: true in JSON, got:\n%s", js)
+	}
+	if !strings.Contains(js, `"tracking_branch"`) {
+		t.Errorf("expected tracking_branch present when has_remote=true, got:\n%s", js)
+	}
+	if !strings.Contains(js, `"ahead": 3`) {
+		t.Errorf("expected ahead: 3 in JSON, got:\n%s", js)
+	}
+	if !strings.Contains(js, `"behind": 1`) {
+		t.Errorf("expected behind: 1 in JSON, got:\n%s", js)
 	}
 }
 

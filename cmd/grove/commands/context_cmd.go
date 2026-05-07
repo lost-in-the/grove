@@ -31,10 +31,11 @@ type contextRecentCommit struct {
 //	branch            - current branch name; "(detached HEAD at <sha>)" if detached
 //	commit            - { sha, message } of HEAD
 //	tracking_branch   - remote tracking branch (omitted when not set)
+//	has_remote        - true when a remote tracking branch is configured
 //	status            - "clean" or "dirty"
 //	changes           - list of changed files (omitted when clean)
-//	ahead             - commits ahead of remote (0 when no remote)
-//	behind            - commits behind remote (0 when no remote)
+//	ahead             - commits ahead of remote (meaningful only when has_remote: true)
+//	behind            - commits behind remote (meaningful only when has_remote: true)
 //	stash_count       - number of stashes (0 when none)
 //	recent_commits    - last 3–5 commits [{sha, message}, ...]
 type contextOutput struct {
@@ -43,6 +44,7 @@ type contextOutput struct {
 	Branch         string                `json:"branch"`
 	Commit         contextCommitInfo     `json:"commit"`
 	TrackingBranch string                `json:"tracking_branch,omitempty"`
+	HasRemote      bool                  `json:"has_remote"`
 	Status         string                `json:"status"`
 	Changes        []string              `json:"changes,omitempty"`
 	Ahead          int                   `json:"ahead"`
@@ -136,10 +138,11 @@ JSON schema:
   branch            current branch (or detached HEAD description)
   commit            { sha, message } of HEAD
   tracking_branch   remote tracking branch (omitted when not set)
+  has_remote        true when a remote tracking branch is configured
   status            "clean" or "dirty"
   changes           changed files (omitted when clean)
-  ahead             commits ahead of remote
-  behind            commits behind remote
+  ahead             commits ahead of remote (meaningful only when has_remote: true)
+  behind            commits behind remote (meaningful only when has_remote: true)
   stash_count       number of stashes
   recent_commits    last 5 commits [{sha, message}]`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
@@ -183,15 +186,16 @@ JSON schema:
 				Path:          tree.Path,
 				Branch:        tree.Branch,
 				Commit:        contextCommitInfo{SHA: tree.ShortCommit, Message: tree.CommitMessage},
+				HasRemote:     hasRemote,
 				Status:        wtStatus,
 				Changes:       changes,
+				Ahead:         ahead,
+				Behind:        behind,
 				StashCount:    stashCount,
 				RecentCommits: recentCommits,
 			}
 			if hasRemote {
 				result.TrackingBranch = trackingBranch
-				result.Ahead = ahead
-				result.Behind = behind
 			}
 			return output.PrintJSON(result)
 		}

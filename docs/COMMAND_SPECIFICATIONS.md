@@ -965,6 +965,7 @@ Recent:
     "message": "Add authentication middleware"
   },
   "tracking_branch": "origin/feat/my-feature",
+  "has_remote": true,
   "status": "clean",
   "ahead": 2,
   "behind": 0,
@@ -987,10 +988,11 @@ Recent:
 | `commit.sha` | string | 7-char short hash of HEAD |
 | `commit.message` | string | Subject line of HEAD commit |
 | `tracking_branch` | string | Remote tracking ref (field omitted when not set) |
+| `has_remote` | bool | `true` when a remote tracking branch is configured; `ahead`/`behind` are meaningful only when `true` |
 | `status` | string | `"clean"` or `"dirty"` |
 | `changes` | []string | Modified files from `git status --porcelain` (field omitted when clean) |
-| `ahead` | int | Commits ahead of remote (0 when no remote) |
-| `behind` | int | Commits behind remote (0 when no remote) |
+| `ahead` | int | Commits ahead of remote (always present; interpret only when `has_remote: true`) |
+| `behind` | int | Commits behind remote (always present; interpret only when `has_remote: true`) |
 | `stash_count` | int | Number of stashes |
 | `recent_commits` | []object | Last 5 commits, each `{sha, message}` |
 
@@ -998,7 +1000,7 @@ Recent:
 
 | Scenario | Behavior |
 |----------|----------|
-| No remote tracking branch | Omit `Tracking:` line in human output; omit `tracking_branch` key in JSON |
+| No remote tracking branch | Omit `Tracking:` line in human output; omit `tracking_branch` key in JSON; emit `has_remote: false` |
 | Detached HEAD | Branch shows `(detached HEAD at <sha>)` |
 | Dirty worktree | Shows modified files (up to 5 shown; remainder counted) |
 | No stashes | `Stash:` line omitted in human output; `stash_count: 0` in JSON |
