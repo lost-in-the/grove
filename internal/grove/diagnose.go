@@ -1,9 +1,9 @@
 package grove
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 // DiagnoseReason describes why a directory isn't a grove project.
@@ -64,23 +64,39 @@ const (
 	ReasonDriftedWorktree                    // cwd is a git worktree but not in state.json
 )
 
-// IsWorktreeInState checks whether a worktree path appears as a registered path
-// value in a state.json byte slice. The check is intentionally lightweight
-// (substring match, no full JSON parse) and handles symlink-resolved paths by
-// accepting either the raw or resolved form of worktreePath.
+// stateSnapshot is a minimal representation of state.json used only for path
+// lookup. It mirrors the persisted shape without importing internal/state.
+type stateSnapshot struct {
+	Worktrees map[string]struct {
+		Path string `json:"path"`
+	} `json:"worktrees"`
+}
+
+// IsWorktreeInState checks whether a worktree path appears as a registered
+// path value in a state.json byte slice. It unmarshals only the worktrees map
+// and compares path values directly, avoiding substring-match false positives
+// and JSON-escape mismatches.
 //
-// Returns false when stateData is empty or nil.
+// Returns false when stateData is empty, nil, or not valid JSON.
 func IsWorktreeInState(stateData []byte, worktreePath string) bool {
 	if len(stateData) == 0 {
 		return false
 	}
-	stateStr := string(stateData)
-	if strings.Contains(stateStr, `"`+worktreePath+`"`) {
-		return true
+
+	var snap stateSnapshot
+	if err := json.Unmarshal(stateData, &snap); err != nil {
+		return false
 	}
-	// Also check the symlink-resolved path (e.g. macOS /var → /private/var).
-	if resolved, err := filepath.EvalSymlinks(worktreePath); err == nil && resolved != worktreePath {
-		if strings.Contains(stateStr, `"`+resolved+`"`) {
+
+	// Resolve symlinks once so we can compare against either stored form
+	// (handles macOS /var → /private/var and similar).
+	resolved, resolveErr := filepath.EvalSymlinks(worktreePath)
+
+	for _, wt := range snap.Worktrees {
+		if wt.Path == worktreePath {
+			return true
+		}
+		if resolveErr == nil && resolved != worktreePath && wt.Path == resolved {
 			return true
 		}
 	}
@@ -90,9 +106,6 @@ func IsWorktreeInState(stateData []byte, worktreePath string) bool {
 // DiagnoseDrift checks whether the worktree at worktreePath is registered in state.json
 // at mainPath/.grove/state.json. Returns ReasonRegistered when it's the main worktree
 // or appears in state, and ReasonDriftedWorktree otherwise.
-//
-// This is intentionally lightweight (no JSON parsing of complex shapes): it just
-// checks whether the worktree path appears as a value in the state's worktrees map.
 func DiagnoseDrift(worktreePath, mainPath string) DriftReason {
 	resolvedWT, _ := filepath.EvalSymlinks(worktreePath)
 	if resolvedWT == "" {
