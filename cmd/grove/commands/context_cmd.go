@@ -48,7 +48,7 @@ type contextOutput struct {
 	Ahead          int                   `json:"ahead"`
 	Behind         int                   `json:"behind"`
 	StashCount     int                   `json:"stash_count"`
-	RecentCommits  []contextRecentCommit `json:"recent_commits"`
+	RecentCommits  []contextRecentCommit `json:"recent_commits,omitempty"`
 }
 
 type contextCommitInfo struct {
@@ -56,19 +56,22 @@ type contextCommitInfo struct {
 	Message string `json:"message"`
 }
 
-// ctxUpstreamInfo returns ahead/behind counts and the tracking branch name.
-// Returns zeroes and empty string when no upstream is configured.
-func ctxUpstreamInfo(worktreePath string) (ahead, behind int, trackingBranch string) {
+// ctxUpstreamInfo returns ahead/behind counts, whether a remote is configured,
+// and the tracking branch name. Mirrors the signature of getUpstreamInfo in
+// internal/tui/data.go: hasRemote is false whenever no upstream is configured
+// or the rev-list output is malformed, so callers can distinguish "no remote"
+// from "0 ahead, 0 behind with a remote".
+func ctxUpstreamInfo(worktreePath string) (ahead, behind int, hasRemote bool, trackingBranch string) {
 	ctx := context.TODO()
 	out, err := cmdexec.Output(ctx, "git",
 		[]string{"rev-list", "--count", "--left-right", "@{upstream}...HEAD"},
 		worktreePath, cmdexec.GitLocal)
 	if err != nil {
-		return 0, 0, ""
+		return 0, 0, false, ""
 	}
 	parts := strings.Fields(strings.TrimSpace(string(out)))
 	if len(parts) != 2 {
-		return 0, 0, ""
+		return 0, 0, false, ""
 	}
 	b, _ := strconv.Atoi(parts[0])
 	a, _ := strconv.Atoi(parts[1])
@@ -79,7 +82,7 @@ func ctxUpstreamInfo(worktreePath string) (ahead, behind int, trackingBranch str
 	if tbErr == nil {
 		trackingBranch = strings.TrimSpace(string(tbOut))
 	}
-	return a, b, trackingBranch
+	return a, b, true, trackingBranch
 }
 
 // ctxRecentCommits returns the last n commits as (short-sha, subject) pairs.
@@ -154,12 +157,14 @@ JSON schema:
 		}
 
 		displayName := tree.DisplayName()
-		ahead, behind, trackingBranch := ctxUpstreamInfo(tree.Path)
+		ahead, behind, hasRemote, trackingBranch := ctxUpstreamInfo(tree.Path)
 		stashCount := ctxStashCount(tree.Path)
 		recentCommits := ctxRecentCommits(tree.Path, 5)
 
 		var changes []string
-		if tree.IsDirty && tree.DirtyFiles != "" {
+		// Mirror here.go convention: only check DirtyFiles, not IsDirty.
+		// IsDirty=true with DirtyFiles="" would be a bug elsewhere; we let it surface rather than hiding it.
+		if tree.DirtyFiles != "" {
 			for _, f := range strings.Split(tree.DirtyFiles, "\n") {
 				if f != "" {
 					changes = append(changes, f)
@@ -174,17 +179,19 @@ JSON schema:
 
 		if contextJSON {
 			result := contextOutput{
-				Name:           displayName,
-				Path:           tree.Path,
-				Branch:         tree.Branch,
-				Commit:         contextCommitInfo{SHA: tree.ShortCommit, Message: tree.CommitMessage},
-				TrackingBranch: trackingBranch,
-				Status:         wtStatus,
-				Changes:        changes,
-				Ahead:          ahead,
-				Behind:         behind,
-				StashCount:     stashCount,
-				RecentCommits:  recentCommits,
+				Name:          displayName,
+				Path:          tree.Path,
+				Branch:        tree.Branch,
+				Commit:        contextCommitInfo{SHA: tree.ShortCommit, Message: tree.CommitMessage},
+				Status:        wtStatus,
+				Changes:       changes,
+				StashCount:    stashCount,
+				RecentCommits: recentCommits,
+			}
+			if hasRemote {
+				result.TrackingBranch = trackingBranch
+				result.Ahead = ahead
+				result.Behind = behind
 			}
 			return output.PrintJSON(result)
 		}

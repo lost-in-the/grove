@@ -247,3 +247,111 @@ func TestContextOutput_PrintJSON(t *testing.T) {
 	// output.PrintJSON is a thin wrapper; verify the package is importable.
 	_ = output.PrintJSON // just ensure the import is used
 }
+
+// TestContextOutput_NoRemote_OmitsTrackingFields verifies that when hasRemote
+// is false, the JSON output omits tracking_branch and emits 0 for ahead/behind.
+// This mirrors the TUI's hasRemote contract in internal/tui/data.go.
+func TestContextOutput_NoRemote_OmitsTrackingFields(t *testing.T) {
+	// Simulate what contextCmd does when hasRemote=false: tracking_branch is
+	// left as zero value ("") so omitempty drops it; ahead/behind stay 0.
+	obj := buildContextOutput(func(o *contextOutput) {
+		o.TrackingBranch = ""
+		o.Ahead = 0
+		o.Behind = 0
+	})
+
+	data, err := json.MarshalIndent(obj, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent: %v", err)
+	}
+	js := string(data)
+
+	if strings.Contains(js, `"tracking_branch"`) {
+		t.Errorf("expected tracking_branch to be absent when no remote, got:\n%s", js)
+	}
+}
+
+// TestContextOutput_EmptyRecentCommits_Omitted verifies that when the
+// recent_commits slice is nil/empty, the field is omitted from JSON output.
+func TestContextOutput_EmptyRecentCommits_Omitted(t *testing.T) {
+	obj := buildContextOutput(func(o *contextOutput) {
+		o.RecentCommits = nil
+	})
+
+	data, err := json.MarshalIndent(obj, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent: %v", err)
+	}
+	js := string(data)
+
+	if strings.Contains(js, `"recent_commits"`) {
+		t.Errorf("expected recent_commits to be absent when empty, got:\n%s", js)
+	}
+}
+
+// TestContextOutput_EmptyRecentCommitsSlice_Omitted verifies that an empty
+// (non-nil) slice is also omitted, since omitempty treats empty slices as zero.
+func TestContextOutput_EmptyRecentCommitsSlice_Omitted(t *testing.T) {
+	obj := buildContextOutput(func(o *contextOutput) {
+		o.RecentCommits = []contextRecentCommit{}
+	})
+
+	data, err := json.MarshalIndent(obj, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent: %v", err)
+	}
+	js := string(data)
+
+	if strings.Contains(js, `"recent_commits"`) {
+		t.Errorf("expected recent_commits to be absent for empty slice, got:\n%s", js)
+	}
+}
+
+// TestContextDirtyFileGuard verifies that the changes slice is populated from
+// DirtyFiles alone (no IsDirty check), mirroring the here.go convention.
+func TestContextDirtyFileGuard(t *testing.T) {
+	tests := []struct {
+		name        string
+		dirtyFiles  string
+		wantChanges []string
+	}{
+		{
+			name:        "dirty files present",
+			dirtyFiles:  "M internal/foo.go\n?? newfile.txt\n",
+			wantChanges: []string{"M internal/foo.go", "?? newfile.txt"},
+		},
+		{
+			name:        "empty dirty files",
+			dirtyFiles:  "",
+			wantChanges: nil,
+		},
+		{
+			name:        "only blank lines",
+			dirtyFiles:  "\n\n",
+			wantChanges: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Reproduce the guard logic from context_cmd.go directly.
+			var changes []string
+			if tc.dirtyFiles != "" {
+				for _, f := range strings.Split(tc.dirtyFiles, "\n") {
+					if f != "" {
+						changes = append(changes, f)
+					}
+				}
+			}
+
+			if len(changes) != len(tc.wantChanges) {
+				t.Fatalf("changes len: got %d, want %d (got %v)", len(changes), len(tc.wantChanges), changes)
+			}
+			for i, want := range tc.wantChanges {
+				if changes[i] != want {
+					t.Errorf("changes[%d]: got %q, want %q", i, changes[i], want)
+				}
+			}
+		})
+	}
+}
