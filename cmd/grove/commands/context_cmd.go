@@ -1,26 +1,18 @@
 package commands
 
 import (
-	"context"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/lost-in-the/grove/internal/cli"
-	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/output"
 	"github.com/lost-in-the/grove/internal/worktree"
+	"github.com/lost-in-the/grove/internal/worktreeinfo"
 )
 
 var contextJSON bool
-
-// contextRecentCommit holds a short SHA and commit message for JSON output.
-type contextRecentCommit struct {
-	SHA     string `json:"sha"`
-	Message string `json:"message"`
-}
 
 // contextOutput is the JSON schema for grove context.
 //
@@ -39,89 +31,23 @@ type contextRecentCommit struct {
 //	stash_count       - number of stashes (0 when none)
 //	recent_commits    - last 3–5 commits [{sha, message}, ...]
 type contextOutput struct {
-	Name           string                `json:"name"`
-	Path           string                `json:"path"`
-	Branch         string                `json:"branch"`
-	Commit         contextCommitInfo     `json:"commit"`
-	TrackingBranch string                `json:"tracking_branch,omitempty"`
-	HasRemote      bool                  `json:"has_remote"`
-	Status         string                `json:"status"`
-	Changes        []string              `json:"changes,omitempty"`
-	Ahead          int                   `json:"ahead"`
-	Behind         int                   `json:"behind"`
-	StashCount     int                   `json:"stash_count"`
-	RecentCommits  []contextRecentCommit `json:"recent_commits,omitempty"`
+	Name           string                      `json:"name"`
+	Path           string                      `json:"path"`
+	Branch         string                      `json:"branch"`
+	Commit         contextCommitInfo           `json:"commit"`
+	TrackingBranch string                      `json:"tracking_branch,omitempty"`
+	HasRemote      bool                        `json:"has_remote"`
+	Status         string                      `json:"status"`
+	Changes        []string                    `json:"changes,omitempty"`
+	Ahead          int                         `json:"ahead"`
+	Behind         int                         `json:"behind"`
+	StashCount     int                         `json:"stash_count"`
+	RecentCommits  []worktreeinfo.RecentCommit `json:"recent_commits,omitempty"`
 }
 
 type contextCommitInfo struct {
 	SHA     string `json:"sha"`
 	Message string `json:"message"`
-}
-
-// ctxUpstreamInfo returns ahead/behind counts, whether a remote is configured,
-// and the tracking branch name. Mirrors the signature of getUpstreamInfo in
-// internal/tui/data.go: hasRemote is false whenever no upstream is configured
-// or the rev-list output is malformed, so callers can distinguish "no remote"
-// from "0 ahead, 0 behind with a remote".
-func ctxUpstreamInfo(worktreePath string) (ahead, behind int, hasRemote bool, trackingBranch string) {
-	ctx := context.TODO()
-	out, err := cmdexec.Output(ctx, "git",
-		[]string{"rev-list", "--count", "--left-right", "@{upstream}...HEAD"},
-		worktreePath, cmdexec.GitLocal)
-	if err != nil {
-		return 0, 0, false, ""
-	}
-	parts := strings.Fields(strings.TrimSpace(string(out)))
-	if len(parts) != 2 {
-		return 0, 0, false, ""
-	}
-	b, _ := strconv.Atoi(parts[0])
-	a, _ := strconv.Atoi(parts[1])
-
-	tbOut, tbErr := cmdexec.Output(ctx, "git",
-		[]string{"rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"},
-		worktreePath, cmdexec.GitLocal)
-	if tbErr == nil {
-		trackingBranch = strings.TrimSpace(string(tbOut))
-	}
-	return a, b, true, trackingBranch
-}
-
-// ctxRecentCommits returns the last n commits as (short-sha, subject) pairs.
-func ctxRecentCommits(worktreePath string, n int) []contextRecentCommit {
-	out, err := cmdexec.Output(context.TODO(), "git",
-		[]string{"log", fmt.Sprintf("-%d", n), "--format=%h %s"},
-		worktreePath, cmdexec.GitLocal)
-	if err != nil {
-		return nil
-	}
-	raw := strings.TrimSpace(string(out))
-	if raw == "" {
-		return nil
-	}
-	lines := strings.Split(raw, "\n")
-	commits := make([]contextRecentCommit, 0, len(lines))
-	for _, line := range lines {
-		if sha, msg, ok := strings.Cut(line, " "); ok {
-			commits = append(commits, contextRecentCommit{SHA: sha, Message: msg})
-		}
-	}
-	return commits
-}
-
-// ctxStashCount returns the number of stashes in the worktree.
-func ctxStashCount(worktreePath string) int {
-	out, err := cmdexec.Output(context.TODO(), "git",
-		[]string{"stash", "list"},
-		worktreePath, cmdexec.GitLocal)
-	if err != nil {
-		return 0
-	}
-	raw := strings.TrimSpace(string(out))
-	if raw == "" {
-		return 0
-	}
-	return len(strings.Split(raw, "\n"))
 }
 
 var contextCmd = &cobra.Command{
@@ -160,9 +86,9 @@ JSON schema:
 		}
 
 		displayName := tree.DisplayName()
-		ahead, behind, hasRemote, trackingBranch := ctxUpstreamInfo(tree.Path)
-		stashCount := ctxStashCount(tree.Path)
-		recentCommits := ctxRecentCommits(tree.Path, 5)
+		ahead, behind, hasRemote, trackingBranch := worktreeinfo.UpstreamInfo(tree.Path)
+		stashCount := worktreeinfo.StashCount(tree.Path)
+		recentCommits := worktreeinfo.RecentCommits(tree.Path, 5)
 
 		var changes []string
 		// Mirror here.go convention: only check DirtyFiles, not IsDirty.

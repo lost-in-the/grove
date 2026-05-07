@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/lost-in-the/grove/internal/worktreeinfo"
 )
 
 func TestRenderDetailV2_NilItem(t *testing.T) {
@@ -239,7 +241,7 @@ func TestRenderDetailV2_RecentCommits(t *testing.T) {
 	item := &WorktreeItem{
 		ShortName: "test",
 		Branch:    "main",
-		RecentCommits: []RecentCommit{
+		RecentCommits: []worktreeinfo.RecentCommit{
 			{SHA: "abc1234", Message: "fix: resolve bug"},
 			{SHA: "def5678", Message: "feat: add login"},
 			{SHA: "ghi9012", Message: "chore: update deps"},
@@ -414,7 +416,7 @@ func TestRenderDetailV2_CommitSHAStyle(t *testing.T) {
 	item := &WorktreeItem{
 		ShortName: "test",
 		Branch:    "main",
-		RecentCommits: []RecentCommit{
+		RecentCommits: []worktreeinfo.RecentCommit{
 			{SHA: "abc1234", Message: "test msg"},
 		},
 	}
