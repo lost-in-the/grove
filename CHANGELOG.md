@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Compose `--env-file` is honored when reading the active-worktree env var (previously hardcoded to `.env`)
 
 ### Fixed
+- `teeBuffer` (Docker compose stderr capture) now correctly caps single writes larger than the 8KB sliding window — the previous path stored the full oversized chunk before trimming, briefly exceeding the cap
 - `grove test` now translates `compose run` "service didn't complete successfully" errors into actionable grove-styled messages
 - `grove up` no longer silently swallows compose-up failures when the post-up health probe returns no statuses
 - `grove up` skips the post-up health probe when compose-up succeeded (previously paid up to 1s on every successful run)
