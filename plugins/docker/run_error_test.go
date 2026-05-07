@@ -94,6 +94,36 @@ func TestTranslateRunError_NoSuchHost_NoIncludeDeps_HintAppended(t *testing.T) {
 	}
 }
 
+func TestTranslateRunError_TemporaryFailureInNameResolution_NoIncludeDeps_HintAppended(t *testing.T) {
+	stderr := "dial tcp: lookup db on 127.0.0.11:53: temporary failure in name resolution"
+	original := errors.New("exit status 1")
+
+	got := translateRunError(stderr, original, false)
+
+	if got == nil {
+		t.Fatal("expected error with hint, got nil")
+	}
+	msg := got.Error()
+	if !strings.Contains(msg, "--with-deps") {
+		t.Errorf("expected --with-deps hint, got: %s", msg)
+	}
+}
+
+func TestTranslateRunError_ConnectionReset_NoIncludeDeps_HintAppended(t *testing.T) {
+	stderr := "read tcp 172.17.0.3:54321->172.17.0.2:5432: read: connection reset by peer"
+	original := errors.New("exit status 1")
+
+	got := translateRunError(stderr, original, false)
+
+	if got == nil {
+		t.Fatal("expected error with hint, got nil")
+	}
+	msg := got.Error()
+	if !strings.Contains(msg, "--with-deps") {
+		t.Errorf("expected --with-deps hint, got: %s", msg)
+	}
+}
+
 func TestTranslateRunError_UnrelatedError_NoIncludeDeps_NoHint(t *testing.T) {
 	stderr := "ERROR: Service 'web' failed to build: dockerfile parse error"
 	original := errors.New("exit status 1")
