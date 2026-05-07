@@ -133,7 +133,11 @@ func setupCreatedWorktree(ctx *GroveContext, mgr *worktree.Manager, name, branch
 		IsEnvironment: opts.IsEnvironment,
 		Mirror:        opts.Mirror,
 	}
-	if err := worktree.BootstrapWorktree(ctx.State, ctx.Config, bootstrapOpts); err != nil {
+	var bootstrapWriter *cli.Writer
+	if !opts.JSONOutput {
+		bootstrapWriter = w
+	}
+	if err := worktree.BootstrapWorktree(ctx.State, ctx.Config, bootstrapOpts, bootstrapWriter); err != nil {
 		if !opts.JSONOutput {
 			cli.Warning(w, "Bootstrap failed: %v", err)
 			cli.Faint(w, "run 'grove repair' to fix")

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/grove"
 	"github.com/lost-in-the/grove/internal/hooks"
@@ -35,8 +36,13 @@ type BootstrapOpts struct {
 // via docker:compose handlers) run.
 //
 // Returns an error only if state registration or symlinking fails irrecoverably.
-// Hook and SetupFiles failures are logged but do not abort the bootstrap.
-func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts BootstrapOpts) error {
+// Hook and SetupFiles failures are non-fatal; they are reported via w so the
+// user sees them on stderr. Pass a non-nil w for interactive callers (grove new,
+// grove adopt). Pass nil for JSON-mode callers where stderr would corrupt
+// machine-readable output, or for tests that don't assert on warning output.
+// With nil, hook failures are still written to grove.log when GROVE_LOG=1 is
+// set, but are otherwise invisible.
+func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts BootstrapOpts, w *cli.Writer) error {
 	if opts.WorktreePath == "" || opts.MainPath == "" {
 		return fmt.Errorf("WorktreePath and MainPath are required")
 	}
@@ -67,6 +73,9 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 	if cfg != nil && cfg.Plugins.Docker.External != nil {
 		if err := SetupFiles(cfg.Plugins.Docker.External, opts.WorktreePath, opts.MainPath); err != nil {
 			log.Printf("file setup: %v", err)
+			if w != nil {
+				cli.Warning(w, "file setup: %v", err)
+			}
 		}
 	}
 
@@ -80,6 +89,9 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 	}
 	if err := hooks.Fire(hooks.EventPostCreate, globalHookCtx); err != nil {
 		log.Printf("hooks: global post-create plugin hook failed: %v", err)
+		if w != nil {
+			cli.Warning(w, "post-create plugin hook failed: %v", err)
+		}
 	}
 
 	// Per-project (config-driven) post-create hooks last — these may target
@@ -87,6 +99,9 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 	hookExecutor, hookErr := hooks.NewExecutor()
 	if hookErr != nil {
 		log.Printf("hooks: failed to load config during bootstrap: %v", hookErr)
+		if w != nil {
+			cli.Warning(w, "post-create hooks: failed to load config: %v", hookErr)
+		}
 	} else if hookExecutor.HasHooksForEvent(hooks.EventPostCreate) {
 		hookCtx := &hooks.ExecutionContext{
 			Event:        hooks.EventPostCreate,
@@ -99,6 +114,9 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 		}
 		if err := hookExecutor.Execute(hooks.EventPostCreate, hookCtx); err != nil {
 			log.Printf("hooks: post-create project hook failed: %v", err)
+			if w != nil {
+				cli.Warning(w, "post-create hook failed: %v", err)
+			}
 		}
 	}
 

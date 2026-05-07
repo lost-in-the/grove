@@ -97,7 +97,7 @@ Examples:
 			MainPath:     ctx.ProjectRoot,
 			ProjectName:  projectName,
 		}
-		if err := worktree.BootstrapWorktree(ctx.State, ctx.Config, bootstrapOpts); err != nil {
+		if err := worktree.BootstrapWorktree(ctx.State, ctx.Config, bootstrapOpts, w); err != nil {
 			return fmt.Errorf("bootstrap: %w", err)
 		}
 
