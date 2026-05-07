@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
 )
@@ -66,8 +67,12 @@ func CompareSemver(current, latest string) Severity {
 // When NO_COLOR is set, the output is plain ASCII (no ANSI escapes).
 func RenderBox(currentVersion, latestVersion, latestURL, updateCmd string) string {
 	severity := CompareSemver(currentVersion, latestVersion)
+	arrow := "→"
+	if os.Getenv("NO_COLOR") != "" {
+		arrow = "->"
+	}
 	body := []string{
-		fmt.Sprintf("Update available  %s  →  %s", currentVersion, latestVersion),
+		fmt.Sprintf("Update available  %s  %s  %s", currentVersion, arrow, latestVersion),
 		"Run: " + updateCmd,
 		"Changelog: " + latestURL,
 	}
@@ -80,8 +85,8 @@ func RenderBox(currentVersion, latestVersion, latestURL, updateCmd string) strin
 func renderPlain(lines []string) string {
 	width := 0
 	for _, l := range lines {
-		if len(l) > width {
-			width = len(l)
+		if w := utf8.RuneCountInString(l); w > width {
+			width = w
 		}
 	}
 	var b strings.Builder
@@ -89,7 +94,7 @@ func renderPlain(lines []string) string {
 	for _, l := range lines {
 		b.WriteString("| ")
 		b.WriteString(l)
-		b.WriteString(strings.Repeat(" ", width-len(l)))
+		b.WriteString(strings.Repeat(" ", width-utf8.RuneCountInString(l)))
 		b.WriteString(" |\n")
 	}
 	b.WriteString("+" + strings.Repeat("-", width+2) + "+\n")

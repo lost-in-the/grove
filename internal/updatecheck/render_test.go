@@ -77,6 +77,27 @@ func TestRenderBox_ColoredEmitsAnsi(t *testing.T) {
 	}
 }
 
+func TestRenderBox_PlainPaddingAlignsForUTF8(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	out := RenderBox("0.5.0", "0.6.0",
+		"https://x",
+		"brew upgrade x",
+	)
+	// Verify each line between the top and bottom borders has identical visual width.
+	// In plain mode, lines are ASCII-only after the arrow swap, so byte length == rune count
+	// and we can compare line lengths directly.
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) < 3 {
+		t.Fatalf("expected >= 3 lines in box output, got: %q", out)
+	}
+	want := len(lines[0])
+	for i, l := range lines {
+		if len(l) != want {
+			t.Errorf("line %d width %d, want %d (line=%q)", i, len(l), want, l)
+		}
+	}
+}
+
 func mustContain(t *testing.T, haystack, needle string) {
 	t.Helper()
 	if !strings.Contains(haystack, needle) {
