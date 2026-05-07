@@ -3,6 +3,7 @@ package updatecheck
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -33,7 +34,7 @@ func ReadCacheFromPath(path string) (Cache, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return Cache{}, nil
 		}
-		return Cache{}, err
+		return Cache{}, fmt.Errorf("update cache: read: %w", err)
 	}
 	var c Cache
 	if err := json.Unmarshal(data, &c); err != nil {
@@ -43,19 +44,36 @@ func ReadCacheFromPath(path string) (Cache, error) {
 	return c, nil
 }
 
-// WriteCacheToPath atomically writes the cache: write to path+".tmp", then rename.
-// Creates the parent directory if it doesn't exist.
+// WriteCacheToPath atomically writes the cache via a uniquely-named temp file
+// in the destination directory, then renames into place. The unique suffix
+// avoids clobbers when multiple grove processes write concurrently. Creates
+// the parent directory if it doesn't exist.
 func WriteCacheToPath(path string, c Cache) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
+		return fmt.Errorf("update cache: mkdir: %w", err)
 	}
 	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("update cache: marshal: %w", err)
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return err
+	f, err := os.CreateTemp(filepath.Dir(path), "update-check-*.json.tmp")
+	if err != nil {
+		return fmt.Errorf("update cache: create temp: %w", err)
 	}
-	return os.Rename(tmp, path)
+	tmp := f.Name()
+	cleanup := func() { _ = os.Remove(tmp) }
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		cleanup()
+		return fmt.Errorf("update cache: write: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		cleanup()
+		return fmt.Errorf("update cache: close: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		cleanup()
+		return fmt.Errorf("update cache: rename: %w", err)
+	}
+	return nil
 }

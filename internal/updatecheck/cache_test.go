@@ -3,6 +3,7 @@ package updatecheck
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -55,18 +56,26 @@ func TestCache_CorruptFileReturnsZeroValue(t *testing.T) {
 	}
 }
 
-func TestCache_AtomicWriteUsesTempThenRename(t *testing.T) {
+func TestCache_AtomicWriteCleansUpTempFiles(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "update-check.json")
 	c := Cache{Version: 1, LatestVersion: "0.6.0"}
 	if err := WriteCacheToPath(path, c); err != nil {
 		t.Fatalf("WriteCacheToPath: %v", err)
 	}
-	if _, err := os.Stat(path + ".tmp"); !os.IsNotExist(err) {
-		t.Errorf("expected no leftover %s.tmp, got: %v", path, err)
-	}
+	// Final file should exist
 	if _, err := os.Stat(path); err != nil {
 		t.Errorf("expected final file at %s: %v", path, err)
+	}
+	// No leftover *.tmp files in the directory
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".tmp") {
+			t.Errorf("unexpected leftover tmp file: %s", e.Name())
+		}
 	}
 }
 
