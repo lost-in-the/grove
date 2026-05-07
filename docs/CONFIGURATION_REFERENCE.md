@@ -766,6 +766,24 @@ These are read at runtime and never written to config files.
 | `GROVE_CONFIG` | file path | Override the global config file path (default: `~/.config/grove/config.toml`). |
 | `GROVE_CD_FILE` | file path | Temp file used by TUI for directory handoff to shell wrapper. Managed by grove. |
 
+### Update notifications
+
+| Variable | Effect |
+|---|---|
+| `GROVE_NO_UPDATE_NOTIFIER=1` | Suppress the update-available notification entirely |
+| `NO_UPDATE_NOTIFIER=1` | Same — honored for compatibility with the npm `update-notifier` convention |
+| `GROVE_AGENT_MODE=1` | Suppresses notifications (in addition to other agent-mode behavior) |
+| `GROVE_NONINTERACTIVE=1` | Suppresses notifications |
+
+Per-run flags:
+
+| Flag | Effect |
+|---|---|
+| `--no-update-notifier` | Suppress on this invocation |
+| `--check-update` | Force a synchronous check now and exit; bypasses the 24h cooldown |
+
+The check runs in a detached background process and never delays command execution. Notifications are only printed when a newer stable release is available and stdout is a TTY.
+
 ---
 
 ## Example Configurations
