@@ -133,7 +133,7 @@ func (s *localStrategy) Run(worktreePath string, service string, command string)
 	cmd.Stderr = stderrBuf
 	cmd.Stdin = os.Stdin
 	if err := cmd.Run(); err != nil {
-		return translateRunError(stderrBuf.String(), err)
+		return translateRunError(stderrBuf.String(), err, s.cfg.Test.IncludeDepsValue())
 	}
 	return nil
 }

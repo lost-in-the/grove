@@ -4,15 +4,30 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 )
 
 // dependencyFailureRE matches compose's "service \"X\" didn't complete successfully" message.
 var dependencyFailureRE = regexp.MustCompile(`service "([^"]+)" didn't complete successfully`)
 
+// connectionErrorRE matches connection/DNS failure patterns that suggest a
+// missing depends_on service (database, cache, MQ, etc.).
+var connectionErrorRE = regexp.MustCompile(`(?i)connection refused|no such host|temporary failure in name resolution|connection reset`)
+
+// noDepHint is appended to the error message when a connection error is detected
+// and the user is on the default --no-deps behavior (include_deps not explicitly set).
+const noDepHint = "\nhint: this looks like a missing depends_on service. By default, `grove test` runs with --no-deps.\n" +
+	"      Try `grove test --with-deps`, or set `[test] include_deps = true` in .grove/config.toml."
+
 // translateRunError inspects captured compose stderr and rewrites the error
 // when it matches a known unactionable pattern. Returns the original error
 // when no pattern matches.
-func translateRunError(stderr string, original error) error {
+//
+// includeDeps should be true when the caller explicitly opted into dependency
+// resolution (via --with-deps or include_deps = true in config). When false
+// (the default), a connection-error match appends a hint directing the user
+// to --with-deps.
+func translateRunError(stderr string, original error, includeDeps bool) error {
 	if stderr == "" {
 		return original
 	}
@@ -28,6 +43,9 @@ func translateRunError(stderr string, original error) error {
 				"underlying error: %w",
 			service, original,
 		)
+	}
+	if !includeDeps && connectionErrorRE.MatchString(stderr) {
+		return fmt.Errorf("%w%s", original, strings.TrimRight(noDepHint, "\n"))
 	}
 	return original
 }
