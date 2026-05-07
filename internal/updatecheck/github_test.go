@@ -1,6 +1,7 @@
 package updatecheck
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -14,7 +15,7 @@ func TestFetchLatest_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	rel, err := fetchLatestFromURL(server.URL, 2*time.Second)
+	rel, err := fetchLatestFromURL(context.Background(), server.URL, 2*time.Second)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -32,7 +33,7 @@ func TestFetchLatest_404IsError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := fetchLatestFromURL(server.URL, 2*time.Second)
+	_, err := fetchLatestFromURL(context.Background(), server.URL, 2*time.Second)
 	if err == nil {
 		t.Fatal("expected error on 404")
 	}
@@ -44,7 +45,7 @@ func TestFetchLatest_TimeoutIsError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := fetchLatestFromURL(server.URL, 50*time.Millisecond)
+	_, err := fetchLatestFromURL(context.Background(), server.URL, 50*time.Millisecond)
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}
@@ -56,7 +57,7 @@ func TestFetchLatest_MalformedJSONIsError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := fetchLatestFromURL(server.URL, 2*time.Second)
+	_, err := fetchLatestFromURL(context.Background(), server.URL, 2*time.Second)
 	if err == nil {
 		t.Fatal("expected JSON parse error")
 	}
@@ -68,11 +69,23 @@ func TestFetchLatest_StripsLeadingV(t *testing.T) {
 	}))
 	defer server.Close()
 
-	rel, err := fetchLatestFromURL(server.URL, 2*time.Second)
+	rel, err := fetchLatestFromURL(context.Background(), server.URL, 2*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if rel.Version() != "1.2.3" {
 		t.Errorf("Version() = %q, want %q", rel.Version(), "1.2.3")
+	}
+}
+
+func TestFetchLatest_EmptyBodyIsError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// no body written
+	}))
+	defer server.Close()
+
+	_, err := fetchLatestFromURL(context.Background(), server.URL, 2*time.Second)
+	if err == nil {
+		t.Fatal("expected error on empty body")
 	}
 }

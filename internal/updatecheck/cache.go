@@ -34,7 +34,7 @@ func ReadCacheFromPath(path string) (Cache, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return Cache{}, nil
 		}
-		return Cache{}, fmt.Errorf("update cache: read: %w", err)
+		return Cache{}, fmt.Errorf("updatecheck: cache read: %w", err)
 	}
 	var c Cache
 	if err := json.Unmarshal(data, &c); err != nil {
@@ -50,30 +50,30 @@ func ReadCacheFromPath(path string) (Cache, error) {
 // the parent directory if it doesn't exist.
 func WriteCacheToPath(path string, c Cache) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("update cache: mkdir: %w", err)
+		return fmt.Errorf("updatecheck: cache mkdir: %w", err)
 	}
 	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
-		return fmt.Errorf("update cache: marshal: %w", err)
+		return fmt.Errorf("updatecheck: cache marshal: %w", err)
 	}
 	f, err := os.CreateTemp(filepath.Dir(path), "update-check-*.json.tmp")
 	if err != nil {
-		return fmt.Errorf("update cache: create temp: %w", err)
+		return fmt.Errorf("updatecheck: cache create temp: %w", err)
 	}
 	tmp := f.Name()
 	cleanup := func() { _ = os.Remove(tmp) }
 	if _, err := f.Write(data); err != nil {
 		_ = f.Close()
 		cleanup()
-		return fmt.Errorf("update cache: write: %w", err)
+		return fmt.Errorf("updatecheck: cache write: %w", err)
 	}
 	if err := f.Close(); err != nil {
 		cleanup()
-		return fmt.Errorf("update cache: close: %w", err)
+		return fmt.Errorf("updatecheck: cache close: %w", err)
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		cleanup()
-		return fmt.Errorf("update cache: rename: %w", err)
+		return fmt.Errorf("updatecheck: cache rename: %w", err)
 	}
 	return nil
 }
