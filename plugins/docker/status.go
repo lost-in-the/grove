@@ -258,7 +258,13 @@ func externalServiceInfo(cfg *config.Config, currentPath string) *ServiceInfo {
 	// that non_blocking_services is honored and both code paths agree on verdict.
 	statuses, _ := probeServiceHealth(composePath, ext.EnvFileName(), nil)
 	healthy, _ := classifyHealth(statuses, ext.NonBlockingServices)
-	running := healthy && len(statuses) > 0
+	runningCount := 0
+	for _, s := range statuses {
+		if s.Status == ServiceRunning {
+			runningCount++
+		}
+	}
+	running := healthy && runningCount > 0
 
 	runningFor := filepath.Base(activeWorktree)
 	if activeWorktree == "" {
