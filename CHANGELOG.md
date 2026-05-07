@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `grove context` command — prints full worktree context (branch, commit, remote tracking/sync, status, stash count, recent commits) for CLI/scripting use; `--json` flag emits structured machine-readable output (closes #16); JSON includes `has_remote` boolean to distinguish "no remote" from "remote, in sync" (0/0 ahead/behind)
 - `grove adopt [path]` command — bootstraps a git worktree that grove doesn't know about (config symlink, state registration, post-create hooks)
 - Drift detection — running any grove command from a worktree not in `state.json` prints a non-fatal warning suggesting `grove adopt`
 - `grove doctor` Tier-2 "Worktree registration" check — reports drifted worktrees with a `grove adopt` hint
