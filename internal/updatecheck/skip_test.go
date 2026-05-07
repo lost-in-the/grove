@@ -32,13 +32,40 @@ func TestSkip(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			for k, v := range tc.env {
-				t.Setenv(k, v)
-			}
 			got := skipWithDeps(tc.env, tc.flag, tc.version, tc.stdoutIsTTY)
 			if got != tc.want {
 				t.Errorf("Skip() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestSkip_PublicIntegration(t *testing.T) {
+	// Cover the public Skip() function which reads os.Getenv directly.
+	// Force-clear the env vars Skip checks so the happy path can pass when CI=true is set.
+	for _, k := range []string{
+		"CI", "GITHUB_ACTIONS", "BUILDKITE", "CIRCLECI", "TRAVIS",
+		"GROVE_AGENT_MODE", "GROVE_NONINTERACTIVE",
+		"NO_UPDATE_NOTIFIER", "GROVE_NO_UPDATE_NOTIFIER",
+	} {
+		t.Setenv(k, "")
+	}
+
+	// With env cleared and a real released version, Skip should be true only if
+	// stdout is not a TTY (which it isn't under `go test`). So this exercises the
+	// TTY branch in the public function.
+	if !Skip(false, "0.6.0") {
+		t.Error("Skip should return true under `go test` (stdout is not a TTY)")
+	}
+
+	// Setting the flag still suppresses regardless of TTY.
+	if !Skip(true, "0.6.0") {
+		t.Error("Skip should return true when --no-update-notifier flag is set")
+	}
+
+	// Setting GROVE_NO_UPDATE_NOTIFIER suppresses too.
+	t.Setenv("GROVE_NO_UPDATE_NOTIFIER", "1")
+	if !Skip(false, "0.6.0") {
+		t.Error("Skip should return true when GROVE_NO_UPDATE_NOTIFIER=1")
 	}
 }

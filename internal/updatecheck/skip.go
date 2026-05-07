@@ -7,16 +7,20 @@ import (
 	"golang.org/x/term"
 )
 
+// skipEnvVars are the env vars that, when non-empty, suppress update notifications.
+// CI vars first, then grove-specific opt-out, then the npm convention.
+var skipEnvVars = []string{
+	"CI", "GITHUB_ACTIONS", "BUILDKITE", "CIRCLECI", "TRAVIS",
+	"GROVE_AGENT_MODE", "GROVE_NONINTERACTIVE",
+	"NO_UPDATE_NOTIFIER", "GROVE_NO_UPDATE_NOTIFIER",
+}
+
 // Skip returns true when update checking should be entirely suppressed.
 // Honors CI env vars, grove-specific opt-out, the --no-update-notifier flag,
 // non-TTY stdout, and dev/unknown/non-semver versions.
 func Skip(noUpdateNotifierFlag bool, currentVersion string) bool {
 	env := map[string]string{}
-	for _, k := range []string{
-		"CI", "GITHUB_ACTIONS", "BUILDKITE", "CIRCLECI", "TRAVIS",
-		"GROVE_AGENT_MODE", "GROVE_NONINTERACTIVE",
-		"NO_UPDATE_NOTIFIER", "GROVE_NO_UPDATE_NOTIFIER",
-	} {
+	for _, k := range skipEnvVars {
 		if v := os.Getenv(k); v != "" {
 			env[k] = v
 		}
@@ -30,11 +34,7 @@ func skipWithDeps(env map[string]string, flag bool, version string, stdoutIsTTY 
 	if flag {
 		return true
 	}
-	for _, k := range []string{
-		"CI", "GITHUB_ACTIONS", "BUILDKITE", "CIRCLECI", "TRAVIS",
-		"GROVE_AGENT_MODE", "GROVE_NONINTERACTIVE",
-		"NO_UPDATE_NOTIFIER", "GROVE_NO_UPDATE_NOTIFIER",
-	} {
+	for _, k := range skipEnvVars {
 		if env[k] != "" {
 			return true
 		}
