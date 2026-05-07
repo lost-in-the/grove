@@ -217,10 +217,7 @@ func (s *agentExternalStrategy) Run(worktreePath string, service string, command
 	}
 
 	cmd := agentComposeCommand(ac.composePath, ac.templatePaths, ac.projectName, env, "run", "--rm", service, "bash", "-cil", command)
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	return cmd.Run()
+	return runWithErrorTranslation(cmd, s.cfg.Test.IncludeDepsValue())
 }
 
 // Exec runs a command in an already-running agent container.
