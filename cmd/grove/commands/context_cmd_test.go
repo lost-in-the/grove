@@ -9,6 +9,7 @@ import (
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/output"
+	"github.com/lost-in-the/grove/internal/worktreeinfo"
 )
 
 // TestContextCmd_Registration verifies the command is wired up correctly.
@@ -46,7 +47,7 @@ func buildContextOutput(overrides func(*contextOutput)) contextOutput {
 		Ahead:          2,
 		Behind:         0,
 		StashCount:     0,
-		RecentCommits: []contextRecentCommit{
+		RecentCommits: []worktreeinfo.RecentCommit{
 			{SHA: "abc1234", Message: "initial commit"},
 			{SHA: "def5678", Message: "second commit"},
 		},
@@ -337,7 +338,7 @@ func TestContextOutput_EmptyRecentCommits_Omitted(t *testing.T) {
 // (non-nil) slice is also omitted, since omitempty treats empty slices as zero.
 func TestContextOutput_EmptyRecentCommitsSlice_Omitted(t *testing.T) {
 	obj := buildContextOutput(func(o *contextOutput) {
-		o.RecentCommits = []contextRecentCommit{}
+		o.RecentCommits = []worktreeinfo.RecentCommit{}
 	})
 
 	data, err := json.MarshalIndent(obj, "", "  ")

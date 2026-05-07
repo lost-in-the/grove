@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lost-in-the/grove/internal/testhelper"
+	"github.com/lost-in-the/grove/internal/worktreeinfo"
 )
 
 // gitEnv returns environment variables for isolated git operations.
@@ -54,9 +55,9 @@ func writeFile(t *testing.T, path, content string) {
 	testhelper.WriteFile(t, path, content)
 }
 
-// getUpstreamCounts is a thin test-only wrapper around getUpstreamInfo
+// getUpstreamCounts is a thin test-only wrapper around worktreeinfo.UpstreamInfo
 // that returns just the (ahead, behind) counts for assertion simplicity.
 func getUpstreamCounts(worktreePath string) (ahead, behind int) {
-	a, b, _, _ := getUpstreamInfo(worktreePath)
+	a, b, _, _ := worktreeinfo.UpstreamInfo(worktreePath)
 	return a, b
 }

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/lost-in-the/grove/internal/worktreeinfo"
 )
 
 // syncStatusText returns a compact sync status string for testing.
@@ -149,14 +151,14 @@ func TestRenderDetailV2_SyncWithHasRemote(t *testing.T) {
 }
 
 func TestGetUpstreamInfo_InvalidPath(t *testing.T) {
-	ahead, behind, hasRemote, trackingBranch := getUpstreamInfo("/nonexistent/path")
+	ahead, behind, hasRemote, trackingBranch := worktreeinfo.UpstreamInfo("/nonexistent/path")
 	if hasRemote {
-		t.Error("getUpstreamInfo() should return hasRemote=false for nonexistent path")
+		t.Error("UpstreamInfo() should return hasRemote=false for nonexistent path")
 	}
 	if ahead != 0 || behind != 0 {
-		t.Errorf("getUpstreamInfo() = (%d, %d, _, _), want (0, 0, _, _)", ahead, behind)
+		t.Errorf("UpstreamInfo() = (%d, %d, _, _), want (0, 0, _, _)", ahead, behind)
 	}
 	if trackingBranch != "" {
-		t.Errorf("getUpstreamInfo() trackingBranch = %q, want empty", trackingBranch)
+		t.Errorf("UpstreamInfo() trackingBranch = %q, want empty", trackingBranch)
 	}
 }
