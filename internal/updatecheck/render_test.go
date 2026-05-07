@@ -24,3 +24,26 @@ func TestCompareSemver(t *testing.T) {
 		})
 	}
 }
+
+func TestParseSemver_EdgeCases(t *testing.T) {
+	cases := []struct {
+		in string
+		ok bool
+	}{
+		{"", false},
+		{"0.5", false},       // 2 parts
+		{"0.5.0.0", false},   // 4 parts
+		{"-1.2.3", false},    // negative (Atoi accepts -1, but spec wants real-world semver)
+		{"0.5.0-dev", false}, // pre-release suffix
+		{"0.5.0", true},
+		{"v0.5.0", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			_, got := parseSemver(tc.in)
+			if got != tc.ok {
+				t.Errorf("parseSemver(%q) ok=%v, want %v", tc.in, got, tc.ok)
+			}
+		})
+	}
+}

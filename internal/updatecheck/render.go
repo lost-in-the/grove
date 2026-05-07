@@ -15,6 +15,20 @@ const (
 	SeverityMajor
 )
 
+// String renders the severity as a human-readable name.
+func (s Severity) String() string {
+	switch s {
+	case SeverityPatch:
+		return "patch"
+	case SeverityMinor:
+		return "minor"
+	case SeverityMajor:
+		return "major"
+	default:
+		return "none"
+	}
+}
+
 // CompareSemver returns the severity of upgrade from current to latest.
 // SeverityNone means current is already at or ahead of latest, or either is unparseable.
 func CompareSemver(current, latest string) Severity {
@@ -53,7 +67,7 @@ func parseSemver(v string) ([3]int, bool) {
 	var out [3]int
 	for i, p := range parts {
 		n, err := strconv.Atoi(p)
-		if err != nil {
+		if err != nil || n < 0 {
 			return [3]int{}, false
 		}
 		out[i] = n

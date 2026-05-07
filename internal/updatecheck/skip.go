@@ -46,28 +46,14 @@ func skipWithDeps(env map[string]string, flag bool, version string, stdoutIsTTY 
 }
 
 // isReleasedVersion returns true for versions that look like real releases
-// (semver, no -dev suffix, not "unknown"). A leading "v" is tolerated.
+// (parseable semver, no -dev suffix, not "unknown"). A leading "v" is tolerated.
 func isReleasedVersion(v string) bool {
 	if v == "" || v == "unknown" {
 		return false
 	}
-	v = strings.TrimPrefix(v, "v")
 	if strings.Contains(v, "-dev") {
 		return false
 	}
-	parts := strings.Split(v, ".")
-	if len(parts) != 3 {
-		return false
-	}
-	for _, p := range parts {
-		if p == "" {
-			return false
-		}
-		for _, r := range p {
-			if r < '0' || r > '9' {
-				return false
-			}
-		}
-	}
-	return true
+	_, ok := parseSemver(v)
+	return ok
 }
