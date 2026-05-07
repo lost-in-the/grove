@@ -1,6 +1,10 @@
 package updatecheck
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestDetectInstallFromPath(t *testing.T) {
 	cases := []struct {
@@ -20,6 +24,38 @@ func TestDetectInstallFromPath(t *testing.T) {
 				t.Errorf("detectInstallFromPath(%q) = %v, want %v", tc.path, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestDetectInstall_ResolvesSymlinks(t *testing.T) {
+	dir := t.TempDir()
+	// Simulate brew layout: bin/grove → Cellar/grove/0.6.0/bin/grove
+	cellarDir := filepath.Join(dir, "Cellar", "grove", "0.6.0", "bin")
+	if err := os.MkdirAll(cellarDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cellarBin := filepath.Join(cellarDir, "grove")
+	if err := os.WriteFile(cellarBin, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(binDir, "grove")
+	if err := os.Symlink(cellarBin, link); err != nil {
+		t.Fatal(err)
+	}
+
+	// Direct test of detection on the resolved path (the public DetectInstall calls os.Executable
+	// which we can't easily mock, so we verify the resolve+detect contract by hand).
+	resolved, err := filepath.EvalSymlinks(link)
+	if err != nil {
+		t.Fatalf("EvalSymlinks: %v", err)
+	}
+	got := detectInstallFromPath(resolved)
+	if got != InstallBrew {
+		t.Errorf("detectInstallFromPath(resolved symlink) = %v, want InstallBrew (resolved path: %s)", got, resolved)
 	}
 }
 

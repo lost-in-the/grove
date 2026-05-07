@@ -2,6 +2,7 @@ package updatecheck
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -36,9 +37,16 @@ func DetectInstall() InstallMethod {
 	if err != nil {
 		return InstallUnknown
 	}
+	// Resolve symlinks — brew installs the binary as a symlink from /opt/homebrew/bin/grove
+	// to the versioned Cellar path. Without this, brew installs misclassify as InstallBinary.
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
 	return detectInstallFromPath(exe)
 }
 
+// Path heuristics use forward-slash separators. Grove is currently Unix-only;
+// Windows install detection would require backslash variants.
 func detectInstallFromPath(path string) InstallMethod {
 	if path == "" {
 		return InstallUnknown
@@ -47,7 +55,7 @@ func detectInstallFromPath(path string) InstallMethod {
 		// covers /opt/homebrew/Cellar/grove/... and /usr/local/Cellar/grove/...
 		return InstallBrew
 	}
-	if strings.HasSuffix(path, "/go/bin/grove") || strings.Contains(path, "/go/bin/") {
+	if strings.Contains(path, "/go/bin/") {
 		return InstallGoInstall
 	}
 	return InstallBinary
