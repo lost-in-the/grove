@@ -242,7 +242,7 @@ services = ["app"]
 		t.Fatal(err)
 	}
 
-	cfg, err := loadFromPaths(LoadDefaults(), "/nonexistent/global.toml", configPath)
+	cfg, err := loadFromPaths(LoadDefaults(), "/nonexistent/global.toml", configPath, "")
 	if err != nil {
 		t.Fatalf("loadFromPaths() error = %v", err)
 	}

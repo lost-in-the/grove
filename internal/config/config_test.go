@@ -1325,6 +1325,175 @@ func TestIsExternalDockerMode(t *testing.T) {
 	}
 }
 
+func TestLoadFromGroveDir_LocalOverlay_Absent(t *testing.T) {
+	groveDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(groveDir, "config.toml"), []byte(`
+[tmux]
+mode = "auto"
+prefix = "team-"
+`), 0o644); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+
+	// Force GROVE_CONFIG to point at a non-existent path so HOME-based global
+	// config doesn't pollute the test.
+	t.Setenv("GROVE_CONFIG", filepath.Join(groveDir, "no-such-global.toml"))
+
+	cfg, err := LoadFromGroveDir(groveDir)
+	if err != nil {
+		t.Fatalf("LoadFromGroveDir: %v", err)
+	}
+	if cfg.Tmux.Mode != "auto" {
+		t.Errorf("Tmux.Mode: got %q want %q", cfg.Tmux.Mode, "auto")
+	}
+	if cfg.Tmux.Prefix != "team-" {
+		t.Errorf("Tmux.Prefix: got %q want %q", cfg.Tmux.Prefix, "team-")
+	}
+}
+
+func TestLoadFromGroveDir_LocalOverlay_OverridesProject(t *testing.T) {
+	groveDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(groveDir, "config.toml"), []byte(`
+[tmux]
+mode = "auto"
+`), 0o644); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(groveDir, "config.local.toml"), []byte(`
+[tmux]
+mode = "off"
+`), 0o644); err != nil {
+		t.Fatalf("write local config: %v", err)
+	}
+
+	t.Setenv("GROVE_CONFIG", filepath.Join(groveDir, "no-such-global.toml"))
+
+	cfg, err := LoadFromGroveDir(groveDir)
+	if err != nil {
+		t.Fatalf("LoadFromGroveDir: %v", err)
+	}
+	if cfg.Tmux.Mode != "off" {
+		t.Errorf("Tmux.Mode: got %q want %q (local overlay should win)", cfg.Tmux.Mode, "off")
+	}
+}
+
+func TestLoadFromGroveDir_LocalOverlay_PartialOverridePreservesUntouched(t *testing.T) {
+	groveDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(groveDir, "config.toml"), []byte(`
+[tmux]
+mode = "auto"
+prefix = "team-"
+`), 0o644); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(groveDir, "config.local.toml"), []byte(`
+[tmux]
+mode = "off"
+`), 0o644); err != nil {
+		t.Fatalf("write local config: %v", err)
+	}
+
+	t.Setenv("GROVE_CONFIG", filepath.Join(groveDir, "no-such-global.toml"))
+
+	cfg, err := LoadFromGroveDir(groveDir)
+	if err != nil {
+		t.Fatalf("LoadFromGroveDir: %v", err)
+	}
+	if cfg.Tmux.Mode != "off" {
+		t.Errorf("Tmux.Mode: got %q want %q", cfg.Tmux.Mode, "off")
+	}
+	if cfg.Tmux.Prefix != "team-" {
+		t.Errorf("Tmux.Prefix: got %q want %q (untouched fields must survive overlay)", cfg.Tmux.Prefix, "team-")
+	}
+}
+
+func TestLoadFromGroveDir_LocalOverlay_EmptyFile(t *testing.T) {
+	groveDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(groveDir, "config.toml"), []byte(`
+[tmux]
+mode = "auto"
+prefix = "team-"
+`), 0o644); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(groveDir, "config.local.toml"), []byte(""), 0o644); err != nil {
+		t.Fatalf("write local config: %v", err)
+	}
+
+	t.Setenv("GROVE_CONFIG", filepath.Join(groveDir, "no-such-global.toml"))
+
+	cfg, err := LoadFromGroveDir(groveDir)
+	if err != nil {
+		t.Fatalf("LoadFromGroveDir: %v", err)
+	}
+	if cfg.Tmux.Mode != "auto" {
+		t.Errorf("Tmux.Mode: got %q want %q (empty overlay must be a no-op)", cfg.Tmux.Mode, "auto")
+	}
+	if cfg.Tmux.Prefix != "team-" {
+		t.Errorf("Tmux.Prefix: got %q want %q", cfg.Tmux.Prefix, "team-")
+	}
+}
+
+func TestLoadFromGroveDir_LocalOverlay_CorruptFile(t *testing.T) {
+	groveDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(groveDir, "config.toml"), []byte(`
+[tmux]
+mode = "auto"
+`), 0o644); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(groveDir, "config.local.toml"), []byte(`
+[tmux
+mode = "off
+`), 0o644); err != nil {
+		t.Fatalf("write local config: %v", err)
+	}
+
+	t.Setenv("GROVE_CONFIG", filepath.Join(groveDir, "no-such-global.toml"))
+
+	_, err := LoadFromGroveDir(groveDir)
+	if err == nil {
+		t.Fatal("expected error for corrupt config.local.toml, got nil")
+	}
+	if !strings.Contains(err.Error(), "config.local.toml") {
+		t.Errorf("error should mention config.local.toml, got: %v", err)
+	}
+}
+
+func TestLoadFromGroveDir_LocalOverlay_OverridesTestSection(t *testing.T) {
+	groveDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(groveDir, "config.toml"), []byte(`
+[test]
+command = "bin/rspec"
+service = "app"
+include_deps = true
+`), 0o644); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(groveDir, "config.local.toml"), []byte(`
+[test]
+include_deps = false
+`), 0o644); err != nil {
+		t.Fatalf("write local config: %v", err)
+	}
+
+	t.Setenv("GROVE_CONFIG", filepath.Join(groveDir, "no-such-global.toml"))
+
+	cfg, err := LoadFromGroveDir(groveDir)
+	if err != nil {
+		t.Fatalf("LoadFromGroveDir: %v", err)
+	}
+	if cfg.Test.IncludeDepsValue() {
+		t.Error("Test.IncludeDeps: local overlay false should win over project true")
+	}
+	if cfg.Test.Command != "bin/rspec" {
+		t.Errorf("Test.Command: got %q want %q (untouched)", cfg.Test.Command, "bin/rspec")
+	}
+	if cfg.Test.Service != "app" {
+		t.Errorf("Test.Service: got %q want %q (untouched)", cfg.Test.Service, "app")
+	}
+}
+
 func TestLoadConfig_ExternalNonBlockingServices(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "config.toml")

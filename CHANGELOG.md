@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Per-developer config overlay at `.grove/config.local.toml` (gitignored). Overrides values from the committed `.grove/config.toml` for individual developers — e.g., `[tmux] mode = "off"` for someone who prefers no tmux without changing team defaults. Precedence: defaults → global → `.grove/config.toml` → `.grove/config.local.toml` → env vars (closes #79).
 - Optional update-available notification on command exit when a newer grove release is published. Checks at most once per 24 hours, in a detached background process — never blocks command execution. Suppressed in CI, non-TTY contexts, and when `NO_UPDATE_NOTIFIER`, `GROVE_NO_UPDATE_NOTIFIER`, `GROVE_AGENT_MODE`, or `GROVE_NONINTERACTIVE` env vars are set, or when `--no-update-notifier` is passed. Use `--check-update` to force a synchronous check at any time.
 - `grove context` command — prints full worktree context (branch, commit, remote tracking/sync, status, stash count, recent commits) for CLI/scripting use; `--json` flag emits structured machine-readable output (closes #16); JSON includes `has_remote` boolean to distinguish "no remote" from "remote, in sync" (0/0 ahead/behind)
 - `grove adopt [path]` command — bootstraps a git worktree that grove doesn't know about (config symlink, state registration, post-create hooks)
