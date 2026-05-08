@@ -44,7 +44,7 @@ func (u *UpdateOverlay) Close() {
 
 // View renders the overlay panel centered to the given terminal dimensions.
 func (u *UpdateOverlay) View(width, height int) string {
-	w, _ := calcUpdateOverlaySize(width, height)
+	w, ht := calcUpdateOverlaySize(width, height)
 
 	// Width() in lipgloss includes border + padding + text. The OverlayBorderInfo
 	// uses Border (2) + Padding(1,2) (4 horizontal) — same accounting as HelpOverlay.
@@ -94,6 +94,7 @@ func (u *UpdateOverlay) View(width, height int) string {
 
 	return Styles.OverlayBorderInfo.
 		Width(w).
+		Height(ht).
 		Render(content)
 }
 
