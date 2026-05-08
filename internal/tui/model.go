@@ -1787,7 +1787,7 @@ func (m Model) viewContent() string {
 	if result == "" {
 		result = m.renderDashboard()
 	}
-	return m.compositeHelpOverlay(result)
+	return m.compositeActiveOverlay(result)
 }
 
 func (m Model) viewNotReady() string {
@@ -1866,8 +1866,10 @@ func (m Model) viewForActiveView() string {
 	return ""
 }
 
-// compositeHelpOverlay renders the help overlay on top of the given content if active.
-func (m Model) compositeHelpOverlay(content string) string {
+// compositeActiveOverlay renders whichever overlay (update or help) is active
+// on top of the given content. The update overlay takes precedence when both
+// are active. Returns content unchanged when no overlay is active.
+func (m Model) compositeActiveOverlay(content string) string {
 	if m.updateOverlay != nil && m.updateOverlay.Active {
 		panel := m.updateOverlay.View(m.width, m.height)
 		return centerOverlay(content, panel, m.width, m.height)
