@@ -36,6 +36,9 @@ func TestUpdateOverlayOpen(t *testing.T) {
 	if u.updateCommand == "" {
 		t.Error("expected updateCommand to be populated after Open")
 	}
+	if u.updateLabel == "" {
+		t.Error("expected updateLabel to be populated after Open")
+	}
 }
 
 func TestUpdateOverlayClose(t *testing.T) {
@@ -58,13 +61,19 @@ func TestUpdateOverlayViewContent(t *testing.T) {
 
 	plain := stripUpdateView(view)
 
+	// Label is contextual: "Run" for brew/go-install, "Download" for binary.
+	// In tests the running binary lives under go test cache → InstallBinary →
+	// "Download". Just check that one or the other is present.
+	if !strings.Contains(stripUpdateView(view), "Run") && !strings.Contains(stripUpdateView(view), "Download") {
+		t.Errorf("expected View to contain command label (Run or Download)\n--- plain ---\n%s", stripUpdateView(view))
+	}
+
 	wantSubstrings := []string{
 		"Update available",
 		"Current",
 		"Latest",
 		"0.6.0",
 		"0.7.0",
-		"Run",
 		"Changelog",
 		"close",
 	}

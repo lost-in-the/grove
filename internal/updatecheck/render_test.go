@@ -55,6 +55,7 @@ func TestRenderBox_Plain(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	out := RenderBox("0.5.0", "0.6.0",
 		"https://github.com/lost-in-the/grove/releases/tag/v0.6.0",
+		"Run",
 		"brew upgrade lost-in-the/tap/grove",
 		SeverityMinor,
 	)
@@ -65,14 +66,28 @@ func TestRenderBox_Plain(t *testing.T) {
 	mustContain(t, out, "Update available")
 	mustContain(t, out, "0.5.0")
 	mustContain(t, out, "0.6.0")
-	mustContain(t, out, "brew upgrade lost-in-the/tap/grove")
+	mustContain(t, out, "Run: brew upgrade lost-in-the/tap/grove")
 	mustContain(t, out, "github.com/lost-in-the/grove/releases/tag/v0.6.0")
+}
+
+func TestRenderBox_PlainBinaryUsesDownloadLabel(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	out := RenderBox("0.5.0", "0.6.0",
+		"https://github.com/lost-in-the/grove/releases/tag/v0.6.0",
+		"Download",
+		"https://github.com/lost-in-the/grove/releases",
+		SeverityMinor,
+	)
+	mustContain(t, out, "Download: https://github.com/lost-in-the/grove/releases")
+	if strings.Contains(out, "Run:") {
+		t.Errorf("expected no \"Run:\" label in binary-install output, got:\n%s", out)
+	}
 }
 
 func TestRenderBox_ColoredEmitsAnsi(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
 	t.Setenv("CLICOLOR_FORCE", "1") // hint to lipgloss to render colors even when not a TTY
-	out := RenderBox("0.5.0", "1.0.0", "https://x", "brew upgrade x", SeverityMajor)
+	out := RenderBox("0.5.0", "1.0.0", "https://x", "Run", "brew upgrade x", SeverityMajor)
 	if !strings.Contains(out, "\x1b[") {
 		t.Errorf("expected ANSI escape sequences in colored output, got: %q", out)
 	}
@@ -82,6 +97,7 @@ func TestRenderBox_PlainPaddingAlignsForUTF8(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	out := RenderBox("0.5.0", "0.6.0",
 		"https://x",
+		"Run",
 		"brew upgrade x",
 		SeverityMinor,
 	)

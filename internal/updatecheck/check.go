@@ -34,7 +34,7 @@ func renderUpdateBox(w io.Writer, currentVersion, latestVersion, latestURL strin
 		return false
 	}
 	method := DetectInstall()
-	_, _ = io.WriteString(w, RenderBox(currentVersion, latestVersion, latestURL, UpdateCommand(method), severity))
+	_, _ = io.WriteString(w, RenderBox(currentVersion, latestVersion, latestURL, UpdateLabel(method), UpdateCommand(method), severity))
 	return true
 }
 

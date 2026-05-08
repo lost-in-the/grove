@@ -19,6 +19,7 @@ type UpdateOverlay struct {
 	latestVersion  string
 	latestURL      string
 	updateCommand  string
+	updateLabel    string
 }
 
 // NewUpdateOverlay creates an inactive UpdateOverlay.
@@ -34,7 +35,9 @@ func (u *UpdateOverlay) Open(currentVersion, latestVersion, latestURL string) {
 	u.currentVersion = currentVersion
 	u.latestVersion = latestVersion
 	u.latestURL = latestURL
-	u.updateCommand = updatecheck.UpdateCommand(updatecheck.DetectInstall())
+	method := updatecheck.DetectInstall()
+	u.updateCommand = updatecheck.UpdateCommand(method)
+	u.updateLabel = updatecheck.UpdateLabel(method)
 }
 
 // Close deactivates the overlay.
@@ -64,7 +67,15 @@ func (u *UpdateOverlay) View(width, height int) string {
 	current := labelStyle.Render("Current:  ") + valueStyle.Render(u.currentVersion)
 	latest := labelStyle.Render("Latest:   ") + emphStyle.Render(u.latestVersion)
 
-	runLine := labelStyle.Render("Run:        ") + cmdStyle.Render(u.updateCommand)
+	// Pad the command label so the value column aligns with "Changelog:".
+	// "Changelog: " is 11 chars + 1 space → values start at column 12.
+	const valueColumn = 12
+	cmdLabelText := u.updateLabel + ":"
+	cmdPad := valueColumn - len(cmdLabelText)
+	if cmdPad < 1 {
+		cmdPad = 1
+	}
+	runLine := labelStyle.Render(cmdLabelText+strings.Repeat(" ", cmdPad)) + cmdStyle.Render(u.updateCommand)
 	var changelogLine string
 	if u.latestURL != "" {
 		changelogLine = labelStyle.Render("Changelog:  ") + urlStyle.Render(u.latestURL)
