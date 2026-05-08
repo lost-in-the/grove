@@ -277,3 +277,24 @@ func TestCachedRelease_OlderCachedVersionUnavailable(t *testing.T) {
 		t.Error("expected available=false when current is newer than cached")
 	}
 }
+
+// TestCachedRelease_DevVersionUnavailable locks the contract that pre-release
+// or otherwise unparseable currentVersion strings (e.g. "0.7.0-dev") never
+// surface an update. CompareSemver returns SeverityNone for unparseable inputs,
+// which intentionally suppresses the badge/modal for development builds.
+func TestCachedRelease_DevVersionUnavailable(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "update-check.json")
+	_ = WriteCacheToPath(path, Cache{
+		LatestVersion: "0.8.0",
+		LatestURL:     "https://github.com/lost-in-the/grove/releases/tag/v0.8.0",
+	})
+
+	latest, url, available := cachedReleaseFromPath("0.7.0-dev", path)
+	if available {
+		t.Errorf("dev version should not show update available, got latest=%q url=%q", latest, url)
+	}
+	if latest != "" || url != "" {
+		t.Errorf("expected zero values for dev version, got latest=%q url=%q", latest, url)
+	}
+}
