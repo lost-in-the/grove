@@ -33,11 +33,8 @@ func TestUpdateOverlayOpen(t *testing.T) {
 	if u.latestVersion != "99.0.0" {
 		t.Errorf("latestVersion = %q, want %q", u.latestVersion, "99.0.0")
 	}
-	if u.updateCommand == "" {
-		t.Error("expected updateCommand to be populated after Open")
-	}
-	if u.updateLabel == "" {
-		t.Error("expected updateLabel to be populated after Open")
+	if u.latestURL != "https://github.com/lost-in-the/grove/releases/tag/v99.0.0" {
+		t.Errorf("latestURL = %q, want full release tag URL", u.latestURL)
 	}
 }
 
@@ -61,19 +58,17 @@ func TestUpdateOverlayViewContent(t *testing.T) {
 
 	plain := stripUpdateView(view)
 
-	// Label is contextual: "Run" for brew/go-install, "Download" for binary.
-	// In tests the running binary lives under go test cache → InstallBinary →
-	// "Download". Just check that one or the other is present.
-	if !strings.Contains(stripUpdateView(view), "Run") && !strings.Contains(stripUpdateView(view), "Download") {
-		t.Errorf("expected View to contain command label (Run or Download)\n--- plain ---\n%s", stripUpdateView(view))
-	}
-
 	wantSubstrings := []string{
 		"Update available",
 		"Current",
 		"Latest",
 		"0.6.0",
 		"0.7.0",
+		// All three install methods are always shown; user picks the one
+		// matching their setup.
+		"Brew",
+		"Go",
+		"Binary",
 		"Changelog",
 		"close",
 	}
@@ -83,15 +78,32 @@ func TestUpdateOverlayViewContent(t *testing.T) {
 		}
 	}
 
-	// URL may wrap onto multiple cells (and across the border glyph). Strip
-	// border glyphs + whitespace before checking continuity.
+	// Verify the actual install commands are rendered. The URL/command may
+	// wrap onto multiple cells (and across the border glyph). Strip border
+	// glyphs + whitespace before checking continuity.
 	flattened := plain
 	for _, r := range []string{"│", "╭", "╮", "╰", "╯", "─"} {
 		flattened = strings.ReplaceAll(flattened, r, "")
 	}
 	flattened = strings.Join(strings.Fields(flattened), "")
-	if !strings.Contains(flattened, "github.com/lost-in-the/grove/releases/tag/v0.7.0") {
-		t.Errorf("expected View to contain release URL\n--- plain ---\n%s", plain)
+
+	wantFlattened := []string{
+		"github.com/lost-in-the/grove/releases/tag/v0.7.0",
+		"brewupgradelost-in-the/tap/grove",
+		"goinstallgithub.com/lost-in-the/grove/cmd/grove@latest",
+		"github.com/lost-in-the/grove/releases",
+	}
+	for _, s := range wantFlattened {
+		if !strings.Contains(flattened, s) {
+			t.Errorf("expected flattened View to contain %q\n--- plain ---\n%s", s, plain)
+		}
+	}
+
+	// Footer should combine both keys with a single "close" action label —
+	// not have "close" written twice.
+	closeCount := strings.Count(plain, "close")
+	if closeCount != 1 {
+		t.Errorf("expected footer to render the word \"close\" exactly once, got %d\n--- plain ---\n%s", closeCount, plain)
 	}
 }
 
@@ -122,12 +134,14 @@ func TestCalcUpdateOverlaySize_Bounds(t *testing.T) {
 		wantW              int
 		wantHMin, wantHMax int
 	}{
-		// Floor
-		{40, 10, 50, 11, 11},
-		// Mid-range
-		{120, 40, 72, 16, 16},
+		// Tiny terminal — w clamps to termW so it doesn't overflow.
+		{40, 10, 40, 14, 14},
+		// Standard 80x24 — target 74 to fit go-install command without wrap.
+		{80, 24, 74, 14, 14},
+		// Mid-range — target stays 74 until termW*70/100 exceeds it.
+		{120, 40, 80, 22, 22},
 		// Ceiling
-		{300, 100, 80, 16, 16},
+		{300, 100, 80, 22, 22},
 	}
 	for _, tt := range tests {
 		w, h := calcUpdateOverlaySize(tt.termW, tt.termH)
