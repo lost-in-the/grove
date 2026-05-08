@@ -196,6 +196,19 @@ func (h *HelpFooter) CompactHeight(view ActiveView, width int) int {
 	return strings.Count(rendered, "\n") + 1
 }
 
+// RenderUpdateBadge returns a muted "↑ current → latest  press u" badge string
+// suitable for appending to a footer. Returns "" when no update is available
+// (zero strings) — caller should handle the empty case.
+func RenderUpdateBadge(currentVersion, latestVersion string) string {
+	if currentVersion == "" || latestVersion == "" {
+		return ""
+	}
+	mutedStyle := lipgloss.NewStyle().Foreground(Colors.TextMuted)
+	keyStyle := lipgloss.NewStyle().Foreground(Colors.Primary).Bold(true)
+	return mutedStyle.Render("↑ "+currentVersion+" → "+latestVersion+"  press ") +
+		keyStyle.Render("u")
+}
+
 // RenderCompactWithHints renders a one- or two-line footer with the given hints
 // (instead of looking up hints by view). Used for context-specific hint sets
 // like detail-focused mode.

@@ -20,6 +20,8 @@ import (
 	"github.com/lost-in-the/grove/internal/state"
 	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/tuilog"
+	"github.com/lost-in-the/grove/internal/updatecheck"
+	"github.com/lost-in-the/grove/internal/version"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
 
@@ -59,10 +61,16 @@ type Model struct {
 	help    help.Model
 
 	// V2 components
-	header      Header
-	toast       *ToastModel
-	helpFooter  *HelpFooter
-	helpOverlay *HelpOverlay
+	header        Header
+	toast         *ToastModel
+	helpFooter    *HelpFooter
+	helpOverlay   *HelpOverlay
+	updateOverlay *UpdateOverlay
+
+	// Cached update-available info, populated once at startup so we
+	// don't read the cache file on every render. Empty strings = no update.
+	updateLatestVersion string
+	updateLatestURL     string
 
 	// Keys
 	keys KeyMap
@@ -147,25 +155,33 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		pm = pluginMgr[0]
 	}
 
+	// Read update-check cache once at startup. Empty strings if no update is
+	// available (which is the common case). Reading from disk here instead of
+	// on every render keeps the hot path allocation-free.
+	latest, latestURL, _ := updatecheck.CachedRelease(version.Version)
+
 	return Model{
-		worktreeMgr:  mgr,
-		stateMgr:     stateMgr,
-		pluginMgr:    pm,
-		projectRoot:  projectRoot,
-		projectName:  mgr.GetProjectName(),
-		cfg:          cfg,
-		cfgLoadErr:   cfgErr,
-		keys:         keys,
-		list:         l,
-		listDelegate: v1Delegate,
-		compactMode:  compact,
-		spinner:      s,
-		help:         h,
-		toast:        NewToastModel(),
-		helpFooter:   NewHelpFooter(),
-		helpOverlay:  NewHelpOverlay(),
-		activeView:   ViewDashboard,
-		loading:      true,
+		worktreeMgr:         mgr,
+		stateMgr:            stateMgr,
+		pluginMgr:           pm,
+		projectRoot:         projectRoot,
+		projectName:         mgr.GetProjectName(),
+		cfg:                 cfg,
+		cfgLoadErr:          cfgErr,
+		keys:                keys,
+		list:                l,
+		listDelegate:        v1Delegate,
+		compactMode:         compact,
+		spinner:             s,
+		help:                h,
+		toast:               NewToastModel(),
+		helpFooter:          NewHelpFooter(),
+		helpOverlay:         NewHelpOverlay(),
+		updateOverlay:       NewUpdateOverlay(),
+		updateLatestVersion: latest,
+		updateLatestURL:     latestURL,
+		activeView:          ViewDashboard,
+		loading:             true,
 	}
 }
 
@@ -838,10 +854,27 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	// Update overlay intercepts all keys when active. Mirrors HelpOverlay's
+	// pattern from #54: both the trigger key (u) and esc close the modal.
+	if m.updateOverlay != nil && m.updateOverlay.Active {
+		if key.Matches(msg, m.keys.Update) || key.Matches(msg, m.keys.Escape) {
+			m.updateOverlay.Close()
+			return m, nil
+		}
+		return m, nil
+	}
+
 	// ? opens help for views without text input
 	// Views with active text inputs (Create, Rename, Checkout, Fork) pass ? through
 	if key.Matches(msg, m.keys.Help) && !m.viewHasTextInput() {
 		m.helpOverlay.Open(m.activeView, m.width, m.height)
+		return m, nil
+	}
+
+	// u opens the update modal when an update is available and no text input
+	// is focused. Same gating as ?-for-help.
+	if key.Matches(msg, m.keys.Update) && !m.viewHasTextInput() && m.updateAvailable() {
+		m.updateOverlay.Open(version.Version, m.updateLatestVersion, m.updateLatestURL)
 		return m, nil
 	}
 
@@ -1835,11 +1868,53 @@ func (m Model) viewForActiveView() string {
 
 // compositeHelpOverlay renders the help overlay on top of the given content if active.
 func (m Model) compositeHelpOverlay(content string) string {
+	if m.updateOverlay != nil && m.updateOverlay.Active {
+		panel := m.updateOverlay.View(m.width, m.height)
+		return centerOverlay(content, panel, m.width, m.height)
+	}
 	if m.helpOverlay.Active {
 		helpPanel := m.helpOverlay.View(m.width, m.height)
 		return centerOverlay(content, helpPanel, m.width, m.height)
 	}
 	return content
+}
+
+// updateAvailable reports whether the cached release info shows a newer
+// grove version is available than the running binary.
+func (m Model) updateAvailable() bool {
+	return m.updateLatestVersion != "" && m.updateLatestVersion != version.Version
+}
+
+// appendUpdateBadge appends a passive update-available badge to the given
+// footer when an update is cached. Returns footer unchanged otherwise.
+// The badge is appended on the same line if it fits within the width
+// budget (m.width-4), or on a new line below otherwise.
+func (m Model) appendUpdateBadge(footer string) string {
+	if !m.updateAvailable() {
+		return footer
+	}
+	badge := RenderUpdateBadge(version.Version, m.updateLatestVersion)
+	if badge == "" {
+		return footer
+	}
+
+	// Find the longest line in the footer. If the badge fits beside it with
+	// a separator, append inline; otherwise add as a new line.
+	maxLineWidth := 0
+	for _, line := range strings.Split(footer, "\n") {
+		if w := lipgloss.Width(line); w > maxLineWidth {
+			maxLineWidth = w
+		}
+	}
+	sep := Styles.HelpSep.Render("  ·  ")
+	budget := m.width - 4
+	if maxLineWidth+lipgloss.Width(sep)+lipgloss.Width(badge) <= budget {
+		// Append to the last line of the footer.
+		lines := strings.Split(footer, "\n")
+		lines[len(lines)-1] = lines[len(lines)-1] + sep + badge
+		return strings.Join(lines, "\n")
+	}
+	return footer + "\n  " + badge
 }
 
 // viewHasTextInput returns true if the active view has a focused text input
@@ -1870,6 +1945,7 @@ func (m Model) renderDashboard() string {
 	} else {
 		footer = m.helpFooter.RenderCompact(ViewDashboard, m.width-4)
 	}
+	footer = m.appendUpdateBadge(footer)
 
 	statusBar = m.applyToastToHeader(statusBar)
 
@@ -2197,6 +2273,7 @@ func RunPRs(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, 
 	tuilog.Init()
 	defer tuilog.Close()
 
+	maybeRefreshUpdateCache()
 	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...).ConfigureForPRs()
 	return runModel(model)
 }
@@ -2206,6 +2283,7 @@ func RunIssues(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot strin
 	tuilog.Init()
 	defer tuilog.Close()
 
+	maybeRefreshUpdateCache()
 	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...).ConfigureForIssues()
 	return runModel(model)
 }
@@ -2215,8 +2293,21 @@ func Run(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, plu
 	tuilog.Init()
 	defer tuilog.Close()
 
+	maybeRefreshUpdateCache()
 	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...)
 	return runModel(model)
+}
+
+// maybeRefreshUpdateCache triggers an async refresh of the update-check cache
+// from the TUI startup path, honoring the same Skip rules as the CLI surface
+// (CI, GROVE_AGENT_MODE, GROVE_NO_UPDATE_NOTIFIER, non-TTY, dev/unknown
+// versions). The 24h interval inside RefreshAsync prevents repeated network
+// hits.
+func maybeRefreshUpdateCache() {
+	if updatecheck.Skip(false, version.Version) {
+		return
+	}
+	updatecheck.RefreshAsync()
 }
 
 // handleTmuxSwitch creates/switches to the tmux session for the target worktree.
