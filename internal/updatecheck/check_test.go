@@ -222,3 +222,58 @@ func TestCachedUpdateAnnotation_OlderCachedVersionReturnsEmpty(t *testing.T) {
 		t.Errorf("expected empty for older cached version, got %q", got)
 	}
 }
+
+func TestCachedRelease_NewerCachedVersionReturnsBoth(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "update-check.json")
+	_ = WriteCacheToPath(path, Cache{
+		LatestVersion: "0.7.0",
+		LatestURL:     "https://github.com/lost-in-the/grove/releases/tag/v0.7.0",
+	})
+
+	latest, url, available := cachedReleaseFromPath("0.6.0", path)
+	if !available {
+		t.Fatal("expected available=true for newer cached version")
+	}
+	if latest != "0.7.0" {
+		t.Errorf("latest = %q, want %q", latest, "0.7.0")
+	}
+	if url != "https://github.com/lost-in-the/grove/releases/tag/v0.7.0" {
+		t.Errorf("url = %q, want release URL", url)
+	}
+}
+
+func TestCachedRelease_EqualVersionUnavailable(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "update-check.json")
+	_ = WriteCacheToPath(path, Cache{LatestVersion: "0.6.0", LatestURL: "https://x"})
+
+	latest, url, available := cachedReleaseFromPath("0.6.0", path)
+	if available {
+		t.Error("expected available=false for equal version")
+	}
+	if latest != "" || url != "" {
+		t.Errorf("expected zero values, got latest=%q url=%q", latest, url)
+	}
+}
+
+func TestCachedRelease_MissingCacheUnavailable(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "missing.json")
+
+	_, _, available := cachedReleaseFromPath("0.6.0", path)
+	if available {
+		t.Error("expected available=false for missing cache")
+	}
+}
+
+func TestCachedRelease_OlderCachedVersionUnavailable(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "update-check.json")
+	_ = WriteCacheToPath(path, Cache{LatestVersion: "0.5.0", LatestURL: "https://x"})
+
+	_, _, available := cachedReleaseFromPath("0.6.0", path)
+	if available {
+		t.Error("expected available=false when current is newer than cached")
+	}
+}
