@@ -38,6 +38,27 @@ func renderUpdateBox(w io.Writer, currentVersion, latestVersion, latestURL strin
 	return true
 }
 
+// CachedUpdateAnnotation returns a parenthetical annotation like
+// " (update available: 0.7.0)" when the cache indicates a newer version is
+// available. Returns "" otherwise (no cache, equal or older version).
+//
+// Use case: annotating `grove version` output so users see at a glance
+// whether their installed binary is behind.
+func CachedUpdateAnnotation(currentVersion string) string {
+	return cachedUpdateAnnotationFromPath(currentVersion, DefaultCachePath())
+}
+
+func cachedUpdateAnnotationFromPath(currentVersion, path string) string {
+	c, err := ReadCacheFromPath(path)
+	if err != nil || c.LatestVersion == "" {
+		return ""
+	}
+	if CompareSemver(currentVersion, c.LatestVersion) == SeverityNone {
+		return ""
+	}
+	return " (update available: " + c.LatestVersion + ")"
+}
+
 // CheckInterval is the default minimum gap between two refreshes.
 const CheckInterval = 24 * time.Hour
 

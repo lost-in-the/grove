@@ -178,3 +178,47 @@ func TestCheckNow_FetchFailureReturnsError(t *testing.T) {
 		t.Error("expected error on fetch failure")
 	}
 }
+
+func TestCachedUpdateAnnotation_NewerCachedVersionReturnsAnnotation(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "update-check.json")
+	_ = WriteCacheToPath(path, Cache{LatestVersion: "0.7.0", LatestURL: "https://x"})
+
+	got := cachedUpdateAnnotationFromPath("0.6.0", path)
+	want := " (update available: 0.7.0)"
+	if got != want {
+		t.Errorf("annotation = %q, want %q", got, want)
+	}
+}
+
+func TestCachedUpdateAnnotation_EqualVersionReturnsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "update-check.json")
+	_ = WriteCacheToPath(path, Cache{LatestVersion: "0.6.0"})
+
+	got := cachedUpdateAnnotationFromPath("0.6.0", path)
+	if got != "" {
+		t.Errorf("expected empty for equal version, got %q", got)
+	}
+}
+
+func TestCachedUpdateAnnotation_MissingCacheReturnsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "missing.json")
+
+	got := cachedUpdateAnnotationFromPath("0.6.0", path)
+	if got != "" {
+		t.Errorf("expected empty for missing cache, got %q", got)
+	}
+}
+
+func TestCachedUpdateAnnotation_OlderCachedVersionReturnsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "update-check.json")
+	_ = WriteCacheToPath(path, Cache{LatestVersion: "0.5.0"})
+
+	got := cachedUpdateAnnotationFromPath("0.6.0", path)
+	if got != "" {
+		t.Errorf("expected empty for older cached version, got %q", got)
+	}
+}
