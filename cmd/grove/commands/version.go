@@ -2,10 +2,8 @@ package commands
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 
 	"github.com/lost-in-the/grove/internal/updatecheck"
 	"github.com/lost-in-the/grove/internal/version"
@@ -22,7 +20,12 @@ var versionCmd = &cobra.Command{
 		} else {
 			output = version.GetVersion()
 		}
-		if term.IsTerminal(int(os.Stdout.Fd())) {
+		// Annotate only when we'd otherwise notify the user about updates.
+		// Skip honors CI/non-TTY/dev-version/opt-out env vars (NO_UPDATE_NOTIFIER,
+		// GROVE_NO_UPDATE_NOTIFIER, GROVE_AGENT_MODE, GROVE_NONINTERACTIVE).
+		// We pass false for the --no-update-notifier flag because the version cmd
+		// doesn't accept it; the env-var path covers the user-level opt-outs.
+		if !updatecheck.Skip(false, version.Version) {
 			output += updatecheck.CachedUpdateAnnotation(version.Version)
 		}
 		fmt.Println(output)
