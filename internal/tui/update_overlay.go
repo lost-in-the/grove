@@ -88,12 +88,9 @@ func (u *UpdateOverlay) View(width, height int) string {
 
 	footerRule := lipgloss.NewStyle().Foreground(Colors.SurfaceBorder).
 		Render(strings.Repeat("─", textWidth))
-	// Group both keys with a single action label, matching the project's
-	// other overlay footers (help_overlay.go).
+	// Group both keys with a single action label.
 	footerKeys := "  " +
-		Styles.HelpKey.Render("esc") +
-		Styles.HelpSep.Render(" · ") +
-		Styles.HelpKey.Render("u") + "   " + Styles.HelpDesc.Render("close")
+		Styles.HelpKey.Render("esc/u") + "   " + Styles.HelpDesc.Render("close")
 
 	parts := []string{
 		title,
