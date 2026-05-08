@@ -13,18 +13,42 @@ Single source of truth for all Grove configuration options. For command behavior
 | `~/.config/grove/config.toml` | Global config — applies to all projects |
 | `~/.config/grove/hooks.toml` | Global hooks — run in every project |
 | `.grove/config.toml` | Project config — overrides global |
+| `.grove/config.local.toml` | Per-developer overlay — overrides project config (gitignored) |
 | `.grove/hooks.toml` | Project hooks — merged with (or replaces) global hooks |
 | `.grove/state.json` | Per-project runtime state managed by grove — do not edit |
 
-**Load order:** defaults → global config → project config → environment variable overrides.
+**Load order:** defaults → global config → project config → project local overlay → environment variable overrides.
 
-Project settings override global settings for all scalar fields. For `[protection]` lists,
-project entries are unioned with global entries (global protections always apply).
+Each layer overrides the one before it for scalar fields. For `[protection]` lists,
+later entries are unioned with earlier ones (earlier protections always apply).
 
 **`GROVE_CONFIG`** overrides the global config file path at runtime:
 ```sh
 GROVE_CONFIG=~/work/shared-grove.toml grove ls
 ```
+
+### Per-developer overlay (`.grove/config.local.toml`)
+
+`.grove/config.local.toml` is an optional, gitignored overlay that lets a single
+developer override values committed to `.grove/config.toml` without touching the
+team baseline. The file is missing for most users — there's no harm in not
+having one.
+
+Example: the repo commits `[tmux] mode = "auto"` for the team, but you don't
+want grove to manage tmux for you. Create `.grove/config.local.toml`:
+
+```toml
+[tmux]
+mode = "off"
+```
+
+Your grove invocations now see `mode = "off"`. Other developers, who don't have
+the file, still see the committed `auto`. The file matches the same schema as
+`.grove/config.toml` — only the fields you set are overridden, everything else
+falls through.
+
+Add `.grove/config.local.toml` to your project's `.gitignore` (grove's own
+`.gitignore` already does this).
 
 ---
 

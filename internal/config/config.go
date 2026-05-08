@@ -170,7 +170,8 @@ func Load() (*Config, error) {
 		return cfg, err
 	}
 
-	return loadFromPaths(cfg, globalPath, projectPath)
+	localPath := localOverlayPathFor(projectPath)
+	return loadFromPaths(cfg, globalPath, projectPath, localPath)
 }
 
 // LoadFromGroveDir loads config using an explicit .grove directory path
@@ -194,11 +195,22 @@ func LoadFromGroveDir(groveDir string) (*Config, error) {
 	}
 	globalPath := filepath.Join(homeDir, ".config", "grove", "config.toml")
 
-	return loadFromPaths(cfg, globalPath, projectPath)
+	localPath := filepath.Join(groveDir, "config.local.toml")
+	return loadFromPaths(cfg, globalPath, projectPath, localPath)
+}
+
+// localOverlayPathFor returns the per-developer overlay path that sits next to
+// the given project config (.grove/config.toml → .grove/config.local.toml).
+// Returns empty string when projectPath is empty.
+func localOverlayPathFor(projectPath string) string {
+	if projectPath == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(projectPath), "config.local.toml")
 }
 
 // loadFromPaths is the shared config loading logic.
-func loadFromPaths(cfg *Config, globalPath, projectPath string) (*Config, error) {
+func loadFromPaths(cfg *Config, globalPath, projectPath, localPath string) (*Config, error) {
 
 	// GROVE_CONFIG overrides the global config path
 	if envConfig := os.Getenv("GROVE_CONFIG"); envConfig != "" {
@@ -227,6 +239,21 @@ func loadFromPaths(cfg *Config, globalPath, projectPath string) (*Config, error)
 			return nil, err
 		}
 		cfg = mergeConfigs(cfg, projectCfg)
+	}
+
+	// Load per-developer local overlay if it exists (overrides project).
+	// Missing file is silent; a present-but-corrupt file is a hard error.
+	if localPath != "" {
+		localCfg, err := LoadConfigFromPath(localPath)
+		if err != nil && !os.IsNotExist(err) {
+			return nil, fmt.Errorf("config.local.toml: %w", err)
+		}
+		if localCfg != nil {
+			if err := resolveProjectPaths(localCfg, projectRootFor(localPath)); err != nil {
+				return nil, fmt.Errorf("config.local.toml: %w", err)
+			}
+			cfg = mergeConfigs(cfg, localCfg)
+		}
 	}
 
 	// Apply environment variable overrides for runtime settings

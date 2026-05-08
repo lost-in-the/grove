@@ -60,6 +60,7 @@ docs/plans/
 .grove/state.lock
 .grove/ui_prefs.json
 .grove/.envrc
+.grove/config.local.toml
 
 # Auto Claude data directory
 .auto-claude/
