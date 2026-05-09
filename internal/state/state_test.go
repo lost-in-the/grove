@@ -333,6 +333,50 @@ func TestManagerWorktreeOperations(t *testing.T) {
 		}
 	})
 
+	t.Run("remove clears last_worktree when it points at the removed entry", func(t *testing.T) {
+		mgr := setupTestManager(t)
+
+		_ = mgr.AddWorktree("first", &WorktreeState{Path: "/p1", Branch: "b1"})
+		_ = mgr.AddWorktree("second", &WorktreeState{Path: "/p2", Branch: "b2"})
+		if err := mgr.SetLastWorktree("first"); err != nil {
+			t.Fatalf("SetLastWorktree() error = %v", err)
+		}
+
+		if err := mgr.RemoveWorktree("first"); err != nil {
+			t.Fatalf("RemoveWorktree() error = %v", err)
+		}
+
+		last, err := mgr.GetLastWorktree()
+		if err != nil {
+			t.Fatalf("GetLastWorktree() error = %v", err)
+		}
+		if last != "" {
+			t.Errorf("GetLastWorktree() = %q, want empty after removing pointed-at worktree", last)
+		}
+	})
+
+	t.Run("remove leaves last_worktree alone when it points elsewhere", func(t *testing.T) {
+		mgr := setupTestManager(t)
+
+		_ = mgr.AddWorktree("first", &WorktreeState{Path: "/p1", Branch: "b1"})
+		_ = mgr.AddWorktree("second", &WorktreeState{Path: "/p2", Branch: "b2"})
+		if err := mgr.SetLastWorktree("second"); err != nil {
+			t.Fatalf("SetLastWorktree() error = %v", err)
+		}
+
+		if err := mgr.RemoveWorktree("first"); err != nil {
+			t.Fatalf("RemoveWorktree() error = %v", err)
+		}
+
+		last, err := mgr.GetLastWorktree()
+		if err != nil {
+			t.Fatalf("GetLastWorktree() error = %v", err)
+		}
+		if last != "second" {
+			t.Errorf("GetLastWorktree() = %q, want %q (unchanged)", last, "second")
+		}
+	})
+
 	t.Run("list worktrees returns sorted names", func(t *testing.T) {
 		mgr := setupTestManager(t)
 
