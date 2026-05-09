@@ -182,6 +182,39 @@ func TestIsWorktreeInState(t *testing.T) {
 	}
 }
 
+func TestIsWorktreeInState_SymmetricSymlinkResolution(t *testing.T) {
+	// state.json may have been written with the unresolved form of a path
+	// (e.g. /var/folders/... on macOS) while the caller passes the resolved
+	// form (/private/var/folders/...). The helper must match either way.
+	tmpDir := t.TempDir()
+
+	// Create a real directory (the resolved path) and a symlink that points
+	// at it (the unresolved path).
+	realDir := filepath.Join(tmpDir, "real")
+	if err := os.MkdirAll(realDir, 0755); err != nil {
+		t.Fatalf("mkdir real: %v", err)
+	}
+	linkDir := filepath.Join(tmpDir, "link")
+	if err := os.Symlink(realDir, linkDir); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	// state.json stores the symlinked (unresolved) path.
+	stateData := []byte(`{"worktrees":{"wt":{"path":"` + linkDir + `","branch":"main"}}}`)
+
+	// Caller passes the resolved real path — should still match.
+	if !IsWorktreeInState(stateData, realDir) {
+		t.Errorf("IsWorktreeInState(stored=symlink, caller=real) = false, want true")
+	}
+
+	// Inverse: state.json stores the real path, caller passes the symlinked
+	// form. EvalSymlinks(linkDir) returns realDir, so this must also match.
+	stateData2 := []byte(`{"worktrees":{"wt":{"path":"` + realDir + `","branch":"main"}}}`)
+	if !IsWorktreeInState(stateData2, linkDir) {
+		t.Errorf("IsWorktreeInState(stored=real, caller=symlink) = false, want true")
+	}
+}
+
 func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...)

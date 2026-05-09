@@ -88,15 +88,28 @@ func IsWorktreeInState(stateData []byte, worktreePath string) bool {
 		return false
 	}
 
-	// Resolve symlinks once so we can compare against either stored form
-	// (handles macOS /var → /private/var and similar).
-	resolved, resolveErr := filepath.EvalSymlinks(worktreePath)
+	// Resolve symlinks on the caller's path once so we can compare against
+	// either stored form (handles macOS /var → /private/var and similar).
+	resolvedCaller, resolveCallerErr := filepath.EvalSymlinks(worktreePath)
 
 	for _, wt := range snap.Worktrees {
 		if wt.Path == worktreePath {
 			return true
 		}
-		if resolveErr == nil && resolved != worktreePath && wt.Path == resolved {
+		if resolveCallerErr == nil && resolvedCaller != worktreePath && wt.Path == resolvedCaller {
+			return true
+		}
+		// Also resolve the stored path so a state.json written before
+		// path normalization (unresolved /var/...) still matches a caller
+		// that already passes a resolved /private/var/... path.
+		resolvedStored, err := filepath.EvalSymlinks(wt.Path)
+		if err != nil {
+			continue
+		}
+		if resolvedStored == worktreePath {
+			return true
+		}
+		if resolveCallerErr == nil && resolvedStored == resolvedCaller {
 			return true
 		}
 	}
