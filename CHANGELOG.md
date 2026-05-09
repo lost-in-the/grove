@@ -90,6 +90,7 @@ Downstream consumers integrating with grove via `.grove/config.toml` or `.grove/
 - `internal/grove.IsWorktreeInState` — shared helper for state.json drift detection.
 - `state.Manager.Batch()` and the new `worktreeinfo` package extracted to consolidate git fan-out (#74, #85).
 - Removed unused `matchesActive` parameter from external-status classifier; removed `_ = name` dead wiring in env-loader doctor checks; removed dead `BootstrapOpts.Now` injection field.
+- Test fixtures in `internal/tui/update_overlay_test.go` now reference `version.Version` instead of a hardcoded `0.7.0-dev` literal, so they don't silently break on the next dev-cycle version bump.
 
 ## [0.6.1] - 2026-03-19
 

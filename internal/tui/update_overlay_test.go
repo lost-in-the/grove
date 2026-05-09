@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/lost-in-the/grove/internal/version"
 )
 
 // stripANSIUpdate removes ANSI escape codes for substring assertions.
@@ -22,13 +24,16 @@ func TestNewUpdateOverlay(t *testing.T) {
 
 func TestUpdateOverlayOpen(t *testing.T) {
 	u := NewUpdateOverlay()
-	u.Open("0.7.0-dev", "99.0.0", "https://github.com/lost-in-the/grove/releases/tag/v99.0.0")
+	// Use the live version.Version so this test doesn't silently break on the
+	// next dev-cycle version bump. Whatever the current build's version is,
+	// Open should round-trip it through currentVersion unchanged.
+	u.Open(version.Version, "99.0.0", "https://github.com/lost-in-the/grove/releases/tag/v99.0.0")
 
 	if !u.Active {
 		t.Error("expected Active to be true after Open")
 	}
-	if u.currentVersion != "0.7.0-dev" {
-		t.Errorf("currentVersion = %q, want %q", u.currentVersion, "0.7.0-dev")
+	if u.currentVersion != version.Version {
+		t.Errorf("currentVersion = %q, want %q", u.currentVersion, version.Version)
 	}
 	if u.latestVersion != "99.0.0" {
 		t.Errorf("latestVersion = %q, want %q", u.latestVersion, "99.0.0")
