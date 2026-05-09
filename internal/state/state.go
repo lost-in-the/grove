@@ -45,6 +45,8 @@ type Manager struct {
 	mu               sync.RWMutex
 	state            *State
 	removedWorktrees map[string]bool // tracks explicit removals for merge in save()
+	batchDepth       int             // > 0 while inside Batch — setters defer their save()
+	batchDirty       bool            // a setter ran during the current batch
 }
 
 // NewManager creates a new state manager for a grove project
@@ -98,7 +100,7 @@ func (m *Manager) SetProject(name string) error {
 	defer m.mu.Unlock()
 
 	m.state.Project = name
-	return m.save()
+	return m.saveOrDefer()
 }
 
 // GetProject returns the project name from state
@@ -125,7 +127,7 @@ func (m *Manager) SetLastWorktree(name string) error {
 	defer m.mu.Unlock()
 
 	m.state.LastWorktree = name
-	return m.save()
+	return m.saveOrDefer()
 }
 
 // AddWorktree adds a new worktree to state
@@ -141,7 +143,7 @@ func (m *Manager) AddWorktree(name string, ws *WorktreeState) error {
 	defer m.mu.Unlock()
 
 	m.state.Worktrees[name] = ws
-	return m.save()
+	return m.saveOrDefer()
 }
 
 // GetWorktree returns the worktree state for a given name
@@ -171,7 +173,7 @@ func (m *Manager) RemoveWorktree(name string) error {
 
 	delete(m.state.Worktrees, name)
 	m.removedWorktrees[name] = true
-	return m.save()
+	return m.saveOrDefer()
 }
 
 // RenameWorktree renames a worktree in state, moving all fields to the new key.
@@ -207,7 +209,7 @@ func (m *Manager) RenameWorktree(oldName, newName string) error {
 		m.state.LastWorktree = newName
 	}
 
-	return m.save()
+	return m.saveOrDefer()
 }
 
 // TouchWorktree updates the last_accessed_at timestamp for a worktree
@@ -225,7 +227,7 @@ func (m *Manager) TouchWorktree(name string) error {
 	}
 
 	ws.LastAccessedAt = time.Now()
-	return m.save()
+	return m.saveOrDefer()
 }
 
 // IsEnvironment checks if a worktree is an environment worktree
@@ -262,6 +264,48 @@ func (m *Manager) GetState() State {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return *m.state
+}
+
+// Batch suppresses individual save() calls inside fn and flushes a single
+// save when the outermost batch ends. Use when a command runs multiple state
+// mutations in sequence — collapses N flock+merge+rename cycles into one.
+//
+// The flush runs in a defer so it still happens if fn panics (the panic
+// continues to propagate after the flush). os.Exit inside fn skips deferred
+// saves — keep validation-failure exits before any state mutations.
+//
+// Contract: only the goroutine calling Batch should mutate this Manager
+// during fn. Concurrent mutations from other goroutines would also have
+// their saves suppressed and may not be flushed.
+func (m *Manager) Batch(fn func() error) (retErr error) {
+	m.mu.Lock()
+	m.batchDepth++
+	m.mu.Unlock()
+
+	defer func() {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		m.batchDepth--
+		if m.batchDepth == 0 && m.batchDirty {
+			m.batchDirty = false
+			if saveErr := m.save(); saveErr != nil && retErr == nil {
+				retErr = saveErr
+			}
+		}
+	}()
+
+	return fn()
+}
+
+// saveOrDefer saves immediately when no batch is active, or just marks the
+// in-memory state dirty when a Batch is in progress so the outermost Batch
+// can flush once. Callers must hold m.mu (matches save's contract).
+func (m *Manager) saveOrDefer() error {
+	if m.batchDepth > 0 {
+		m.batchDirty = true
+		return nil
+	}
+	return m.save()
 }
 
 // load reads the state from disk

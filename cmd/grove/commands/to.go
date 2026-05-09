@@ -70,16 +70,17 @@ When using shell integration, this will also change your current directory.`,
 			return fmt.Errorf("worktree '%s' is stale (directory missing). Run 'grove rm %s' to clean up", name, name)
 		}
 
-		// Get current worktree for hook context and state update
-		currentTree, _ := mgr.GetCurrent()
+		// Get current worktree for hook context and state update. Path +
+		// display name are all that's needed — the WIP handler does its own
+		// per-path dirty check below.
 		var prevWorktree string
 		var prevWorktreePath string
-		if currentTree != nil {
-			prevWorktree = currentTree.DisplayName()
-			prevWorktreePath = currentTree.Path
+		if currentPath, err := mgr.CurrentPath(); err == nil && currentPath != "" {
+			prevWorktree = mgr.DisplayNameForPath(currentPath)
+			prevWorktreePath = currentPath
 
 			// Check for dirty worktree before allowing switch
-			wip := worktree.NewWIPHandler(currentTree.Path)
+			wip := worktree.NewWIPHandler(currentPath)
 			hasDirty, wipErr := wip.HasWIP()
 			if wipErr != nil {
 				log.Printf("failed to check dirty state: %v", wipErr)

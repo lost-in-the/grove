@@ -10,6 +10,13 @@ type worktreesFetchedMsg struct {
 	err   error
 }
 
+// detailMetricsLoadedMsg is sent after the deferred detail-panel metrics
+// (CommitCount, StashCount) have been computed for the visible worktrees.
+// Keyed by worktree path.
+type detailMetricsLoadedMsg struct {
+	metrics map[string]DetailMetrics
+}
+
 // worktreeDeletedMsg is sent after a worktree deletion attempt.
 type worktreeDeletedMsg struct {
 	name         string

@@ -94,8 +94,18 @@ var lsCmd = &cobra.Command{
 		// Get project name for tmux session naming
 		projectName := mgr.GetProjectName()
 
-		// Get current worktree to mark it
-		currentTree, _ := mgr.GetCurrent()
+		// Resolve current worktree from the trees we already fetched, rather
+		// than calling GetCurrent (which re-runs List with N parallel git
+		// status calls).
+		var currentTree *worktree.Worktree
+		if currentPath, err := mgr.CurrentPath(); err == nil {
+			for _, t := range trees {
+				if t.Path == currentPath {
+					currentTree = t
+					break
+				}
+			}
+		}
 
 		// Get tmux sessions for status
 		tmuxAvailable := tmux.IsTmuxAvailable()

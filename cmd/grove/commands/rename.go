@@ -83,8 +83,12 @@ Examples:
 			return fmt.Errorf("failed to check new name: %w", err)
 		}
 
-		// Validate rename preconditions
-		currentTree, _ := mgr.GetCurrent()
+		// Validate rename preconditions. validateRename only consults
+		// current.Path — synthesize a minimal Worktree from CurrentPath.
+		var currentTree *worktree.Worktree
+		if currentPath, err := mgr.CurrentPath(); err == nil {
+			currentTree = &worktree.Worktree{Path: currentPath}
+		}
 		if err := validateRename(wt, existing, currentTree, ctx.Config, oldName); err != nil {
 			cli.Error(stderr, "%s", err)
 			if err == errCurrentWorktree {
@@ -98,23 +102,26 @@ Examples:
 			return fmt.Errorf("failed to move worktree: %w", err)
 		}
 
-		// Step 2: Rename in state
-		if err := ctx.State.RenameWorktree(oldName, newName); err != nil {
-			cli.Warning(w, "Worktree moved but state update failed: %v", err)
-		}
-
-		// Step 3: Update the path in state to reflect the new directory
+		// Steps 2 + 3: rename in state, then update the path. Batched into a
+		// single save — without this the rename + path update would write
+		// state.json twice.
 		newFullName := mgr.FullName(newName)
-		newWt, findErr := mgr.Find(newName)
-		if findErr == nil && newWt != nil {
-			if ws, _ := ctx.State.GetWorktree(newName); ws != nil {
-				ws.Path = newWt.Path
-				// Re-add to save the updated path
-				_ = ctx.State.AddWorktree(newName, ws)
+		_ = ctx.State.Batch(func() error {
+			if err := ctx.State.RenameWorktree(oldName, newName); err != nil {
+				cli.Warning(w, "Worktree moved but state update failed: %v", err)
 			}
-		} else {
-			cli.Warning(w, "Could not update worktree path for %s", newFullName)
-		}
+
+			newWt, findErr := mgr.Find(newName)
+			if findErr == nil && newWt != nil {
+				if ws, _ := ctx.State.GetWorktree(newName); ws != nil {
+					ws.Path = newWt.Path
+					_ = ctx.State.AddWorktree(newName, ws)
+				}
+			} else {
+				cli.Warning(w, "Could not update worktree path for %s", newFullName)
+			}
+			return nil
+		})
 
 		cli.Success(w, "Renamed worktree '%s' to '%s'", oldName, newName)
 

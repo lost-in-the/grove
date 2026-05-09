@@ -99,6 +99,11 @@ type Model struct {
 	// Post-create selection
 	pendingSelect string
 
+	// Lazy-loaded detail-panel metrics (CommitCount, StashCount), keyed by
+	// worktree path. Populated after the initial fetch via a deferred Cmd.
+	// Renderers overlay these onto WorktreeItem before drawing the detail.
+	detailMetrics map[string]DetailMetrics
+
 	// Output
 	switchTo            string
 	switchToDisplayName string // display name for tmux session naming
@@ -214,6 +219,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleWindowSize(msg)
 	case worktreesFetchedMsg:
 		return m.handleWorktreesFetched(msg)
+	case detailMetricsLoadedMsg:
+		return m.handleDetailMetricsLoaded(msg)
 	case prLookupMsg:
 		return m.handlePRLookup(msg)
 	case worktreeDeletedMsg:
@@ -311,7 +318,40 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 			branches = append(branches, item.Branch)
 		}
 	}
-	return m, lookupPRsCmd(branches)
+
+	defaultBranch := "main"
+	if m.cfg != nil && m.cfg.DefaultBranch != "" {
+		defaultBranch = m.cfg.DefaultBranch
+	}
+	return m, tea.Batch(
+		lookupPRsCmd(branches),
+		fetchDetailMetricsCmd(msg.items, defaultBranch),
+	)
+}
+
+func (m Model) handleDetailMetricsLoaded(msg detailMetricsLoadedMsg) (tea.Model, tea.Cmd) {
+	if msg.metrics == nil {
+		return m, nil
+	}
+	m.detailMetrics = msg.metrics
+
+	// Apply metrics to items in the list so detail panel renders show them
+	// even when updateDetailContent is called outside this handler path.
+	listItems := m.list.Items()
+	for i, li := range listItems {
+		item, ok := li.(WorktreeItem)
+		if !ok {
+			continue
+		}
+		if metrics, found := msg.metrics[item.Path]; found {
+			item.CommitCount = metrics.CommitCount
+			item.StashCount = metrics.StashCount
+			listItems[i] = item
+		}
+	}
+	m.list.SetItems(listItems)
+	m.updateDetailContent()
+	return m, nil
 }
 
 func (m Model) handlePRLookup(msg prLookupMsg) (tea.Model, tea.Cmd) {

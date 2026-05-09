@@ -83,8 +83,10 @@ Examples:
 			return fmt.Errorf("failed to initialize worktree manager: %w", err)
 		}
 
-		// Check if worktree already exists
-		if existingWt, _ := mgr.Find(name); existingWt != nil {
+		// Quick path-based existence check — avoids List() with N parallel
+		// dirty checks. If a non-standard or prunable worktree owns the name,
+		// the eventual git worktree add will surface it.
+		if mgr.PathExists(name) {
 			return fmt.Errorf("worktree '%s' already exists\n\nOptions:\n  • Switch to it: grove to %s\n  • Remove it first: grove rm %s\n  • Use different name: grove new %s-v2",
 				name, name, name, name)
 		}
@@ -190,46 +192,52 @@ Examples:
 			return nil
 		}
 
-		// Determine current worktree name for state tracking
+		// Determine current worktree name for state tracking. CurrentPath +
+		// DisplayNameForPath skips the List()-with-N-dirty-checks that
+		// GetCurrent would trigger.
 		currentWorktreeName := ""
-		if currentWt, _ := mgr.GetCurrent(); currentWt != nil {
-			currentWorktreeName = currentWt.DisplayName()
+		if currentPath, err := mgr.CurrentPath(); err == nil {
+			currentWorktreeName = mgr.DisplayNameForPath(currentPath)
 		}
 
-		// Switch to new worktree unless --no-switch
+		// Switch to new worktree unless --no-switch.
+		// Batch the SetLastWorktree + TouchWorktree pair so the state file is
+		// flock-merged-renamed once instead of twice.
 		if !newNoSwitch {
-			// Update last_worktree before switching
-			if currentWorktreeName != "" {
-				if err := ctx.State.SetLastWorktree(currentWorktreeName); err != nil {
-					log.Printf("failed to set last worktree %q: %v", currentWorktreeName, err)
-				}
-			}
-
-			// Store current session as last if inside tmux
-			if tmux.IsInsideTmux() {
-				currentSession, err := tmux.GetCurrentSession()
-				if err == nil {
-					if err := tmux.StoreLastSession(currentSession); err != nil {
-						log.Printf("failed to store last session %q: %v", currentSession, err)
+			var tmuxSwitched bool
+			_ = ctx.State.Batch(func() error {
+				if currentWorktreeName != "" {
+					if err := ctx.State.SetLastWorktree(currentWorktreeName); err != nil {
+						log.Printf("failed to set last worktree %q: %v", currentWorktreeName, err)
 					}
 				}
-			}
 
-			// Switch tmux session if inside tmux (skip in agent mode)
-			var tmuxSwitched bool
-			if !ctx.Config.AgentMode && tmux.IsTmuxAvailable() && tmux.IsInsideTmux() {
-				sessionName := worktree.TmuxSessionName(projectName, name)
-				if err := tmux.SwitchSession(sessionName); err != nil {
-					cli.Warning(w, "Failed to switch session: %v", err)
-				} else {
-					tmuxSwitched = true
+				// Store current session as last if inside tmux
+				if tmux.IsInsideTmux() {
+					currentSession, err := tmux.GetCurrentSession()
+					if err == nil {
+						if err := tmux.StoreLastSession(currentSession); err != nil {
+							log.Printf("failed to store last session %q: %v", currentSession, err)
+						}
+					}
 				}
-			}
 
-			// Update last_accessed_at for target worktree
-			if err := ctx.State.TouchWorktree(name); err != nil {
-				log.Printf("failed to touch worktree %q: %v", name, err)
-			}
+				// Switch tmux session if inside tmux (skip in agent mode)
+				if !ctx.Config.AgentMode && tmux.IsTmuxAvailable() && tmux.IsInsideTmux() {
+					sessionName := worktree.TmuxSessionName(projectName, name)
+					if err := tmux.SwitchSession(sessionName); err != nil {
+						cli.Warning(w, "Failed to switch session: %v", err)
+					} else {
+						tmuxSwitched = true
+					}
+				}
+
+				// Update last_accessed_at for target worktree
+				if err := ctx.State.TouchWorktree(name); err != nil {
+					log.Printf("failed to touch worktree %q: %v", name, err)
+				}
+				return nil
+			})
 
 			// Skip cd directive when tmux switch already moved the user
 			if !tmuxSwitched {

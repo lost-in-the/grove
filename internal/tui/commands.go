@@ -25,6 +25,18 @@ func (m Model) fetchWorktrees() tea.Msg {
 	return worktreesFetchedMsg{items: items, err: err}
 }
 
+// fetchDetailMetricsCmd returns a tea.Cmd that loads the detail-panel-only
+// numbers (CommitCount, StashCount) for the given items in the background.
+// Use after the dashboard has rendered so the user doesn't wait on N extra
+// git calls before first paint.
+func fetchDetailMetricsCmd(items []WorktreeItem, defaultBranch string) tea.Cmd {
+	return func() tea.Msg {
+		return detailMetricsLoadedMsg{
+			metrics: FetchDetailMetrics(items, defaultBranch),
+		}
+	}
+}
+
 func deleteWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot, name string, deleteBranch bool) tea.Cmd {
 	return func() tea.Msg {
 		projectName := mgr.GetProjectName()

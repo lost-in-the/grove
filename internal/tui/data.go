@@ -106,6 +106,7 @@ type fetchContext struct {
 	cfg           *config.Config
 	stateMgr      *state.Manager
 	mgr           *worktree.Manager
+	upstreams     map[string]worktreeinfo.BranchUpstream // keyed by branch name
 }
 
 func loadFetchContext(mgr *worktree.Manager, stateMgr *state.Manager) fetchContext {
@@ -125,13 +126,14 @@ func loadFetchContext(mgr *worktree.Manager, stateMgr *state.Manager) fetchConte
 		fc.defaultBranch = cfg.DefaultBranch
 	}
 
-	currentTree, currentErr := mgr.GetCurrent()
+	// Use CurrentPath (single git rev-parse) rather than GetCurrent, which
+	// would re-run List() with N parallel git status calls — already done by
+	// the caller.
+	currentPath, currentErr := mgr.CurrentPath()
 	if currentErr != nil {
-		tuilog.Printf("warning: failed to get current worktree: %v", currentErr)
+		tuilog.Printf("warning: failed to get current worktree path: %v", currentErr)
 	}
-	if currentTree != nil {
-		fc.currentPath = currentTree.Path
-	}
+	fc.currentPath = currentPath
 
 	if tmux.IsTmuxAvailable() {
 		sessionList, err := tmux.ListSessions()
@@ -180,37 +182,76 @@ func (fc *fetchContext) setStateInfo(item *WorktreeItem, shortName string) {
 	}
 }
 
-func (fc *fetchContext) enrichGitInfo(item *WorktreeItem, treePath, branch string, isDirty bool) {
-	shortHash, message, age, err := fc.mgr.GetCommitInfo(treePath)
-	if err != nil {
-		tuilog.Printf("warning: failed to get commit info for %q: %v", treePath, err)
-	} else {
-		item.Commit = shortHash
-		item.CommitMessage = message
-		item.CommitAge = age
-	}
+func (fc *fetchContext) enrichGitInfo(item *WorktreeItem, tree *worktree.Worktree) {
+	branch := tree.Branch
 
-	if isDirty {
-		dirtyFiles, err := fc.mgr.GetDirtyFiles(treePath)
-		if err != nil {
-			tuilog.Printf("warning: failed to get dirty files for %q: %v", treePath, err)
-		} else if dirtyFiles != "" {
-			for _, f := range strings.Split(dirtyFiles, "\n") {
-				if f != "" {
-					item.DirtyFiles = append(item.DirtyFiles, f)
-				}
+	// One git log call returns both the head commit info and recent commits.
+	commitInfo, recents := worktreeinfo.HeadAndRecentCommits(tree.Path, 3)
+	item.Commit = commitInfo.ShortHash
+	item.CommitMessage = commitInfo.Message
+	item.CommitAge = commitInfo.Age
+	item.RecentCommits = recents
+
+	// Dirty file list was populated by Manager.List(); split it here.
+	if tree.DirtyFiles != "" {
+		for _, f := range strings.Split(tree.DirtyFiles, "\n") {
+			if f != "" {
+				item.DirtyFiles = append(item.DirtyFiles, f)
 			}
 		}
 	}
 
-	item.AheadCount, item.BehindCount, item.HasRemote, item.TrackingBranch = worktreeinfo.UpstreamInfo(treePath)
-
-	if branch != fc.defaultBranch {
-		item.CommitCount = worktreeinfo.CommitCountAhead(treePath, fc.defaultBranch)
+	if up, ok := fc.upstreams[branch]; ok {
+		item.AheadCount = up.Ahead
+		item.BehindCount = up.Behind
+		item.HasRemote = up.HasRemote
+		item.TrackingBranch = up.Tracking
 	}
 
-	item.RecentCommits = worktreeinfo.RecentCommits(treePath, 3)
-	item.StashCount = worktreeinfo.StashCount(treePath)
+	// CommitCount (ahead of default branch) and StashCount are detail-panel
+	// only — defer their per-worktree git calls to FetchDetailMetrics so the
+	// dashboard renders without paying for ~2N extra git invocations.
+}
+
+// DetailMetrics holds the per-worktree numbers that only appear in the detail
+// panel: commits ahead of the default branch, and stash count. Computed
+// lazily after the dashboard has rendered.
+type DetailMetrics struct {
+	CommitCount int
+	StashCount  int
+}
+
+// FetchDetailMetrics loads the per-worktree detail-panel numbers (CommitCount,
+// StashCount) for every non-prunable item in parallel. Result is keyed by
+// worktree path. Skips worktrees on the default branch for CommitCount.
+//
+// Run this AFTER the initial FetchWorktrees so the dashboard paint isn't
+// blocked on N extra git calls. Takes the existing items rather than
+// re-listing — the caller already paid for List() once.
+func FetchDetailMetrics(items []WorktreeItem, defaultBranch string) map[string]DetailMetrics {
+	result := make(map[string]DetailMetrics, len(items))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, item := range items {
+		if item.IsPrunable {
+			continue
+		}
+		wg.Add(1)
+		go func(path, branch string) {
+			defer wg.Done()
+			m := DetailMetrics{
+				StashCount: worktreeinfo.StashCount(path),
+			}
+			if branch != defaultBranch {
+				m.CommitCount = worktreeinfo.CommitCountAhead(path, defaultBranch)
+			}
+			mu.Lock()
+			result[path] = m
+			mu.Unlock()
+		}(item.Path, item.Branch)
+	}
+	wg.Wait()
+	return result
 }
 
 // FetchWorktrees gathers all enriched worktree data for display.
@@ -222,6 +263,15 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager, pluginMgr ..
 	}
 
 	fc := loadFetchContext(mgr, stateMgr)
+
+	// Batch upstream tracking info for every local branch in one git call,
+	// instead of 2 calls per worktree.
+	upstreams, upErr := worktreeinfo.AllBranchUpstreams(mgr.GetRepoRoot())
+	if upErr != nil {
+		tuilog.Printf("warning: failed to load upstream info: %v", upErr)
+	}
+	fc.upstreams = upstreams
+
 	items := make([]WorktreeItem, len(trees))
 
 	var wg sync.WaitGroup
@@ -246,10 +296,10 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager, pluginMgr ..
 
 		if !tree.IsPrunable {
 			wg.Add(1)
-			go func(item *WorktreeItem, treePath, branch string, isDirty bool) {
+			go func(item *WorktreeItem, tree *worktree.Worktree) {
 				defer wg.Done()
-				fc.enrichGitInfo(item, treePath, branch, isDirty)
-			}(item, tree.Path, tree.Branch, tree.IsDirty)
+				fc.enrichGitInfo(item, tree)
+			}(item, tree)
 		}
 	}
 

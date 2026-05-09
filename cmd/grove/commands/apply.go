@@ -70,16 +70,17 @@ Examples:
 			return fmt.Errorf("failed to initialize worktree manager: %w", err)
 		}
 
-		// Get current worktree (target)
-		currentTree, err := mgr.GetCurrent()
+		// Get current worktree (target). Only path + display name are needed
+		// downstream — skip GetCurrent's commit/dirty enrichment.
+		currentPath, err := mgr.CurrentPath()
 		if err != nil {
 			return fmt.Errorf("failed to get current worktree: %w", err)
 		}
-		if currentTree == nil {
-			return fmt.Errorf("could not determine current worktree")
+		currentTree := &worktree.Worktree{
+			Path: currentPath,
 		}
 
-		targetName := currentTree.DisplayName()
+		targetName := mgr.DisplayNameForPath(currentPath)
 
 		// Check if target is immutable
 		if cfg.IsImmutable(targetName) {

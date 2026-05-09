@@ -283,38 +283,41 @@ Examples:
 			return output.PrintJSON(result)
 		}
 
-		// Switch to new worktree unless --no-switch
+		// Switch to new worktree unless --no-switch.
+		// Batch the SetLastWorktree + TouchWorktree pair into a single state save.
 		if !forkNoSwitch {
-			// Update last_worktree before switching
-			if err := ctx.State.SetLastWorktree(parentName); err != nil {
-				log.Printf("failed to set last worktree %q: %v", parentName, err)
-			}
+			var tmuxSwitched bool
+			_ = ctx.State.Batch(func() error {
+				if err := ctx.State.SetLastWorktree(parentName); err != nil {
+					log.Printf("failed to set last worktree %q: %v", parentName, err)
+				}
 
-			// Store current session as last if inside tmux
-			if tmux.IsInsideTmux() {
-				currentSession, err := tmux.GetCurrentSession()
-				if err == nil {
-					if err := tmux.StoreLastSession(currentSession); err != nil {
-						log.Printf("failed to store last session %q: %v", currentSession, err)
+				// Store current session as last if inside tmux
+				if tmux.IsInsideTmux() {
+					currentSession, err := tmux.GetCurrentSession()
+					if err == nil {
+						if err := tmux.StoreLastSession(currentSession); err != nil {
+							log.Printf("failed to store last session %q: %v", currentSession, err)
+						}
 					}
 				}
-			}
 
-			// Switch tmux session
-			var tmuxSwitched bool
-			if tmux.IsTmuxAvailable() && tmux.IsInsideTmux() {
-				sessionName := worktree.TmuxSessionName(projectName, name)
-				if err := tmux.SwitchSession(sessionName); err != nil {
-					cli.Warning(w, "Failed to switch session: %v", err)
-				} else {
-					tmuxSwitched = true
+				// Switch tmux session
+				if tmux.IsTmuxAvailable() && tmux.IsInsideTmux() {
+					sessionName := worktree.TmuxSessionName(projectName, name)
+					if err := tmux.SwitchSession(sessionName); err != nil {
+						cli.Warning(w, "Failed to switch session: %v", err)
+					} else {
+						tmuxSwitched = true
+					}
 				}
-			}
 
-			// Update last_accessed_at for target worktree
-			if err := ctx.State.TouchWorktree(name); err != nil {
-				log.Printf("failed to touch worktree %q: %v", name, err)
-			}
+				// Update last_accessed_at for target worktree
+				if err := ctx.State.TouchWorktree(name); err != nil {
+					log.Printf("failed to touch worktree %q: %v", name, err)
+				}
+				return nil
+			})
 
 			// Skip cd directive when tmux switch already moved the user
 			if !tmuxSwitched {
