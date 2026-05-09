@@ -1889,15 +1889,16 @@ func (m Model) compositeActiveOverlay(content string) string {
 	return content
 }
 
-// updateAvailable reports whether the cached release info shows a strictly
-// newer grove version is available than the running binary. Uses semver
-// comparison rather than string inequality so a downgrade or unparseable
-// cache value won't accidentally surface a badge.
+// updateAvailable reports whether the cached release info shows a newer
+// grove version is available than the running binary.
+//
+// String inequality is sufficient because the only path that populates
+// updateLatestVersion is NewModel → updatecheck.CachedRelease, which already
+// applies CompareSemver and only returns a value when the cache is strictly
+// newer. Re-running CompareSemver here would be redundant AND would break
+// dev/test builds where version.Version is unparseable as semver.
 func (m Model) updateAvailable() bool {
-	if m.updateLatestVersion == "" {
-		return false
-	}
-	return updatecheck.CompareSemver(version.Version, m.updateLatestVersion) != updatecheck.SeverityNone
+	return m.updateLatestVersion != "" && m.updateLatestVersion != version.Version
 }
 
 // appendUpdateBadge appends a passive update-available badge to the given
