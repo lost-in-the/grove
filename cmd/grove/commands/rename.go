@@ -106,7 +106,7 @@ Examples:
 		// single save — without this the rename + path update would write
 		// state.json twice.
 		newFullName := mgr.FullName(newName)
-		_ = ctx.State.Batch(func() error {
+		batchErr := ctx.State.Batch(func() error {
 			if err := ctx.State.RenameWorktree(oldName, newName); err != nil {
 				cli.Warning(w, "Worktree moved but state update failed: %v", err)
 			}
@@ -122,6 +122,9 @@ Examples:
 			}
 			return nil
 		})
+		if batchErr != nil {
+			cli.Warning(w, "state save failed: %v", batchErr)
+		}
 
 		cli.Success(w, "Renamed worktree '%s' to '%s'", oldName, newName)
 

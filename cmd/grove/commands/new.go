@@ -205,7 +205,7 @@ Examples:
 		// flock-merged-renamed once instead of twice.
 		if !newNoSwitch {
 			var tmuxSwitched bool
-			_ = ctx.State.Batch(func() error {
+			batchErr := ctx.State.Batch(func() error {
 				if currentWorktreeName != "" {
 					if err := ctx.State.SetLastWorktree(currentWorktreeName); err != nil {
 						log.Printf("failed to set last worktree %q: %v", currentWorktreeName, err)
@@ -238,6 +238,9 @@ Examples:
 				}
 				return nil
 			})
+			if batchErr != nil {
+				log.Printf("state save failed: %v", batchErr)
+			}
 
 			// Skip cd directive when tmux switch already moved the user
 			if !tmuxSwitched {

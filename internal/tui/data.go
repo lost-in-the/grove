@@ -109,12 +109,21 @@ type fetchContext struct {
 	upstreams     map[string]worktreeinfo.BranchUpstream // keyed by branch name
 }
 
+// ResolveDefaultBranch returns the default branch name to use for "ahead of
+// default" calculations: cfg.DefaultBranch when set, otherwise "main". Single
+// source of truth for both the bulk fetcher and the lazy metrics dispatcher.
+func ResolveDefaultBranch(cfg *config.Config) string {
+	if cfg != nil && cfg.DefaultBranch != "" {
+		return cfg.DefaultBranch
+	}
+	return "main"
+}
+
 func loadFetchContext(mgr *worktree.Manager, stateMgr *state.Manager) fetchContext {
 	fc := fetchContext{
-		projectName:   mgr.GetProjectName(),
-		defaultBranch: "main",
-		stateMgr:      stateMgr,
-		mgr:           mgr,
+		projectName: mgr.GetProjectName(),
+		stateMgr:    stateMgr,
+		mgr:         mgr,
 	}
 
 	cfg, cfgErr := config.Load()
@@ -122,9 +131,7 @@ func loadFetchContext(mgr *worktree.Manager, stateMgr *state.Manager) fetchConte
 		tuilog.Printf("warning: failed to load config for protection checks: %v", cfgErr)
 	}
 	fc.cfg = cfg
-	if cfg != nil && cfg.DefaultBranch != "" {
-		fc.defaultBranch = cfg.DefaultBranch
-	}
+	fc.defaultBranch = ResolveDefaultBranch(cfg)
 
 	// Use CurrentPath (single git rev-parse) rather than GetCurrent, which
 	// would re-run List() with N parallel git status calls — already done by

@@ -99,10 +99,10 @@ type Model struct {
 	// Post-create selection
 	pendingSelect string
 
-	// Lazy-loaded detail-panel metrics (CommitCount, StashCount), keyed by
-	// worktree path. Populated after the initial fetch via a deferred Cmd.
-	// Renderers overlay these onto WorktreeItem before drawing the detail.
-	detailMetrics map[string]DetailMetrics
+	// Generation counter for the deferred detail-metrics fetch. Each
+	// FetchWorktrees bumps this; results from older generations are
+	// dropped so a stale fetch can't apply old numbers to a fresh item set.
+	detailMetricsGen int
 
 	// Output
 	switchTo            string
@@ -319,24 +319,23 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 		}
 	}
 
-	defaultBranch := "main"
-	if m.cfg != nil && m.cfg.DefaultBranch != "" {
-		defaultBranch = m.cfg.DefaultBranch
-	}
+	// Bump the generation BEFORE dispatching the lazy fetch. Any in-flight
+	// metrics from a previous fetch will arrive with an older gen and get
+	// dropped by handleDetailMetricsLoaded.
+	m.detailMetricsGen++
 	return m, tea.Batch(
 		lookupPRsCmd(branches),
-		fetchDetailMetricsCmd(msg.items, defaultBranch),
+		fetchDetailMetricsCmd(m.detailMetricsGen, msg.items, ResolveDefaultBranch(m.cfg)),
 	)
 }
 
 func (m Model) handleDetailMetricsLoaded(msg detailMetricsLoadedMsg) (tea.Model, tea.Cmd) {
-	if msg.metrics == nil {
+	// Drop results from a stale fetch (a newer FetchWorktrees was dispatched
+	// after we kicked off this metrics load).
+	if msg.gen != m.detailMetricsGen || msg.metrics == nil {
 		return m, nil
 	}
-	m.detailMetrics = msg.metrics
 
-	// Apply metrics to items in the list so detail panel renders show them
-	// even when updateDetailContent is called outside this handler path.
 	listItems := m.list.Items()
 	for i, li := range listItems {
 		item, ok := li.(WorktreeItem)

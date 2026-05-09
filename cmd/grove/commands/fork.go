@@ -287,7 +287,7 @@ Examples:
 		// Batch the SetLastWorktree + TouchWorktree pair into a single state save.
 		if !forkNoSwitch {
 			var tmuxSwitched bool
-			_ = ctx.State.Batch(func() error {
+			batchErr := ctx.State.Batch(func() error {
 				if err := ctx.State.SetLastWorktree(parentName); err != nil {
 					log.Printf("failed to set last worktree %q: %v", parentName, err)
 				}
@@ -318,6 +318,9 @@ Examples:
 				}
 				return nil
 			})
+			if batchErr != nil {
+				log.Printf("state save failed: %v", batchErr)
+			}
 
 			// Skip cd directive when tmux switch already moved the user
 			if !tmuxSwitched {

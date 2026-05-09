@@ -13,7 +13,12 @@ type worktreesFetchedMsg struct {
 // detailMetricsLoadedMsg is sent after the deferred detail-panel metrics
 // (CommitCount, StashCount) have been computed for the visible worktrees.
 // Keyed by worktree path.
+//
+// gen identifies the FetchWorktrees iteration this result belongs to; the
+// handler drops messages whose gen no longer matches the model's current
+// generation, so a slow fetch can't apply old numbers to a fresh item set.
 type detailMetricsLoadedMsg struct {
+	gen     int
 	metrics map[string]DetailMetrics
 }
 
