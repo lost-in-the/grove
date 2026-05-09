@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/lost-in-the/grove/internal/fsutil"
 )
 
 // LegacyState represents the V0/V1 state schema (frozen.json)
@@ -48,7 +50,7 @@ func MigrateFromLegacy(groveDir string, legacyPath string) (bool, error) {
 		return false, fmt.Errorf("failed to marshal new state: %w", err)
 	}
 
-	if err := os.WriteFile(stateFile, stateData, 0644); err != nil {
+	if err := fsutil.AtomicWriteFile(stateFile, stateData, 0644); err != nil {
 		return false, fmt.Errorf("failed to write new state: %w", err)
 	}
 
@@ -122,7 +124,7 @@ func BackupState(groveDir string) error {
 	}
 
 	// Write backup
-	if err := os.WriteFile(backupFile, data, 0644); err != nil {
+	if err := fsutil.AtomicWriteFile(backupFile, data, 0644); err != nil {
 		return fmt.Errorf("failed to write state backup: %w", err)
 	}
 
@@ -146,7 +148,7 @@ func RestoreStateBackup(groveDir string) error {
 	}
 
 	// Write to state file
-	if err := os.WriteFile(stateFile, data, 0644); err != nil {
+	if err := fsutil.AtomicWriteFile(stateFile, data, 0644); err != nil {
 		return fmt.Errorf("failed to restore state: %w", err)
 	}
 
