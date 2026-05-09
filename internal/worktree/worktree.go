@@ -196,10 +196,14 @@ func (m *Manager) Move(oldName, newName string) error {
 	return nil
 }
 
-// Find searches for a worktree by short name or full name
-// Returns the worktree if found, nil if not found
+// Find searches for a worktree by short name, display name, branch, full
+// name, or path basename. Returns the worktree if found, nil if not found.
+//
+// Returned worktrees do not have IsDirty/DirtyFiles populated — callers that
+// need dirty status should call GetDirtyFiles on the returned tree's Path.
+// Skipping dirty checks here keeps Find fast in repos with many worktrees.
 func (m *Manager) Find(name string) (*Worktree, error) {
-	trees, err := m.List()
+	trees, err := m.listLight()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list worktrees: %w", err)
 	}
@@ -217,30 +221,38 @@ func (m *Manager) Find(name string) (*Worktree, error) {
 	return nil, nil
 }
 
-// List returns all worktrees in the repository
+// List returns all worktrees in the repository.
+// Each tree's IsDirty + DirtyFiles are populated from a single git status call —
+// callers that need the dirty file list should read tree.DirtyFiles rather than
+// calling GetDirtyFiles a second time.
+//
+// In repos with many worktrees, the per-worktree dirty checks dominate cost.
+// Callers that only need the porcelain metadata (path, branch, prunable) can
+// use listLight or higher-level helpers (Find, ListNames) to skip them.
 func (m *Manager) List() ([]*Worktree, error) {
-	output, err := cmdexec.Output(context.TODO(), "git", []string{"worktree", "list", "--porcelain"}, m.repoRoot, cmdexec.GitLocal)
+	trees, err := m.listLight()
 	if err != nil {
-		return nil, fmt.Errorf("failed to list worktrees: %w", err)
+		return nil, err
 	}
 
-	projectName := m.GetProjectName()
-	mainPath := m.getMainWorktreePath()
-	trees := parseWorktreeList(string(output), mainPath, projectName)
-
-	// Check dirty status in parallel — each goroutine writes to its own struct
+	// Check dirty status in parallel — each goroutine writes to its own struct.
+	// Cache the file list too so callers don't re-run git status to get it.
 	var wg sync.WaitGroup
 	for _, tree := range trees {
+		if tree.IsPrunable {
+			continue
+		}
 		wg.Add(1)
 		go func(t *Worktree) {
 			defer wg.Done()
-			dirty, err := m.isDirty(t.Path)
+			files, err := m.getDirtyFiles(t.Path)
 			if err != nil {
 				log.Printf("warning: dirty check failed for %q: %v", t.Path, err)
 				t.DirtyCheckFailed = true
 				return
 			}
-			t.IsDirty = dirty
+			t.DirtyFiles = files
+			t.IsDirty = files != ""
 		}(tree)
 	}
 	wg.Wait()
@@ -248,17 +260,102 @@ func (m *Manager) List() ([]*Worktree, error) {
 	return trees, nil
 }
 
-// ListNames returns display names for all worktrees without running dirty checks.
-// This is significantly faster than List() and suitable for tab completion.
-func (m *Manager) ListNames() ([]string, error) {
+// listLight returns worktrees parsed from `git worktree list --porcelain`
+// without the per-worktree dirty status check. Returned worktrees have all
+// porcelain-derived fields (Path, Name, ShortName, Branch, Commit, IsMain,
+// IsPrunable) but IsDirty/DirtyFiles/DirtyCheckFailed remain at zero values.
+//
+// Use for callers that need the worktree set but not dirty state — much
+// faster in repos with many worktrees because it skips N parallel git status
+// invocations.
+func (m *Manager) listLight() ([]*Worktree, error) {
 	output, err := cmdexec.Output(context.TODO(), "git", []string{"worktree", "list", "--porcelain"}, m.repoRoot, cmdexec.GitLocal)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list worktrees: %w", err)
 	}
 
-	projectName := m.GetProjectName()
-	mainPath := m.getMainWorktreePath()
-	trees := parseWorktreeList(string(output), mainPath, projectName)
+	// The main worktree is always the first `worktree <path>` line —
+	// extract it from the output we already have rather than running
+	// `git worktree list --porcelain` a second time via getMainWorktreePath.
+	raw := string(output)
+	mainPath := mainWorktreePathFromPorcelain(raw)
+	if mainPath == "" {
+		mainPath = m.repoRoot
+	}
+	return parseWorktreeList(raw, mainPath, m.GetProjectName()), nil
+}
+
+// mainWorktreePathFromPorcelain returns the first worktree path in the output
+// of `git worktree list --porcelain`, which is always the main worktree.
+// Returns the empty string when no worktree line is found.
+func mainWorktreePathFromPorcelain(porcelain string) string {
+	for _, line := range strings.Split(porcelain, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "worktree ") {
+			return strings.TrimPrefix(line, "worktree ")
+		}
+	}
+	return ""
+}
+
+// CurrentPath returns the absolute path of the worktree containing the current
+// working directory. Unlike GetCurrent, it does NOT call List() — use this when
+// you only need the path and the trees list either isn't needed or is already
+// in hand.
+func (m *Manager) CurrentPath() (string, error) {
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"rev-parse", "--show-toplevel"}, "", cmdexec.GitLocal)
+	if err != nil {
+		return "", fmt.Errorf("failed to get current worktree path: %w", err)
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+// PathForName returns the canonical filesystem path for a worktree of the
+// given short name, whether it exists or not. Used by callers that have
+// already created (or are about to create) a worktree at the standard
+// location and want to avoid re-running List().
+func (m *Manager) PathForName(name string) string {
+	return filepath.Join(filepath.Dir(m.repoRoot), m.FullName(name))
+}
+
+// PathExists reports whether a worktree directory already exists at the
+// canonical path for `name`. Cheap (single os.Stat) — prefer this over Find
+// for "does this name collide?" checks where the standard location is enough.
+//
+// Doesn't catch worktrees registered with git but missing from disk
+// (prunable) or worktrees living at non-standard paths; Create() will surface
+// those as a git-level error if encountered.
+func (m *Manager) PathExists(name string) bool {
+	_, err := os.Stat(m.PathForName(name))
+	return err == nil
+}
+
+// DisplayNameForPath returns the display name a worktree at `path` would have
+// (e.g. "root" for the main worktree, or the short name with project prefix
+// stripped for everything else). No git calls — pure string manipulation
+// against the configured project name and repo root.
+func (m *Manager) DisplayNameForPath(path string) string {
+	if path == "" {
+		return ""
+	}
+	if path == m.repoRoot {
+		return "root"
+	}
+	base := filepath.Base(path)
+	prefix := m.GetProjectName() + "-"
+	if strings.HasPrefix(base, prefix) {
+		return strings.TrimPrefix(base, prefix)
+	}
+	return base
+}
+
+// ListNames returns display names for all worktrees without running dirty checks.
+// This is significantly faster than List() and suitable for tab completion.
+func (m *Manager) ListNames() ([]string, error) {
+	trees, err := m.listLight()
+	if err != nil {
+		return nil, err
+	}
 
 	names := make([]string, 0, len(trees))
 	for _, t := range trees {
@@ -273,8 +370,10 @@ func (m *Manager) Remove(name string) error {
 		return fmt.Errorf("worktree name cannot be empty")
 	}
 
-	// Find the worktree by name
-	trees, err := m.List()
+	// Find the worktree by name. listLight skips per-worktree dirty checks
+	// — Remove only needs the target's path/IsMain/IsPrunable to decide what
+	// to do.
+	trees, err := m.listLight()
 	if err != nil {
 		return fmt.Errorf("failed to list worktrees: %w", err)
 	}
@@ -334,40 +433,41 @@ func (m *Manager) Remove(name string) error {
 	return nil
 }
 
-// GetCurrent returns the current worktree
+// GetCurrent returns the current worktree, enriched with commit info and
+// the dirty file list for just that worktree.
+//
+// Performs O(1) dirty checks instead of O(N) — only the current worktree is
+// inspected, not every worktree in the repo. Significantly faster than the
+// pre-refactor implementation in repos with many worktrees.
 func (m *Manager) GetCurrent() (*Worktree, error) {
-	output, err := cmdexec.Output(context.TODO(), "git", []string{"rev-parse", "--show-toplevel"}, "", cmdexec.GitLocal)
+	currentPath, err := m.CurrentPath()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get current worktree: %w", err)
+		return nil, err
 	}
 
-	currentPath := strings.TrimSpace(string(output))
-
-	trees, err := m.List()
+	trees, err := m.listLight()
 	if err != nil {
 		return nil, err
 	}
 
 	for _, tree := range trees {
-		if tree.Path == currentPath {
-			// Enrich with commit information
-			shortHash, message, age, err := m.getCommitInfo(tree.Path)
-			if err == nil {
-				tree.ShortCommit = shortHash
-				tree.CommitMessage = message
-				tree.CommitAge = age
-			}
-
-			// Get dirty files if the worktree is dirty
-			if tree.IsDirty {
-				dirtyFiles, err := m.getDirtyFiles(tree.Path)
-				if err == nil {
-					tree.DirtyFiles = dirtyFiles
-				}
-			}
-
-			return tree, nil
+		if tree.Path != currentPath {
+			continue
 		}
+		shortHash, message, age, err := m.getCommitInfo(tree.Path)
+		if err == nil {
+			tree.ShortCommit = shortHash
+			tree.CommitMessage = message
+			tree.CommitAge = age
+		}
+		files, dirtyErr := m.getDirtyFiles(tree.Path)
+		if dirtyErr != nil {
+			tree.DirtyCheckFailed = true
+		} else {
+			tree.DirtyFiles = files
+			tree.IsDirty = files != ""
+		}
+		return tree, nil
 	}
 
 	return nil, fmt.Errorf("current worktree not found")
@@ -386,16 +486,6 @@ func (m *Manager) getDirtyFiles(path string) (string, error) {
 	}
 
 	return strings.TrimSpace(string(output)), nil
-}
-
-// isDirty checks if a worktree has uncommitted changes
-func (m *Manager) isDirty(path string) (bool, error) {
-	dirtyFiles, err := m.getDirtyFiles(path)
-	if err != nil {
-		return false, err
-	}
-
-	return len(dirtyFiles) > 0, nil
 }
 
 // GetCommitInfo retrieves detailed commit information for a worktree.
