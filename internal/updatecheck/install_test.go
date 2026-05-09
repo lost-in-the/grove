@@ -14,7 +14,7 @@ func TestDetectInstallFromPath(t *testing.T) {
 	}{
 		{"homebrew apple silicon", "/opt/homebrew/Cellar/grove/0.6.0/bin/grove", InstallBrew},
 		{"homebrew intel", "/usr/local/Cellar/grove/0.6.0/bin/grove", InstallBrew},
-		{"go install", "/Users/leah/go/bin/grove", InstallGoInstall},
+		{"go install", "/Users/example/go/bin/grove", InstallGoInstall},
 		{"binary download", "/usr/local/bin/grove", InstallBinary},
 		{"empty", "", InstallUnknown},
 	}

@@ -1881,10 +1881,15 @@ func (m Model) compositeActiveOverlay(content string) string {
 	return content
 }
 
-// updateAvailable reports whether the cached release info shows a newer
-// grove version is available than the running binary.
+// updateAvailable reports whether the cached release info shows a strictly
+// newer grove version is available than the running binary. Uses semver
+// comparison rather than string inequality so a downgrade or unparseable
+// cache value won't accidentally surface a badge.
 func (m Model) updateAvailable() bool {
-	return m.updateLatestVersion != "" && m.updateLatestVersion != version.Version
+	if m.updateLatestVersion == "" {
+		return false
+	}
+	return updatecheck.CompareSemver(version.Version, m.updateLatestVersion) != updatecheck.SeverityNone
 }
 
 // appendUpdateBadge appends a passive update-available badge to the given
