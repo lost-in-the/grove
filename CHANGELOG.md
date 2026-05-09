@@ -58,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Service-health probe timeout raised from 1s to 3s to tolerate slow systems.
 - Compose `--env-file` is now honored when reading the active-worktree env var (previously hardcoded to `.env`).
 - Worktree ages now reflect real timestamps (no more "9999 days").
+- `docs/COMMAND_SPECIFICATIONS.md` clarifies `grove context` exit codes: exit 10 only when the command runs outside any grove project; exit 1 when in a grove project but the current directory is not a registered worktree.
 
 ### Fixed
 - TUI update-available opt-outs now also gate the Skip flow for full parity with the CLI box (issue #84, PR #83). Previously the Skip-cache gate didn't honor every documented opt-out env var.

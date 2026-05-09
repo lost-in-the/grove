@@ -1005,11 +1005,13 @@ Recent:
 | Dirty worktree | Shows modified files (up to 5 shown; remainder counted) |
 | No stashes | `Stash:` line omitted in human output; `stash_count: 0` in JSON |
 | No commits yet | Recent commits section omitted |
-| Not in grove project | Exit non-zero with "not a grove project" error |
+| Not in grove project | Exit 10 with "not a grove project" error |
+| In a grove project but cwd is not a registered worktree | Exit 1 with "not in a grove worktree" error |
 
 **Exit Codes:**
 - 0: Success
-- 10: Not in a grove project
+- 1: In a grove project but the current directory is not a registered worktree
+- 10: Not in any grove project (no `.grove/` directory found)
 
 ---
 
