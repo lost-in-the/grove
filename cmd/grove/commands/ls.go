@@ -22,7 +22,7 @@ var (
 // lsWorktreeOutput represents a worktree in JSON output
 type lsWorktreeOutput struct {
 	Name        string            `json:"name"`
-	FullName    string            `json:"fullName"`
+	FullName    string            `json:"full_name"`
 	Branch      string            `json:"branch"`
 	Path        string            `json:"path"`
 	Status      string            `json:"status"`

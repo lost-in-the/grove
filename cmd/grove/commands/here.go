@@ -37,7 +37,7 @@ var (
 // hereOutput represents the JSON output structure for grove here
 type hereOutput struct {
 	Name        string     `json:"name"`
-	FullName    string     `json:"fullName"`
+	FullName    string     `json:"full_name"`
 	Project     string     `json:"project"`
 	Branch      string     `json:"branch"`
 	Path        string     `json:"path"`
@@ -47,13 +47,13 @@ type hereOutput struct {
 	Tmux        tmuxInfo   `json:"tmux"`
 	Environment bool       `json:"environment,omitempty"`
 	Mirror      string     `json:"mirror,omitempty"`
-	AgentSlot   int        `json:"agentSlot,omitempty"`
-	AgentURL    string     `json:"agentURL,omitempty"`
+	AgentSlot   int        `json:"agent_slot,omitempty"`
+	AgentURL    string     `json:"agent_url,omitempty"`
 }
 
 type commitInfo struct {
 	Hash      string `json:"hash"`
-	ShortHash string `json:"shortHash"`
+	ShortHash string `json:"short_hash"`
 	Message   string `json:"message"`
 	Age       string `json:"age"`
 }

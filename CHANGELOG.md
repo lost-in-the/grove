@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Behavior changes (read before upgrading)
 
+- **`grove here --json`, `grove ls --json`, and `grove ps --json` field names changed to snake_case for consistency with `grove context --json`.** Scripts parsing these outputs need to update field-name lookups: `fullName → full_name` (here, ls), `agentSlot → agent_slot`, `agentURL → agent_url`, `shortHash → short_hash` (here), `composeProject → compose_project` (ps).
 - **Post-create hook ordering inverted.** Plugin Go hooks now fire BEFORE config-driven hooks in `.grove/hooks.toml` (so containers are up by the time user setup commands run). Pre-existing hook setups that rely on the old ordering may need verification.
 - **`grove test` defaults to `--no-deps`.** Tests that rely on `depends_on` services starting must opt in via `[test] include_deps = true` in `.grove/config.toml` or pass `--with-deps`.
 - **External compose path resolution changed.** Relative paths in `[plugins.docker.external] path` resolve against the directory containing `.grove/`, not grove's CWD.

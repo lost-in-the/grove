@@ -246,7 +246,7 @@ NAME            BRANCH          STATUS     TMUX        PATH
   "worktrees": [
     {
       "name": "main",
-      "fullName": "grove",
+      "full_name": "grove",
       "branch": "main",
       "path": "~/projects/grove",
       "status": "clean",
@@ -853,13 +853,13 @@ testing
 ```json
 {
   "name": "testing",
-  "fullName": "grove-testing",
+  "full_name": "grove-testing",
   "project": "grove",
   "branch": "testing",
   "path": "~/projects/grove-testing",
   "commit": {
     "hash": "abc1234def5678",
-    "shortHash": "abc1234",
+    "short_hash": "abc1234",
     "message": "Fix authentication bug",
     "age": "2 hours ago"
   },
@@ -1353,7 +1353,7 @@ To enable, add to .grove/config.toml:
   {
     "slot": 1,
     "worktree": "feature-x",
-    "composeProject": "myapp-agent-1",
+    "compose_project": "myapp-agent-1",
     "url": "http://localhost:3101"
   }
 ]
