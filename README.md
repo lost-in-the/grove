@@ -87,10 +87,13 @@ go install github.com/lost-in-the/grove/cmd/grove@latest
 Download the latest release for your platform from the [releases page](https://github.com/lost-in-the/grove/releases).
 
 ```bash
-# macOS (Apple Silicon)
-curl -L https://github.com/lost-in-the/grove/releases/latest/download/grove_1.0.0_Darwin_arm64.tar.gz | tar xz
+# macOS (Apple Silicon) — replace <VERSION> with the latest tag from the
+# releases page, e.g. 0.7.0
+curl -L https://github.com/lost-in-the/grove/releases/download/v<VERSION>/grove_<VERSION>_Darwin_arm64.tar.gz | tar xz
 sudo mv grove /usr/local/bin/
 ```
+
+Find the latest tag on the [releases page](https://github.com/lost-in-the/grove/releases). Archive names follow the pattern `grove_<VERSION>_<OS>_<ARCH>.tar.gz` (e.g. `grove_0.7.0_Darwin_arm64.tar.gz`, `grove_0.7.0_Linux_amd64.tar.gz`).
 
 ### Build from Source
 
