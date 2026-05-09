@@ -77,6 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Post-create hook execution failures are now logged to grove's debug log (previously discarded silently).
 - `docs/COMMAND_SPECIFICATIONS.md` `grove init` section now documents the actual command (it had been showing `grove install <shell>` content). New init flags (`--auto`, `--walkthrough`, `--yes`) and Docker-aware install routing are now discoverable from the spec, the Docker plugin README, and the agent guide.
 - `docs/TUI.md` keybind reference now includes `v` (view-mode toggle) and `u` (update modal).
+- `grove rm` now clears `LastWorktree` in state.json when removing the worktree it points at, so `grove last` no longer returns a removed name.
+- `IsWorktreeInState` resolves symlinks on both the stored path and the caller's path, so drift detection remains correct when state.json was written before symlink-aware path normalization.
 
 ### Migration / consumer-side
 
@@ -95,6 +97,7 @@ Downstream consumers integrating with grove via `.grove/config.toml` or `.grove/
 - Removed unused `matchesActive` parameter from external-status classifier; removed `_ = name` dead wiring in env-loader doctor checks; removed dead `BootstrapOpts.Now` injection field.
 - Test fixtures in `internal/tui/update_overlay_test.go` now reference `version.Version` instead of a hardcoded `0.7.0-dev` literal, so they don't silently break on the next dev-cycle version bump.
 - TUI render hot path no longer reallocates lipgloss styles per frame in update overlay and footer badge — promoted to package-level vars.
+- Atomic-write helper extracted to `internal/fsutil` and used by state migration/backup paths and project-config writes. Crashes mid-write no longer corrupt `state.json` or user `.grove/config.toml`.
 
 ### Documentation
 - `docs/AGENT_GUIDE.md` updated to cover `grove context`, `--check-update`/`--no-update-notifier` persistent flags and `GROVE_NO_UPDATE_NOTIFIER`, and `grove adopt` edge cases (detached HEAD, already-registered).

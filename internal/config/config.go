@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/lost-in-the/grove/internal/fsutil"
 )
 
 // TestConfig controls test command behavior
@@ -481,7 +483,7 @@ func SetProjectConfigValues(updates map[string]string) error {
 	if !strings.HasSuffix(content, "\n") {
 		content += "\n"
 	}
-	return os.WriteFile(projectPath, []byte(content), 0o644)
+	return fsutil.AtomicWriteFile(projectPath, []byte(content), 0o644)
 }
 
 // splitKey splits "section.field" into ("section", "field").

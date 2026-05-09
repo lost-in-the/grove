@@ -173,6 +173,13 @@ func (m *Manager) RemoveWorktree(name string) error {
 
 	delete(m.state.Worktrees, name)
 	m.removedWorktrees[name] = true
+
+	// Clear LastWorktree if it pointed at the removed entry, so callers
+	// like `grove last` don't return a name that no longer exists.
+	if m.state.LastWorktree == name {
+		m.state.LastWorktree = ""
+	}
+
 	return m.saveOrDefer()
 }
 
