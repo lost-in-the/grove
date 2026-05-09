@@ -2313,7 +2313,29 @@ Generates the shell integration snippet for a given shell (`grove install zsh`, 
 
 ### grove version
 
-Prints the grove version string. See `grove version --help`.
+Print version information.
+
+**Usage:**
+
+    grove version [flags]
+
+**Flags:**
+
+- `-v`, `--verbose` — include build metadata (commit, build date, Go runtime)
+- `--check-update` (persistent) — force a synchronous update check; prints either an update box or "grove is up to date (X.Y.Z)"
+- `--no-update-notifier` (persistent) — suppress the update annotation on this run
+
+**Output:**
+
+Default:
+
+    grove 0.7.0 darwin/arm64
+
+When the update-check cache shows a newer release and stdout is a TTY:
+
+    grove 0.7.0 darwin/arm64 (update available: 0.8.0)
+
+The annotation honors the same opt-outs as `grove`'s other update surfaces (env vars, non-TTY stdout, dev/unknown versions). Use `grove --check-update` for a synchronous check that bypasses these opt-outs.
 
 ---
 
