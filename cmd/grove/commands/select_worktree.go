@@ -41,14 +41,16 @@ func selectWorktree(ctx *GroveContext, prompt string) (string, error) {
 // Supports selection by number or by name. Escape and Ctrl+C cancel cleanly.
 func chooseWorktree(mgr *worktree.Manager, trees []*worktree.Worktree, prompt string) (string, error) {
 	w := cli.NewStderr()
-	currentTree, _ := mgr.GetCurrent()
+	// Just need the path to mark the current row — CurrentPath skips
+	// GetCurrent's commit-info enrichment + dirty check.
+	currentPath, _ := mgr.CurrentPath()
 
 	cli.Bold(w, "%s", prompt)
 	_, _ = fmt.Fprintln(w)
 
 	for i, tree := range trees {
 		indicator := "  "
-		if currentTree != nil && tree.Path == currentTree.Path {
+		if currentPath != "" && tree.Path == currentPath {
 			indicator = cli.Accent(w, "● ") //nolint:gosmopolitan
 		}
 

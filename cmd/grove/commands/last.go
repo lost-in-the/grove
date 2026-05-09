@@ -56,40 +56,46 @@ var lastCmd = &cobra.Command{
 			return fmt.Errorf("last worktree '%s' not found", lastWorktree)
 		}
 
-		// Get current worktree for state update
-		currentTree, _ := mgr.GetCurrent()
-		if currentTree != nil {
-			// Update last_worktree in state before switching
-			if err := ctx.State.SetLastWorktree(currentTree.DisplayName()); err != nil {
-				log.Printf("failed to set last worktree %q: %v", currentTree.DisplayName(), err)
-			}
-		}
-
-		// Store current session as last if inside tmux
-		if tmux.IsInsideTmux() {
-			currentSession, err := tmux.GetCurrentSession()
-			if err == nil {
-				if err := tmux.StoreLastSession(currentSession); err != nil {
-					log.Printf("failed to store last session %q: %v", currentSession, err)
+		// Batch the SetLastWorktree + TouchWorktree pair so the state file
+		// is written once instead of twice.
+		projectName := mgr.GetProjectName()
+		var tmuxSwitched bool
+		if batchErr := ctx.State.Batch(func() error {
+			if currentPath, err := mgr.CurrentPath(); err == nil {
+				prevName := mgr.DisplayNameForPath(currentPath)
+				if prevName != "" {
+					if err := ctx.State.SetLastWorktree(prevName); err != nil {
+						log.Printf("failed to set last worktree %q: %v", prevName, err)
+					}
 				}
 			}
-		}
 
-		projectName := mgr.GetProjectName()
-
-		// Switch to session
-		var tmuxSwitched bool
-		if tmux.IsTmuxAvailable() && tmux.IsInsideTmux() {
-			sessionName := worktree.TmuxSessionName(projectName, lastWorktree)
-			if err := tmux.SwitchSession(sessionName); err != nil {
-				return fmt.Errorf("failed to switch session: %w", err)
+			// Store current session as last if inside tmux
+			if tmux.IsInsideTmux() {
+				currentSession, err := tmux.GetCurrentSession()
+				if err == nil {
+					if err := tmux.StoreLastSession(currentSession); err != nil {
+						log.Printf("failed to store last session %q: %v", currentSession, err)
+					}
+				}
 			}
-			tmuxSwitched = true
-		}
 
-		// Update last_accessed_at for target worktree
-		if err := ctx.State.TouchWorktree(targetTree.DisplayName()); err != nil {
-			log.Printf("failed to touch worktree %q: %v", targetTree.DisplayName(), err)
+			// Switch to session
+			if tmux.IsTmuxAvailable() && tmux.IsInsideTmux() {
+				sessionName := worktree.TmuxSessionName(projectName, lastWorktree)
+				if err := tmux.SwitchSession(sessionName); err != nil {
+					return fmt.Errorf("failed to switch session: %w", err)
+				}
+				tmuxSwitched = true
+			}
+
+			// Update last_accessed_at for target worktree
+			if err := ctx.State.TouchWorktree(targetTree.DisplayName()); err != nil {
+				log.Printf("failed to touch worktree %q: %v", targetTree.DisplayName(), err)
+			}
+			return nil
+		}); batchErr != nil {
+			return batchErr
 		}
 
 		// JSON output mode

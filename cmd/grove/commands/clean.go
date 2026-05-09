@@ -74,12 +74,9 @@ Examples:
 
 		cfg := ctx.Config
 
-		// Get current worktree
-		currentTree, _ := mgr.GetCurrent()
-		var currentPath string
-		if currentTree != nil {
-			currentPath = currentTree.Path
-		}
+		// CurrentPath avoids the porcelain listing + per-worktree dirty
+		// check that GetCurrent would do — clean only needs the path.
+		currentPath, _ := mgr.CurrentPath()
 
 		// List all worktrees
 		trees, err := mgr.List()

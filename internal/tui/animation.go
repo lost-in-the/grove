@@ -18,22 +18,27 @@ func GroveSpinner() spinner.Model {
 	return s
 }
 
+// Pre-built styles for ToastOpacity. Allocating a new lipgloss.Style on every
+// render frame (toasts can be re-rendered on every tick) is wasted work — the
+// only two states are "full" and "faint".
+var (
+	toastStyleFull  = lipgloss.NewStyle()
+	toastStyleFaint = lipgloss.NewStyle().Faint(true)
+)
+
 // ToastOpacity returns a lipgloss.Style modifier based on how close the toast
 // is to expiry. Returns full opacity for most of the lifetime, then fades in
 // the final 800ms.
 func ToastOpacity(t *Toast) lipgloss.Style {
 	if t == nil {
-		return lipgloss.NewStyle()
+		return toastStyleFull
 	}
 	elapsed := time.Since(t.CreatedAt)
 	remaining := t.Duration - elapsed
-	fadeWindow := 800 * time.Millisecond
+	const fadeWindow = 800 * time.Millisecond
 
-	if remaining <= 0 {
-		return lipgloss.NewStyle().Faint(true)
-	}
 	if remaining < fadeWindow {
-		return lipgloss.NewStyle().Faint(true)
+		return toastStyleFaint
 	}
-	return lipgloss.NewStyle()
+	return toastStyleFull
 }

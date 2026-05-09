@@ -128,28 +128,30 @@ Examples:
 			}
 		}
 
-		// Check if trying to remove the current worktree
-		currentTree, _ := mgr.GetCurrent()
-		if currentTree != nil && currentTree.Path == wt.Path {
+		// Check if trying to remove the current worktree. CurrentPath avoids
+		// the per-worktree dirty checks GetCurrent would perform on the rest
+		// of the repo.
+		if currentPath, err := mgr.CurrentPath(); err == nil && currentPath == wt.Path {
 			cli.Error(stderr, "cannot remove current worktree '%s'", name)
 			cli.Info(stderr, "Switch to another worktree first: grove to <name>")
 			os.Exit(exitcode.CannotRemove)
 		}
 
-		// Cannot remove dirty worktree without --force
-		if wt.IsDirty && !rmForce {
-			cli.Error(stderr, "worktree '%s' has uncommitted changes", name)
-			dirtyFiles, err := mgr.GetDirtyFiles(wt.Path)
-			if err == nil && dirtyFiles != "" {
+		// Cannot remove dirty worktree without --force. Dirty status is no
+		// longer populated by Find — check it here for just this one path.
+		if !rmForce {
+			dirtyFiles, _ := mgr.GetDirtyFiles(wt.Path)
+			if dirtyFiles != "" {
+				cli.Error(stderr, "worktree '%s' has uncommitted changes", name)
 				for _, line := range strings.Split(dirtyFiles, "\n") {
 					if line != "" {
 						cli.Faint(stderr, "  %s", line)
 					}
 				}
+				cli.Info(stderr, "To remove anyway: grove rm %s --force", name)
+				cli.Info(stderr, "To switch and commit: grove to %s", name)
+				os.Exit(exitcode.CannotRemove)
 			}
-			cli.Info(stderr, "To remove anyway: grove rm %s --force", name)
-			cli.Info(stderr, "To switch and commit: grove to %s", name)
-			os.Exit(exitcode.CannotRemove)
 		}
 
 		// Dry run - just show what would happen

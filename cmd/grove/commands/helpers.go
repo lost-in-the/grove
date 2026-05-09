@@ -115,9 +115,18 @@ type worktreeSetupOpts struct {
 // setupCreatedWorktree runs the shared post-create sequence: find the worktree,
 // symlink config, register state, execute hooks, and auto-start Docker.
 func setupCreatedWorktree(ctx *GroveContext, mgr *worktree.Manager, name, branchName string, opts worktreeSetupOpts, w *cli.Writer) (*worktree.Worktree, error) {
-	wt, err := mgr.Find(name)
-	if err != nil || wt == nil {
-		return nil, fmt.Errorf("failed to find created worktree: %w", err)
+	// Compute the canonical path directly. The worktree was just created by
+	// the caller at the standard location, so re-running List() to find it
+	// would only burn another N parallel git status calls.
+	wtPath := mgr.PathForName(name)
+	if _, err := os.Stat(wtPath); err != nil {
+		return nil, fmt.Errorf("created worktree not found at %s: %w", wtPath, err)
+	}
+	wt := &worktree.Worktree{
+		Name:      filepath.Base(wtPath),
+		Path:      wtPath,
+		Branch:    branchName,
+		ShortName: name,
 	}
 
 	if !opts.JSONOutput {

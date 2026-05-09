@@ -861,7 +861,9 @@ func TestIsDirtyWithWorktree(t *testing.T) {
 	projectName := m.GetProjectName()
 	fullName := projectName + "-dirty-test"
 
-	// Linked worktree should start clean
+	// Linked worktree should start clean. Find no longer populates IsDirty
+	// (it skips the per-worktree status check) — verify by fetching dirty
+	// state explicitly through GetDirtyFiles.
 	wt, err := m.Find(fullName)
 	if err != nil {
 		t.Fatalf("Find() error = %v", err)
@@ -869,8 +871,8 @@ func TestIsDirtyWithWorktree(t *testing.T) {
 	if wt == nil {
 		t.Fatal("Find() returned nil")
 	}
-	if wt.IsDirty {
-		t.Error("fresh worktree should not be dirty")
+	if files, _ := m.GetDirtyFiles(wt.Path); files != "" {
+		t.Errorf("fresh worktree should not be dirty, got %q", files)
 	}
 
 	// Make the linked worktree dirty
@@ -879,7 +881,8 @@ func TestIsDirtyWithWorktree(t *testing.T) {
 		t.Fatalf("Failed to write dirty file: %v", err)
 	}
 
-	// Re-find — should now be dirty
+	// Re-find — Find still returns the worktree, but IsDirty isn't set.
+	// Use GetDirtyFiles to confirm the new file shows up.
 	wt, err = m.Find(fullName)
 	if err != nil {
 		t.Fatalf("Find() error = %v", err)
@@ -887,14 +890,13 @@ func TestIsDirtyWithWorktree(t *testing.T) {
 	if wt == nil {
 		t.Fatal("Find() returned nil")
 	}
-	if !wt.IsDirty {
-		t.Error("worktree with uncommitted file should be dirty")
-	}
 
-	// GetDirtyFiles should list the file
 	dirtyFiles, err := m.GetDirtyFiles(wt.Path)
 	if err != nil {
 		t.Fatalf("GetDirtyFiles() error = %v", err)
+	}
+	if dirtyFiles == "" {
+		t.Error("worktree with uncommitted file should report dirty files")
 	}
 	if !strings.Contains(dirtyFiles, "dirty.txt") {
 		t.Errorf("GetDirtyFiles() = %q, want it to contain 'dirty.txt'", dirtyFiles)

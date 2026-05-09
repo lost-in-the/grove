@@ -70,10 +70,13 @@ func setupFetchedWorktree(ctx *GroveContext, mgr *worktree.Manager, w *cli.Write
 		}
 	}
 
-	currentTree, _ := mgr.GetCurrent()
-	if currentTree != nil {
-		if err := ctx.State.SetLastWorktree(currentTree.DisplayName()); err != nil {
-			log.Printf("failed to set last worktree %q: %v", currentTree.DisplayName(), err)
+	// Display-name-only path: skips the GetCurrent enrichment.
+	if currentPath, err := mgr.CurrentPath(); err == nil {
+		prevName := mgr.DisplayNameForPath(currentPath)
+		if prevName != "" {
+			if err := ctx.State.SetLastWorktree(prevName); err != nil {
+				log.Printf("failed to set last worktree %q: %v", prevName, err)
+			}
 		}
 	}
 

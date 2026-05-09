@@ -87,22 +87,24 @@ Examples:
 			// Sync specific worktree
 			targets = []string{args[0]}
 		} else {
-			// Sync current if it's an environment worktree
-			currentTree, err := mgr.GetCurrent()
+			// Sync current if it's an environment worktree. Use the cheap
+			// path lookup since we only need the worktree's short name.
+			currentPath, err := mgr.CurrentPath()
 			if err != nil {
 				return fmt.Errorf("failed to get current worktree: %w", err)
 			}
-			if currentTree == nil {
+			currentName := mgr.DisplayNameForPath(currentPath)
+			if currentName == "" {
 				return fmt.Errorf("could not determine current worktree")
 			}
 
-			isEnv, _ := ctx.State.IsEnvironment(currentTree.ShortName)
+			isEnv, _ := ctx.State.IsEnvironment(currentName)
 			if !isEnv {
-				fmt.Fprintf(os.Stderr, "Error: current worktree '%s' is not an environment worktree\n", currentTree.ShortName)
+				fmt.Fprintf(os.Stderr, "Error: current worktree '%s' is not an environment worktree\n", currentName)
 				fmt.Fprintf(os.Stderr, "Use 'grove sync <name>' to specify an environment worktree, or --all\n")
 				os.Exit(exitcode.ConstraintViolated)
 			}
-			targets = []string{currentTree.ShortName}
+			targets = []string{currentName}
 		}
 
 		result := SyncResult{

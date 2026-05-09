@@ -99,6 +99,11 @@ type Model struct {
 	// Post-create selection
 	pendingSelect string
 
+	// Generation counter for the deferred detail-metrics fetch. Each
+	// FetchWorktrees bumps this; results from older generations are
+	// dropped so a stale fetch can't apply old numbers to a fresh item set.
+	detailMetricsGen int
+
 	// Output
 	switchTo            string
 	switchToDisplayName string // display name for tmux session naming
@@ -222,6 +227,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleWindowSize(msg)
 	case worktreesFetchedMsg:
 		return m.handleWorktreesFetched(msg)
+	case detailMetricsLoadedMsg:
+		return m.handleDetailMetricsLoaded(msg)
 	case prLookupMsg:
 		return m.handlePRLookup(msg)
 	case worktreeDeletedMsg:
@@ -319,7 +326,39 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 			branches = append(branches, item.Branch)
 		}
 	}
-	return m, lookupPRsCmd(branches)
+
+	// Bump the generation BEFORE dispatching the lazy fetch. Any in-flight
+	// metrics from a previous fetch will arrive with an older gen and get
+	// dropped by handleDetailMetricsLoaded.
+	m.detailMetricsGen++
+	return m, tea.Batch(
+		lookupPRsCmd(branches),
+		fetchDetailMetricsCmd(m.detailMetricsGen, msg.items, ResolveDefaultBranch(m.cfg)),
+	)
+}
+
+func (m Model) handleDetailMetricsLoaded(msg detailMetricsLoadedMsg) (tea.Model, tea.Cmd) {
+	// Drop results from a stale fetch (a newer FetchWorktrees was dispatched
+	// after we kicked off this metrics load).
+	if msg.gen != m.detailMetricsGen || msg.metrics == nil {
+		return m, nil
+	}
+
+	listItems := m.list.Items()
+	for i, li := range listItems {
+		item, ok := li.(WorktreeItem)
+		if !ok {
+			continue
+		}
+		if metrics, found := msg.metrics[item.Path]; found {
+			item.CommitCount = metrics.CommitCount
+			item.StashCount = metrics.StashCount
+			listItems[i] = item
+		}
+	}
+	m.list.SetItems(listItems)
+	m.updateDetailContent()
+	return m, nil
 }
 
 func (m Model) handlePRLookup(msg prLookupMsg) (tea.Model, tea.Cmd) {
