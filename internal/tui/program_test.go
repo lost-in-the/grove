@@ -130,7 +130,9 @@ func TestProgram_UpdateOverlay_OpensOnUWhenAvailable(t *testing.T) {
 	mgr, stateMgr := newTestManagers(t, repo)
 	m := NewModel(mgr, stateMgr, repo)
 	// Inject a fake update so the overlay gate passes regardless of the
-	// real ~/.grove/update-check.json contents on the test host.
+	// real ~/.grove/update-check.json contents on the test host. With the
+	// Skip-honoring gate in NewModel, a non-TTY test run produces empty
+	// fields by design, so direct injection is the canonical seam.
 	m.updateLatestVersion = "99.0.0"
 	m.updateLatestURL = "https://github.com/lost-in-the/grove/releases/tag/v99.0.0"
 
@@ -155,6 +157,25 @@ func TestProgram_UpdateOverlay_OpensOnUWhenAvailable(t *testing.T) {
 	tm.Send(tea.KeyPressMsg{Code: tea.KeyEscape})
 	tm.Send(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
+}
+
+// TestProgram_UpdateOverlay_GateRespectsSkip verifies NewModel honors
+// updatecheck.Skip — when the env-var opt-out is set, NewModel must produce
+// a model with an empty updateLatestVersion regardless of cache contents.
+// This is the parity guarantee with the CLI box and `grove version`.
+func TestProgram_UpdateOverlay_GateRespectsSkip(t *testing.T) {
+	t.Setenv("GROVE_NO_UPDATE_NOTIFIER", "1")
+
+	repo := setupRailsFixture(t)
+	mgr, stateMgr := newTestManagers(t, repo)
+	m := NewModel(mgr, stateMgr, repo)
+
+	if m.updateLatestVersion != "" {
+		t.Fatalf("expected updateLatestVersion to be empty when Skip returns true, got %q", m.updateLatestVersion)
+	}
+	if m.updateLatestURL != "" {
+		t.Fatalf("expected updateLatestURL to be empty when Skip returns true, got %q", m.updateLatestURL)
+	}
 }
 
 func TestProgram_CreateWizard(t *testing.T) {

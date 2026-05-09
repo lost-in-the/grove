@@ -158,7 +158,15 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 	// Read update-check cache once at startup. Empty strings if no update is
 	// available (which is the common case). Reading from disk here instead of
 	// on every render keeps the hot path allocation-free.
-	latest, latestURL, _ := updatecheck.CachedRelease(version.Version)
+	//
+	// Honor Skip for the in-TUI update surfaces (badge + u-keybind modal),
+	// matching the CLI box and `grove version` annotation. Users who set
+	// GROVE_NO_UPDATE_NOTIFIER, GROVE_AGENT_MODE, etc. get no update UI anywhere.
+	// Use `grove --check-update` to force a synchronous check.
+	var latest, latestURL string
+	if !updatecheck.Skip(false, version.Version) {
+		latest, latestURL, _ = updatecheck.CachedRelease(version.Version)
+	}
 
 	return Model{
 		worktreeMgr:         mgr,
