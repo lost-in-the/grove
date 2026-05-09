@@ -116,6 +116,8 @@ Toast levels:
 | `a` | Bulk delete |
 | `o` | Cycle sort mode |
 | `r` | Refresh worktree list |
+| `v` | Toggle view mode (compact / detailed) |
+| `u` | Open update modal (only when a newer release is cached — the footer badge indicates availability) |
 | `/` | Filter list |
 | `?` | Toggle expanded help |
 | `q` / `esc` | Quit |
