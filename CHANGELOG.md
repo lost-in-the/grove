@@ -76,6 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `grove adopt` errors out on detached HEAD instead of storing the literal `"HEAD"` as a branch name.
 - Post-create hook execution failures are now logged to grove's debug log (previously discarded silently).
 - `docs/COMMAND_SPECIFICATIONS.md` `grove init` section now documents the actual command (it had been showing `grove install <shell>` content). New init flags (`--auto`, `--walkthrough`, `--yes`) and Docker-aware install routing are now discoverable from the spec, the Docker plugin README, and the agent guide.
+- `docs/TUI.md` keybind reference now includes `v` (view-mode toggle) and `u` (update modal).
 
 ### Migration / consumer-side
 
@@ -93,6 +94,7 @@ Downstream consumers integrating with grove via `.grove/config.toml` or `.grove/
 - `state.Manager.Batch()` and the new `worktreeinfo` package extracted to consolidate git fan-out (#74, #85).
 - Removed unused `matchesActive` parameter from external-status classifier; removed `_ = name` dead wiring in env-loader doctor checks; removed dead `BootstrapOpts.Now` injection field.
 - Test fixtures in `internal/tui/update_overlay_test.go` now reference `version.Version` instead of a hardcoded `0.7.0-dev` literal, so they don't silently break on the next dev-cycle version bump.
+- TUI render hot path no longer reallocates lipgloss styles per frame in update overlay and footer badge — promoted to package-level vars.
 
 ### Documentation
 - `docs/AGENT_GUIDE.md` updated to cover `grove context`, `--check-update`/`--no-update-notifier` persistent flags and `GROVE_NO_UPDATE_NOTIFIER`, and `grove adopt` edge cases (detached HEAD, already-registered).
