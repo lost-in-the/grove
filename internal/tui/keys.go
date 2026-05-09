@@ -49,6 +49,9 @@ type KeyMap struct {
 	Config   key.Binding
 	Rename   key.Binding
 	Checkout key.Binding
+
+	// Update modal
+	Update key.Binding
 }
 
 // ShortHelp returns keybindings for the short help view (help.KeyMap interface).
@@ -181,6 +184,10 @@ func DefaultKeyMap() KeyMap {
 		Checkout: key.NewBinding(
 			key.WithKeys("b"),
 			key.WithHelp("b", "branch"),
+		),
+		Update: key.NewBinding(
+			key.WithKeys("u"),
+			key.WithHelp("u", "update"),
 		),
 	}
 }

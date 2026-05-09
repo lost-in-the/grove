@@ -34,7 +34,7 @@ func renderUpdateBox(w io.Writer, currentVersion, latestVersion, latestURL strin
 		return false
 	}
 	method := DetectInstall()
-	_, _ = io.WriteString(w, RenderBox(currentVersion, latestVersion, latestURL, UpdateCommand(method), severity))
+	_, _ = io.WriteString(w, RenderBox(currentVersion, latestVersion, latestURL, UpdateLabel(method), UpdateCommand(method), severity))
 	return true
 }
 
@@ -57,6 +57,25 @@ func cachedUpdateAnnotationFromPath(currentVersion, path string) string {
 		return ""
 	}
 	return " (update available: " + c.LatestVersion + ")"
+}
+
+// CachedRelease returns the cached LatestVersion + LatestURL when a newer
+// release is available, or zero strings when there's nothing to surface.
+// Used by UI surfaces (TUI footer badge, modal, version annotation) that
+// need both fields without re-implementing the cache+compare flow.
+func CachedRelease(currentVersion string) (latest, url string, available bool) {
+	return cachedReleaseFromPath(currentVersion, DefaultCachePath())
+}
+
+func cachedReleaseFromPath(currentVersion, path string) (latest, url string, available bool) {
+	c, err := ReadCacheFromPath(path)
+	if err != nil || c.LatestVersion == "" {
+		return "", "", false
+	}
+	if CompareSemver(currentVersion, c.LatestVersion) == SeverityNone {
+		return "", "", false
+	}
+	return c.LatestVersion, c.LatestURL, true
 }
 
 // CheckInterval is the default minimum gap between two refreshes.

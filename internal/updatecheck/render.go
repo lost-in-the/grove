@@ -64,14 +64,14 @@ func CompareSemver(current, latest string) Severity {
 
 // RenderBox returns the formatted box notification as a string.
 // When NO_COLOR is set, the output is plain ASCII (no ANSI escapes).
-func RenderBox(currentVersion, latestVersion, latestURL, updateCmd string, severity Severity) string {
+func RenderBox(currentVersion, latestVersion, latestURL, updateLabel, updateCmd string, severity Severity) string {
 	arrow := "→"
 	if os.Getenv("NO_COLOR") != "" {
 		arrow = "->"
 	}
 	body := []string{
 		fmt.Sprintf("Update available  %s  %s  %s", currentVersion, arrow, latestVersion),
-		"Run: " + updateCmd,
+		updateLabel + ": " + updateCmd,
 		"Changelog: " + latestURL,
 	}
 	if os.Getenv("NO_COLOR") != "" {

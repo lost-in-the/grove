@@ -68,6 +68,17 @@ func UpdateCommand(m InstallMethod) string {
 	case InstallGoInstall:
 		return "go install github.com/lost-in-the/grove/cmd/grove@latest"
 	default:
-		return "Visit https://github.com/lost-in-the/grove/releases for the latest binary"
+		return "https://github.com/lost-in-the/grove/releases"
+	}
+}
+
+// UpdateLabel returns the verb that pairs with UpdateCommand for the given
+// install method. "Run" for shell commands; "Download" for the URL fallback.
+func UpdateLabel(m InstallMethod) string {
+	switch m {
+	case InstallBrew, InstallGoInstall:
+		return "Run"
+	default:
+		return "Download"
 	}
 }

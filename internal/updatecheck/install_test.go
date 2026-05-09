@@ -66,13 +66,32 @@ func TestUpdateCommand(t *testing.T) {
 	}{
 		{InstallBrew, "brew upgrade lost-in-the/tap/grove"},
 		{InstallGoInstall, "go install github.com/lost-in-the/grove/cmd/grove@latest"},
-		{InstallBinary, "Visit https://github.com/lost-in-the/grove/releases for the latest binary"},
-		{InstallUnknown, "Visit https://github.com/lost-in-the/grove/releases for the latest binary"},
+		{InstallBinary, "https://github.com/lost-in-the/grove/releases"},
+		{InstallUnknown, "https://github.com/lost-in-the/grove/releases"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.method.String(), func(t *testing.T) {
 			if got := UpdateCommand(tc.method); got != tc.want {
 				t.Errorf("UpdateCommand(%v) = %q, want %q", tc.method, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestUpdateLabel(t *testing.T) {
+	cases := []struct {
+		method InstallMethod
+		want   string
+	}{
+		{InstallBrew, "Run"},
+		{InstallGoInstall, "Run"},
+		{InstallBinary, "Download"},
+		{InstallUnknown, "Download"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.method.String(), func(t *testing.T) {
+			if got := UpdateLabel(tc.method); got != tc.want {
+				t.Errorf("UpdateLabel(%v) = %q, want %q", tc.method, got, tc.want)
 			}
 		})
 	}

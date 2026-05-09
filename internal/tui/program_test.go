@@ -125,6 +125,38 @@ func TestProgram_HelpOverlay_QuestionMarkToggles(t *testing.T) {
 // that TestProgram_HelpOverlay_QuestionMarkToggles verifies the overlay's
 // open/closed state machine end-to-end.
 
+func TestProgram_UpdateOverlay_OpensOnUWhenAvailable(t *testing.T) {
+	repo := setupRailsFixture(t)
+	mgr, stateMgr := newTestManagers(t, repo)
+	m := NewModel(mgr, stateMgr, repo)
+	// Inject a fake update so the overlay gate passes regardless of the
+	// real ~/.grove/update-check.json contents on the test host.
+	m.updateLatestVersion = "99.0.0"
+	m.updateLatestURL = "https://github.com/lost-in-the/grove/releases/tag/v99.0.0"
+
+	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(120, 40))
+
+	// Wait for dashboard
+	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+		s := stripANSI(string(bts))
+		return regexp.MustCompile(`(?i)rails-app`).MatchString(s)
+	}, teatest.WithDuration(5*time.Second))
+
+	// Press u — modal should open with "Update available" and the latest version.
+	tm.Send(tea.KeyPressMsg{Code: 'u', Text: "u"})
+
+	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+		s := stripANSI(string(bts))
+		return regexp.MustCompile(`Update available`).MatchString(s) &&
+			regexp.MustCompile(`99\.0\.0`).MatchString(s)
+	}, teatest.WithDuration(5*time.Second))
+
+	// esc closes (mirroring HelpOverlay close-keys)
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEscape})
+	tm.Send(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
+}
+
 func TestProgram_CreateWizard(t *testing.T) {
 	repo := setupRailsFixture(t)
 	tm := newTestProgram(t, repo)
