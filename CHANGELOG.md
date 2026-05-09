@@ -8,7 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- TUI now shows a passive `↑ X.Y.Z → X.Y+1.Z press u` footer badge when a newer grove release is available, plus a richer modal (opened via `u`) showing the install command and changelog link. Reuses the existing `~/.grove/update-check.json` cache. Suppressed in CI / non-TTY / via `GROVE_NO_UPDATE_NOTIFIER`.
+- TUI now shows a passive `↑ X.Y.Z → X.Y+1.Z press u` footer badge when a newer grove release is available, plus a richer modal (opened via `u`) showing all install methods (Brew, Go install, binary) and the changelog link. Reuses the existing `~/.grove/update-check.json` cache. Suppressed in CI / non-TTY / via `GROVE_NO_UPDATE_NOTIFIER` etc. — same opt-outs as the CLI box.
+- `grove version` output now appends `(update available: X.Y.Z)` when a newer release is cached. Suppressed in non-TTY contexts and when update-notifier opt-outs are set.
 - Per-developer config overlay at `.grove/config.local.toml` (gitignored). Overrides values from the committed `.grove/config.toml` for individual developers — e.g., `[tmux] mode = "off"` for someone who prefers no tmux without changing team defaults. Precedence: defaults → global → `.grove/config.toml` → `.grove/config.local.toml` → env vars (closes #79).
 - Optional update-available notification on command exit when a newer grove release is published. Checks at most once per 24 hours, in a detached background process — never blocks command execution. Suppressed in CI, non-TTY contexts, and when `NO_UPDATE_NOTIFIER`, `GROVE_NO_UPDATE_NOTIFIER`, `GROVE_AGENT_MODE`, or `GROVE_NONINTERACTIVE` env vars are set, or when `--no-update-notifier` is passed. Use `--check-update` to force a synchronous check at any time.
 - `grove context` command — prints full worktree context (branch, commit, remote tracking/sync, status, stash count, recent commits) for CLI/scripting use; `--json` flag emits structured machine-readable output (closes #16); JSON includes `has_remote` boolean to distinguish "no remote" from "remote, in sync" (0/0 ahead/behind)
@@ -22,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `internal/grove.IsWorktreeInState` — shared helper for state.json drift detection
 
 ### Changed
+- Update notification now uses contextual labels: `Run:` for shell commands (Brew, `go install`), `Download:` for the binary URL fallback. Previously rendered `Run: Visit https://...` which read awkwardly.
 - **Behavior change:** `grove test` now passes `--no-deps` to `compose run` by default. Tests that rely on dependency services starting (e.g., a database) need either `[test] include_deps = true` in config or the `--with-deps` flag.
 - When `grove test` exits non-zero with a connection-refused or DNS error (e.g. "connection refused", "no such host") and the user has not opted into `include_deps`, grove appends a hint pointing at `--with-deps` and `[test] include_deps = true`.
 - **Behavior change:** `grove up` against an external stack tolerates failures of services listed in `non_blocking_services` — the command no longer exits non-zero when only one-shot init services failed.

@@ -121,7 +121,7 @@ Edge builds may include breaking changes that haven't been documented yet. Pin t
 | Release binary | Re-download from the [releases page](https://github.com/lost-in-the/grove/releases) |
 | Build from source | `git pull && make build && sudo make install` |
 
-`grove version` shows the currently installed version. Subscribe to [release notifications](https://github.com/lost-in-the/grove/releases.atom) (Atom feed) or watch the repo for releases on GitHub to be notified of new versions.
+`grove version` shows the currently installed version. Grove also checks for newer releases automatically on each invocation (at most once per 24h, in a detached background process), surfacing a notification on command exit or in the TUI footer when an update is available. Set `GROVE_NO_UPDATE_NOTIFIER=1` to opt out, or use `grove --check-update` for a manual check. See [`docs/CONFIGURATION_REFERENCE.md`](docs/CONFIGURATION_REFERENCE.md) for the full opt-out matrix. To watch for releases externally, the GitHub repo's [Atom feed](https://github.com/lost-in-the/grove/releases.atom) and Watch → Custom → Releases work too.
 
 **Requirements:** Git 2.30+, tmux 3.0+ (optional), `gh` CLI (optional for GitHub features), zsh or bash.
 

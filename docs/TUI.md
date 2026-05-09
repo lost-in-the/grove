@@ -71,6 +71,20 @@ Selecting a worktree updates the detail panel with:
 
 A compact hint bar at the bottom shows essential keybindings. Press `?` to open a scrollable, context-sensitive help overlay with the full reference for the current view.
 
+### Update available indicator
+
+When grove's update-check cache (`~/.grove/update-check.json`) shows a newer
+release, the dashboard footer renders a passive badge:
+
+    ↑ 0.7.0 → 0.8.0  press u
+
+Pressing `u` opens an `UpdateOverlay` modal showing all install methods
+(Brew, `go install`, binary download) and a changelog link. The modal closes
+on `esc` or `u`.
+
+The badge and modal are silenced by the same opt-outs as other grove update
+surfaces — `GROVE_NO_UPDATE_NOTIFIER=1` and friends suppress all of them.
+
 ### Toast Notifications
 
 Short-lived notifications appear in the top-right corner of the header after operations complete. They auto-dismiss after 3 seconds and fade as they expire.
