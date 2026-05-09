@@ -16,7 +16,7 @@ var psJSON bool
 type psSlotOutput struct {
 	Slot    int    `json:"slot"`
 	Name    string `json:"worktree"`
-	Project string `json:"composeProject"`
+	Project string `json:"compose_project"`
 	URL     string `json:"url,omitempty"`
 }
 

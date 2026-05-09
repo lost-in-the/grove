@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Behavior changes (read before upgrading)
 
+- **`grove here --json`, `grove ls --json`, and `grove ps --json` field names changed to snake_case for consistency with `grove context --json`.** Scripts parsing these outputs need to update field-name lookups: `fullName → full_name` (here, ls), `agentSlot → agent_slot`, `agentURL → agent_url`, `shortHash → short_hash` (here), `composeProject → compose_project` (ps).
 - **Post-create hook ordering inverted.** Plugin Go hooks now fire BEFORE config-driven hooks in `.grove/hooks.toml` (so containers are up by the time user setup commands run). Pre-existing hook setups that rely on the old ordering may need verification.
 - **`grove test` defaults to `--no-deps`.** Tests that rely on `depends_on` services starting must opt in via `[test] include_deps = true` in `.grove/config.toml` or pass `--with-deps`.
 - **External compose path resolution changed.** Relative paths in `[plugins.docker.external] path` resolve against the directory containing `.grove/`, not grove's CWD.
@@ -57,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Service-health probe timeout raised from 1s to 3s to tolerate slow systems.
 - Compose `--env-file` is now honored when reading the active-worktree env var (previously hardcoded to `.env`).
 - Worktree ages now reflect real timestamps (no more "9999 days").
+- `docs/COMMAND_SPECIFICATIONS.md` clarifies `grove context` exit codes: exit 10 only when the command runs outside any grove project; exit 1 when in a grove project but the current directory is not a registered worktree.
 
 ### Fixed
 - TUI update-available opt-outs now also gate the Skip flow for full parity with the CLI box (issue #84, PR #83). Previously the Skip-cache gate didn't honor every documented opt-out env var.
