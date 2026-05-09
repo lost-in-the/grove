@@ -196,6 +196,14 @@ func (h *HelpFooter) CompactHeight(view ActiveView, width int) int {
 	return strings.Count(rendered, "\n") + 1
 }
 
+// Pre-built styles for RenderUpdateBadge. The badge re-renders on every
+// dashboard frame whenever an update is cached, so allocating these per
+// call is wasted work.
+var (
+	updateBadgeMutedStyle = lipgloss.NewStyle().Foreground(Colors.TextMuted)
+	updateBadgeKeyStyle   = lipgloss.NewStyle().Foreground(Colors.Primary).Bold(true)
+)
+
 // RenderUpdateBadge returns a muted "↑ current → latest  press u" badge string
 // suitable for appending to a footer. Returns "" when no update is available
 // (zero strings) — caller should handle the empty case.
@@ -203,10 +211,8 @@ func RenderUpdateBadge(currentVersion, latestVersion string) string {
 	if currentVersion == "" || latestVersion == "" {
 		return ""
 	}
-	mutedStyle := lipgloss.NewStyle().Foreground(Colors.TextMuted)
-	keyStyle := lipgloss.NewStyle().Foreground(Colors.Primary).Bold(true)
-	return mutedStyle.Render("↑ "+currentVersion+" → "+latestVersion+"  press ") +
-		keyStyle.Render("u")
+	return updateBadgeMutedStyle.Render("↑ "+currentVersion+" → "+latestVersion+"  press ") +
+		updateBadgeKeyStyle.Render("u")
 }
 
 // RenderCompactWithHints renders a one- or two-line footer with the given hints

@@ -20,6 +20,19 @@ type UpdateOverlay struct {
 	latestURL      string
 }
 
+// Pre-built styles for UpdateOverlay.View(). Allocating these on every render
+// is wasted work — they don't depend on per-call state. Package-level init
+// runs after Colors is assigned (theme_v2.go declares Colors first), so
+// these references resolve correctly.
+var (
+	updateOverlayLabelStyle = lipgloss.NewStyle().Foreground(Colors.TextMuted)
+	updateOverlayValueStyle = lipgloss.NewStyle().Foreground(Colors.TextNormal)
+	updateOverlayEmphStyle  = lipgloss.NewStyle().Bold(true).Foreground(Colors.TextBright)
+	updateOverlayCmdStyle   = lipgloss.NewStyle().Foreground(Colors.Primary)
+	updateOverlayURLStyle   = lipgloss.NewStyle().Foreground(Colors.Info).Underline(true)
+	updateOverlayRuleStyle  = lipgloss.NewStyle().Foreground(Colors.SurfaceBorder)
+)
+
 // NewUpdateOverlay creates an inactive UpdateOverlay.
 func NewUpdateOverlay() *UpdateOverlay {
 	return &UpdateOverlay{}
@@ -53,12 +66,6 @@ func (u *UpdateOverlay) View(width, height int) string {
 
 	title := Styles.OverlayTitle.Render("↑ Update available")
 
-	labelStyle := lipgloss.NewStyle().Foreground(Colors.TextMuted)
-	valueStyle := lipgloss.NewStyle().Foreground(Colors.TextNormal)
-	emphStyle := lipgloss.NewStyle().Bold(true).Foreground(Colors.TextBright)
-	cmdStyle := lipgloss.NewStyle().Foreground(Colors.Primary)
-	urlStyle := lipgloss.NewStyle().Foreground(Colors.Info).Underline(true)
-
 	// Align all values at the same column. "Changelog:" is 10 chars; pad
 	// labels so values start at column 12 (matches the previous layout).
 	const valueColumn = 12
@@ -68,26 +75,25 @@ func (u *UpdateOverlay) View(width, height int) string {
 		if n < 1 {
 			n = 1
 		}
-		return labelStyle.Render(text + strings.Repeat(" ", n))
+		return updateOverlayLabelStyle.Render(text + strings.Repeat(" ", n))
 	}
 
-	current := pad("Current") + valueStyle.Render(u.currentVersion)
-	latest := pad("Latest") + emphStyle.Render(u.latestVersion)
+	current := pad("Current") + updateOverlayValueStyle.Render(u.currentVersion)
+	latest := pad("Latest") + updateOverlayEmphStyle.Render(u.latestVersion)
 
 	// Always show all three install methods. The user picks whichever applies
 	// to their setup. The CLI box (render.go) still uses DetectInstall to pick
 	// a single method for its space-constrained one-liner.
-	brewLine := pad("Brew") + cmdStyle.Render(updatecheck.UpdateCommand(updatecheck.InstallBrew))
-	goLine := pad("Go") + cmdStyle.Render(updatecheck.UpdateCommand(updatecheck.InstallGoInstall))
-	binaryLine := pad("Binary") + urlStyle.Render(updatecheck.UpdateCommand(updatecheck.InstallBinary))
+	brewLine := pad("Brew") + updateOverlayCmdStyle.Render(updatecheck.UpdateCommand(updatecheck.InstallBrew))
+	goLine := pad("Go") + updateOverlayCmdStyle.Render(updatecheck.UpdateCommand(updatecheck.InstallGoInstall))
+	binaryLine := pad("Binary") + updateOverlayURLStyle.Render(updatecheck.UpdateCommand(updatecheck.InstallBinary))
 
 	var changelogLine string
 	if u.latestURL != "" {
-		changelogLine = pad("Changelog") + urlStyle.Render(u.latestURL)
+		changelogLine = pad("Changelog") + updateOverlayURLStyle.Render(u.latestURL)
 	}
 
-	footerRule := lipgloss.NewStyle().Foreground(Colors.SurfaceBorder).
-		Render(strings.Repeat("─", textWidth))
+	footerRule := updateOverlayRuleStyle.Render(strings.Repeat("─", textWidth))
 	// Group both keys with a single action label.
 	footerKeys := "  " +
 		Styles.HelpKey.Render("esc/u") + "   " + Styles.HelpDesc.Render("close")
