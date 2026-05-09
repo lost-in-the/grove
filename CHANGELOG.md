@@ -92,6 +92,10 @@ Downstream consumers integrating with grove via `.grove/config.toml` or `.grove/
 - Removed unused `matchesActive` parameter from external-status classifier; removed `_ = name` dead wiring in env-loader doctor checks; removed dead `BootstrapOpts.Now` injection field.
 - Test fixtures in `internal/tui/update_overlay_test.go` now reference `version.Version` instead of a hardcoded `0.7.0-dev` literal, so they don't silently break on the next dev-cycle version bump.
 
+### Documentation
+- `docs/AGENT_GUIDE.md` updated to cover `grove context`, `--check-update`/`--no-update-notifier` persistent flags and `GROVE_NO_UPDATE_NOTIFIER`, and `grove adopt` edge cases (detached HEAD, already-registered).
+- `docs/PLUGIN_DEVELOPMENT.md` now documents `docker:compose` and `docker:exec` action-type handler signatures and the post-create hook ordering invariant (plugin Go hooks fire before config-driven hooks).
+
 ## [0.6.1] - 2026-03-19
 
 ### Fixed

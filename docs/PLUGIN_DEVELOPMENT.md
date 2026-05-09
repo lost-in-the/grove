@@ -113,6 +113,85 @@ type" error. The docker plugin extends `disabledTypeHint` in
 `docker:compose` and `docker:exec` — consider adding to that switch if your
 plugin is similarly load-conditional.
 
+### Hook ordering invariant
+
+When implementing custom action handlers, know which fires first:
+
+1. **Plugin Go hooks** (registered via `Plugin.RegisterHooks` against
+   `hooks.EventPostCreate`, etc.) fire **before** any `hooks.toml` actions.
+2. **Config-driven hooks** (`[[hooks.post_create]]` entries in `hooks.toml`,
+   including `docker:compose` and `docker:exec` action types) run after.
+
+This ordering is what makes `type = "docker:compose"` with `mode = "exec"`
+viable on `post_create` — the docker plugin's Go hook brings the local stack
+up first, so by the time the config hook fires there's a running container
+to exec into. A handler you add can rely on the same guarantee for resources
+its plugin provisions.
+
+The invariant is enforced in `internal/worktree/bootstrap.go` (`hooks.Fire`
+runs before `hookExecutor.Execute`). Don't try to reorder by re-firing
+`EventPostCreate` from a config-driven handler.
+
+### Built-in action types: `docker:compose` and `docker:exec`
+
+The docker plugin registers two action types that plugin authors can
+reference for parity. Both are implemented in `plugins/docker/`.
+
+**`docker:compose`** — runs a command via `docker compose run --rm` (default)
+or `docker compose exec` against a service in the worktree's compose file.
+Implementation: `plugins/docker/hook_compose.go`.
+
+```toml
+[[hooks.post_create]]
+type       = "docker:compose"
+service    = "app"                    # required: compose service name
+command    = "bundle install --quiet" # required: shell command run inside the container
+mode       = "run"                    # optional: "run" (default, ephemeral) | "exec" (existing container)
+timeout    = 300                      # optional: seconds (default 60); applied by executor, not the handler
+on_failure = "warn"                   # optional: "fail" (default) | "warn" | "ignore"
+```
+
+Field reference (matches `HookAction` in `internal/hooks/config.go`):
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| `service` | yes | Compose service name; supports `${VAR}` interpolation |
+| `command` | yes | Shell command run inside the container |
+| `mode` | no | `"run"` brings up service deps on demand; `"exec"` requires a running container and fails with a hint if the stack is down |
+| `timeout` | no | Per-action timeout (seconds), enforced by the hook executor |
+| `on_failure` | no | Standard error-handling field shared with all action types |
+
+The handler returns a targeted error when no compose file is present at the
+worktree path, suggesting `type = "docker:exec"` as the alternative.
+
+**`docker:exec`** — runs a command directly via `docker exec` in an
+externally-managed container that grove doesn't lifecycle (e.g., a long-
+running dev shell started outside grove). Bypasses compose entirely.
+Implementation: `plugins/docker/hook_docker_exec.go`.
+
+```toml
+[[hooks.post_create]]
+type       = "docker:exec"
+container  = "app-dev"                # required: docker container name (not service name)
+command    = "bin/setup"              # required: command to run
+shell      = "bash -lc"               # optional: shell wrapper (default "bash -lc"); plain command + flags only, no quotes
+timeout    = 60                       # optional: seconds (default 60)
+on_failure = "fail"
+```
+
+Differences from `docker:compose mode = "exec"`:
+
+| | `docker:compose` (`mode = "exec"`) | `docker:exec` |
+|---|---|---|
+| Targets | A compose **service** in the worktree's compose file | A raw docker **container** by name |
+| Requires compose file | Yes | No |
+| Brings up dependencies | No (errors if stack is down) | No (errors if container isn't running) |
+| Use when | The container is part of grove's managed compose stack | The container is started/managed outside grove |
+
+The handler pre-checks that the container is running (3s-bounded
+`docker inspect`) and returns an actionable error rather than the noisy
+`docker exec` "no such container" output.
+
 ## Creating a Plugin
 
 ### 1. Create Plugin Package

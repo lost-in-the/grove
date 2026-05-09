@@ -295,6 +295,25 @@ grove last
 
 Switches back to the previous worktree (tracked in `.grove/state.json`). Same hook/directive behavior as `grove to`.
 
+### Inspect the Current Worktree
+
+```bash
+grove here              # short summary
+grove here --json       # machine-readable
+grove context           # full context (sidebar-style)
+grove context --json    # richer JSON
+```
+
+`grove here` is the cheap option — name, branch, short SHA, status, tmux/Docker state. Useful for "where am I?" probes between commands.
+
+`grove context` returns a richer payload tailored for agents that need to make decisions without re-running git themselves: tracking branch, ahead/behind counts, stash count, and the last 5 commits. **Prefer `grove context --json` over `grove here --json`** when you need any of:
+
+- Sync state vs remote (`ahead`, `behind`, `has_remote`)
+- Stash awareness (`stash_count`)
+- Recent history (`recent_commits`) without shelling out to `git log`
+
+Both commands exit non-zero when not inside a grove-managed worktree.
+
 ### Work from a GitHub PR or Issue
 
 ```bash
@@ -419,6 +438,14 @@ grove adopt /path/to/other-worktree
 ```
 
 The short name is derived from the directory by stripping the project prefix (`project-feature` → `feature`), matching the convention `grove new` produces.
+
+**Edge cases:**
+
+| Scenario | Behavior |
+|----------|----------|
+| Already adopted | Prints `worktree "<name>" is already registered (path: ...)` and exits 0. Safe to call repeatedly. |
+| Detached HEAD | Errors out with `worktree is in detached HEAD state; check out a branch first` rather than registering with the literal branch `HEAD`. Run `git checkout -b <branch>` (or `git switch -c <branch>`) inside the worktree first, then re-run `grove adopt`. |
+| Path outside the project | Returns an error — adopt only registers worktrees that belong to the current grove project. |
 
 ---
 
@@ -644,6 +671,14 @@ Run `grove config` to see the merged effective config for the current project.
 | `GROVE_DEBUG` | unset | Set to `1` for verbose debug output. |
 | `GROVE_NONINTERACTIVE` | unset | Set to `1` to skip all interactive prompts (auto-accept defaults). |
 | `GROVE_CONFIG` | unset | Override path to global config file. Replaces `~/.config/grove/config.toml`. |
+| `GROVE_NO_UPDATE_NOTIFIER` | unset | Set to `1` to suppress the "update available" annotation across all grove commands. Also honors the standard `NO_UPDATE_NOTIFIER`. Implied by `GROVE_AGENT_MODE=1` and common CI vars. |
+
+### Persistent flags (apply to every command)
+
+| Flag | Purpose |
+|------|---------|
+| `--no-update-notifier` | Suppress the update annotation for this invocation only. Useful for one-off scripted runs without exporting the env var. |
+| `--check-update` | Force a synchronous update check, bypassing the cache and the standard opt-outs. Prints either an update box or `grove is up to date (X.Y.Z)` and exits. Use when an agent explicitly wants to know the latest version. |
 
 ---
 
