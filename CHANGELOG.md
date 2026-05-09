@@ -98,6 +98,8 @@ Downstream consumers integrating with grove via `.grove/config.toml` or `.grove/
 - Test fixtures in `internal/tui/update_overlay_test.go` now reference `version.Version` instead of a hardcoded `0.7.0-dev` literal, so they don't silently break on the next dev-cycle version bump.
 - TUI render hot path no longer reallocates lipgloss styles per frame in update overlay and footer badge — promoted to package-level vars.
 - Atomic-write helper extracted to `internal/fsutil` and used by state migration/backup paths and project-config writes. Crashes mid-write no longer corrupt `state.json` or user `.grove/config.toml`.
+- CI's release workflow now runs `make test-integration` and `make lint` before publishing, mirroring the gate fix applied to the main CI workflow in PR #83.
+- CI test matrix now includes macOS in addition to Linux, surfacing platform-specific issues (especially around symlink resolution and path handling) before release. The `plugins/docker` unit tests are excluded on the macOS runner (it has no Docker daemon and many of those tests don't gate on `exec.LookPath`); Docker-aware integration tests already self-skip when Docker isn't reachable.
 
 ### Documentation
 - `docs/AGENT_GUIDE.md` updated to cover `grove context`, `--check-update`/`--no-update-notifier` persistent flags and `GROVE_NO_UPDATE_NOTIFIER`, and `grove adopt` edge cases (detached HEAD, already-registered).

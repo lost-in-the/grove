@@ -12,7 +12,11 @@ permissions:
 jobs:
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     permissions:
       contents: read
     steps:
@@ -35,13 +39,28 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
-      - name: Run tests
+      - name: Run tests (Linux)
+        if: runner.os == 'Linux'
         run: go test -race -cover ./...
+
+      # macOS runners don't have Docker installed, and the plugins/docker
+      # unit tests assume `docker` is on PATH. Skip that package on macOS;
+      # everything else (including symlink and path-handling code paths
+      # this matrix exists to cover) still runs.
+      - name: Run tests (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          PKGS=$(go list ./... | grep -v '/plugins/docker$')
+          go test -race -cover $PKGS
 
   integration:
     name: Integration Tests
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     permissions:
       contents: read
     steps:
