@@ -7,6 +7,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -157,14 +158,25 @@ func disabledTypeHint(typeName string) (string, bool) {
 	return "", false
 }
 
+// currentUsername caches the result of user.Current() across hook invocations.
+// The username doesn't change during a process lifetime, so the syscall is
+// pure waste on subsequent calls.
+var (
+	currentUsernameOnce sync.Once
+	currentUsername     string
+)
+
+func cachedUsername() string {
+	currentUsernameOnce.Do(func() {
+		if u, err := user.Current(); err == nil {
+			currentUsername = u.Username
+		}
+	})
+	return currentUsername
+}
+
 // buildVariables creates the variable context for interpolation
 func (e *Executor) buildVariables(ctx *ExecutionContext) *Variables {
-	// Get current username
-	username := ""
-	if u, err := user.Current(); err == nil {
-		username = u.Username
-	}
-
 	now := time.Now()
 
 	return &Variables{
@@ -176,7 +188,7 @@ func (e *Executor) buildVariables(ctx *ExecutionContext) *Variables {
 		NewPath:      ctx.NewPath,
 		PrevPath:     ctx.PrevPath,
 		Port:         ctx.Port,
-		User:         username,
+		User:         cachedUsername(),
 		Timestamp:    now.Unix(),
 		Date:         now.Format("2006-01-02"),
 	}
@@ -197,30 +209,25 @@ type Variables struct {
 	Date         string // ISO date (YYYY-MM-DD)
 }
 
-// Interpolate replaces template variables in a string using {{.variable}} syntax
+// Interpolate replaces template variables in a string using {{.variable}} syntax.
+// Uses strings.NewReplacer for a single-pass replacement instead of N
+// sequential strings.ReplaceAll calls — meaningful when many hook fields are
+// interpolated.
 func (v *Variables) Interpolate(s string) string {
-	// Simple interpolation without full text/template for basic cases
-	// This handles the common {{.variable}} pattern
-	replacements := map[string]string{
-		"{{.worktree}}":      v.Worktree,
-		"{{.worktree_full}}": v.WorktreeFull,
-		"{{.branch}}":        v.Branch,
-		"{{.project}}":       v.Project,
-		"{{.main_path}}":     v.MainPath,
-		"{{.new_path}}":      v.NewPath,
-		"{{.prev_path}}":     v.PrevPath,
-		"{{.port}}":          fmt.Sprintf("%d", v.Port),
-		"{{.user}}":          v.User,
-		"{{.timestamp}}":     fmt.Sprintf("%d", v.Timestamp),
-		"{{.date}}":          v.Date,
-	}
-
-	result := s
-	for pattern, value := range replacements {
-		result = strings.ReplaceAll(result, pattern, value)
-	}
-
-	return result
+	r := strings.NewReplacer(
+		"{{.worktree}}", v.Worktree,
+		"{{.worktree_full}}", v.WorktreeFull,
+		"{{.branch}}", v.Branch,
+		"{{.project}}", v.Project,
+		"{{.main_path}}", v.MainPath,
+		"{{.new_path}}", v.NewPath,
+		"{{.prev_path}}", v.PrevPath,
+		"{{.port}}", fmt.Sprintf("%d", v.Port),
+		"{{.user}}", v.User,
+		"{{.timestamp}}", fmt.Sprintf("%d", v.Timestamp),
+		"{{.date}}", v.Date,
+	)
+	return r.Replace(s)
 }
 
 // builtinCopy performs a copy action

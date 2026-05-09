@@ -7,10 +7,32 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/hooks"
 )
+
+// dockerAvailable caches the result of looking up docker / docker-compose in
+// PATH. Repeated Plugin.Init calls (e.g. across multiple commands sharing a
+// process or tests) would otherwise burn an exec.LookPath each time.
+var (
+	dockerAvailableOnce   sync.Once
+	dockerAvailableResult bool
+)
+
+func dockerAvailable() bool {
+	dockerAvailableOnce.Do(func() {
+		if _, err := exec.LookPath("docker-compose"); err == nil {
+			dockerAvailableResult = true
+			return
+		}
+		if _, err := exec.LookPath("docker"); err == nil {
+			dockerAvailableResult = true
+		}
+	})
+	return dockerAvailableResult
+}
 
 // ErrNoComposeFile is returned when no docker-compose file is found
 var ErrNoComposeFile = errors.New("no docker-compose file found")
@@ -58,12 +80,10 @@ func (p *Plugin) Init(cfg *config.Config) error {
 		return nil
 	}
 
-	// Check if docker is available
-	if _, err := exec.LookPath("docker-compose"); err != nil {
-		if _, err := exec.LookPath("docker"); err != nil {
-			p.enabled = false
-			return fmt.Errorf("docker or docker-compose not found in PATH")
-		}
+	// Check if docker is available (LookPath result cached across Init calls).
+	if !dockerAvailable() {
+		p.enabled = false
+		return fmt.Errorf("docker or docker-compose not found in PATH")
 	}
 
 	// Select strategy based on mode
