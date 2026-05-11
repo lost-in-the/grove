@@ -34,6 +34,10 @@ Thumbs.db
 /tmp/
 *.tmp
 
+# Python
+__pycache__/
+*.pyc
+
 # Build artifacts
 dist/
 
