@@ -287,21 +287,30 @@ Arguments:
   name    Name for the new worktree (required)
 
 Flags:
-  -b, --branch <branch>  Branch name to create (default: worktree name)
-  -f, --from <ref>       Create branch from this ref (default: HEAD)
-  -j, --json             Output as JSON with switch_to field
-      --mirror <ref>     Create environment worktree tracking a remote branch (e.g., origin/main)
-      --no-docker        Skip Docker auto-start
+  -b, --branch <branch>      Branch name to create (default: worktree name)
+  -f, --from <ref>           Create branch from this ref (default: HEAD)
+      --from-branch <branch> Check out an existing local or remote branch (no new branch created)
+      --dirty                Carry over `git diff HEAD` from the current worktree (requires --from-branch)
+  -j, --json                 Output as JSON with switch_to field
+      --mirror <ref>         Create environment worktree tracking a remote branch (e.g., origin/main)
+      --no-docker            Skip Docker auto-start
+  -n, --no-switch            Stay in current worktree after creation
 ```
+
+`--mirror`, `--from`, `--branch`, and `--from-branch` are mutually exclusive — pick the one that matches your intent.
 
 **Behavior:**
 
 1. **Validate name:**
    - Apply naming transformations
    - Check for existing worktree with same name
-   
-2. **Create worktree:**
+   - If `--dirty` is set without `--from-branch`, return an error before any creation
+
+2. **(If `--dirty`) Capture diff** from the current worktree via `git -C <project-root> diff HEAD` (working tree + staged tracked changes; untracked files excluded by design). Held in memory until step 5; failures here abort the command before any worktree is created.
+
+3. **Create worktree:**
    - If `--mirror` specified: verify remote branch exists, create environment worktree tracking it
+   - If `--from-branch <branch>` specified: check out the existing branch in the new worktree (`git worktree add <path> <branch>`). No new branch is created. Git refuses if the branch is already checked out elsewhere — that guardrail is intentional.
    - Otherwise: create new worktree with branch matching the name
    ```bash
    git worktree add <path> <branch>
@@ -322,6 +331,12 @@ Flags:
 8. **Auto-start Docker** (unless `--no-docker`):
    - Only runs when `shouldAutoDocker()` returns true: agent stacks configured (`plugins.docker.external.agent.enabled = true`) or `plugins.docker.auto_up = true`
    - Calls `docker.Up()` for the new worktree path
+
+9. **(If `--dirty`) Apply the captured patch** via `git -C <new-worktree> apply <tempfile>`:
+   - Empty patch (no uncommitted changes in source): informational message, no-op
+   - Non-empty patch that applies cleanly: success message
+   - Non-empty patch that fails to apply: warning to stderr — the original worktree is untouched, the new worktree is intact, and the user is told to re-apply manually. Not a hard failure because the worktree creation already succeeded
+   - All transferred edits land in the new worktree as **unstaged** changes regardless of staging state in the source; re-stage manually if needed
 
 **Output (Success):**
 ```
@@ -358,6 +373,11 @@ To remove it:    grove rm testing
 | Branch exists, worktree doesn't | Create worktree with existing branch |
 | Invalid name characters | Auto-transform and proceed with warning |
 | Disk full | Error: "Failed to create worktree: {git error}" |
+| `--from-branch <branch>` and branch is checked out elsewhere | Git refuses with "branch already checked out at <path>"; grove surfaces the error and exits non-zero. The user must switch the other worktree off the branch first. |
+| `--from-branch <branch>` with branch that only exists on origin | Grove fetches `origin/<branch>:<branch>` into a local ref (best-effort; logged but non-fatal), then `git worktree add` checks it out. |
+| `--dirty` with no uncommitted changes in source | Informational message ("no uncommitted changes to transfer"), worktree still created. |
+| `--dirty` patch fails to apply (conflicts) | Warning to stderr, worktree intact, source unmodified, user told to re-apply manually. Non-zero in this case is *not* returned. |
+| `--dirty` without `--from-branch` | Validation error before any state changes. |
 | No write permission | Error: "Cannot create worktree: permission denied at {path}" |
 | Inside a worktree (not main) | Still works, creates sibling |
 | Parent directory doesn't exist | Create parent directories |

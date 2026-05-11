@@ -1,8 +1,14 @@
 package commands
 
 import (
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lost-in-the/grove/internal/cmdexec"
 )
 
 func TestNewCmd(t *testing.T) {
@@ -194,5 +200,130 @@ func TestNewCmd_HasSpawnAlias(t *testing.T) {
 	}
 	if !found {
 		t.Error("newCmd should have 'spawn' alias")
+	}
+}
+
+func TestNewCmd_FromBranchFlag(t *testing.T) {
+	flag := newCmd.Flags().Lookup("from-branch")
+	if flag == nil {
+		t.Fatal("newCmd missing --from-branch flag")
+	}
+	if flag.DefValue != "" {
+		t.Errorf("--from-branch should default to empty, got %q", flag.DefValue)
+	}
+	if !strings.Contains(strings.ToLower(flag.Usage), "existing") {
+		t.Errorf("--from-branch usage should mention 'existing' branch, got: %q", flag.Usage)
+	}
+}
+
+func TestNewCmd_DirtyFlag(t *testing.T) {
+	flag := newCmd.Flags().Lookup("dirty")
+	if flag == nil {
+		t.Fatal("newCmd missing --dirty flag")
+	}
+	if flag.DefValue != "false" {
+		t.Errorf("--dirty should default to false, got %q", flag.DefValue)
+	}
+	if !strings.Contains(flag.Usage, "from-branch") {
+		t.Errorf("--dirty usage should mention --from-branch requirement, got: %q", flag.Usage)
+	}
+}
+
+// TestNewCmd_FromBranchMutuallyExclusive verifies --from-branch is mutually
+// exclusive with --from, --branch, and --mirror (all attempt to create a new
+// branch in different ways, so combining them is nonsense).
+func TestNewCmd_FromBranchMutuallyExclusive(t *testing.T) {
+	flag := newCmd.Flags().Lookup("from-branch")
+	if flag == nil {
+		t.Fatal("--from-branch flag not found")
+	}
+	annotations := flag.Annotations
+	if annotations == nil {
+		t.Fatal("--from-branch has no annotations; MarkFlagsMutuallyExclusive not configured")
+	}
+	group, ok := annotations["cobra_annotation_mutually_exclusive"]
+	if !ok {
+		t.Fatal("--from-branch missing cobra_annotation_mutually_exclusive annotation")
+	}
+
+	for _, peer := range []string{"from", "branch", "mirror"} {
+		found := false
+		for _, g := range group {
+			if strings.Contains(g, peer) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("--from-branch should be mutually exclusive with --%s (annotations: %v)", peer, group)
+		}
+	}
+}
+
+// TestApplyDirtyPatch_RoundTrip exercises the diff-capture + diff-apply pair
+// against a real git repo. It writes a baseline file, commits it, modifies it,
+// captures `git diff HEAD`, then applies the patch in a freshly-built worktree
+// directory and asserts the modification is reproduced. This is the core
+// invariant of --dirty: whatever the user sees as uncommitted in their current
+// worktree must appear identically in the new one.
+func TestApplyDirtyPatch_RoundTrip(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available on PATH")
+	}
+
+	source := t.TempDir()
+	runGit := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = source
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
+			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com",
+		)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	runGit("init", "-b", "main", ".")
+	runGit("config", "user.email", "test@example.com")
+	runGit("config", "user.name", "test")
+
+	baseline := filepath.Join(source, "file.txt")
+	if err := os.WriteFile(baseline, []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit("add", "file.txt")
+	runGit("commit", "-m", "baseline")
+
+	// Modify the file but don't commit — this is what --dirty should carry.
+	if err := os.WriteFile(baseline, []byte("hello\nworld\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	patch, err := cmdexec.Output(context.Background(), "git", []string{"-C", source, "diff", "HEAD"}, "", cmdexec.GitLocal)
+	if err != nil {
+		t.Fatalf("capture diff: %v", err)
+	}
+	if len(patch) == 0 {
+		t.Fatal("expected non-empty diff after modification")
+	}
+
+	// Build a separate "worktree" by adding via git worktree on a new branch.
+	// applyDirtyPatch only needs a git working tree at the target path.
+	target := filepath.Join(t.TempDir(), "wt")
+	if out, err := exec.Command("git", "-C", source, "worktree", "add", "-b", "feature", target).CombinedOutput(); err != nil {
+		t.Fatalf("create target worktree: %v\n%s", err, out)
+	}
+
+	if err := applyDirtyPatch(target, patch); err != nil {
+		t.Fatalf("applyDirtyPatch: %v", err)
+	}
+
+	got, err := os.ReadFile(filepath.Join(target, "file.txt"))
+	if err != nil {
+		t.Fatalf("read target file: %v", err)
+	}
+	if string(got) != "hello\nworld\n" {
+		t.Errorf("target file contents = %q, want %q", string(got), "hello\nworld\n")
 	}
 }
