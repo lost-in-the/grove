@@ -18,12 +18,14 @@ import (
 )
 
 var (
-	newJSON     bool
-	newMirror   string // Remote branch to mirror (e.g., "origin/main")
-	newNoDocker bool   // Skip auto-starting Docker
-	newBranch   string // Override branch name
-	newFrom     string // Create branch from this ref
-	newNoSwitch bool   // Skip auto-switching to the new worktree
+	newJSON       bool
+	newMirror     string // Remote branch to mirror (e.g., "origin/main")
+	newNoDocker   bool   // Skip auto-starting Docker
+	newBranch     string // Override branch name
+	newFrom       string // Create branch from this ref
+	newFromBranch string // Check out an existing branch in the new worktree
+	newDirty      bool   // Carry over `git diff HEAD` from the current worktree
+	newNoSwitch   bool   // Skip auto-switching to the new worktree
 )
 
 var newCmd = &cobra.Command{
@@ -43,13 +45,21 @@ Use --no-docker to skip Docker auto-start.
 Use --mirror to create an environment worktree that tracks a remote branch.
 Environment worktrees are read-only and can be synced with 'grove sync'.
 
+Use --from-branch to check out an existing local or remote branch in the new
+worktree (no new branch is created). Pair with --dirty to also carry over
+uncommitted changes ('git diff HEAD' — working tree + staged) from the current
+worktree. Useful when promoting an in-progress branch from your main checkout
+into its own worktree.
+
 Examples:
   grove new feature-auth                          # Create worktree + tmux + Docker
   grove new feature-auth --branch custom-branch   # Use custom branch name
   grove new feature-auth --from develop            # Branch from develop
   grove new feature-auth --no-docker               # Skip Docker auto-start
   grove spawn feature-x                            # Alias (implies --json output)
-  grove new staging --mirror origin/main           # Environment worktree tracking origin/main`,
+  grove new staging --mirror origin/main           # Environment worktree tracking origin/main
+  grove new payments --from-branch feature/payments         # Adopt existing branch as worktree
+  grove new payments --from-branch feature/payments --dirty # Also carry over uncommitted edits`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		// spawn alias implies JSON output
@@ -76,6 +86,27 @@ Examples:
 
 		if name == "" {
 			return fmt.Errorf("worktree name cannot be empty")
+		}
+
+		// --dirty only makes sense paired with --from-branch (adopting an
+		// existing branch). For the default flow (new branch from HEAD) the
+		// branch is empty and a working-tree carry-over has no obvious
+		// destination semantics.
+		if newDirty && newFromBranch == "" {
+			return fmt.Errorf("--dirty requires --from-branch")
+		}
+
+		// Capture the diff BEFORE creating the worktree. If creation fails we
+		// just discard the patch; if it succeeds we apply it in the new
+		// worktree after setup. `git diff HEAD` combines staged + unstaged
+		// tracked changes; untracked files are intentionally excluded.
+		var dirtyPatch []byte
+		if newDirty {
+			out, diffErr := cmdexec.Output(context.TODO(), "git", []string{"-C", ctx.ProjectRoot, "diff", "HEAD"}, "", cmdexec.GitLocal)
+			if diffErr != nil {
+				return fmt.Errorf("failed to capture working-tree diff: %w", diffErr)
+			}
+			dirtyPatch = out
 		}
 
 		mgr, err := worktree.NewManager(ctx.ProjectRoot)
@@ -126,6 +157,19 @@ Examples:
 			if !newJSON {
 				cli.Success(w, "Created environment worktree '%s' tracking %s", name, mirror)
 			}
+		} else if newFromBranch != "" {
+			// Adopt an existing branch into a new worktree. No new branch is
+			// created; the worktree checks out newFromBranch directly. Git
+			// refuses if the branch is already checked out elsewhere — that
+			// guardrail is intentional and surfaces to the user as-is.
+			branchName = newFromBranch
+			if err := mgr.CreateFromBranch(name, newFromBranch); err != nil {
+				return fmt.Errorf("failed to create worktree from branch %q: %w", newFromBranch, err)
+			}
+
+			if !newJSON {
+				cli.Success(w, "Created worktree '%s' from branch '%s'", name, newFromBranch)
+			}
 		} else {
 			// Regular worktree - use --branch if provided, otherwise name
 			if newBranch != "" {
@@ -159,6 +203,24 @@ Examples:
 		}, w)
 		if err != nil {
 			return err
+		}
+
+		// Apply the diff captured before worktree creation. Empty diff is a
+		// no-op (issued as informational text only); a non-empty diff that
+		// fails to apply is surfaced as a warning rather than a hard error
+		// because the worktree itself is intact and useful — the user can
+		// inspect and re-apply manually.
+		if newDirty {
+			if len(dirtyPatch) == 0 {
+				if !newJSON {
+					cli.Info(w, "--dirty: no uncommitted changes to transfer")
+				}
+			} else if err := applyDirtyPatch(wt.Path, dirtyPatch); err != nil {
+				cli.Warning(stderr, "--dirty: failed to apply patch to new worktree: %v", err)
+				cli.Faint(stderr, "The patch is intact in your current worktree; resolve manually and re-apply.")
+			} else if !newJSON {
+				cli.Success(w, "Transferred uncommitted changes (--dirty)")
+			}
 		}
 
 		projectName := mgr.GetProjectName()
@@ -261,14 +323,44 @@ Examples:
 	}),
 }
 
+// applyDirtyPatch writes the captured diff to a temp file alongside the new
+// worktree and applies it via `git apply`. The temp file is removed regardless
+// of apply outcome so a stray patch file doesn't litter the worktree root.
+func applyDirtyPatch(worktreePath string, patch []byte) error {
+	f, err := os.CreateTemp("", "grove-dirty-*.patch")
+	if err != nil {
+		return fmt.Errorf("create temp patch file: %w", err)
+	}
+	defer func() { _ = os.Remove(f.Name()) }()
+
+	if _, err := f.Write(patch); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("write temp patch file: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close temp patch file: %w", err)
+	}
+
+	out, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", worktreePath, "apply", f.Name()}, "", cmdexec.GitLocal)
+	if err != nil {
+		return fmt.Errorf("git apply: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	return nil
+}
+
 func init() {
 	newCmd.Flags().BoolVarP(&newJSON, "json", "j", false, "Output as JSON with switch_to field")
 	newCmd.Flags().StringVarP(&newBranch, "branch", "b", "", "Branch name to create (default: worktree name)")
 	newCmd.Flags().StringVarP(&newFrom, "from", "f", "", "Create branch from this ref (default: HEAD)")
+	newCmd.Flags().StringVar(&newFromBranch, "from-branch", "", "Check out an existing branch in the new worktree (no new branch created)")
+	newCmd.Flags().BoolVar(&newDirty, "dirty", false, "Carry over `git diff HEAD` from the current worktree (requires --from-branch)")
 	newCmd.Flags().StringVar(&newMirror, "mirror", "", "Create environment worktree tracking a remote branch (e.g., origin/main)")
 	newCmd.Flags().BoolVar(&newNoDocker, "no-docker", false, "Skip Docker auto-start")
 	newCmd.Flags().BoolVarP(&newNoSwitch, "no-switch", "n", false, "Stay in current worktree after creation")
 	newCmd.MarkFlagsMutuallyExclusive("mirror", "from")
 	newCmd.MarkFlagsMutuallyExclusive("mirror", "branch")
+	newCmd.MarkFlagsMutuallyExclusive("mirror", "from-branch")
+	newCmd.MarkFlagsMutuallyExclusive("from", "from-branch")
+	newCmd.MarkFlagsMutuallyExclusive("branch", "from-branch")
 	rootCmd.AddCommand(newCmd)
 }
