@@ -1,0 +1,23 @@
+{
+  "skill_name": "grove-worktree-management",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Can you review PR #42 in this repo without disrupting my current work?",
+      "expected_output": "Agent uses `grove fetch pr/42` to create a worktree, then `grove to <name> --peek` to switch without hooks or tmux, reviews the PR, and offers to run `grove rm` when done.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I want to run the test suite against the cache-redesign branch while keeping my current branch checked out.",
+      "expected_output": "Agent uses `grove test cache-redesign` to run tests in the other worktree without switching context.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Start the dev environment for this feature in an isolated stack so it doesn't conflict with what's running on main.",
+      "expected_output": "Agent checks `grove ps --json` for free slots, then runs `grove up --isolated --slot N` to start a port-offset Docker stack for the current worktree.",
+      "files": []
+    }
+  ]
+}

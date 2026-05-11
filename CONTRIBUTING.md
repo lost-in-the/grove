@@ -86,6 +86,8 @@ test(worktree): add tests for dirty status detection
 - **Small interfaces**: Prefer 1-3 methods per interface
 - **Error messages**: Lowercase, no trailing punctuation
 - **Error wrapping**: Use `fmt.Errorf("context: %w", err)` for context
+- **Interface discipline**: Accept interfaces, return concrete types
+- **New dependencies**: Require explicit justification in the commit message
 
 **Example:**
 ```go
@@ -203,6 +205,37 @@ Before submitting, ensure:
 - [ ] Conventional commit message used
 - [ ] No merge conflicts with `main`
 - [ ] Golden files reviewed (`make golden-diff`) — no unintended visual regressions
+- [ ] If changes affect `docs/`, updated in this same PR
+
+### Common Task Recipes
+
+#### Adding a new command
+
+1. Create `cmd/grove/commands/{command}.go`
+2. Write tests in `cmd/grove/commands/{command}_test.go` **first** (TDD)
+3. Register with Cobra in `cmd/grove/commands/root.go`
+4. Update shell completions if the command takes worktree names as arguments
+5. Add the command to `docs/COMMAND_SPECIFICATIONS.md`
+
+#### Modifying worktree behavior
+
+1. Check `internal/worktree/` for existing patterns first
+2. Update `docs/COMMAND_SPECIFICATIONS.md` with the new behavior
+3. Write test cases before implementing (TDD)
+
+#### Working with shell integration
+
+1. Review `docs/SHELL_INTEGRATION.md` and `internal/shell/`
+2. Test both zsh AND bash paths
+3. Output `cd:` directives from binary stdout; never call `cd` directly
+4. Use `GROVE_SHELL=1` detection (set by the wrapper) to enable directive output
+
+#### Behavioral invariants (do not break)
+
+- Worktree names must follow `{project}-{name}` — enforced by naming logic in `internal/worktree/`
+- `grove ls` displays **short** names; tmux session names use **full** names (`{project}-{name}`)
+- Shell directives (`cd:`, `tmux-attach:`, `env:`) must be zero-ANSI — parsed literally by the wrapper
+- Every command must complete in <500ms under normal conditions
 
 ## Development Commands
 

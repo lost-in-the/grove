@@ -5,12 +5,7 @@ Go CLI for managing git worktrees with tmux integration. Config: `.grove/config.
 
 ## For Agents Using Grove
 
-If you're helping a user install, configure, or use grove:
-- **[Agent Guide](docs/AGENT_GUIDE.md)** — installation, workflows, Docker strategies, multi-agent patterns
-- **[Configuration Reference](docs/CONFIGURATION_REFERENCE.md)** — all config.toml and hooks.toml options
-- **[README](README.md)** — feature overview and quick start
-
-Grove replaces manual git worktree + tmux + Docker orchestration. One command (`grove new`) creates a worktree, branch, tmux session, copies credentials, symlinks dependencies, and starts Docker. `grove to` switches with atomic context changes. `grove fetch pr/42` creates a worktree from a GitHub PR.
+If you're an agent helping a user *use* grove (install, configure, run commands), start with [AGENTS.md](AGENTS.md) — it's the front door for agent-facing context.
 
 ---
 
