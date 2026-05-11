@@ -330,6 +330,14 @@ services = ["web", "worker"]       # string array (required)
 # Default: [] (every configured service is treated as long-running)
 non_blocking_services = ["asset_precompile", "db_seed"]  # string array
 
+# Container path where grove expects the worktree source to be bind-mounted.
+# Used by `grove here --check-mount` to inspect each running container and
+# compare its actual mount Source against the configured worktree pointer in
+# env_file. Set this only if your services mount source somewhere other than
+# /app (e.g., /srv/app, /workspace).
+# Default: "/app"
+mount_dest = "/app"                # string
+
 # Files to copy from the main worktree into each new worktree on create.
 # Useful for credential files, local config, etc. that are gitignored.
 # Paths are relative to the worktree root.
