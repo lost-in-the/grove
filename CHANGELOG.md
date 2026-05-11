@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-05-11
+
+> **Upgrading:** No breaking changes. New surface added for adopting existing branches into worktrees, auditing per-worktree provisioning, and detecting Docker bind-mount drift. One latent bug fix for projects using `env_file` set to anything other than `.env`.
+
 ### Added
 - `grove new --from-branch <branch>` — adopts an existing local or remote branch into a new worktree without creating a new branch (calls `git worktree add <path> <branch>`). Mutually exclusive with `--from`, `--branch`, and `--mirror`. Git's "branch already checked out" guardrail still fires when the branch is in use elsewhere (closes #95).
 - `grove new --dirty` — when paired with `--from-branch`, transfers `git diff HEAD` (working tree + staged tracked changes) from the current worktree into the new one via `git apply`. Untracked files are intentionally excluded. Transferred changes land as unstaged in the destination; re-stage manually if needed. A patch that fails to apply (conflict, etc.) emits a warning rather than aborting — the new worktree is intact and the source is unmodified.
