@@ -225,22 +225,41 @@ func hasDockerCompose(dir string) bool {
 	return false
 }
 
+// composeEnvFileArgs returns --env-file arguments for `docker compose` v2 that
+// layer the default .env (if present in composePath) underneath the configured
+// envFile. Returns nil when envFile is unset or already ".env" (compose reads
+// .env by default in that case).
+//
+// Compose v2 supports multiple --env-file flags; later ones override earlier
+// ones for interpolation. Without this layering, setting env_file=".env.local"
+// would cause `docker compose` to ignore .env entirely, silently breaking
+// interpolation of variables defined only in .env (issue #98).
+func composeEnvFileArgs(composePath, envFile string) []string {
+	if envFile == "" || envFile == ".env" {
+		return nil
+	}
+	var args []string
+	if _, err := os.Stat(filepath.Join(composePath, ".env")); err == nil {
+		args = append(args, "--env-file", ".env")
+	}
+	args = append(args, "--env-file", envFile)
+	return args
+}
+
 // composeCommand creates a docker-compose command with optional environment variables.
 // dir sets the working directory. envFile, when non-empty and not ".env", adds
-// --env-file to the compose command for YAML variable interpolation. env is a list
-// of extra KEY=VALUE strings to add to the process environment.
+// --env-file to the compose command for YAML variable interpolation; if a .env
+// file also exists alongside, it is layered underneath so compose still reads
+// defaults from .env. env is a list of extra KEY=VALUE strings to add to the
+// process environment.
 //
 // Callers set cmd.Stdout = os.Stderr intentionally: grove reserves stdout for
 // shell-integration directives (cd:, env:, tmux-attach:), so Docker output
 // must go to stderr to avoid corrupting the directive stream.
 func composeCommand(dir string, envFile string, env []string, args ...string) *exec.Cmd {
 	if _, err := exec.LookPath("docker"); err == nil {
-		var cmdArgs []string
-		if envFile != "" && envFile != ".env" {
-			cmdArgs = append(cmdArgs, "compose", "--env-file", envFile)
-		} else {
-			cmdArgs = append(cmdArgs, "compose")
-		}
+		cmdArgs := []string{"compose"}
+		cmdArgs = append(cmdArgs, composeEnvFileArgs(dir, envFile)...)
 		cmdArgs = append(cmdArgs, args...)
 		cmd := exec.Command("docker", cmdArgs...)
 		cmd.Dir = dir
@@ -250,7 +269,8 @@ func composeCommand(dir string, envFile string, env []string, args ...string) *e
 		return cmd
 	}
 
-	// docker-compose v1 fallback — --env-file goes after compose subcommand
+	// docker-compose v1 fallback — only supports a single --env-file, so we
+	// can't layer .env underneath. Pass the configured envFile as-is.
 	var cmdArgs []string
 	if envFile != "" && envFile != ".env" {
 		cmdArgs = append(cmdArgs, "--env-file", envFile)

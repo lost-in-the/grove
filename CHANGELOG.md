@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `[plugins.docker.external] env_file` set to a non-default file (e.g. `.env.local`) no longer shadows the project's `.env` for compose interpolation. Grove now passes both `--env-file .env --env-file <configured>` when `.env` is present alongside, matching developer intuition (defaults from `.env`, per-worktree overrides from the configured file). Previously, variables defined only in `.env` would silently become blank during interpolation (issue #98).
+
 ## [0.7.0] - 2026-05-11
 
 > **Upgrading:** No breaking config changes — all new fields have defaults and existing configs continue to work. Docker users should run `grove doctor` to surface host install commands that should now be `docker:compose` hooks (`grove doctor --fix` rewrites them automatically). See "Behavior changes" and "Migration / consumer-side" below.

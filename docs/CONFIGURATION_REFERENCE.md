@@ -309,7 +309,11 @@ path = "~/work/compose-dev"        # string (required)
 env_var = "APP_DIR"                # string (required)
 
 # File in the compose directory where grove writes the env var value.
-# Grove passes --env-file to every compose call automatically.
+# Grove passes --env-file to every compose call automatically. When this is
+# set to anything other than ".env" and a ".env" file also exists in the
+# compose directory, grove layers both (--env-file .env --env-file <configured>)
+# so committed defaults in .env stay available for interpolation alongside the
+# per-worktree overrides written here.
 # Set to ".env.local" to avoid dirtying a git-tracked .env.
 # Default: ".env"
 env_file = ".env"                  # string

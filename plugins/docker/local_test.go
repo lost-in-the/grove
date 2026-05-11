@@ -147,3 +147,62 @@ func TestLocalRun_IncludeDepsTrueOmitsNoDeps(t *testing.T) {
 		}
 	}
 }
+
+// TestComposeEnvFileArgs locks the behavior introduced for issue #98: when a
+// project configures env_file to something other than ".env", grove must still
+// layer ".env" underneath so compose v2 can interpolate variables defined only
+// in the committed defaults file.
+func TestComposeEnvFileArgs(t *testing.T) {
+	tests := []struct {
+		name      string
+		envFile   string
+		writeEnv  bool // whether a .env file exists in composePath
+		expectArg []string
+	}{
+		{
+			name:      "empty envFile returns no args",
+			envFile:   "",
+			writeEnv:  true,
+			expectArg: nil,
+		},
+		{
+			name:      "envFile equals .env returns no args (compose default)",
+			envFile:   ".env",
+			writeEnv:  true,
+			expectArg: nil,
+		},
+		{
+			name:      "envFile=.env.local with .env present layers both",
+			envFile:   ".env.local",
+			writeEnv:  true,
+			expectArg: []string{"--env-file", ".env", "--env-file", ".env.local"},
+		},
+		{
+			name:      "envFile=.env.local without .env passes only configured",
+			envFile:   ".env.local",
+			writeEnv:  false,
+			expectArg: []string{"--env-file", ".env.local"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if tt.writeEnv {
+				if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("FOO=bar\n"), 0o644); err != nil {
+					t.Fatalf("write .env: %v", err)
+				}
+			}
+
+			got := composeEnvFileArgs(dir, tt.envFile)
+			if len(got) != len(tt.expectArg) {
+				t.Fatalf("expected %v (len %d), got %v (len %d)", tt.expectArg, len(tt.expectArg), got, len(got))
+			}
+			for i := range got {
+				if got[i] != tt.expectArg[i] {
+					t.Errorf("args[%d]: expected %q, got %q (full: %v)", i, tt.expectArg[i], got[i], got)
+				}
+			}
+		})
+	}
+}
