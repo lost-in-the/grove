@@ -140,9 +140,7 @@ func probeServiceHealth(composePath, envFile string, env []string) ([]ServiceSta
 	defer cancel()
 
 	args := []string{"compose"}
-	if envFile != "" && envFile != ".env" {
-		args = append(args, "--env-file", envFile)
-	}
+	args = append(args, composeEnvFileArgs(composePath, envFile)...)
 	args = append(args, "ps", "--all", "--format", "json")
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
