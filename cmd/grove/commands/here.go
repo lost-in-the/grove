@@ -30,8 +30,9 @@ const (
 )
 
 var (
-	hereQuiet bool
-	hereJSON  bool
+	hereQuiet      bool
+	hereJSON       bool
+	hereCheckMount bool
 )
 
 // hereOutput represents the JSON output structure for grove here
@@ -83,6 +84,13 @@ var hereCmd = &cobra.Command{
 		}
 
 		displayName := tree.DisplayName()
+
+		// --check-mount short-circuits the normal info flow. It's intended
+		// for scripting / pre-test guards: "did I forget to grove up after
+		// switching?" The exit code is the user-facing signal.
+		if hereCheckMount {
+			return runMountDriftCheck(ctx, tree)
+		}
 
 		// Quiet mode: just print the name
 		if hereQuiet {
@@ -231,5 +239,6 @@ var hereCmd = &cobra.Command{
 func init() {
 	hereCmd.Flags().BoolVarP(&hereQuiet, "quiet", "q", false, "Just print the worktree name")
 	hereCmd.Flags().BoolVarP(&hereJSON, "json", "j", false, "Output as JSON")
+	hereCmd.Flags().BoolVar(&hereCheckMount, "check-mount", false, "Compare env-configured worktree against running container's bind-mount source; exits non-zero on drift")
 	rootCmd.AddCommand(hereCmd)
 }

@@ -34,4 +34,10 @@ const (
 	// WorktreeMissing indicates the worktree directory is missing from disk.
 	// Used by grove repair when worktrees are orphaned.
 	WorktreeMissing = 11
+
+	// MountDrift indicates `grove here --check-mount` detected a mismatch
+	// between the env-configured worktree and a running container's
+	// bind-mount source. Used to gate scripts ("did I forget to grove up
+	// after switching?").
+	MountDrift = 12
 )

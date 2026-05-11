@@ -114,6 +114,7 @@ type ExternalComposeConfig struct {
 	CopyFiles           []string          `toml:"copy_files"`            // Files to copy from main on worktree create
 	SymlinkFiles        []string          `toml:"symlink_files"`         // Files to symlink from main on create
 	SymlinkDirs         []string          `toml:"symlink_dirs"`          // Directories to symlink from main on create
+	MountDest           string            `toml:"mount_dest"`            // Container path where worktree source is bind-mounted (default "/app")
 	Agent               *AgentStackConfig `toml:"agent"`                 // Optional agent stack configuration
 }
 
@@ -123,6 +124,16 @@ func (e *ExternalComposeConfig) EnvFileName() string {
 		return e.EnvFile
 	}
 	return ".env"
+}
+
+// MountDestPath returns the configured mount destination, defaulting to "/app".
+// This is the container path that grove will inspect to detect drift between
+// the env-configured source directory and the actually-mounted source.
+func (e *ExternalComposeConfig) MountDestPath() string {
+	if e.MountDest != "" {
+		return e.MountDest
+	}
+	return "/app"
 }
 
 // AgentStackConfig configures agent stack support for external compose mode.

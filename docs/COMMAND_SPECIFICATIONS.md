@@ -828,8 +828,9 @@ Arguments:
 grove here [flags]
 
 Flags:
-  -q, --quiet    Just print the worktree name
-  -j, --json     Output as JSON
+  -q, --quiet         Just print the worktree name
+  -j, --json          Output as JSON
+      --check-mount   Compare env-configured worktree against running container's bind-mount source
 ```
 
 **Behavior:**
@@ -837,6 +838,24 @@ Flags:
 1. Detect current worktree from `$PWD`
 2. Gather status information
 3. Display
+
+**Mount drift check (`--check-mount`)**
+
+When passed, `grove here` short-circuits the default info display and instead:
+
+1. Reads `[plugins.docker.external].env_var` from the configured `env_file` — this is the worktree path grove last wrote ("configured source").
+2. For each configured service, runs `docker compose ps -q <service>` to get the running container, then `docker inspect` to find the mount whose `Destination` matches `[plugins.docker.external].mount_dest` (default `/app`).
+3. Compares the container's actual `Source` against the configured source.
+
+**Exit codes:**
+
+| Code | Meaning |
+|---|---|
+| `0` | All services mounted from the configured worktree (or no external mode configured / no services running) |
+| `6` (`ExternalCommandFailed`) | docker invocation itself failed (daemon down, command not found, etc.) |
+| `12` (`MountDrift`) | At least one running service has a bind-mount source different from the configured worktree |
+
+When drift is detected, the output names each affected service and points at `grove up` as the remediation. Services whose container isn't running are reported as `container not running` (informational, not drift).
 
 **Output (Default):**
 ```
