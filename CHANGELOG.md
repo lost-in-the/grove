@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.7.0] - YYYY-MM-DD
+## [0.7.0] - 2026-05-11
 
 > **Upgrading:** No breaking config changes — all new fields have defaults and existing configs continue to work. Docker users should run `grove doctor` to surface host install commands that should now be `docker:compose` hooks (`grove doctor --fix` rewrites them automatically). See "Behavior changes" and "Migration / consumer-side" below.
 
