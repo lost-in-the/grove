@@ -22,15 +22,19 @@ import (
 	"github.com/lost-in-the/grove/plugins/docker"
 )
 
-var doctorFix bool
+var (
+	doctorFix bool
+	doctorAll bool
+)
 
 func init() {
-	doctorCmd.Flags().BoolVar(&doctorFix, "fix", false, "Apply automatic fixes for detected issues (currently: rewrites host install hooks to docker:compose)")
+	doctorCmd.Flags().BoolVar(&doctorFix, "fix", false, "Apply automatic fixes for detected issues (host-install hook rewrite at project level; missing copy_files / symlink entries at per-worktree level)")
+	doctorCmd.Flags().BoolVar(&doctorAll, "all", false, "Audit every registered worktree's copy_files / symlink_files / symlink_dirs entries")
 	rootCmd.AddCommand(doctorCmd)
 }
 
 var doctorCmd = &cobra.Command{
-	Use:   "doctor",
+	Use:   "doctor [worktree]",
 	Short: "Check system health for grove",
 	Long: `Run diagnostic checks to verify that grove's dependencies and configuration
 are set up correctly.
@@ -38,14 +42,32 @@ are set up correctly.
 System checks (binary, PATH, shell integration, git, tmux) run anywhere.
 Project checks (Docker, config, symlinks) run when inside a grove project.
 
-Pass --fix to apply automatic fixes for detected issues. Currently fixable:
-  - Host bundle/npm/pip-install hooks in a Docker project are rewritten to
-    docker:compose hooks.
+Pass a worktree name to audit just that worktree's provisioning entries
+(copy_files, symlink_files, symlink_dirs) against the project config. Pass
+--all to audit every registered worktree.
+
+Pass --fix to apply automatic fixes for detected issues:
+  - Project-level: host bundle/npm/pip-install hooks in a Docker project are
+    rewritten to docker:compose hooks.
+  - Per-worktree: missing copy_files / symlink_files / symlink_dirs entries
+    are restored from the main worktree. Entries the user has overridden
+    (e.g. replaced a symlink with a regular file) are left untouched.
 
 Examples:
-  grove doctor`,
+  grove doctor                # project-level checks
+  grove doctor my-feature     # audit one worktree
+  grove doctor --all          # audit every registered worktree
+  grove doctor my-feature --fix   # restore missing entries in one worktree`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		w := cli.NewStdout()
+
+		// Per-worktree audit path — short-circuits the system / project
+		// tiers. Either a positional worktree name or --all triggers it.
+		if len(args) == 1 || doctorAll {
+			return runWorktreeAudit(w, args, doctorAll, doctorFix)
+		}
+
 		cli.Header(w, "grove doctor")
 
 		allPassed := true

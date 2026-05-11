@@ -2146,15 +2146,34 @@ Excluded worktrees:
 
 **Usage:**
 ```
-grove doctor [flags]
+grove doctor [worktree] [flags]
+
+Arguments:
+  worktree    Optional worktree name. Switches to per-worktree audit mode.
 
 Flags:
+      --all    Audit every registered worktree's provisioning entries
       --fix    Apply automatic fixes for detected issues
 ```
 
-**`--fix` flag:** When passed, `grove doctor` rewrites host install commands (e.g., `bundle install`, `npm install`, `pip install`) in `hooks.toml` to `docker:compose` hooks in place. The rewrite is idempotent — running it again when already converted is a no-op. This is a surgical text-based edit; user comments and unrelated keys are preserved. Currently, `--fix` only handles the install-command rewrite; other detected issues still require manual remediation.
+**Modes:**
 
-**Two-tier design:**
+- **Default (no arg, no `--all`):** Run system + project-level checks (Tier 1 and Tier 2 below).
+- **Per-worktree (`grove doctor <name>` or `--all`):** Audit `copy_files` / `symlink_files` / `symlink_dirs` entries in the specified worktree(s) against the project config. Skips Tier 1/2.
+
+**`--fix` flag:**
+- In default mode: rewrites host install commands (e.g., `bundle install`, `npm install`, `pip install`) in `hooks.toml` to `docker:compose` hooks in place. The rewrite is idempotent — running it again when already converted is a no-op. This is a surgical text-based edit; user comments and unrelated keys are preserved.
+- In per-worktree mode: restores `missing` entries by copying/symlinking from the main worktree, matching the action type configured (`copy_files` → copy, `symlink_*` → symlink). Entries the user has **overridden** (e.g. replaced a symlink with a regular file, or replaced a tracked copy with a symlink) are reported but left untouched.
+
+**Per-worktree audit classifications:**
+
+| Status | Meaning | `--fix` action |
+|---|---|---|
+| `ok` | Entry present and matches the configured type | none |
+| `missing` | Entry not present in worktree | restore from main worktree |
+| `override` | Entry present but wrong type (user has customized) | none — leave alone |
+
+**Two-tier design (default mode):**
 
 - **Tier 1 (System checks):** Always run, regardless of project context. Checks grove binary resolution, shell integration version, git, tmux, GitHub CLI, Docker availability.
 - **Tier 2 (Project checks):** Only run when inside a grove project. Checks config loading, config symlinks across worktrees, worktree registration (drift detection), Docker external mode, env file loaders, agent stacks.
