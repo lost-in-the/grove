@@ -158,7 +158,7 @@ func (m Model) handleIssueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) openCreateWizardForIssue(issue *tracker.Issue) (tea.Model, tea.Cmd) {
 	branches, _ := git.ListAllBranches(m.projectRoot)
-	m.createState = prefillCreateStateForIssue(issue, m.projectName, branches)
+	m.createState = prefillCreateStateForIssue(issue, m.projectName, m.worktreeNamePattern(), branches)
 	m.createState.ReturnView = ViewIssues
 	m.createState.WorktreeBranches = m.worktreeBranchMap()
 	m.activeView = ViewCreate

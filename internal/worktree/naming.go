@@ -14,6 +14,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/lost-in-the/grove/internal/cmdexec"
+	"github.com/lost-in-the/grove/internal/config"
 )
 
 // TestEnvNumber derives a stable TEST_ENV_NUMBER in range [50, 99] from a worktree name.
@@ -27,9 +28,6 @@ func TestEnvNumber(name string) int {
 // projectConfig represents the project-level configuration
 type projectConfig struct {
 	ProjectName string `toml:"project_name"`
-	Naming      struct {
-		Pattern string `toml:"pattern"`
-	} `toml:"naming"`
 }
 
 // DefaultNamePattern is the worktree directory naming pattern used when
@@ -63,6 +61,23 @@ func ValidateNamePattern(pattern string) error {
 // invalidPatternWarning ensures the invalid-pattern warning prints at most
 // once per process even when several Managers are created.
 var invalidPatternWarning sync.Once
+
+// EffectiveNamePattern returns pattern when it is a valid naming pattern and
+// DefaultNamePattern otherwise (including empty input).
+func EffectiveNamePattern(pattern string) string {
+	if ValidateNamePattern(pattern) == nil {
+		return pattern
+	}
+	return DefaultNamePattern
+}
+
+// InterpolateNamePattern builds a full worktree directory name from a naming
+// pattern. Invalid or empty patterns fall back to DefaultNamePattern, so
+// callers (e.g. UI previews) always produce the name grove would create.
+func InterpolateNamePattern(pattern, project, name string) string {
+	full := strings.ReplaceAll(EffectiveNamePattern(pattern), "{project}", project)
+	return strings.ReplaceAll(full, "{name}", name)
+}
 
 // detectProjectName determines the project name using priority:
 // 1. .grove/config.toml -> project_name (from main worktree)
@@ -158,24 +173,20 @@ func DeriveWorktreeName(branch, strategy string) string {
 	return branch
 }
 
-// getNamePattern returns the worktree naming pattern for the project, read
-// from [naming] pattern in the main worktree's .grove/config.toml (the same
-// project-level file detectProjectName reads). Unset or invalid patterns fall
-// back to DefaultNamePattern; invalid ones additionally warn on stderr so the
-// fallback is visible.
+// getNamePattern returns the worktree naming pattern, loaded through the
+// standard layered config (defaults → global → project → config.local.toml)
+// anchored at the main worktree's .grove directory — the same value `grove
+// config` displays. Invalid patterns fall back to DefaultNamePattern with a
+// stderr warning so the fallback is visible.
 func (m *Manager) getNamePattern() string {
 	if m.namePattern != "" {
 		return m.namePattern
 	}
 	m.namePattern = DefaultNamePattern
 
-	configPath := filepath.Join(m.getMainWorktreePath(), ".grove", "config.toml")
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return m.namePattern
-	}
-	var cfg projectConfig
-	if err := toml.Unmarshal(data, &cfg); err != nil || cfg.Naming.Pattern == "" {
+	groveDir := filepath.Join(m.getMainWorktreePath(), ".grove")
+	cfg, err := config.LoadFromGroveDir(groveDir)
+	if err != nil || cfg == nil {
 		return m.namePattern
 	}
 	if err := ValidateNamePattern(cfg.Naming.Pattern); err != nil {
@@ -198,8 +209,7 @@ func (m *Manager) FullName(name string) string {
 		m.projectName = m.detectProjectName()
 	}
 
-	full := strings.ReplaceAll(m.getNamePattern(), "{project}", m.projectName)
-	return strings.ReplaceAll(full, "{name}", name)
+	return InterpolateNamePattern(m.getNamePattern(), m.projectName, name)
 }
 
 // ShortName inverts the naming pattern: given a full worktree directory name,

@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `grove to --no-tmux` and `grove new --no-tmux` — per-invocation tmux suppression (no session creation, switch, or attach) without the isolated-Docker coupling of `GROVE_AGENT_MODE`. Hooks and Docker still run (closes #106).
-- `[naming] pattern` now actually controls worktree directory names. Placeholders `{project}` and `{name}` (each required exactly once, literals limited to `[A-Za-z0-9._-]`), default `{project}-{name}`. Read from the project's `.grove/config.toml`; short-name display, lookup, rename, and adopt all honor the pattern. Invalid patterns warn on stderr and fall back to the default. Tmux session names intentionally keep the canonical `{project}-{name}` form. Previously the key was parsed and displayed but never applied (closes #104).
+- `[naming] pattern` now actually controls worktree directory names. Placeholders `{project}` and `{name}` (each required exactly once, literals limited to `[A-Za-z0-9._-]`), default `{project}-{name}`. Loaded via standard config layering (global → project → `config.local.toml`); short-name display, lookup, rename, adopt, and TUI create previews all honor the pattern. Invalid patterns warn on stderr and fall back to the default. Tmux session names intentionally keep the canonical `{project}-{name}` form. Previously the key was parsed and displayed but never applied (closes #104).
 
 ### Fixed
 - `grove to --peek` no longer relocates the caller's tmux client. Peek now skips tmux entirely (session creation, `switch-client`, and attach) in addition to hooks, matching its documented "observational" intent (closes #105).

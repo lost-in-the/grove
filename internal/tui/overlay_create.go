@@ -32,6 +32,7 @@ type CreateState struct {
 	Name           string
 	NameSuggestion string // derived from branch, shown as placeholder
 	ProjectName    string
+	NamePattern    string // worktree naming pattern for directory-name previews
 	BaseBranch     string // set when using existing branch (split)
 	NewBranchName  string // set when creating new branch via selector
 	Error          string

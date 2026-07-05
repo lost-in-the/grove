@@ -112,9 +112,10 @@ Controls how worktree **directories** are named.
 pattern = "{project}-{name}"       # string
 ```
 
-**Read from the project's `.grove/config.toml` only** — worktree naming is a
-repo-level convention that every grove invocation must agree on, so global
-(`~/.config/grove/config.toml`) values are not applied here.
+Follows standard config layering (global → project → `config.local.toml`), the
+same value `grove config` displays. Set it in the project's `.grove/config.toml`
+in shared repos — worktree naming is a repo-level convention, and a personal
+override changes how existing directory names are parsed for display.
 
 Tmux session names always use the canonical `{project}-{name}` form regardless
 of this pattern; they are internal keys and stay stable across pattern changes.

@@ -1070,12 +1070,23 @@ func (m Model) handleDashboardNewKey() (tea.Model, tea.Cmd) {
 		Step:              CreateStepBranchChoice,
 		ReturnView:        ViewDashboard,
 		ProjectName:       m.projectName,
+		NamePattern:       m.worktreeNamePattern(),
 		Branches:          branches,
 		BranchFilterInput: newBranchFilterInput(),
 		BranchNameInput:   newBranchNameInput(),
 		WorktreeBranches:  m.worktreeBranchMap(),
 	}
 	return m, nil
+}
+
+// worktreeNamePattern returns the configured worktree naming pattern for
+// directory-name previews. Empty when config is unavailable — interpolation
+// falls back to the default pattern.
+func (m Model) worktreeNamePattern() string {
+	if m.cfg == nil {
+		return ""
+	}
+	return m.cfg.Naming.Pattern
 }
 
 func (m Model) handleDashboardDeleteKey() (tea.Model, tea.Cmd) {

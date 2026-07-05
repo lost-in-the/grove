@@ -356,22 +356,28 @@ func TestShortNameFromFull(t *testing.T) {
 }
 
 func TestGetNamePatternFromConfig(t *testing.T) {
+	writeConfig := func(t *testing.T, tmpDir, fileName, content string) {
+		t.Helper()
+		groveDir := filepath.Join(tmpDir, ".grove")
+		if err := os.MkdirAll(groveDir, 0755); err != nil {
+			t.Fatalf("Failed to create .grove dir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(groveDir, fileName), []byte(content), 0644); err != nil {
+			t.Fatalf("Failed to write %s: %v", fileName, err)
+		}
+	}
 	setup := func(t *testing.T, configContent string) *Manager {
 		t.Helper()
 		tmpDir := t.TempDir()
+		// Isolate from the developer's real global config (~/.config/grove).
+		t.Setenv("GROVE_CONFIG", filepath.Join(tmpDir, "no-global.toml"))
 		initCmd := exec.Command("git", "init")
 		initCmd.Dir = tmpDir
 		if err := initCmd.Run(); err != nil {
 			t.Fatalf("Failed to init git repo: %v", err)
 		}
 		if configContent != "" {
-			groveDir := filepath.Join(tmpDir, ".grove")
-			if err := os.MkdirAll(groveDir, 0755); err != nil {
-				t.Fatalf("Failed to create .grove dir: %v", err)
-			}
-			if err := os.WriteFile(filepath.Join(groveDir, "config.toml"), []byte(configContent), 0644); err != nil {
-				t.Fatalf("Failed to write config: %v", err)
-			}
+			writeConfig(t, tmpDir, "config.toml", configContent)
 		}
 		return &Manager{repoRoot: tmpDir}
 	}
@@ -401,6 +407,14 @@ func TestGetNamePatternFromConfig(t *testing.T) {
 		m := setup(t, "project_name = \"proj\"\n\n[naming]\npattern = \"{name}_{project}\"\n")
 		if got := m.FullName("foo"); got != "foo_proj" {
 			t.Errorf("FullName(\"foo\") = %q, want %q", got, "foo_proj")
+		}
+	})
+
+	t.Run("config.local.toml overlay overrides project config", func(t *testing.T) {
+		m := setup(t, "[naming]\npattern = \"{project}-{name}\"\n")
+		writeConfig(t, m.repoRoot, "config.local.toml", "[naming]\npattern = \"{name}.{project}\"\n")
+		if got := m.getNamePattern(); got != "{name}.{project}" {
+			t.Errorf("getNamePattern() = %q, want %q (local overlay should win)", got, "{name}.{project}")
 		}
 	})
 }

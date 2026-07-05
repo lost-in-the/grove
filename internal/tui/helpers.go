@@ -273,13 +273,14 @@ func (m Model) findWorktreeByName(name string) *WorktreeItem {
 
 // prefillCreateStateForPR creates a CreateState pre-filled from a PR,
 // skipping directly to the name step.
-func prefillCreateStateForPR(pr *tracker.PullRequest, projectName string, branches []string) *CreateState {
+func prefillCreateStateForPR(pr *tracker.PullRequest, projectName, namePattern string, branches []string) *CreateState {
 	suggestion := worktree.DeriveWorktreeName(pr.Branch, "")
 	ni := newNameInput("")
 	return &CreateState{
 		Step:              CreateStepName,
 		Source:            "pr",
 		ProjectName:       projectName,
+		NamePattern:       namePattern,
 		BaseBranch:        pr.Branch,
 		NameSuggestion:    suggestion,
 		NameInput:         ni,
@@ -292,12 +293,13 @@ func prefillCreateStateForPR(pr *tracker.PullRequest, projectName string, branch
 // prefillCreateStateForIssue creates a CreateState pre-filled from an issue,
 // starting at the branch choice step so the user can pick a base branch.
 // The issue-derived name is carried as NameSuggestion for the Name step.
-func prefillCreateStateForIssue(issue *tracker.Issue, projectName string, branches []string) *CreateState {
+func prefillCreateStateForIssue(issue *tracker.Issue, projectName, namePattern string, branches []string) *CreateState {
 	name := fmt.Sprintf("issue-%d", issue.Number)
 	return &CreateState{
 		Step:              CreateStepBranchChoice,
 		Source:            "issue",
 		ProjectName:       projectName,
+		NamePattern:       namePattern,
 		NameSuggestion:    name,
 		Branches:          branches,
 		BranchFilterInput: newBranchFilterInput(),

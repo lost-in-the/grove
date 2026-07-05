@@ -99,8 +99,9 @@ naming pattern. The default (and recommended) pattern is:
 {project}-{name}
 ```
 
-The pattern is configurable via `[naming] pattern` in the project's
-`.grove/config.toml`. It must contain `{project}` and `{name}` exactly once
+The pattern is configurable via `[naming] pattern` (standard config layering;
+set it in the project's `.grove/config.toml` for shared repos). It must
+contain `{project}` and `{name}` exactly once
 each, and literal characters are limited to `[A-Za-z0-9._-]` — this keeps
 directory names safe for git, tmux, GitHub, and shell use, keeps the project
 identifiable in every directory name, and keeps the short name recoverable.
