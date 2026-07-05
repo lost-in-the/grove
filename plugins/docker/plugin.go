@@ -13,9 +13,11 @@ import (
 	"github.com/lost-in-the/grove/internal/hooks"
 )
 
-// dockerAvailable caches the result of looking up docker / docker-compose in
-// PATH. Repeated Plugin.Init calls (e.g. across multiple commands sharing a
-// process or tests) would otherwise burn an exec.LookPath each time.
+// dockerAvailable caches the result of looking up docker in PATH. Repeated
+// Plugin.Init calls (e.g. across multiple commands sharing a process or
+// tests) would otherwise burn an exec.LookPath each time. Only the docker
+// CLI (compose v2) counts — the standalone docker-compose v1 binary is EOL
+// and no longer supported (issue #107).
 var (
 	dockerAvailableOnce   sync.Once
 	dockerAvailableResult bool
@@ -23,10 +25,6 @@ var (
 
 func dockerAvailable() bool {
 	dockerAvailableOnce.Do(func() {
-		if _, err := exec.LookPath("docker-compose"); err == nil {
-			dockerAvailableResult = true
-			return
-		}
 		if _, err := exec.LookPath("docker"); err == nil {
 			dockerAvailableResult = true
 		}

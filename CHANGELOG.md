@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- Standalone `docker-compose` (Compose v1) support. The docker plugin now requires the `docker` CLI with Compose v2. The v1 fallback only accepted a single `--env-file`, silently bypassing the `.env` layering fix from #98 (v1 has been EOL since mid-2023) (closes #107).
+
+### Added
+- `grove to --no-tmux` and `grove new --no-tmux` — per-invocation tmux suppression (no session creation, switch, or attach) without the isolated-Docker coupling of `GROVE_AGENT_MODE`. Hooks and Docker still run (closes #106).
+- `[naming] pattern` now actually controls worktree directory names. Placeholders `{project}` and `{name}` (each required exactly once, literals limited to `[A-Za-z0-9._-]`), default `{project}-{name}`. Loaded via standard config layering (global → project → `config.local.toml`); short-name display, lookup, rename, adopt, and TUI create previews all honor the pattern. Invalid patterns warn on stderr and fall back to the default. Tmux session names intentionally keep the canonical `{project}-{name}` form. Previously the key was parsed and displayed but never applied (closes #104).
+
+### Fixed
+- `grove to --peek` no longer relocates the caller's tmux client. Peek now skips tmux entirely (session creation, `switch-client`, and attach) in addition to hooks, matching its documented "observational" intent (closes #105).
+
 ## [0.7.1] - 2026-05-11
 
 > **Upgrading:** No breaking changes. New surface added for adopting existing branches into worktrees, auditing per-worktree provisioning, and detecting Docker bind-mount drift. One latent bug fix for projects using `env_file` set to anything other than `.env`.

@@ -21,8 +21,9 @@ If you're an agent helping a user *use* grove (install, configure, run commands)
 ## Critical Rules
 
 ### Worktree Naming
-Worktrees MUST follow `{project}-{name}`: `grove-testing` not `testing`.
-Project name derived from: git remote > directory name > config.
+Worktree directories follow the project's `[naming] pattern` (default `{project}-{name}`: `grove-testing` not `testing`). Patterns must contain `{project}` and `{name}` exactly once each; literals limited to `[A-Za-z0-9._-]`.
+Tmux session names ALWAYS use canonical `{project}-{name}`, regardless of the directory pattern.
+Project name derived from: config > git remote > directory name.
 
 ### Shell Integration Protocol
 Commands that change directories output `cd:/path/to/dir` — shell wrapper intercepts when `GROVE_SHELL=1`.

@@ -53,7 +53,8 @@ func writeAgentHelp(cmd *cobra.Command) {
   grove ls                  List worktrees (table)
   grove ls --json           List worktrees (JSON, machine-readable)
   grove to <name>           Switch to worktree
-  grove to <name> --peek    Switch without hooks (lightweight)
+  grove to <name> --peek    Switch without hooks or tmux (lightweight)
+  grove to <name> --no-tmux Switch with hooks but without tmux
   grove fetch pr/<N>        Create worktree from GitHub PR
   grove fetch issue/<N>     Create worktree from GitHub issue
   grove rm <name>           Remove worktree

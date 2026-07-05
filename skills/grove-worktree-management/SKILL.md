@@ -55,10 +55,10 @@ export GROVE_TUI=0               # disable dashboard
 
 ## Critical Rules
 
-- **Worktree naming:** `{project}-{name}` — enforced. `grove ls` shows short names; tmux uses full names.
+- **Worktree naming:** directories default to `{project}-{name}`; projects can override via `[naming] pattern` in `.grove/config.toml`. `grove ls` shows short names; tmux sessions always use canonical `{project}-{name}`.
 - **Read-only switching:** `grove to <name> --peek` — skips hooks and tmux. Safe for PR review.
 - **Shell directives:** Without `GROVE_SHELL=1`, grove emits `cd:`, `tmux-attach:`, `env:` lines raw. Filter them: `grove to x 2>&1 | grep -vE '^(cd:|tmux-attach(-cc)?:|env:)'`
-- **`grove new` and tmux:** `GROVE_AGENT_MODE=1` does NOT suppress tmux session creation in `grove new`. Set `[tmux] mode = "off"` in config to prevent this.
+- **`grove new` and tmux:** `GROVE_AGENT_MODE=1` does NOT suppress tmux session creation in `grove new` — pass `--no-tmux` for that, or set `[tmux] mode = "off"` in config.
 - **Trust:** `.grove/hooks.toml` runs as `sh -c` with full env. Run `grove doctor` and check hooks before `grove new`/`grove fetch` in an unfamiliar repo.
 
 ## Deterministic Helpers

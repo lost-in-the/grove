@@ -246,37 +246,25 @@ func composeEnvFileArgs(composePath, envFile string) []string {
 	return args
 }
 
-// composeCommand creates a docker-compose command with optional environment variables.
-// dir sets the working directory. envFile, when non-empty and not ".env", adds
-// --env-file to the compose command for YAML variable interpolation; if a .env
-// file also exists alongside, it is layered underneath so compose still reads
-// defaults from .env. env is a list of extra KEY=VALUE strings to add to the
-// process environment.
+// composeCommand creates a `docker compose` (v2) command with optional
+// environment variables. dir sets the working directory. envFile, when
+// non-empty and not ".env", adds --env-file to the compose command for YAML
+// variable interpolation; if a .env file also exists alongside, it is layered
+// underneath so compose still reads defaults from .env. env is a list of
+// extra KEY=VALUE strings to add to the process environment.
+//
+// The standalone docker-compose v1 binary is not supported: v1 is EOL and
+// only accepts a single --env-file, which would silently break the .env
+// layering above (issue #107).
 //
 // Callers set cmd.Stdout = os.Stderr intentionally: grove reserves stdout for
 // shell-integration directives (cd:, env:, tmux-attach:), so Docker output
 // must go to stderr to avoid corrupting the directive stream.
 func composeCommand(dir string, envFile string, env []string, args ...string) *exec.Cmd {
-	if _, err := exec.LookPath("docker"); err == nil {
-		cmdArgs := []string{"compose"}
-		cmdArgs = append(cmdArgs, composeEnvFileArgs(dir, envFile)...)
-		cmdArgs = append(cmdArgs, args...)
-		cmd := exec.Command("docker", cmdArgs...)
-		cmd.Dir = dir
-		if len(env) > 0 {
-			cmd.Env = append(os.Environ(), env...)
-		}
-		return cmd
-	}
-
-	// docker-compose v1 fallback — only supports a single --env-file, so we
-	// can't layer .env underneath. Pass the configured envFile as-is.
-	var cmdArgs []string
-	if envFile != "" && envFile != ".env" {
-		cmdArgs = append(cmdArgs, "--env-file", envFile)
-	}
+	cmdArgs := []string{"compose"}
+	cmdArgs = append(cmdArgs, composeEnvFileArgs(dir, envFile)...)
 	cmdArgs = append(cmdArgs, args...)
-	cmd := exec.Command("docker-compose", cmdArgs...)
+	cmd := exec.Command("docker", cmdArgs...)
 	cmd.Dir = dir
 	if len(env) > 0 {
 		cmd.Env = append(os.Environ(), env...)

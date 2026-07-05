@@ -175,7 +175,7 @@ func (m Model) handlePREnter(s *PRViewState, filtered []*tracker.PullRequest) (t
 
 func (m Model) openCreateWizardForPR(pr *tracker.PullRequest) (tea.Model, tea.Cmd) {
 	branches, _ := git.ListAllBranches(m.projectRoot)
-	m.createState = prefillCreateStateForPR(pr, m.projectName, branches)
+	m.createState = prefillCreateStateForPR(pr, m.projectName, m.worktreeNamePattern(), branches)
 	m.createState.ReturnView = ViewPRs
 	m.createState.WorktreeBranches = m.worktreeBranchMap()
 	m.createState.ExistingWorktree = checkDuplicateWorktree(

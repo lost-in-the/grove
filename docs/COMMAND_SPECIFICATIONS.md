@@ -92,18 +92,36 @@ Priority 3: Root directory name
 
 ### Worktree Naming Convention
 
-**CRITICAL:** All worktrees created by grove follow this pattern:
+**CRITICAL:** All worktree directories created by grove follow the project's
+naming pattern. The default (and recommended) pattern is:
 
 ```
-{project}-{worktree-name}
+{project}-{name}
 ```
 
-**Examples:**
+The pattern is configurable via `[naming] pattern` (standard config layering;
+set it in the project's `.grove/config.toml` for shared repos). It must
+contain `{project}` and `{name}` exactly once
+each, and literal characters are limited to `[A-Za-z0-9._-]` — this keeps
+directory names safe for git, tmux, GitHub, and shell use, keeps the project
+identifiable in every directory name, and keeps the short name recoverable.
+Invalid patterns are ignored with a stderr warning and the default is used.
+
+**Tmux sessions always use the canonical `{project}-{name}` form**, regardless
+of the directory pattern — session names are grove-internal keys and stay
+stable across pattern changes.
+
+**Examples (default pattern):**
 | Project | User Input | Worktree Directory | Tmux Session |
 |---------|------------|-------------------|--------------|
 | grove | testing | grove-testing | grove-testing |
 | grove | feature-auth | grove-feature-auth | grove-feature-auth |
 | my-app | hotfix-123 | my-app-hotfix-123 | my-app-hotfix-123 |
+
+**Example (custom pattern `{name}.{project}`):**
+| Project | User Input | Worktree Directory | Tmux Session |
+|---------|------------|-------------------|--------------|
+| grove | testing | testing.grove | grove-testing |
 
 **Rationale:** 
 - Prevents naming collisions across projects
@@ -153,8 +171,7 @@ my-app-main: 1 windows
 When creating a worktree, grove creates a branch if needed:
 
 ```
-Default pattern: {worktree-name}
-Configurable: {type}/{description}
+Default: branch name = worktree name (override with --branch)
 
 Examples:
   w new testing          →  branch: testing
@@ -480,8 +497,9 @@ Arguments:
   name    Name of worktree to switch to (required)
 
 Flags:
-  -j, --json   Output as JSON with switch_to field
-      --peek   Lightweight switch: skip hooks (no Docker side effects)
+  -j, --json      Output as JSON with switch_to field
+      --peek      Lightweight switch: skip hooks and tmux (no Docker or session side effects)
+      --no-tmux   Skip tmux session creation/switch/attach for this invocation
 ```
 
 **Behavior:**
@@ -500,7 +518,7 @@ Flags:
    - If the dirty check itself fails (e.g., git error), treat the worktree as clean and proceed — never block the user on a failed status check
    - `--peek` always bypasses dirty checks (peek is a lightweight switch with no side effects)
 
-3. **Handle tmux session:**
+3. **Handle tmux session** (skipped entirely with `--peek`, `--no-tmux`, or `GROVE_AGENT_MODE`):
    - If session exists and inside tmux: `tmux switch-client -t {session}`
    - If session exists and outside tmux: `tmux attach -t {session}` (or `tmux -CC attach` in iTerm2 when `control_mode` is enabled)
    - If session doesn't exist: Create it, then attach/switch
@@ -511,7 +529,7 @@ Flags:
      - `"prompt"`: Ask user before starting/stopping containers. Falls back to `auto` in non-interactive sessions.
      - `"off"`: Skip container start/stop entirely. In external mode, env var persistence and env directives still run — only `stopServices()` and `startServices()` are skipped.
 
-5. **Switch tmux session** (if inside tmux): `tmux switch-client -t {session}`
+5. **Switch tmux session** (if inside tmux, and neither `--peek` nor `--no-tmux` nor `GROVE_AGENT_MODE` is set): `tmux switch-client -t {session}`
 
 6. **Fire post-switch hooks** (Docker start, etc.) before tmux switch so progress is visible in current session (unless `--peek`). Container lifecycle gating from step 4 applies here too.
 
@@ -620,6 +638,7 @@ Please be more specific.
 | Dirty worktree, prompt mode (TTY) | Show dirty files, ask user to confirm, abort or proceed |
 | Dirty worktree, prompt mode (non-TTY) | Fall back to refuse behavior (exit 1) |
 | Dirty worktree with `--peek` | Bypass dirty check entirely, proceed with switch |
+| `--peek` or `--no-tmux` | No tmux session is created, switched, or attached; cd directive still emitted |
 | Dirty check fails (git error) | Treat as clean, proceed with switch |
 | container_switch = "off" | Skip Docker start/stop; env var persistence still runs in external mode |
 | container_switch = "prompt" (TTY) | Ask before start/stop; user can decline |
@@ -1927,8 +1946,7 @@ Switch:
   dirty_handling:   prompt
 
 Naming:
-  pattern:          {type}/{description}
-  max_length:       50
+  pattern:          {project}-{name}
 
 Tmux:
   prefix:           (none, uses naming pattern)

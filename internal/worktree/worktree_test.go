@@ -116,7 +116,7 @@ detached
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			trees := parseWorktreeList(tt.input, "/home/user/project", "project")
+			trees := parseWorktreeList(tt.input, "/home/user/project", "project", DefaultNamePattern)
 			if len(trees) != tt.wantCount {
 				t.Errorf("parseWorktreeList() got %d worktrees, want %d", len(trees), tt.wantCount)
 			}

@@ -269,3 +269,152 @@ func TestDetectProjectNameFromConfig(t *testing.T) {
 		t.Errorf("detectProjectName() with config = %q, want %q", got, want)
 	}
 }
+
+func TestValidateNamePattern(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		wantErr bool
+	}{
+		{name: "default pattern", pattern: "{project}-{name}", wantErr: false},
+		{name: "reversed order", pattern: "{name}-{project}", wantErr: false},
+		{name: "underscore separator", pattern: "{project}_{name}", wantErr: false},
+		{name: "dot separator", pattern: "{name}.{project}", wantErr: false},
+		{name: "no separator", pattern: "{project}{name}", wantErr: false},
+		{name: "literal affixes", pattern: "wt-{project}-{name}", wantErr: false},
+		{name: "missing project", pattern: "{name}", wantErr: true},
+		{name: "missing name", pattern: "{project}", wantErr: true},
+		{name: "empty", pattern: "", wantErr: true},
+		{name: "duplicate name", pattern: "{project}-{name}-{name}", wantErr: true},
+		{name: "duplicate project", pattern: "{project}{project}-{name}", wantErr: true},
+		{name: "path separator", pattern: "{project}/{name}", wantErr: true},
+		{name: "whitespace literal", pattern: "{project} {name}", wantErr: true},
+		{name: "shell metachar", pattern: "{project}${name}", wantErr: true},
+		{name: "legacy branch tokens", pattern: "{type}/{description}", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateNamePattern(tt.pattern)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateNamePattern(%q) error = %v, wantErr %v", tt.pattern, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestFullNameWithPattern(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		project string
+		short   string
+		want    string
+	}{
+		{name: "default", pattern: "{project}-{name}", project: "grove", short: "testing", want: "grove-testing"},
+		{name: "reversed", pattern: "{name}.{project}", project: "grove", short: "testing", want: "testing.grove"},
+		{name: "underscore", pattern: "{project}_{name}", project: "myapp", short: "pr-42", want: "myapp_pr-42"},
+		{name: "literal prefix", pattern: "wt-{project}-{name}", project: "myapp", short: "auth", want: "wt-myapp-auth"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &Manager{repoRoot: "/fake/path", projectName: tt.project, namePattern: tt.pattern}
+			if got := m.FullName(tt.short); got != tt.want {
+				t.Errorf("FullName(%q) = %q, want %q", tt.short, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestShortNameFromFull(t *testing.T) {
+	tests := []struct {
+		name    string
+		full    string
+		project string
+		pattern string
+		want    string
+		wantOK  bool
+	}{
+		{name: "default pattern", full: "grove-testing", project: "grove", pattern: "{project}-{name}", want: "testing", wantOK: true},
+		{name: "reversed pattern", full: "testing.grove", project: "grove", pattern: "{name}.{project}", want: "testing", wantOK: true},
+		{name: "hyphenated short name", full: "grove-feature-auth", project: "grove", pattern: "{project}-{name}", want: "feature-auth", wantOK: true},
+		{name: "no match returns input", full: "unrelated-dir", project: "grove", pattern: "{project}-{name}", want: "unrelated-dir", wantOK: false},
+		{name: "prefix only no name", full: "grove-", project: "grove", pattern: "{project}-{name}", want: "grove-", wantOK: false},
+		{name: "literal affix pattern", full: "wt-grove-auth", project: "grove", pattern: "wt-{project}-{name}", want: "auth", wantOK: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := shortNameFromFull(tt.full, tt.project, tt.pattern)
+			if got != tt.want || ok != tt.wantOK {
+				t.Errorf("shortNameFromFull(%q, %q, %q) = (%q, %v), want (%q, %v)",
+					tt.full, tt.project, tt.pattern, got, ok, tt.want, tt.wantOK)
+			}
+		})
+	}
+}
+
+func TestGetNamePatternFromConfig(t *testing.T) {
+	writeConfig := func(t *testing.T, tmpDir, fileName, content string) {
+		t.Helper()
+		groveDir := filepath.Join(tmpDir, ".grove")
+		if err := os.MkdirAll(groveDir, 0755); err != nil {
+			t.Fatalf("Failed to create .grove dir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(groveDir, fileName), []byte(content), 0644); err != nil {
+			t.Fatalf("Failed to write %s: %v", fileName, err)
+		}
+	}
+	setup := func(t *testing.T, configContent string) *Manager {
+		t.Helper()
+		tmpDir := t.TempDir()
+		// Isolate from the developer's real global config (~/.config/grove).
+		t.Setenv("GROVE_CONFIG", filepath.Join(tmpDir, "no-global.toml"))
+		initCmd := exec.Command("git", "init")
+		initCmd.Dir = tmpDir
+		if err := initCmd.Run(); err != nil {
+			t.Fatalf("Failed to init git repo: %v", err)
+		}
+		if configContent != "" {
+			writeConfig(t, tmpDir, "config.toml", configContent)
+		}
+		return &Manager{repoRoot: tmpDir}
+	}
+
+	t.Run("no config falls back to default", func(t *testing.T) {
+		m := setup(t, "")
+		if got := m.getNamePattern(); got != DefaultNamePattern {
+			t.Errorf("getNamePattern() = %q, want %q", got, DefaultNamePattern)
+		}
+	})
+
+	t.Run("valid pattern is used", func(t *testing.T) {
+		m := setup(t, "[naming]\npattern = \"{name}.{project}\"\n")
+		if got := m.getNamePattern(); got != "{name}.{project}" {
+			t.Errorf("getNamePattern() = %q, want %q", got, "{name}.{project}")
+		}
+	})
+
+	t.Run("invalid pattern falls back to default", func(t *testing.T) {
+		m := setup(t, "[naming]\npattern = \"{name}\"\n")
+		if got := m.getNamePattern(); got != DefaultNamePattern {
+			t.Errorf("getNamePattern() = %q, want %q", got, DefaultNamePattern)
+		}
+	})
+
+	t.Run("pattern applies end to end via FullName", func(t *testing.T) {
+		m := setup(t, "project_name = \"proj\"\n\n[naming]\npattern = \"{name}_{project}\"\n")
+		if got := m.FullName("foo"); got != "foo_proj" {
+			t.Errorf("FullName(\"foo\") = %q, want %q", got, "foo_proj")
+		}
+	})
+
+	t.Run("config.local.toml overlay overrides project config", func(t *testing.T) {
+		m := setup(t, "[naming]\npattern = \"{project}-{name}\"\n")
+		writeConfig(t, m.repoRoot, "config.local.toml", "[naming]\npattern = \"{name}.{project}\"\n")
+		if got := m.getNamePattern(); got != "{name}.{project}" {
+			t.Errorf("getNamePattern() = %q, want %q (local overlay should win)", got, "{name}.{project}")
+		}
+	})
+}

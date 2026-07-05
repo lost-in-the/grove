@@ -25,7 +25,7 @@ func LoadDefaults() *Config {
 			ContainerSwitch: "auto",
 		},
 		Naming: NamingConfig{
-			Pattern: "{type}/{description}",
+			Pattern: "{project}-{name}",
 		},
 		Tmux: TmuxConfig{
 			Mode:        "auto",

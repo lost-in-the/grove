@@ -4,13 +4,17 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/binary"
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/BurntSushi/toml"
 
 	"github.com/lost-in-the/grove/internal/cmdexec"
+	"github.com/lost-in-the/grove/internal/config"
 )
 
 // TestEnvNumber derives a stable TEST_ENV_NUMBER in range [50, 99] from a worktree name.
@@ -24,6 +28,55 @@ func TestEnvNumber(name string) int {
 // projectConfig represents the project-level configuration
 type projectConfig struct {
 	ProjectName string `toml:"project_name"`
+}
+
+// DefaultNamePattern is the worktree directory naming pattern used when
+// [naming] pattern is unset or invalid.
+const DefaultNamePattern = "{project}-{name}"
+
+// namePatternLiterals restricts literal (non-placeholder) characters to ones
+// that are safe in directory names, git branch names, tmux targets, and
+// GitHub URLs.
+var namePatternLiterals = regexp.MustCompile(`^[A-Za-z0-9._-]*$`)
+
+// ValidateNamePattern checks that a worktree naming pattern is usable:
+// exactly one {project} and one {name} placeholder (so full names stay
+// project-identifiable and short names are recoverable), with literal
+// characters limited to [A-Za-z0-9._-].
+func ValidateNamePattern(pattern string) error {
+	if strings.Count(pattern, "{project}") != 1 {
+		return fmt.Errorf("pattern must contain {project} exactly once")
+	}
+	if strings.Count(pattern, "{name}") != 1 {
+		return fmt.Errorf("pattern must contain {name} exactly once")
+	}
+	literals := strings.ReplaceAll(pattern, "{project}", "")
+	literals = strings.ReplaceAll(literals, "{name}", "")
+	if !namePatternLiterals.MatchString(literals) {
+		return fmt.Errorf("literal characters must match [A-Za-z0-9._-] (got %q)", literals)
+	}
+	return nil
+}
+
+// invalidPatternWarning ensures the invalid-pattern warning prints at most
+// once per process even when several Managers are created.
+var invalidPatternWarning sync.Once
+
+// EffectiveNamePattern returns pattern when it is a valid naming pattern and
+// DefaultNamePattern otherwise (including empty input).
+func EffectiveNamePattern(pattern string) string {
+	if ValidateNamePattern(pattern) == nil {
+		return pattern
+	}
+	return DefaultNamePattern
+}
+
+// InterpolateNamePattern builds a full worktree directory name from a naming
+// pattern. Invalid or empty patterns fall back to DefaultNamePattern, so
+// callers (e.g. UI previews) always produce the name grove would create.
+func InterpolateNamePattern(pattern, project, name string) string {
+	full := strings.ReplaceAll(EffectiveNamePattern(pattern), "{project}", project)
+	return strings.ReplaceAll(full, "{name}", name)
 }
 
 // detectProjectName determines the project name using priority:
@@ -120,14 +173,71 @@ func DeriveWorktreeName(branch, strategy string) string {
 	return branch
 }
 
-// FullName returns the full worktree name with project prefix.
-// Format: {project}-{name}
-// Example: grove-cli-testing
+// getNamePattern returns the worktree naming pattern, loaded through the
+// standard layered config (defaults → global → project → config.local.toml)
+// anchored at the main worktree's .grove directory — the same value `grove
+// config` displays. Invalid patterns fall back to DefaultNamePattern with a
+// stderr warning so the fallback is visible.
+func (m *Manager) getNamePattern() string {
+	if m.namePattern != "" {
+		return m.namePattern
+	}
+	m.namePattern = DefaultNamePattern
+
+	groveDir := filepath.Join(m.getMainWorktreePath(), ".grove")
+	cfg, err := config.LoadFromGroveDir(groveDir)
+	if err != nil || cfg == nil {
+		return m.namePattern
+	}
+	if err := ValidateNamePattern(cfg.Naming.Pattern); err != nil {
+		invalidPatternWarning.Do(func() {
+			fmt.Fprintf(os.Stderr, "grove: warning: ignoring invalid [naming] pattern %q: %v (using %q)\n",
+				cfg.Naming.Pattern, err, DefaultNamePattern)
+		})
+		return m.namePattern
+	}
+	m.namePattern = cfg.Naming.Pattern
+	return m.namePattern
+}
+
+// FullName returns the full worktree directory name, built from the project
+// naming pattern (default "{project}-{name}", e.g. grove-cli-testing).
+// Tmux session names intentionally do NOT follow the pattern — they always
+// use the canonical {project}-{name} form (see TmuxSessionName).
 func (m *Manager) FullName(name string) string {
 	if m.projectName == "" {
 		m.projectName = m.detectProjectName()
 	}
 
-	// Return project-name format
-	return m.projectName + "-" + name
+	return InterpolateNamePattern(m.getNamePattern(), m.projectName, name)
+}
+
+// ShortName inverts the naming pattern: given a full worktree directory name,
+// it extracts the short {name} part. Names that don't match the pattern are
+// returned unchanged (e.g. worktrees created before a pattern change or by
+// raw `git worktree add`).
+func (m *Manager) ShortName(fullName string) string {
+	if m.projectName == "" {
+		m.projectName = m.detectProjectName()
+	}
+	short, _ := shortNameFromFull(fullName, m.projectName, m.getNamePattern())
+	return short
+}
+
+// shortNameFromFull extracts the {name} segment from a full directory name by
+// matching the pattern's literal prefix and suffix around {name}. Returns the
+// input unchanged (and false) when it doesn't match the pattern.
+func shortNameFromFull(fullName, projectName, pattern string) (string, bool) {
+	before, after, found := strings.Cut(pattern, "{name}")
+	if !found {
+		return fullName, false
+	}
+	prefix := strings.ReplaceAll(before, "{project}", projectName)
+	suffix := strings.ReplaceAll(after, "{project}", projectName)
+	if len(fullName) > len(prefix)+len(suffix) &&
+		strings.HasPrefix(fullName, prefix) &&
+		strings.HasSuffix(fullName, suffix) {
+		return fullName[len(prefix) : len(fullName)-len(suffix)], true
+	}
+	return fullName, false
 }

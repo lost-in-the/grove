@@ -16,8 +16,9 @@ import (
 )
 
 var (
-	toJSON bool
-	toPeek bool
+	toJSON   bool
+	toPeek   bool
+	toNoTmux bool
 )
 
 var toCmd = &cobra.Command{
@@ -27,8 +28,13 @@ var toCmd = &cobra.Command{
 	Long: `Switch to a worktree by name. If a tmux session exists for the worktree, switch to it.
 If no tmux session exists, create one.
 
-Use --peek for a lightweight switch that skips hooks (no Docker side effects).
-Useful for code review or quick file checks.
+Use --peek for a lightweight switch that skips hooks and tmux entirely
+(no Docker side effects, no tmux client relocation). Useful for code review
+or quick file checks.
+
+Use --no-tmux to switch without creating, switching, or attaching tmux
+sessions — hooks still fire. Useful for automation running inside an
+existing tmux session.
 
 When using shell integration, this will also change your current directory.`,
 	Args:              cobra.MaximumNArgs(1),
@@ -165,10 +171,7 @@ When using shell integration, this will also change your current directory.`,
 			tmuxMode = tmuxModeAuto
 		}
 		useCC := tmux.ShouldUseControlMode(cfg.Tmux.ControlMode)
-		// Agent mode: suppress tmux to prevent terminal takeover
-		if cfg.AgentMode {
-			tmuxMode = tmuxModeOff
-		}
+		tmuxMode = effectiveTmuxMode(tmuxMode, cfg.AgentMode, toNoTmux, toPeek)
 
 		// Handle tmux session (unless mode is "off")
 		var sessionName string
@@ -280,6 +283,17 @@ When using shell integration, this will also change your current directory.`,
 	}),
 }
 
+// effectiveTmuxMode returns the tmux mode after per-invocation overrides.
+// Agent mode suppresses tmux to prevent terminal takeover; --no-tmux does the
+// same for a single invocation without implying agent Docker isolation; --peek
+// is observational and must never relocate the caller's tmux client (#105).
+func effectiveTmuxMode(mode string, agentMode, noTmux, peek bool) string {
+	if agentMode || noTmux || peek {
+		return tmuxModeOff
+	}
+	return mode
+}
+
 // handleDirectoryDrift detects if a tmux session's active pane has drifted
 // from the worktree root and corrects it based on the configured on_switch mode.
 func handleDirectoryDrift(sessionName, worktreePath, onSwitch string, stderr *cli.Writer) {
@@ -313,6 +327,7 @@ func handleDirectoryDrift(sessionName, worktreePath, onSwitch string, stderr *cl
 
 func init() {
 	toCmd.Flags().BoolVarP(&toJSON, "json", "j", false, "Output as JSON with switch_to field")
-	toCmd.Flags().BoolVar(&toPeek, "peek", false, "Lightweight switch: skip hooks (no Docker side effects)")
+	toCmd.Flags().BoolVar(&toPeek, "peek", false, "Lightweight switch: skip hooks and tmux (no Docker or session side effects)")
+	toCmd.Flags().BoolVar(&toNoTmux, "no-tmux", false, "Skip tmux session creation/switch/attach for this invocation")
 	rootCmd.AddCommand(toCmd)
 }

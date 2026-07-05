@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+
+	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 // renderCreateV2 is the V2 dispatcher for the create wizard overlay.
@@ -255,7 +257,8 @@ func renderCreateNameV2(s *CreateState, width int) string {
 		effectiveName = s.NameSuggestion
 	}
 	if s.ProjectName != "" && effectiveName != "" {
-		b.WriteString(d.indent + Styles.DetailDim.Render(fmt.Sprintf("→ %s-%s", s.ProjectName, effectiveName)) + "\n")
+		full := worktree.InterpolateNamePattern(s.NamePattern, s.ProjectName, effectiveName)
+		b.WriteString(d.indent + Styles.DetailDim.Render("→ "+full) + "\n")
 	}
 
 	if s.Error != "" {
@@ -337,7 +340,7 @@ func renderContextSummary(s *CreateState, width int) string {
 	if s.Name != "" {
 		lines = append(lines, fmt.Sprintf("Name:     %s", s.Name))
 		if s.ProjectName != "" {
-			lines = append(lines, fmt.Sprintf("Full:     %s-%s", s.ProjectName, s.Name))
+			lines = append(lines, fmt.Sprintf("Full:     %s", worktree.InterpolateNamePattern(s.NamePattern, s.ProjectName, s.Name)))
 		}
 	}
 
