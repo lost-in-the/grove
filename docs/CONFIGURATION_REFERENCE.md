@@ -758,8 +758,8 @@ on_failure  = "ignore"
 2. **Wrong file location** — hooks must be in `.grove/hooks.toml` (project) or
    `~/.config/grove/hooks.toml` (global). A file named `hooks.toml` in the repo root is ignored.
 
-3. **Using `--peek`** — `grove to <name> --peek` skips all hooks by design. Remove `--peek` for
-   a full switch with hooks.
+3. **Using `--peek`** — `grove to <name> --peek` skips all hooks (and tmux) by design. Remove
+   `--peek` for a full switch with hooks.
 
 4. **Branch matches a skip pattern** — check `[[overrides]]` entries in your hooks file.
    An override with `skip_hooks = true` silences all hooks for matching branches:
@@ -792,7 +792,7 @@ These are read at runtime and never written to config files.
 | `GROVE_SHELL` | `1` | Set by shell integration. Enables the directive protocol (cd:, env:, tmux-attach:, tmux-attach-cc:). |
 | `GROVE_SHELL_VERSION` | integer | Set by shell integration. Binary warns if shell is outdated. |
 | `GROVE_TUI` | `0` to disable | Set to `0` to disable TUI mode. Bare `grove` shows help instead. Default: enabled. |
-| `GROVE_AGENT_MODE` | any non-empty | Forces isolated Docker strategy and suppresses tmux for AI agent workloads. |
+| `GROVE_AGENT_MODE` | any non-empty | Forces isolated Docker strategy and suppresses tmux for AI agent workloads. To suppress tmux alone for one invocation, use `--no-tmux` on `grove to` / `grove new` instead. |
 | `GROVE_LOG` | `1` or path | Enable command-level logging. `1` writes to `~/.grove/grove.log`. |
 | `GROVE_DEBUG` | `1` or path | Enable TUI debug logging. `1` writes to `~/.grove-debug.log`. |
 | `GROVE_NO_COLOR` | any non-empty | Disable all colored output. Also respected: `NO_COLOR`. |

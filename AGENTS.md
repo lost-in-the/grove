@@ -30,8 +30,10 @@ export GROVE_TUI=0               # disable dashboard; bare `grove` prints usage
 ```
 
 > `GROVE_AGENT_MODE=1` suppresses tmux attachment in `grove to` but **not** session
-> creation in `grove new`. To fully disable tmux, set `[tmux] mode = "off"` in
-> `.grove/config.toml`.
+> creation in `grove new` — and it also forces the isolated Docker strategy. For
+> per-invocation tmux suppression without the Docker coupling, pass `--no-tmux` to
+> `grove to` / `grove new` (on `new` it also skips session creation). To fully
+> disable tmux, set `[tmux] mode = "off"` in `.grove/config.toml`.
 
 ---
 
@@ -40,7 +42,7 @@ export GROVE_TUI=0               # disable dashboard; bare `grove` prints usage
 | Command | Purpose | `--json` | Mutates |
 |---------|---------|:--------:|:-------:|
 | `grove new [name]` | Create worktree + branch + Docker + tmux (aliases: `spawn`, `n`) | — | ✓ |
-| `grove to [name]` | Switch context atomically; `--peek` skips hooks/tmux (aliases: `switch`, `t`) | — | ✓ |
+| `grove to [name]` | Switch context atomically; `--peek` skips hooks/tmux, `--no-tmux` skips tmux only (aliases: `switch`, `t`) | — | ✓ |
 | `grove fetch <pr\|issue>/<n>` | Create worktree from GitHub PR/issue; needs `gh` (aliases: `f`) | — | ✓ |
 | `grove ls` | List all worktrees in this project (aliases: `list`, `l`) | ✓ | — |
 | `grove here` | Current worktree status (aliases: `h`) | ✓ | — |

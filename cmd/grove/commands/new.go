@@ -26,6 +26,7 @@ var (
 	newFromBranch string // Check out an existing branch in the new worktree
 	newDirty      bool   // Carry over `git diff HEAD` from the current worktree
 	newNoSwitch   bool   // Skip auto-switching to the new worktree
+	newNoTmux     bool   // Skip tmux session creation/switch
 )
 
 var newCmd = &cobra.Command{
@@ -41,6 +42,9 @@ Use --from to specify the base ref for the new branch (default: HEAD).
 
 When Docker agent stacks are configured, containers start automatically.
 Use --no-docker to skip Docker auto-start.
+
+Use --no-tmux to skip tmux entirely for this invocation: no session is
+created and your tmux client is not switched. Docker and hooks still run.
 
 Use --mirror to create an environment worktree that tracks a remote branch.
 Environment worktrees are read-only and can be synced with 'grove sync'.
@@ -225,8 +229,9 @@ Examples:
 
 		projectName := mgr.GetProjectName()
 
-		// Create tmux session if tmux is available
-		if tmux.IsTmuxAvailable() {
+		// Create tmux session if tmux is available (skip with --no-tmux; agent
+		// mode intentionally still creates the detached session — see AGENTS.md)
+		if !newNoTmux && tmux.IsTmuxAvailable() {
 			sessionName := worktree.TmuxSessionName(projectName, name)
 			if err := tmux.CreateSession(sessionName, wt.Path); err != nil {
 				if !newJSON {
@@ -284,8 +289,8 @@ Examples:
 					}
 				}
 
-				// Switch tmux session if inside tmux (skip in agent mode)
-				if !ctx.Config.AgentMode && tmux.IsTmuxAvailable() && tmux.IsInsideTmux() {
+				// Switch tmux session if inside tmux (skip in agent mode or --no-tmux)
+				if !ctx.Config.AgentMode && !newNoTmux && tmux.IsTmuxAvailable() && tmux.IsInsideTmux() {
 					sessionName := worktree.TmuxSessionName(projectName, name)
 					if err := tmux.SwitchSession(sessionName); err != nil {
 						cli.Warning(w, "Failed to switch session: %v", err)
@@ -356,6 +361,7 @@ func init() {
 	newCmd.Flags().BoolVar(&newDirty, "dirty", false, "Carry over `git diff HEAD` from the current worktree (requires --from-branch)")
 	newCmd.Flags().StringVar(&newMirror, "mirror", "", "Create environment worktree tracking a remote branch (e.g., origin/main)")
 	newCmd.Flags().BoolVar(&newNoDocker, "no-docker", false, "Skip Docker auto-start")
+	newCmd.Flags().BoolVar(&newNoTmux, "no-tmux", false, "Skip tmux session creation/switch for this invocation")
 	newCmd.Flags().BoolVarP(&newNoSwitch, "no-switch", "n", false, "Stay in current worktree after creation")
 	newCmd.MarkFlagsMutuallyExclusive("mirror", "from")
 	newCmd.MarkFlagsMutuallyExclusive("mirror", "branch")

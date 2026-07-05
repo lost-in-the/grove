@@ -480,8 +480,9 @@ Arguments:
   name    Name of worktree to switch to (required)
 
 Flags:
-  -j, --json   Output as JSON with switch_to field
-      --peek   Lightweight switch: skip hooks (no Docker side effects)
+  -j, --json      Output as JSON with switch_to field
+      --peek      Lightweight switch: skip hooks and tmux (no Docker or session side effects)
+      --no-tmux   Skip tmux session creation/switch/attach for this invocation
 ```
 
 **Behavior:**
@@ -500,7 +501,7 @@ Flags:
    - If the dirty check itself fails (e.g., git error), treat the worktree as clean and proceed — never block the user on a failed status check
    - `--peek` always bypasses dirty checks (peek is a lightweight switch with no side effects)
 
-3. **Handle tmux session:**
+3. **Handle tmux session** (skipped entirely with `--peek`, `--no-tmux`, or `GROVE_AGENT_MODE`):
    - If session exists and inside tmux: `tmux switch-client -t {session}`
    - If session exists and outside tmux: `tmux attach -t {session}` (or `tmux -CC attach` in iTerm2 when `control_mode` is enabled)
    - If session doesn't exist: Create it, then attach/switch
@@ -511,7 +512,7 @@ Flags:
      - `"prompt"`: Ask user before starting/stopping containers. Falls back to `auto` in non-interactive sessions.
      - `"off"`: Skip container start/stop entirely. In external mode, env var persistence and env directives still run — only `stopServices()` and `startServices()` are skipped.
 
-5. **Switch tmux session** (if inside tmux): `tmux switch-client -t {session}`
+5. **Switch tmux session** (if inside tmux, and neither `--peek` nor `--no-tmux` nor `GROVE_AGENT_MODE` is set): `tmux switch-client -t {session}`
 
 6. **Fire post-switch hooks** (Docker start, etc.) before tmux switch so progress is visible in current session (unless `--peek`). Container lifecycle gating from step 4 applies here too.
 
@@ -620,6 +621,7 @@ Please be more specific.
 | Dirty worktree, prompt mode (TTY) | Show dirty files, ask user to confirm, abort or proceed |
 | Dirty worktree, prompt mode (non-TTY) | Fall back to refuse behavior (exit 1) |
 | Dirty worktree with `--peek` | Bypass dirty check entirely, proceed with switch |
+| `--peek` or `--no-tmux` | No tmux session is created, switched, or attached; cd directive still emitted |
 | Dirty check fails (git error) | Treat as clean, proceed with switch |
 | container_switch = "off" | Skip Docker start/stop; env var persistence still runs in external mode |
 | container_switch = "prompt" (TTY) | Ask before start/stop; user can decline |

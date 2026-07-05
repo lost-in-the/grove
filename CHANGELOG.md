@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `grove to --no-tmux` and `grove new --no-tmux` — per-invocation tmux suppression (no session creation, switch, or attach) without the isolated-Docker coupling of `GROVE_AGENT_MODE`. Hooks and Docker still run (closes #106).
+
+### Fixed
+- `grove to --peek` no longer relocates the caller's tmux client. Peek now skips tmux entirely (session creation, `switch-client`, and attach) in addition to hooks, matching its documented "observational" intent (closes #105).
+
 ## [0.7.1] - 2026-05-11
 
 > **Upgrading:** No breaking changes. New surface added for adopting existing branches into worktrees, auditing per-worktree provisioning, and detecting Docker bind-mount drift. One latent bug fix for projects using `env_file` set to anything other than `.env`.
