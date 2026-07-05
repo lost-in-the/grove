@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- Standalone `docker-compose` (Compose v1) support. The docker plugin now requires the `docker` CLI with Compose v2. The v1 fallback only accepted a single `--env-file`, silently bypassing the `.env` layering fix from #98 (v1 has been EOL since mid-2023) (closes #107).
+
 ### Added
 - `grove to --no-tmux` and `grove new --no-tmux` — per-invocation tmux suppression (no session creation, switch, or attach) without the isolated-Docker coupling of `GROVE_AGENT_MODE`. Hooks and Docker still run (closes #106).
 

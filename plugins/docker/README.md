@@ -8,7 +8,7 @@ The Docker plugin provides automatic container lifecycle management for Grove wo
 - **Multi-compose file support**: Supports docker-compose.yml, docker-compose.yaml, compose.yml, compose.yaml
 - **Service-level control**: Manage individual services or all at once
 - **Log streaming**: Tail logs from running containers
-- **Modern Docker Compose**: Works with both `docker compose` and `docker-compose`
+- **Modern Docker Compose**: Uses `docker compose` (Compose v2)
 - **External compose mode**: Manage projects whose Docker services live in a shared orchestrator directory
 
 ## Commands
@@ -338,12 +338,13 @@ Run `grove doctor` to check that your loader is detected and configured correctl
 
 ## Requirements
 
-The Docker plugin requires one of the following:
+The Docker plugin requires:
 
 - **Docker with Compose V2**: `docker compose` command available
-- **Docker Compose V1**: `docker-compose` command available
 
-The plugin automatically detects which version is available and uses the appropriate command.
+The standalone `docker-compose` (Compose v1) binary is not supported — v1 is
+EOL and only accepts a single `--env-file`, which breaks grove's `.env`
+layering for non-default `env_file` settings.
 
 ## How It Works
 
@@ -448,11 +449,12 @@ w to feature-auth
 
 ## Troubleshooting
 
-### "docker or docker-compose not found"
+### "docker not found"
 
-The plugin is automatically disabled if neither `docker` nor `docker-compose` is found in your PATH.
+The plugin is automatically disabled if `docker` is not found in your PATH.
+The standalone `docker-compose` (v1) binary does not count — Compose v2 is required.
 
-**Solution**: Install Docker and ensure it's in your PATH.
+**Solution**: Install Docker (with Compose v2) and ensure it's in your PATH.
 
 ### "no docker-compose file found"
 
