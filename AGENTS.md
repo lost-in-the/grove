@@ -14,7 +14,7 @@ machine-parseable.
 
 - Export the env block below before any grove invocation
 - Always use `--json` for status queries; never scrape human-readable output
-- Worktrees are named `{project}-{name}` (e.g., `myapp-pr-42`) — this is enforced
+- Worktree directories default to `{project}-{name}` (e.g., `myapp-pr-42`); projects can override via `[naming] pattern` — check `.grove/config.toml`
 - `grove ls` and `grove here` show **short** names; tmux sessions use **full** names
 - Read the **Trust model** section before `grove new`/`grove fetch` in an unfamiliar repo
 - `skills/grove-worktree-management/` has deterministic Python helpers for common tasks
@@ -145,10 +145,12 @@ for the full multi-agent workflow.
 
 ## Worktree Naming
 
-Grove enforces `{project}-{name}` — e.g., `myapp-auth`, `myapp-pr-42`. The project
-name is derived from the git remote URL, then the parent directory name, then an explicit
-config setting. `grove ls` shows the **short** name (`auth`); tmux session names use
-the **full** name (`myapp-auth`).
+Worktree directories follow the project's `[naming] pattern` (in `.grove/config.toml`),
+default `{project}-{name}` — e.g., `myapp-auth`, `myapp-pr-42`. The pattern must contain
+`{project}` and `{name}` exactly once each. The project name comes from project config,
+then the git remote URL, then the directory name. `grove ls` shows the **short** name
+(`auth`); tmux session names always use the canonical `{project}-{name}` form
+(`myapp-auth`) regardless of the directory pattern.
 
 ## Drift + Adopt
 

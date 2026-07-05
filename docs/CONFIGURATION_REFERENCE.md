@@ -100,15 +100,26 @@ container_switch = "auto"          # string: auto | prompt | off
 
 ### [naming]
 
-Controls how new worktree names are suggested when branching.
+Controls how worktree **directories** are named.
 
 ```toml
 [naming]
-# Pattern template for suggested worktree names.
-# Tokens: {type} (branch type, e.g. "feat"), {description} (branch slug)
-# Default: "{type}/{description}"
-pattern = "{type}/{description}"   # string
+# Template for worktree directory names.
+# Placeholders: {project} (project name), {name} (short worktree name).
+# Rules: each placeholder exactly once; literal characters limited to
+# [A-Za-z0-9._-]. Invalid patterns warn on stderr and fall back to default.
+# Default: "{project}-{name}"
+pattern = "{project}-{name}"       # string
 ```
+
+**Read from the project's `.grove/config.toml` only** — worktree naming is a
+repo-level convention that every grove invocation must agree on, so global
+(`~/.config/grove/config.toml`) values are not applied here.
+
+Tmux session names always use the canonical `{project}-{name}` form regardless
+of this pattern; they are internal keys and stay stable across pattern changes.
+Worktrees created under a previous pattern keep working: directory names that
+don't match the current pattern are displayed as-is (full directory name).
 
 ---
 

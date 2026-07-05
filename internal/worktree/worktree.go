@@ -38,6 +38,7 @@ type Worktree struct {
 type Manager struct {
 	repoRoot    string // Root of the git repository
 	projectName string // Cached project name
+	namePattern string // Cached worktree naming pattern (see getNamePattern)
 }
 
 // NewManager creates a new worktree manager
@@ -176,13 +177,14 @@ func (m *Manager) Move(oldName, newName string) error {
 	}
 	oldPath := wt.Path
 
-	// Place the renamed worktree as a sibling of the original,
-	// preserving the naming convention (with or without project prefix).
+	// Place the renamed worktree as a sibling of the original, preserving
+	// the naming convention: directories that match the naming pattern get
+	// the new name interpolated into the same pattern, others are renamed
+	// bare (e.g. worktrees created by raw `git worktree add`).
 	oldBase := filepath.Base(oldPath)
-	prefix := m.GetProjectName() + "-"
 	var newBase string
-	if strings.HasPrefix(oldBase, prefix) {
-		newBase = prefix + newName
+	if _, matched := shortNameFromFull(oldBase, m.GetProjectName(), m.getNamePattern()); matched {
+		newBase = m.FullName(newName)
 	} else {
 		newBase = newName
 	}
@@ -282,7 +284,7 @@ func (m *Manager) listLight() ([]*Worktree, error) {
 	if mainPath == "" {
 		mainPath = m.repoRoot
 	}
-	return parseWorktreeList(raw, mainPath, m.GetProjectName()), nil
+	return parseWorktreeList(raw, mainPath, m.GetProjectName(), m.getNamePattern()), nil
 }
 
 // mainWorktreePathFromPorcelain returns the first worktree path in the output
@@ -341,12 +343,7 @@ func (m *Manager) DisplayNameForPath(path string) string {
 	if path == m.repoRoot {
 		return "root"
 	}
-	base := filepath.Base(path)
-	prefix := m.GetProjectName() + "-"
-	if strings.HasPrefix(base, prefix) {
-		return strings.TrimPrefix(base, prefix)
-	}
-	return base
+	return m.ShortName(filepath.Base(path))
 }
 
 // ListNames returns display names for all worktrees without running dirty checks.
@@ -512,16 +509,13 @@ func (m *Manager) getCommitInfo(path string) (shortHash, message, age string, er
 }
 
 // newWorktreeEntry creates a Worktree from a "worktree <path>" porcelain line.
-func newWorktreeEntry(path, mainPath, projectName string) *Worktree {
+func newWorktreeEntry(path, mainPath, projectName, namePattern string) *Worktree {
 	name := filepath.Base(path)
 	isMain := (path == mainPath)
 
 	shortName := name
 	if !isMain {
-		prefix := projectName + "-"
-		if strings.HasPrefix(name, prefix) {
-			shortName = strings.TrimPrefix(name, prefix)
-		}
+		shortName, _ = shortNameFromFull(name, projectName, namePattern)
 	}
 
 	return &Worktree{
@@ -548,7 +542,7 @@ func applyWorktreeAttribute(wt *Worktree, line string) {
 }
 
 // parseWorktreeList parses the output of 'git worktree list --porcelain'
-func parseWorktreeList(output, mainPath, projectName string) []*Worktree {
+func parseWorktreeList(output, mainPath, projectName, namePattern string) []*Worktree {
 	var trees []*Worktree
 	var current *Worktree
 
@@ -564,7 +558,7 @@ func parseWorktreeList(output, mainPath, projectName string) []*Worktree {
 		}
 
 		if strings.HasPrefix(line, "worktree ") {
-			current = newWorktreeEntry(strings.TrimPrefix(line, "worktree "), mainPath, projectName)
+			current = newWorktreeEntry(strings.TrimPrefix(line, "worktree "), mainPath, projectName, namePattern)
 		} else if current != nil {
 			applyWorktreeAttribute(current, line)
 		}

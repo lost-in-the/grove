@@ -193,7 +193,7 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Value:       cfg.Naming.Pattern,
 			Default:     cfg.Naming.Pattern,
 			Type:        ConfigString,
-			Description: "Pattern for naming worktrees",
+			Description: "Worktree directory template; {project} and {name} each exactly once",
 		},
 		{
 			Key:         "tui.skip_branch_notice",

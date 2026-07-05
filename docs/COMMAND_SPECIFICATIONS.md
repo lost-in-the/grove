@@ -92,18 +92,35 @@ Priority 3: Root directory name
 
 ### Worktree Naming Convention
 
-**CRITICAL:** All worktrees created by grove follow this pattern:
+**CRITICAL:** All worktree directories created by grove follow the project's
+naming pattern. The default (and recommended) pattern is:
 
 ```
-{project}-{worktree-name}
+{project}-{name}
 ```
 
-**Examples:**
+The pattern is configurable via `[naming] pattern` in the project's
+`.grove/config.toml`. It must contain `{project}` and `{name}` exactly once
+each, and literal characters are limited to `[A-Za-z0-9._-]` — this keeps
+directory names safe for git, tmux, GitHub, and shell use, keeps the project
+identifiable in every directory name, and keeps the short name recoverable.
+Invalid patterns are ignored with a stderr warning and the default is used.
+
+**Tmux sessions always use the canonical `{project}-{name}` form**, regardless
+of the directory pattern — session names are grove-internal keys and stay
+stable across pattern changes.
+
+**Examples (default pattern):**
 | Project | User Input | Worktree Directory | Tmux Session |
 |---------|------------|-------------------|--------------|
 | grove | testing | grove-testing | grove-testing |
 | grove | feature-auth | grove-feature-auth | grove-feature-auth |
 | my-app | hotfix-123 | my-app-hotfix-123 | my-app-hotfix-123 |
+
+**Example (custom pattern `{name}.{project}`):**
+| Project | User Input | Worktree Directory | Tmux Session |
+|---------|------------|-------------------|--------------|
+| grove | testing | testing.grove | grove-testing |
 
 **Rationale:** 
 - Prevents naming collisions across projects
@@ -153,8 +170,7 @@ my-app-main: 1 windows
 When creating a worktree, grove creates a branch if needed:
 
 ```
-Default pattern: {worktree-name}
-Configurable: {type}/{description}
+Default: branch name = worktree name (override with --branch)
 
 Examples:
   w new testing          →  branch: testing
@@ -1929,8 +1945,7 @@ Switch:
   dirty_handling:   prompt
 
 Naming:
-  pattern:          {type}/{description}
-  max_length:       50
+  pattern:          {project}-{name}
 
 Tmux:
   prefix:           (none, uses naming pattern)

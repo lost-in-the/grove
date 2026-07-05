@@ -77,7 +77,12 @@ type SwitchConfig struct {
 
 // NamingConfig controls worktree naming conventions
 type NamingConfig struct {
-	Pattern string `toml:"pattern"` // Pattern for naming worktrees
+	// Pattern is the worktree directory naming template. Placeholders
+	// {project} and {name} must each appear exactly once; literal characters
+	// are limited to [A-Za-z0-9._-]. Grove reads the effective value from the
+	// project-level .grove/config.toml (see worktree.Manager); tmux session
+	// names always use the canonical {project}-{name} form regardless.
+	Pattern string `toml:"pattern"`
 }
 
 // TmuxConfig controls tmux session behavior

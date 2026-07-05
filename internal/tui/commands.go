@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -100,7 +101,7 @@ func runPreRemoveHooks(projectName, name string, wt *worktree.Worktree) {
 	if wt != nil {
 		hookCtx.Branch = wt.Branch
 		hookCtx.NewPath = wt.Path
-		hookCtx.WorktreeFull = projectName + "-" + name
+		hookCtx.WorktreeFull = filepath.Base(wt.Path)
 	}
 	if err := hookExecutor.Execute(hooks.EventPreRemove, hookCtx); err != nil {
 		tuilog.Printf("warning: pre-remove hook failed for %q: %v", name, err)
@@ -166,7 +167,7 @@ func runPostCreateStreaming(ch chan<- creationEvent, mgr *worktree.Manager, stat
 		hookCtx := &hooks.ExecutionContext{
 			Event:        hooks.EventPostCreate,
 			Worktree:     name,
-			WorktreeFull: projectName + "-" + name,
+			WorktreeFull: filepath.Base(wt.Path),
 			Branch:       wt.Branch,
 			Project:      projectName,
 			MainPath:     projectRoot,

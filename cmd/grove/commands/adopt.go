@@ -69,13 +69,9 @@ Examples:
 			return fmt.Errorf("worktree manager: %w", err)
 		}
 
-		projectName := mgr.GetProjectName()
-		name := filepath.Base(target)
-		// Strip the project prefix so the state key matches grove's convention
+		// Strip the naming pattern so the state key matches grove's convention
 		// (state stores short names, not full directory names).
-		if prefix := projectName + "-"; strings.HasPrefix(name, prefix) {
-			name = strings.TrimPrefix(name, prefix)
-		}
+		name := mgr.ShortName(filepath.Base(target))
 
 		if existing, err := ctx.State.GetWorktree(name); err == nil && existing != nil {
 			existingResolved, _ := filepath.EvalSymlinks(existing.Path)
@@ -95,7 +91,7 @@ Examples:
 			Branch:       branch,
 			WorktreePath: target,
 			MainPath:     ctx.ProjectRoot,
-			ProjectName:  projectName,
+			ProjectName:  mgr.GetProjectName(),
 		}
 		if err := worktree.BootstrapWorktree(ctx.State, ctx.Config, bootstrapOpts, w); err != nil {
 			return fmt.Errorf("bootstrap: %w", err)

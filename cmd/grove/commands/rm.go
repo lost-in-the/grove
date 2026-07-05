@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -196,7 +197,7 @@ Examples:
 				Project:      projectName,
 				MainPath:     ctx.ProjectRoot,
 				NewPath:      wt.Path,
-				WorktreeFull: projectName + "-" + name,
+				WorktreeFull: filepath.Base(wt.Path),
 			}
 			cli.Step(w, "Running pre-remove hooks...")
 			if err := hookExecutor.Execute(hooks.EventPreRemove, hookCtx); err != nil {
