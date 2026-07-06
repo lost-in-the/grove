@@ -26,7 +26,7 @@ type IssueViewState struct {
 	Filtering        bool // true when filter input is active (activated by /)
 	DetailFocused    bool // true when detail panel has focus (Tab to toggle)
 	DetailViewport   viewport.Model
-	lastCursor       int               // tracks cursor changes to update viewport content
+	lastItemNumber   int               // tracks the last-rendered issue number to update viewport content
 	WorktreeBranches map[string]string // branch → worktree short name
 	ExistsPrompt     *ExistingWorktreePrompt
 }
@@ -370,11 +370,10 @@ func renderIssueDetailContent(issue *tracker.Issue, width int) string {
 func (m Model) renderIssueDetailViewport(issue *tracker.Issue, width, height int) string {
 	s := m.issueState
 	return renderDetailViewportCard(detailViewportConfig{
-		vp:         &s.DetailViewport,
-		cursor:     s.Cursor,
-		lastCursor: &s.lastCursor,
-		focused:    s.DetailFocused,
-		itemNumber: issue.Number,
+		vp:             &s.DetailViewport,
+		lastItemNumber: &s.lastItemNumber,
+		focused:        s.DetailFocused,
+		itemNumber:     issue.Number,
 		contentFunc: func(w int) string {
 			return renderIssueDetailContent(issue, w)
 		},

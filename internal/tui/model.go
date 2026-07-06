@@ -320,6 +320,17 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 
 	m.updateDetailContent()
 
+	// Refresh worktree-branch maps for browser views that were constructed
+	// before worktrees finished loading (the `grove prs`/`grove issues` direct
+	// entry points build these states with an empty list). Without this, the
+	// "✓ worktree" badge and the "worktree exists" prompt never fire.
+	if m.prState != nil {
+		m.prState.WorktreeBranches = m.worktreeBranchMap()
+	}
+	if m.issueState != nil {
+		m.issueState.WorktreeBranches = m.worktreeBranchMap()
+	}
+
 	var branches []string
 	for _, li := range listItems {
 		if item, ok := li.(WorktreeItem); ok {
@@ -500,14 +511,17 @@ func (m Model) handleBulkDeleteDone(msg bulkDeleteDoneMsg) (tea.Model, tea.Cmd) 
 }
 
 func (m Model) handleWIPCheck(msg wipCheckMsg) (tea.Model, tea.Cmd) {
-	if m.forkState != nil {
+	// Only apply the result to the overlay whose worktree path matches, so a
+	// stale check dispatched by a since-cancelled overlay cannot overwrite the
+	// WIP state of a different overlay opened afterwards.
+	if m.forkState != nil && m.forkState.Source.Path == msg.path {
 		m.forkState.HasWIP = msg.hasWIP
 		m.forkState.WIPFiles = msg.files
 		if msg.err != nil {
 			m.forkState.Err = msg.err
 		}
 	}
-	if m.checkoutState != nil {
+	if m.checkoutState != nil && m.checkoutState.Item.Path == msg.path {
 		m.checkoutState.HasWIP = msg.hasWIP
 		m.checkoutState.WIPCheckDone = true
 		m.checkoutState.WIPFiles = msg.files
@@ -1251,6 +1265,10 @@ func (m Model) handleRenameKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		newName := m.renameState.Input.Value()
 		if newName == "" {
 			m.renameState.Error = "name cannot be empty"
+			return m, nil
+		}
+		if errMsg := ValidateWorktreeName(newName); errMsg != "" {
+			m.renameState.Error = errMsg
 			return m, nil
 		}
 		if newName == m.renameState.Item.ShortName {
@@ -2325,6 +2343,7 @@ func (m Model) ConfigureForPRs() Model {
 	m.prState = &PRViewState{
 		Loading:          true,
 		WorktreeBranches: m.worktreeBranchMap(),
+		FilterInput:      newFilterInput(""),
 	}
 	return m
 }
@@ -2333,7 +2352,9 @@ func (m Model) ConfigureForPRs() Model {
 func (m Model) ConfigureForIssues() Model {
 	m.activeView = ViewIssues
 	m.issueState = &IssueViewState{
-		Loading: true,
+		Loading:          true,
+		FilterInput:      newFilterInput(""),
+		WorktreeBranches: m.worktreeBranchMap(),
 	}
 	return m
 }

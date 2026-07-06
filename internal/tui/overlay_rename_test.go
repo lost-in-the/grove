@@ -104,6 +104,32 @@ func TestRenameOverlay_DuplicateNameBlocked(t *testing.T) {
 	}
 }
 
+func TestRenameOverlay_InvalidCharsBlocked(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 30))
+	m = sendKey(m, "j")
+	m = sendKey(m, "R")
+	if m.renameState == nil {
+		t.Fatal("expected renameState to be set")
+	}
+
+	// A name with a slash must be rejected before dispatch — create/fork already
+	// enforce ValidateWorktreeName, and rename must match.
+	m.renameState.Input.SetValue("a/b")
+	m = sendKey(m, "enter")
+	if m.renameState == nil {
+		t.Fatal("expected rename overlay to stay open after invalid name")
+	}
+	if m.renameState.Error == "" {
+		t.Error("expected error for name containing a slash")
+	}
+	if m.renameState.Renaming {
+		t.Error("expected no rename to be dispatched for an invalid name")
+	}
+	if m.activeView != ViewRename {
+		t.Errorf("expected ViewRename to remain active, got %d", m.activeView)
+	}
+}
+
 func TestRenameOverlay_RenamingIgnoresInput(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
 	m.activeView = ViewRename

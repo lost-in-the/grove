@@ -31,7 +31,7 @@ type PRViewState struct {
 	Filtering        bool // true when filter input is active (activated by /)
 	DetailFocused    bool // true when detail panel has focus (Tab to toggle)
 	DetailViewport   viewport.Model
-	lastCursor       int // tracks cursor changes to update viewport content
+	lastItemNumber   int // tracks the last-rendered PR number to update viewport content
 }
 
 func (s *PRViewState) getActivityLog() *ActivityLog { return s.ActivityLog }

@@ -131,6 +131,28 @@ func TestCheckoutOverlay_WIPCheckMsg(t *testing.T) {
 	}
 }
 
+func TestCheckoutOverlay_WIPCheckIgnoresStalePath(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 30))
+	m.activeView = ViewCheckout
+	m.checkoutState = NewCheckoutState(WorktreeItem{ShortName: "b", Branch: "b", Path: "/tmp/wt-b"})
+
+	// A stale result dispatched by a since-cancelled overlay for a *different*
+	// worktree must not corrupt this overlay's WIP state.
+	m = sendMsg(m, wipCheckMsg{path: "/tmp/wt-a", hasWIP: true, files: []string{"x.go"}})
+	if m.checkoutState.HasWIP {
+		t.Error("expected HasWIP unchanged by mismatched-path wip check")
+	}
+	if m.checkoutState.WIPCheckDone {
+		t.Error("expected WIPCheckDone still false after mismatched-path wip check")
+	}
+
+	// The matching result applies as normal.
+	m = sendMsg(m, wipCheckMsg{path: "/tmp/wt-b", hasWIP: true, files: []string{"x.go"}})
+	if !m.checkoutState.HasWIP || !m.checkoutState.WIPCheckDone {
+		t.Error("expected matching wip check to populate checkout state")
+	}
+}
+
 func TestCheckoutOverlay_WIPCheckMsgError(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
 	m.activeView = ViewCheckout

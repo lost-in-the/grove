@@ -246,11 +246,10 @@ func renderPRDetailContent(pr *tracker.PullRequest, width int) string {
 func (m Model) renderPRDetailViewport(pr *tracker.PullRequest, width, height int) string {
 	s := m.prState
 	return renderDetailViewportCard(detailViewportConfig{
-		vp:         &s.DetailViewport,
-		cursor:     s.Cursor,
-		lastCursor: &s.lastCursor,
-		focused:    s.DetailFocused,
-		itemNumber: pr.Number,
+		vp:             &s.DetailViewport,
+		lastItemNumber: &s.lastItemNumber,
+		focused:        s.DetailFocused,
+		itemNumber:     pr.Number,
 		contentFunc: func(w int) string {
 			return renderPRDetailContent(pr, w)
 		},
