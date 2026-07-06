@@ -488,3 +488,32 @@ func TestHasActionsForEvent(t *testing.T) {
 		})
 	}
 }
+
+func TestGetHooksConfigPaths_DiscoversProjectRootFromSubdir(t *testing.T) {
+	// Regression: without an explicit groveDir the project hooks.toml was
+	// resolved against the bare cwd, so hooks silently didn't run from
+	// subdirectories. The fallback must walk up like the rest of grove.
+	tmpDir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	groveDir := filepath.Join(tmpDir, ".grove")
+	subDir := filepath.Join(tmpDir, "src", "nested")
+	if err := os.MkdirAll(groveDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Chdir(subDir)
+
+	_, projectPath, err := GetHooksConfigPaths()
+	if err != nil {
+		t.Fatalf("GetHooksConfigPaths() error = %v", err)
+	}
+	want := filepath.Join(groveDir, "hooks.toml")
+	if projectPath != want {
+		t.Errorf("project hooks path = %q, want %q (discovered from project root, not cwd)", projectPath, want)
+	}
+}

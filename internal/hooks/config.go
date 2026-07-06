@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/lost-in-the/grove/internal/grove"
 )
 
 // FindOverride returns the first matching override for a branch/worktree name, or nil
@@ -153,6 +155,13 @@ func GetHooksConfigPaths(groveDir ...string) (string, string, error) {
 	var projectHooks string
 	if len(groveDir) > 0 && groveDir[0] != "" {
 		projectHooks = filepath.Join(groveDir[0], "hooks.toml")
+	} else if root, rootErr := grove.FindRoot(""); rootErr == nil && root != "" {
+		// Discover the project's .grove directory the same way the rest of
+		// grove does (walk up from cwd, bounded by the git root) instead of
+		// assuming cwd is the project root — otherwise project hooks are
+		// silently skipped when running from a subdirectory or a secondary
+		// worktree.
+		projectHooks = filepath.Join(root, "hooks.toml")
 	} else {
 		cwd, err := os.Getwd()
 		if err != nil {
