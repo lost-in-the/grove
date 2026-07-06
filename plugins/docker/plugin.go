@@ -81,7 +81,7 @@ func (p *Plugin) Init(cfg *config.Config) error {
 	// Check if docker is available (LookPath result cached across Init calls).
 	if !dockerAvailable() {
 		p.enabled = false
-		return fmt.Errorf("docker or docker-compose not found in PATH")
+		return fmt.Errorf("docker CLI (with compose v2) not found in PATH")
 	}
 
 	// Select strategy based on mode
