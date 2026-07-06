@@ -75,6 +75,14 @@ Examples:
 			os.Exit(exitcode.ResourceNotFound)
 		}
 
+		// Find matches by short name, display name, branch, or path basename,
+		// so the argument the user typed (e.g. a branch name that differs
+		// from the worktree's directory name) isn't necessarily the name
+		// state and tmux sessions are keyed under. Use the resolved short
+		// name for state/tmux operations from here on; user-facing messages
+		// keep echoing the argument as typed.
+		resolvedName := wt.ShortName
+
 		// When selected interactively, confirm before proceeding
 		if len(args) == 0 {
 			details := []string{
@@ -105,7 +113,7 @@ Examples:
 		cfg := ctx.Config
 		isProtectedByConfig := cfg != nil && cfg.IsProtected(name)
 		isEnvironment := false
-		ws, _ := ctx.State.GetWorktree(name)
+		ws, _ := ctx.State.GetWorktree(resolvedName)
 		if ws != nil {
 			isEnvironment = ws.Environment
 		}
@@ -168,7 +176,7 @@ Examples:
 				}
 			}
 			if tmux.IsTmuxAvailable() {
-				sessionName := worktree.TmuxSessionName(mgr.GetProjectName(), name)
+				sessionName := worktree.TmuxSessionName(mgr.GetProjectName(), resolvedName)
 				exists, _ := tmux.SessionExists(sessionName)
 				if exists {
 					cli.Faint(w, "  Would kill tmux session: %s", sessionName)
@@ -187,7 +195,7 @@ Examples:
 
 		// Shared removal sequence: pre-remove hooks, git removal, state
 		// cleanup, tmux session kill (also used by `grove trim`).
-		if err := removeWorktreeWithHooks(ctx, mgr, w, projectName, name, wt.Path, branchName); err != nil {
+		if err := removeWorktreeWithHooks(ctx, mgr, w, projectName, resolvedName, wt.Path, branchName); err != nil {
 			return err
 		}
 
@@ -199,7 +207,7 @@ Examples:
 		}
 
 		// User + plugin post-remove hooks
-		firePostRemoveHooks(ctx, w, projectName, name, wt.Path, branchName)
+		firePostRemoveHooks(ctx, w, projectName, resolvedName, wt.Path, branchName)
 
 		return nil
 	}),
