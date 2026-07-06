@@ -135,13 +135,13 @@ Examples:
 				}
 
 				files, _ := wipHandler.ListWIPFiles()
-				cli.Warning(w, "Uncommitted changes detected (%d files):", len(files))
+				cli.Warning(stderr, "Uncommitted changes detected (%d files):", len(files))
 				for i, f := range files {
 					if i >= 5 {
-						cli.Faint(w, "  ... and %d more", len(files)-5)
+						cli.Faint(stderr, "  ... and %d more", len(files)-5)
 						break
 					}
-					cli.Faint(w, "  %s", f)
+					cli.Faint(stderr, "  %s", f)
 				}
 
 				choice, err := cli.Choose("How do you want to handle uncommitted changes?", []string{
