@@ -46,7 +46,7 @@ func ShouldUseControlMode(controlModeCfg *bool) bool {
 // AttachSessionControlMode attaches to a session using tmux -CC (control mode).
 // This is for iTerm2 integration where -CC goes before the subcommand.
 func AttachSessionControlMode(name string) error {
-	return attachSession(name, "-CC", "attach-session", "-t", name)
+	return attachSession(name, "-CC", "attach-session", "-t", exactTarget(name))
 }
 
 var (
@@ -73,7 +73,7 @@ func CreateSession(name, path string) error {
 // AttachSession attaches to an existing session.
 // This is interactive (blocks until detach) — no timeout applied.
 func AttachSession(name string) error {
-	return attachSession(name, "attach-session", "-t", name)
+	return attachSession(name, "attach-session", "-t", exactTarget(name))
 }
 
 // attachSession is the shared implementation for AttachSession and AttachSessionControlMode.
@@ -115,7 +115,7 @@ func SwitchSession(name string) error {
 		return fmt.Errorf("not inside tmux session")
 	}
 
-	output, err := cmdexec.CombinedOutput(context.TODO(), "tmux", []string{"switch-client", "-t", name}, "", cmdexec.Tmux)
+	output, err := cmdexec.CombinedOutput(context.TODO(), "tmux", []string{"switch-client", "-t", exactTarget(name)}, "", cmdexec.Tmux)
 	if err != nil {
 		return fmt.Errorf("failed to switch session: %s: %w", string(output), err)
 	}
@@ -133,7 +133,7 @@ func RenameSession(oldName, newName string) error {
 		return fmt.Errorf("new session name cannot be empty")
 	}
 
-	output, err := cmdexec.CombinedOutput(context.TODO(), "tmux", []string{"rename-session", "-t", oldName, newName}, "", cmdexec.Tmux)
+	output, err := cmdexec.CombinedOutput(context.TODO(), "tmux", []string{"rename-session", "-t", exactTarget(oldName), newName}, "", cmdexec.Tmux)
 	if err != nil {
 		return fmt.Errorf("failed to rename tmux session: %s: %w", string(output), err)
 	}
@@ -148,7 +148,7 @@ func KillSession(name string) error {
 		return fmt.Errorf("session name cannot be empty")
 	}
 
-	output, err := cmdexec.CombinedOutput(context.TODO(), "tmux", []string{"kill-session", "-t", name}, "", cmdexec.Tmux)
+	output, err := cmdexec.CombinedOutput(context.TODO(), "tmux", []string{"kill-session", "-t", exactTarget(name)}, "", cmdexec.Tmux)
 	if err != nil {
 		return fmt.Errorf("failed to kill session: %s: %w", string(output), err)
 	}
@@ -156,9 +156,26 @@ func KillSession(name string) error {
 	return nil
 }
 
+// exactTarget prefixes a session name with "=" so tmux resolves the -t
+// target by exact match. Without it tmux falls back to prefix matching when
+// no exact name exists, so e.g. `kill-session -t grove-test` could act on a
+// live "grove-test-ui" session. Use only for session targets (has-session,
+// kill-session, attach-session, switch-client, rename-session).
+func exactTarget(name string) string {
+	return "=" + name
+}
+
+// exactPaneTarget is exactTarget for pane-targeting commands (display-message,
+// send-keys): those parse the target as session:window.pane, and a bare
+// "=name" is rejected — the trailing ":" marks the whole string as the
+// session part and selects the session's active pane.
+func exactPaneTarget(name string) string {
+	return "=" + name + ":"
+}
+
 // SessionExists checks if a session exists
 func SessionExists(name string) (bool, error) {
-	err := cmdexec.Run(context.TODO(), "tmux", []string{"has-session", "-t", name}, "", cmdexec.Tmux)
+	err := cmdexec.Run(context.TODO(), "tmux", []string{"has-session", "-t", exactTarget(name)}, "", cmdexec.Tmux)
 	if err != nil {
 		// Exit code 1 means session doesn't exist
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -299,7 +316,7 @@ type PaneInfo struct {
 
 // GetPaneInfo returns the current path and command for a session's active pane
 func GetPaneInfo(sessionName string) (*PaneInfo, error) {
-	output, err := cmdexec.Output(context.TODO(), "tmux", []string{"display-message", "-t", sessionName, "-p", "#{pane_current_path}|#{pane_current_command}"}, "", cmdexec.Tmux)
+	output, err := cmdexec.Output(context.TODO(), "tmux", []string{"display-message", "-t", exactPaneTarget(sessionName), "-p", "#{pane_current_path}|#{pane_current_command}"}, "", cmdexec.Tmux)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get pane info: %w", err)
 	}
@@ -328,7 +345,7 @@ func (p *PaneInfo) IsShell() bool {
 
 // SendKeys sends keys to the active pane of a tmux session
 func SendKeys(sessionName string, keys string) error {
-	output, err := cmdexec.CombinedOutput(context.TODO(), "tmux", []string{"send-keys", "-t", sessionName, keys, "Enter"}, "", cmdexec.Tmux)
+	output, err := cmdexec.CombinedOutput(context.TODO(), "tmux", []string{"send-keys", "-t", exactPaneTarget(sessionName), keys, "Enter"}, "", cmdexec.Tmux)
 	if err != nil {
 		return fmt.Errorf("failed to send keys: %s: %w", string(output), err)
 	}
@@ -392,9 +409,13 @@ func DisplayPopup(sessionName, width, height string) error {
 	if height != "" {
 		args = append(args, "-h", height)
 	}
-	// Session name is single-quoted to prevent shell injection. Tmux session
-	// names follow {project}-{name} and cannot contain single quotes.
-	args = append(args, "-E", fmt.Sprintf("tmux attach-session -t '%s'", sessionName))
+	// The -E command runs through a shell, so the target is single-quoted
+	// with embedded single quotes escaped ('\'' idiom) — session names are
+	// derived from unvalidated project/worktree names and may contain
+	// quotes. exactTarget's "=" prefix keeps tmux from prefix-matching a
+	// different session.
+	escaped := strings.ReplaceAll(exactTarget(sessionName), "'", `'\''`)
+	args = append(args, "-E", fmt.Sprintf("tmux attach-session -t '%s'", escaped))
 
 	cmd := exec.Command("tmux", args...)
 	cmd.Stdin = os.Stdin

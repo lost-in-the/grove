@@ -524,3 +524,41 @@ func TestAttachSessionControlMode_NonExistent(t *testing.T) {
 		t.Error("AttachSessionControlMode(nonexistent) expected error, got nil")
 	}
 }
+
+func TestSessionTargets_ExactMatchOnly(t *testing.T) {
+	// Regression: tmux falls back to PREFIX matching for -t targets, so with
+	// only "grove-exacttest-ui" alive, SessionExists("grove-exacttest")
+	// returned true and KillSession("grove-exacttest") killed the other
+	// worktree's session. All targets must use the "=" exact-match prefix.
+	if !IsTmuxAvailable() {
+		t.Skip("tmux not available")
+	}
+
+	longer := "grove-exacttest-ui"
+	shorter := "grove-exacttest"
+	_ = KillSession(longer)
+	_ = KillSession(shorter)
+
+	if err := CreateSession(longer, "/tmp"); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	defer func() { _ = KillSession(longer) }()
+
+	exists, err := SessionExists(shorter)
+	if err != nil {
+		t.Fatalf("SessionExists() error = %v", err)
+	}
+	if exists {
+		t.Errorf("SessionExists(%q) = true, but only %q exists (prefix match leak)", shorter, longer)
+	}
+
+	// KillSession on the absent shorter name must NOT kill the longer session.
+	_ = KillSession(shorter)
+	stillThere, err := SessionExists(longer)
+	if err != nil {
+		t.Fatalf("SessionExists() error = %v", err)
+	}
+	if !stillThere {
+		t.Errorf("KillSession(%q) killed %q via prefix matching", shorter, longer)
+	}
+}
