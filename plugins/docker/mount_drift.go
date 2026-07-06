@@ -116,15 +116,20 @@ func shortID(id string) string {
 	return id
 }
 
+// composePsQArgs builds the `docker` argument list for `compose ps -q <service>`,
+// layering env files via composeEnvFileArgs so a non-default env_file doesn't
+// make compose ignore .env (issue #98). Extracted for unit testing.
+func composePsQArgs(composePath, envFile, service string) []string {
+	args := []string{"compose"}
+	args = append(args, composeEnvFileArgs(composePath, envFile)...)
+	return append(args, "ps", "-q", service)
+}
+
 // containerIDForService runs `docker compose ps -q <service>` and returns the
 // (single) container ID. Multi-replica compose configs return multiple IDs;
 // we take the first since drift detection only needs one sample of the mount.
 func containerIDForService(composePath, envFile, service string) (string, error) {
-	args := []string{"compose"}
-	if envFile != "" && envFile != ".env" {
-		args = append(args, "--env-file", envFile)
-	}
-	args = append(args, "ps", "-q", service)
+	args := composePsQArgs(composePath, envFile, service)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
