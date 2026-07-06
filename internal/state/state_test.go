@@ -561,3 +561,80 @@ func setupTestManager(t *testing.T) *Manager {
 	}
 	return mgr
 }
+
+// TestCrossProcessRemovalNotResurrected: a manager that loaded state before
+// another manager removed an entry must not write the deleted entry back on
+// its next save. Disk is authoritative for entries this manager didn't touch.
+func TestCrossProcessRemovalNotResurrected(t *testing.T) {
+	stateDir := t.TempDir()
+
+	// Seed state with "foo"
+	seed, _ := NewManager(stateDir)
+	if err := seed.AddWorktree("foo", &WorktreeState{Path: "/foo", Branch: "foo"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// B loads state (including foo) before A's removal lands
+	mgrB, _ := NewManager(stateDir)
+
+	// A removes foo (simulating `grove rm foo` in another shell)
+	mgrA, _ := NewManager(stateDir)
+	if err := mgrA.RemoveWorktree("foo"); err != nil {
+		t.Fatal(err)
+	}
+
+	// B saves for an unrelated reason — must NOT resurrect foo
+	if err := mgrB.AddWorktree("bar", &WorktreeState{Path: "/bar", Branch: "bar"}); err != nil {
+		t.Fatal(err)
+	}
+
+	check, _ := NewManager(stateDir)
+	if ws, _ := check.GetWorktree("foo"); ws != nil {
+		t.Errorf("removed worktree 'foo' was resurrected by another manager's save")
+	}
+	if ws, _ := check.GetWorktree("bar"); ws == nil {
+		t.Errorf("worktree 'bar' missing after save")
+	}
+}
+
+// TestCrossProcessScalarsNotClobbered: LastWorktree/Project written by another
+// process must survive a save from a manager that didn't touch them.
+func TestCrossProcessScalarsNotClobbered(t *testing.T) {
+	stateDir := t.TempDir()
+
+	seed, _ := NewManager(stateDir)
+	if err := seed.AddWorktree("bar", &WorktreeState{Path: "/bar", Branch: "bar"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := seed.SetLastWorktree("old"); err != nil {
+		t.Fatal(err)
+	}
+	if err := seed.SetProject("oldproj"); err != nil {
+		t.Fatal(err)
+	}
+
+	// B loads with LastWorktree "old" / Project "oldproj" in memory
+	mgrB, _ := NewManager(stateDir)
+
+	// A updates the scalars
+	mgrA, _ := NewManager(stateDir)
+	if err := mgrA.SetLastWorktree("x"); err != nil {
+		t.Fatal(err)
+	}
+	if err := mgrA.SetProject("newproj"); err != nil {
+		t.Fatal(err)
+	}
+
+	// B saves without touching the scalars — must not revert them
+	if err := mgrB.TouchWorktree("bar"); err != nil {
+		t.Fatal(err)
+	}
+
+	check, _ := NewManager(stateDir)
+	if got, _ := check.GetLastWorktree(); got != "x" {
+		t.Errorf("LastWorktree = %q, want %q (clobbered by stale in-memory value)", got, "x")
+	}
+	if got := check.GetProject(); got != "newproj" {
+		t.Errorf("Project = %q, want %q (clobbered by stale in-memory value)", got, "newproj")
+	}
+}
