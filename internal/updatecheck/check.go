@@ -116,6 +116,14 @@ func refreshFromPathWithFetcher(path string, interval time.Duration, fetcher fun
 	}
 	rel, err := fetcher()
 	if err != nil {
+		// Record the attempt even on failure, preserving any previously
+		// cached release info. Otherwise a host where the fetch always
+		// fails or times out (offline, firewalled, slow DNS/TLS) never
+		// gets a written cache, so every subsequent command re-attempts
+		// the network fetch and blocks for the full RefreshWaitBudget
+		// instead of the interval applying to failures too.
+		c.LastCheckedAt = time.Now()
+		_ = WriteCacheToPath(path, c)
 		return
 	}
 	_ = WriteCacheToPath(path, Cache{
