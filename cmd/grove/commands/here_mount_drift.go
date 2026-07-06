@@ -7,7 +7,6 @@ import (
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/exitcode"
-	"github.com/lost-in-the/grove/internal/worktree"
 	"github.com/lost-in-the/grove/plugins/docker"
 )
 
@@ -18,7 +17,7 @@ import (
 //
 // Reporter shape is deliberately scriptable: human-readable when running
 // interactively, exit code carries the parity verdict for automation.
-func runMountDriftCheck(ctx *GroveContext, tree *worktree.Worktree) error {
+func runMountDriftCheck(ctx *GroveContext, displayName string) error {
 	w := cli.NewStdout()
 	stderr := cli.NewStderr()
 
@@ -45,7 +44,7 @@ func runMountDriftCheck(ctx *GroveContext, tree *worktree.Worktree) error {
 		os.Exit(exitcode.ExternalCommandFailed)
 	}
 
-	cli.Header(w, "Mount drift — '%s'", tree.DisplayName())
+	cli.Header(w, "Mount drift — '%s'", displayName)
 	cli.Label(w, "Env file:        ", filepath.Join(composePath, driftCfg.EnvFileName))
 	cli.Label(w, "Configured src:  ", displayPath(reports))
 	cli.Label(w, "Mount dest:      ", driftCfg.MountDest)
