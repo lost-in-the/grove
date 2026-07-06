@@ -149,11 +149,15 @@ Examples:
 				os.Exit(exitcode.ResourceNotFound)
 			}
 
-			// Use env/{name} as local branch for environment worktrees
+			// Use env/{name} as local branch for environment worktrees. Must
+			// actually create that branch (git worktree add -b) rather than
+			// checking out the remote ref directly — the latter leaves the
+			// worktree on a detached HEAD while state/JSON output/hooks still
+			// report "env/{name}" as the branch, a branch that doesn't exist.
 			branchName = "env/" + name
 
-			// Create worktree from the remote branch
-			if err := mgr.CreateFromBranch(name, mirror); err != nil {
+			// Create worktree with a new local branch tracking the remote ref
+			if err := mgr.CreateFromRef(name, branchName, mirror); err != nil {
 				return fmt.Errorf("failed to create environment worktree: %w", err)
 			}
 
