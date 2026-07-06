@@ -8,83 +8,34 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sync"
-	"time"
+
+	"github.com/lost-in-the/grove/internal/log"
 )
 
-var (
-	mu      sync.Mutex
-	logFile *os.File
-	enabled bool
-)
+// std is the TUI debug logger — a second instance of the shared
+// log.Logger with its own env var and default path.
+var std = &log.Logger{
+	EnvVar: "GROVE_DEBUG",
+	Label:  "debug log",
+	Banner: "grove TUI session",
+	DefaultPath: func() (string, error) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("cannot resolve home dir: %w", err)
+		}
+		return filepath.Join(home, ".grove-debug.log"), nil
+	},
+}
 
 // Init opens the debug log if GROVE_DEBUG is set.
 // Call once at TUI startup; safe to call multiple times.
-func Init() {
-	mu.Lock()
-	defer mu.Unlock()
-
-	if logFile != nil {
-		return
-	}
-
-	val := os.Getenv("GROVE_DEBUG")
-	if val == "" {
-		return
-	}
-
-	path := val
-	if path == "1" || path == "true" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "grove: warning: cannot resolve home dir for debug log: %v\n", err)
-			return
-		}
-		path = filepath.Join(home, ".grove-debug.log")
-	}
-
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "grove: warning: failed to open debug log %s: %v\n", path, err)
-		return
-	}
-
-	logFile = f
-	enabled = true
-
-	ts := time.Now().Format("15:04:05.000")
-	_, _ = fmt.Fprintf(logFile, "%s  === grove TUI session started at %s ===\n", ts, time.Now().Format(time.RFC3339))
-}
+func Init() { std.Init() }
 
 // Close flushes and closes the log file.
-func Close() {
-	mu.Lock()
-	defer mu.Unlock()
-
-	if logFile != nil {
-		_ = logFile.Close()
-		logFile = nil
-		enabled = false
-	}
-}
+func Close() { std.Close() }
 
 // Printf writes a formatted message to the debug log.
-func Printf(format string, args ...any) {
-	mu.Lock()
-	defer mu.Unlock()
-
-	if !enabled {
-		return
-	}
-
-	ts := time.Now().Format("15:04:05.000")
-	msg := fmt.Sprintf(format, args...)
-	_, _ = fmt.Fprintf(logFile, "%s  %s\n", ts, msg)
-}
+func Printf(format string, args ...any) { std.Printf(format, args...) }
 
 // Enabled returns true when debug logging is active.
-func Enabled() bool {
-	mu.Lock()
-	defer mu.Unlock()
-	return enabled
-}
+func Enabled() bool { return std.Enabled() }
