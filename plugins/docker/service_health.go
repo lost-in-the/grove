@@ -130,13 +130,17 @@ func finalizeUpResult(cmdErr error, statuses []ServiceStatus, nonBlocking []stri
 // probeTimeout is longer than statusTimeout (300ms) because Up() can tolerate a
 // slower probe — docker compose ps can be slow on busy systems (NFS, heavy disk I/O)
 // and 1s caused false-empty probes that fed the silent-failure bug in finalizeUpResult.
+// Display paths (grove ls, grove which) must pass statusTimeout instead so a slow
+// daemon can't blow the <500ms command budget; a timed-out probe degrades to
+// "configured" via classifyExternalStatusFromHealth.
 const probeTimeout = 3 * time.Second
 
 // probeServiceHealth runs `docker compose ps --all --format json` and returns parsed statuses.
 // composePath is the directory containing the compose file; envFile is the env file name
-// (e.g., ".env" or ".env.local") to pass via --env-file.
-func probeServiceHealth(composePath, envFile string, env []string) ([]ServiceStatus, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+// (e.g., ".env" or ".env.local") to pass via --env-file. timeout bounds the compose call:
+// probeTimeout for correctness paths (Up), statusTimeout for display paths.
+func probeServiceHealth(composePath, envFile string, env []string, timeout time.Duration) ([]ServiceStatus, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	args := []string{"compose"}

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lost-in-the/grove/internal/config"
@@ -35,30 +36,43 @@ func (p *Plugin) WorktreeStatuses(worktreePaths []string) map[string]plugins.Sta
 }
 
 // localStatuses checks each worktree for a compose file and running containers.
+// The per-worktree docker compose ps calls are independent, so they run
+// concurrently — a serial loop would cost N x statusTimeout in the worst case,
+// blowing the <500ms budget for grove ls as soon as 2+ worktrees have compose files.
 func localStatuses(_ *localStrategy, paths []string) map[string]plugins.StatusEntry {
 	result := make(map[string]plugins.StatusEntry)
 
+	var mu sync.Mutex
+	var wg sync.WaitGroup
 	for _, path := range paths {
 		if !hasDockerCompose(path) {
 			continue
 		}
 
-		// Has compose file — at minimum "configured"
-		entry := plugins.StatusEntry{
-			ProviderName: "docker",
-			Level:        plugins.StatusInfo,
-			Short:        "compose",
-			Detail:       "Compose file found",
-		}
+		wg.Add(1)
+		go func(path string) {
+			defer wg.Done()
 
-		if running, count := composeRunningCount(path); running {
-			entry.Level = plugins.StatusActive
-			entry.Short = fmt.Sprintf("up (%d)", count)
-			entry.Detail = fmt.Sprintf("%d container(s) running", count)
-		}
+			// Has compose file — at minimum "configured"
+			entry := plugins.StatusEntry{
+				ProviderName: "docker",
+				Level:        plugins.StatusInfo,
+				Short:        "compose",
+				Detail:       "Compose file found",
+			}
 
-		result[path] = entry
+			if running, count := composeRunningCount(path); running {
+				entry.Level = plugins.StatusActive
+				entry.Short = fmt.Sprintf("up (%d)", count)
+				entry.Detail = fmt.Sprintf("%d container(s) running", count)
+			}
+
+			mu.Lock()
+			result[path] = entry
+			mu.Unlock()
+		}(path)
 	}
+	wg.Wait()
 
 	return result
 }
@@ -74,7 +88,8 @@ func externalStatuses(s *externalStrategy, paths []string) map[string]plugins.St
 	// ignored here: status display is informational and a nil result downgrades to
 	// "configured" via classifyExternalStatusFromHealth, which is correct for
 	// "stack not running yet" — surfacing the error would just be noise on the dashboard.
-	statuses, _ := probeServiceHealth(composePath, s.ext.EnvFileName(), nil)
+	// statusTimeout (not probeTimeout) keeps grove ls within the <500ms budget.
+	statuses, _ := probeServiceHealth(composePath, s.ext.EnvFileName(), nil, statusTimeout)
 
 	for _, path := range paths {
 		matches := pathMatchesEnv(path, activeWorktree, composePath)
@@ -256,7 +271,8 @@ func externalServiceInfo(cfg *config.Config, currentPath string) *ServiceInfo {
 
 	// Use the same probeServiceHealth + classifyHealth path as externalStatuses so
 	// that non_blocking_services is honored and both code paths agree on verdict.
-	statuses, _ := probeServiceHealth(composePath, ext.EnvFileName(), nil)
+	// statusTimeout (not probeTimeout) keeps grove which within the <500ms budget.
+	statuses, _ := probeServiceHealth(composePath, ext.EnvFileName(), nil, statusTimeout)
 	healthy, _ := classifyHealth(statuses, ext.NonBlockingServices)
 	runningCount := 0
 	for _, s := range statuses {

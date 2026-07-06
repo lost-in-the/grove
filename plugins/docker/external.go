@@ -115,7 +115,7 @@ func (s *externalStrategy) Up(worktreePath string, detach bool) error {
 	}
 
 	// compose up returned non-zero — check whether only non-blocking services failed.
-	statuses, probeErr := probeServiceHealth(s.composePath(), s.ext.EnvFileName(), s.envForWorktree(worktreePath))
+	statuses, probeErr := probeServiceHealth(s.composePath(), s.ext.EnvFileName(), s.envForWorktree(worktreePath), probeTimeout)
 	if probeErr != nil {
 		// Probe failed — surface the original cmd error rather than swallowing it.
 		return cmdErr

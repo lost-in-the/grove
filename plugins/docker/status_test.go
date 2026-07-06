@@ -106,6 +106,41 @@ func TestLocalStatuses_WithComposeFile(t *testing.T) {
 	}
 }
 
+// localStatuses probes worktrees concurrently — verify every compose-bearing
+// worktree still gets an entry and non-compose worktrees are skipped. Run with
+// -race this also guards the shared result map against unsynchronized writes.
+func TestLocalStatuses_MultipleWorktrees(t *testing.T) {
+	composeDirs := make([]string, 3)
+	for i := range composeDirs {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "docker-compose.yml"), []byte("services: {}"), 0644); err != nil {
+			t.Fatalf("failed to create compose file: %v", err)
+		}
+		composeDirs[i] = dir
+	}
+	noCompose := t.TempDir()
+
+	paths := append(append([]string{}, composeDirs...), noCompose)
+	result := localStatuses(&localStrategy{cfg: &config.Config{}}, paths)
+
+	if len(result) != len(composeDirs) {
+		t.Fatalf("expected %d entries, got %d: %v", len(composeDirs), len(result), result)
+	}
+	for _, dir := range composeDirs {
+		entry, ok := result[dir]
+		if !ok {
+			t.Errorf("missing entry for compose worktree %s", dir)
+			continue
+		}
+		if entry.ProviderName != "docker" {
+			t.Errorf("expected ProviderName 'docker', got %q", entry.ProviderName)
+		}
+	}
+	if _, ok := result[noCompose]; ok {
+		t.Errorf("unexpected entry for worktree without compose file")
+	}
+}
+
 func TestExternalStatuses_NoMatch(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("APP_DIR=/other/path\n"), 0644); err != nil {
