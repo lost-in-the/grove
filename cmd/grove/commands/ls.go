@@ -59,7 +59,9 @@ var lsCmd = &cobra.Command{
 			return err
 		}
 
-		// Fast paths: quiet and paths modes skip dirty checks entirely
+		// Fast path: quiet mode skips dirty checks entirely. (--paths still
+		// pays for List()'s per-worktree git status; hoisting it needs a
+		// light path listing in internal/worktree.)
 		if lsQuiet {
 			names, err := mgr.ListNames()
 			if err != nil {
@@ -152,21 +154,8 @@ var lsCmd = &cobra.Command{
 				}
 
 				tmuxStatus := tmuxStatusNone
-				if tmuxAvailable && sessions != nil {
-					sessionName := worktree.TmuxSessionName(projectName, tree.DisplayName())
-					if session, ok := sessions[sessionName]; ok {
-						if session.Attached {
-							tmuxStatus = tmuxStatusAttached
-						} else {
-							tmuxStatus = tmuxStatusDetached
-						}
-					} else if session, ok := sessions[tree.Name]; ok {
-						if session.Attached {
-							tmuxStatus = tmuxStatusAttached
-						} else {
-							tmuxStatus = tmuxStatusDetached
-						}
-					}
+				if tmuxAvailable {
+					tmuxStatus = tmuxStatusFor(tree, projectName, sessions)
 				}
 
 				isEnv, _ := ctx.State.IsEnvironment(tree.ShortName)
@@ -184,8 +173,8 @@ var lsCmd = &cobra.Command{
 				}
 
 				if entries, ok := pluginStatuses[tree.Path]; ok {
+					wo.Containers = containersSummary(entries)
 					for _, e := range entries {
-						wo.Containers = e.Short
 						wo.Services = append(wo.Services, lsServiceStatus{
 							Provider: e.ProviderName,
 							Status:   e.Short,
@@ -267,16 +256,7 @@ var lsCmd = &cobra.Command{
 				tmuxStatus = tmuxStatusFor(tree, projectName, sessions)
 			}
 
-			containers := ""
-			if entries, ok := pluginStatuses[tree.Path]; ok {
-				var parts []string
-				for _, e := range entries {
-					if e.Short != "" {
-						parts = append(parts, e.Short)
-					}
-				}
-				containers = strings.Join(parts, ",")
-			}
+			containers := containersSummary(pluginStatuses[tree.Path])
 
 			pathStr := tree.Path
 			if isEnv, _ := ctx.State.IsEnvironment(tree.ShortName); isEnv {
@@ -294,6 +274,19 @@ var lsCmd = &cobra.Command{
 
 		return nil
 	}),
+}
+
+// containersSummary joins each plugin status entry's short status with ","
+// so JSON and table output agree when multiple providers report. Empty
+// shorts are skipped.
+func containersSummary(entries []plugins.StatusEntry) string {
+	var parts []string
+	for _, e := range entries {
+		if e.Short != "" {
+			parts = append(parts, e.Short)
+		}
+	}
+	return strings.Join(parts, ",")
 }
 
 // tmuxStatusFor returns "attached", "detached", or "none" for a worktree.
