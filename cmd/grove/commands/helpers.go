@@ -180,6 +180,23 @@ func switchToWorktree(ctx *GroveContext, stderr *cli.Writer, prevName, targetNam
 	return tmuxSwitched
 }
 
+// currentWorktreeRoot resolves the root directory of the worktree containing
+// the current working directory. Docker slot detection keys on the worktree
+// directory basename (docker.FindWorktreeSlot), so container commands must
+// pass the worktree root — a raw os.Getwd() from a subdirectory would miss
+// the isolated stack and silently operate on the shared one instead.
+func currentWorktreeRoot(ctx *GroveContext) (string, error) {
+	mgr, err := ctx.WorktreeManager()
+	if err != nil {
+		return "", err
+	}
+	root, err := mgr.CurrentPath()
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve current worktree root: %w", err)
+	}
+	return root, nil
+}
+
 // removeWorktreeWithHooks runs the shared removal sequence used by `grove rm`
 // and `grove trim`: user pre-remove hooks (hooks.toml), the plugin pre-remove
 // hook (e.g. stop agent stacks), git worktree removal, state cleanup, and

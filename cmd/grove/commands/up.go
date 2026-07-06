@@ -2,7 +2,6 @@ package commands
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -43,10 +42,13 @@ Examples:
 		w := cli.NewStdout()
 		stderr := cli.NewStderr()
 
-		// Get current directory (docker-compose works in cwd)
-		cwd, err := os.Getwd()
+		// Resolve the worktree root — isolated slot allocation keys on the
+		// worktree directory basename, so cwd must be normalized (running
+		// from a subdirectory would otherwise register a slot under the
+		// subdirectory's name, which later lookups would never match).
+		root, err := currentWorktreeRoot(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to get current directory: %w", err)
+			return err
 		}
 
 		// Create docker plugin
@@ -65,7 +67,7 @@ Examples:
 		// Start containers — no spinner here: docker compose writes its own
 		// progress to stderr, and wrapping it in Bubbletea causes flashing.
 		cli.Step(stderr, "Starting containers...")
-		if err := plugin.Up(cwd, upDetach); err != nil {
+		if err := plugin.Up(root, upDetach); err != nil {
 			return fmt.Errorf("failed to start containers: %w", err)
 		}
 		if upDetach && !upIsolated {

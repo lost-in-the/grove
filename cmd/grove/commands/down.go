@@ -2,7 +2,6 @@ package commands
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -32,15 +31,17 @@ Examples:
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		w := cli.NewStdout()
 
-		// Get current directory (docker-compose works in cwd)
-		cwd, err := os.Getwd()
+		// Resolve the worktree root — slot detection keys on the worktree
+		// directory basename, so cwd must be normalized (running from a
+		// subdirectory would otherwise target the shared stack).
+		root, err := currentWorktreeRoot(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to get current directory: %w", err)
+			return err
 		}
 
 		// Create docker plugin — auto-detect isolated stacks
 		plugin := docker.New()
-		if docker.HasActiveAgentSlot(ctx.Config, cwd) {
+		if docker.HasActiveAgentSlot(ctx.Config, root) {
 			plugin.SetIsolated(true)
 		}
 		if err := plugin.Init(ctx.Config); err != nil {
@@ -50,7 +51,7 @@ Examples:
 		// Stop containers — no spinner: docker compose writes its own progress
 		stderr := cli.NewStderr()
 		cli.Step(stderr, "Stopping containers...")
-		if err := plugin.Down(cwd); err != nil {
+		if err := plugin.Down(root); err != nil {
 			return fmt.Errorf("failed to stop containers: %w", err)
 		}
 
