@@ -363,7 +363,9 @@ func DetectRepo() (string, error) {
 // GetPRForBranch looks up the open PR for a given branch name.
 // Returns nil with no error if no PR exists for the branch.
 func (g *GitHubAdapter) GetPRForBranch(branch string) (*PullRequest, error) {
-	args := []string{"pr", "view", "--head", branch, "--json", "number,title,state,url"}
+	// gh pr view takes the branch as a positional argument — it has no --head
+	// flag (that belongs to gh pr list).
+	args := []string{"pr", "view", branch, "--json", "number,title,state,url"}
 	if g.repo != "" {
 		args = append(args, "--repo", g.repo)
 	}

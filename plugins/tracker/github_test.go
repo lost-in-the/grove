@@ -1,8 +1,86 @@
 package tracker
 
 import (
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 )
+
+// installFakeGh shadows the real gh CLI with a script that mimics gh's
+// argument handling for `pr view`: any --head flag is rejected (the real
+// gh pr view has no such flag), and the branch must be positional.
+func installFakeGh(t *testing.T, script string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("fake gh shell script not supported on windows")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "gh")
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake gh: %v", err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// fakeGhPRView mimics real gh: `pr view` rejects --head (unknown flag) and
+// returns PR JSON only when the branch is passed positionally.
+const fakeGhPRView = `#!/bin/sh
+if [ "$1 $2" != "pr view" ]; then
+  echo "unexpected command: $@" >&2
+  exit 1
+fi
+shift 2
+for arg in "$@"; do
+  if [ "$arg" = "--head" ]; then
+    echo "unknown flag: --head" >&2
+    exit 1
+  fi
+done
+if [ "$1" = "feature-branch" ]; then
+  echo '{"number":42,"title":"Test PR","state":"OPEN","url":"https://github.com/test-org/test-repo/pull/42"}'
+  exit 0
+fi
+echo "no pull requests found for branch \"$1\"" >&2
+exit 1
+`
+
+// Regression test for the --head bug: gh pr view has no --head flag, so the
+// old invocation always errored and GetPRForBranch always returned nil.
+func TestGetPRForBranch_PositionalBranch(t *testing.T) {
+	installFakeGh(t, fakeGhPRView)
+
+	adapter := NewGitHubAdapter("test-org/test-repo")
+	pr, err := adapter.GetPRForBranch("feature-branch")
+	if err != nil {
+		t.Fatalf("GetPRForBranch() error = %v", err)
+	}
+	if pr == nil {
+		t.Fatal("GetPRForBranch() = nil, want PR #42")
+	}
+	if pr.Number != 42 {
+		t.Errorf("pr.Number = %d, want 42", pr.Number)
+	}
+	if pr.State != "open" {
+		t.Errorf("pr.State = %q, want %q", pr.State, "open")
+	}
+	if pr.URL != "https://github.com/test-org/test-repo/pull/42" {
+		t.Errorf("pr.URL = %q", pr.URL)
+	}
+}
+
+func TestGetPRForBranch_NoPR(t *testing.T) {
+	installFakeGh(t, fakeGhPRView)
+
+	adapter := NewGitHubAdapter("test-org/test-repo")
+	pr, err := adapter.GetPRForBranch("branch-without-pr")
+	if err != nil {
+		t.Fatalf("GetPRForBranch() error = %v, want nil (no PR is not an error)", err)
+	}
+	if pr != nil {
+		t.Errorf("GetPRForBranch() = %+v, want nil", pr)
+	}
+}
 
 func TestNewGitHubAdapter(t *testing.T) {
 	adapter := NewGitHubAdapter("owner/repo")
