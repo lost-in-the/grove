@@ -39,7 +39,7 @@ func TestShellSingleQuote(t *testing.T) {
 		want string
 	}{
 		{name: "plain path", in: "/Users/dev/proj-fix", want: "'/Users/dev/proj-fix'"},
-		{name: "embedded single quote", in: "/Users/leah/Leah's Projects/app-fix", want: `'/Users/leah/Leah'\''s Projects/app-fix'`},
+		{name: "embedded single quote", in: "/Users/dev/Dev's Projects/app-fix", want: `'/Users/dev/Dev'\''s Projects/app-fix'`},
 		{name: "empty string", in: "", want: "''"},
 	}
 
