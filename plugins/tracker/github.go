@@ -27,9 +27,119 @@ func (g *GitHubAdapter) Name() string {
 	return "github"
 }
 
+// issueJSONFields is the gh --json field list matching ghIssue. Keep in sync
+// with the ghIssue struct below.
+const issueJSONFields = "number,title,body,state,author,labels,createdAt,updatedAt,url"
+
+// ghIssue mirrors the JSON fields requested from gh for issues.
+type ghIssue struct {
+	Number int    `json:"number"`
+	Title  string `json:"title"`
+	Body   string `json:"body"`
+	State  string `json:"state"`
+	Author struct {
+		Login string `json:"login"`
+	} `json:"author"`
+	Labels []struct {
+		Name string `json:"name"`
+	} `json:"labels"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+	URL       string    `json:"url"`
+}
+
+// toIssue converts a gh issue response into the tracker Issue type.
+func (gh ghIssue) toIssue() *Issue {
+	labels := make([]string, len(gh.Labels))
+	for i, l := range gh.Labels {
+		labels[i] = l.Name
+	}
+
+	return &Issue{
+		Number:    gh.Number,
+		Title:     gh.Title,
+		Body:      gh.Body,
+		State:     strings.ToLower(gh.State),
+		Author:    gh.Author.Login,
+		Labels:    labels,
+		CreatedAt: gh.CreatedAt,
+		UpdatedAt: gh.UpdatedAt,
+		URL:       gh.URL,
+	}
+}
+
+// prJSONFields is the gh --json field list matching ghPR. Keep in sync with
+// the ghPR struct below.
+const prJSONFields = "number,title,body,state,author,labels,headRefName,baseRefName,isDraft,commits,additions,deletions,reviewDecision,createdAt,updatedAt,url"
+
+// ghPR mirrors the JSON fields requested from gh for pull requests.
+type ghPR struct {
+	Number int    `json:"number"`
+	Title  string `json:"title"`
+	Body   string `json:"body"`
+	State  string `json:"state"`
+	Author struct {
+		Login string `json:"login"`
+	} `json:"author"`
+	Labels []struct {
+		Name string `json:"name"`
+	} `json:"labels"`
+	HeadRefName string `json:"headRefName"`
+	BaseRefName string `json:"baseRefName"`
+	IsDraft     bool   `json:"isDraft"`
+	Commits     []struct {
+		Oid             string `json:"oid"`
+		MessageHeadline string `json:"messageHeadline"`
+	} `json:"commits"`
+	Additions      int       `json:"additions"`
+	Deletions      int       `json:"deletions"`
+	ReviewDecision string    `json:"reviewDecision"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
+	URL            string    `json:"url"`
+}
+
+// toPullRequest converts a gh PR response into the tracker PullRequest type,
+// flattening labels and truncating commit SHAs to 7 characters.
+func (gh ghPR) toPullRequest() *PullRequest {
+	labels := make([]string, len(gh.Labels))
+	for i, l := range gh.Labels {
+		labels[i] = l.Name
+	}
+
+	commits := make([]PRCommit, len(gh.Commits))
+	for i, c := range gh.Commits {
+		sha := c.Oid
+		if len(sha) > 7 {
+			sha = sha[:7]
+		}
+		commits[i] = PRCommit{SHA: sha, Message: c.MessageHeadline}
+	}
+
+	return &PullRequest{
+		Number:         gh.Number,
+		Title:          gh.Title,
+		Body:           gh.Body,
+		State:          strings.ToLower(gh.State),
+		Author:         gh.Author.Login,
+		Labels:         labels,
+		Branch:         gh.HeadRefName,
+		BaseBranch:     gh.BaseRefName,
+		IsDraft:        gh.IsDraft,
+		CommitCount:    len(gh.Commits),
+		Commits:        commits,
+		Additions:      gh.Additions,
+		Deletions:      gh.Deletions,
+		ReviewDecision: gh.ReviewDecision,
+		CreatedAt:      gh.CreatedAt,
+		UpdatedAt:      gh.UpdatedAt,
+		URL:            gh.URL,
+	}
+}
+
 // FetchIssue retrieves an issue by number.
 func (g *GitHubAdapter) FetchIssue(number int) (*Issue, error) {
-	args := []string{"issue", "view", strconv.Itoa(number), "--json", "number,title,body,state,author,labels,createdAt,updatedAt,url"}
+	args := []string{"issue", "view", strconv.Itoa(number), "--json", issueJSONFields}
 	if g.repo != "" {
 		args = append(args, "--repo", g.repo)
 	}
@@ -39,47 +149,17 @@ func (g *GitHubAdapter) FetchIssue(number int) (*Issue, error) {
 		return nil, fmt.Errorf("fetch issue %d: %w", number, err)
 	}
 
-	var ghIssue struct {
-		Number int    `json:"number"`
-		Title  string `json:"title"`
-		Body   string `json:"body"`
-		State  string `json:"state"`
-		Author struct {
-			Login string `json:"login"`
-		} `json:"author"`
-		Labels []struct {
-			Name string `json:"name"`
-		} `json:"labels"`
-		CreatedAt time.Time `json:"createdAt"`
-		UpdatedAt time.Time `json:"updatedAt"`
-		URL       string    `json:"url"`
-	}
-
-	if err := json.Unmarshal(output, &ghIssue); err != nil {
+	var gh ghIssue
+	if err := json.Unmarshal(output, &gh); err != nil {
 		return nil, fmt.Errorf("parse issue response: %w", err)
 	}
 
-	labels := make([]string, len(ghIssue.Labels))
-	for i, l := range ghIssue.Labels {
-		labels[i] = l.Name
-	}
-
-	return &Issue{
-		Number:    ghIssue.Number,
-		Title:     ghIssue.Title,
-		Body:      ghIssue.Body,
-		State:     strings.ToLower(ghIssue.State),
-		Author:    ghIssue.Author.Login,
-		Labels:    labels,
-		CreatedAt: ghIssue.CreatedAt,
-		UpdatedAt: ghIssue.UpdatedAt,
-		URL:       ghIssue.URL,
-	}, nil
+	return gh.toIssue(), nil
 }
 
 // FetchPR retrieves a pull request by number.
 func (g *GitHubAdapter) FetchPR(number int) (*PullRequest, error) {
-	args := []string{"pr", "view", strconv.Itoa(number), "--json", "number,title,body,state,author,labels,headRefName,baseRefName,isDraft,commits,additions,deletions,reviewDecision,createdAt,updatedAt,url"}
+	args := []string{"pr", "view", strconv.Itoa(number), "--json", prJSONFields}
 	if g.repo != "" {
 		args = append(args, "--repo", g.repo)
 	}
@@ -89,74 +169,17 @@ func (g *GitHubAdapter) FetchPR(number int) (*PullRequest, error) {
 		return nil, fmt.Errorf("fetch pr %d: %w", number, err)
 	}
 
-	var ghPR struct {
-		Number int    `json:"number"`
-		Title  string `json:"title"`
-		Body   string `json:"body"`
-		State  string `json:"state"`
-		Author struct {
-			Login string `json:"login"`
-		} `json:"author"`
-		Labels []struct {
-			Name string `json:"name"`
-		} `json:"labels"`
-		HeadRefName string `json:"headRefName"`
-		BaseRefName string `json:"baseRefName"`
-		IsDraft     bool   `json:"isDraft"`
-		Commits     []struct {
-			Oid             string `json:"oid"`
-			MessageHeadline string `json:"messageHeadline"`
-		} `json:"commits"`
-		Additions      int       `json:"additions"`
-		Deletions      int       `json:"deletions"`
-		ReviewDecision string    `json:"reviewDecision"`
-		CreatedAt      time.Time `json:"createdAt"`
-		UpdatedAt      time.Time `json:"updatedAt"`
-		URL            string    `json:"url"`
-	}
-
-	if err := json.Unmarshal(output, &ghPR); err != nil {
+	var gh ghPR
+	if err := json.Unmarshal(output, &gh); err != nil {
 		return nil, fmt.Errorf("parse pr response: %w", err)
 	}
 
-	labels := make([]string, len(ghPR.Labels))
-	for i, l := range ghPR.Labels {
-		labels[i] = l.Name
-	}
-
-	commits := make([]PRCommit, len(ghPR.Commits))
-	for i, c := range ghPR.Commits {
-		sha := c.Oid
-		if len(sha) > 7 {
-			sha = sha[:7]
-		}
-		commits[i] = PRCommit{SHA: sha, Message: c.MessageHeadline}
-	}
-
-	return &PullRequest{
-		Number:         ghPR.Number,
-		Title:          ghPR.Title,
-		Body:           ghPR.Body,
-		State:          strings.ToLower(ghPR.State),
-		Author:         ghPR.Author.Login,
-		Labels:         labels,
-		Branch:         ghPR.HeadRefName,
-		BaseBranch:     ghPR.BaseRefName,
-		IsDraft:        ghPR.IsDraft,
-		CommitCount:    len(ghPR.Commits),
-		Commits:        commits,
-		Additions:      ghPR.Additions,
-		Deletions:      ghPR.Deletions,
-		ReviewDecision: ghPR.ReviewDecision,
-		CreatedAt:      ghPR.CreatedAt,
-		UpdatedAt:      ghPR.UpdatedAt,
-		URL:            ghPR.URL,
-	}, nil
+	return gh.toPullRequest(), nil
 }
 
 // ListIssues retrieves issues with optional filtering.
 func (g *GitHubAdapter) ListIssues(opts ListOptions) ([]*Issue, error) {
-	args := []string{"issue", "list", "--json", "number,title,body,state,author,labels,createdAt,updatedAt,url"}
+	args := []string{"issue", "list", "--json", issueJSONFields}
 
 	if opts.State != "" && opts.State != "all" {
 		args = append(args, "--state", opts.State)
@@ -187,44 +210,14 @@ func (g *GitHubAdapter) ListIssues(opts ListOptions) ([]*Issue, error) {
 		return nil, fmt.Errorf("list issues: %w", err)
 	}
 
-	var ghIssues []struct {
-		Number int    `json:"number"`
-		Title  string `json:"title"`
-		Body   string `json:"body"`
-		State  string `json:"state"`
-		Author struct {
-			Login string `json:"login"`
-		} `json:"author"`
-		Labels []struct {
-			Name string `json:"name"`
-		} `json:"labels"`
-		CreatedAt time.Time `json:"createdAt"`
-		UpdatedAt time.Time `json:"updatedAt"`
-		URL       string    `json:"url"`
-	}
-
+	var ghIssues []ghIssue
 	if err := json.Unmarshal(output, &ghIssues); err != nil {
 		return nil, fmt.Errorf("parse issues response: %w", err)
 	}
 
 	issues := make([]*Issue, len(ghIssues))
 	for i, gh := range ghIssues {
-		labels := make([]string, len(gh.Labels))
-		for j, l := range gh.Labels {
-			labels[j] = l.Name
-		}
-
-		issues[i] = &Issue{
-			Number:    gh.Number,
-			Title:     gh.Title,
-			Body:      gh.Body,
-			State:     strings.ToLower(gh.State),
-			Author:    gh.Author.Login,
-			Labels:    labels,
-			CreatedAt: gh.CreatedAt,
-			UpdatedAt: gh.UpdatedAt,
-			URL:       gh.URL,
-		}
+		issues[i] = gh.toIssue()
 	}
 
 	return issues, nil
@@ -232,7 +225,7 @@ func (g *GitHubAdapter) ListIssues(opts ListOptions) ([]*Issue, error) {
 
 // ListPRs retrieves pull requests with optional filtering.
 func (g *GitHubAdapter) ListPRs(opts ListOptions) ([]*PullRequest, error) {
-	args := []string{"pr", "list", "--json", "number,title,body,state,author,labels,headRefName,baseRefName,isDraft,commits,additions,deletions,reviewDecision,createdAt,updatedAt,url"}
+	args := []string{"pr", "list", "--json", prJSONFields}
 
 	if opts.State != "" && opts.State != "all" {
 		args = append(args, "--state", opts.State)
@@ -263,71 +256,14 @@ func (g *GitHubAdapter) ListPRs(opts ListOptions) ([]*PullRequest, error) {
 		return nil, fmt.Errorf("list prs: %w", err)
 	}
 
-	var ghPRs []struct {
-		Number int    `json:"number"`
-		Title  string `json:"title"`
-		Body   string `json:"body"`
-		State  string `json:"state"`
-		Author struct {
-			Login string `json:"login"`
-		} `json:"author"`
-		Labels []struct {
-			Name string `json:"name"`
-		} `json:"labels"`
-		HeadRefName string `json:"headRefName"`
-		BaseRefName string `json:"baseRefName"`
-		IsDraft     bool   `json:"isDraft"`
-		Commits     []struct {
-			Oid             string `json:"oid"`
-			MessageHeadline string `json:"messageHeadline"`
-		} `json:"commits"`
-		Additions      int       `json:"additions"`
-		Deletions      int       `json:"deletions"`
-		ReviewDecision string    `json:"reviewDecision"`
-		CreatedAt      time.Time `json:"createdAt"`
-		UpdatedAt      time.Time `json:"updatedAt"`
-		URL            string    `json:"url"`
-	}
-
+	var ghPRs []ghPR
 	if err := json.Unmarshal(output, &ghPRs); err != nil {
 		return nil, fmt.Errorf("parse prs response: %w", err)
 	}
 
 	prs := make([]*PullRequest, len(ghPRs))
 	for i, gh := range ghPRs {
-		labels := make([]string, len(gh.Labels))
-		for j, l := range gh.Labels {
-			labels[j] = l.Name
-		}
-
-		commits := make([]PRCommit, len(gh.Commits))
-		for j, c := range gh.Commits {
-			sha := c.Oid
-			if len(sha) > 7 {
-				sha = sha[:7]
-			}
-			commits[j] = PRCommit{SHA: sha, Message: c.MessageHeadline}
-		}
-
-		prs[i] = &PullRequest{
-			Number:         gh.Number,
-			Title:          gh.Title,
-			Body:           gh.Body,
-			State:          strings.ToLower(gh.State),
-			Author:         gh.Author.Login,
-			Labels:         labels,
-			Branch:         gh.HeadRefName,
-			BaseBranch:     gh.BaseRefName,
-			IsDraft:        gh.IsDraft,
-			CommitCount:    len(gh.Commits),
-			Commits:        commits,
-			Additions:      gh.Additions,
-			Deletions:      gh.Deletions,
-			ReviewDecision: gh.ReviewDecision,
-			CreatedAt:      gh.CreatedAt,
-			UpdatedAt:      gh.UpdatedAt,
-			URL:            gh.URL,
-		}
+		prs[i] = gh.toPullRequest()
 	}
 
 	return prs, nil
@@ -376,23 +312,14 @@ func (g *GitHubAdapter) GetPRForBranch(branch string) (*PullRequest, error) {
 		return nil, nil
 	}
 
-	var ghPR struct {
-		Number int    `json:"number"`
-		Title  string `json:"title"`
-		State  string `json:"state"`
-		URL    string `json:"url"`
-	}
-
-	if err := json.Unmarshal(output, &ghPR); err != nil {
+	// Only a subset of prJSONFields is requested; the remaining ghPR fields
+	// stay at their zero values.
+	var gh ghPR
+	if err := json.Unmarshal(output, &gh); err != nil {
 		return nil, fmt.Errorf("parse pr response: %w", err)
 	}
 
-	return &PullRequest{
-		Number: ghPR.Number,
-		Title:  ghPR.Title,
-		State:  strings.ToLower(ghPR.State),
-		URL:    ghPR.URL,
-	}, nil
+	return gh.toPullRequest(), nil
 }
 
 // GetRepoViewURL returns the base HTTPS URL of the GitHub repository.

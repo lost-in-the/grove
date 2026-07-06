@@ -1,6 +1,7 @@
 package tracker
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -209,5 +210,92 @@ func TestDetectRepo_Integration(t *testing.T) {
 
 	if repo == "" {
 		t.Error("DetectRepo() returned empty string")
+	}
+}
+
+func TestGhIssue_ToIssue(t *testing.T) {
+	raw := `{
+		"number": 7,
+		"title": "Test Issue",
+		"body": "body text",
+		"state": "OPEN",
+		"author": {"login": "octocat"},
+		"labels": [{"name": "bug"}, {"name": "help wanted"}],
+		"url": "https://github.com/test-org/test-repo/issues/7"
+	}`
+	var gh ghIssue
+	if err := json.Unmarshal([]byte(raw), &gh); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	issue := gh.toIssue()
+	if issue.Number != 7 {
+		t.Errorf("Number = %d, want 7", issue.Number)
+	}
+	if issue.State != "open" {
+		t.Errorf("State = %q, want %q (should be lowercased)", issue.State, "open")
+	}
+	if issue.Author != "octocat" {
+		t.Errorf("Author = %q, want octocat", issue.Author)
+	}
+	if len(issue.Labels) != 2 || issue.Labels[0] != "bug" || issue.Labels[1] != "help wanted" {
+		t.Errorf("Labels = %v, want [bug, help wanted]", issue.Labels)
+	}
+}
+
+func TestGhPR_ToPullRequest(t *testing.T) {
+	raw := `{
+		"number": 42,
+		"title": "Test PR",
+		"state": "MERGED",
+		"author": {"login": "octocat"},
+		"labels": [{"name": "enhancement"}],
+		"headRefName": "feature-branch",
+		"baseRefName": "main",
+		"isDraft": true,
+		"commits": [
+			{"oid": "0123456789abcdef0123456789abcdef01234567", "messageHeadline": "first"},
+			{"oid": "abc1234", "messageHeadline": "short sha kept as-is"}
+		],
+		"additions": 10,
+		"deletions": 3,
+		"reviewDecision": "APPROVED",
+		"url": "https://github.com/test-org/test-repo/pull/42"
+	}`
+	var gh ghPR
+	if err := json.Unmarshal([]byte(raw), &gh); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	pr := gh.toPullRequest()
+	if pr.Number != 42 {
+		t.Errorf("Number = %d, want 42", pr.Number)
+	}
+	if pr.State != "merged" {
+		t.Errorf("State = %q, want %q (should be lowercased)", pr.State, "merged")
+	}
+	if pr.Branch != "feature-branch" || pr.BaseBranch != "main" {
+		t.Errorf("Branch = %q, BaseBranch = %q", pr.Branch, pr.BaseBranch)
+	}
+	if !pr.IsDraft {
+		t.Error("IsDraft = false, want true")
+	}
+	if pr.CommitCount != 2 || len(pr.Commits) != 2 {
+		t.Fatalf("CommitCount = %d, Commits = %v", pr.CommitCount, pr.Commits)
+	}
+	if pr.Commits[0].SHA != "0123456" {
+		t.Errorf("Commits[0].SHA = %q, want truncated %q", pr.Commits[0].SHA, "0123456")
+	}
+	if pr.Commits[1].SHA != "abc1234" {
+		t.Errorf("Commits[1].SHA = %q, want %q", pr.Commits[1].SHA, "abc1234")
+	}
+	if pr.Additions != 10 || pr.Deletions != 3 {
+		t.Errorf("Additions = %d, Deletions = %d", pr.Additions, pr.Deletions)
+	}
+	if pr.ReviewDecision != "APPROVED" {
+		t.Errorf("ReviewDecision = %q, want APPROVED", pr.ReviewDecision)
+	}
+	if len(pr.Labels) != 1 || pr.Labels[0] != "enhancement" {
+		t.Errorf("Labels = %v, want [enhancement]", pr.Labels)
 	}
 }
