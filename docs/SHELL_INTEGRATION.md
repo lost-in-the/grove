@@ -202,7 +202,7 @@ eval "$(grove install zsh)"   # or bash
 
 ## Version Bumps
 
-The constant `ShellVersion` in `internal/shell/version.go` tracks the shell integration template version. It is currently **5**.
+The constant `ShellVersion` in `internal/shell/version.go` tracks the shell integration template version. It is currently **6**.
 
 When the shell wrapper behavior changes incompatibly — new directives, changed passthrough logic, new env vars — increment `ShellVersion`. The grove binary reads `GROVE_SHELL_VERSION` (set by the wrapper) on every invocation and emits a warning when the running shell integration is older than `ShellVersion`.
 
