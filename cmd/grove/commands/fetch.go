@@ -5,13 +5,11 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/log"
-	"github.com/lost-in-the/grove/internal/state"
 	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/worktree"
 	"github.com/lost-in-the/grove/plugins/tracker"
@@ -48,16 +46,14 @@ func createFetchedWorktree(mgr *worktree.Manager, itemType, worktreeName, branch
 	return mgr.Create(worktreeName, branchName)
 }
 
-func setupFetchedWorktree(ctx *GroveContext, mgr *worktree.Manager, w *cli.Writer, wt *worktree.Worktree, worktreeName, branchName string) {
-	now := time.Now()
-	wsState := &state.WorktreeState{
-		Path:           wt.Path,
-		Branch:         branchName,
-		CreatedAt:      now,
-		LastAccessedAt: now,
-	}
-	if err := ctx.State.AddWorktree(worktreeName, wsState); err != nil {
-		log.Printf("failed to add worktree %q to state: %v", worktreeName, err)
+func setupFetchedWorktree(ctx *GroveContext, mgr *worktree.Manager, w *cli.Writer, worktreeName, branchName string) error {
+	// Run the same bootstrap as `grove new`/`grove open`: config symlink,
+	// state registration, file setup, post-create hooks, docker auto-start.
+	// Fetched worktrees previously only registered state, leaving them
+	// silently unprovisioned (#112).
+	wt, err := setupCreatedWorktree(ctx, mgr, worktreeName, branchName, worktreeSetupOpts{}, w)
+	if err != nil {
+		return err
 	}
 
 	if tmux.IsTmuxAvailable() {
@@ -85,6 +81,7 @@ func setupFetchedWorktree(ctx *GroveContext, mgr *worktree.Manager, w *cli.Write
 	} else {
 		fmt.Printf("\nTo switch to this worktree:\n  grove to %s\n", worktreeName)
 	}
+	return nil
 }
 
 // fetchItem creates a worktree from a GitHub PR or issue.
@@ -123,15 +120,7 @@ func fetchItem(ctx *GroveContext, itemType string, number int) error {
 		cli.Success(w, "Created worktree '%s' with new branch '%s'", worktreeName, branchName)
 	}
 
-	wt, err := mgr.Find(worktreeName)
-	if err != nil {
-		return fmt.Errorf("failed to find created worktree: %w", err)
-	}
-	if wt != nil {
-		setupFetchedWorktree(ctx, mgr, w, wt, worktreeName, branchName)
-	}
-
-	return nil
+	return setupFetchedWorktree(ctx, mgr, w, worktreeName, branchName)
 }
 
 var fetchCmd = &cobra.Command{
