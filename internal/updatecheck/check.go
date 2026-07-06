@@ -81,12 +81,30 @@ func cachedReleaseFromPath(currentVersion, path string) (latest, url string, ava
 // CheckInterval is the default minimum gap between two refreshes.
 const CheckInterval = 24 * time.Hour
 
-// RefreshAsync starts a detached goroutine that refreshes the cache if the
-// interval has elapsed. Never blocks. Failures are silent.
-func RefreshAsync() {
-	go refreshFromPathWithFetcher(DefaultCachePath(), CheckInterval, func() (Release, error) {
-		return FetchLatest(context.Background())
-	})
+// RefreshWaitBudget caps how long a short-lived CLI command should wait on
+// RefreshAsync's channel before exiting. When the cache is fresh the refresh
+// returns immediately, so the cap only bites on the (at most daily) run that
+// actually hits the network — keeping commands within the <500ms budget.
+const RefreshWaitBudget = 300 * time.Millisecond
+
+// RefreshAsync starts a goroutine that refreshes the cache if the interval
+// has elapsed, and returns a channel that is closed when the refresh
+// completes (or was skipped). Never blocks. Failures are silent.
+//
+// Short-lived CLI processes MUST wait (bounded, e.g. RefreshWaitBudget) on
+// the returned channel: goroutines die when main returns, so a fire-and-
+// forget refresh would be killed before the HTTPS round trip finishes and
+// the cache would never be written. Long-lived callers (the TUI) can ignore
+// the channel.
+func RefreshAsync() <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		refreshFromPathWithFetcher(DefaultCachePath(), CheckInterval, func() (Release, error) {
+			return FetchLatest(context.Background())
+		})
+	}()
+	return done
 }
 
 // refreshFromPathWithFetcher is the testable core: deterministic, no goroutine,
@@ -108,17 +126,28 @@ func refreshFromPathWithFetcher(path string, interval time.Duration, fetcher fun
 }
 
 // CheckNow synchronously fetches the latest release and prints the result to w.
-// Bypasses the cache and the interval. Used by --check-update.
+// Bypasses the cache and the interval for the fetch, but seeds the cache with
+// the result so later commands' MaybeNotify works from it. Used by --check-update.
 func CheckNow(w io.Writer, currentVersion string) error {
-	return checkNowWithDeps(w, currentVersion, func() (Release, error) {
+	return checkNowWithDeps(w, currentVersion, DefaultCachePath(), func() (Release, error) {
 		return FetchLatest(context.Background())
 	})
 }
 
-func checkNowWithDeps(w io.Writer, currentVersion string, fetcher func() (Release, error)) error {
+func checkNowWithDeps(w io.Writer, currentVersion, cachePath string, fetcher func() (Release, error)) error {
 	rel, err := fetcher()
 	if err != nil {
 		return err
+	}
+	// Write-through to the cache: without this, a manual --check-update
+	// couldn't seed the cache for later notifications. Failure is non-fatal —
+	// the synchronous output below is the primary result.
+	if cachePath != "" {
+		_ = WriteCacheToPath(cachePath, Cache{
+			LastCheckedAt: time.Now(),
+			LatestVersion: rel.Version(),
+			LatestURL:     rel.HTMLURL,
+		})
 	}
 	if !renderUpdateBox(w, currentVersion, rel.Version(), rel.HTMLURL) {
 		_, _ = fmt.Fprintf(w, upToDateMessage, currentVersion)

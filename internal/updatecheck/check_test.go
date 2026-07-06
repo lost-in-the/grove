@@ -150,7 +150,7 @@ func TestCheckNow_FetchesAndPrintsNotification(t *testing.T) {
 		return Release{TagName: "v0.6.0", HTMLURL: "https://x"}, nil
 	}
 	var buf bytes.Buffer
-	if err := checkNowWithDeps(&buf, "0.5.0", fetcher); err != nil {
+	if err := checkNowWithDeps(&buf, "0.5.0", "", fetcher); err != nil {
 		t.Fatalf("checkNowWithDeps: %v", err)
 	}
 	if !strings.Contains(buf.String(), "0.6.0") {
@@ -163,7 +163,7 @@ func TestCheckNow_UpToDateMessage(t *testing.T) {
 		return Release{TagName: "v0.5.0", HTMLURL: "https://x"}, nil
 	}
 	var buf bytes.Buffer
-	if err := checkNowWithDeps(&buf, "0.5.0", fetcher); err != nil {
+	if err := checkNowWithDeps(&buf, "0.5.0", "", fetcher); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(buf.String(), "up to date") {
@@ -174,7 +174,7 @@ func TestCheckNow_UpToDateMessage(t *testing.T) {
 func TestCheckNow_FetchFailureReturnsError(t *testing.T) {
 	fetcher := func() (Release, error) { return Release{}, errFakeNetwork }
 	var buf bytes.Buffer
-	if err := checkNowWithDeps(&buf, "0.5.0", fetcher); err == nil {
+	if err := checkNowWithDeps(&buf, "0.5.0", "", fetcher); err == nil {
 		t.Error("expected error on fetch failure")
 	}
 }
@@ -296,5 +296,31 @@ func TestCachedRelease_DevVersionUnavailable(t *testing.T) {
 	}
 	if latest != "" || url != "" {
 		t.Errorf("expected zero values for dev version, got latest=%q url=%q", latest, url)
+	}
+}
+
+func TestCheckNow_SeedsCache(t *testing.T) {
+	// Regression: --check-update fetched synchronously but never wrote the
+	// cache, so a manual check couldn't seed later MaybeNotify calls.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "update-check.json")
+	fetcher := func() (Release, error) {
+		return Release{TagName: "v0.6.0", HTMLURL: "https://x"}, nil
+	}
+
+	var buf bytes.Buffer
+	if err := checkNowWithDeps(&buf, "0.5.0", path, fetcher); err != nil {
+		t.Fatalf("checkNowWithDeps: %v", err)
+	}
+
+	c, err := ReadCacheFromPath(path)
+	if err != nil {
+		t.Fatalf("cache not written: %v", err)
+	}
+	if c.LatestVersion != "0.6.0" {
+		t.Errorf("cached LatestVersion = %q, want %q", c.LatestVersion, "0.6.0")
+	}
+	if c.LastCheckedAt.IsZero() {
+		t.Error("cached LastCheckedAt is zero")
 	}
 }
