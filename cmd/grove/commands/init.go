@@ -15,6 +15,7 @@ import (
 	"github.com/lost-in-the/grove/internal/exitcode"
 	"github.com/lost-in-the/grove/internal/grove"
 	"github.com/lost-in-the/grove/internal/state"
+	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 var (
@@ -116,7 +117,7 @@ func runInit() error {
 		generateAndWriteHooks(groveDir, cwd, cli.StdPrompter{})
 	}
 
-	createInitialWorktrees(cwd, projectName)
+	createInitialWorktrees(groveDir, cwd, projectName)
 
 	fmt.Println("")
 	fmt.Println("Next steps:")
@@ -468,7 +469,14 @@ func printHooksSummary(profile *detect.ProjectProfile) {
 	fmt.Printf("\n  Edit hooks: grove config --hooks -e\n")
 }
 
-func createInitialWorktrees(cwd, projectName string) {
+// createInitialWorktrees creates the --with-testing/--with-scratch/--full
+// worktrees through the same path as `grove new`: worktree.Manager.Create
+// (which honors the [naming] pattern instead of hardcoding {project}-{name})
+// followed by setupCreatedWorktree (state registration, config symlink,
+// hooks.toml post_create hooks, docker auto-start). Without this, worktrees
+// grove itself just created weren't registered in state, so entering one and
+// running any grove command reported it as an unrecognized drifted worktree.
+func createInitialWorktrees(groveDir, cwd, projectName string) {
 	if initFull {
 		initWithTesting = true
 		initWithScratch = true
@@ -484,13 +492,38 @@ func createInitialWorktrees(cwd, projectName string) {
 	if initFull {
 		names = append(names, "hotfix")
 	}
+	if len(names) == 0 {
+		return
+	}
+
+	mgr, err := worktree.NewManager(cwd)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to initialize worktree manager: %v\n", err)
+		return
+	}
+	stateMgr, err := state.NewManager(groveDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to open state for initial worktrees: %v\n", err)
+		return
+	}
+	cfg, err := config.LoadFromGroveDir(groveDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to load config for initial worktrees: %v\n", err)
+		return
+	}
+	ctx := &GroveContext{GroveDir: groveDir, ProjectRoot: cwd, State: stateMgr, Config: cfg}
+	w := cli.NewStdout()
 
 	for _, name := range names {
-		if err := createWorktree(cwd, projectName, name); err != nil {
+		if err := mgr.Create(name, name); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to create %s worktree: %v\n", name, err)
-		} else {
-			fmt.Printf("✓ Created '%s' worktree\n", name)
+			continue
 		}
+		if _, err := setupCreatedWorktree(ctx, mgr, name, name, worktreeSetupOpts{}, w); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to set up %s worktree: %v\n", name, err)
+			continue
+		}
+		fmt.Printf("✓ Created '%s' worktree\n", name)
 	}
 }
 

@@ -3,6 +3,8 @@ package commands
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -10,6 +12,7 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/detect"
+	"github.com/lost-in-the/grove/internal/state"
 )
 
 // fakePrompter is a scripted cli.Prompter used by tests that need to drive
@@ -564,3 +567,53 @@ func TestWalkthroughProfile(t *testing.T) {
 
 // Compile-time check that fakePrompter satisfies the cli.Prompter interface.
 var _ cli.Prompter = (*fakePrompter)(nil)
+
+// TestCreateInitialWorktrees_RegistersState verifies that --with-testing
+// worktrees are registered in state (and use the project's naming pattern)
+// instead of being created via a raw `git worktree add` that state never
+// learns about. Previously, entering a grove-init-created worktree and
+// running any grove command reported it as an unrecognized drifted worktree.
+func TestCreateInitialWorktrees_RegistersState(t *testing.T) {
+	dir := t.TempDir()
+	runAdoptGit(t, dir, "init", "-b", "main")
+	runAdoptGit(t, dir, "commit", "--allow-empty", "-m", "init")
+
+	groveDir := filepath.Join(dir, ".grove")
+	if err := os.MkdirAll(groveDir, 0755); err != nil {
+		t.Fatalf("mkdir .grove: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(groveDir, "config.toml"), []byte("project_name = \"proj\"\n"), 0644); err != nil {
+		t.Fatalf("write config.toml: %v", err)
+	}
+
+	stateMgr, err := state.NewManager(groveDir)
+	if err != nil {
+		t.Fatalf("state.NewManager: %v", err)
+	}
+	if err := stateMgr.AddWorktree("main", &state.WorktreeState{Path: dir, Branch: "main", Root: true}); err != nil {
+		t.Fatalf("AddWorktree(main): %v", err)
+	}
+
+	origTesting, origScratch, origFull := initWithTesting, initWithScratch, initFull
+	defer func() { initWithTesting, initWithScratch, initFull = origTesting, origScratch, origFull }()
+	initWithTesting, initWithScratch, initFull = true, false, false
+
+	createInitialWorktrees(groveDir, dir, "proj")
+
+	wtPath := filepath.Join(filepath.Dir(dir), "proj-testing")
+	if _, err := os.Stat(wtPath); err != nil {
+		t.Fatalf("expected worktree dir %s to exist: %v", wtPath, err)
+	}
+
+	reopened, err := state.NewManager(groveDir)
+	if err != nil {
+		t.Fatalf("reopen state: %v", err)
+	}
+	ws, _ := reopened.GetWorktree("testing")
+	if ws == nil {
+		t.Fatal("expected 'testing' worktree to be registered in state after createInitialWorktrees")
+	}
+	if ws.Branch != "testing" {
+		t.Errorf("branch = %q, want %q", ws.Branch, "testing")
+	}
+}

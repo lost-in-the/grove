@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -85,26 +84,6 @@ func updateGitignore(dir string) error {
 
 	_, err = f.WriteString(entry)
 	return err
-}
-
-func createWorktree(repoDir, projectName, name string) error {
-	parentDir := filepath.Dir(repoDir)
-	worktreeDir := filepath.Join(parentDir, fmt.Sprintf("%s-%s", projectName, name))
-
-	output, err := cmdexec.Output(context.TODO(), "git", []string{"rev-parse", "--abbrev-ref", "HEAD"}, repoDir, cmdexec.GitLocal)
-	if err != nil {
-		return fmt.Errorf("failed to get current branch: %w", err)
-	}
-	baseBranch := strings.TrimSpace(string(output))
-
-	branchName := name
-	// Worktree add streams progress to stdout/stderr — use exec.Command directly
-	cmd := exec.Command("git", "worktree", "add", "-b", branchName, worktreeDir, baseBranch)
-	cmd.Dir = repoDir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	return cmd.Run()
 }
 
 // emitCdOrExplain emits the cd: directive for the shell wrapper when shell
