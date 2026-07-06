@@ -1247,7 +1247,7 @@ When no Docker is configured, the `services` field is `null`/omitted.
 
 ## State Commands
 
-> No user-facing state commands are currently registered. The `internal/state` package exposes freeze/resume logic, but no cobra commands wire it to the CLI. See the [Planned Commands](#planned-not-yet-implemented) section for the design.
+> No user-facing state commands are currently registered, and no freeze/resume logic is implemented — the `internal/state` package only tracks worktree metadata. See the [Planned Commands](#planned-not-yet-implemented) section for the freeze/resume design.
 
 ---
 
@@ -2412,7 +2412,7 @@ The annotation honors the same opt-outs as `grove`'s other update surfaces (env 
 
 ## Planned (not yet implemented)
 
-These commands are referenced in `internal/state` but not yet wired to user-facing cobra commands. The spec is preserved here so the design is recoverable when implementation lands.
+These commands are not implemented — no freeze/resume logic exists in code (a future-API sketch lives in `internal/state/README.md`). The spec is preserved here so the design is recoverable when implementation lands.
 
 ### grove freeze
 
