@@ -3,8 +3,6 @@ package config
 import (
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
 )
 
 const dockerModeExternal = "external"
@@ -114,15 +112,14 @@ func validateExternalRequiredFields(ext *ExternalComposeConfig) error {
 	return nil
 }
 
-// validateExternalPath validates the external docker path exists and is a directory
+// validateExternalPath validates the external docker path exists and is a
+// directory. In the standard load path ext.Path is already absolute
+// (resolveProjectPaths runs before Validate); expandTildePath keeps Validate
+// safe for raw, unresolved configs without duplicating the expansion logic.
 func validateExternalPath(ext *ExternalComposeConfig) error {
-	path := ext.Path
-	if strings.HasPrefix(path, "~/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("plugins.docker.external.path: failed to expand ~: %w", err)
-		}
-		path = filepath.Join(home, path[2:])
+	path, err := expandTildePath(ext.Path)
+	if err != nil {
+		return fmt.Errorf("plugins.docker.external.path: %w", err)
 	}
 	info, err := os.Stat(path)
 	if err != nil {

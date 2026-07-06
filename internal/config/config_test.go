@@ -55,12 +55,16 @@ dirty_handling = "auto-stash"
 			},
 		},
 		{
-			name:       "empty config uses defaults",
+			// A file that doesn't set a field must leave it at the zero
+			// value — defaults enter the merge chain once, in Load/
+			// LoadFromGroveDir, so mergeConfigs can tell "file set this"
+			// apart from "default filled this".
+			name:       "empty config leaves fields unset",
 			configData: ``,
 			wantErr:    false,
 			validate: func(t *testing.T, cfg *Config) {
-				if cfg.Alias != "w" {
-					t.Errorf("Expected default alias 'w', got '%s'", cfg.Alias)
+				if cfg.Alias != "" {
+					t.Errorf("Expected unset alias, got '%s'", cfg.Alias)
 				}
 			},
 		},
@@ -1527,5 +1531,62 @@ non_blocking_services = ["asset_precompile", "db_seed"]
 		if ext.NonBlockingServices[i] != w {
 			t.Errorf("NonBlockingServices[%d]: got %q want %q", i, ext.NonBlockingServices[i], w)
 		}
+	}
+}
+
+// TestLoadFromPaths_HigherLayerDoesNotResetLowerLayerSettings is the
+// regression test for per-file default seeding: the mere existence of a
+// project config must not reset explicit global settings the project file
+// doesn't mention back to built-in defaults.
+func TestLoadFromPaths_HigherLayerDoesNotResetLowerLayerSettings(t *testing.T) {
+	t.Setenv("GROVE_CONFIG", "")
+
+	tmpDir := t.TempDir()
+
+	globalPath := filepath.Join(tmpDir, "global", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(globalPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	globalToml := `default_base_branch = "develop"
+
+[tmux]
+mode = "off"
+
+[plugins.docker]
+enabled = false
+`
+	if err := os.WriteFile(globalPath, []byte(globalToml), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	projectPath := filepath.Join(tmpDir, "proj", ".grove", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(projectPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Project file mentions ONLY project_name.
+	if err := os.WriteFile(projectPath, []byte("project_name = \"myproj\"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadFromPaths(LoadDefaults(), globalPath, projectPath, "")
+	if err != nil {
+		t.Fatalf("loadFromPaths() error = %v", err)
+	}
+
+	if cfg.ProjectName != "myproj" {
+		t.Errorf("ProjectName = %q, want %q", cfg.ProjectName, "myproj")
+	}
+	if cfg.DefaultBranch != "develop" {
+		t.Errorf("DefaultBranch = %q, want global %q (clobbered by project layer's phantom defaults)", cfg.DefaultBranch, "develop")
+	}
+	if cfg.Tmux.Mode != "off" {
+		t.Errorf("Tmux.Mode = %q, want global %q", cfg.Tmux.Mode, "off")
+	}
+	if cfg.Plugins.Docker.Enabled == nil || *cfg.Plugins.Docker.Enabled {
+		t.Errorf("Plugins.Docker.Enabled = %v, want global false", cfg.Plugins.Docker.Enabled)
+	}
+	// And defaults still fill fields no layer set.
+	if cfg.Alias != "w" {
+		t.Errorf("Alias = %q, want default %q", cfg.Alias, "w")
 	}
 }

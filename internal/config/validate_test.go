@@ -55,9 +55,12 @@ default_base_branch = "develop"
 		if cfg.DefaultBranch != "develop" {
 			t.Errorf("DefaultBranch = %q, want %q", cfg.DefaultBranch, "develop")
 		}
-		// Defaults should be preserved for unset values
-		if cfg.Tmux.Mode != "auto" {
-			t.Errorf("Tmux.Mode = %q, want default %q", cfg.Tmux.Mode, "auto")
+		// Unset values must stay at zero — defaults are applied once as the
+		// base of the merge chain, not per file. Seeding defaults here would
+		// make every file look like it explicitly set every field, clobbering
+		// lower-priority layers in mergeConfigs.
+		if cfg.Tmux.Mode != "" {
+			t.Errorf("Tmux.Mode = %q, want unset (zero value)", cfg.Tmux.Mode)
 		}
 	})
 
