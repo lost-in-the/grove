@@ -64,6 +64,23 @@ Examples:
 			return nil
 		}
 
+		// Verify the target belongs to THIS repository. gitBranchAt succeeds
+		// in any git repository (or subdirectory of one), so without this
+		// check adopt would register an unrelated repo in this project's
+		// state, symlink this project's config into it, and fire this
+		// project's post-create hooks there.
+		targetCommon, err := gitCommonDirAt(target)
+		if err != nil {
+			return fmt.Errorf("resolve git dir for %s: %w", target, err)
+		}
+		rootCommon, err := gitCommonDirAt(ctx.ProjectRoot)
+		if err != nil {
+			return fmt.Errorf("resolve git dir for %s: %w", ctx.ProjectRoot, err)
+		}
+		if targetCommon != rootCommon {
+			return fmt.Errorf("%s is not a worktree of this repository (git dir: %s, expected: %s)", target, targetCommon, rootCommon)
+		}
+
 		mgr, err := ctx.WorktreeManager()
 		if err != nil {
 			return err
@@ -125,6 +142,25 @@ func resolveAdoptTarget(cwd string, args []string) (string, error) {
 		return resolved, nil
 	}
 	return abs, nil
+}
+
+// gitCommonDirAt returns the absolute, symlink-resolved path of the git
+// common directory (the shared .git dir) for the repository containing dir.
+// Two directories belong to the same repository iff their common dirs match.
+func gitCommonDirAt(dir string) (string, error) {
+	out, err := cmdexec.Output(context.TODO(), "git", []string{"rev-parse", "--git-common-dir"}, dir, cmdexec.GitLocal)
+	if err != nil {
+		return "", err
+	}
+	p := strings.TrimSpace(string(out))
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(dir, p)
+	}
+	p = filepath.Clean(p)
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		return resolved, nil
+	}
+	return p, nil
 }
 
 // gitBranchAt returns the current branch name of the git worktree at dir.
