@@ -317,7 +317,7 @@ func handleDirectoryDrift(sessionName, worktreePath, onSwitch string, stderr *cl
 }
 
 // shellSingleQuote wraps s in single quotes for safe interpolation into a
-// POSIX shell command line, escaping embedded single quotes with '\''.
+// POSIX shell command line, escaping embedded single quotes with '\”.
 func shellSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
