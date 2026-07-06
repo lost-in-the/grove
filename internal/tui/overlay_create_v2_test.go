@@ -310,7 +310,7 @@ func TestCreateWorktreeCmd_RemoteBranch_UsesCreateFromBranch(t *testing.T) {
 	}
 
 	const baseBranch = "origin/feature-remote-only"
-	cmd := createWorktreeCmd(mgr, nil, dir, "remote-wt", baseBranch)
+	cmd := createWorktreeCmd(mgr, nil, dir, "remote-wt", baseBranch, "", "")
 	msg := cmd()
 
 	// The first message must be a creationLogMsg (log line before createFn runs)

@@ -189,7 +189,7 @@ func TestCreateWorktreeCmd_NewBranch(t *testing.T) {
 	repo := setupRailsFixture(t)
 	mgr, stateMgr := newTestManagers(t, repo)
 
-	cmd := createWorktreeCmd(mgr, stateMgr, repo, "new-feature", "")
+	cmd := createWorktreeCmd(mgr, stateMgr, repo, "new-feature", "", "", "")
 	created := drainCreationStream(t, cmd)
 	if created.err != nil {
 		t.Fatalf("unexpected error: %v", created.err)
@@ -214,7 +214,7 @@ func TestCreateWorktreeCmd_WithBaseBranch(t *testing.T) {
 	// already exist and not be checked out elsewhere — main fails because
 	// the fixture repo itself is checked out at main.
 	runGit(t, repo, "branch", "feature-base")
-	cmd := createWorktreeCmd(mgr, stateMgr, repo, "auth-work", "feature-base")
+	cmd := createWorktreeCmd(mgr, stateMgr, repo, "auth-work", "feature-base", "", "")
 	created := drainCreationStream(t, cmd)
 	if created.err != nil {
 		t.Fatalf("unexpected error: %v", created.err)
@@ -226,15 +226,77 @@ func TestCreateWorktreeCmd_WithBaseBranch(t *testing.T) {
 	}
 }
 
+// TestCreateWorktreeCmd_NewBranchNameThreaded verifies the typed new-branch
+// name is used for the git branch even when it differs from the worktree name
+// (regression for the create wizard discarding NewBranchName).
+func TestCreateWorktreeCmd_NewBranchNameThreaded(t *testing.T) {
+	repo := setupRailsFixture(t)
+	mgr, stateMgr := newTestManagers(t, repo)
+
+	// Worktree name "login" differs from the typed branch "feature/login-fix".
+	// Before the fix, the branch was named after the worktree and the typed
+	// name was silently lost.
+	cmd := createWorktreeCmd(mgr, stateMgr, repo, "login", "", "feature/login-fix", "")
+	created := drainCreationStream(t, cmd)
+	if created.err != nil {
+		t.Fatalf("unexpected error: %v", created.err)
+	}
+
+	wtPath := filepath.Join(filepath.Dir(repo), "rails-app-login")
+	branch := strings.TrimSpace(runGit(t, wtPath, "rev-parse", "--abbrev-ref", "HEAD"))
+	if branch != "feature/login-fix" {
+		t.Errorf("expected worktree on branch %q, got %q", "feature/login-fix", branch)
+	}
+}
+
+// TestCreateWorktreeCmd_ForkFromBase verifies a fork creates a new branch based
+// on the selected base ref rather than HEAD (regression for the fork action
+// dropping the base branch).
+func TestCreateWorktreeCmd_ForkFromBase(t *testing.T) {
+	repo := setupRailsFixture(t)
+	mgr, stateMgr := newTestManagers(t, repo)
+
+	// Point "develop" at the current commit, then advance main so HEAD differs
+	// from develop. A fork from develop must land on develop's commit, not HEAD.
+	base := strings.TrimSpace(runGit(t, repo, "rev-parse", "HEAD"))
+	runGit(t, repo, "branch", "develop", base)
+	if err := os.WriteFile(filepath.Join(repo, "advance.txt"), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "add", "advance.txt")
+	runGit(t, repo, "commit", "-m", "advance main")
+	head := strings.TrimSpace(runGit(t, repo, "rev-parse", "HEAD"))
+	if head == base {
+		t.Fatal("expected main HEAD to advance past develop")
+	}
+
+	// Fork: no explicit new-branch name (named after the worktree), fromRef=develop.
+	cmd := createWorktreeCmd(mgr, stateMgr, repo, "forked", "", "", "develop")
+	created := drainCreationStream(t, cmd)
+	if created.err != nil {
+		t.Fatalf("unexpected error: %v", created.err)
+	}
+
+	wtPath := filepath.Join(filepath.Dir(repo), "rails-app-forked")
+	got := strings.TrimSpace(runGit(t, wtPath, "rev-parse", "HEAD"))
+	if got != base {
+		t.Errorf("expected forked worktree at develop's commit %q, got %q", base, got)
+	}
+	branch := strings.TrimSpace(runGit(t, wtPath, "rev-parse", "--abbrev-ref", "HEAD"))
+	if branch != "forked" {
+		t.Errorf("expected new branch %q named after worktree, got %q", "forked", branch)
+	}
+}
+
 func TestCreateWorktreeCmd_InvalidName(t *testing.T) {
 	repo := setupRailsFixture(t)
 	mgr, stateMgr := newTestManagers(t, repo)
 
 	// Create a worktree, then try to create it again (duplicate)
-	cmd := createWorktreeCmd(mgr, stateMgr, repo, "dup-test", "")
+	cmd := createWorktreeCmd(mgr, stateMgr, repo, "dup-test", "", "", "")
 	drainCreationStream(t, cmd) // first creation
 
-	cmd2 := createWorktreeCmd(mgr, stateMgr, repo, "dup-test", "")
+	cmd2 := createWorktreeCmd(mgr, stateMgr, repo, "dup-test", "", "", "")
 	created := drainCreationStream(t, cmd2)
 	if created.err == nil {
 		t.Error("expected error for duplicate worktree creation")
@@ -245,7 +307,7 @@ func TestCreateWorktreeCmd_BranchInState(t *testing.T) {
 	repo := setupRailsFixture(t)
 	mgr, stateMgr := newTestManagers(t, repo)
 
-	cmd := createWorktreeCmd(mgr, stateMgr, repo, "my-feature", "")
+	cmd := createWorktreeCmd(mgr, stateMgr, repo, "my-feature", "", "", "")
 	created := drainCreationStream(t, cmd)
 	if created.err != nil {
 		t.Fatalf("unexpected error: %v", created.err)
@@ -430,7 +492,7 @@ func TestCreateWorktreeCmd_DockerComposeInherited(t *testing.T) {
 	repo := setupRailsFixture(t)
 	mgr, stateMgr := newTestManagers(t, repo)
 
-	cmd := createWorktreeCmd(mgr, stateMgr, repo, "docker-test", "")
+	cmd := createWorktreeCmd(mgr, stateMgr, repo, "docker-test", "", "", "")
 	created := drainCreationStream(t, cmd)
 	if created.err != nil {
 		t.Fatalf("unexpected error: %v", created.err)

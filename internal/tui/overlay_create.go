@@ -35,6 +35,7 @@ type CreateState struct {
 	NamePattern    string // worktree naming pattern for directory-name previews
 	BaseBranch     string // set when using existing branch (split)
 	NewBranchName  string // set when creating new branch via selector
+	ForkBase       string // set when forking a new branch from a selected base branch
 	Error          string
 
 	// Branch choice state (step 0)

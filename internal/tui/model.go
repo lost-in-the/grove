@@ -1357,7 +1357,8 @@ func (m Model) handleBranchActionKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 
 		if s.ActionChoice == 1 {
-			// fork: new branch, don't use existing
+			// fork: create a new branch based on the selected branch
+			s.ForkBase = s.BaseBranch
 			s.BaseBranch = ""
 		}
 		// Initialize name input and proceed to Name step
@@ -1387,19 +1388,19 @@ func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, s.NameInput.Focus()
 
 	case key.Matches(msg, m.keys.Enter):
-		return m.startCreate(s.Name, s.BaseBranch)
+		return m.startCreate(s)
 	}
 	return m, nil
 }
 
-func (m *Model) startCreate(name, baseBranch string) (tea.Model, tea.Cmd) {
-	if m.createState.Creating {
+func (m *Model) startCreate(s *CreateState) (tea.Model, tea.Cmd) {
+	if s.Creating {
 		return m, nil
 	}
-	m.createState.Error = ""
-	m.createState.Creating = true
-	m.createState.ActivityLog = NewActivityLog(60, 10)
-	return m, tea.Batch(m.spinner.Tick, createWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, name, baseBranch))
+	s.Error = ""
+	s.Creating = true
+	s.ActivityLog = NewActivityLog(60, 10)
+	return m, tea.Batch(m.spinner.Tick, createWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, s.Name, s.BaseBranch, s.NewBranchName, s.ForkBase))
 }
 
 // handleBranchChoiceKey handles the initial "Select existing" vs "Create new" choice.
@@ -1564,6 +1565,7 @@ func (m Model) handleBranchCreateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		s.BaseBranch = ""
+		s.ForkBase = ""
 		s.NewBranchName = name
 		if s.NameSuggestion == "" {
 			s.NameSuggestion = name
@@ -1582,6 +1584,7 @@ func (m Model) handleBranchCreateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m Model) selectExistingBranch(branch string) (tea.Model, tea.Cmd) {
 	s := m.createState
 	s.BaseBranch = branch
+	s.ForkBase = ""
 	s.NewBranchName = ""
 
 	strategy := ""
@@ -1596,6 +1599,7 @@ func (m Model) selectExistingBranch(branch string) (tea.Model, tea.Cmd) {
 
 	if m.cfg != nil && m.cfg.TUI.SkipBranchNotice != nil && *m.cfg.TUI.SkipBranchNotice {
 		if m.cfg.TUI.DefaultBranchAction == "fork" {
+			s.ForkBase = s.BaseBranch
 			s.BaseBranch = ""
 		}
 		s.Step = CreateStepName

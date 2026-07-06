@@ -251,18 +251,32 @@ func streamingCreateCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectR
 	return readCreationLog(ch, source)
 }
 
-func createWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot, name, baseBranch string) tea.Cmd {
+func createWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot, name, baseBranch, newBranch, fromRef string) tea.Cmd {
 	var logLines []string
 	var createFn func() error
 	if baseBranch != "" {
+		// Split: check out an existing branch into the new worktree.
 		logLines = []string{fmt.Sprintf("Creating worktree '%s' from branch '%s'...", name, baseBranch)}
 		createFn = func() error { return mgr.CreateFromBranch(name, baseBranch) }
 	} else {
-		logLines = []string{
-			fmt.Sprintf("Creating worktree '%s'...", name),
-			fmt.Sprintf("Creating branch '%s'...", name),
+		// New branch (optionally forked from fromRef). When no explicit branch
+		// name is given (e.g. the fork action), name the branch after the worktree.
+		branch := newBranch
+		if branch == "" {
+			branch = name
 		}
-		createFn = func() error { return mgr.Create(name, name) }
+		if fromRef != "" {
+			logLines = []string{
+				fmt.Sprintf("Creating worktree '%s'...", name),
+				fmt.Sprintf("Creating branch '%s' from '%s'...", branch, fromRef),
+			}
+		} else {
+			logLines = []string{
+				fmt.Sprintf("Creating worktree '%s'...", name),
+				fmt.Sprintf("Creating branch '%s'...", branch),
+			}
+		}
+		createFn = func() error { return mgr.CreateFromRef(name, branch, fromRef) }
 	}
 	return streamingCreateCmd(mgr, stateMgr, projectRoot, name, "create", logLines, createFn)
 }
