@@ -497,7 +497,7 @@ grove down               # stop the current worktree's isolated stack
 ```toml
 [plugins.docker.external.agent]
 max_slots = 5
-url_pattern = "http://localhost:{port}"
+url_pattern = "http://localhost:{slot}"  # {slot} = slot number; empty disables URL display
 ```
 
 See [plugins/docker/README.md](plugins/docker/README.md) for the full reference.

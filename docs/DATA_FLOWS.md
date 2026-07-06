@@ -15,7 +15,7 @@ Config
   ProjectsDir   string           # default: ~/projects
   DefaultBranch string           # default: "main"
   Switch        SwitchConfig     # dirty_handling: "prompt" | "auto-stash" | "refuse"
-  Naming        NamingConfig     # pattern: "{type}/{description}"
+  Naming        NamingConfig     # pattern: "{project}-{name}" (worktree directory template)
   Tmux          TmuxConfig       # mode: "auto" | "manual" | "off", prefix: ""
   Plugins       PluginsConfig    # docker plugin config
   Protection    ProtectionConfig # protected/immutable worktree lists
@@ -24,6 +24,7 @@ Config
   NoColor        bool            # runtime only (GROVE_NO_COLOR)
   Debug          bool            # runtime only (GROVE_DEBUG)
   NonInteractive bool            # runtime only (GROVE_NONINTERACTIVE)
+  AgentMode      bool            # runtime only (GROVE_AGENT_MODE)
 ```
 
 **Load chain** (each layer overrides the previous):
@@ -32,15 +33,17 @@ Config
 graph LR
     A[LoadDefaults] --> B[Global config]
     B --> C[Project config]
-    C --> D[Env var overrides]
-    D --> E[Validate]
+    C --> D[Local overlay]
+    D --> E[Env var overrides]
+    E --> F[Validate]
 ```
 
 1. **Defaults** -- `LoadDefaults()` in `defaults.go` returns hardcoded defaults
 2. **Global config** -- `~/.config/grove/config.toml` (overridden by `GROVE_CONFIG` env var)
 3. **Project config** -- `.grove/config.toml` in the project root (or `groveDir/config.toml` when loaded via `LoadFromGroveDir`)
-4. **Environment overrides** -- `GROVE_NO_COLOR`, `GROVE_DEBUG`, `GROVE_NONINTERACTIVE` (runtime-only, not persisted)
-5. **Validation** -- `Validate()` in `validate.go` checks required fields and enum values
+4. **Local overlay** -- `.grove/config.local.toml` (gitignored, per-developer overrides)
+5. **Environment overrides** -- `GROVE_NO_COLOR`, `GROVE_DEBUG`, `GROVE_NONINTERACTIVE`, `GROVE_AGENT_MODE` (runtime-only, not persisted)
+6. **Validation** -- `Validate()` in `validate.go` checks required fields and enum values
 
 **Merge behavior:** `mergeConfigs()` does field-by-field override -- non-zero/non-nil values in the override replace the base. Protection lists (`Protected`, `Immutable`) use **deduplicated union** semantics -- project-level protections are merged with global protections so that global protections are never silently lost (CF-5 resolved).
 
