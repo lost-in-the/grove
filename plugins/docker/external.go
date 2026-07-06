@@ -27,20 +27,8 @@ func newExternalStrategy(cfg *config.Config) *externalStrategy {
 }
 
 func (s *externalStrategy) OnPreSwitch(ctx *hooks.Context) error {
-	if !s.getAutoStop() {
+	if !confirmSwitchAction(s.getAutoStop(), ctx, promptStopContainers, false) {
 		return nil
-	}
-
-	action := resolveFromConfig(s.getContainerSwitch(ctx))
-	if action == ContainerSwitchOff {
-		return nil
-	}
-
-	if action == ContainerSwitchPrompt {
-		yes, err := cli.Confirm("Stop containers in previous worktree?", false)
-		if err != nil || !yes {
-			return nil
-		}
 	}
 
 	return s.stopServices()
@@ -61,20 +49,8 @@ func (s *externalStrategy) OnPostSwitch(ctx *hooks.Context) error {
 	// Export the env var into the user's shell so manual docker compose commands work
 	s.emitEnvDirective(worktreePath)
 
-	if !s.getAutoStart() {
+	if !confirmSwitchAction(s.getAutoStart(), ctx, promptStartContainers, true) {
 		return nil
-	}
-
-	action := resolveFromConfig(s.getContainerSwitch(ctx))
-	if action == ContainerSwitchOff {
-		return nil
-	}
-
-	if action == ContainerSwitchPrompt {
-		yes, err := cli.Confirm("Start containers for this worktree?", true)
-		if err != nil || !yes {
-			return nil
-		}
 	}
 
 	return s.startServices(worktreePath)
@@ -363,25 +339,11 @@ func (s *externalStrategy) relativeWorktreePath(absPath string) string {
 	return rel
 }
 
-func (s *externalStrategy) getContainerSwitch(ctx *hooks.Context) string {
-	if ctx.Config != nil {
-		return ctx.Config.Switch.ContainerSwitch
-	}
-	return ""
-}
-
 func (s *externalStrategy) getAutoStart() bool {
-	if s.cfg != nil && s.cfg.Plugins.Docker.AutoStart != nil {
-		return *s.cfg.Plugins.Docker.AutoStart
-	}
-	// External mode defaults to true for auto_start
-	return true
+	return dockerAutoStart(s.cfg, true)
 }
 
 func (s *externalStrategy) getAutoStop() bool {
-	if s.cfg != nil && s.cfg.Plugins.Docker.AutoStop != nil {
-		return *s.cfg.Plugins.Docker.AutoStop
-	}
 	// External mode defaults to true for auto_stop (unlike local's false)
-	return true
+	return dockerAutoStop(s.cfg, true)
 }

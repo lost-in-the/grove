@@ -5,7 +5,6 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/hooks"
 )
@@ -20,50 +19,26 @@ func newLocalStrategy(cfg *config.Config) *localStrategy {
 }
 
 func (s *localStrategy) OnPreSwitch(ctx *hooks.Context) error {
-	if !s.getAutoStop() {
-		return nil
-	}
-
-	action := resolveFromConfig(s.getContainerSwitch(ctx))
-	if action == ContainerSwitchOff {
-		return nil
-	}
-
 	worktreePath := s.getWorktreePath(ctx.PrevWorktree)
 	if !hasDockerCompose(worktreePath) {
 		return nil
 	}
 
-	if action == ContainerSwitchPrompt {
-		yes, err := cli.Confirm("Stop containers in previous worktree?", false)
-		if err != nil || !yes {
-			return nil
-		}
+	if !confirmSwitchAction(s.getAutoStop(), ctx, promptStopContainers, false) {
+		return nil
 	}
 
 	return s.down(worktreePath)
 }
 
 func (s *localStrategy) OnPostSwitch(ctx *hooks.Context) error {
-	if !s.getAutoStart() {
-		return nil
-	}
-
-	action := resolveFromConfig(s.getContainerSwitch(ctx))
-	if action == ContainerSwitchOff {
-		return nil
-	}
-
 	worktreePath := s.getWorktreePath(ctx.Worktree)
 	if !hasDockerCompose(worktreePath) {
 		return nil
 	}
 
-	if action == ContainerSwitchPrompt {
-		yes, err := cli.Confirm("Start containers for this worktree?", true)
-		if err != nil || !yes {
-			return nil
-		}
+	if !confirmSwitchAction(s.getAutoStart(), ctx, promptStartContainers, true) {
+		return nil
 	}
 
 	return s.up(worktreePath, false)
@@ -169,24 +144,11 @@ func (s *localStrategy) up(worktreePath string, detach bool) error {
 }
 
 func (s *localStrategy) getAutoStart() bool {
-	if s.cfg != nil && s.cfg.Plugins.Docker.AutoStart != nil {
-		return *s.cfg.Plugins.Docker.AutoStart
-	}
-	return true
-}
-
-func (s *localStrategy) getContainerSwitch(ctx *hooks.Context) string {
-	if ctx.Config != nil {
-		return ctx.Config.Switch.ContainerSwitch
-	}
-	return ""
+	return dockerAutoStart(s.cfg, true)
 }
 
 func (s *localStrategy) getAutoStop() bool {
-	if s.cfg != nil && s.cfg.Plugins.Docker.AutoStop != nil {
-		return *s.cfg.Plugins.Docker.AutoStop
-	}
-	return false
+	return dockerAutoStop(s.cfg, false)
 }
 
 func (s *localStrategy) getWorktreePath(name string) string {
