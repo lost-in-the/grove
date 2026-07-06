@@ -11,6 +11,7 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/hooks"
 	"github.com/lost-in-the/grove/internal/log"
 	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/worktree"
@@ -177,6 +178,99 @@ func switchToWorktree(ctx *GroveContext, stderr *cli.Writer, prevName, targetNam
 		log.Printf("state save failed: %v", batchErr)
 	}
 	return tmuxSwitched
+}
+
+// removeWorktreeWithHooks runs the shared removal sequence used by `grove rm`
+// and `grove trim`: user pre-remove hooks (hooks.toml), the plugin pre-remove
+// hook (e.g. stop agent stacks), git worktree removal, state cleanup, and
+// tmux session kill. Returns an error only when the git removal itself fails;
+// ancillary failures are warned and skipped.
+func removeWorktreeWithHooks(ctx *GroveContext, mgr *worktree.Manager, w *cli.Writer, projectName, name, wtPath, branchName string) error {
+	// Execute pre-remove hooks (user hooks from hooks.toml)
+	hookExecutor, hookErr := hooks.NewExecutor()
+	if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPreRemove) {
+		hookCtx := &hooks.ExecutionContext{
+			Event:        hooks.EventPreRemove,
+			Worktree:     name,
+			Branch:       branchName,
+			Project:      projectName,
+			MainPath:     ctx.ProjectRoot,
+			NewPath:      wtPath,
+			WorktreeFull: filepath.Base(wtPath),
+		}
+		cli.Step(w, "Running pre-remove hooks...")
+		if err := hookExecutor.Execute(hooks.EventPreRemove, hookCtx); err != nil {
+			cli.Warning(w, "Hook execution had errors: %v", err)
+		}
+	}
+
+	// Fire plugin pre-remove hook (e.g., stop agent stacks)
+	pluginHookCtx := &hooks.Context{
+		Worktree:     name,
+		Config:       ctx.Config,
+		WorktreePath: wtPath,
+		MainPath:     ctx.ProjectRoot,
+	}
+	if err := hooks.Fire(hooks.EventPreRemove, pluginHookCtx); err != nil {
+		cli.Warning(w, "Pre-remove plugin hook failed: %v", err)
+	}
+
+	// Remove worktree — the critical step, done before tmux kill
+	if err := mgr.Remove(name); err != nil {
+		return fmt.Errorf("failed to remove worktree: %w", err)
+	}
+
+	// Remove from state
+	if err := ctx.State.RemoveWorktree(name); err != nil {
+		cli.Warning(w, "worktree removed but state cleanup failed: %v", err)
+	}
+
+	cli.Success(w, "Removed worktree '%s'", name)
+
+	// Kill tmux session after worktree is confirmed gone
+	if tmux.IsTmuxAvailable() {
+		sessionName := worktree.TmuxSessionName(projectName, name)
+		if exists, err := tmux.SessionExists(sessionName); err == nil && exists {
+			if err := tmux.KillSession(sessionName); err != nil {
+				cli.Warning(w, "Failed to kill tmux session: %v", err)
+			} else {
+				cli.Success(w, "Killed tmux session '%s'", sessionName)
+			}
+		}
+	}
+
+	return nil
+}
+
+// firePostRemoveHooks fires user post-remove hooks (hooks.toml) and the
+// plugin post-remove hook for a worktree that was just removed. Kept separate
+// from removeWorktreeWithHooks so `grove rm` can interleave branch deletion
+// before the post-remove hooks, preserving its established ordering.
+func firePostRemoveHooks(ctx *GroveContext, w *cli.Writer, projectName, name, wtPath, branchName string) {
+	hookExecutor, hookErr := hooks.NewExecutor()
+	if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPostRemove) {
+		hookCtx := &hooks.ExecutionContext{
+			Event:    hooks.EventPostRemove,
+			Worktree: name,
+			Branch:   branchName,
+			Project:  projectName,
+			MainPath: ctx.ProjectRoot,
+		}
+		cli.Step(w, "Running post-remove hooks...")
+		if err := hookExecutor.Execute(hooks.EventPostRemove, hookCtx); err != nil {
+			cli.Warning(w, "Post-remove hook had errors: %v", err)
+		}
+	}
+
+	pluginHookCtx := &hooks.Context{
+		Worktree:     name,
+		Config:       ctx.Config,
+		WorktreePath: wtPath,
+		MainPath:     ctx.ProjectRoot,
+	}
+	if err := hooks.Fire(hooks.EventPostRemove, pluginHookCtx); err != nil {
+		cli.Warning(w, "Post-remove plugin hook failed: %v", err)
+	}
 }
 
 // worktreeSetupOpts configures the post-create setup sequence.
