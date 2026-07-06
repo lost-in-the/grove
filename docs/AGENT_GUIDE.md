@@ -218,7 +218,7 @@ grove new <name>
 
 What happens:
 1. Creates a git worktree at `../{project}-{name}/`
-2. Creates a branch named `{name}` (configurable via `[naming] pattern`)
+2. Creates a branch named `{name}` (override with `--branch`; `[naming] pattern` controls the directory name, not the branch)
 3. Fires `post_create` hooks (copy credentials, symlink deps, etc.)
 4. Creates a tmux session named `{project}-{name}` (if tmux mode is not `off`)
 
@@ -330,9 +330,11 @@ What happens:
 
 ```bash
 grove fetch pr/42
-# Fetched branch: feature/auth-refactor (PR #42)
-# Created worktree: myapp-pr-42
+# Created worktree 'pr-42-auth-refactor' from branch 'feature/auth-refactor'
 ```
+
+The worktree is named `pr-<N>-<title-slug>` (issue fetches use `issue-<N>-<title-slug>`).
+Take the exact name from fetch's output or `grove ls` — don't guess it.
 
 Interactive browsers: `grove prs`, `grove issues` — TUI lists with fuzzy search, press Enter to fetch.
 
@@ -400,11 +402,11 @@ Protected worktrees (`main`, `develop`, or any name in `[protection] protected`)
 
 **Remove stale worktrees in bulk:**
 ```bash
-grove trim           # removes worktrees not accessed in 30 days
-grove trim --days 7  # shorter threshold
+grove trim                 # removes worktrees not accessed in 30 days
+grove trim --older-than 7  # shorter threshold
 ```
 
-The `clean` alias also works (`grove clean --days 7`), but `trim` is the canonical name.
+The `clean` alias also works (`grove clean --older-than 7`), but `trim` is the canonical name.
 
 Stale = `LastAccessedAt` older than threshold and no dirty changes. Protected worktrees are skipped.
 
@@ -555,23 +557,22 @@ Multiple agents can each run their own independent Docker stack with port offset
 
 ```bash
 grove up --isolated          # allocate next available slot
-grove up --isolated --slot 3 # specific slot
 
 grove agent-status           # table of active stacks
 grove agent-status --json    # machine-readable
 
-grove down --slot 2          # stop specific stack
+grove down                   # stop the stack (isolated stacks auto-detected from cwd)
 grove ps                     # show running stacks with reference IDs and URLs
 ```
 
-Each isolated stack gets a unique compose project name (`{project}-{worktree}-slot-{N}`) and port-offset containers.
+Each isolated stack gets a unique compose project name (`{project}-agent-{N}`) and port-offset containers.
 
 Configure max concurrent stacks:
 ```toml
 [plugins.docker.external.agent]
 max_slots = 5
 network = "shared"
-url_pattern = "http://localhost:{port}"
+url_pattern = "http://localhost:{slot}"  # {slot} is the slot number; empty disables URL display
 ```
 
 See §7 for agent workflow patterns using isolated stacks.
@@ -598,10 +599,10 @@ Config is loaded in layers (later overrides earlier):
 dirty_handling = "prompt"
 
 [naming]
-# Branch name pattern when creating worktrees
-# Tokens: {type}, {description}
-# Default creates branch matching the worktree short name
-# pattern = "{type}/{description}"
+# Worktree directory naming template
+# Must contain {project} and {name} exactly once each; literals limited to [A-Za-z0-9._-]
+# Branch names are not affected (the branch is named after the worktree, or --branch)
+# pattern = "{project}-{name}"  # default
 
 [tmux]
 # "auto" (default) | "manual" | "off"
@@ -638,7 +639,7 @@ auto_stop = false
 # [plugins.docker.external.agent]
 # max_slots = 5
 # network = "shared"
-# url_pattern = "http://localhost:{port}"
+# url_pattern = "http://localhost:{slot}"  # {slot} = slot number; empty disables URL display
 
 [protection]
 # Worktrees that require --force to remove
@@ -720,14 +721,17 @@ grove up --isolated               # gets slot 2
 
 # Check what's running
 grove agent-status --json
-# [{"slot":1,"project":"myapp-agent-task-1-slot-1","status":"running","ports":[3101,3111]},
-#  {"slot":2,"project":"myapp-agent-task-2-slot-2","status":"running","ports":[3102,3112]}]
+# [{"slot":1,"worktree":"agent-task-1","compose_project":"myapp-agent-1","url":"http://localhost:3101"},
+#  {"slot":2,"worktree":"agent-task-2","compose_project":"myapp-agent-2","url":"http://localhost:3102"}]
+# (`url` is omitted when no url_pattern is configured)
 
-# When done, clean up
-grove down --slot 1
+# When done, clean up (run `grove down` inside each worktree — its stack is auto-detected)
+cd ../myapp-agent-task-1
+grove down
 grove rm agent-task-1
 
-grove down --slot 2
+cd ../myapp-agent-task-2
+grove down
 grove rm agent-task-2
 ```
 
@@ -740,17 +744,18 @@ export GROVE_AGENT_MODE=1
 
 # Fetch the PR branch as a new worktree (no switch, no hooks that affect active stack)
 grove fetch pr/42
+# Created worktree 'pr-42-fix-login-bug' ... — use the exact name it prints
 
 # Peek into it without firing hooks
-grove to pr-42 --peek
+grove to pr-42-fix-login-bug --peek
 
 # Run tests in the PR worktree without leaving current context
-grove test pr-42
-# or with extra args:
-grove test pr-42 -- --tag focus
+grove test pr-42-fix-login-bug
+# or with extra args (appended verbatim — no `--` separator):
+grove test pr-42-fix-login-bug --tag focus
 
 # When done
-grove rm pr-42
+grove rm pr-42-fix-login-bug
 ```
 
 ### Configuring for Agent Use

@@ -49,8 +49,8 @@ export GROVE_TUI=0               # disable dashboard; bare `grove` prints usage
 | `grove context` | Rich status: ahead/behind, stash count, recent commits | ✓ | — |
 | `grove test <name>` | Run configured tests in another worktree without switching (aliases: `tt`) | — | — |
 | `grove ps` | List active isolated Docker slots (aliases: `agent-status`) | ✓ | — |
-| `grove up` | Start Docker stack; `--isolated [--slot N]` for per-agent stacks (aliases: `u`) | — | ✓ |
-| `grove down` | Stop Docker stack; `--slot N` for isolated stacks | — | ✓ |
+| `grove up` | Start Docker stack; `--isolated` for per-agent stacks (aliases: `u`) | — | ✓ |
+| `grove down` | Stop Docker stack; isolated stacks are auto-detected | — | ✓ |
 | `grove rm [name]` | Remove worktree + branch + tmux + Docker (aliases: `remove`, `delete`) | — | ✓ |
 | `grove doctor [worktree]` | Health check; inspect output before `grove new` in unknown repos | — | — |
 
@@ -102,11 +102,15 @@ allowing any worktree creation or switching. Do not assume a repo's hooks are sa
 ### Review a GitHub PR non-destructively
 
 ```bash
-grove fetch pr/42                   # creates worktree grove-{project}-pr-42 (needs `gh`)
-grove to grove-project-pr-42 --peek # cd only — skips hooks and tmux entirely
+grove fetch pr/42          # creates worktree pr-42-<title-slug> (needs `gh`)
+                           # fetch prints the generated name — use that, don't guess it
+grove to pr-42-fix-login-bug --peek # cd only — skips hooks and tmux entirely
 # read files, run grep, etc.
-grove rm grove-project-pr-42        # teardown
+grove rm pr-42-fix-login-bug        # teardown
 ```
+
+`grove fetch` names the worktree `pr-<N>-<title-slug>` (slug from the PR title). Take
+the exact name from fetch's own output or `grove ls`, never hardcode it.
 
 ### New feature branch
 
@@ -115,8 +119,8 @@ Clean up when done: `grove rm auth`.
 
 ### Run tests in another worktree without leaving current
 
-`grove test cache-redesign` runs the configured test command there. Pass extra args
-after `--`: `grove test cache-redesign -- -run TestFoo`.
+`grove test cache-redesign` runs the configured test command there. Extra args are
+appended verbatim (no `--` separator): `grove test cache-redesign -run TestFoo`.
 
 ### Cheap state probes
 
@@ -132,9 +136,9 @@ unique port offsets:
 
 ```bash
 grove ps --json                     # discover active slots: [{slot, worktree, compose_project, url}]
-grove up --isolated --slot 2        # start an isolated stack on slot 2
+grove up --isolated                 # start an isolated stack (auto-allocates a slot)
 # ... work in this worktree ...
-grove down --slot 2                 # release slot when done
+grove down                          # release the stack (isolated stacks auto-detected)
 ```
 
 The `[plugins.docker.external.agent] max_slots` config value caps the number of
