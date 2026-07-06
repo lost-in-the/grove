@@ -753,7 +753,7 @@ func (m *Model) updateLayout() {
 		listHeaderHeight = 2
 	}
 
-	useSideBySide := m.width > 100
+	useSideBySide := isWideLayout(m.width)
 	if useSideBySide {
 		// List gets 60% of content width, detail gets the remainder
 		listWidth := contentWidth * 60 / 100
@@ -2070,7 +2070,7 @@ func (m Model) buildDashboardHeader() Header {
 
 // renderDashboardBody renders the list and detail panels in side-by-side or stacked layout.
 func (m Model) renderDashboardBody() string {
-	if m.width > 100 {
+	if isWideLayout(m.width) {
 		return m.renderSideBySideBody()
 	}
 	return m.renderStackedBody()

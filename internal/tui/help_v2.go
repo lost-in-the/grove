@@ -151,43 +151,7 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 // RenderCompact renders a one- or two-line footer with key hints.
 // At narrow widths, hints wrap to a second line instead of being dropped.
 func (h *HelpFooter) RenderCompact(view ActiveView, width int) string {
-	hints := h.CompactHints(view)
-
-	parts := make([]string, 0, len(hints))
-	for _, hint := range hints {
-		keyStyle := Styles.HelpKey
-		if h.IsHighlighted(hint.Key) {
-			keyStyle = Styles.HelpKeyHighlight
-		}
-		part := keyStyle.Render(hint.Key) + " " + Styles.HelpDesc.Render(hint.Description)
-		parts = append(parts, part)
-	}
-
-	sep := Styles.HelpSep.Render(" · ")
-	line := strings.Join(parts, sep)
-
-	// Fits on one line — done
-	if lipgloss.Width(line) <= width || width <= 0 {
-		return "  " + line
-	}
-
-	// Try two lines: split roughly in half
-	for split := len(parts) / 2; split >= 1; split-- {
-		line1 := strings.Join(parts[:split], sep)
-		line2 := strings.Join(parts[split:], sep)
-		if lipgloss.Width(line1) <= width && lipgloss.Width(line2) <= width {
-			return "  " + line1 + "\n  " + line2
-		}
-	}
-
-	// Even two lines overflow — fall back to dropping from right
-	for i := len(parts) - 1; i >= 1; i-- {
-		line = strings.Join(parts[:i], sep)
-		if lipgloss.Width(line) <= width {
-			break
-		}
-	}
-	return "  " + line
+	return h.RenderCompactWithHints(h.CompactHints(view), width)
 }
 
 // CompactHeight returns the number of lines the compact footer will occupy.

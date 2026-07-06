@@ -296,7 +296,7 @@ func (m Model) renderContextPanel(cfg contextPanelConfig) string {
 	footerLines := strings.Count(cfg.footer, "\n") + 1
 	bodyBudget := m.height - 1 - footerLines
 
-	useSideBySide := m.width > 100
+	useSideBySide := isWideLayout(m.width)
 	bodyWidth := m.width - 2
 
 	var body string

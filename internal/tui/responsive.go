@@ -23,3 +23,10 @@ func LayoutBreakpoint(width int) Layout {
 		return LayoutNarrow
 	}
 }
+
+// isWideLayout reports whether the given width should use the side-by-side
+// (wide) layout. Centralizes the breakpoint so panel sizing and rendering
+// never disagree.
+func isWideLayout(width int) bool {
+	return LayoutBreakpoint(width) == LayoutWide
+}

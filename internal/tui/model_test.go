@@ -657,7 +657,7 @@ func TestRenderBulkOverlay(t *testing.T) {
 	t.Run("empty items", func(t *testing.T) {
 		s := &BulkState{Items: nil, Selected: nil}
 		v := renderBulk(s)
-		if !strings.Contains(v, "No merged") {
+		if !strings.Contains(v, "No worktrees to clean up") {
 			t.Error("expected empty message")
 		}
 	})

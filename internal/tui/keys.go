@@ -154,7 +154,7 @@ func DefaultKeyMap() KeyMap {
 		),
 		All: key.NewBinding(
 			key.WithKeys("a"),
-			key.WithHelp("a", "all merged"),
+			key.WithHelp("a", "bulk delete"),
 		),
 
 		SwitchUp: key.NewBinding(

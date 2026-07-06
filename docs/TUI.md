@@ -20,7 +20,7 @@ GROVE_TUI=0 grove
 
 The dashboard adjusts to your terminal width:
 
-- **Wide (> 120 columns):** Side-by-side layout — worktree list on the left, detail panel on the right, separated by a vertical divider.
+- **Wide (> 100 columns):** Side-by-side layout — worktree list on the left, detail panel on the right, separated by a vertical divider.
 - **Narrow:** Stacked layout — list on top, a named separator rule, detail panel below.
 
 ### Header
@@ -103,7 +103,10 @@ Toast levels:
 | `↑` / `k` | Move up |
 | `↓` / `j` | Move down |
 | `enter` | Switch to selected worktree |
+| `U` | Switch to selected worktree and force-start its containers |
 | `1`–`9` | Quick-switch to nth worktree |
+| `tab` | Focus the detail panel for scrolling (see below) |
+| `B` | Open the selected worktree's associated PR in the browser |
 | `n` | Create new worktree |
 | `d` | Delete selected worktree |
 | `R` | Rename selected worktree |
@@ -121,6 +124,18 @@ Toast levels:
 | `/` | Filter list |
 | `?` | Toggle expanded help |
 | `q` / `esc` | Quit |
+
+#### Detail Panel (when focused)
+
+Press `tab` from the dashboard to move focus into the detail panel so you can scroll long content. While focused:
+
+| Key | Action |
+|-----|--------|
+| `↑` / `k`, `↓` / `j` | Scroll up / down |
+| `g` / `G` | Jump to top / bottom |
+| `ctrl+u` / `ctrl+d` | Half page up / down |
+| `B` | Open associated PR in browser |
+| `tab` / `esc` | Return focus to the list |
 
 ### Overlay / Wizard Keys
 
@@ -255,7 +270,7 @@ Controls:
 - `tab` — Toggle PR detail preview (rendered markdown body)
 - `enter` — Create a new worktree from the PR branch
 - `B` — Open the selected PR in your default browser
-- Type to filter by title, author, number, or labels
+- Type to filter by title, branch, author, or number
 - `esc` — Close
 
 ### Issue Browser (`i`)
