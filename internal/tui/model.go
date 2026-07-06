@@ -512,7 +512,7 @@ func (m Model) handleBulkDeleteDone(msg bulkDeleteDoneMsg) (tea.Model, tea.Cmd) 
 
 func (m Model) handleWIPCheck(msg wipCheckMsg) (tea.Model, tea.Cmd) {
 	// Only apply the result to the overlay whose worktree path matches, so a
-	// stale check dispatched by a since-cancelled overlay cannot overwrite the
+	// stale check dispatched by a since-canceled overlay cannot overwrite the
 	// WIP state of a different overlay opened afterwards.
 	if m.forkState != nil && m.forkState.Source.Path == msg.path {
 		m.forkState.HasWIP = msg.hasWIP

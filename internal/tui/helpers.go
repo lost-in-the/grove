@@ -121,7 +121,7 @@ func scrollWindow(total, cursor, maxVisible int) (start, end int) {
 // wipCheckMsg is sent after checking a worktree for uncommitted changes.
 // Used by both the checkout and fork overlays. The path field correlates the
 // result back to the worktree that was checked, so a stale result from a
-// cancelled overlay cannot corrupt a later overlay opened for a different
+// canceled overlay cannot corrupt a later overlay opened for a different
 // worktree.
 type wipCheckMsg struct {
 	path   string

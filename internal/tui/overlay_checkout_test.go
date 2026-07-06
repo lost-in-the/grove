@@ -136,7 +136,7 @@ func TestCheckoutOverlay_WIPCheckIgnoresStalePath(t *testing.T) {
 	m.activeView = ViewCheckout
 	m.checkoutState = NewCheckoutState(WorktreeItem{ShortName: "b", Branch: "b", Path: "/tmp/wt-b"})
 
-	// A stale result dispatched by a since-cancelled overlay for a *different*
+	// A stale result dispatched by a since-canceled overlay for a *different*
 	// worktree must not corrupt this overlay's WIP state.
 	m = sendMsg(m, wipCheckMsg{path: "/tmp/wt-a", hasWIP: true, files: []string{"x.go"}})
 	if m.checkoutState.HasWIP {
