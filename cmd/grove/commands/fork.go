@@ -99,7 +99,9 @@ Examples:
 			if err == nil && ws != nil && ws.Mirror != "" {
 				// For environment worktrees, fork from the mirror's HEAD
 				baseRef = ws.Mirror
-				cli.Info(w, "Forking from environment worktree (mirror: %s)", ws.Mirror)
+				if !forkJSON {
+					cli.Info(w, "Forking from environment worktree (mirror: %s)", ws.Mirror)
+				}
 			}
 		}
 
@@ -128,7 +130,7 @@ Examples:
 			// Determine WIP handling strategy
 			if !forkMoveWIP && !forkCopyWIP && !forkNoWIP {
 				// Prompt user if interactive
-				if !isInteractive() {
+				if !cli.IsInteractive() {
 					return fmt.Errorf("uncommitted changes detected; use --move-wip, --copy-wip, or --no-wip")
 				}
 
@@ -195,7 +197,9 @@ Examples:
 			return fmt.Errorf("failed to find created worktree")
 		}
 
-		cli.Success(w, "Created worktree '%s' with branch '%s'", name, newBranchName)
+		if !forkJSON {
+			cli.Success(w, "Created worktree '%s' with branch '%s'", name, newBranchName)
+		}
 
 		// Symlink config.toml from main worktree
 		if err := grove.EnsureConfigSymlink(ctx.ProjectRoot, newTree.Path); err != nil {
@@ -208,21 +212,23 @@ Examples:
 		if len(wipPatch) > 0 && (forkMoveWIP || forkCopyWIP) {
 			newWipHandler := worktree.NewWIPHandler(newTree.Path)
 			if err := newWipHandler.ApplyPatch(wipPatch); err != nil {
-				cli.Warning(w, "Failed to apply changes to fork: %v", err)
-				cli.Warning(w, "Changes are preserved in the source worktree")
+				cli.Warning(stderr, "Failed to apply changes to fork: %v", err)
+				cli.Warning(stderr, "Changes are preserved in the source worktree")
 			} else {
-				if forkCopyWIP {
+				if forkCopyWIP && !forkJSON {
 					cli.Success(w, "Copied uncommitted changes to fork")
 				}
 				// Reset source worktree only after successful patch application
 				if forkMoveWIP {
 					if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", currentTree.Path, "checkout", "--", "."}, "", cmdexec.GitLocal); err != nil {
-						cli.Warning(w, "changes applied to fork but failed to reset source: %v\n%s", err, output)
+						cli.Warning(stderr, "changes applied to fork but failed to reset source: %v\n%s", err, output)
 					} else {
 						if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", currentTree.Path, "clean", "-fd"}, "", cmdexec.GitLocal); err != nil {
-							cli.Warning(w, "failed to clean untracked files in source: %v\n%s", err, output)
+							cli.Warning(stderr, "failed to clean untracked files in source: %v\n%s", err, output)
 						}
-						cli.Success(w, "Moved uncommitted changes to fork")
+						if !forkJSON {
+							cli.Success(w, "Moved uncommitted changes to fork")
+						}
 					}
 				}
 			}
@@ -238,8 +244,8 @@ Examples:
 			ParentWorktree: parentName,
 		}
 		if err := ctx.State.AddWorktree(name, wsState); err != nil {
-			cli.Warning(w, "worktree created but state tracking failed: %v", err)
-			cli.Info(w, "run 'grove repair' to fix")
+			cli.Warning(stderr, "worktree created but state tracking failed: %v", err)
+			cli.Info(stderr, "run 'grove repair' to fix")
 		}
 
 		runFileSetup(ctx.Config, newTree.Path, ctx.ProjectRoot, w, forkJSON)
@@ -252,7 +258,7 @@ Examples:
 			MainPath:     ctx.ProjectRoot,
 		}
 		if err := hooks.Fire(hooks.EventPostCreate, hookCtx); err != nil {
-			cli.Warning(w, "Post-create hook failed: %v", err)
+			cli.Warning(stderr, "Post-create hook failed: %v", err)
 		}
 
 		projectName := mgr.GetProjectName()
@@ -261,8 +267,8 @@ Examples:
 		if tmux.IsTmuxAvailable() {
 			sessionName := worktree.TmuxSessionName(projectName, name)
 			if err := tmux.CreateSession(sessionName, newTree.Path); err != nil {
-				cli.Warning(w, "Failed to create tmux session: %v", err)
-			} else {
+				cli.Warning(stderr, "Failed to create tmux session: %v", err)
+			} else if !forkJSON {
 				cli.Success(w, "Created tmux session '%s'", sessionName)
 			}
 		}
@@ -297,16 +303,6 @@ Examples:
 
 		return nil
 	}),
-}
-
-// isInteractive checks if we're running interactively.
-func isInteractive() bool {
-	// Check if stdin is a terminal
-	fileInfo, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return (fileInfo.Mode() & os.ModeCharDevice) != 0
 }
 
 func init() {

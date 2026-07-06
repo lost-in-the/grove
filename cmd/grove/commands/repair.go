@@ -141,7 +141,7 @@ Examples:
 		}
 
 		// Prompt for confirmation
-		if !isInteractive() {
+		if !cli.IsInteractive() {
 			fmt.Fprintln(os.Stderr, "Non-interactive mode: use --dry-run to preview or run interactively to repair")
 			return nil
 		}
