@@ -111,7 +111,7 @@ Examples:
 
 		// Check protection status
 		cfg := ctx.Config
-		isProtectedByConfig := cfg != nil && cfg.IsProtected(name)
+		isProtectedByConfig := cfg != nil && (cfg.IsProtected(resolvedName) || cfg.IsProtected(name))
 		isEnvironment := false
 		ws, _ := ctx.State.GetWorktree(resolvedName)
 		if ws != nil {
