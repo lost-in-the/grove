@@ -120,7 +120,7 @@ func TestDetectProjectName(t *testing.T) {
 			}
 
 			m := &Manager{repoRoot: repoRoot}
-			got := m.detectProjectName()
+			got := m.detectProjectNameAt(m.getMainWorktreePath())
 
 			if got != tt.want {
 				t.Errorf("detectProjectName() = %q, want %q", got, tt.want)
@@ -261,7 +261,7 @@ func TestDetectProjectNameFromConfig(t *testing.T) {
 	}
 
 	m := &Manager{repoRoot: tmpDir}
-	got := m.detectProjectName()
+	got := m.detectProjectNameAt(m.getMainWorktreePath())
 
 	// Should use config value, not remote
 	want := "my-custom-project"

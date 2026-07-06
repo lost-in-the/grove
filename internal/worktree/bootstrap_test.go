@@ -189,3 +189,63 @@ required = true
 		})
 	}
 }
+
+// TestBootstrapWorktree_WorktreeFullMatchesDirectory guards the
+// {{.worktree_full}} contract: it must be the real directory name
+// (filepath.Base of the worktree path), not the canonical
+// {project}-{name} concatenation, which diverges under a custom
+// [naming] pattern or for adopted directories.
+//
+// It also covers hooks.toml discovery: BootstrapWorktree passes the main
+// worktree's .grove dir to the executor explicitly, so the hook must run
+// even though the test's cwd is nowhere near the project.
+func TestBootstrapWorktree_WorktreeFullMatchesDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	mainDir := filepath.Join(tmpDir, "main")
+	groveDir := filepath.Join(mainDir, ".grove")
+	if err := os.MkdirAll(groveDir, 0755); err != nil {
+		t.Fatalf("mkdir grove: %v", err)
+	}
+	// Directory name deliberately does NOT match {project}-{name}
+	// ("test-proj-feature") — as with a custom pattern like {project}_{name}.
+	wtPath := filepath.Join(tmpDir, "test-proj_feature")
+	if err := os.MkdirAll(wtPath, 0755); err != nil {
+		t.Fatalf("mkdir wt: %v", err)
+	}
+
+	hooksToml := `[hooks]
+[[hooks.post_create]]
+type = "command"
+command = "printf '%s' '{{.worktree_full}}' > worktree_full.txt"
+working_dir = "new"
+`
+	if err := os.WriteFile(filepath.Join(groveDir, "hooks.toml"), []byte(hooksToml), 0644); err != nil {
+		t.Fatalf("write hooks.toml: %v", err)
+	}
+
+	stateMgr, err := state.NewManager(groveDir)
+	if err != nil {
+		t.Fatalf("state mgr: %v", err)
+	}
+
+	opts := BootstrapOpts{
+		Name:         "feature",
+		Branch:       "feature",
+		WorktreePath: wtPath,
+		MainPath:     mainDir,
+		ProjectName:  "test-proj",
+	}
+
+	if err := BootstrapWorktree(stateMgr, config.LoadDefaults(), opts, nil); err != nil {
+		t.Fatalf("BootstrapWorktree: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(wtPath, "worktree_full.txt"))
+	if err != nil {
+		t.Fatalf("post-create hook did not run (worktree_full.txt missing): %v", err)
+	}
+	want := filepath.Base(wtPath)
+	if got := strings.TrimSpace(string(data)); got != want {
+		t.Errorf("{{.worktree_full}} = %q, want directory name %q", got, want)
+	}
+}

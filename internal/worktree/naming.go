@@ -35,8 +35,10 @@ type projectConfig struct {
 const DefaultNamePattern = "{project}-{name}"
 
 // namePatternLiterals restricts literal (non-placeholder) characters to ones
-// that are safe in directory names, git branch names, tmux targets, and
-// GitHub URLs.
+// that are safe in directory names, git branch names, and GitHub URLs.
+// Note '.' and ':' are NOT safe in tmux targets — the pattern only governs
+// directory names; tmux session names are sanitized separately (see
+// TmuxSessionName).
 var namePatternLiterals = regexp.MustCompile(`^[A-Za-z0-9._-]*$`)
 
 // ValidateNamePattern checks that a worktree naming pattern is usable:
@@ -79,14 +81,15 @@ func InterpolateNamePattern(pattern, project, name string) string {
 	return strings.ReplaceAll(full, "{name}", name)
 }
 
-// detectProjectName determines the project name using priority:
+// detectProjectNameAt determines the project name using priority:
 // 1. .grove/config.toml -> project_name (from main worktree)
 // 2. Git remote origin URL -> repo name (from main worktree)
 // 3. Main worktree directory name as fallback
-func (m *Manager) detectProjectName() string {
-	// Get the main worktree path (first in the list)
-	mainWorktreePath := m.getMainWorktreePath()
-
+//
+// The main worktree path is taken as a parameter so callers that already
+// parsed `git worktree list --porcelain` (e.g. listLight) don't trigger a
+// redundant exec via getMainWorktreePath.
+func (m *Manager) detectProjectNameAt(mainWorktreePath string) string {
 	// Priority 1: Check .grove/config.toml in main worktree
 	configPath := filepath.Join(mainWorktreePath, ".grove", "config.toml")
 	if data, err := os.ReadFile(configPath); err == nil {
@@ -182,9 +185,18 @@ func (m *Manager) getNamePattern() string {
 	if m.namePattern != "" {
 		return m.namePattern
 	}
+	return m.namePatternAt(m.getMainWorktreePath())
+}
+
+// namePatternAt is getNamePattern with the main worktree path already in
+// hand, so priming a cold cache doesn't re-exec `git worktree list`.
+func (m *Manager) namePatternAt(mainWorktreePath string) string {
+	if m.namePattern != "" {
+		return m.namePattern
+	}
 	m.namePattern = DefaultNamePattern
 
-	groveDir := filepath.Join(m.getMainWorktreePath(), ".grove")
+	groveDir := filepath.Join(mainWorktreePath, ".grove")
 	cfg, err := config.LoadFromGroveDir(groveDir)
 	if err != nil || cfg == nil {
 		return m.namePattern
@@ -205,11 +217,7 @@ func (m *Manager) getNamePattern() string {
 // Tmux session names intentionally do NOT follow the pattern — they always
 // use the canonical {project}-{name} form (see TmuxSessionName).
 func (m *Manager) FullName(name string) string {
-	if m.projectName == "" {
-		m.projectName = m.detectProjectName()
-	}
-
-	return InterpolateNamePattern(m.getNamePattern(), m.projectName, name)
+	return InterpolateNamePattern(m.getNamePattern(), m.GetProjectName(), name)
 }
 
 // ShortName inverts the naming pattern: given a full worktree directory name,
@@ -217,10 +225,7 @@ func (m *Manager) FullName(name string) string {
 // returned unchanged (e.g. worktrees created before a pattern change or by
 // raw `git worktree add`).
 func (m *Manager) ShortName(fullName string) string {
-	if m.projectName == "" {
-		m.projectName = m.detectProjectName()
-	}
-	short, _ := shortNameFromFull(fullName, m.projectName, m.getNamePattern())
+	short, _ := shortNameFromFull(fullName, m.GetProjectName(), m.getNamePattern())
 	return short
 }
 

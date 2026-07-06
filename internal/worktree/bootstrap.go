@@ -2,6 +2,7 @@ package worktree
 
 import (
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/lost-in-the/grove/internal/cli"
@@ -96,7 +97,9 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 
 	// Per-project (config-driven) post-create hooks last — these may target
 	// containers via docker:compose handlers and need them already running.
-	hookExecutor, hookErr := hooks.NewExecutor()
+	// The main worktree's .grove dir is passed explicitly so hooks.toml is
+	// found regardless of the caller's cwd (subdirectory, secondary worktree).
+	hookExecutor, hookErr := hooks.NewExecutor(filepath.Join(opts.MainPath, ".grove"))
 	if hookErr != nil {
 		log.Printf("hooks: failed to load config during bootstrap: %v", hookErr)
 		if w != nil {
@@ -104,9 +107,14 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 		}
 	} else if hookExecutor.HasHooksForEvent(hooks.EventPostCreate) {
 		hookCtx := &hooks.ExecutionContext{
-			Event:        hooks.EventPostCreate,
-			Worktree:     opts.Name,
-			WorktreeFull: opts.ProjectName + "-" + opts.Name,
+			Event:    hooks.EventPostCreate,
+			Worktree: opts.Name,
+			// WorktreeFull is contractually the real directory name
+			// ({{.worktree_full}} in hooks.toml). Derive it from the path —
+			// the canonical {project}-{name} concatenation is wrong under a
+			// custom [naming] pattern or for adopted directories, and every
+			// other producer (rm, TUI) uses filepath.Base(wt.Path).
+			WorktreeFull: filepath.Base(opts.WorktreePath),
 			Branch:       opts.Branch,
 			Project:      opts.ProjectName,
 			MainPath:     opts.MainPath,
