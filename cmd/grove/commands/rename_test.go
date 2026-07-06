@@ -110,6 +110,7 @@ func TestValidateRename(t *testing.T) {
 		current   *worktree.Worktree
 		cfg       *mockProtection
 		oldName   string
+		newName   string
 		wantErr   bool
 		errSubstr string
 	}{
@@ -119,6 +120,7 @@ func TestValidateRename(t *testing.T) {
 			current: otherWT,
 			cfg:     noCfg,
 			oldName: "feature",
+			newName: "feature-v2",
 			wantErr: false,
 		},
 		{
@@ -127,6 +129,7 @@ func TestValidateRename(t *testing.T) {
 			current:   otherWT,
 			cfg:       noCfg,
 			oldName:   "root",
+			newName:   "renamed",
 			wantErr:   true,
 			errSubstr: "cannot rename the main worktree",
 		},
@@ -136,6 +139,7 @@ func TestValidateRename(t *testing.T) {
 			current:   otherWT,
 			cfg:       &mockProtection{protected: map[string]bool{"feature": true}},
 			oldName:   "feature",
+			newName:   "renamed",
 			wantErr:   true,
 			errSubstr: "protected",
 		},
@@ -146,6 +150,7 @@ func TestValidateRename(t *testing.T) {
 			current:   nil,
 			cfg:       noCfg,
 			oldName:   "feature",
+			newName:   "other",
 			wantErr:   true,
 			errSubstr: "already exists",
 		},
@@ -155,6 +160,7 @@ func TestValidateRename(t *testing.T) {
 			current:   normalWT, // same path = current
 			cfg:       noCfg,
 			oldName:   "feature",
+			newName:   "renamed",
 			wantErr:   true,
 			errSubstr: "cannot rename current worktree",
 		},
@@ -164,6 +170,7 @@ func TestValidateRename(t *testing.T) {
 			current: nil,
 			cfg:     noCfg,
 			oldName: "feature",
+			newName: "renamed",
 			wantErr: false,
 		},
 		{
@@ -172,7 +179,38 @@ func TestValidateRename(t *testing.T) {
 			current: otherWT,
 			cfg:     nil,
 			oldName: "feature",
+			newName: "renamed",
 			wantErr: false,
+		},
+		{
+			name:      "new name with path separator is rejected",
+			wt:        normalWT,
+			current:   otherWT,
+			cfg:       noCfg,
+			oldName:   "feature",
+			newName:   "../escape",
+			wantErr:   true,
+			errSubstr: "invalid new name",
+		},
+		{
+			name:      "new name starting with dash is rejected",
+			wt:        normalWT,
+			current:   otherWT,
+			cfg:       noCfg,
+			oldName:   "feature",
+			newName:   "-flag",
+			wantErr:   true,
+			errSubstr: "invalid new name",
+		},
+		{
+			name:      "new name starting with dot is rejected",
+			wt:        normalWT,
+			current:   otherWT,
+			cfg:       noCfg,
+			oldName:   "feature",
+			newName:   ".hidden",
+			wantErr:   true,
+			errSubstr: "invalid new name",
 		},
 	}
 
@@ -182,7 +220,7 @@ func TestValidateRename(t *testing.T) {
 			if tt.cfg != nil {
 				cfg = tt.cfg
 			}
-			err := validateRename(tt.wt, tt.existing, tt.current, cfg, tt.oldName)
+			err := validateRename(tt.wt, tt.existing, tt.current, cfg, tt.oldName, tt.newName)
 			if tt.wantErr {
 				if err == nil {
 					t.Error("expected error, got nil")

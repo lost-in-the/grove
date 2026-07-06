@@ -9,6 +9,7 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/exitcode"
 	"github.com/lost-in-the/grove/internal/tmux"
+	"github.com/lost-in-the/grove/internal/tui"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
 
@@ -89,7 +90,7 @@ Examples:
 		if currentPath, err := mgr.CurrentPath(); err == nil {
 			currentTree = &worktree.Worktree{Path: currentPath}
 		}
-		if err := validateRename(wt, existing, currentTree, ctx.Config, oldName); err != nil {
+		if err := validateRename(wt, existing, currentTree, ctx.Config, oldName, newName); err != nil {
 			cli.Error(stderr, "%s", err)
 			if err == errCurrentWorktree {
 				cli.Info(stderr, "Switch to another worktree first: grove to <name>")
@@ -154,8 +155,13 @@ var (
 )
 
 // validateRename checks rename preconditions: not main, not protected,
-// not a name collision, and not the current worktree.
-func validateRename(wt, existing, current *worktree.Worktree, cfg interface{ IsProtected(string) bool }, oldName string) error {
+// not a name collision, not the current worktree, and that the new name is
+// a valid worktree name — the same character/prefix check create/fork's TUI
+// overlays enforce (internal/tui.ValidateWorktreeName), which the CLI rename
+// path skipped entirely. Without it, `grove rename x ../escape` or
+// `grove rename x -flag` would reach mgr.Move with an unvalidated path
+// component.
+func validateRename(wt, existing, current *worktree.Worktree, cfg interface{ IsProtected(string) bool }, oldName, newName string) error {
 	if wt.IsMain {
 		return errMainWorktree
 	}
@@ -167,6 +173,9 @@ func validateRename(wt, existing, current *worktree.Worktree, cfg interface{ IsP
 	}
 	if current != nil && current.Path == wt.Path {
 		return errCurrentWorktree
+	}
+	if errMsg := tui.ValidateWorktreeName(newName); errMsg != "" {
+		return fmt.Errorf("invalid new name '%s': %s", newName, errMsg)
 	}
 	return nil
 }
