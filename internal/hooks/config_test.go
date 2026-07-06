@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -486,6 +487,81 @@ func TestHasActionsForEvent(t *testing.T) {
 				t.Errorf("HasActionsForEvent(%q) = %v, want %v", tt.event, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestGetHooksConfigPaths_SecondaryWorktreeFallsBackToMain(t *testing.T) {
+	// Regression: grove-created secondary worktrees get their own .grove
+	// containing only a config.toml symlink (EnsureConfigSymlink), never
+	// hooks.toml. FindRoot therefore resolves to the WORKTREE's .grove and
+	// project hooks were silently skipped from inside any secondary worktree.
+	// When hooks.toml is absent at the discovered root, the lookup must fall
+	// through to the main worktree's .grove.
+	mainDir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	run := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test", "GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("command %v failed: %v\n%s", args, err, out)
+		}
+	}
+	run(mainDir, "git", "init")
+	run(mainDir, "git", "commit", "--allow-empty", "-m", "init")
+
+	// Main worktree has .grove with config.toml and hooks.toml.
+	mainGrove := filepath.Join(mainDir, ".grove")
+	if err := os.MkdirAll(mainGrove, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(mainGrove, "config.toml"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	mainHooks := filepath.Join(mainGrove, "hooks.toml")
+	if err := os.WriteFile(mainHooks, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Secondary worktree with a .grove holding only the config.toml symlink,
+	// exactly as grove.EnsureConfigSymlink leaves it after `grove new`.
+	wtDir := mainDir + "-wt"
+	run(mainDir, "git", "worktree", "add", wtDir, "-b", "test-branch")
+	defer func() { _ = os.RemoveAll(wtDir) }()
+	wtGrove := filepath.Join(wtDir, ".grove")
+	if err := os.MkdirAll(wtGrove, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(mainGrove, "config.toml"), filepath.Join(wtGrove, "config.toml")); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Chdir(wtDir)
+
+	_, projectPath, err := GetHooksConfigPaths()
+	if err != nil {
+		t.Fatalf("GetHooksConfigPaths() error = %v", err)
+	}
+	if projectPath != mainHooks {
+		t.Errorf("project hooks path = %q, want %q (main worktree's hooks.toml)", projectPath, mainHooks)
+	}
+
+	// A worktree-local hooks.toml, when present, must win over main's.
+	wtHooks := filepath.Join(wtGrove, "hooks.toml")
+	if err := os.WriteFile(wtHooks, []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, projectPath, err = GetHooksConfigPaths()
+	if err != nil {
+		t.Fatalf("GetHooksConfigPaths() error = %v", err)
+	}
+	if projectPath != wtHooks {
+		t.Errorf("project hooks path = %q, want %q (worktree-local hooks.toml takes precedence)", projectPath, wtHooks)
 	}
 }
 
