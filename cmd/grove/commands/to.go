@@ -248,24 +248,13 @@ When using shell integration, this will also change your current directory.`,
 		// target session — emitting cd: here would change the OLD session's
 		// directory, not the one the user is now viewing.
 		if !tmuxSwitched {
-			if hasShellIntegration {
-				// Shell wrapper will parse this and execute cd
-				cli.Directive("cd", targetTree.Path)
-				// In auto mode outside tmux, emit tmux-attach directive for shell wrapper
-				if tmuxMode == tmuxModeAuto && sessionName != "" {
+			emitCdOrExplain(stderr, targetTree.Path)
+			// In auto mode outside tmux: emit the tmux-attach directive for
+			// the shell wrapper, or attach directly without it.
+			if tmuxMode == tmuxModeAuto && sessionName != "" {
+				if hasShellIntegration {
 					cli.TmuxAttachDirective(sessionName, useCC)
-				}
-			} else {
-				cli.Faint(stderr, "Note: Directory switching requires shell integration.")
-				cli.Faint(stderr, "Add this to your shell config (~/.zshrc or ~/.bashrc):")
-				_, _ = fmt.Fprintf(stderr, "\n")
-				cli.Faint(stderr, "  eval \"$(grove install zsh)\"   # for zsh")
-				cli.Faint(stderr, "  eval \"$(grove install bash)\"  # for bash")
-				_, _ = fmt.Fprintf(stderr, "\n")
-				cli.Faint(stderr, "To change directory manually:")
-				cli.Faint(stderr, "  cd %s", targetTree.Path)
-				// In auto mode outside tmux without shell wrapper, attach directly
-				if tmuxMode == tmuxModeAuto && sessionName != "" {
+				} else {
 					var attachErr error
 					if useCC {
 						attachErr = tmux.AttachSessionControlMode(sessionName)

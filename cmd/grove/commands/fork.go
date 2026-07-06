@@ -13,7 +13,6 @@ import (
 	"github.com/lost-in-the/grove/internal/exitcode"
 	"github.com/lost-in-the/grove/internal/grove"
 	"github.com/lost-in-the/grove/internal/hooks"
-	"github.com/lost-in-the/grove/internal/log"
 	"github.com/lost-in-the/grove/internal/output"
 	"github.com/lost-in-the/grove/internal/state"
 	"github.com/lost-in-the/grove/internal/tmux"
@@ -283,55 +282,14 @@ Examples:
 			return output.PrintJSON(result)
 		}
 
-		// Switch to new worktree unless --no-switch.
-		// Batch the SetLastWorktree + TouchWorktree pair into a single state save.
+		// Switch to new worktree unless --no-switch. Agent mode and tmux mode
+		// "off" suppress the client switch (terminal takeover) — same policy
+		// as `grove new` and `grove to`.
 		if !forkNoSwitch {
-			var tmuxSwitched bool
-			batchErr := ctx.State.Batch(func() error {
-				if err := ctx.State.SetLastWorktree(parentName); err != nil {
-					log.Printf("failed to set last worktree %q: %v", parentName, err)
-				}
-
-				// Store current session as last if inside tmux
-				if tmux.IsInsideTmux() {
-					currentSession, err := tmux.GetCurrentSession()
-					if err == nil {
-						if err := tmux.StoreLastSession(currentSession); err != nil {
-							log.Printf("failed to store last session %q: %v", currentSession, err)
-						}
-					}
-				}
-
-				// Switch tmux session
-				if tmux.IsTmuxAvailable() && tmux.IsInsideTmux() {
-					sessionName := worktree.TmuxSessionName(projectName, name)
-					if err := tmux.SwitchSession(sessionName); err != nil {
-						cli.Warning(w, "Failed to switch session: %v", err)
-					} else {
-						tmuxSwitched = true
-					}
-				}
-
-				// Update last_accessed_at for target worktree
-				if err := ctx.State.TouchWorktree(name); err != nil {
-					log.Printf("failed to touch worktree %q: %v", name, err)
-				}
-				return nil
-			})
-			if batchErr != nil {
-				log.Printf("state save failed: %v", batchErr)
-			}
-
-			// Skip cd directive when tmux switch already moved the user
-			if !tmuxSwitched {
-				hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
-				if hasShellIntegration {
-					cli.Directive("cd", newTree.Path)
-				} else {
-					cli.Info(stderr, "Directory switching requires shell integration.")
-					cli.Faint(stderr, "To change directory manually:")
-					cli.Faint(stderr, "  cd %s", newTree.Path)
-				}
+			suppressTmux := effectiveTmuxMode(ctx.Config.Tmux.Mode, ctx.Config.AgentMode, false, false) == tmuxModeOff
+			sessionName := worktree.TmuxSessionName(projectName, name)
+			if !switchToWorktree(ctx, stderr, parentName, name, sessionName, newTree.Path, suppressTmux) {
+				emitCdOrExplain(stderr, newTree.Path)
 			}
 		} else {
 			cli.Info(w, "To switch to the new worktree: grove to %s", name)

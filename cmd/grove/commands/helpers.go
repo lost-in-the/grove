@@ -11,6 +11,8 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/log"
+	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/worktree"
 	"github.com/lost-in-the/grove/plugins/docker"
 )
@@ -102,6 +104,79 @@ func createWorktree(repoDir, projectName, name string) error {
 	cmd.Stderr = os.Stderr
 
 	return cmd.Run()
+}
+
+// emitCdOrExplain emits the cd: directive for the shell wrapper when shell
+// integration is active; otherwise it explains how to set up shell
+// integration and change directory manually. Shared by every command that
+// lands the user in a different worktree without a tmux client switch.
+func emitCdOrExplain(stderr *cli.Writer, path string) {
+	if os.Getenv("GROVE_SHELL") == "1" {
+		cli.Directive("cd", path)
+		return
+	}
+	cli.Faint(stderr, "Note: Directory switching requires shell integration.")
+	cli.Faint(stderr, "Add this to your shell config (~/.zshrc or ~/.bashrc):")
+	_, _ = fmt.Fprintf(stderr, "\n")
+	cli.Faint(stderr, "  eval \"$(grove install zsh)\"   # for zsh")
+	cli.Faint(stderr, "  eval \"$(grove install bash)\"  # for bash")
+	_, _ = fmt.Fprintf(stderr, "\n")
+	cli.Faint(stderr, "To change directory manually:")
+	cli.Faint(stderr, "  cd %s", path)
+}
+
+// switchToWorktree runs the shared switch epilogue used by new/fork/last:
+// batches SetLastWorktree + TouchWorktree into a single state save, stores
+// the current tmux session as "last", and switches the tmux client to the
+// target session (creating it if missing). Returns whether the client was
+// actually switched; callers emit the cd-directive fallback when it wasn't.
+//
+// suppressTmux must be true when the client must not be relocated (agent
+// mode, --no-tmux, tmux mode "off") — compute it via effectiveTmuxMode.
+func switchToWorktree(ctx *GroveContext, stderr *cli.Writer, prevName, targetName, sessionName, targetPath string, suppressTmux bool) bool {
+	var tmuxSwitched bool
+	batchErr := ctx.State.Batch(func() error {
+		if prevName != "" {
+			if err := ctx.State.SetLastWorktree(prevName); err != nil {
+				log.Printf("failed to set last worktree %q: %v", prevName, err)
+			}
+		}
+
+		// Store current session as last if inside tmux
+		if tmux.IsInsideTmux() {
+			if currentSession, err := tmux.GetCurrentSession(); err == nil {
+				if err := tmux.StoreLastSession(currentSession); err != nil {
+					log.Printf("failed to store last session %q: %v", currentSession, err)
+				}
+			}
+		}
+
+		// Switch tmux session, creating it first when missing (e.g. killed
+		// by hand, or the worktree was entered with --no-tmux). Failures
+		// degrade to the cd-directive fallback instead of aborting.
+		if !suppressTmux && tmux.IsTmuxAvailable() && tmux.IsInsideTmux() {
+			if exists, err := tmux.SessionExists(sessionName); err == nil && !exists {
+				if createErr := tmux.CreateSession(sessionName, targetPath); createErr != nil {
+					cli.Warning(stderr, "Failed to create tmux session: %v", createErr)
+				}
+			}
+			if err := tmux.SwitchSession(sessionName); err != nil {
+				cli.Warning(stderr, "Failed to switch session: %v", err)
+			} else {
+				tmuxSwitched = true
+			}
+		}
+
+		// Update last_accessed_at for target worktree
+		if err := ctx.State.TouchWorktree(targetName); err != nil {
+			log.Printf("failed to touch worktree %q: %v", targetName, err)
+		}
+		return nil
+	})
+	if batchErr != nil {
+		log.Printf("state save failed: %v", batchErr)
+	}
+	return tmuxSwitched
 }
 
 // worktreeSetupOpts configures the post-create setup sequence.

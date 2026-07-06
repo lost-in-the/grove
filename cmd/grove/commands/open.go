@@ -119,7 +119,9 @@ Examples:
 				return printOpenJSON(wt, name, created)
 			}
 			cli.Faint(stderr, "tmux not available, skipping session management")
-			cli.Directive("cd", wt.Path)
+			// Only emit the raw cd: protocol line when the shell wrapper is
+			// listening; otherwise explain how to switch manually.
+			emitCdOrExplain(stderr, wt.Path)
 			return nil
 		}
 
