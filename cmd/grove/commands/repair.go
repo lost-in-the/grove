@@ -146,23 +146,43 @@ Examples:
 			return nil
 		}
 
-		confirmed, err := cli.Confirm("Proceed with repairs?", false)
-		if err != nil || !confirmed {
+		// State repairs (orphan_state/missing_state) are confirmed together — they're
+		// derived from this project's own git worktree list, so low-risk. orphan_tmux
+		// is confirmed per-session below instead: tmux.ListSessions() returns every
+		// session on the server, and the "starts with {project}-" prefix match can't
+		// tell this project's sessions apart from a sibling project whose name shares
+		// the prefix (e.g. "grove" vs "grove-web-checkout"). A single blanket "yes"
+		// must not be enough to kill a live session that may belong to someone else.
+		hasStateIssues := false
+		for _, issue := range issues {
+			if issue.Type == "orphan_state" || issue.Type == "missing_state" {
+				hasStateIssues = true
+				break
+			}
+		}
+
+		confirmedState := false
+		if hasStateIssues {
+			confirmed, err := cli.Confirm("Proceed with state repairs?", false)
 			if err != nil && !errors.Is(err, cli.ErrPromptCanceled) {
 				fmt.Fprintf(os.Stderr, "%v\n", err)
 			}
-			fmt.Fprintln(os.Stderr, "Canceled")
-			os.Exit(exitcode.UserCancelled)
+			confirmedState = confirmed
 		}
 
 		// Perform repairs
 		repaired := 0
 		failed := 0
+		skipped := 0
 
 		for i := range issues {
 			issue := &issues[i]
 			switch issue.Type {
 			case "orphan_state":
+				if !confirmedState {
+					skipped++
+					continue
+				}
 				// Extract name from description (hacky but works)
 				name := extractQuotedName(issue.Description)
 				if err := ctx.State.RemoveWorktree(name); err != nil {
@@ -175,6 +195,10 @@ Examples:
 				}
 
 			case "missing_state":
+				if !confirmedState {
+					skipped++
+					continue
+				}
 				// Find the worktree and add it to state
 				name := extractQuotedName(issue.Description)
 				if wt, exists := gitWorktreeByName[name]; exists {
@@ -198,17 +222,37 @@ Examples:
 			case "orphan_tmux":
 				// Extract session name
 				sessionName := extractQuotedName(issue.Description)
-				if sessionName != "" {
-					if err := tmux.KillSession(sessionName); err != nil {
-						fmt.Fprintf(os.Stderr, "  Failed to kill session '%s': %v\n", sessionName, err)
-						failed++
-					} else {
-						fmt.Fprintf(os.Stderr, "  Killed tmux session '%s'\n", sessionName)
-						issue.Resolved = true
-						repaired++
-					}
+				if sessionName == "" {
+					continue
+				}
+				confirmed, err := cli.Confirm(
+					fmt.Sprintf("Kill tmux session '%s'? (may belong to a different project sharing this name prefix)", sessionName),
+					false,
+				)
+				if err != nil && !errors.Is(err, cli.ErrPromptCanceled) {
+					fmt.Fprintf(os.Stderr, "%v\n", err)
+				}
+				if !confirmed {
+					skipped++
+					continue
+				}
+				if err := tmux.KillSession(sessionName); err != nil {
+					fmt.Fprintf(os.Stderr, "  Failed to kill session '%s': %v\n", sessionName, err)
+					failed++
+				} else {
+					fmt.Fprintf(os.Stderr, "  Killed tmux session '%s'\n", sessionName)
+					issue.Resolved = true
+					repaired++
 				}
 			}
+		}
+
+		if repaired == 0 && failed == 0 {
+			fmt.Fprintln(os.Stderr, "Canceled")
+			os.Exit(exitcode.UserCancelled)
+		}
+		if skipped > 0 {
+			fmt.Fprintf(os.Stderr, "%d issue(s) skipped (not confirmed)\n", skipped)
 		}
 
 		fmt.Fprintf(os.Stderr, "\nRepairs complete: %d fixed, %d failed\n", repaired, failed)
