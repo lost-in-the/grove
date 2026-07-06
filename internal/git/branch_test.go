@@ -1,6 +1,7 @@
 package git
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -383,4 +384,24 @@ func TestGetUnpushedCommits(t *testing.T) {
 			t.Errorf("GetUnpushedCommits() = %v, want nil", commits)
 		}
 	})
+}
+
+func TestDelete_WrapsUnderlyingError(t *testing.T) {
+	// Regression: Delete discarded the exec error, returning only git's
+	// output text — empty-output failures produced a bare, causeless message
+	// and callers couldn't errors.As/Is on the underlying error.
+	dir := initTestRepo(t, "main")
+
+	mgr, err := NewBranchManager(dir)
+	if err != nil {
+		t.Fatalf("NewBranchManager() error = %v", err)
+	}
+
+	delErr := mgr.Delete("does-not-exist", false)
+	if delErr == nil {
+		t.Fatal("expected error deleting nonexistent branch")
+	}
+	if errors.Unwrap(delErr) == nil {
+		t.Errorf("Delete() error %q does not wrap the underlying error (missing %%w)", delErr)
+	}
 }
