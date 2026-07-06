@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (2026-07 repo audit — issues #109–#123)
+- TUI create wizard: the typed new-branch name and the selected fork base are now actually used — previously `git worktree add -b <worktreeName>` ran from HEAD regardless of what the confirm screen showed (#109).
+- TUI dashboard: `grove prs`/`grove issues` entry points now populate worktree badges and the "worktree exists" prompt; PR/issue detail no longer shows stale content after filtering; cancelled WIP checks can't corrupt the next overlay; the config overlay's save confirmation works instead of silently discarding on esc; the rename overlay validates names like create/fork (#110).
+- `grove fetch` (and the `prs`/`issues` CLI path) runs the full worktree bootstrap — config symlink, state, hooks, Docker — instead of a bare `git worktree add` (#112).
+- `grove last` recreates the tmux session instead of failing when it's gone; `down`/`logs`/`restart`/`up` resolve the worktree root via git instead of the cwd basename; `grove config --global` shows global values, not mislabeled merged config; `adopt` rejects repos that aren't worktrees of the current project; `ls --json` aggregates container statuses from all providers; `new --mirror` creates the documented `env/{name}` branch; `open` no longer prints a raw `cd:` directive without shell integration; `to`'s drift-reset handles single-quoted paths (#113).
+- `grove fork --json` emits clean JSON (human output moved off stdout); `grove trim` fires the same pre/post-remove hooks as `rm` (Docker teardown included); `grove init --with-*` honors the naming pattern and registers state/hooks (#114).
+- `grove rm` can no longer validate one worktree and remove another: `Remove` resolves names with the same matcher as `Find`, and `[protection]` is checked against the resolved name too (#115, #116).
+- tmux operations use exact-match session targets, so `grove-foo` can't kill/attach `grove-foo-bar`; `grove repair` confirms each orphan session kill individually (#116).
+- Layered config no longer resets explicit settings: a project/local file that omits a key no longer overrides an earlier layer's value with the default (#117).
+- Concurrent grove processes no longer resurrect removed worktrees or clobber `LastWorktree` in state.json; `FindRoot` resolves symlinked cwds (macOS `/tmp`, `/var`) so the git-root boundary holds; linked worktrees discover the main worktree's `hooks.toml` instead of silently skipping project hooks; compose detection matches all four compose filenames (#118).
+- `grove browse` PR lookup works again: the tracker called `gh pr view` with a nonexistent `--head` flag and always fell back to the compare page (#119).
+- Update check actually persists its cache (the fire-and-forget goroutine died with the process), and failed/timed-out checks record the attempt so offline hosts don't block 300ms on every command (#119).
+- Shell integration: `grove new` output is captured by the zsh/bash wrappers so its `cd:` directive is honored (`ShellVersion` bumped to 6 — re-source your shell); stale duplicate `shell/` wrappers are no longer shipped in release archives (#121).
+- Docs realigned with the code across command specs, agent guides, and configuration/plugin/data-flow references — removed nonexistent flags and hooks, corrected defaults and placeholders (#111, #122, #123).
+
+### Performance (2026-07 repo audit)
+- `grove ls` and status displays stay within the <500ms budget in external Docker mode (300ms status timeout instead of 3s probe timeout); cold worktree listing no longer runs `git worktree list --porcelain` three times; `GetStatus` no longer double-execs `git rev-parse @{upstream}`; `grove here -q`/`--check-mount` skip enrichment they never display (#120).
+
 ### Removed
 - Standalone `docker-compose` (Compose v1) support. The docker plugin now requires the `docker` CLI with Compose v2. The v1 fallback only accepted a single `--env-file`, silently bypassing the `.env` layering fix from #98 (v1 has been EOL since mid-2023) (closes #107).
 
