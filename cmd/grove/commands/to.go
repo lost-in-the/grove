@@ -306,12 +306,20 @@ func handleDirectoryDrift(sessionName, worktreePath, onSwitch string, stderr *cl
 	case "ignore":
 		// Do nothing
 	default: // "reset" or ""
-		// Use single quotes for shell safety — path cannot contain single quotes
-		// (git worktree paths are derived from branch names which disallow them)
-		if err := tmux.SendKeys(sessionName, "cd '"+worktreePath+"'"); err != nil {
+		// Single-quote for shell safety. The path derives from the repo's
+		// parent directory plus the naming pattern (and externally created
+		// worktrees can live anywhere), so it may legally contain single
+		// quotes — escape them with the standard '\'' idiom.
+		if err := tmux.SendKeys(sessionName, "cd "+shellSingleQuote(worktreePath)); err != nil {
 			log.Printf("failed to reset directory in session %q: %v", sessionName, err)
 		}
 	}
+}
+
+// shellSingleQuote wraps s in single quotes for safe interpolation into a
+// POSIX shell command line, escaping embedded single quotes with '\''.
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func init() {
