@@ -60,6 +60,20 @@ func main() {
 			fmt.Fprintf(os.Stderr, "[fakegrove] emitted cd:/tmp/fakegrove-%s\n", name)
 		}
 
+	case "new":
+		// Simulates grove new outside tmux: progress output followed by a
+		// cd: directive (emitted when GROVE_SHELL=1 and no tmux switch happened)
+		if len(os.Args) < 3 {
+			fmt.Fprintln(os.Stderr, "usage: grove new <name>")
+			os.Exit(1)
+		}
+		name := os.Args[2]
+		fmt.Printf("Created worktree fakegrove-%s\n", name)
+		fmt.Printf("cd:/tmp/fakegrove-%s\n", name)
+		if debug {
+			fmt.Fprintf(os.Stderr, "[fakegrove] emitted cd:/tmp/fakegrove-%s\n", name)
+		}
+
 	case "fork":
 		// Simulates fork output: regular lines mixed with a cd: directive
 		if len(os.Args) < 3 {

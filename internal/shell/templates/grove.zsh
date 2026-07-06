@@ -23,7 +23,7 @@ grove() {
     # Only directive-producing commands need output capture.
     # All other commands run directly for streaming support.
     case "$1" in
-        to|t|switch|last|la|fork|fo|split|fetch|f|attach|join|a|j|open|o|up|u|run|kick|k|restart)
+        new|spawn|n|to|t|switch|last|la|fork|fo|split|fetch|f|attach|join|a|j|open|o|up|u|run|kick|k|restart)
             # Capture output and parse for cd:/tmux-attach:/env: directives
             local output exit_code
             output=$(GROVE_SHELL=1 GROVE_SHELL_VERSION="$__GROVE_SHELL_VERSION" "$__GROVE_BIN" "$@")

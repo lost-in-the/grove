@@ -44,8 +44,8 @@ func generateIntegration(shell, rcFile, installCmd, template string) (string, er
 #
 # WHAT THIS DOES:
 #   1. Creates a 'grove' shell function that wraps the binary
-#      - Directive commands (to, last, fork, fetch, attach, open, up, run,
-#        restart): output is captured and parsed for cd:/tmux-attach:/env:
+#      - Directive commands (new, to, last, fork, fetch, attach, open, up,
+#        run, restart): output is captured and parsed for cd:/tmux-attach:/env:
 #        directives
 #      - All other commands: run directly (streaming-safe for logs, test, etc.)
 #   2. Registers tab completion for grove commands and worktree names

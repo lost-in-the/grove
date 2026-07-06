@@ -183,6 +183,47 @@ func TestWrapper_ToCommand_ParsesCdDirective(t *testing.T) {
 	}
 }
 
+func TestWrapper_NewCommand_ParsesCdDirective(t *testing.T) {
+	binPath := buildFakeGrove(t)
+
+	// "grove new" emits a cd: directive when outside tmux (or --no-tmux).
+	// Regression test: "new" was missing from the wrapper's capture case
+	// list, so the directive printed raw and the shell never cd'd.
+	targetDir := "/tmp/fakegrove-myfeature"
+	_ = os.MkdirAll(targetDir, 0755)
+	defer func() { _ = os.RemoveAll(targetDir) }()
+
+	stdout, stderr, exitCode := runZshWrapper(t, binPath, "new myfeature")
+
+	t.Logf("stdout: %q", stdout)
+	t.Logf("stderr: %q", stderr)
+
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+
+	// Progress output should still appear
+	if !strings.Contains(stdout, "Created worktree fakegrove-myfeature") {
+		t.Errorf("expected progress output in stdout, got: %q", stdout)
+	}
+
+	// cd: directive must be consumed by the wrapper, not printed
+	if strings.Contains(stdout, "cd:/tmp") {
+		t.Errorf("cd: directive leaked to stdout: %q", stdout)
+	}
+}
+
+func TestWrapper_NewAliases_AreCaptured(t *testing.T) {
+	// grove new's aliases (spawn, n) must also be in the capture case list,
+	// otherwise the cd: directive prints raw when invoked via an alias.
+	if !strings.Contains(zshTemplate, "new|spawn|n|") {
+		t.Error("zsh template capture list missing new|spawn|n")
+	}
+	if !strings.Contains(bashTemplate, "new|spawn|n|") {
+		t.Error("bash template capture list missing new|spawn|n")
+	}
+}
+
 func TestWrapper_ForkCommand_SeparatesDirectivesFromText(t *testing.T) {
 	binPath := buildFakeGrove(t)
 
