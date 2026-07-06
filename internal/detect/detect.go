@@ -53,7 +53,7 @@ type DetectionRule struct {
 // DefaultRules returns the built-in detection rules, checked in order.
 // Multiple rules can match, resulting in a "mixed" project type.
 func DefaultRules() []DetectionRule {
-	return []DetectionRule{
+	rules := []DetectionRule{
 		{
 			Marker:   "Gemfile",
 			Type:     "rails",
@@ -87,12 +87,21 @@ func DefaultRules() []DetectionRule {
 			Symlinks: []string{".venv"},
 			Commands: []string{"pip install -e ."},
 		},
-		{
-			Marker: "docker-compose.yml",
+	}
+
+	// Docker matches every compose filename FindComposeFile accepts (see
+	// composeFiles in compose.go), so the detected Type agrees with
+	// HasDocker for modern names like compose.yaml, not just the legacy
+	// docker-compose.yml. Duplicate matches dedupe via resolveProjectType.
+	for _, marker := range composeFiles {
+		rules = append(rules, DetectionRule{
+			Marker: marker,
 			Type:   "docker",
 			Copy:   []string{".env"},
-		},
+		})
 	}
+
+	return rules
 }
 
 // Detect scans the given directory for marker files and returns a ProjectProfile
