@@ -70,9 +70,9 @@ var hereCmd = &cobra.Command{
 	Short:   "Show current worktree information",
 	Long:    `Display information about the current worktree including name, branch, and status.`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
-		mgr, err := worktree.NewManager(ctx.ProjectRoot)
+		mgr, err := ctx.WorktreeManager()
 		if err != nil {
-			return fmt.Errorf("failed to initialize worktree manager: %w", err)
+			return err
 		}
 
 		tree, err := mgr.GetCurrent()

@@ -73,9 +73,9 @@ Examples:
 			return fmt.Errorf("worktree name cannot be empty")
 		}
 
-		mgr, err := worktree.NewManager(ctx.ProjectRoot)
+		mgr, err := ctx.WorktreeManager()
 		if err != nil {
-			return fmt.Errorf("failed to initialize worktree manager: %w", err)
+			return err
 		}
 
 		projectName := mgr.GetProjectName()

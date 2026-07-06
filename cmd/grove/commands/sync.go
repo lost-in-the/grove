@@ -14,7 +14,6 @@ import (
 	"github.com/lost-in-the/grove/internal/exitcode"
 	"github.com/lost-in-the/grove/internal/log"
 	"github.com/lost-in-the/grove/internal/output"
-	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 var (
@@ -64,9 +63,9 @@ Examples:
 		w := cli.NewStdout()
 		stderr := cli.NewStderr()
 
-		mgr, err := worktree.NewManager(ctx.ProjectRoot)
+		mgr, err := ctx.WorktreeManager()
 		if err != nil {
-			return fmt.Errorf("failed to initialize worktree manager: %w", err)
+			return err
 		}
 
 		var targets []string

@@ -65,9 +65,9 @@ Examples:
 
 		cfg := ctx.Config
 
-		mgr, err := worktree.NewManager(ctx.ProjectRoot)
+		mgr, err := ctx.WorktreeManager()
 		if err != nil {
-			return fmt.Errorf("failed to initialize worktree manager: %w", err)
+			return err
 		}
 
 		// Get current worktree (target). Only path + display name are needed

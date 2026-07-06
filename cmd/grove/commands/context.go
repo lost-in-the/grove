@@ -17,6 +17,7 @@ import (
 	"github.com/lost-in-the/grove/internal/plugins"
 	"github.com/lost-in-the/grove/internal/shell"
 	"github.com/lost-in-the/grove/internal/state"
+	"github.com/lost-in-the/grove/internal/worktree"
 	"github.com/lost-in-the/grove/plugins/docker"
 )
 
@@ -27,6 +28,24 @@ type GroveContext struct {
 	State         *state.Manager   // State manager instance
 	Config        *config.Config   // Loaded configuration
 	PluginManager *plugins.Manager // Plugin manager for status queries
+
+	wtMgr *worktree.Manager // Memoized worktree manager (via WorktreeManager)
+}
+
+// WorktreeManager returns a lazily constructed, memoized worktree.Manager
+// rooted at the project root. Commands should use this instead of calling
+// worktree.NewManager(ctx.ProjectRoot) inline so construction and error
+// wrapping live in one place.
+func (c *GroveContext) WorktreeManager() (*worktree.Manager, error) {
+	if c.wtMgr != nil {
+		return c.wtMgr, nil
+	}
+	mgr, err := worktree.NewManager(c.ProjectRoot)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize worktree manager: %w", err)
+	}
+	c.wtMgr = mgr
+	return mgr, nil
 }
 
 // RequireGroveContext wraps a command function to require grove project context.

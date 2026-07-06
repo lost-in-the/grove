@@ -54,9 +54,9 @@ var lsCmd = &cobra.Command{
 	Short:   "List all worktrees",
 	Long:    `List all git worktrees with their status (clean/dirty) and branch information.`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
-		mgr, err := worktree.NewManager(ctx.ProjectRoot)
+		mgr, err := ctx.WorktreeManager()
 		if err != nil {
-			return fmt.Errorf("failed to initialize worktree manager: %w", err)
+			return err
 		}
 
 		// Fast paths: quiet and paths modes skip dirty checks entirely

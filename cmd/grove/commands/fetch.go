@@ -103,9 +103,9 @@ func fetchItem(ctx *GroveContext, itemType string, number int) error {
 
 	gh := tracker.NewGitHubAdapter(repo)
 
-	mgr, err := worktree.NewManager(ctx.ProjectRoot)
+	mgr, err := ctx.WorktreeManager()
 	if err != nil {
-		return fmt.Errorf("failed to initialize worktree manager: %w", err)
+		return err
 	}
 
 	worktreeName, branchName, err := fetchItemMetadata(gh, w, itemType, number)

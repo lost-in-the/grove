@@ -62,9 +62,9 @@ Examples:
 			return fmt.Errorf("both old and new names are required")
 		}
 
-		mgr, err := worktree.NewManager(ctx.ProjectRoot)
+		mgr, err := ctx.WorktreeManager()
 		if err != nil {
-			return fmt.Errorf("failed to initialize worktree manager: %w", err)
+			return err
 		}
 
 		// Find the worktree by old name

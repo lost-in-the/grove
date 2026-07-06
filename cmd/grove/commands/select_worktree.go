@@ -12,9 +12,9 @@ import (
 // In interactive mode, shows a formatted numbered list and prompts for selection.
 // In non-interactive mode, returns an error listing available worktrees.
 func selectWorktree(ctx *GroveContext, prompt string) (string, error) {
-	mgr, err := worktree.NewManager(ctx.ProjectRoot)
+	mgr, err := ctx.WorktreeManager()
 	if err != nil {
-		return "", fmt.Errorf("failed to initialize worktree manager: %w", err)
+		return "", err
 	}
 
 	trees, err := mgr.List()

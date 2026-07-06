@@ -64,9 +64,9 @@ Examples:
 			return nil
 		}
 
-		mgr, err := worktree.NewManager(ctx.ProjectRoot)
+		mgr, err := ctx.WorktreeManager()
 		if err != nil {
-			return fmt.Errorf("worktree manager: %w", err)
+			return err
 		}
 
 		// Strip the naming pattern so the state key matches grove's convention
