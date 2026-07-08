@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -184,5 +185,41 @@ func TestParseInspectMounts_RealisticOutput(t *testing.T) {
 	want := filepath.Clean("/Users/leah/work/proj-feature-x")
 	if got != want {
 		t.Errorf("source = %q, want %q", got, want)
+	}
+}
+
+// Regression test for the drift-check path reintroducing issue #98: a lone
+// --env-file makes compose v2 ignore .env, so the args must layer .env
+// underneath the configured env file via composeEnvFileArgs.
+func TestComposePsQArgs_LayersDefaultEnvFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("FOO=bar\n"), 0o644); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+
+	got := composePsQArgs(dir, ".env.local", "web")
+	want := []string{"compose", "--env-file", ".env", "--env-file", ".env.local", "ps", "-q", "web"}
+	if len(got) != len(want) {
+		t.Fatalf("args = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("args[%d] = %q, want %q (full: %v)", i, got[i], want[i], got)
+		}
+	}
+}
+
+func TestComposePsQArgs_DefaultEnvFileOmitsFlag(t *testing.T) {
+	dir := t.TempDir()
+
+	got := composePsQArgs(dir, ".env", "web")
+	want := []string{"compose", "ps", "-q", "web"}
+	if len(got) != len(want) {
+		t.Fatalf("args = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("args[%d] = %q, want %q (full: %v)", i, got[i], want[i], got)
+		}
 	}
 }

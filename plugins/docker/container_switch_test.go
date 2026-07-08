@@ -1,6 +1,11 @@
 package docker
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/hooks"
+)
 
 func TestResolveContainerSwitch(t *testing.T) {
 	tests := []struct {
@@ -54,5 +59,84 @@ func TestResolveContainerSwitch(t *testing.T) {
 				t.Errorf("ResolveContainerSwitch(%q, %v) = %d, want %d", tt.configValue, tt.isInteractive, got, tt.want)
 			}
 		})
+	}
+}
+
+// confirmSwitchAction combines the auto gate, container_switch resolution, and
+// the interactive prompt. Tests run non-interactively, so "prompt" resolves to
+// Auto and the cli.Confirm path is never reached here.
+func TestConfirmSwitchAction(t *testing.T) {
+	ctxWithSwitch := func(value string) *hooks.Context {
+		return &hooks.Context{Config: &config.Config{
+			Switch: config.SwitchConfig{ContainerSwitch: value},
+		}}
+	}
+
+	tests := []struct {
+		name        string
+		autoEnabled bool
+		ctx         *hooks.Context
+		want        bool
+	}{
+		{
+			name:        "auto gate disabled returns false",
+			autoEnabled: false,
+			ctx:         ctxWithSwitch("auto"),
+			want:        false,
+		},
+		{
+			name:        "container_switch off returns false",
+			autoEnabled: true,
+			ctx:         ctxWithSwitch("off"),
+			want:        false,
+		},
+		{
+			name:        "auto proceeds",
+			autoEnabled: true,
+			ctx:         ctxWithSwitch("auto"),
+			want:        true,
+		},
+		{
+			name:        "nil hook config defaults to auto",
+			autoEnabled: true,
+			ctx:         &hooks.Context{},
+			want:        true,
+		},
+		{
+			name:        "prompt non-interactive falls back to auto",
+			autoEnabled: true,
+			ctx:         ctxWithSwitch("prompt"),
+			want:        true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := confirmSwitchAction(tt.autoEnabled, tt.ctx, promptStartContainers, true)
+			if got != tt.want {
+				t.Errorf("confirmSwitchAction(%v, ...) = %v, want %v", tt.autoEnabled, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDockerAutoFlagDefaults(t *testing.T) {
+	boolPtr := func(v bool) *bool { return &v }
+
+	if got := dockerAutoStart(nil, true); !got {
+		t.Error("dockerAutoStart(nil, true) = false, want default true")
+	}
+	if got := dockerAutoStop(nil, false); got {
+		t.Error("dockerAutoStop(nil, false) = true, want default false")
+	}
+
+	cfg := &config.Config{}
+	cfg.Plugins.Docker.AutoStart = boolPtr(false)
+	cfg.Plugins.Docker.AutoStop = boolPtr(true)
+	if got := dockerAutoStart(cfg, true); got {
+		t.Error("dockerAutoStart with explicit false = true, want false")
+	}
+	if got := dockerAutoStop(cfg, false); !got {
+		t.Error("dockerAutoStop with explicit true = false, want true")
 	}
 }
