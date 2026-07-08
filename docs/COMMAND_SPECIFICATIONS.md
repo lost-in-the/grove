@@ -512,9 +512,9 @@ Flags:
 2. **Check dirty state** (unless `--peek`):
    - Inspect the *current* worktree for uncommitted changes (`git status --porcelain`)
    - Behavior controlled by `switch.dirty_handling` in `.grove/config.toml`:
-     - `"refuse"` (default): Block the switch, list dirty files, suggest committing/stashing or changing config
+     - `"prompt"` (default): In interactive mode (TTY), show dirty files and ask "Switch anyway?". In non-interactive mode, fall back to refuse behavior
      - `"auto-stash"`: Automatically run `git stash push -m "grove: auto-stash before switch to {name}"`, then proceed
-     - `"prompt"`: In interactive mode (TTY), show dirty files and ask "Switch anyway?". In non-interactive mode, fall back to refuse behavior
+     - `"refuse"`: Block the switch, list dirty files, suggest committing/stashing or changing config
    - If the dirty check itself fails (e.g., git error), treat the worktree as clean and proceed — never block the user on a failed status check
    - `--peek` always bypasses dirty checks (peek is a lightweight switch with no side effects)
 
@@ -1247,7 +1247,7 @@ When no Docker is configured, the `services` field is `null`/omitted.
 
 ## State Commands
 
-> No user-facing state commands are currently registered. The `internal/state` package exposes freeze/resume logic, but no cobra commands wire it to the CLI. See the [Planned Commands](#planned-not-yet-implemented) section for the design.
+> No user-facing state commands are currently registered, and no freeze/resume logic is implemented — the `internal/state` package only tracks worktree metadata. See the [Planned Commands](#planned-not-yet-implemented) section for the freeze/resume design.
 
 ---
 
@@ -1261,16 +1261,12 @@ When no Docker is configured, the `services` field is `null`/omitted.
 
 **Usage:**
 ```
-grove up [services...] [flags]
-
-Arguments:
-  services    Specific services to start (default: all)
+grove up [flags]
 
 Flags:
   -d, --detach    Run in background (default: true)
-      --build     Build images before starting
-      --isolated  Start an isolated stack (for parallel agents)
-      --slot N    Use a specific slot number (implies --isolated)
+      --isolated  Start an isolated stack with its own containers and database
+                  (for parallel agents; a slot is allocated automatically)
 ```
 
 **Behavior:**
@@ -1306,13 +1302,10 @@ All containers running. Web available at http://localhost:3001
 
 **Usage:**
 ```
-grove down [services...] [flags]
+grove down
 
-Arguments:
-  services    Specific services to stop (default: all)
-
-Flags:
-  -v, --volumes    Also remove volumes
+(no flags — if the worktree has an isolated stack running, it is
+auto-detected and torn down)
 ```
 
 **Output:**
@@ -1339,8 +1332,7 @@ Arguments:
   service    Service to show logs for (default: all)
 
 Flags:
-  -f, --follow    Follow log output
-  -n, --tail N    Number of lines to show (default: 100)
+  -f, --follow    Follow log output (default: true; pass -f=false to disable)
 ```
 
 **Behavior:**
@@ -1925,38 +1917,39 @@ Add a [test] section to .grove/config.toml:
 grove config [flags]
 
 Flags:
-      --edit     Open config file in $EDITOR
-      --path     Just print config file path
-  -j, --json     Output as JSON
+  -e, --edit     Open config file in $EDITOR
+  -g, --global   Use global config (~/.config/grove/config.toml) instead of project config
+      --hooks    Work with hooks config (.grove/hooks.toml) instead of main config
 ```
+
+Show mode prints a single `Config file:` path — the project config by default,
+or the global config with `--global`. Combine `--hooks` with `-e` to edit
+`.grove/hooks.toml`; `--hooks` alone prints its contents.
 
 **Output (Default):**
 ```
-Configuration for 'grove'
+Configuration
+  Config file: ~/projects/grove/.grove/config.toml
 
-Global: ~/.config/grove/config.toml
-Local:  ~/projects/grove/.grove/config.toml (not found)
+General:
+  alias: w
+  projects_dir: ~/projects
+  default_base_branch: main
 
-Settings:
-  alias:            w
-  projects_dir:     ~/projects
-  default_branch:   main
+[switch]:
+  dirty_handling: prompt
 
-Switch:
-  dirty_handling:   prompt
+[naming]:
+  pattern: {project}-{name}
 
-Naming:
-  pattern:          {project}-{name}
+[tmux]:
+  mode: auto
+  prefix:
 
-Tmux:
-  prefix:           (none, uses naming pattern)
-  layout:           default
-
-Docker:
-  enabled:          true
-  auto_up:          true
-  port_base:        3000
-  port_range:       100
+[plugins.docker]:
+  enabled: true
+  auto_start: true
+  auto_stop: false
 ```
 
 ---
@@ -2419,7 +2412,7 @@ The annotation honors the same opt-outs as `grove`'s other update surfaces (env 
 
 ## Planned (not yet implemented)
 
-These commands are referenced in `internal/state` but not yet wired to user-facing cobra commands. The spec is preserved here so the design is recoverable when implementation lands.
+These commands are not implemented — no freeze/resume logic exists in code (a future-API sketch lives in `internal/state/README.md`). The spec is preserved here so the design is recoverable when implementation lands.
 
 ### grove freeze
 

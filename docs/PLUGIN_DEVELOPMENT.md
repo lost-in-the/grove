@@ -37,8 +37,6 @@ Plugins register hooks to run at specific lifecycle events:
 - `post-create` - After worktree creation
 - `pre-switch` - Before switching away from worktree
 - `post-switch` - After switching to worktree
-- `pre-freeze` - Before freezing worktree
-- `post-resume` - After resuming frozen worktree
 - `pre-remove` - Before removing worktree
 - `post-remove` - After worktree removal
 
@@ -148,14 +146,14 @@ service    = "app"                    # required: compose service name
 command    = "bundle install --quiet" # required: shell command run inside the container
 mode       = "run"                    # optional: "run" (default, ephemeral) | "exec" (existing container)
 timeout    = 300                      # optional: seconds (default 60); applied by executor, not the handler
-on_failure = "warn"                   # optional: "fail" (default) | "warn" | "ignore"
+on_failure = "warn"                   # optional: "warn" (default) | "fail" | "ignore"
 ```
 
 Field reference (matches `HookAction` in `internal/hooks/config.go`):
 
 | Field | Required | Notes |
 |-------|----------|-------|
-| `service` | yes | Compose service name; supports `${VAR}` interpolation |
+| `service` | yes | Compose service name; supports `{{.variable}}` interpolation (e.g. `{{.worktree}}`, `{{.branch}}`) |
 | `command` | yes | Shell command run inside the container |
 | `mode` | no | `"run"` brings up service deps on demand; `"exec"` requires a running container and fails with a hint if the stack is down |
 | `timeout` | no | Per-action timeout (seconds), enforced by the hook executor |
@@ -250,26 +248,31 @@ func (p *MyPlugin) onPostSwitch(ctx *hooks.Context) error {
 
 ### 3. Register Plugin
 
-Add your plugin to the main initialization in `cmd/grove/main.go`:
+Lifecycle plugins are registered once per process by `registerPlugins()` in
+`cmd/grove/commands/context.go` (invoked from the `RequireGroveContext`
+middleware). Add your plugin there, registering it with the `plugins.Manager`
+and hooking into `hooks.GlobalRegistry()`:
 
 ```go
+// cmd/grove/commands/context.go, inside registerPlugins()
 import (
     myplugin "github.com/lost-in-the/grove/plugins/myplugin"
 )
 
-func initializePlugins(cfg *config.Config, registry *hooks.Registry) error {
-    p := myplugin.New()
-    if err := p.Init(cfg); err != nil {
-        return fmt.Errorf("myplugin: %w", err)
+myPlugin := myplugin.New()
+if err := mgr.Register(myPlugin); err != nil {
+    // plugin unavailable — skip (registration failures are non-fatal)
+    return mgr
+}
+if myPlugin.Enabled() {
+    if err := myPlugin.RegisterHooks(hooks.GlobalRegistry()); err != nil {
+        log.Printf("failed to register myplugin hooks: %v", err)
     }
-    if p.Enabled() {
-        if err := p.RegisterHooks(registry); err != nil {
-            return fmt.Errorf("myplugin hooks: %w", err)
-        }
-    }
-    return nil
 }
 ```
+
+Note: `plugins.Manager.Register` calls your plugin's `Init(cfg)` for you, and
+registration failures are logged/skipped rather than aborting the command.
 
 ### 4. Add Tests
 

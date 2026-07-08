@@ -136,9 +136,10 @@ Controls tmux session management. Requires tmux to be installed.
 # "off"    — disable tmux integration entirely
 mode = "auto"                      # string: auto | manual | off
 
-# Prefix for tmux session names. If set, sessions are named "{prefix}-{worktree}".
-# Default: "" (no prefix; session name equals the full worktree name)
-prefix = ""                        # string
+# DEPRECATED/INERT: parsed and shown by `grove config`, but never applied.
+# Tmux session names always use the canonical "{project}-{name}" form
+# regardless of this value (see the [naming] section above).
+prefix = ""                        # string (no effect)
 
 # How grove handles directory drift when switching tmux sessions.
 # "reset"  — cd the session to the worktree root on switch (default)
@@ -167,7 +168,9 @@ Configures `grove test` command behavior.
 command = "go test ./..."          # string
 
 # Docker Compose service name to run tests inside.
-# When set, grove runs the command via `docker compose exec <service> <command>`.
+# When set, grove runs the command in an ephemeral container via
+# `docker compose run --rm <service> bash -cil <command>`
+# (with --no-deps unless include_deps is set, and -v when bind_mount is set).
 # Requires the docker plugin to be configured.
 service = "app"                    # string
 
@@ -282,7 +285,7 @@ enabled = true                     # bool
 auto_start = true                  # bool
 
 # Automatically stop services when switching away from a worktree.
-# Default: false (local mode), true (external mode)
+# Default: false
 auto_stop = false                  # bool
 
 # Auto-start Docker on `grove new` (runs `docker compose up` after worktree creation).
@@ -407,13 +410,13 @@ template_path = "~/work/compose-dev/agent-compose.yml"  # string (required when 
 template_overlays = ["overrides/dev.yml"]  # string array (optional)
 
 # URL pattern for accessing agent services.
-# {port} is replaced with the allocated port.
-# Default: "http://localhost:{port}"
-url_pattern = "http://localhost:{port}"  # string
+# {slot} is replaced with the slot number (grove does not allocate ports).
+# Default: "" (empty — no URL is displayed)
+url_pattern = "http://localhost:{slot}"  # string
 
 # External Docker network that agent stacks attach to.
 # The network must already exist before grove can create agent stacks.
-# Default: "shared"
+# Default: "" (empty — the network-existence check is skipped)
 network = "shared"                 # string
 ```
 
@@ -915,7 +918,7 @@ enabled       = true
 max_slots     = 8
 services      = ["web", "worker"]
 template_path = "~/work/compose-dev/agent-compose.yml"
-url_pattern   = "http://localhost:{port}"
+url_pattern   = "http://localhost:{slot}"
 network       = "shared"
 ```
 
