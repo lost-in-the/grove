@@ -5,8 +5,37 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/bubbles/v2/viewport"
+
 	"github.com/lost-in-the/grove/internal/worktreeinfo"
 )
+
+func TestRenderDetailViewportCard_CachesByItemNumber(t *testing.T) {
+	vp := viewport.New(viewport.WithWidth(40), viewport.WithHeight(10))
+	last := 0
+	render := func(num int, body string) {
+		renderDetailViewportCard(detailViewportConfig{
+			vp:             &vp,
+			lastItemNumber: &last,
+			itemNumber:     num,
+			contentFunc:    func(int) string { return body },
+			width:          40,
+			height:         10,
+		})
+	}
+
+	render(12, "body-of-12")
+	if !strings.Contains(vp.GetContent(), "body-of-12") {
+		t.Fatalf("expected initial content for #12, got %q", vp.GetContent())
+	}
+
+	// Filtering can place a different item (#34) at the same cursor index. The
+	// card must refresh to the new item's body rather than keep #12's content.
+	render(34, "body-of-34")
+	if !strings.Contains(vp.GetContent(), "body-of-34") {
+		t.Errorf("expected content to refresh for new item number, got %q", vp.GetContent())
+	}
+}
 
 func TestRenderDetailV2_NilItem(t *testing.T) {
 	got := renderDetailV2(nil, 60)

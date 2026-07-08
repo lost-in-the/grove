@@ -246,11 +246,10 @@ func renderPRDetailContent(pr *tracker.PullRequest, width int) string {
 func (m Model) renderPRDetailViewport(pr *tracker.PullRequest, width, height int) string {
 	s := m.prState
 	return renderDetailViewportCard(detailViewportConfig{
-		vp:         &s.DetailViewport,
-		cursor:     s.Cursor,
-		lastCursor: &s.lastCursor,
-		focused:    s.DetailFocused,
-		itemNumber: pr.Number,
+		vp:             &s.DetailViewport,
+		lastItemNumber: &s.lastItemNumber,
+		focused:        s.DetailFocused,
+		itemNumber:     pr.Number,
 		contentFunc: func(w int) string {
 			return renderPRDetailContent(pr, w)
 		},
@@ -297,7 +296,7 @@ func (m Model) renderContextPanel(cfg contextPanelConfig) string {
 	footerLines := strings.Count(cfg.footer, "\n") + 1
 	bodyBudget := m.height - 1 - footerLines
 
-	useSideBySide := m.width > 100
+	useSideBySide := isWideLayout(m.width)
 	bodyWidth := m.width - 2
 
 	var body string

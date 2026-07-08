@@ -411,6 +411,27 @@ func TestConfigForm_EscapeClosesOverlay(t *testing.T) {
 	}
 }
 
+func TestConfigForm_EscapeWithEditsPromptsSave(t *testing.T) {
+	m := newConfigTestModel(t)
+
+	// Simulate an in-progress edit: a string field bound live via &f.Value now
+	// differs from its default. On esc the overlay must sync and offer to save,
+	// rather than silently discarding the change.
+	f := &m.configState.Fields[ConfigTabGeneral][0]
+	f.Value = f.Default + "-edited"
+
+	m = sendKey(m, "esc")
+	if m.configState == nil {
+		t.Fatal("expected configState to remain while confirming")
+	}
+	if !m.configState.Confirming {
+		t.Error("expected Confirming prompt after esc with unsaved edits")
+	}
+	if m.activeView != ViewConfig {
+		t.Errorf("expected ViewConfig to remain during confirm, got %d", m.activeView)
+	}
+}
+
 func TestConfigForm_MessageForwarding(t *testing.T) {
 	m := newConfigTestModel(t)
 	// Send a WindowSizeMsg — should not panic

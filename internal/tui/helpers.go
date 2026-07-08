@@ -119,8 +119,12 @@ func scrollWindow(total, cursor, maxVisible int) (start, end int) {
 }
 
 // wipCheckMsg is sent after checking a worktree for uncommitted changes.
-// Used by both the checkout and fork overlays.
+// Used by both the checkout and fork overlays. The path field correlates the
+// result back to the worktree that was checked, so a stale result from a
+// canceled overlay cannot corrupt a later overlay opened for a different
+// worktree.
 type wipCheckMsg struct {
+	path   string
 	hasWIP bool
 	files  []string
 	err    error
@@ -132,16 +136,16 @@ func wipCheckCmd(path string) tea.Cmd {
 		wip := worktree.NewWIPHandler(path)
 		hasWIP, err := wip.HasWIP()
 		if err != nil {
-			return wipCheckMsg{err: err}
+			return wipCheckMsg{path: path, err: err}
 		}
 		var files []string
 		if hasWIP {
 			files, err = wip.ListWIPFiles()
 			if err != nil {
-				return wipCheckMsg{hasWIP: hasWIP, err: fmt.Errorf("failed to list WIP files: %w", err)}
+				return wipCheckMsg{path: path, hasWIP: hasWIP, err: fmt.Errorf("failed to list WIP files: %w", err)}
 			}
 		}
-		return wipCheckMsg{hasWIP: hasWIP, files: files}
+		return wipCheckMsg{path: path, hasWIP: hasWIP, files: files}
 	}
 }
 

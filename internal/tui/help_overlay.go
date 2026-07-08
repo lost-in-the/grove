@@ -284,10 +284,10 @@ var helpSectionsDashboard = []helpSection{
 		{"d", "Delete worktree"},
 		{"R", "Rename worktree"},
 		{"f", "Fork (copy) worktree"},
-		{"a", "Bulk delete stale worktrees"},
+		{"a", "Bulk delete worktrees"},
 	}},
 	{title: "Workflow", items: []helpEntry{
-		{"s", "Sync environment worktree"},
+		{"s", "Sync changes from another worktree"},
 		{"b", "Switch git branch in-place"},
 		{"p", "Browse pull requests"},
 		{"i", "Browse issues"},
@@ -325,11 +325,10 @@ var helpSectionsCreate = []helpSection{
 }
 
 var helpSectionsBulk = []helpSection{
-	{title: "Bulk Delete", note: "Select multiple stale worktrees for deletion.", items: []helpEntry{
+	{title: "Bulk Delete", note: "Select multiple worktrees for deletion (main, protected, and current are excluded).", items: []helpEntry{
 		{"↑/k ↓/j", "Navigate worktrees"},
 		{"space", "Toggle selection"},
 		{"enter", "Delete selected worktrees"},
-		{"a", "Select all"},
 		{"esc", "Cancel"},
 	}},
 }
@@ -376,10 +375,10 @@ var helpSectionsFork = []helpSection{
 }
 
 var helpSectionsSync = []helpSection{
-	{title: "Sync Environment", note: "Sync configuration and dependencies from the main worktree.", items: []helpEntry{
-		{"↑/k ↓/j", "Navigate items"},
-		{"enter", "Start sync"},
-		{"space", "Toggle item"},
+	{title: "Sync Changes", note: "Pull uncommitted changes from another worktree into the current one (source → preview → confirm).", items: []helpEntry{
+		{"↑/k ↓/j", "Choose source worktree"},
+		{"enter", "Next step / start sync on confirm"},
+		{"backspace", "Back to previous step"},
 		{"esc", "Cancel"},
 	}},
 }

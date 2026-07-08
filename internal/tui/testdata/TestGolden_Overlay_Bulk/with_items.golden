@@ -7,7 +7,7 @@
           │                                                         │
           │  [1mBulk Delete[m                                            │
           │                                                         │
-          │  Select merged worktrees to delete (2/4 selected)       │
+          │  Select worktrees to delete (2/4 selected)              │
           │                                                         │
           │  ❯ [x] feature-auth (feature-auth)                      │
           │    [ ] fix-bug (fix-bug)                                │

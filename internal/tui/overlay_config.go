@@ -168,6 +168,13 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 	if tmuxMode == "" {
 		tmuxMode = "auto"
 	}
+	// The enum select cannot represent an empty value — huh normalizes it to the
+	// first option ("split") on display. Reflect that in both Value and Default so
+	// an untouched field is not reported dirty.
+	defaultBranchAction := cfg.TUI.DefaultBranchAction
+	if defaultBranchAction == "" {
+		defaultBranchAction = "split"
+	}
 	fields[ConfigTabBehavior] = []ConfigField{
 		{
 			Key:         "switch.dirty_handling",
@@ -206,8 +213,8 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 		{
 			Key:         "tui.default_branch_action",
 			Label:       "default_branch_action",
-			Value:       cfg.TUI.DefaultBranchAction,
-			Default:     cfg.TUI.DefaultBranchAction,
+			Value:       defaultBranchAction,
+			Default:     defaultBranchAction,
 			Type:        ConfigEnum,
 			Options:     []string{"split", "fork"},
 			Description: "Default action when branch exists",
@@ -322,8 +329,11 @@ func (m Model) handleConfigKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Escape closes the overlay (with dirty check)
+	// Escape closes the overlay (with dirty check). Sync form values first so
+	// in-progress edits are detected — the form only reaches StateCompleted on
+	// the save path, so without this Dirty would always be false on escape.
 	if key.Matches(msg, m.keys.Escape) {
+		m.syncConfigFormValues()
 		if s.Dirty {
 			s.Confirming = true
 			return m, nil

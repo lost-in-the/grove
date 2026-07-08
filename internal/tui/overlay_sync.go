@@ -108,9 +108,8 @@ func syncWorktreeCmd(source WorktreeWIPInfo, target WorktreeItem) tea.Cmd {
 			return syncCompleteMsg{err: fmt.Errorf("failed to create patch from source: %w", err)}
 		}
 
-		// Re-apply the patch to source (CreatePatch stages then resets, but doesn't lose changes)
-		// The source keeps its changes since CreatePatch does: add --all, diff --cached, reset HEAD
-		// After reset HEAD, the working tree still has changes.
+		// No restore needed on the source: CreatePatch does add --all, diff --cached,
+		// then reset HEAD, which leaves the source working-tree changes in place.
 
 		if len(patch) == 0 {
 			return syncCompleteMsg{filesApplied: 0}

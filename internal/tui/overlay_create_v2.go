@@ -348,6 +348,8 @@ func renderContextSummary(s *CreateState, width int) string {
 		lines = append(lines, fmt.Sprintf("Branch:   %s (existing)", s.BaseBranch))
 	} else if s.NewBranchName != "" {
 		lines = append(lines, fmt.Sprintf("Branch:   %s (new)", s.NewBranchName))
+	} else if s.ForkBase != "" {
+		lines = append(lines, fmt.Sprintf("Branch:   new, forked from %s", s.ForkBase))
 	}
 
 	body := Styles.TextMuted.Render(strings.Join(lines, "\n"))
@@ -382,6 +384,8 @@ func renderCreateConfirmV2(s *CreateState, width int) string {
 	// Branch strategy detail
 	if s.BaseBranch != "" {
 		b.WriteString(d.indent + "Strategy: " + Styles.DetailValue.Render("from existing branch") + "\n")
+	} else if s.ForkBase != "" {
+		b.WriteString(d.indent + "Strategy: " + Styles.DetailValue.Render("fork new branch from "+s.ForkBase) + "\n")
 	} else {
 		b.WriteString(d.indent + "Strategy: " + Styles.DetailValue.Render("create new branch") + "\n")
 	}

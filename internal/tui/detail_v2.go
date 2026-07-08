@@ -383,14 +383,13 @@ func injectBorderTitleWithColor(rendered, title string, borderColor color.Color)
 
 // detailViewportConfig holds the parameters for rendering a detail viewport card.
 type detailViewportConfig struct {
-	vp          *viewport.Model
-	cursor      int
-	lastCursor  *int
-	focused     bool
-	itemNumber  int
-	contentFunc func(width int) string
-	width       int
-	height      int
+	vp             *viewport.Model
+	lastItemNumber *int // tracks the last-rendered item's identity (number)
+	focused        bool
+	itemNumber     int
+	contentFunc    func(width int) string
+	width          int
+	height         int
 }
 
 // renderDetailViewportCard renders a bordered viewport card with title injection
@@ -407,11 +406,14 @@ func renderDetailViewportCard(cfg detailViewportConfig) string {
 	cfg.vp.SetWidth(vpWidth)
 	cfg.vp.SetHeight(vpHeight)
 
-	if cfg.cursor != *cfg.lastCursor || cfg.vp.GetContent() == "" {
+	// Cache viewport content by item identity (number), not cursor position:
+	// filtering can change which item sits at a given cursor index while the
+	// index stays the same, which would otherwise show stale content.
+	if cfg.itemNumber != *cfg.lastItemNumber || cfg.vp.GetContent() == "" {
 		content := cfg.contentFunc(cfg.width)
 		cfg.vp.SetContent(content)
 		cfg.vp.GotoTop()
-		*cfg.lastCursor = cfg.cursor
+		*cfg.lastItemNumber = cfg.itemNumber
 	}
 
 	borderStyle := Styles.DetailBorder

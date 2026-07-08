@@ -42,3 +42,21 @@ func TestConfigureForPRs_WorktreeBranches(t *testing.T) {
 		t.Error("expected WorktreeBranches to be initialized")
 	}
 }
+
+// TestHandleWorktreesFetched_RefreshesPRWorktreeBranches reproduces the
+// `grove prs` entry point: prState is built before worktrees load, so its
+// WorktreeBranches map starts empty and must be refreshed once worktrees
+// arrive (otherwise the "worktree exists" badge/prompt never fire).
+func TestHandleWorktreesFetched_RefreshesPRWorktreeBranches(t *testing.T) {
+	m := newTestModel(withSize(80, 30))
+	m.prState = &PRViewState{Loading: true, WorktreeBranches: map[string]string{}}
+
+	items := makeTestItems(2) // root + feature-auth (branch "feature-auth")
+	res, _ := m.handleWorktreesFetched(worktreesFetchedMsg{items: items})
+	mm := res.(Model)
+
+	if got := mm.prState.WorktreeBranches["feature-auth"]; got != "feature-auth" {
+		t.Errorf("expected prState.WorktreeBranches to include feature-auth after fetch, got %q (map=%v)",
+			got, mm.prState.WorktreeBranches)
+	}
+}

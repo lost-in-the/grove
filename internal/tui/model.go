@@ -320,6 +320,17 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 
 	m.updateDetailContent()
 
+	// Refresh worktree-branch maps for browser views that were constructed
+	// before worktrees finished loading (the `grove prs`/`grove issues` direct
+	// entry points build these states with an empty list). Without this, the
+	// "✓ worktree" badge and the "worktree exists" prompt never fire.
+	if m.prState != nil {
+		m.prState.WorktreeBranches = m.worktreeBranchMap()
+	}
+	if m.issueState != nil {
+		m.issueState.WorktreeBranches = m.worktreeBranchMap()
+	}
+
 	var branches []string
 	for _, li := range listItems {
 		if item, ok := li.(WorktreeItem); ok {
@@ -500,14 +511,17 @@ func (m Model) handleBulkDeleteDone(msg bulkDeleteDoneMsg) (tea.Model, tea.Cmd) 
 }
 
 func (m Model) handleWIPCheck(msg wipCheckMsg) (tea.Model, tea.Cmd) {
-	if m.forkState != nil {
+	// Only apply the result to the overlay whose worktree path matches, so a
+	// stale check dispatched by a since-canceled overlay cannot overwrite the
+	// WIP state of a different overlay opened afterwards.
+	if m.forkState != nil && m.forkState.Source.Path == msg.path {
 		m.forkState.HasWIP = msg.hasWIP
 		m.forkState.WIPFiles = msg.files
 		if msg.err != nil {
 			m.forkState.Err = msg.err
 		}
 	}
-	if m.checkoutState != nil {
+	if m.checkoutState != nil && m.checkoutState.Item.Path == msg.path {
 		m.checkoutState.HasWIP = msg.hasWIP
 		m.checkoutState.WIPCheckDone = true
 		m.checkoutState.WIPFiles = msg.files
@@ -739,7 +753,7 @@ func (m *Model) updateLayout() {
 		listHeaderHeight = 2
 	}
 
-	useSideBySide := m.width > 100
+	useSideBySide := isWideLayout(m.width)
 	if useSideBySide {
 		// List gets 60% of content width, detail gets the remainder
 		listWidth := contentWidth * 60 / 100
@@ -1253,6 +1267,10 @@ func (m Model) handleRenameKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.renameState.Error = "name cannot be empty"
 			return m, nil
 		}
+		if errMsg := ValidateWorktreeName(newName); errMsg != "" {
+			m.renameState.Error = errMsg
+			return m, nil
+		}
 		if newName == m.renameState.Item.ShortName {
 			m.renameState.Error = "new name is the same as current name"
 			return m, nil
@@ -1357,7 +1375,8 @@ func (m Model) handleBranchActionKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 
 		if s.ActionChoice == 1 {
-			// fork: new branch, don't use existing
+			// fork: create a new branch based on the selected branch
+			s.ForkBase = s.BaseBranch
 			s.BaseBranch = ""
 		}
 		// Initialize name input and proceed to Name step
@@ -1387,19 +1406,19 @@ func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, s.NameInput.Focus()
 
 	case key.Matches(msg, m.keys.Enter):
-		return m.startCreate(s.Name, s.BaseBranch)
+		return m.startCreate(s)
 	}
 	return m, nil
 }
 
-func (m *Model) startCreate(name, baseBranch string) (tea.Model, tea.Cmd) {
-	if m.createState.Creating {
+func (m *Model) startCreate(s *CreateState) (tea.Model, tea.Cmd) {
+	if s.Creating {
 		return m, nil
 	}
-	m.createState.Error = ""
-	m.createState.Creating = true
-	m.createState.ActivityLog = NewActivityLog(60, 10)
-	return m, tea.Batch(m.spinner.Tick, createWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, name, baseBranch))
+	s.Error = ""
+	s.Creating = true
+	s.ActivityLog = NewActivityLog(60, 10)
+	return m, tea.Batch(m.spinner.Tick, createWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, s.Name, s.BaseBranch, s.NewBranchName, s.ForkBase))
 }
 
 // handleBranchChoiceKey handles the initial "Select existing" vs "Create new" choice.
@@ -1564,6 +1583,7 @@ func (m Model) handleBranchCreateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		s.BaseBranch = ""
+		s.ForkBase = ""
 		s.NewBranchName = name
 		if s.NameSuggestion == "" {
 			s.NameSuggestion = name
@@ -1582,6 +1602,7 @@ func (m Model) handleBranchCreateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m Model) selectExistingBranch(branch string) (tea.Model, tea.Cmd) {
 	s := m.createState
 	s.BaseBranch = branch
+	s.ForkBase = ""
 	s.NewBranchName = ""
 
 	strategy := ""
@@ -1596,6 +1617,7 @@ func (m Model) selectExistingBranch(branch string) (tea.Model, tea.Cmd) {
 
 	if m.cfg != nil && m.cfg.TUI.SkipBranchNotice != nil && *m.cfg.TUI.SkipBranchNotice {
 		if m.cfg.TUI.DefaultBranchAction == "fork" {
+			s.ForkBase = s.BaseBranch
 			s.BaseBranch = ""
 		}
 		s.Step = CreateStepName
@@ -2048,7 +2070,7 @@ func (m Model) buildDashboardHeader() Header {
 
 // renderDashboardBody renders the list and detail panels in side-by-side or stacked layout.
 func (m Model) renderDashboardBody() string {
-	if m.width > 100 {
+	if isWideLayout(m.width) {
 		return m.renderSideBySideBody()
 	}
 	return m.renderStackedBody()
@@ -2321,6 +2343,7 @@ func (m Model) ConfigureForPRs() Model {
 	m.prState = &PRViewState{
 		Loading:          true,
 		WorktreeBranches: m.worktreeBranchMap(),
+		FilterInput:      newFilterInput(""),
 	}
 	return m
 }
@@ -2329,7 +2352,9 @@ func (m Model) ConfigureForPRs() Model {
 func (m Model) ConfigureForIssues() Model {
 	m.activeView = ViewIssues
 	m.issueState = &IssueViewState{
-		Loading: true,
+		Loading:          true,
+		FilterInput:      newFilterInput(""),
+		WorktreeBranches: m.worktreeBranchMap(),
 	}
 	return m
 }

@@ -75,7 +75,7 @@ func TestForkOverlay_WIPCheckNoWIPStaysOnName(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
 	m.activeView = ViewFork
 	m.forkState = s
-	m = sendMsg(m, wipCheckMsg{hasWIP: false, files: nil})
+	m = sendMsg(m, wipCheckMsg{path: source.Path, hasWIP: false, files: nil})
 	if m.forkState.Step != ForkStepName {
 		t.Errorf("expected ForkStepName when no WIP (user hasn't entered name yet), got %d", m.forkState.Step)
 	}
@@ -99,7 +99,7 @@ func TestForkOverlay_RootWorktreeStartsOnName(t *testing.T) {
 	m.forkState = s
 
 	// Root worktrees are typically clean, so WIP check returns false
-	m = sendMsg(m, wipCheckMsg{hasWIP: false, files: nil})
+	m = sendMsg(m, wipCheckMsg{path: root.Path, hasWIP: false, files: nil})
 	if m.forkState.Step != ForkStepName {
 		t.Errorf("expected ForkStepName after WIP check on root, got %d", m.forkState.Step)
 	}
@@ -120,7 +120,7 @@ func TestForkOverlay_WIPCheckKeepsStep(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
 	m.activeView = ViewFork
 	m.forkState = s
-	m = sendMsg(m, wipCheckMsg{hasWIP: true, files: []string{"file.go", "other.go"}})
+	m = sendMsg(m, wipCheckMsg{path: source.Path, hasWIP: true, files: []string{"file.go", "other.go"}})
 	if m.forkState.Step != ForkStepName {
 		t.Errorf("expected ForkStepName when WIP present, got %d", m.forkState.Step)
 	}

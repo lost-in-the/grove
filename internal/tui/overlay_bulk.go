@@ -7,7 +7,7 @@ import (
 
 // BulkState holds the state for the bulk delete overlay.
 type BulkState struct {
-	Items    []WorktreeItem // merged/deletable worktrees
+	Items    []WorktreeItem // deletable worktrees (excludes main, protected, current)
 	Selected []bool         // toggle state per item
 	Cursor   int
 	Deleting bool   // true while deletions in progress
@@ -47,14 +47,14 @@ func renderBulk(s *BulkState) string {
 	}
 
 	if len(s.Items) == 0 {
-		b.WriteString(Styles.DetailDim.Render("No merged worktrees to clean up.") + "\n")
+		b.WriteString(Styles.DetailDim.Render("No worktrees to clean up.") + "\n")
 		b.WriteString("\n" + Styles.Footer.Render("[esc] close"))
 		return Styles.OverlayBorderDanger.Render(
 			Styles.OverlayTitle.Render("Bulk Delete") + "\n\n" + b.String(),
 		)
 	}
 
-	fmt.Fprintf(&b, "Select merged worktrees to delete (%d/%d selected)\n\n",
+	fmt.Fprintf(&b, "Select worktrees to delete (%d/%d selected)\n\n",
 		s.SelectedCount(), len(s.Items))
 
 	start, end := scrollWindow(len(s.Items), s.Cursor, 12)
