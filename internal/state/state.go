@@ -39,14 +39,23 @@ type WorktreeState struct {
 
 // Manager handles state management for Grove
 type Manager struct {
-	groveDir         string // Path to .grove directory
-	stateFile        string
-	lockFile         string // .grove/state.lock
-	mu               sync.RWMutex
-	state            *State
-	removedWorktrees map[string]bool // tracks explicit removals for merge in save()
-	batchDepth       int             // > 0 while inside Batch — setters defer their save()
-	batchDirty       bool            // a setter ran during the current batch
+	groveDir  string // Path to .grove directory
+	stateFile string
+	lockFile  string // .grove/state.lock
+	mu        sync.RWMutex
+	state     *State
+
+	// Mutation tracking for save()'s cross-process merge: the on-disk state
+	// is authoritative for everything this process didn't explicitly touch,
+	// so setters record what they changed and save() replays exactly that
+	// on top of a fresh disk read.
+	removedWorktrees  map[string]bool // worktree entries explicitly removed
+	dirtyWorktrees    map[string]bool // worktree entries added/updated
+	projectDirty      bool            // Project was set by this process
+	lastWorktreeDirty bool            // LastWorktree was set/cleared by this process
+
+	batchDepth int  // > 0 while inside Batch — setters defer their save()
+	batchDirty bool // a setter ran during the current batch
 }
 
 // NewManager creates a new state manager for a grove project
@@ -70,6 +79,7 @@ func NewManager(groveDir string) (*Manager, error) {
 		lockFile:         lockFile,
 		state:            newEmptyState(),
 		removedWorktrees: make(map[string]bool),
+		dirtyWorktrees:   make(map[string]bool),
 	}
 
 	// Load existing state if it exists
@@ -100,6 +110,7 @@ func (m *Manager) SetProject(name string) error {
 	defer m.mu.Unlock()
 
 	m.state.Project = name
+	m.projectDirty = true
 	return m.saveOrDefer()
 }
 
@@ -127,6 +138,7 @@ func (m *Manager) SetLastWorktree(name string) error {
 	defer m.mu.Unlock()
 
 	m.state.LastWorktree = name
+	m.lastWorktreeDirty = true
 	return m.saveOrDefer()
 }
 
@@ -143,6 +155,7 @@ func (m *Manager) AddWorktree(name string, ws *WorktreeState) error {
 	defer m.mu.Unlock()
 
 	m.state.Worktrees[name] = ws
+	m.dirtyWorktrees[name] = true
 	return m.saveOrDefer()
 }
 
@@ -172,12 +185,14 @@ func (m *Manager) RemoveWorktree(name string) error {
 	defer m.mu.Unlock()
 
 	delete(m.state.Worktrees, name)
+	delete(m.dirtyWorktrees, name)
 	m.removedWorktrees[name] = true
 
 	// Clear LastWorktree if it pointed at the removed entry, so callers
 	// like `grove last` don't return a name that no longer exists.
 	if m.state.LastWorktree == name {
 		m.state.LastWorktree = ""
+		m.lastWorktreeDirty = true
 	}
 
 	return m.saveOrDefer()
@@ -208,12 +223,15 @@ func (m *Manager) RenameWorktree(oldName, newName string) error {
 	// Move entry to new key, marking the old name as explicitly removed
 	// so save()'s disk-merge doesn't resurrect it.
 	delete(m.state.Worktrees, oldName)
+	delete(m.dirtyWorktrees, oldName)
 	m.removedWorktrees[oldName] = true
 	m.state.Worktrees[newName] = ws
+	m.dirtyWorktrees[newName] = true
 
 	// Update LastWorktree if it pointed to the old name
 	if m.state.LastWorktree == oldName {
 		m.state.LastWorktree = newName
+		m.lastWorktreeDirty = true
 	}
 
 	return m.saveOrDefer()
@@ -234,6 +252,7 @@ func (m *Manager) TouchWorktree(name string) error {
 	}
 
 	ws.LastAccessedAt = time.Now()
+	m.dirtyWorktrees[name] = true
 	return m.saveOrDefer()
 }
 
@@ -337,8 +356,14 @@ func (m *Manager) load() error {
 }
 
 // save writes the state to disk with file locking and atomic rename.
-// It merges with the current on-disk state to avoid clobbering concurrent changes
-// from other grove processes (e.g., two simultaneous grove new commands).
+// It merges with the current on-disk state to avoid clobbering concurrent
+// changes from other grove processes (e.g., a `grove rm` in another shell
+// while the TUI holds a long-lived Manager): the freshly-read disk state is
+// the base, and only the mutations this process explicitly made (tracked in
+// removedWorktrees/dirtyWorktrees and the scalar dirty flags) are replayed
+// on top. Everything this process didn't touch — including entries other
+// processes removed and their LastWorktree/Project updates — stays as disk
+// has it.
 func (m *Manager) save() error {
 	f, err := m.fileLock()
 	if err != nil {
@@ -346,16 +371,40 @@ func (m *Manager) save() error {
 	}
 	defer m.fileUnlock(f)
 
-	// Re-read current disk state under the lock to preserve entries
-	// added by other processes since we loaded.
+	// Re-read current disk state under the lock and rebase our tracked
+	// mutations onto it. A missing or corrupt state file falls through to
+	// writing the in-memory state as-is.
 	if diskData, err := os.ReadFile(m.stateFile); err == nil {
 		var diskState State
 		if err := json.Unmarshal(diskData, &diskState); err == nil {
-			for name, ws := range diskState.Worktrees {
-				if _, exists := m.state.Worktrees[name]; !exists && !m.removedWorktrees[name] {
-					m.state.Worktrees[name] = ws
+			merged := &diskState
+			if merged.Worktrees == nil {
+				merged.Worktrees = make(map[string]*WorktreeState)
+			}
+			merged.Version = m.state.Version
+
+			for name := range m.removedWorktrees {
+				delete(merged.Worktrees, name)
+			}
+			for name := range m.dirtyWorktrees {
+				if ws, ok := m.state.Worktrees[name]; ok {
+					merged.Worktrees[name] = ws
 				}
 			}
+			if m.projectDirty {
+				merged.Project = m.state.Project
+			}
+			if m.lastWorktreeDirty {
+				merged.LastWorktree = m.state.LastWorktree
+			}
+			// Never persist a LastWorktree pointing at an entry removed in
+			// this save (e.g. another process set it while we removed the
+			// worktree).
+			if m.removedWorktrees[merged.LastWorktree] {
+				merged.LastWorktree = ""
+			}
+
+			m.state = merged
 		}
 	}
 
@@ -373,8 +422,11 @@ func (m *Manager) save() error {
 		return fmt.Errorf("failed to save state file: %w", err)
 	}
 
-	// Disk is now authoritative — clear the tracking set.
+	// Disk is now authoritative — clear the mutation tracking.
 	m.removedWorktrees = make(map[string]bool)
+	m.dirtyWorktrees = make(map[string]bool)
+	m.projectDirty = false
+	m.lastWorktreeDirty = false
 
 	return nil
 }

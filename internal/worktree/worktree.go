@@ -19,7 +19,7 @@ const (
 
 // Worktree represents a git worktree
 type Worktree struct {
-	Name             string // Short name (derived from path)
+	Name             string // Full directory name (basename of Path, e.g. "grove-testing")
 	Path             string // Absolute path to worktree
 	Branch           string // Branch name or "detached"
 	Commit           string // Commit hash (full)
@@ -279,12 +279,14 @@ func (m *Manager) listLight() ([]*Worktree, error) {
 	// The main worktree is always the first `worktree <path>` line —
 	// extract it from the output we already have rather than running
 	// `git worktree list --porcelain` a second time via getMainWorktreePath.
+	// The *At helpers reuse that path too, so priming the project-name and
+	// name-pattern caches doesn't re-exec `git worktree list` either.
 	raw := string(output)
 	mainPath := mainWorktreePathFromPorcelain(raw)
 	if mainPath == "" {
 		mainPath = m.repoRoot
 	}
-	return parseWorktreeList(raw, mainPath, m.GetProjectName(), m.getNamePattern()), nil
+	return parseWorktreeList(raw, mainPath, m.projectNameAt(mainPath), m.namePatternAt(mainPath)), nil
 }
 
 // mainWorktreePathFromPorcelain returns the first worktree path in the output
@@ -361,26 +363,23 @@ func (m *Manager) ListNames() ([]string, error) {
 	return names, nil
 }
 
-// Remove removes a worktree
+// Remove removes a worktree.
+//
+// The name is resolved with Find, so it accepts exactly the same identifiers
+// (short name, display name, branch, full name, or path basename). Callers
+// like `grove rm` run their safety checks against Find's result — resolving
+// with a narrower matcher here could delete a different worktree than the
+// one that was validated.
 func (m *Manager) Remove(name string) error {
 	if name == "" {
 		return fmt.Errorf("worktree name cannot be empty")
 	}
 
-	// Find the worktree by name. listLight skips per-worktree dirty checks
-	// — Remove only needs the target's path/IsMain/IsPrunable to decide what
-	// to do.
-	trees, err := m.listLight()
+	// Find uses listLight, which skips per-worktree dirty checks — Remove
+	// only needs the target's path/IsMain/IsPrunable to decide what to do.
+	targetTree, err := m.Find(name)
 	if err != nil {
-		return fmt.Errorf("failed to list worktrees: %w", err)
-	}
-
-	var targetTree *Worktree
-	for _, tree := range trees {
-		if tree.Name == name || tree.ShortName == name || tree.DisplayName() == name {
-			targetTree = tree
-			break
-		}
+		return err
 	}
 
 	if targetTree == nil {
@@ -586,18 +585,36 @@ func (m *Manager) GetProjectName() string {
 		return m.projectName
 	}
 
-	m.projectName = m.detectProjectName()
+	return m.projectNameAt(m.getMainWorktreePath())
+}
+
+// projectNameAt is GetProjectName with the main worktree path already in
+// hand, so priming a cold cache doesn't re-exec `git worktree list`.
+func (m *Manager) projectNameAt(mainWorktreePath string) string {
+	if m.projectName == "" {
+		m.projectName = m.detectProjectNameAt(mainWorktreePath)
+	}
 	return m.projectName
 }
 
+// tmuxNameSanitizer rewrites characters tmux mangles in session names: tmux
+// silently converts '.' and ':' to '_' when creating a session, but treats
+// them as window/pane separators when resolving `-t` targets. Applying the
+// same rewrite here keeps the Go-side name identical to the session tmux
+// actually stores, so exists/kill/attach target the right session.
+var tmuxNameSanitizer = strings.NewReplacer(".", "_", ":", "_")
+
 // TmuxSessionName returns the tmux session name for a worktree.
 // The main/root worktree uses just the project name (e.g. "myapp"),
-// while branch worktrees use project-name (e.g. "myapp-testing").
+// while branch worktrees use the canonical project-name form (e.g.
+// "myapp-testing"), regardless of the [naming] directory pattern.
+// Characters tmux rewrites in session names ('.' and ':') are replaced
+// with '_' so the returned name matches what tmux stores.
 func TmuxSessionName(project, worktreeName string) string {
 	if worktreeName == "root" {
-		return project
+		return tmuxNameSanitizer.Replace(project)
 	}
-	return fmt.Sprintf("%s-%s", project, worktreeName)
+	return tmuxNameSanitizer.Replace(fmt.Sprintf("%s-%s", project, worktreeName))
 }
 
 // GetRepoRoot returns the repository root path

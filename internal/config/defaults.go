@@ -45,9 +45,16 @@ func LoadDefaults() *Config {
 	}
 }
 
-// LoadConfigFromPath loads configuration from a specific file path
+// LoadConfigFromPath parses a single config file into a zero-value Config.
+//
+// Fields the file does not mention stay at their zero values — deliberately
+// NOT seeded from LoadDefaults(). mergeConfigs treats non-empty / non-nil
+// fields as explicit overrides, so seeding defaults here would make every
+// config file appear to set every field, silently resetting lower-priority
+// layers' explicit settings back to the defaults. Defaults enter the merge
+// chain exactly once, as the base config in Load/LoadFromGroveDir.
 func LoadConfigFromPath(path string) (*Config, error) {
-	cfg := LoadDefaults()
+	cfg := &Config{}
 
 	data, err := os.ReadFile(path)
 	if err != nil {

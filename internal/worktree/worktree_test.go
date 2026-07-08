@@ -981,3 +981,73 @@ func TestGetCommitInfo(t *testing.T) {
 		t.Error("Branch should not be empty")
 	}
 }
+
+func TestRemoveByBranchName(t *testing.T) {
+	// Regression: Remove used a narrower name matcher than Find, so
+	// `grove rm <branch>` passed all pre-flight checks (run against Find's
+	// result) and then failed with "not found" — after pre-remove hooks had
+	// already fired. Remove must resolve names exactly like Find.
+	tmpDir, _ := setupTestRepo(t)
+
+	m := &Manager{repoRoot: tmpDir}
+
+	// Slash-containing branch: the derived worktree name ("agent-slot-db")
+	// differs from the branch name ("feat/agent-slot-db").
+	if err := m.Create("agent-slot-db", "feat/agent-slot-db"); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	wt, err := m.Find("feat/agent-slot-db")
+	if err != nil || wt == nil {
+		t.Fatalf("Find(branch) expected worktree, got error=%v, wt=%v", err, wt)
+	}
+
+	if err := m.Remove("feat/agent-slot-db"); err != nil {
+		t.Fatalf("Remove(branch) error = %v — Remove must accept every identifier Find accepts", err)
+	}
+
+	wtAfter, _ := m.Find("feat/agent-slot-db")
+	if wtAfter != nil {
+		t.Error("Worktree should not exist after Remove() by branch name")
+	}
+}
+
+func TestTmuxSessionNameSanitizesTmuxUnsafeChars(t *testing.T) {
+	// Regression: tmux rewrites '.' and ':' to '_' when creating a session
+	// but parses them as window/pane separators in -t targets, so unsanitized
+	// names never match the session tmux actually stores.
+	tests := []struct {
+		name        string
+		project     string
+		worktree    string
+		wantSession string
+	}{
+		{
+			name:        "dot in project name",
+			project:     "my.app",
+			worktree:    "testing",
+			wantSession: "my_app-testing",
+		},
+		{
+			name:        "dot in project name for root",
+			project:     "next.js",
+			worktree:    "root",
+			wantSession: "next_js",
+		},
+		{
+			name:        "colon in worktree name",
+			project:     "myapp",
+			worktree:    "fix:urgent",
+			wantSession: "myapp-fix_urgent",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := TmuxSessionName(tt.project, tt.worktree)
+			if got != tt.wantSession {
+				t.Errorf("TmuxSessionName(%q, %q) = %q, want %q", tt.project, tt.worktree, got, tt.wantSession)
+			}
+		})
+	}
+}

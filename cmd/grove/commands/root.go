@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -105,7 +106,15 @@ Use 'grove install --help' for details.`,
 			return nil
 		}
 		updatecheck.MaybeNotify(os.Stderr, version.Version)
-		updatecheck.RefreshAsync()
+		// Wait (bounded) for the async refresh: the process exits right
+		// after this hook, and exiting kills the goroutine before it can
+		// fetch and write the cache. The wait is a no-op when the cache is
+		// fresh (the goroutine returns immediately without touching the
+		// network).
+		select {
+		case <-updatecheck.RefreshAsync():
+		case <-time.After(updatecheck.RefreshWaitBudget):
+		}
 		return nil
 	},
 }

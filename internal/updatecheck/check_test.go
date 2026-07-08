@@ -145,12 +145,70 @@ func TestRefresh_FetchFailureLeavesCacheAlone(t *testing.T) {
 
 var errFakeNetwork = fmt.Errorf("simulated network failure")
 
+func TestRefresh_FetchFailureRecordsAttempt(t *testing.T) {
+	// Regression: a failed fetch never wrote LastCheckedAt, so on hosts where
+	// the fetch always fails (offline, firewalled, >RefreshWaitBudget latency)
+	// the cache was never seeded and EVERY subsequent command re-attempted the
+	// network fetch — blocking the full RefreshWaitBudget each time instead of
+	// at most once per interval.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "update-check.json")
+
+	calls := 0
+	fetcher := func() (Release, error) {
+		calls++
+		return Release{}, errFakeNetwork
+	}
+
+	// First refresh with no cache at all: fetch fails, attempt must be recorded.
+	refreshFromPathWithFetcher(path, 24*time.Hour, fetcher)
+	if calls != 1 {
+		t.Fatalf("fetcher calls = %d, want 1", calls)
+	}
+	got, err := ReadCacheFromPath(path)
+	if err != nil {
+		t.Fatalf("cache not readable after failed fetch: %v", err)
+	}
+	if got.LastCheckedAt.IsZero() {
+		t.Fatal("LastCheckedAt is zero after failed fetch; attempt was not recorded")
+	}
+
+	// Second refresh within the interval must not hit the network again.
+	refreshFromPathWithFetcher(path, 24*time.Hour, fetcher)
+	if calls != 1 {
+		t.Errorf("fetcher calls = %d after second refresh, want 1 (attempt timestamp should suppress retry)", calls)
+	}
+}
+
+func TestRefresh_FetchFailurePreservesReleaseInfoWithAttempt(t *testing.T) {
+	// A failed fetch must record the attempt WITHOUT discarding previously
+	// cached release info — MaybeNotify still needs it.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "update-check.json")
+	_ = WriteCacheToPath(path, Cache{
+		LastCheckedAt: time.Now().Add(-48 * time.Hour),
+		LatestVersion: "0.5.0",
+		LatestURL:     "https://example/old",
+	})
+
+	fetcher := func() (Release, error) { return Release{}, errFakeNetwork }
+	refreshFromPathWithFetcher(path, 24*time.Hour, fetcher)
+
+	got, _ := ReadCacheFromPath(path)
+	if got.LatestVersion != "0.5.0" || got.LatestURL != "https://example/old" {
+		t.Errorf("release info clobbered on failed fetch: got %+v", got)
+	}
+	if time.Since(got.LastCheckedAt) > time.Minute {
+		t.Errorf("LastCheckedAt not refreshed on failed fetch: %v", got.LastCheckedAt)
+	}
+}
+
 func TestCheckNow_FetchesAndPrintsNotification(t *testing.T) {
 	fetcher := func() (Release, error) {
 		return Release{TagName: "v0.6.0", HTMLURL: "https://x"}, nil
 	}
 	var buf bytes.Buffer
-	if err := checkNowWithDeps(&buf, "0.5.0", fetcher); err != nil {
+	if err := checkNowWithDeps(&buf, "0.5.0", "", fetcher); err != nil {
 		t.Fatalf("checkNowWithDeps: %v", err)
 	}
 	if !strings.Contains(buf.String(), "0.6.0") {
@@ -163,7 +221,7 @@ func TestCheckNow_UpToDateMessage(t *testing.T) {
 		return Release{TagName: "v0.5.0", HTMLURL: "https://x"}, nil
 	}
 	var buf bytes.Buffer
-	if err := checkNowWithDeps(&buf, "0.5.0", fetcher); err != nil {
+	if err := checkNowWithDeps(&buf, "0.5.0", "", fetcher); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(buf.String(), "up to date") {
@@ -174,7 +232,7 @@ func TestCheckNow_UpToDateMessage(t *testing.T) {
 func TestCheckNow_FetchFailureReturnsError(t *testing.T) {
 	fetcher := func() (Release, error) { return Release{}, errFakeNetwork }
 	var buf bytes.Buffer
-	if err := checkNowWithDeps(&buf, "0.5.0", fetcher); err == nil {
+	if err := checkNowWithDeps(&buf, "0.5.0", "", fetcher); err == nil {
 		t.Error("expected error on fetch failure")
 	}
 }
@@ -296,5 +354,31 @@ func TestCachedRelease_DevVersionUnavailable(t *testing.T) {
 	}
 	if latest != "" || url != "" {
 		t.Errorf("expected zero values for dev version, got latest=%q url=%q", latest, url)
+	}
+}
+
+func TestCheckNow_SeedsCache(t *testing.T) {
+	// Regression: --check-update fetched synchronously but never wrote the
+	// cache, so a manual check couldn't seed later MaybeNotify calls.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "update-check.json")
+	fetcher := func() (Release, error) {
+		return Release{TagName: "v0.6.0", HTMLURL: "https://x"}, nil
+	}
+
+	var buf bytes.Buffer
+	if err := checkNowWithDeps(&buf, "0.5.0", path, fetcher); err != nil {
+		t.Fatalf("checkNowWithDeps: %v", err)
+	}
+
+	c, err := ReadCacheFromPath(path)
+	if err != nil {
+		t.Fatalf("cache not written: %v", err)
+	}
+	if c.LatestVersion != "0.6.0" {
+		t.Errorf("cached LatestVersion = %q, want %q", c.LatestVersion, "0.6.0")
+	}
+	if c.LastCheckedAt.IsZero() {
+		t.Error("cached LastCheckedAt is zero")
 	}
 }

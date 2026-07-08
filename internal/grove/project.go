@@ -27,6 +27,15 @@ func FindRoot(startDir string) (string, error) {
 		return "", err
 	}
 
+	// Resolve symlinks so the walk compares like with like against the git
+	// root: `git rev-parse --show-toplevel` returns the symlink-resolved
+	// path (e.g. /private/var on macOS) while os.Getwd may return the
+	// logical $PWD path (/var). Without this the boundary check below never
+	// fires and the walk can escape the repository. Same rule as diagnose.go.
+	if resolved, err := filepath.EvalSymlinks(absDir); err == nil {
+		absDir = resolved
+	}
+
 	// Determine git repo root to limit search scope.
 	// Without this boundary, the walk can escape the repo and find
 	// unrelated .grove directories (e.g., ~/.grove from debug logging).
@@ -129,12 +138,6 @@ func isWorktreeByWalkingUp(startDir string) (bool, error) {
 		}
 		current = parent
 	}
-}
-
-// StateDir returns the path to the state.json file for the current project.
-// Returns empty string if not in a grove project.
-func StateDir() (string, error) {
-	return FindRoot("")
 }
 
 // ConfigPath returns the path to the config.toml file for the current project.

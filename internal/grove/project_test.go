@@ -9,7 +9,9 @@ import (
 
 func TestFindRoot(t *testing.T) {
 	t.Run("finds .grove in current directory", func(t *testing.T) {
-		tmpDir := t.TempDir()
+		// FindRoot resolves symlinks in the start dir (macOS t.TempDir lives
+		// under symlinked /var), so resolve the expected path the same way.
+		tmpDir, _ := filepath.EvalSymlinks(t.TempDir())
 		groveDir := filepath.Join(tmpDir, ".grove")
 		if err := os.MkdirAll(groveDir, 0755); err != nil {
 			t.Fatalf("failed to create .grove dir: %v", err)
@@ -25,7 +27,7 @@ func TestFindRoot(t *testing.T) {
 	})
 
 	t.Run("finds .grove in parent directory", func(t *testing.T) {
-		tmpDir := t.TempDir()
+		tmpDir, _ := filepath.EvalSymlinks(t.TempDir())
 		groveDir := filepath.Join(tmpDir, ".grove")
 		subDir := filepath.Join(tmpDir, "sub", "nested")
 
@@ -348,4 +350,47 @@ func TestProjectRoot(t *testing.T) {
 			t.Errorf("ProjectRoot() = %q, want empty", root)
 		}
 	})
+}
+
+// TestFindRoot_SymlinkedPathDoesNotEscapeRepo: git returns the symlink-
+// resolved repo root while the walk may start from a logical (symlinked)
+// path. Without resolving both sides, the git-root boundary never fires and
+// the walk escapes the repository, adopting an unrelated .grove above it
+// (macOS: /tmp -> /private/tmp, /var -> /private/var).
+func TestFindRoot_SymlinkedPathDoesNotEscapeRepo(t *testing.T) {
+	base := t.TempDir()
+
+	realDir := filepath.Join(base, "real")
+	repoDir := filepath.Join(realDir, "repo")
+	subDir := filepath.Join(repoDir, "sub")
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Stray .grove ABOVE the repository — must never be adopted.
+	if err := os.MkdirAll(filepath.Join(realDir, ".grove"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command("git", "init")
+	cmd.Dir = repoDir
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init failed: %v\n%s", err, out)
+	}
+
+	// Enter the repo through a symlink so the logical path differs from
+	// git's resolved path.
+	linkDir := filepath.Join(base, "link")
+	if err := os.Symlink(realDir, linkDir); err != nil {
+		t.Fatal(err)
+	}
+
+	found, err := FindRoot(filepath.Join(linkDir, "repo", "sub"))
+	if err != nil {
+		t.Fatalf("FindRoot() error = %v", err)
+	}
+	if found != "" {
+		t.Errorf("FindRoot() = %q, want empty — walk escaped the repo and found the stray .grove", found)
+	}
 }

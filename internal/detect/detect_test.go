@@ -257,3 +257,34 @@ func assertContains(t *testing.T, slice []string, item string) {
 	}
 	t.Errorf("expected %v to contain %q", slice, item)
 }
+
+func TestDetect_ModernComposeFilenames(t *testing.T) {
+	// Regression: the docker rule only matched docker-compose.yml, while
+	// HasDocker/FindComposeFile accept four filenames — so compose.yaml-only
+	// repos were typed "unknown" despite HasDocker being true.
+	for _, filename := range []string{"docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"} {
+		t.Run(filename, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, dir, filename, "services:\n  app:\n    image: x\n")
+
+			profile := Detect(dir)
+			if profile.Type != "docker" {
+				t.Errorf("Type = %q, want %q", profile.Type, "docker")
+			}
+			if !profile.HasDocker {
+				t.Error("HasDocker = false, want true")
+			}
+		})
+	}
+}
+
+func TestDetect_MixedWithModernComposeFilename(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "Gemfile", "source 'https://rubygems.org'")
+	writeFile(t, dir, "compose.yaml", "services:\n  app:\n    image: x\n")
+
+	profile := Detect(dir)
+	if profile.Type != "mixed" {
+		t.Errorf("Type = %q, want %q", profile.Type, "mixed")
+	}
+}

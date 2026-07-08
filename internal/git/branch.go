@@ -50,12 +50,15 @@ func (b *BranchManager) GetStatus(branch string, excludeWorktree string) (*Branc
 	}
 	status.IsMerged = merged
 
-	// Check if branch has a remote tracking branch
-	status.HasRemote = b.hasRemoteTracking(branch)
+	// Resolve the upstream once and reuse it for both the has-remote check
+	// and the unpushed count — previously two identical `git rev-parse`
+	// executions per branch.
+	upstream := b.getUpstream(branch)
+	status.HasRemote = upstream != ""
 
 	// Count unpushed commits if there's a remote
 	if status.HasRemote {
-		count, err := b.countUnpushedCommits(branch)
+		count, err := b.countUnpushedCommits(branch, upstream)
 		if err != nil {
 			// Non-fatal - might not have upstream set
 			count = 0
@@ -82,7 +85,7 @@ func (b *BranchManager) Delete(branch string, force bool) error {
 
 	output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", b.repoPath, "branch", flag, branch}, "", cmdexec.GitLocal)
 	if err != nil {
-		return fmt.Errorf("failed to delete branch: %s", strings.TrimSpace(string(output)))
+		return fmt.Errorf("failed to delete branch: %s: %w", strings.TrimSpace(string(output)), err)
 	}
 	return nil
 }
@@ -187,11 +190,6 @@ func (b *BranchManager) isBranchMerged(branch string) (bool, error) {
 	return false, nil
 }
 
-// hasRemoteTracking checks if a branch has a remote tracking branch
-func (b *BranchManager) hasRemoteTracking(branch string) bool {
-	return b.getUpstream(branch) != ""
-}
-
 // getUpstream returns the upstream tracking branch for a local branch.
 // Returns empty string if no upstream is set (not an error condition).
 func (b *BranchManager) getUpstream(branch string) string {
@@ -203,9 +201,10 @@ func (b *BranchManager) getUpstream(branch string) string {
 	return strings.TrimSpace(string(output))
 }
 
-// countUnpushedCommits returns the number of commits not pushed to upstream
-func (b *BranchManager) countUnpushedCommits(branch string) (int, error) {
-	upstream := b.getUpstream(branch)
+// countUnpushedCommits returns the number of commits not pushed to upstream.
+// The upstream ref is taken as a parameter so callers that already resolved
+// it (GetStatus) don't pay a second `git rev-parse` exec.
+func (b *BranchManager) countUnpushedCommits(branch, upstream string) (int, error) {
 	if upstream == "" {
 		return 0, nil
 	}
