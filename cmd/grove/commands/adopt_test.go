@@ -128,3 +128,60 @@ func TestAdopt_StripProjectPrefixForName(t *testing.T) {
 		})
 	}
 }
+
+func TestGitCommonDirAt_DistinguishesRepositories(t *testing.T) {
+	base := t.TempDir()
+
+	repo := filepath.Join(base, "repo")
+	if err := os.MkdirAll(repo, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	runAdoptGit(t, repo, "init")
+	runAdoptGit(t, repo, "commit", "--allow-empty", "-m", "init")
+
+	// Linked worktree of the same repository must share the common dir.
+	wt := filepath.Join(base, "repo-wt")
+	runAdoptGit(t, repo, "worktree", "add", wt)
+
+	repoCommon, err := gitCommonDirAt(repo)
+	if err != nil {
+		t.Fatalf("gitCommonDirAt(repo): %v", err)
+	}
+	wtCommon, err := gitCommonDirAt(wt)
+	if err != nil {
+		t.Fatalf("gitCommonDirAt(wt): %v", err)
+	}
+	if repoCommon != wtCommon {
+		t.Errorf("worktree common dir %q != repo common dir %q", wtCommon, repoCommon)
+	}
+
+	// A subdirectory of the worktree also resolves to the same repo.
+	sub := filepath.Join(wt, "sub")
+	if err := os.MkdirAll(sub, 0755); err != nil {
+		t.Fatalf("mkdir sub: %v", err)
+	}
+	subCommon, err := gitCommonDirAt(sub)
+	if err != nil {
+		t.Fatalf("gitCommonDirAt(sub): %v", err)
+	}
+	if subCommon != repoCommon {
+		t.Errorf("subdir common dir %q != repo common dir %q", subCommon, repoCommon)
+	}
+
+	// An unrelated repository must NOT match — this is the membership check
+	// grove adopt relies on to reject foreign repos.
+	other := filepath.Join(base, "other")
+	if err := os.MkdirAll(other, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	runAdoptGit(t, other, "init")
+	runAdoptGit(t, other, "commit", "--allow-empty", "-m", "init")
+
+	otherCommon, err := gitCommonDirAt(other)
+	if err != nil {
+		t.Fatalf("gitCommonDirAt(other): %v", err)
+	}
+	if otherCommon == repoCommon {
+		t.Errorf("unrelated repo shares common dir %q — membership check would pass foreign repos", otherCommon)
+	}
+}

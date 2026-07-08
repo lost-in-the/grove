@@ -4,13 +4,15 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/hooks"
+	"github.com/lost-in-the/grove/internal/log"
+	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/worktree"
 	"github.com/lost-in-the/grove/plugins/docker"
 )
@@ -84,24 +86,187 @@ func updateGitignore(dir string) error {
 	return err
 }
 
-func createWorktree(repoDir, projectName, name string) error {
-	parentDir := filepath.Dir(repoDir)
-	worktreeDir := filepath.Join(parentDir, fmt.Sprintf("%s-%s", projectName, name))
-
-	output, err := cmdexec.Output(context.TODO(), "git", []string{"rev-parse", "--abbrev-ref", "HEAD"}, repoDir, cmdexec.GitLocal)
-	if err != nil {
-		return fmt.Errorf("failed to get current branch: %w", err)
+// emitCdOrExplain emits the cd: directive for the shell wrapper when shell
+// integration is active; otherwise it explains how to set up shell
+// integration and change directory manually. Shared by every command that
+// lands the user in a different worktree without a tmux client switch.
+func emitCdOrExplain(stderr *cli.Writer, path string) {
+	if os.Getenv("GROVE_SHELL") == "1" {
+		cli.Directive("cd", path)
+		return
 	}
-	baseBranch := strings.TrimSpace(string(output))
+	cli.Faint(stderr, "Note: Directory switching requires shell integration.")
+	cli.Faint(stderr, "Add this to your shell config (~/.zshrc or ~/.bashrc):")
+	_, _ = fmt.Fprintf(stderr, "\n")
+	cli.Faint(stderr, "  eval \"$(grove install zsh)\"   # for zsh")
+	cli.Faint(stderr, "  eval \"$(grove install bash)\"  # for bash")
+	_, _ = fmt.Fprintf(stderr, "\n")
+	cli.Faint(stderr, "To change directory manually:")
+	cli.Faint(stderr, "  cd %s", path)
+}
 
-	branchName := name
-	// Worktree add streams progress to stdout/stderr — use exec.Command directly
-	cmd := exec.Command("git", "worktree", "add", "-b", branchName, worktreeDir, baseBranch)
-	cmd.Dir = repoDir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+// switchToWorktree runs the shared switch epilogue used by new/fork/last:
+// batches SetLastWorktree + TouchWorktree into a single state save, stores
+// the current tmux session as "last", and switches the tmux client to the
+// target session (creating it if missing). Returns whether the client was
+// actually switched; callers emit the cd-directive fallback when it wasn't.
+//
+// suppressTmux must be true when the client must not be relocated (agent
+// mode, --no-tmux, tmux mode "off") — compute it via effectiveTmuxMode.
+func switchToWorktree(ctx *GroveContext, stderr *cli.Writer, prevName, targetName, sessionName, targetPath string, suppressTmux bool) bool {
+	var tmuxSwitched bool
+	batchErr := ctx.State.Batch(func() error {
+		if prevName != "" {
+			if err := ctx.State.SetLastWorktree(prevName); err != nil {
+				log.Printf("failed to set last worktree %q: %v", prevName, err)
+			}
+		}
 
-	return cmd.Run()
+		// Store current session as last if inside tmux
+		if tmux.IsInsideTmux() {
+			if currentSession, err := tmux.GetCurrentSession(); err == nil {
+				if err := tmux.StoreLastSession(currentSession); err != nil {
+					log.Printf("failed to store last session %q: %v", currentSession, err)
+				}
+			}
+		}
+
+		// Switch tmux session, creating it first when missing (e.g. killed
+		// by hand, or the worktree was entered with --no-tmux). Failures
+		// degrade to the cd-directive fallback instead of aborting.
+		if !suppressTmux && tmux.IsTmuxAvailable() && tmux.IsInsideTmux() {
+			if exists, err := tmux.SessionExists(sessionName); err == nil && !exists {
+				if createErr := tmux.CreateSession(sessionName, targetPath); createErr != nil {
+					cli.Warning(stderr, "Failed to create tmux session: %v", createErr)
+				}
+			}
+			if err := tmux.SwitchSession(sessionName); err != nil {
+				cli.Warning(stderr, "Failed to switch session: %v", err)
+			} else {
+				tmuxSwitched = true
+			}
+		}
+
+		// Update last_accessed_at for target worktree
+		if err := ctx.State.TouchWorktree(targetName); err != nil {
+			log.Printf("failed to touch worktree %q: %v", targetName, err)
+		}
+		return nil
+	})
+	if batchErr != nil {
+		log.Printf("state save failed: %v", batchErr)
+	}
+	return tmuxSwitched
+}
+
+// currentWorktreeRoot resolves the root directory of the worktree containing
+// the current working directory. Docker slot detection keys on the worktree
+// directory basename (docker.FindWorktreeSlot), so container commands must
+// pass the worktree root — a raw os.Getwd() from a subdirectory would miss
+// the isolated stack and silently operate on the shared one instead.
+func currentWorktreeRoot(ctx *GroveContext) (string, error) {
+	mgr, err := ctx.WorktreeManager()
+	if err != nil {
+		return "", err
+	}
+	root, err := mgr.CurrentPath()
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve current worktree root: %w", err)
+	}
+	return root, nil
+}
+
+// removeWorktreeWithHooks runs the shared removal sequence used by `grove rm`
+// and `grove trim`: user pre-remove hooks (hooks.toml), the plugin pre-remove
+// hook (e.g. stop agent stacks), git worktree removal, state cleanup, and
+// tmux session kill. Returns an error only when the git removal itself fails;
+// ancillary failures are warned and skipped.
+func removeWorktreeWithHooks(ctx *GroveContext, mgr *worktree.Manager, w *cli.Writer, projectName, name, wtPath, branchName string) error {
+	// Execute pre-remove hooks (user hooks from hooks.toml)
+	hookExecutor, hookErr := hooks.NewExecutor()
+	if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPreRemove) {
+		hookCtx := &hooks.ExecutionContext{
+			Event:        hooks.EventPreRemove,
+			Worktree:     name,
+			Branch:       branchName,
+			Project:      projectName,
+			MainPath:     ctx.ProjectRoot,
+			NewPath:      wtPath,
+			WorktreeFull: filepath.Base(wtPath),
+		}
+		cli.Step(w, "Running pre-remove hooks...")
+		if err := hookExecutor.Execute(hooks.EventPreRemove, hookCtx); err != nil {
+			cli.Warning(w, "Hook execution had errors: %v", err)
+		}
+	}
+
+	// Fire plugin pre-remove hook (e.g., stop agent stacks)
+	pluginHookCtx := &hooks.Context{
+		Worktree:     name,
+		Config:       ctx.Config,
+		WorktreePath: wtPath,
+		MainPath:     ctx.ProjectRoot,
+	}
+	if err := hooks.Fire(hooks.EventPreRemove, pluginHookCtx); err != nil {
+		cli.Warning(w, "Pre-remove plugin hook failed: %v", err)
+	}
+
+	// Remove worktree — the critical step, done before tmux kill
+	if err := mgr.Remove(name); err != nil {
+		return fmt.Errorf("failed to remove worktree: %w", err)
+	}
+
+	// Remove from state
+	if err := ctx.State.RemoveWorktree(name); err != nil {
+		cli.Warning(w, "worktree removed but state cleanup failed: %v", err)
+	}
+
+	cli.Success(w, "Removed worktree '%s'", name)
+
+	// Kill tmux session after worktree is confirmed gone
+	if tmux.IsTmuxAvailable() {
+		sessionName := worktree.TmuxSessionName(projectName, name)
+		if exists, err := tmux.SessionExists(sessionName); err == nil && exists {
+			if err := tmux.KillSession(sessionName); err != nil {
+				cli.Warning(w, "Failed to kill tmux session: %v", err)
+			} else {
+				cli.Success(w, "Killed tmux session '%s'", sessionName)
+			}
+		}
+	}
+
+	return nil
+}
+
+// firePostRemoveHooks fires user post-remove hooks (hooks.toml) and the
+// plugin post-remove hook for a worktree that was just removed. Kept separate
+// from removeWorktreeWithHooks so `grove rm` can interleave branch deletion
+// before the post-remove hooks, preserving its established ordering.
+func firePostRemoveHooks(ctx *GroveContext, w *cli.Writer, projectName, name, wtPath, branchName string) {
+	hookExecutor, hookErr := hooks.NewExecutor()
+	if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPostRemove) {
+		hookCtx := &hooks.ExecutionContext{
+			Event:    hooks.EventPostRemove,
+			Worktree: name,
+			Branch:   branchName,
+			Project:  projectName,
+			MainPath: ctx.ProjectRoot,
+		}
+		cli.Step(w, "Running post-remove hooks...")
+		if err := hookExecutor.Execute(hooks.EventPostRemove, hookCtx); err != nil {
+			cli.Warning(w, "Post-remove hook had errors: %v", err)
+		}
+	}
+
+	pluginHookCtx := &hooks.Context{
+		Worktree:     name,
+		Config:       ctx.Config,
+		WorktreePath: wtPath,
+		MainPath:     ctx.ProjectRoot,
+	}
+	if err := hooks.Fire(hooks.EventPostRemove, pluginHookCtx); err != nil {
+		cli.Warning(w, "Post-remove plugin hook failed: %v", err)
+	}
 }
 
 // worktreeSetupOpts configures the post-create setup sequence.

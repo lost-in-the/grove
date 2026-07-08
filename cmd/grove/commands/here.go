@@ -70,9 +70,34 @@ var hereCmd = &cobra.Command{
 	Short:   "Show current worktree information",
 	Long:    `Display information about the current worktree including name, branch, and status.`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
-		mgr, err := worktree.NewManager(ctx.ProjectRoot)
+		mgr, err := ctx.WorktreeManager()
 		if err != nil {
-			return fmt.Errorf("failed to initialize worktree manager: %w", err)
+			return err
+		}
+
+		// Fast paths: --quiet and --check-mount only need the display name,
+		// so skip GetCurrent's commit-info and git-status enrichment (the
+		// same CurrentPath + DisplayNameForPath pattern new.go uses). -q is
+		// the variant scripts and prompts call in a loop.
+		if hereQuiet || hereCheckMount {
+			currentPath, err := mgr.CurrentPath()
+			if err != nil {
+				return fmt.Errorf("failed to get current worktree: %w", err)
+			}
+			displayName := mgr.DisplayNameForPath(currentPath)
+			if displayName == "" {
+				return fmt.Errorf("not in a grove worktree")
+			}
+
+			// --check-mount short-circuits the normal info flow. It's
+			// intended for scripting / pre-test guards: "did I forget to
+			// grove up after switching?" The exit code is the signal.
+			if hereCheckMount {
+				return runMountDriftCheck(ctx, displayName)
+			}
+
+			fmt.Println(displayName)
+			return nil
 		}
 
 		tree, err := mgr.GetCurrent()
@@ -85,21 +110,11 @@ var hereCmd = &cobra.Command{
 
 		displayName := tree.DisplayName()
 
-		// --check-mount short-circuits the normal info flow. It's intended
-		// for scripting / pre-test guards: "did I forget to grove up after
-		// switching?" The exit code is the user-facing signal.
-		if hereCheckMount {
-			return runMountDriftCheck(ctx, tree)
-		}
-
-		// Quiet mode: just print the name
-		if hereQuiet {
-			fmt.Println(displayName)
-			return nil
-		}
-
 		projectName := mgr.GetProjectName()
-		tmuxSessionName := worktree.TmuxSessionName(projectName, tree.ShortName)
+		// Canonical session name comes from DisplayName ("root" maps to the
+		// bare project name) — ShortName is the directory basename for the
+		// main worktree and would name a session that doesn't exist.
+		tmuxSessionName := worktree.TmuxSessionName(projectName, tree.DisplayName())
 		tmuxStatus := tmux.GetSessionStatus(tmuxSessionName)
 
 		// Fallback: check with directory basename

@@ -57,9 +57,9 @@ When using shell integration, this will also change your current directory.`,
 			return fmt.Errorf("worktree name cannot be empty")
 		}
 
-		mgr, err := worktree.NewManager(ctx.ProjectRoot)
+		mgr, err := ctx.WorktreeManager()
 		if err != nil {
-			return fmt.Errorf("failed to initialize worktree manager: %w", err)
+			return err
 		}
 
 		// Find worktree by short name or full name
@@ -248,24 +248,13 @@ When using shell integration, this will also change your current directory.`,
 		// target session — emitting cd: here would change the OLD session's
 		// directory, not the one the user is now viewing.
 		if !tmuxSwitched {
-			if hasShellIntegration {
-				// Shell wrapper will parse this and execute cd
-				cli.Directive("cd", targetTree.Path)
-				// In auto mode outside tmux, emit tmux-attach directive for shell wrapper
-				if tmuxMode == tmuxModeAuto && sessionName != "" {
+			emitCdOrExplain(stderr, targetTree.Path)
+			// In auto mode outside tmux: emit the tmux-attach directive for
+			// the shell wrapper, or attach directly without it.
+			if tmuxMode == tmuxModeAuto && sessionName != "" {
+				if hasShellIntegration {
 					cli.TmuxAttachDirective(sessionName, useCC)
-				}
-			} else {
-				cli.Faint(stderr, "Note: Directory switching requires shell integration.")
-				cli.Faint(stderr, "Add this to your shell config (~/.zshrc or ~/.bashrc):")
-				_, _ = fmt.Fprintf(stderr, "\n")
-				cli.Faint(stderr, "  eval \"$(grove install zsh)\"   # for zsh")
-				cli.Faint(stderr, "  eval \"$(grove install bash)\"  # for bash")
-				_, _ = fmt.Fprintf(stderr, "\n")
-				cli.Faint(stderr, "To change directory manually:")
-				cli.Faint(stderr, "  cd %s", targetTree.Path)
-				// In auto mode outside tmux without shell wrapper, attach directly
-				if tmuxMode == tmuxModeAuto && sessionName != "" {
+				} else {
 					var attachErr error
 					if useCC {
 						attachErr = tmux.AttachSessionControlMode(sessionName)
@@ -317,12 +306,20 @@ func handleDirectoryDrift(sessionName, worktreePath, onSwitch string, stderr *cl
 	case "ignore":
 		// Do nothing
 	default: // "reset" or ""
-		// Use single quotes for shell safety — path cannot contain single quotes
-		// (git worktree paths are derived from branch names which disallow them)
-		if err := tmux.SendKeys(sessionName, "cd '"+worktreePath+"'"); err != nil {
+		// Single-quote for shell safety. The path derives from the repo's
+		// parent directory plus the naming pattern (and externally created
+		// worktrees can live anywhere), so it may legally contain single
+		// quotes — escape them with the standard '\'' idiom.
+		if err := tmux.SendKeys(sessionName, "cd "+shellSingleQuote(worktreePath)); err != nil {
 			log.Printf("failed to reset directory in session %q: %v", sessionName, err)
 		}
 	}
+}
+
+// shellSingleQuote wraps s in single quotes for safe interpolation into a
+// POSIX shell command line, escaping embedded single quotes with '\”.
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func init() {

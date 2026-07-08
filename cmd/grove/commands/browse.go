@@ -29,9 +29,9 @@ func browseRunE(
 		useFzf, _ := cmd.Flags().GetBool("fzf")
 
 		if !useFzf && term.IsTerminal(int(os.Stdin.Fd())) && os.Getenv("GROVE_TUI") != "0" {
-			mgr, err := worktree.NewManager(ctx.ProjectRoot)
+			mgr, err := ctx.WorktreeManager()
 			if err != nil {
-				return fmt.Errorf("failed to initialize worktree manager: %w", err)
+				return err
 			}
 			_, _, err = runTUI(mgr, ctx.State, ctx.ProjectRoot, ctx.PluginManager)
 			return err
@@ -333,9 +333,9 @@ Examples:
 			return fmt.Errorf("failed to detect repository: %w\n\nMake sure you're in a git repository with a GitHub remote", err)
 		}
 
-		mgr, err := worktree.NewManager(ctx.ProjectRoot)
+		mgr, err := ctx.WorktreeManager()
 		if err != nil {
-			return fmt.Errorf("failed to initialize worktree manager: %w", err)
+			return err
 		}
 
 		tree, err := mgr.GetCurrent()

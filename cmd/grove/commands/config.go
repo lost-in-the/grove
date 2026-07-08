@@ -1,12 +1,14 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 
+	"github.com/BurntSushi/toml"
 	"github.com/spf13/cobra"
 
 	"github.com/lost-in-the/grove/internal/cli"
@@ -53,6 +55,12 @@ Examples:
 				return fmt.Errorf("failed to get home directory: %w", err)
 			}
 			configPath = filepath.Join(homeDir, ".config", "grove", filename)
+			// GROVE_CONFIG overrides the global main-config path during
+			// loading (config.Load) — reflect that here so the file shown
+			// is the file actually read.
+			if env := os.Getenv("GROVE_CONFIG"); env != "" && !configHooks {
+				configPath = env
+			}
 		} else {
 			groveDir, err := grove.FindRoot("")
 			if err != nil || groveDir == "" {
@@ -95,9 +103,22 @@ Examples:
 			return showHooksConfig(configPath)
 		}
 
-		cfg, err := config.Load()
-		if err != nil {
-			return fmt.Errorf("failed to load config: %w", err)
+		var cfg *config.Config
+		if configGlobal {
+			// --global promises "global config only": show defaults + the
+			// global file, not the merged view (which would display project
+			// overrides under the global file's path).
+			var err error
+			cfg, err = loadGlobalOnlyConfig(configPath)
+			if err != nil {
+				return err
+			}
+		} else {
+			var err error
+			cfg, err = config.Load()
+			if err != nil {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
 		}
 
 		w := cli.NewStdout()
@@ -139,6 +160,18 @@ Examples:
 
 		return nil
 	},
+}
+
+// loadGlobalOnlyConfig returns defaults overlaid with just the global config
+// file — no project config, no local overlay, no env overrides. Used by
+// `grove config --global` so the displayed values match the file shown.
+// A missing file yields plain defaults.
+func loadGlobalOnlyConfig(globalPath string) (*config.Config, error) {
+	cfg := config.LoadDefaults()
+	if _, err := toml.DecodeFile(globalPath, cfg); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("failed to load global config: %w", err)
+	}
+	return cfg, nil
 }
 
 // formatBoolPtr safely formats a *bool, returning the default if nil.

@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/lost-in-the/grove/internal/config"
-	"github.com/lost-in-the/grove/internal/worktree"
 	"github.com/lost-in-the/grove/plugins/docker"
 )
 
@@ -55,9 +54,9 @@ Extra arguments are appended to the configured command:
 			return fmt.Errorf("no test command configured\n\nAdd a [test] section to .grove/config.toml:\n\n  [test]\n  command = \"bin/rails test\"")
 		}
 
-		mgr, err := worktree.NewManager(ctx.ProjectRoot)
+		mgr, err := ctx.WorktreeManager()
 		if err != nil {
-			return fmt.Errorf("failed to initialize worktree manager: %w", err)
+			return err
 		}
 
 		targetTree, err := mgr.Find(name)

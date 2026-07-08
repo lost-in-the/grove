@@ -16,8 +16,6 @@ import (
 	"github.com/lost-in-the/grove/internal/exitcode"
 	"github.com/lost-in-the/grove/internal/git"
 	"github.com/lost-in-the/grove/internal/log"
-	"github.com/lost-in-the/grove/internal/tmux"
-	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 var (
@@ -67,9 +65,9 @@ Examples:
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		w := cli.NewStdout()
 
-		mgr, err := worktree.NewManager(ctx.ProjectRoot)
+		mgr, err := ctx.WorktreeManager()
 		if err != nil {
-			return fmt.Errorf("failed to initialize worktree manager: %w", err)
+			return err
 		}
 
 		cfg := ctx.Config
@@ -196,29 +194,19 @@ Examples:
 		removedBranches := []string{}
 
 		for _, c := range cleanable {
-			// Remove worktree
-			if err := mgr.Remove(c.Name); err != nil {
+			// Shared removal sequence (same as `grove rm`): pre-remove hooks
+			// — including the plugin hook that stops agent Docker stacks —
+			// git removal, state cleanup, and tmux session kill.
+			if err := removeWorktreeWithHooks(ctx, mgr, w, projectName, c.Name, c.Path, c.Branch); err != nil {
 				cli.Warning(w, "Failed to remove '%s': %v", c.Name, err)
 				failed++
 				continue
 			}
 
-			// Remove from state
-			if err := ctx.State.RemoveWorktree(c.Name); err != nil {
-				log.Printf("failed to remove worktree %q from state: %v", c.Name, err)
-			}
+			// User + plugin post-remove hooks (branch deletion is batched
+			// after the loop, unlike `grove rm`)
+			firePostRemoveHooks(ctx, w, projectName, c.Name, c.Path, c.Branch)
 
-			// Kill tmux session if exists
-			sessionName := worktree.TmuxSessionName(projectName, c.Name)
-			if tmux.IsTmuxAvailable() {
-				if exists, _ := tmux.SessionExists(sessionName); exists {
-					if err := tmux.KillSession(sessionName); err != nil {
-						cli.Warning(w, "Worktree removed but failed to kill tmux session '%s': %v", sessionName, err)
-					}
-				}
-			}
-
-			cli.Success(w, "Removed '%s'", c.Name)
 			removed++
 
 			// Track branch for later deletion

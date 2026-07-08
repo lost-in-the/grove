@@ -13,7 +13,6 @@ import (
 	"github.com/lost-in-the/grove/internal/exitcode"
 	"github.com/lost-in-the/grove/internal/grove"
 	"github.com/lost-in-the/grove/internal/hooks"
-	"github.com/lost-in-the/grove/internal/log"
 	"github.com/lost-in-the/grove/internal/output"
 	"github.com/lost-in-the/grove/internal/state"
 	"github.com/lost-in-the/grove/internal/tmux"
@@ -76,9 +75,9 @@ Examples:
 			return fmt.Errorf("worktree name cannot be empty")
 		}
 
-		mgr, err := worktree.NewManager(ctx.ProjectRoot)
+		mgr, err := ctx.WorktreeManager()
 		if err != nil {
-			return fmt.Errorf("failed to initialize worktree manager: %w", err)
+			return err
 		}
 
 		// Get current worktree
@@ -100,7 +99,9 @@ Examples:
 			if err == nil && ws != nil && ws.Mirror != "" {
 				// For environment worktrees, fork from the mirror's HEAD
 				baseRef = ws.Mirror
-				cli.Info(w, "Forking from environment worktree (mirror: %s)", ws.Mirror)
+				if !forkJSON {
+					cli.Info(w, "Forking from environment worktree (mirror: %s)", ws.Mirror)
+				}
 			}
 		}
 
@@ -129,18 +130,18 @@ Examples:
 			// Determine WIP handling strategy
 			if !forkMoveWIP && !forkCopyWIP && !forkNoWIP {
 				// Prompt user if interactive
-				if !isInteractive() {
+				if !cli.IsInteractive() {
 					return fmt.Errorf("uncommitted changes detected; use --move-wip, --copy-wip, or --no-wip")
 				}
 
 				files, _ := wipHandler.ListWIPFiles()
-				cli.Warning(w, "Uncommitted changes detected (%d files):", len(files))
+				cli.Warning(stderr, "Uncommitted changes detected (%d files):", len(files))
 				for i, f := range files {
 					if i >= 5 {
-						cli.Faint(w, "  ... and %d more", len(files)-5)
+						cli.Faint(stderr, "  ... and %d more", len(files)-5)
 						break
 					}
-					cli.Faint(w, "  %s", f)
+					cli.Faint(stderr, "  %s", f)
 				}
 
 				choice, err := cli.Choose("How do you want to handle uncommitted changes?", []string{
@@ -196,7 +197,9 @@ Examples:
 			return fmt.Errorf("failed to find created worktree")
 		}
 
-		cli.Success(w, "Created worktree '%s' with branch '%s'", name, newBranchName)
+		if !forkJSON {
+			cli.Success(w, "Created worktree '%s' with branch '%s'", name, newBranchName)
+		}
 
 		// Symlink config.toml from main worktree
 		if err := grove.EnsureConfigSymlink(ctx.ProjectRoot, newTree.Path); err != nil {
@@ -209,21 +212,23 @@ Examples:
 		if len(wipPatch) > 0 && (forkMoveWIP || forkCopyWIP) {
 			newWipHandler := worktree.NewWIPHandler(newTree.Path)
 			if err := newWipHandler.ApplyPatch(wipPatch); err != nil {
-				cli.Warning(w, "Failed to apply changes to fork: %v", err)
-				cli.Warning(w, "Changes are preserved in the source worktree")
+				cli.Warning(stderr, "Failed to apply changes to fork: %v", err)
+				cli.Warning(stderr, "Changes are preserved in the source worktree")
 			} else {
-				if forkCopyWIP {
+				if forkCopyWIP && !forkJSON {
 					cli.Success(w, "Copied uncommitted changes to fork")
 				}
 				// Reset source worktree only after successful patch application
 				if forkMoveWIP {
 					if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", currentTree.Path, "checkout", "--", "."}, "", cmdexec.GitLocal); err != nil {
-						cli.Warning(w, "changes applied to fork but failed to reset source: %v\n%s", err, output)
+						cli.Warning(stderr, "changes applied to fork but failed to reset source: %v\n%s", err, output)
 					} else {
 						if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", currentTree.Path, "clean", "-fd"}, "", cmdexec.GitLocal); err != nil {
-							cli.Warning(w, "failed to clean untracked files in source: %v\n%s", err, output)
+							cli.Warning(stderr, "failed to clean untracked files in source: %v\n%s", err, output)
 						}
-						cli.Success(w, "Moved uncommitted changes to fork")
+						if !forkJSON {
+							cli.Success(w, "Moved uncommitted changes to fork")
+						}
 					}
 				}
 			}
@@ -239,8 +244,8 @@ Examples:
 			ParentWorktree: parentName,
 		}
 		if err := ctx.State.AddWorktree(name, wsState); err != nil {
-			cli.Warning(w, "worktree created but state tracking failed: %v", err)
-			cli.Info(w, "run 'grove repair' to fix")
+			cli.Warning(stderr, "worktree created but state tracking failed: %v", err)
+			cli.Info(stderr, "run 'grove repair' to fix")
 		}
 
 		runFileSetup(ctx.Config, newTree.Path, ctx.ProjectRoot, w, forkJSON)
@@ -253,7 +258,7 @@ Examples:
 			MainPath:     ctx.ProjectRoot,
 		}
 		if err := hooks.Fire(hooks.EventPostCreate, hookCtx); err != nil {
-			cli.Warning(w, "Post-create hook failed: %v", err)
+			cli.Warning(stderr, "Post-create hook failed: %v", err)
 		}
 
 		projectName := mgr.GetProjectName()
@@ -262,8 +267,8 @@ Examples:
 		if tmux.IsTmuxAvailable() {
 			sessionName := worktree.TmuxSessionName(projectName, name)
 			if err := tmux.CreateSession(sessionName, newTree.Path); err != nil {
-				cli.Warning(w, "Failed to create tmux session: %v", err)
-			} else {
+				cli.Warning(stderr, "Failed to create tmux session: %v", err)
+			} else if !forkJSON {
 				cli.Success(w, "Created tmux session '%s'", sessionName)
 			}
 		}
@@ -283,55 +288,14 @@ Examples:
 			return output.PrintJSON(result)
 		}
 
-		// Switch to new worktree unless --no-switch.
-		// Batch the SetLastWorktree + TouchWorktree pair into a single state save.
+		// Switch to new worktree unless --no-switch. Agent mode and tmux mode
+		// "off" suppress the client switch (terminal takeover) — same policy
+		// as `grove new` and `grove to`.
 		if !forkNoSwitch {
-			var tmuxSwitched bool
-			batchErr := ctx.State.Batch(func() error {
-				if err := ctx.State.SetLastWorktree(parentName); err != nil {
-					log.Printf("failed to set last worktree %q: %v", parentName, err)
-				}
-
-				// Store current session as last if inside tmux
-				if tmux.IsInsideTmux() {
-					currentSession, err := tmux.GetCurrentSession()
-					if err == nil {
-						if err := tmux.StoreLastSession(currentSession); err != nil {
-							log.Printf("failed to store last session %q: %v", currentSession, err)
-						}
-					}
-				}
-
-				// Switch tmux session
-				if tmux.IsTmuxAvailable() && tmux.IsInsideTmux() {
-					sessionName := worktree.TmuxSessionName(projectName, name)
-					if err := tmux.SwitchSession(sessionName); err != nil {
-						cli.Warning(w, "Failed to switch session: %v", err)
-					} else {
-						tmuxSwitched = true
-					}
-				}
-
-				// Update last_accessed_at for target worktree
-				if err := ctx.State.TouchWorktree(name); err != nil {
-					log.Printf("failed to touch worktree %q: %v", name, err)
-				}
-				return nil
-			})
-			if batchErr != nil {
-				log.Printf("state save failed: %v", batchErr)
-			}
-
-			// Skip cd directive when tmux switch already moved the user
-			if !tmuxSwitched {
-				hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
-				if hasShellIntegration {
-					cli.Directive("cd", newTree.Path)
-				} else {
-					cli.Info(stderr, "Directory switching requires shell integration.")
-					cli.Faint(stderr, "To change directory manually:")
-					cli.Faint(stderr, "  cd %s", newTree.Path)
-				}
+			suppressTmux := effectiveTmuxMode(ctx.Config.Tmux.Mode, ctx.Config.AgentMode, false, false) == tmuxModeOff
+			sessionName := worktree.TmuxSessionName(projectName, name)
+			if !switchToWorktree(ctx, stderr, parentName, name, sessionName, newTree.Path, suppressTmux) {
+				emitCdOrExplain(stderr, newTree.Path)
 			}
 		} else {
 			cli.Info(w, "To switch to the new worktree: grove to %s", name)
@@ -339,16 +303,6 @@ Examples:
 
 		return nil
 	}),
-}
-
-// isInteractive checks if we're running interactively.
-func isInteractive() bool {
-	// Check if stdin is a terminal
-	fileInfo, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return (fileInfo.Mode() & os.ModeCharDevice) != 0
 }
 
 func init() {

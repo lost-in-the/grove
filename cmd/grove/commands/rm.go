@@ -3,7 +3,6 @@ package commands
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -11,7 +10,6 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/exitcode"
 	"github.com/lost-in-the/grove/internal/git"
-	"github.com/lost-in-the/grove/internal/hooks"
 	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
@@ -62,9 +60,9 @@ Examples:
 			return fmt.Errorf("worktree name cannot be empty")
 		}
 
-		mgr, err := worktree.NewManager(ctx.ProjectRoot)
+		mgr, err := ctx.WorktreeManager()
 		if err != nil {
-			return fmt.Errorf("failed to initialize worktree manager: %w", err)
+			return err
 		}
 
 		// Find worktree early — all checks reuse this
@@ -76,6 +74,14 @@ Examples:
 			cli.Error(stderr, "worktree '%s' not found", name)
 			os.Exit(exitcode.ResourceNotFound)
 		}
+
+		// Find matches by short name, display name, branch, or path basename,
+		// so the argument the user typed (e.g. a branch name that differs
+		// from the worktree's directory name) isn't necessarily the name
+		// state and tmux sessions are keyed under. Use the resolved short
+		// name for state/tmux operations from here on; user-facing messages
+		// keep echoing the argument as typed.
+		resolvedName := wt.ShortName
 
 		// When selected interactively, confirm before proceeding
 		if len(args) == 0 {
@@ -105,9 +111,9 @@ Examples:
 
 		// Check protection status
 		cfg := ctx.Config
-		isProtectedByConfig := cfg != nil && cfg.IsProtected(name)
+		isProtectedByConfig := cfg != nil && (cfg.IsProtected(resolvedName) || cfg.IsProtected(name))
 		isEnvironment := false
-		ws, _ := ctx.State.GetWorktree(name)
+		ws, _ := ctx.State.GetWorktree(resolvedName)
 		if ws != nil {
 			isEnvironment = ws.Environment
 		}
@@ -170,7 +176,7 @@ Examples:
 				}
 			}
 			if tmux.IsTmuxAvailable() {
-				sessionName := worktree.TmuxSessionName(mgr.GetProjectName(), name)
+				sessionName := worktree.TmuxSessionName(mgr.GetProjectName(), resolvedName)
 				exists, _ := tmux.SessionExists(sessionName)
 				if exists {
 					cli.Faint(w, "  Would kill tmux session: %s", sessionName)
@@ -187,58 +193,10 @@ Examples:
 			branchName = wt.Branch
 		}
 
-		// Execute pre-remove hooks (user hooks from hooks.toml)
-		hookExecutor, hookErr := hooks.NewExecutor()
-		if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPreRemove) {
-			hookCtx := &hooks.ExecutionContext{
-				Event:        hooks.EventPreRemove,
-				Worktree:     name,
-				Branch:       branchName,
-				Project:      projectName,
-				MainPath:     ctx.ProjectRoot,
-				NewPath:      wt.Path,
-				WorktreeFull: filepath.Base(wt.Path),
-			}
-			cli.Step(w, "Running pre-remove hooks...")
-			if err := hookExecutor.Execute(hooks.EventPreRemove, hookCtx); err != nil {
-				cli.Warning(w, "Hook execution had errors: %v", err)
-			}
-		}
-
-		// Fire plugin pre-remove hook (e.g., stop agent stacks)
-		pluginHookCtx := &hooks.Context{
-			Worktree:     name,
-			Config:       cfg,
-			WorktreePath: wt.Path,
-			MainPath:     ctx.ProjectRoot,
-		}
-		if err := hooks.Fire(hooks.EventPreRemove, pluginHookCtx); err != nil {
-			cli.Warning(w, "Pre-remove plugin hook failed: %v", err)
-		}
-
-		// Remove worktree — the critical step, done before tmux kill
-		if err := mgr.Remove(name); err != nil {
-			return fmt.Errorf("failed to remove worktree: %w", err)
-		}
-
-		// Remove from state
-		if err := ctx.State.RemoveWorktree(name); err != nil {
-			cli.Warning(w, "worktree removed but state cleanup failed: %v", err)
-		}
-
-		cli.Success(w, "Removed worktree '%s'", name)
-
-		// Kill tmux session after worktree is confirmed gone
-		if tmux.IsTmuxAvailable() {
-			sessionName := worktree.TmuxSessionName(projectName, name)
-			exists, err := tmux.SessionExists(sessionName)
-			if err == nil && exists {
-				if err := tmux.KillSession(sessionName); err != nil {
-					cli.Warning(w, "Failed to kill tmux session: %v", err)
-				} else {
-					cli.Success(w, "Killed tmux session '%s'", sessionName)
-				}
-			}
+		// Shared removal sequence: pre-remove hooks, git removal, state
+		// cleanup, tmux session kill (also used by `grove trim`).
+		if err := removeWorktreeWithHooks(ctx, mgr, w, projectName, resolvedName, wt.Path, branchName); err != nil {
+			return err
 		}
 
 		// Handle branch deletion
@@ -248,25 +206,8 @@ Examples:
 			}
 		}
 
-		// Execute post-remove hooks (user hooks from hooks.toml)
-		if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPostRemove) {
-			hookCtx := &hooks.ExecutionContext{
-				Event:    hooks.EventPostRemove,
-				Worktree: name,
-				Branch:   branchName,
-				Project:  projectName,
-				MainPath: ctx.ProjectRoot,
-			}
-			cli.Step(w, "Running post-remove hooks...")
-			if err := hookExecutor.Execute(hooks.EventPostRemove, hookCtx); err != nil {
-				cli.Warning(w, "Post-remove hook had errors: %v", err)
-			}
-		}
-
-		// Fire plugin post-remove hook
-		if err := hooks.Fire(hooks.EventPostRemove, pluginHookCtx); err != nil {
-			cli.Warning(w, "Post-remove plugin hook failed: %v", err)
-		}
+		// User + plugin post-remove hooks
+		firePostRemoveHooks(ctx, w, projectName, resolvedName, wt.Path, branchName)
 
 		return nil
 	}),

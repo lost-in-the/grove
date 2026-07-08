@@ -2,7 +2,6 @@ package commands
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -36,10 +35,12 @@ Examples:
   grove logs -f=false  # Show logs without following
   w logs db            # Using alias`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
-		// Get current directory (docker-compose works in cwd)
-		cwd, err := os.Getwd()
+		// Resolve the worktree root — slot detection keys on the worktree
+		// directory basename, so cwd must be normalized (running from a
+		// subdirectory would otherwise tail the shared stack).
+		root, err := currentWorktreeRoot(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to get current directory: %w", err)
+			return err
 		}
 
 		// Get service name if provided
@@ -50,7 +51,7 @@ Examples:
 
 		// Create docker plugin — auto-detect isolated stacks
 		plugin := docker.New()
-		if docker.HasActiveAgentSlot(ctx.Config, cwd) {
+		if docker.HasActiveAgentSlot(ctx.Config, root) {
 			plugin.SetIsolated(true)
 		}
 		if err := plugin.Init(ctx.Config); err != nil {
@@ -58,7 +59,7 @@ Examples:
 		}
 
 		// Show logs
-		if err := plugin.Logs(cwd, service, logsFollow); err != nil {
+		if err := plugin.Logs(root, service, logsFollow); err != nil {
 			return fmt.Errorf("failed to show logs: %w", err)
 		}
 

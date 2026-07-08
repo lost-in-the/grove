@@ -11,7 +11,6 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/exitcode"
-	"github.com/lost-in-the/grove/internal/log"
 	"github.com/lost-in-the/grove/internal/output"
 	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/worktree"
@@ -113,9 +112,9 @@ Examples:
 			dirtyPatch = out
 		}
 
-		mgr, err := worktree.NewManager(ctx.ProjectRoot)
+		mgr, err := ctx.WorktreeManager()
 		if err != nil {
-			return fmt.Errorf("failed to initialize worktree manager: %w", err)
+			return err
 		}
 
 		// Quick path-based existence check — avoids List() with N parallel
@@ -150,11 +149,15 @@ Examples:
 				os.Exit(exitcode.ResourceNotFound)
 			}
 
-			// Use env/{name} as local branch for environment worktrees
+			// Use env/{name} as local branch for environment worktrees. Must
+			// actually create that branch (git worktree add -b) rather than
+			// checking out the remote ref directly — the latter leaves the
+			// worktree on a detached HEAD while state/JSON output/hooks still
+			// report "env/{name}" as the branch, a branch that doesn't exist.
 			branchName = "env/" + name
 
-			// Create worktree from the remote branch
-			if err := mgr.CreateFromBranch(name, mirror); err != nil {
+			// Create worktree with a new local branch tracking the remote ref
+			if err := mgr.CreateFromRef(name, branchName, mirror); err != nil {
 				return fmt.Errorf("failed to create environment worktree: %w", err)
 			}
 
@@ -267,58 +270,13 @@ Examples:
 			currentWorktreeName = mgr.DisplayNameForPath(currentPath)
 		}
 
-		// Switch to new worktree unless --no-switch.
-		// Batch the SetLastWorktree + TouchWorktree pair so the state file is
-		// flock-merged-renamed once instead of twice.
+		// Switch to new worktree unless --no-switch. Agent mode, --no-tmux,
+		// and tmux mode "off" suppress the client switch (terminal takeover).
 		if !newNoSwitch {
-			var tmuxSwitched bool
-			batchErr := ctx.State.Batch(func() error {
-				if currentWorktreeName != "" {
-					if err := ctx.State.SetLastWorktree(currentWorktreeName); err != nil {
-						log.Printf("failed to set last worktree %q: %v", currentWorktreeName, err)
-					}
-				}
-
-				// Store current session as last if inside tmux
-				if tmux.IsInsideTmux() {
-					currentSession, err := tmux.GetCurrentSession()
-					if err == nil {
-						if err := tmux.StoreLastSession(currentSession); err != nil {
-							log.Printf("failed to store last session %q: %v", currentSession, err)
-						}
-					}
-				}
-
-				// Switch tmux session if inside tmux (skip in agent mode or --no-tmux)
-				if !ctx.Config.AgentMode && !newNoTmux && tmux.IsTmuxAvailable() && tmux.IsInsideTmux() {
-					sessionName := worktree.TmuxSessionName(projectName, name)
-					if err := tmux.SwitchSession(sessionName); err != nil {
-						cli.Warning(w, "Failed to switch session: %v", err)
-					} else {
-						tmuxSwitched = true
-					}
-				}
-
-				// Update last_accessed_at for target worktree
-				if err := ctx.State.TouchWorktree(name); err != nil {
-					log.Printf("failed to touch worktree %q: %v", name, err)
-				}
-				return nil
-			})
-			if batchErr != nil {
-				log.Printf("state save failed: %v", batchErr)
-			}
-
-			// Skip cd directive when tmux switch already moved the user
-			if !tmuxSwitched {
-				hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
-				if hasShellIntegration {
-					cli.Directive("cd", wt.Path)
-				} else {
-					cli.Info(stderr, "Directory switching requires shell integration.")
-					cli.Faint(stderr, "To change directory manually:")
-					cli.Faint(stderr, "  cd %s", wt.Path)
-				}
+			suppressTmux := effectiveTmuxMode(ctx.Config.Tmux.Mode, ctx.Config.AgentMode, newNoTmux, false) == tmuxModeOff
+			sessionName := worktree.TmuxSessionName(projectName, name)
+			if !switchToWorktree(ctx, stderr, currentWorktreeName, name, sessionName, wt.Path, suppressTmux) {
+				emitCdOrExplain(stderr, wt.Path)
 			}
 		} else {
 			cli.Info(w, "To switch to the new worktree: grove to %s", name)

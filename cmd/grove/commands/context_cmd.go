@@ -8,7 +8,6 @@ import (
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/output"
-	"github.com/lost-in-the/grove/internal/worktree"
 	"github.com/lost-in-the/grove/internal/worktreeinfo"
 )
 
@@ -72,9 +71,9 @@ JSON schema:
   stash_count       number of stashes
   recent_commits    last 5 commits [{sha, message}]`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
-		mgr, err := worktree.NewManager(ctx.ProjectRoot)
+		mgr, err := ctx.WorktreeManager()
 		if err != nil {
-			return fmt.Errorf("failed to initialize worktree manager: %w", err)
+			return err
 		}
 
 		tree, err := mgr.GetCurrent()

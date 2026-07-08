@@ -10,7 +10,6 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/output"
-	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 var (
@@ -78,9 +77,9 @@ Examples:
 			targetName = args[0]
 		}
 
-		mgr, err := worktree.NewManager(ctx.ProjectRoot)
+		mgr, err := ctx.WorktreeManager()
 		if err != nil {
-			return fmt.Errorf("failed to initialize worktree manager: %w", err)
+			return err
 		}
 
 		// Get current worktree
