@@ -297,7 +297,7 @@ All three use Go 1.25 with module cache keyed by `go.sum`. All three must pass f
 **Platforms**: Linux (amd64/arm64), macOS (amd64/arm64), Windows (amd64)
 
 **Distribution**:
-- GitHub Releases — binary archives with LICENSE, README, CHANGELOG, CONTRIBUTING, and shell integration scripts
+- GitHub Releases — binary archives with LICENSE, README, CHANGELOG, and CONTRIBUTING (shell integration is generated at runtime via `grove setup` / `grove install`)
 - Homebrew tap — `lost-in-the/homebrew-tap` (`brew install lost-in-the/tap/grove`)
 
 **Test-only dependencies** (`teatest`, `golden`, etc.) are safe in `go.mod`. Go only compiles `_test.go` imports into test binaries, never into release builds. No action needed to exclude them.
@@ -323,7 +323,6 @@ grove/
 │   ├── docker/              # Docker container lifecycle plugin
 │   └── tracker/             # Issue tracker integration plugin
 ├── docs/                    # Extended documentation
-├── shell/                   # Shell integration scripts
 ├── Makefile                 # Build automation
 ├── go.mod                   # Go module definition
 └── README.md                # Documentation

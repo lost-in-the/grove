@@ -58,7 +58,7 @@ Running `eval "$(grove install <shell>)"` installs three things:
 
 The wrapper uses a **directives protocol** — the grove binary writes special lines to stdout that the shell function intercepts and acts on.
 
-### Directive Commands (`grove to`, `grove last`, `grove fork`, `grove fetch`, `grove join`, `grove open`, `grove up`, `grove run`, `grove kick`)
+### Directive Commands (`grove new`, `grove to`, `grove last`, `grove fork`, `grove fetch`, `grove join`, `grove open`, `grove up`, `grove run`, `grove kick`)
 
 These commands (and their aliases) can emit `cd:`, `tmux-attach:`, `tmux-attach-cc:`, or `env:` directives. The wrapper captures their stdout (stderr passes through to the terminal), scans it line-by-line, separates directives from normal output, and then:
 
@@ -202,7 +202,7 @@ eval "$(grove install zsh)"   # or bash
 
 ## Version Bumps
 
-The constant `ShellVersion` in `internal/shell/version.go` tracks the shell integration template version. It is currently **5**.
+The constant `ShellVersion` in `internal/shell/version.go` tracks the shell integration template version. It is currently **6**.
 
 When the shell wrapper behavior changes incompatibly — new directives, changed passthrough logic, new env vars — increment `ShellVersion`. The grove binary reads `GROVE_SHELL_VERSION` (set by the wrapper) on every invocation and emits a warning when the running shell integration is older than `ShellVersion`.
 

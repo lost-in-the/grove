@@ -50,7 +50,6 @@ archives:
       - README.md
       - CHANGELOG.md
       - CONTRIBUTING.md
-      - shell/**
 
 checksum:
   name_template: 'checksums.txt'
