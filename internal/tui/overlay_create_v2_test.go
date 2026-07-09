@@ -337,6 +337,20 @@ func TestCreateWorktreeCmd_RemoteBranch_UsesCreateFromBranch(t *testing.T) {
 	default:
 		t.Fatalf("unexpected message type %T: %v", msg, msg)
 	}
+
+	// streamingCreateCmd runs createFn (the actual `git worktree add`) in a
+	// background goroutine and returns after the first log line. Drain the
+	// remaining events until the done message so that goroutine's git writes
+	// complete before t.TempDir() cleanup runs — otherwise an in-flight
+	// worktree add races RemoveAll on .git and CI flakes with
+	// "directory not empty".
+	for {
+		lm, ok := msg.(creationLogMsg)
+		if !ok {
+			break // creationDoneMsg — the creation goroutine has finished
+		}
+		msg = readCreationLog(lm.ch, "create")()
+	}
 }
 
 // createStateWithName creates a CreateState at the name step with a pre-set name.
