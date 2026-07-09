@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The `grove-worktree-management` Claude Code plugin now ships from the shared
+  [`lost-in-the/plugins`](https://github.com/lost-in-the/plugins) marketplace suite instead of
+  this repo's own root marketplace. The suite references the skill via a `git-subdir` source,
+  so installs fetch only `skills/grove-worktree-management/` (~80 KB) rather than caching the
+  entire repo (~4 MB). The repo-root `.claude-plugin/` is removed; the plugin manifest now
+  lives at `skills/grove-worktree-management/.claude-plugin/plugin.json` (the plugin root).
+  New install: `/plugin marketplace add lost-in-the/plugins` then
+  `/plugin install grove-plugin@lost-in-the-plugins`.
+- The skill gained a **Version Preflight** step (run `grove version` + `grove --check-update`,
+  operate only against the installed version) so agents on an older grove don't invoke commands
+  or flags their binary lacks, and surface available updates to the user.
+
 ## [0.8.0] - 2026-07-09
 
 > **Upgrading:** One breaking change — standalone `docker-compose` (Compose v1) support was removed; the docker plugin now requires the `docker` CLI with Compose v2 (#107). Otherwise drop-in: shell integration is unchanged, so no re-source is needed. Highlights: grove now ships as a **Claude Code plugin**, `[naming] pattern` controls worktree directory names (#104), and `grove to/new --no-tmux` land (#106). `grove last` on a fresh project is now a graceful no-op (exit 0) instead of an error (#132).

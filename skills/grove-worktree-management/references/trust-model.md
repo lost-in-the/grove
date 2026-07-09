@@ -54,4 +54,4 @@ When you need to inspect a worktree without running hooks:
 
 ## Further Reading
 
-See [`docs/CONFIGURATION_REFERENCE.md`](../../docs/CONFIGURATION_REFERENCE.md) for the complete `hooks.toml` schema, including all event types, `on_failure` modes, and the `working_dir` field options.
+See [`docs/CONFIGURATION_REFERENCE.md`](https://github.com/lost-in-the/grove/blob/main/docs/CONFIGURATION_REFERENCE.md) for the complete `hooks.toml` schema, including all event types, `on_failure` modes, and the `working_dir` field options.

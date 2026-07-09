@@ -206,6 +206,36 @@ Before submitting, ensure:
 - [ ] No merge conflicts with `main`
 - [ ] Golden files reviewed (`make golden-diff`) — no unintended visual regressions
 - [ ] If changes affect `docs/`, updated in this same PR
+- [ ] **Docs are current** — see [Pre-PR requirements](#pre-pr-requirements) below
+- [ ] **Plugin impact investigated** — see [Claude Code plugin changes](#claude-code-plugin-changes) below
+
+### Pre-PR requirements
+
+These are hard gates — a PR that fails either is incomplete:
+
+1. **Documentation must be current.** Any doc affected by the change — README, `docs/`, the
+   `skills/grove-worktree-management/` skill, `CHANGELOG.md`, config references — must be
+   updated in the *same* PR. Do not ship behavior that the docs still describe the old way.
+2. **Investigate plugin-functionality impact.** If the change touches anything the distributed
+   skill relies on (a `grove` command, flag, `--json` output field, env var, or config
+   schema), investigate whether `skills/grove-worktree-management/` needs to change too — see
+   below.
+
+### Claude Code plugin changes
+
+`skills/grove-worktree-management/` is distributed as the `grove-plugin` via the
+[`lost-in-the/plugins`](https://github.com/lost-in-the/plugins) marketplace (a `git-subdir`
+reference to this subtree). Because installed users may run an **older** grove than `main`:
+
+- If a CLI change adds/removes/renames a command, flag, or `--json` field the skill documents,
+  **update the skill in the same PR** (its command table is validated against
+  [docs/COMMAND_SPECIFICATIONS.md](docs/COMMAND_SPECIFICATIONS.md)).
+- The skill's Version Preflight tells agents to operate only against the installed version, so
+  **land the skill change with the release that ships the capability** — never document a
+  command in the skill before the version that provides it is released. Bump the skill's
+  `version` in `.claude-plugin/plugin.json` when the skill changes.
+- If the change requires a new marketplace entry, `ref` pin, or metadata edit, open a **paired
+  PR against `lost-in-the/plugins`** and link it from this PR.
 
 ### Common Task Recipes
 

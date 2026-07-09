@@ -14,7 +14,23 @@ Use grove instead of manual git worktree commands when:
 - Multiple features or PRs need parallel development environments
 - The user mentions tmux, worktrees, or parallel development
 
-If grove is not installed, refer to [`docs/AGENT_GUIDE.md`](../../docs/AGENT_GUIDE.md) for installation steps.
+If grove is not installed, refer to the [Agent Guide](https://github.com/lost-in-the/grove/blob/main/docs/AGENT_GUIDE.md) for installation steps.
+
+## Version Preflight
+
+Run this once before using grove, and operate **only** against the version you find:
+
+```bash
+grove version          # note the installed version
+grove --check-update   # reports a newer release if one exists (runs even in agent mode)
+```
+
+**Do not use commands, flags, or `--json` fields that are not present in this installed
+version.** If a workflow below needs a capability your grove lacks, tell the user to update
+(`brew upgrade grove`, re-run `go install github.com/lost-in-the/grove/cmd/grove@latest`, or
+their install method) rather than guessing at newer syntax. When `grove --check-update`
+reports a newer release, relay that to the user — agent mode (`GROVE_AGENT_MODE=1`) suppresses
+the passive update notice, so `--check-update` is how you surface it.
 
 ## Agent Mode Setup
 
@@ -69,11 +85,11 @@ export GROVE_TUI=0               # disable dashboard
 
 For common operations where getting the logic right matters, run these Python scripts.
 First set a base path — it resolves whether this skill is installed as a plugin
-(`$CLAUDE_PLUGIN_ROOT` is set to the plugin cache) or run from a repo checkout (falls back
-to the current directory):
+(`$CLAUDE_PLUGIN_ROOT` points at the plugin root, i.e. this skill directory) or run from a
+grove repo checkout (falls back to `skills/grove-worktree-management` under the repo root):
 
 ```bash
-SCRIPTS="${CLAUDE_PLUGIN_ROOT:-.}/skills/grove-worktree-management/scripts"
+SCRIPTS="${CLAUDE_PLUGIN_ROOT:-skills/grove-worktree-management}/scripts"
 ```
 
 | Script | Purpose | Invocation |

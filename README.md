@@ -544,36 +544,40 @@ See [docs/AGENT_GUIDE.md](docs/AGENT_GUIDE.md) for the full agent reference — 
 
 Grove ships as a [Claude Code plugin](https://code.claude.com/docs/en/discover-plugins) so
 agents get the `grove-worktree-management` skill — command reference, safety rules, and
-deterministic helper scripts — without any manual setup. This repo is its own single-plugin
-marketplace.
+deterministic helper scripts — without any manual setup. The plugin is distributed from the
+[`lost-in-the/plugins`](https://github.com/lost-in-the/plugins) marketplace suite, which
+references this repo's skill subtree via a `git-subdir` source — so installing fetches only
+`skills/grove-worktree-management/` (~80 KB), not the whole grove repo.
 
 ```bash
 # In Claude Code:
-/plugin marketplace add lost-in-the/grove
-/plugin install grove-plugin@grove-plugins
+/plugin marketplace add lost-in-the/plugins
+/plugin install grove-plugin@lost-in-the-plugins
 ```
 
 The skill then activates automatically when a project has a `.grove/` directory or the user
-mentions worktrees. To test a local checkout before publishing, point Claude Code at the repo:
+mentions worktrees. To test a local checkout before publishing, point Claude Code at the skill
+directory (the plugin root):
 
 ```bash
-claude --plugin-dir /path/to/grove   # then: /grove-plugin:grove-worktree-management
+claude --plugin-dir /path/to/grove/skills/grove-worktree-management   # then: /grove-plugin:grove-worktree-management
 ```
 
-Updates ship by bumping `version` in `.claude-plugin/plugin.json` and pushing; users pull them
-with `/plugin update grove-plugin@grove-plugins`.
+Updates ship by bumping `version` in the skill's `.claude-plugin/plugin.json` and pushing;
+users pull them with `/plugin update grove-plugin@lost-in-the-plugins`.
 
-**Developing the plugin.** The pieces live at the repo root:
+**Developing the plugin.** The plugin root is the skill directory itself:
 
-- [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json) — plugin manifest (name, version, metadata)
-- [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json) — makes this repo its own marketplace (`source: "./"`)
-- [`skills/grove-worktree-management/`](skills/grove-worktree-management/) — the skill itself (`SKILL.md`, `references/`, `scripts/`), auto-discovered
+- [`skills/grove-worktree-management/.claude-plugin/plugin.json`](skills/grove-worktree-management/.claude-plugin/plugin.json) — plugin manifest (name, version, metadata)
+- [`skills/grove-worktree-management/`](skills/grove-worktree-management/) — the skill (`SKILL.md`, `references/`, `scripts/`); `SKILL.md` at the plugin root loads as a single-skill plugin
+- The marketplace entry lives in [`lost-in-the/plugins`](https://github.com/lost-in-the/plugins) (`.claude-plugin/marketplace.json`), pointing at this subtree
 
 Guidelines when changing it:
 
 - Keep `SKILL.md`'s command reference in sync with the CLI — it's validated against the canonical command set in [docs/COMMAND_SPECIFICATIONS.md](docs/COMMAND_SPECIFICATIONS.md).
-- Reference helper scripts via `${CLAUDE_PLUGIN_ROOT:-.}/skills/…` so they resolve both from an installed plugin and a repo checkout.
-- Run `claude plugin validate .` (add `--strict` in CI) before publishing, and bump `version` for a release.
+- Reference helper scripts via `${CLAUDE_PLUGIN_ROOT:-skills/grove-worktree-management}/scripts/…` so they resolve both from an installed plugin (root = skill dir) and a repo checkout (root = repo).
+- Run `claude plugin validate skills/grove-worktree-management` (add `--strict` in CI) before publishing, and bump `version` for a release.
+- See [CONTRIBUTING.md](CONTRIBUTING.md#claude-code-plugin-changes) — a CLI change that affects the skill needs a paired update here (and, if the marketplace entry changes, in `lost-in-the/plugins`).
 
 > Not to be confused with grove's internal Go **hook-plugins** (`docker`, `tracker`) — see [docs/PLUGIN_DEVELOPMENT.md](docs/PLUGIN_DEVELOPMENT.md).
 

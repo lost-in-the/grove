@@ -54,7 +54,7 @@ grove to feature 2>&1 | grep -vE '^(cd:|tmux-attach(-cc)?:|env:)'
 Or use the provided helper, which handles this and returns structured JSON:
 
 ```bash
-grove to feature 2>&1 | python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/grove-worktree-management/scripts/strip_directives.py"
+grove to feature 2>&1 | python3 "${CLAUDE_PLUGIN_ROOT:-skills/grove-worktree-management}/scripts/strip_directives.py"
 ```
 
 **Parsing rule:** Any line that does NOT start with `cd:`, `tmux-attach:`, `tmux-attach-cc:`, or `env:` is normal output (progress messages, warnings, errors). Directives are always the only content on their line.
@@ -77,4 +77,4 @@ Inside the shell wrapper, the grove binary is invoked as `$__GROVE_BIN` rather t
 
 ## Further Reading
 
-See [`docs/SHELL_INTEGRATION.md`](../../docs/SHELL_INTEGRATION.md) for the full wrapper source, the exact grep patterns, and the wrapper installation instructions for zsh and bash.
+See [`docs/SHELL_INTEGRATION.md`](https://github.com/lost-in-the/grove/blob/main/docs/SHELL_INTEGRATION.md) for the full wrapper source, the exact grep patterns, and the wrapper installation instructions for zsh and bash.

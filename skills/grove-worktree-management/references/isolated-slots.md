@@ -77,14 +77,14 @@ Attempting `grove up --isolated` when all slots are occupied returns an error.
 
 ## Port Offset Scheme
 
-Each slot receives a unique port offset applied to all services in the stack. The exact offset values and base ports are repo-specific — see [`docs/AGENT_GUIDE.md`](../../docs/AGENT_GUIDE.md) §7 for the complete port allocation pattern and how to read the offset for a given slot.
+Each slot receives a unique port offset applied to all services in the stack. The exact offset values and base ports are repo-specific — see [`docs/AGENT_GUIDE.md`](https://github.com/lost-in-the/grove/blob/main/docs/AGENT_GUIDE.md) §7 for the complete port allocation pattern and how to read the offset for a given slot.
 
 ## Safe Slot Selection with the Helper
 
 Use `allocate_slot.py` to find the next free slot without actually starting Docker:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/grove-worktree-management/scripts/allocate_slot.py" --dry-run
+python3 "${CLAUDE_PLUGIN_ROOT:-skills/grove-worktree-management}/scripts/allocate_slot.py" --dry-run
 # {"slot": 2, "available": true}
 ```
 
@@ -98,7 +98,7 @@ export GROVE_NONINTERACTIVE=1
 export GROVE_TUI=0
 
 # Find the next free slot
-SLOT=$(python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/grove-worktree-management/scripts/allocate_slot.py")
+SLOT=$(python3 "${CLAUDE_PLUGIN_ROOT:-skills/grove-worktree-management}/scripts/allocate_slot.py")
 
 # Start the isolated stack
 grove up --isolated --slot "$SLOT"
@@ -111,4 +111,4 @@ grove down --slot "$SLOT"
 
 ## Further Reading
 
-See [`docs/AGENT_GUIDE.md`](../../docs/AGENT_GUIDE.md) §7 for the complete multi-agent Docker pattern, including port offset tables and coordination strategies for agent teams.
+See [`docs/AGENT_GUIDE.md`](https://github.com/lost-in-the/grove/blob/main/docs/AGENT_GUIDE.md) §7 for the complete multi-agent Docker pattern, including port offset tables and coordination strategies for agent teams.
