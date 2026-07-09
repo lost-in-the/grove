@@ -58,7 +58,7 @@ Running `eval "$(grove install <shell>)"` installs three things:
 
 The wrapper uses a **directives protocol** — the grove binary writes special lines to stdout that the shell function intercepts and acts on.
 
-### Directive Commands (`grove new`, `grove to`, `grove last`, `grove fork`, `grove fetch`, `grove join`, `grove open`, `grove up`, `grove run`, `grove kick`)
+### Directive Commands (`grove new`, `grove to`, `grove last`, `grove fork`, `grove fetch`, `grove join`, `grove open`, `grove up`, `grove kick`)
 
 These commands (and their aliases) can emit `cd:`, `tmux-attach:`, `tmux-attach-cc:`, or `env:` directives. The wrapper captures their stdout (stderr passes through to the terminal), scans it line-by-line, separates directives from normal output, and then:
 

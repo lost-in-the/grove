@@ -632,6 +632,50 @@ extra_copy = ["release.env"]    # string array: additional files to copy
 extra_run  = ["make release-prep"]  # string array: additional commands to run
 ```
 
+### Per-directory trust tools (mise, direnv)
+
+Tools like [mise](https://mise.jdx.dev) and [direnv](https://direnv.net) *trust* a config file
+the first time you enter its directory. A fresh worktree inherits the repo's `mise.toml` /
+`.envrc` as a new, untrusted copy, so the shell that opens in the new tmux pane shows several
+"config files are not trusted" **ERROR** lines followed by an interactive `Trust them?
+[Yes] [No] [All]` prompt.
+
+**Why the errors, then a prompt:** mise's shell hook (`mise activate` → `mise hook-env`) runs
+**non-interactively** on shell startup. Per mise's own behavior, it *"fails with an
+untrusted-config error when it cannot prompt"* — so each activation emits the error block. The
+`[Yes] [No] [All]` prompt is mise's one interactive trust decision; it works normally inside the
+grove pane. The error lines are noise *around* a working prompt, not a grove bug — and mise has
+no setting to silence them without also removing the decision (`MISE_QUIET=1` does not suppress
+them; verified).
+
+**Recommended (keeps the trust decision):** do nothing special. Let the prompt appear in the new
+pane and answer it — `a` (All) trusts that worktree and its parents once. This preserves the
+safety gate, which matters when you pull **untrusted third-party code** via
+`grove fetch pr/<N>` / `grove fetch issue/<N>`.
+
+**Opt-in (trades the prompt for silence — only for repos you own):** if the prompt is just noise
+for your own projects, pre-trust so mise never has to ask. Two forms:
+
+```toml
+# ~/.config/grove/hooks.toml — a post_create hook that trusts each new worktree.
+# Runs in the new worktree (working_dir defaults to "new"), no-op without the tool, never fails.
+[[hooks.post_create]]
+type    = "command"
+command = "command -v mise >/dev/null 2>&1 && mise trust >/dev/null 2>&1 || true"
+timeout = 15
+```
+
+or, equivalently, mise's own `trusted_config_paths` in `~/.config/mise/config.toml` listing the
+parent directory of your worktrees. `post_create` hooks fire **before** grove creates the tmux
+session, so either approach means no error flash on first open.
+
+> **Security tradeoff:** any pre-trust approach (the hook above, `trusted_config_paths`, or
+> `MISE_YES=1`) trusts config **including untrusted third-party code** from `grove fetch`. A
+> malicious `mise.toml` / `.envrc` then runs on first shell activation with no prompt. If you
+> review external PRs, keep the prompt — or scope pre-trust to a directory that only holds repos
+> you own. The same pattern applies to any tool that gates on per-directory trust (direnv:
+> `direnv allow`).
+
 ### Complete hooks.toml Example
 
 ```toml

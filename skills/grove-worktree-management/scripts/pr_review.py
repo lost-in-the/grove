@@ -14,10 +14,11 @@ In --dry-run mode: prints the commands that would run without executing them.
 Requirements:
   - grove CLI must be installed and in PATH
   - `gh` CLI must be installed (used internally by `grove fetch`)
+  - `grove fetch` always operates on the repo detected from the current
+    directory's git remote — there is no way to target a different repo
 
 Usage:
     python pr_review.py 42
-    python pr_review.py 42 --repo owner/repo
     python pr_review.py 42 --dry-run
 
 Exits 0 on success, 1 on failure.
@@ -111,7 +112,6 @@ def main() -> None:
         epilog=(
             "Examples:\n"
             "  python pr_review.py 42\n"
-            "  python pr_review.py 42 --repo owner/repo\n"
             "  python pr_review.py 42 --dry-run"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -121,11 +121,6 @@ def main() -> None:
         type=int,
         metavar="PR_NUMBER",
         help="GitHub pull request number to review",
-    )
-    parser.add_argument(
-        "--repo",
-        metavar="OWNER/REPO",
-        help="GitHub repository (e.g. acme/myapp). Passed to `grove fetch` as --repo.",
     )
     parser.add_argument(
         "--dry-run",
@@ -171,8 +166,6 @@ def main() -> None:
     # Step 2: Fetch if not exists
     # -----------------------------------------------------------------------
     fetch_cmd = ["grove", "fetch", f"pr/{pr_number}"]
-    if args.repo:
-        fetch_cmd += ["--repo", args.repo]
 
     if existing:
         action = "existing" if not dry_run else "would_use_existing"

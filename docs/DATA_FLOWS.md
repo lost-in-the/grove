@@ -342,7 +342,7 @@ sequenceDiagram
     end
 ```
 
-**Shell integration protocol:** Commands that change directories output `cd:/path` on stdout. The shell wrapper function (installed via `eval "$(grove install zsh)"`) captures stdout of directive-producing commands (`to`, `last`, `fork`, `fetch`, `attach`), parses for `cd:` and `tmux-attach:` prefixes, and executes the corresponding shell operations.
+**Shell integration protocol:** Commands that change directories output `cd:/path` on stdout. The shell wrapper function (installed via `eval "$(grove install zsh)"`) captures stdout of directive-producing commands (`new`, `to`, `last`, `fork`, `fetch`, `join`, `open`, `up`, `kick`), parses for `cd:` and `tmux-attach:` prefixes, and executes the corresponding shell operations.
 
 ### Worktree Removal: `grove rm`
 
@@ -439,7 +439,7 @@ eval "$(grove install zsh)"
 ```
 
 This generates a shell function that wraps the grove binary:
-- **Directive commands** (`to`, `last`, `fork`, `fetch`, `attach`): stdout is captured and parsed for directives
+- **Directive commands** (`new`, `to`, `last`, `fork`, `fetch`, `join`, `open`, `up`, `kick`): stdout is captured and parsed for directives
 - **All other commands**: run directly for streaming output
 - **Directives:** `cd:/path` triggers `cd`, `tmux-attach:session` triggers `tmux attach-session -t`
 - Sets `GROVE_SHELL=1` environment variable so the binary knows shell integration is active
