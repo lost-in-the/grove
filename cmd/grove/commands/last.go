@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -29,12 +30,16 @@ var lastCmd = &cobra.Command{
 
 		// Try to get last worktree from state first (V2 approach)
 		lastWorktree, err := ctx.State.GetLastWorktree()
+		usedLegacyFallback := false
 		if err != nil || lastWorktree == "" {
-			// Fallback to tmux session tracking (legacy approach)
-			lastSession, err := tmux.GetLastSession()
-			if err != nil {
-				return fmt.Errorf("no last worktree found: %w", err)
+			// Fallback to tmux session tracking (legacy approach). This file is
+			// global (cross-project), so whatever it yields is only a hint and
+			// must be validated against this project's worktrees below.
+			lastSession, serr := tmux.GetLastSession()
+			if serr != nil || lastSession == "" {
+				return noPreviousWorktree(stderr, lastJSON)
 			}
+			usedLegacyFallback = true
 
 			projectName := mgr.GetProjectName()
 			expectedPrefix := projectName + "-"
@@ -51,6 +56,11 @@ var lastCmd = &cobra.Command{
 			return fmt.Errorf("failed to find worktree: %w", err)
 		}
 		if targetTree == nil {
+			// A stale global session from another project (the legacy fallback)
+			// isn't an error — there's simply nothing to switch back to here.
+			if usedLegacyFallback {
+				return noPreviousWorktree(stderr, lastJSON)
+			}
 			return fmt.Errorf("last worktree '%s' not found", lastWorktree)
 		}
 
@@ -84,6 +94,26 @@ var lastCmd = &cobra.Command{
 
 		return nil
 	}),
+}
+
+// noPreviousWorktree reports, without erroring, that there is no previous
+// worktree to switch to in the current project. Running `grove last` before
+// any in-project switch is a no-op, not a failure — and it must never chase a
+// stale cross-project session recorded in the global last_session file.
+//
+// In --json mode it emits a valid JSON object (empty switch_to + a message)
+// rather than a human sentence, so machine consumers always get parseable
+// output on this path.
+func noPreviousWorktree(stderr io.Writer, jsonMode bool) error {
+	const msg = "No previous worktree in this project yet — switch with 'grove to <name>' first."
+	if jsonMode {
+		return output.PrintJSON(struct {
+			SwitchTo string `json:"switch_to"`
+			Message  string `json:"message"`
+		}{SwitchTo: "", Message: msg})
+	}
+	_, _ = fmt.Fprintln(stderr, msg)
+	return nil
 }
 
 func init() {
