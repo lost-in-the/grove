@@ -95,7 +95,7 @@ export GROVE_TUI=0
 grove ps --json
 
 # Find the next free slot without starting anything
-SLOT=$(python skills/grove-worktree-management/scripts/allocate_slot.py)
+SLOT=$(python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/grove-worktree-management/scripts/allocate_slot.py")
 
 # Start an isolated Docker stack on that slot
 grove up --isolated --slot "$SLOT"
@@ -189,7 +189,7 @@ grove ps --json         # active isolated Docker slots
 Or use the helper that combines `here` and `ls` into one normalized output:
 
 ```bash
-python skills/grove-worktree-management/scripts/probe_state.py
+python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/grove-worktree-management/scripts/probe_state.py"
 ```
 
 This is especially important before `grove rm`, `grove graft`, or `grove sync` — verify the target worktree exists and is in the state you expect.

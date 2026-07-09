@@ -84,7 +84,7 @@ Each slot receives a unique port offset applied to all services in the stack. Th
 Use `allocate_slot.py` to find the next free slot without actually starting Docker:
 
 ```bash
-python skills/grove-worktree-management/scripts/allocate_slot.py --dry-run
+python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/grove-worktree-management/scripts/allocate_slot.py" --dry-run
 # {"slot": 2, "available": true}
 ```
 
@@ -98,7 +98,7 @@ export GROVE_NONINTERACTIVE=1
 export GROVE_TUI=0
 
 # Find the next free slot
-SLOT=$(python skills/grove-worktree-management/scripts/allocate_slot.py)
+SLOT=$(python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/grove-worktree-management/scripts/allocate_slot.py")
 
 # Start the isolated stack
 grove up --isolated --slot "$SLOT"

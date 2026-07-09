@@ -278,11 +278,15 @@ See [docs/TUI.md](docs/TUI.md) for the full reference — overlays, PR browser, 
 |---------|-------------|
 | `grove ls` | List all worktrees — name, branch, status, tmux state |
 | `grove new <name>` | Create a worktree + branch + tmux session (`--branch`, `--from`) |
+| `grove adopt [path]` | Bootstrap a git worktree that grove doesn't know about |
 | `grove to <name>` | Switch context: directory, hooks, Docker, tmux |
 | `grove to <name> --peek` | Lightweight switch — skip hooks (no Docker side effects) |
 | `grove here` | Show current worktree: branch, SHA, age, status |
+| `grove which` | Show current worktree and service status (alias: `status`) |
+| `grove context` | Show full worktree context details |
 | `grove last` | Toggle to previous worktree |
 | `grove rm <name>` | Remove worktree, kill tmux session, delete branch |
+| `grove rename [old] [new]` | Rename a worktree |
 | `grove open <name>` | Open a session in any worktree (create if needed) |
 | `grove join [name]` | Join a tmux session without changing directory |
 
@@ -296,6 +300,7 @@ Requires `gh` CLI (installed and authenticated to your repo).
 | `grove fetch issue/123` | Create a worktree from a GitHub issue |
 | `grove prs` | Browse open PRs interactively; press enter to fetch |
 | `grove issues` | Browse open issues interactively; press enter to start work |
+| `grove browse` | Open the current worktree's PR or issue in the browser (alias: `b`) |
 
 ### Cross-worktree operations
 
@@ -331,6 +336,7 @@ Requires `gh` CLI (installed and authenticated to your repo).
 | `grove install <shell>` | Print shell integration code (use in `eval "$(grove install zsh)"`) |
 | `grove doctor` | Health check: binary, shell integration, git, tmux, Docker |
 | `grove repair` | Fix state inconsistencies and orphaned tmux sessions |
+| `grove agent-help` | Quick reference for AI agent workflows |
 | `grove version` | Show version information |
 
 ---
@@ -533,6 +539,43 @@ grove agent-help
 ```
 
 See [docs/AGENT_GUIDE.md](docs/AGENT_GUIDE.md) for the full agent reference — Docker strategies, parallel patterns, CI configuration, and troubleshooting.
+
+### Claude Code plugin
+
+Grove ships as a [Claude Code plugin](https://code.claude.com/docs/en/discover-plugins) so
+agents get the `grove-worktree-management` skill — command reference, safety rules, and
+deterministic helper scripts — without any manual setup. This repo is its own single-plugin
+marketplace.
+
+```bash
+# In Claude Code:
+/plugin marketplace add lost-in-the/grove
+/plugin install grove-plugin@grove-plugins
+```
+
+The skill then activates automatically when a project has a `.grove/` directory or the user
+mentions worktrees. To test a local checkout before publishing, point Claude Code at the repo:
+
+```bash
+claude --plugin-dir /path/to/grove   # then: /grove-plugin:grove-worktree-management
+```
+
+Updates ship by bumping `version` in `.claude-plugin/plugin.json` and pushing; users pull them
+with `/plugin update grove-plugin@grove-plugins`.
+
+**Developing the plugin.** The pieces live at the repo root:
+
+- [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json) — plugin manifest (name, version, metadata)
+- [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json) — makes this repo its own marketplace (`source: "./"`)
+- [`skills/grove-worktree-management/`](skills/grove-worktree-management/) — the skill itself (`SKILL.md`, `references/`, `scripts/`), auto-discovered
+
+Guidelines when changing it:
+
+- Keep `SKILL.md`'s command reference in sync with the CLI — it's validated against the canonical command set in [docs/COMMAND_SPECIFICATIONS.md](docs/COMMAND_SPECIFICATIONS.md).
+- Reference helper scripts via `${CLAUDE_PLUGIN_ROOT:-.}/skills/…` so they resolve both from an installed plugin and a repo checkout.
+- Run `claude plugin validate .` (add `--strict` in CI) before publishing, and bump `version` for a release.
+
+> Not to be confused with grove's internal Go **hook-plugins** (`docker`, `tracker`) — see [docs/PLUGIN_DEVELOPMENT.md](docs/PLUGIN_DEVELOPMENT.md).
 
 ---
 
