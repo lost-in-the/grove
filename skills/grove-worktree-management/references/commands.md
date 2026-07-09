@@ -15,7 +15,7 @@ Read this file when you need the complete command surface including rarely-used 
 | `grove test <name>` | `tt` | — | — | Run tests in another worktree; args after `--` are passed to test runner |
 | `grove ps` | `agent-status` | ✓ | — | List active isolated Docker slots (slot, worktree, compose project, URL) |
 | `grove up` | `u` | — | ✓ | Start Docker stack; `--isolated` for agent stack, `--slot N` for specific slot |
-| `grove down` | — | — | ✓ | Stop Docker stack; `--slot N` to stop a specific isolated slot |
+| `grove down` | `do` | — | ✓ | Stop Docker stack; `--slot N` to stop a specific isolated slot |
 | `grove rm [name]` | `remove`, `delete` | — | ✓ | Remove worktree, branch, tmux session, and Docker stack |
 | `grove doctor [worktree]` | — | — | — | Health check; without arg checks current worktree |
 | `grove adopt [path]` | — | — | ✓ | Bring a raw `git worktree add` worktree under grove management |
@@ -25,12 +25,22 @@ Read this file when you need the complete command surface including rarely-used 
 | `grove graft <name>` | `apply`, `g` | — | ✓ | Apply uncommitted changes from another worktree into current |
 | `grove trim` | `prune`, `clean`, `tm` | — | ✓ | Remove stale or merged worktrees; prompts by default |
 | `grove join [name]` | `attach`, `a`, `j` | — | — | Attach to the tmux session for a worktree |
-| `grove fork <name>` | `split`, `fo` | — | ✓ | Fork current worktree into a new one (branch + copy uncommitted state) |
-| `grove logs [name]` | `lo` | — | — | Tail Docker logs for a worktree; defaults to current |
+| `grove fork [name]` | `split`, `fo` | — | ✓ | Fork current worktree into a new one (branch + copy uncommitted state) |
+| `grove open [name]` | `o` | ✓ | ✓ | Open a worktree session, creating the worktree/tmux session if needed |
+| `grove logs [service]` | `lo` | — | — | Tail Docker logs for a service in the current worktree's stack; defaults to all services |
 | `grove kick [service]` | `restart`, `k` | — | ✓ | Restart a Docker service in the current worktree's stack |
-| `grove rename <new>` | — | — | ✓ | Rename current worktree and update tmux session, branch, Docker project |
+| `grove rename [old] [new]` | — | — | ✓ | Rename a worktree and update tmux session, branch, Docker project |
 | `grove prs` | — | — | — | Browse open pull requests; opens in `gh` or browser |
 | `grove issues` | — | — | — | Browse open issues; opens in `gh` or browser |
+| `grove browse` | `b` | — | — | Open the current worktree's PR or issue in the browser |
+| `grove which` | `status` | ✓ | — | Show current worktree and Docker service status |
+| `grove config` | — | — | ✓ | Show or edit grove configuration (`.grove/config.toml`) |
+| `grove init` | — | — | ✓ | Initialize the current git repository as a grove project |
+| `grove install [shell]` | — | — | — | Print shell integration code for zsh or bash |
+| `grove setup` | — | — | ✓ | Interactively detect shell and install shell integration |
+| `grove repair` | — | — | ✓ | Detect and repair inconsistencies between grove state and worktrees |
+| `grove agent-help` | — | — | — | Print a quick reference for AI agents using grove |
+| `grove version` | — | — | — | Print grove's version and build information |
 
 ## Notes
 

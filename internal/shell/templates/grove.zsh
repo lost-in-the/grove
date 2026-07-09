@@ -23,7 +23,7 @@ grove() {
     # Only directive-producing commands need output capture.
     # All other commands run directly for streaming support.
     case "$1" in
-        new|spawn|n|to|t|switch|last|la|fork|fo|split|fetch|f|attach|join|a|j|open|o|up|u|run|kick|k|restart)
+        new|spawn|n|to|t|switch|last|la|fork|fo|split|fetch|f|attach|join|a|j|open|o|up|u|kick|k|restart)
             # Capture output and parse for cd:/tmux-attach:/env: directives
             local output exit_code
             output=$(GROVE_SHELL=1 GROVE_SHELL_VERSION="$__GROVE_SHELL_VERSION" "$__GROVE_BIN" "$@")
@@ -137,6 +137,12 @@ _grove_completion() {
         'o:Open a worktree session (alias)'
         'ps:Show active stacks'
         'agent-status:Show active isolated stacks'
+        'adopt:Bootstrap an unmanaged git worktree'
+        'browse:Open the current PR or issue in the browser'
+        'b:Open PR/issue in browser (alias)'
+        'context:Show full worktree context details'
+        'rename:Rename a worktree'
+        'agent-help:Quick reference for AI agent workflows'
         'version:Show version'
         'install:Generate shell integration'
     )

@@ -1,5 +1,16 @@
 # Plugin Development Guide
 
+> **Two different things are called "plugin" in grove — this guide is about the first:**
+>
+> 1. **Grove hook-plugins (this document)** — Go components compiled into grove that hook into
+>    worktree lifecycle events (the built-in `docker` and `tracker` plugins). This is grove's
+>    internal extension system.
+> 2. **The grove *Claude Code* plugin** — a separate, packaged distribution of the
+>    `grove-worktree-management` **skill** so AI agents can install grove guidance via the Claude
+>    Code marketplace. That is documented in [README.md → "Claude Code plugin"](../README.md#claude-code-plugin),
+>    and its manifests live in [`.claude-plugin/`](../.claude-plugin/). It is unrelated to the Go
+>    interface below.
+
 Grove's plugin system allows you to extend functionality by hooking into worktree lifecycle events.
 
 ## Plugin Interface

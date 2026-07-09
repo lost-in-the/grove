@@ -194,7 +194,7 @@ for parallel agent work). [`plugins/docker/README.md`](plugins/docker/README.md)
 - [`docs/SHELL_INTEGRATION.md`](docs/SHELL_INTEGRATION.md) — directive protocol and shell wrapper internals
 - [`plugins/docker/README.md`](plugins/docker/README.md) — Docker plugin modes and config
 - [`plugins/tracker/README.md`](plugins/tracker/README.md) — GitHub tracker plugin
-- [`skills/grove-worktree-management/`](skills/grove-worktree-management/) — Claude skill with Python helpers
+- [`skills/grove-worktree-management/`](skills/grove-worktree-management/) — Claude skill with Python helpers. Installable as a Claude Code plugin: `/plugin marketplace add lost-in-the/grove` then `/plugin install grove-plugin@grove-plugins` (see [README → Claude Code plugin](README.md#claude-code-plugin)).
 
 ---
 

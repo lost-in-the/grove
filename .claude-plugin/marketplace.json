@@ -1,0 +1,15 @@
+{
+  "name": "grove-plugins",
+  "owner": {
+    "name": "lost-in-the"
+  },
+  "description": "Claude Code plugins for the grove worktree manager.",
+  "plugins": [
+    {
+      "name": "grove-plugin",
+      "source": "./",
+      "description": "Grove worktree management skill for AI agents and humans.",
+      "version": "1.0.0"
+    }
+  ]
+}

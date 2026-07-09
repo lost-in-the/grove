@@ -42,7 +42,7 @@ export GROVE_TUI=0               # disable dashboard
 | `grove test <name>` | Run tests in another worktree | — | — | `tt` |
 | `grove ps` | List active isolated Docker slots | ✓ | — | `agent-status` |
 | `grove up` | Start Docker; `--isolated [--slot N]` for agent stacks | — | ✓ | `u` |
-| `grove down` | Stop Docker; `--slot N` for isolated stacks | — | ✓ | — |
+| `grove down` | Stop Docker; `--slot N` for isolated stacks | — | ✓ | `do` |
 | `grove rm [name]` | Remove worktree + branch + tmux + Docker | — | ✓ | `remove`, `delete` |
 | `grove doctor [worktree]` | Health check | — | — | — |
 | `grove adopt [path]` | Bring raw git worktree under grove management | — | ✓ | — |
@@ -52,6 +52,10 @@ export GROVE_TUI=0               # disable dashboard
 | `grove graft <name>` | Apply changes from another worktree | — | ✓ | `apply`, `g` |
 | `grove trim` | Remove stale/merged worktrees | — | ✓ | `prune`, `clean`, `tm` |
 | `grove join [name]` | Attach to tmux session | — | — | `attach`, `a`, `j` |
+| `grove fork [name]` | Fork current worktree into a new one | — | ✓ | `split`, `fo` |
+| `grove open [name]` | Open a worktree session (create if needed) | ✓ | ✓ | `o` |
+| `grove logs [service]` | View container logs | — | — | `lo` |
+| `grove browse` | Open current worktree's PR/issue in the browser | — | — | `b` |
 
 ## Critical Rules
 
@@ -63,15 +67,22 @@ export GROVE_TUI=0               # disable dashboard
 
 ## Deterministic Helpers
 
-For common operations where getting the logic right matters, run these Python scripts:
+For common operations where getting the logic right matters, run these Python scripts.
+First set a base path — it resolves whether this skill is installed as a plugin
+(`$CLAUDE_PLUGIN_ROOT` is set to the plugin cache) or run from a repo checkout (falls back
+to the current directory):
+
+```bash
+SCRIPTS="${CLAUDE_PLUGIN_ROOT:-.}/skills/grove-worktree-management/scripts"
+```
 
 | Script | Purpose | Invocation |
 |--------|---------|-----------|
-| `probe_state.py` | Normalized status from `grove here --json` + `grove ls --json` | `python skills/grove-worktree-management/scripts/probe_state.py` |
-| `strip_directives.py` | Filter directive lines from grove stdout | `grove to x 2>&1 \| python skills/grove-worktree-management/scripts/strip_directives.py` |
-| `allocate_slot.py` | Find lowest free isolated Docker slot | `python skills/grove-worktree-management/scripts/allocate_slot.py [--dry-run]` |
-| `audit_hooks.py` | Summarize hooks that would run in this repo | `python skills/grove-worktree-management/scripts/audit_hooks.py` |
-| `pr_review.py` | Orchestrate PR fetch + peek switch | `python skills/grove-worktree-management/scripts/pr_review.py <PR#> [--dry-run]` |
+| `probe_state.py` | Normalized status from `grove here --json` + `grove ls --json` | `python3 "$SCRIPTS/probe_state.py"` |
+| `strip_directives.py` | Filter directive lines from grove stdout | `grove to x 2>&1 \| python3 "$SCRIPTS/strip_directives.py"` |
+| `allocate_slot.py` | Find lowest free isolated Docker slot | `python3 "$SCRIPTS/allocate_slot.py" [--dry-run]` |
+| `audit_hooks.py` | Summarize hooks that would run in this repo | `python3 "$SCRIPTS/audit_hooks.py"` |
+| `pr_review.py` | Orchestrate PR fetch + peek switch | `python3 "$SCRIPTS/pr_review.py" <PR#> [--dry-run]` |
 
 All scripts: Python 3 stdlib only, `--help` flag, JSON to stdout on success.
 

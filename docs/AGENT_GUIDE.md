@@ -398,7 +398,7 @@ grove rm <name>
 # stops Docker, kills tmux session, removes worktree, deletes branch
 ```
 
-Protected worktrees (`main`, `develop`, or any name in `[protection] protected`) require `--force` to remove. Immutable worktrees block `grove apply` and `grove sync` but can still be removed with `grove rm`.
+Protected worktrees (`main`, `develop`, or any name in `[protection] protected`) require `--force` to remove. Immutable worktrees block `grove graft` and `grove sync` but can still be removed with `grove rm`.
 
 **Remove stale worktrees in bulk:**
 ```bash
@@ -558,12 +558,14 @@ Multiple agents can each run their own independent Docker stack with port offset
 ```bash
 grove up --isolated          # allocate next available slot
 
-grove agent-status           # table of active stacks
-grove agent-status --json    # machine-readable
+grove ps                     # table of active stacks
+grove ps --json              # machine-readable
 
 grove down                   # stop the stack (isolated stacks auto-detected from cwd)
 grove ps                     # show running stacks with reference IDs and URLs
 ```
+
+`agent-status` is a back-compat alias for `ps` and still works (`grove agent-status --json`).
 
 Each isolated stack gets a unique compose project name (`{project}-agent-{N}`) and port-offset containers.
 
@@ -720,7 +722,7 @@ grove up --isolated               # gets slot 2
 # → containers running on different offset ports
 
 # Check what's running
-grove agent-status --json
+grove ps --json
 # [{"slot":1,"worktree":"agent-task-1","compose_project":"myapp-agent-1","url":"http://localhost:3101"},
 #  {"slot":2,"worktree":"agent-task-2","compose_project":"myapp-agent-2","url":"http://localhost:3102"}]
 # (`url` is omitted when no url_pattern is configured)

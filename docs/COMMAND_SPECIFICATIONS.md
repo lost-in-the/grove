@@ -294,7 +294,7 @@ NAME            BRANCH          STATUS     TMUX        PATH
 
 **Purpose:** Create a new worktree with associated tmux session and Docker stack.
 
-**Aliases:** `spawn` (implies `--json` output)
+**Aliases:** `spawn` (implies `--json` output), `n`
 
 **Usage:**
 ```
@@ -1082,14 +1082,20 @@ Recent:
 grove last [flags]
 
 Flags:
-  (inherits flags from 'grove to')
+  -j, --json   Output as JSON with a switch_to field
 ```
 
 **Behavior:**
 
-1. Read last worktree from `.grove/state.json` (`State.LastWorktree` field)
-2. If exists: equivalent to `grove to <last>`
-3. If not exists: error
+1. Read last worktree from `.grove/state.json` (`State.LastWorktree` field).
+2. If empty, fall back to the legacy global session file (`~/.config/grove/last_session`)
+   as a *hint only* — it is cross-project, so the resolved name is validated against this
+   project's worktrees before use.
+3. If a worktree is resolved: equivalent to `grove to <last>`.
+4. If nothing is recorded, or the legacy hint doesn't resolve to a worktree in this project:
+   graceful no-op — print a hint and exit 0 (running `grove last` before any in-project switch
+   is not an error, and it must never chase another project's session).
+5. If a worktree recorded in this project's state no longer exists: error (exit 1).
 
 **State File Format:**
 ```json
@@ -1104,21 +1110,21 @@ Flags:
 ✓ Switched to 'testing' (previous worktree)
 ```
 
-**Output (No previous):**
+**Output (No previous — exit 0):**
 ```
-✗ No previous worktree recorded
-
-This is your first switch in this session.
-Use 'grove to <name>' to switch to a worktree.
+No previous worktree in this project yet — switch with 'grove to <name>' first.
 ```
-**Exit code: 1**
-
-**Output (Previous no longer exists):**
+With `--json`:
+```json
+{
+  "switch_to": "",
+  "message": "No previous worktree in this project yet — switch with 'grove to <name>' first."
+}
 ```
-✗ Previous worktree 'old-feature' no longer exists
 
-It may have been removed. Clearing history.
-Use 'grove ls' to see available worktrees.
+**Output (Previous recorded in state but no longer exists):**
+```
+✗ last worktree 'old-feature' not found
 ```
 **Exit code: 1**
 
@@ -1359,7 +1365,7 @@ Arguments:
 
 **Purpose:** Show active Docker stacks.
 
-**Aliases:** `agent-status` (hidden, backward compatibility)
+**Aliases:** `agent-status` (backward compatibility)
 
 **Usage:**
 ```
@@ -1429,7 +1435,7 @@ To enable, add to .grove/config.toml:
 
 **Purpose:** Fork the current worktree into a new one, branching from the current HEAD.
 
-**Aliases:** `split`
+**Aliases:** `split`, `fo`
 
 **Usage:**
 ```
@@ -2370,6 +2376,12 @@ Opens the TUI's PR browser directly (same as pressing `p` from the dashboard). F
 
 Opens the TUI's issue browser directly (same as pressing `i` from the dashboard). Fetches open GitHub issues via the `gh` CLI. Requires `gh` to be installed and authenticated. See `grove issues --help`.
 
+### grove browse
+
+**Aliases:** `b`
+
+Opens the current worktree's PR or issue in the browser. See `grove browse --help`.
+
 ### grove agent-help
 
 Prints a quick-reference guide for AI agent workflows — worktree lifecycle, Docker strategies, and multi-agent patterns. Intended for agents that need context about grove's conventions without reading the full docs. See `grove agent-help --help`.
@@ -2497,13 +2509,7 @@ To switch to it: grove to testing
 
 ## Commands Not Speced
 
-Two command names surfaced during a documentation audit but were confirmed to **not exist** as standalone cobra commands:
-
-### `grove browse` (not implemented)
-
-`cmd/grove/commands/browse.go` exists but registers the `issues` and `prs` subcommands, not a top-level `grove browse` command. The file is named `browse.go` because it implements the browsing UI shared by both. There is no `Use: "browse"` cobra command in the codebase.
-
-If a `grove browse` command is added in the future, it should be documented here and in README.md.
+One command name surfaced during a documentation audit but was confirmed to already be documented elsewhere:
 
 ### `grove context` (implemented in v0.8.0)
 

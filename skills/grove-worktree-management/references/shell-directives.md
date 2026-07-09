@@ -29,6 +29,7 @@ Commands that change location or session state emit directives:
 
 - `grove to` / `grove switch` / `grove t`
 - `grove last` / `grove la`
+- `grove new` / `grove n` (not `spawn` — that alias implies `--json` and returns the path in JSON instead of a raw `cd:` line)
 - `grove fork` / `grove split` / `grove fo`
 - `grove fetch`
 - `grove join` / `grove attach`
@@ -53,7 +54,7 @@ grove to feature 2>&1 | grep -vE '^(cd:|tmux-attach(-cc)?:|env:)'
 Or use the provided helper, which handles this and returns structured JSON:
 
 ```bash
-grove to feature 2>&1 | python skills/grove-worktree-management/scripts/strip_directives.py
+grove to feature 2>&1 | python3 "${CLAUDE_PLUGIN_ROOT:-.}/skills/grove-worktree-management/scripts/strip_directives.py"
 ```
 
 **Parsing rule:** Any line that does NOT start with `cd:`, `tmux-attach:`, `tmux-attach-cc:`, or `env:` is normal output (progress messages, warnings, errors). Directives are always the only content on their line.
