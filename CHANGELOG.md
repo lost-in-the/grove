@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-09
+
+> **Upgrading:** One breaking change — standalone `docker-compose` (Compose v1) support was removed; the docker plugin now requires the `docker` CLI with Compose v2 (#107). Otherwise drop-in: shell integration is unchanged, so no re-source is needed. Highlights: grove now ships as a **Claude Code plugin**, `[naming] pattern` controls worktree directory names (#104), and `grove to/new --no-tmux` land (#106). `grove last` on a fresh project is now a graceful no-op (exit 0) instead of an error (#132).
+
 ### Fixed (2026-07 repo audit — issues #109–#123)
 - TUI create wizard: the typed new-branch name and the selected fork base are now actually used — previously `git worktree add -b <worktreeName>` ran from HEAD regardless of what the confirm screen showed (#109).
 - TUI dashboard: `grove prs`/`grove issues` entry points now populate worktree badges and the "worktree exists" prompt; PR/issue detail no longer shows stale content after filtering; cancelled WIP checks can't corrupt the next overlay; the config overlay's save confirmation works instead of silently discarding on esc; the rename overlay validates names like create/fork (#110).
