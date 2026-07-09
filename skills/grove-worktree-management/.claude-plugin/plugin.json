@@ -1,7 +1,7 @@
 {
   "name": "grove-plugin",
   "description": "Grove worktree management: zero-friction git worktree + tmux workflows for AI agents and humans, exposed as a Claude Code skill.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": {
     "name": "lost-in-the"
   },
