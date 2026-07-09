@@ -55,6 +55,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Homebrew tap update runs as its own job so it can be re-run in isolation
+  # (e.g. after rotating TAP_GITHUB_TOKEN) without re-running GoReleaser, which
+  # fails with "asset already_exists" once a tag has been released. It depends
+  # only on the release existing and the source tarball (not GoReleaser's
+  # artifacts), so `needs: goreleaser` is purely an ordering/success gate.
+  homebrew:
+    name: Update Homebrew formula
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Update Homebrew formula
         env:
           TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
