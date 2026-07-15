@@ -162,6 +162,3 @@ _grove_completion() {
 }
 
 compdef _grove_completion grove
-
-# Alias
-alias w=grove

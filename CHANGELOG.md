@@ -7,7 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Bare `grove` in a directory outside any git repository no longer false-positives on the
+  global `~/.grove` dir (debug logs, update-check cache) and launches the TUI against a
+  non-repo. `FindRoot` never walks outside a git work tree, and interactive bare `grove`
+  outside a project now prints the same "not a grove project" diagnosis as other commands
+  (exit 10) instead of a raw doubly-wrapped git error with leaked terminal escape
+  sequences (#138).
+- Shell integration survives rc re-sourcing: the binary resolver now uses function-immune
+  lookups (`whence -p` in zsh, `type -P` in bash) so a second `eval "$(grove install …)"`
+  no longer resolves the previously-defined `grove()` wrapper function and permanently
+  trips the recursion guard (`ShellVersion` bumped to 7 — re-source your shell) (#137).
+
 ### Changed
+- The `w` shorthand is now **opt-in**: `grove install <shell> --alias[=name]` (bare
+  `--alias` means `w`), plumbed through `grove setup --alias`. The integration no longer
+  claims `w` (which shadows the standard `w(1)` command) by default, and the unused
+  per-project `alias` config field was removed — it was never read by the generator and a
+  project config can't drive a shell-wide alias.
+- `grove setup` is self-healing: it migrates a deprecated `eval "$(grove init …)"` line or
+  an out-of-date `eval "$(grove install …)"` variant in place (keeping the rest of the rc
+  file untouched) instead of only warning, so rc files never need hand-editing.
 - The `grove-worktree-management` Claude Code plugin now ships from the shared
   [`lost-in-the/plugins`](https://github.com/lost-in-the/plugins) marketplace suite instead of
   this repo's own root marketplace. The suite references the skill via a `git-subdir` source,

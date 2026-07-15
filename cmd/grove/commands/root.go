@@ -61,8 +61,8 @@ tmux session management. Every command completes in less than 500ms.
 GETTING STARTED: Add shell integration to your ~/.zshrc or ~/.bashrc:
   eval "$(grove install zsh)"   # or bash
 
-This enables directory switching, tab completion, and the 'w' alias.
-Use 'grove install --help' for details.`,
+This enables directory switching and tab completion. Add --alias for a
+shorthand alias (e.g. 'w'). Use 'grove install --help' for details.`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {

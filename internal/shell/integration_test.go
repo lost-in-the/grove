@@ -6,9 +6,9 @@ import (
 )
 
 func TestGenerateZshIntegration(t *testing.T) {
-	output, err := GenerateZshIntegration()
+	output, err := GenerateZshIntegration("")
 	if err != nil {
-		t.Fatalf("GenerateZshIntegration() failed: %v", err)
+		t.Fatalf("GenerateZshIntegration failed: %v", err)
 	}
 
 	// Check that output contains expected components
@@ -20,20 +20,24 @@ func TestGenerateZshIntegration(t *testing.T) {
 		"cd:",
 		"_grove_completion()",
 		"compdef _grove_completion grove",
-		"alias w=grove",
 	}
 
 	for _, component := range expectedComponents {
 		if !strings.Contains(output, component) {
-			t.Errorf("GenerateZshIntegration() output missing expected component: %s", component)
+			t.Errorf("GenerateZshIntegration output missing expected component: %s", component)
 		}
+	}
+
+	// The alias is opt-in: no alias line without one requested.
+	if strings.Contains(output, "alias ") {
+		t.Errorf("GenerateZshIntegration(\"\") must not define an alias, got output containing 'alias '")
 	}
 }
 
 func TestGenerateBashIntegration(t *testing.T) {
-	output, err := GenerateBashIntegration()
+	output, err := GenerateBashIntegration("")
 	if err != nil {
-		t.Fatalf("GenerateBashIntegration() failed: %v", err)
+		t.Fatalf("GenerateBashIntegration failed: %v", err)
 	}
 
 	// Check that output contains expected components
@@ -45,13 +49,64 @@ func TestGenerateBashIntegration(t *testing.T) {
 		"cd:",
 		"_grove_completion()",
 		"complete -F _grove_completion grove",
-		"alias w=grove",
 		"_init_completion", // bash-completion check
 	}
 
 	for _, component := range expectedComponents {
 		if !strings.Contains(output, component) {
-			t.Errorf("GenerateBashIntegration() output missing expected component: %s", component)
+			t.Errorf("GenerateBashIntegration output missing expected component: %s", component)
+		}
+	}
+
+	// The alias is opt-in: no alias line without one requested.
+	if strings.Contains(output, "alias ") {
+		t.Errorf("GenerateBashIntegration(\"\") must not define an alias, got output containing 'alias '")
+	}
+}
+
+func TestGenerateIntegration_AliasOptIn(t *testing.T) {
+	for name, generate := range map[string]func(string) (string, error){
+		"zsh":  GenerateZshIntegration,
+		"bash": GenerateBashIntegration,
+	} {
+		t.Run(name, func(t *testing.T) {
+			output, err := generate("w")
+			if err != nil {
+				t.Fatalf("generate(\"w\") failed: %v", err)
+			}
+			if !strings.Contains(output, "alias w=grove") {
+				t.Errorf("expected 'alias w=grove' in output when alias requested")
+			}
+
+			output, err = generate("g")
+			if err != nil {
+				t.Fatalf("generate(\"g\") failed: %v", err)
+			}
+			if !strings.Contains(output, "alias g=grove") {
+				t.Errorf("expected 'alias g=grove' in output when alias 'g' requested")
+			}
+		})
+	}
+}
+
+func TestGenerateIntegration_AliasValidation(t *testing.T) {
+	// The alias is interpolated into shell code that users eval — reject
+	// anything that isn't a plain identifier-like name.
+	invalid := []string{
+		"w; rm -rf /",
+		"w x",
+		"1w",
+		"$w",
+		"w\n",
+		"-w",
+	}
+
+	for _, alias := range invalid {
+		if _, err := GenerateZshIntegration(alias); err == nil {
+			t.Errorf("GenerateZshIntegration(%q) should reject invalid alias", alias)
+		}
+		if _, err := GenerateBashIntegration(alias); err == nil {
+			t.Errorf("GenerateBashIntegration(%q) should reject invalid alias", alias)
 		}
 	}
 }
@@ -96,9 +151,9 @@ func TestGetWorktreeNames_ParsesCorrectly(t *testing.T) {
 
 func TestZshDirectiveParsing(t *testing.T) {
 	// Test that the zsh template correctly handles cd: directives
-	output, err := GenerateZshIntegration()
+	output, err := GenerateZshIntegration("")
 	if err != nil {
-		t.Fatalf("GenerateZshIntegration() failed: %v", err)
+		t.Fatalf("GenerateZshIntegration failed: %v", err)
 	}
 
 	// Verify the parsing logic is present
@@ -112,16 +167,16 @@ func TestZshDirectiveParsing(t *testing.T) {
 
 	for _, pattern := range expectedPatterns {
 		if !strings.Contains(output, pattern) {
-			t.Errorf("GenerateZshIntegration() missing expected pattern: %s", pattern)
+			t.Errorf("GenerateZshIntegration missing expected pattern: %s", pattern)
 		}
 	}
 }
 
 func TestBashDirectiveParsing(t *testing.T) {
 	// Test that the bash template correctly handles cd: directives
-	output, err := GenerateBashIntegration()
+	output, err := GenerateBashIntegration("")
 	if err != nil {
-		t.Fatalf("GenerateBashIntegration() failed: %v", err)
+		t.Fatalf("GenerateBashIntegration failed: %v", err)
 	}
 
 	// Verify the parsing logic is present
@@ -135,15 +190,15 @@ func TestBashDirectiveParsing(t *testing.T) {
 
 	for _, pattern := range expectedPatterns {
 		if !strings.Contains(output, pattern) {
-			t.Errorf("GenerateBashIntegration() missing expected pattern: %s", pattern)
+			t.Errorf("GenerateBashIntegration missing expected pattern: %s", pattern)
 		}
 	}
 }
 
 func TestBinaryResolutionUsesDynamicLookup(t *testing.T) {
-	output, err := GenerateZshIntegration()
+	output, err := GenerateZshIntegration("")
 	if err != nil {
-		t.Fatalf("GenerateZshIntegration() failed: %v", err)
+		t.Fatalf("GenerateZshIntegration failed: %v", err)
 	}
 
 	// Must use a PATH-only lookup that ignores functions/aliases: on rc
@@ -167,9 +222,9 @@ func TestBinaryResolutionUsesDynamicLookup(t *testing.T) {
 }
 
 func TestBashBinaryResolutionUsesDynamicLookup(t *testing.T) {
-	output, err := GenerateBashIntegration()
+	output, err := GenerateBashIntegration("")
 	if err != nil {
-		t.Fatalf("GenerateBashIntegration() failed: %v", err)
+		t.Fatalf("GenerateBashIntegration failed: %v", err)
 	}
 
 	if !strings.Contains(output, "type -P grove") {

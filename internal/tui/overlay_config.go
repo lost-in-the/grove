@@ -134,14 +134,6 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Description: "Project name",
 		},
 		{
-			Key:         "alias",
-			Label:       "alias",
-			Value:       cfg.Alias,
-			Default:     cfg.Alias,
-			Type:        ConfigString,
-			Description: "Short name for display",
-		},
-		{
 			Key:         "projects_dir",
 			Label:       "projects_dir",
 			Value:       cfg.ProjectsDir,

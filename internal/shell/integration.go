@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/lost-in-the/grove/internal/cmdexec"
@@ -16,18 +17,40 @@ var zshTemplate string
 //go:embed templates/grove.bash
 var bashTemplate string
 
-// GenerateZshIntegration returns the zsh shell integration code
-func GenerateZshIntegration() (string, error) {
-	return generateIntegration("zsh", "~/.zshrc", "grove install zsh", zshTemplate)
+// aliasNamePattern restricts opt-in alias names to identifier-like tokens.
+// The alias is interpolated into shell code that users eval, so anything
+// else would be a shell-injection vector.
+var aliasNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.-]*$`)
+
+// ValidateAlias reports whether name is safe to use as the opt-in grove
+// alias. Callers that persist an alias (e.g. grove setup writing an rc
+// line) should validate before writing.
+func ValidateAlias(name string) error {
+	if !aliasNamePattern.MatchString(name) {
+		return fmt.Errorf("invalid alias name %q: must match %s", name, aliasNamePattern)
+	}
+	return nil
 }
 
-// GenerateBashIntegration returns the bash shell integration code
-func GenerateBashIntegration() (string, error) {
-	return generateIntegration("bash", "~/.bashrc", "grove install bash", bashTemplate)
+// GenerateZshIntegration returns the zsh shell integration code.
+// alias, when non-empty, adds `alias <name>=grove` (opt-in shorthand).
+func GenerateZshIntegration(alias string) (string, error) {
+	return generateIntegration("zsh", "~/.zshrc", "grove install zsh", zshTemplate, alias)
+}
+
+// GenerateBashIntegration returns the bash shell integration code.
+// alias, when non-empty, adds `alias <name>=grove` (opt-in shorthand).
+func GenerateBashIntegration(alias string) (string, error) {
+	return generateIntegration("bash", "~/.bashrc", "grove install bash", bashTemplate, alias)
 }
 
 // generateIntegration produces shell integration code for the given shell.
-func generateIntegration(shell, rcFile, installCmd, template string) (string, error) {
+func generateIntegration(shell, rcFile, installCmd, template, alias string) (string, error) {
+	if alias != "" {
+		if err := ValidateAlias(alias); err != nil {
+			return "", err
+		}
+	}
 	// Resolve the binary path dynamically, with a lookup that ignores shell
 	// functions and aliases. On an rc re-source the grove() wrapper from the
 	// previous eval is already defined, and `command -v grove` would return
@@ -58,7 +81,6 @@ func generateIntegration(shell, rcFile, installCmd, template string) (string, er
 #        directives
 #      - All other commands: run directly (streaming-safe for logs, test, etc.)
 #   2. Registers tab completion for grove commands and worktree names
-#   3. Creates 'w' as an alias for 'grove'
 #
 # WHY A WRAPPER: Subprocesses cannot change the parent shell's directory.
 # The wrapper captures directive-producing commands, detects 'cd:' directives,
@@ -69,6 +91,9 @@ func generateIntegration(shell, rcFile, installCmd, template string) (string, er
 `, shell, rcFile, installCmd)
 
 	output := fmt.Sprintf("%s%s\n__GROVE_SHELL_VERSION=%d\n\n%s", header, binResolver, ShellVersion, template)
+	if alias != "" {
+		output += fmt.Sprintf("\n# Alias (opt-in via --alias)\nalias %s=grove\n", alias)
+	}
 	return output, nil
 }
 

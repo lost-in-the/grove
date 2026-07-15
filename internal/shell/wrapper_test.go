@@ -434,9 +434,9 @@ echo "exit:$?"
 func TestWrapper_ResourceIdempotent_Zsh(t *testing.T) {
 	binDir := filepath.Dir(buildFakeGroveNamed(t, "grove"))
 
-	integration, err := GenerateZshIntegration()
+	integration, err := GenerateZshIntegration("")
 	if err != nil {
-		t.Fatalf("GenerateZshIntegration() error = %v", err)
+		t.Fatalf("GenerateZshIntegration error = %v", err)
 	}
 
 	stdout, stderr := runResourcedIntegration(t, "zsh", integration, binDir)
@@ -457,9 +457,9 @@ func TestWrapper_ResourceIdempotent_Zsh(t *testing.T) {
 func TestWrapper_ResourceIdempotent_Bash(t *testing.T) {
 	binDir := filepath.Dir(buildFakeGroveNamed(t, "grove"))
 
-	integration, err := GenerateBashIntegration()
+	integration, err := GenerateBashIntegration("")
 	if err != nil {
-		t.Fatalf("GenerateBashIntegration() error = %v", err)
+		t.Fatalf("GenerateBashIntegration error = %v", err)
 	}
 
 	stdout, stderr := runResourcedIntegration(t, "bash", integration, binDir)

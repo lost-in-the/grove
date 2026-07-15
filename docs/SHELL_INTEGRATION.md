@@ -48,11 +48,12 @@ type grove
 
 ## What the Integration Does
 
-Running `eval "$(grove install <shell>)"` installs three things:
+Running `eval "$(grove install <shell>)"` installs two things:
 
 1. **`grove` shell function** — wraps the binary and handles directory changes
 2. **Tab completion** — for commands and worktree names
-3. **`w` alias** — shorthand for `grove`
+
+A shorthand alias is available opt-in via `--alias` (see [Alias](#alias)).
 
 ## How the Wrapper Works
 
@@ -163,12 +164,24 @@ Worktree names are fetched by running `grove ls -q` (quiet mode), which lists sh
 
 ## Alias
 
-The integration sets `w` as an alias for `grove`:
+A shorthand alias is opt-in. Pass `--alias` to `grove install` (or `grove
+setup`) — bare `--alias` means `w`, or pick your own name:
+
+```bash
+eval "$(grove install zsh --alias)"     # alias w=grove
+eval "$(grove install zsh --alias=g)"   # alias g=grove
+grove setup --alias                     # writes the aliased eval line to your rc
+```
+
+With the alias installed:
 
 ```bash
 w to feature       # same as: grove to feature
 w                  # same as: grove (opens TUI)
 ```
+
+Alias names are validated (`[A-Za-z_][A-Za-z0-9_.-]*`) since they are
+interpolated into shell code that your rc file evals.
 
 ## Recursion Guard
 

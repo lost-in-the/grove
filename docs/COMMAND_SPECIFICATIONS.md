@@ -187,10 +187,10 @@ When creating a worktree, grove creates a branch if needed:
 Default: branch name = worktree name (override with --branch)
 
 Examples:
-  w new testing          →  branch: testing
-  w new feature-auth     →  branch: feature-auth
-  w new is/123           →  branch: is/123 (issue integration)
-  w new pr/456           →  branch: pr/456 (PR integration)
+  grove new testing          →  branch: testing
+  grove new feature-auth     →  branch: feature-auth
+  grove new is/123           →  branch: is/123 (issue integration)
+  grove new pr/456           →  branch: pr/456 (PR integration)
 ```
 
 ### Directory Locations
@@ -642,7 +642,7 @@ Please be more specific.
 | Already in target worktree | Message: "Already in 'testing'" (exit 0) |
 | Worktree directory missing | Error: "Worktree directory missing. Run: grove repair testing" |
 | Tmux not running | Start tmux server, create session, attach |
-| Partial name matches one | Switch to it (e.g., `w to test` → `testing` if unambiguous) |
+| Partial name matches one | Switch to it (e.g., `grove to test` → `testing` if unambiguous) |
 | Partial name matches multiple | Error with list of matches |
 | Frozen worktree | Auto-resume, then switch |
 | Session exists but wrong directory | Detect drift and correct per `tmux.on_switch` setting |
@@ -1951,7 +1951,6 @@ Configuration
   Config file: ~/projects/grove/.grove/config.toml
 
 General:
-  alias: w
   projects_dir: ~/projects
   default_base_branch: main
 

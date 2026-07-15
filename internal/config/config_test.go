@@ -10,9 +10,6 @@ import (
 func TestLoadDefaults(t *testing.T) {
 	cfg := LoadDefaults()
 
-	if cfg.Alias != "w" {
-		t.Errorf("Expected default alias 'w', got '%s'", cfg.Alias)
-	}
 	if cfg.DefaultBranch != "main" {
 		t.Errorf("Expected default branch 'main', got '%s'", cfg.DefaultBranch)
 	}
@@ -31,7 +28,6 @@ func TestLoadConfig(t *testing.T) {
 		{
 			name: "valid config",
 			configData: `
-alias = "grove"
 projects_dir = "/tmp/projects"
 default_base_branch = "develop"
 
@@ -40,9 +36,6 @@ dirty_handling = "auto-stash"
 `,
 			wantErr: false,
 			validate: func(t *testing.T, cfg *Config) {
-				if cfg.Alias != "grove" {
-					t.Errorf("Expected alias 'grove', got '%s'", cfg.Alias)
-				}
 				if cfg.ProjectsDir != "/tmp/projects" {
 					t.Errorf("Expected projects_dir '/tmp/projects', got '%s'", cfg.ProjectsDir)
 				}
@@ -63,15 +56,15 @@ dirty_handling = "auto-stash"
 			configData: ``,
 			wantErr:    false,
 			validate: func(t *testing.T, cfg *Config) {
-				if cfg.Alias != "" {
-					t.Errorf("Expected unset alias, got '%s'", cfg.Alias)
+				if cfg.DefaultBranch != "" {
+					t.Errorf("Expected unset default_base_branch, got '%s'", cfg.DefaultBranch)
 				}
 			},
 		},
 		{
 			name: "invalid toml",
 			configData: `
-alias = "grove
+project_name = "grove
 invalid toml here
 `,
 			wantErr:  true,
@@ -115,7 +108,6 @@ func TestMergeConfigs(t *testing.T) {
 			name: "override empty does nothing",
 			base: &Config{
 				ProjectName:   "base-project",
-				Alias:         "base-alias",
 				ProjectsDir:   "/base/dir",
 				DefaultBranch: "main",
 			},
@@ -124,16 +116,12 @@ func TestMergeConfigs(t *testing.T) {
 				if cfg.ProjectName != "base-project" {
 					t.Errorf("Expected ProjectName 'base-project', got '%s'", cfg.ProjectName)
 				}
-				if cfg.Alias != "base-alias" {
-					t.Errorf("Expected Alias 'base-alias', got '%s'", cfg.Alias)
-				}
 			},
 		},
 		{
 			name: "override replaces values",
 			base: &Config{
 				ProjectName:   "base-project",
-				Alias:         "base-alias",
 				ProjectsDir:   "/base/dir",
 				DefaultBranch: "main",
 				Switch:        SwitchConfig{DirtyHandling: "prompt"},
@@ -142,7 +130,6 @@ func TestMergeConfigs(t *testing.T) {
 			},
 			override: &Config{
 				ProjectName:   "override-project",
-				Alias:         "override-alias",
 				ProjectsDir:   "/override/dir",
 				DefaultBranch: "develop",
 				Switch:        SwitchConfig{DirtyHandling: "auto-stash"},
@@ -235,7 +222,6 @@ func TestLoad(t *testing.T) {
 
 	// Write project config
 	projectConfig := `
-alias = "test-alias"
 default_base_branch = "develop"
 
 [switch]
@@ -257,9 +243,6 @@ dirty_handling = "auto-stash"
 	}
 
 	// Verify loaded config
-	if cfg.Alias != "test-alias" {
-		t.Errorf("Expected alias 'test-alias', got '%s'", cfg.Alias)
-	}
 	if cfg.DefaultBranch != "develop" {
 		t.Errorf("Expected default_base_branch 'develop', got '%s'", cfg.DefaultBranch)
 	}
@@ -321,7 +304,6 @@ func TestLoadWithInvalidValidation(t *testing.T) {
 
 	// Write config with invalid dirty_handling
 	projectConfig := `
-alias = "test"
 [switch]
 dirty_handling = "invalid-value"
 `
@@ -503,7 +485,6 @@ func TestValidate(t *testing.T) {
 		{
 			name: "invalid dirty handling",
 			config: &Config{
-				Alias:         "w",
 				ProjectsDir:   "/tmp",
 				DefaultBranch: "main",
 				Switch: SwitchConfig{
@@ -514,22 +495,8 @@ func TestValidate(t *testing.T) {
 			errMsg:  "dirty_handling",
 		},
 		{
-			name: "empty alias",
-			config: &Config{
-				Alias:         "",
-				ProjectsDir:   "/tmp",
-				DefaultBranch: "main",
-				Switch: SwitchConfig{
-					DirtyHandling: "prompt",
-				},
-			},
-			wantErr: true,
-			errMsg:  "alias",
-		},
-		{
 			name: "empty dirty handling",
 			config: &Config{
-				Alias:         "w",
 				ProjectsDir:   "/tmp",
 				DefaultBranch: "main",
 				Switch: SwitchConfig{
@@ -669,7 +636,6 @@ func TestMergeConfigsExternalDocker(t *testing.T) {
 	boolTrue := true
 
 	base := &Config{
-		Alias:         "w",
 		DefaultBranch: "main",
 		Switch:        SwitchConfig{DirtyHandling: "prompt"},
 		Plugins: PluginsConfig{
@@ -718,7 +684,6 @@ func TestValidateDockerPlugin(t *testing.T) {
 
 	validBase := func() *Config {
 		return &Config{
-			Alias:         "w",
 			DefaultBranch: "main",
 			Switch:        SwitchConfig{DirtyHandling: "prompt"},
 		}
@@ -951,7 +916,6 @@ func TestValidateAgentConfig(t *testing.T) {
 
 	validBase := func() *Config {
 		return &Config{
-			Alias:         "w",
 			DefaultBranch: "main",
 			Switch:        SwitchConfig{DirtyHandling: "prompt"},
 			Plugins: PluginsConfig{
@@ -1080,7 +1044,6 @@ func TestMergeConfigsPreservesAgent(t *testing.T) {
 	boolTrue := true
 
 	base := &Config{
-		Alias:         "w",
 		DefaultBranch: "main",
 		Switch:        SwitchConfig{DirtyHandling: "prompt"},
 	}
@@ -1238,7 +1201,7 @@ func TestLoadFromGroveDir_ValidSymlink(t *testing.T) {
 
 	// Create a real config file and symlink to it
 	targetPath := filepath.Join(targetDir, "config.toml")
-	os.WriteFile(targetPath, []byte("alias = \"test\"\n"), 0644)
+	os.WriteFile(targetPath, []byte("project_name = \"test\"\n"), 0644)
 
 	configPath := filepath.Join(groveDir, "config.toml")
 	os.Symlink(targetPath, configPath)
@@ -1247,8 +1210,8 @@ func TestLoadFromGroveDir_ValidSymlink(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.Alias != "test" {
-		t.Errorf("expected alias 'test', got '%s'", cfg.Alias)
+	if cfg.ProjectName != "test" {
+		t.Errorf("expected project_name 'test', got '%s'", cfg.ProjectName)
 	}
 }
 
@@ -1586,7 +1549,7 @@ enabled = false
 		t.Errorf("Plugins.Docker.Enabled = %v, want global false", cfg.Plugins.Docker.Enabled)
 	}
 	// And defaults still fill fields no layer set.
-	if cfg.Alias != "w" {
-		t.Errorf("Alias = %q, want default %q", cfg.Alias, "w")
+	if cfg.Switch.DirtyHandling != "prompt" {
+		t.Errorf("Switch.DirtyHandling = %q, want default %q", cfg.Switch.DirtyHandling, "prompt")
 	}
 }

@@ -162,7 +162,6 @@ func TestConfigSavedMsg_ErrorAfterClose(t *testing.T) {
 func TestPopulateConfigFields(t *testing.T) {
 	cfg := config.LoadDefaults()
 	cfg.ProjectName = "grove-cli"
-	cfg.Alias = "grove"
 
 	fields := populateConfigFields(cfg)
 
@@ -172,8 +171,8 @@ func TestPopulateConfigFields(t *testing.T) {
 
 	// General tab
 	general := fields[ConfigTabGeneral]
-	if len(general) != 4 {
-		t.Errorf("expected 4 General fields, got %d", len(general))
+	if len(general) != 3 {
+		t.Errorf("expected 3 General fields, got %d", len(general))
 	}
 	if general[0].Key != "project_name" {
 		t.Errorf("expected first field 'project_name', got %q", general[0].Key)

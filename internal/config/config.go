@@ -36,7 +36,6 @@ type SessionConfig struct {
 // Config represents the complete grove configuration
 type Config struct {
 	ProjectName   string           `toml:"project_name"`
-	Alias         string           `toml:"alias"`
 	ProjectsDir   string           `toml:"projects_dir"`
 	DefaultBranch string           `toml:"default_base_branch"`
 	Switch        SwitchConfig     `toml:"switch"`
@@ -320,9 +319,6 @@ func mergeConfigs(base, override *Config) *Config {
 func mergeTopLevel(result *Config, override *Config) {
 	if override.ProjectName != "" {
 		result.ProjectName = override.ProjectName
-	}
-	if override.Alias != "" {
-		result.Alias = override.Alias
 	}
 	if override.ProjectsDir != "" {
 		result.ProjectsDir = override.ProjectsDir

@@ -11,23 +11,41 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/lost-in-the/grove/internal/cli"
+	"github.com/lost-in-the/grove/internal/shell"
 )
+
+var setupAliasFlag string
 
 var setupCmd = &cobra.Command{
 	Use:   "setup",
 	Short: "Set up shell integration interactively",
 	Long: `Detect your shell, find the appropriate config file, and add the grove
-shell integration line. Idempotent — safe to run multiple times.
+shell integration line. Idempotent — safe to run multiple times, and it
+migrates deprecated or out-of-date grove lines in place, so you never need
+to edit the file by hand.
 
 This adds the following to your shell config:
 
   eval "$(grove install zsh)"   # or bash
 
+Pass --alias for a shorthand alias (bare --alias means 'w'):
+
+  grove setup --alias      # writes: eval "$(grove install zsh --alias=w)"
+  grove setup --alias=g    # writes: eval "$(grove install zsh --alias=g)"
+
 The shell integration enables directory switching, tab completion, and
-environment variable export for grove commands.`,
+environment variable export for grove commands. Because the rc line evals
+the current binary's output, grove updates take effect on the next shell —
+no rc file edits needed.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		w := cli.NewStdout()
 		cli.Header(w, "grove setup")
+
+		if setupAliasFlag != "" {
+			if err := shell.ValidateAlias(setupAliasFlag); err != nil {
+				return err
+			}
+		}
 
 		shellName, rcFile := detectShellAndRC()
 		if shellName == "" {
@@ -41,6 +59,9 @@ environment variable export for grove commands.`,
 		}
 
 		evalLine := fmt.Sprintf(`eval "$(grove install %s)"`, shellName)
+		if setupAliasFlag != "" {
+			evalLine = fmt.Sprintf(`eval "$(grove install %s --alias=%s)"`, shellName, setupAliasFlag)
+		}
 
 		_, _ = fmt.Fprintf(w, "  Shell:   %s\n", shellName)
 		_, _ = fmt.Fprintf(w, "  Config:  %s\n", rcFile)
@@ -53,12 +74,16 @@ environment variable export for grove commands.`,
 			return nil
 		}
 
-		// Also check for the old grove init pattern
-		oldLine := fmt.Sprintf(`eval "$(grove init %s)"`, shellName)
-		if rcFileContains(rcFile, oldLine) {
-			cli.Warning(w, "Found deprecated 'grove init %s' in %s", shellName, rcFile)
-			_, _ = fmt.Fprintln(w, "  Please replace it with:")
-			_, _ = fmt.Fprintf(w, "  %s\n", evalLine)
+		// Self-heal: replace a deprecated `grove init` line or an
+		// out-of-date `grove install` line in place, keeping the rest of
+		// the rc file untouched.
+		migrated, err := migrateRCLine(rcFile, isStaleGroveEvalLine, evalLine)
+		if err != nil {
+			return err
+		}
+		if migrated {
+			cli.Success(w, "Updated existing grove line in %s", rcFile)
+			_, _ = fmt.Fprintf(w, "\n  To apply changes now: source %s\n", rcFile)
 			return nil
 		}
 
@@ -87,6 +112,8 @@ environment variable export for grove commands.`,
 }
 
 func init() {
+	setupCmd.Flags().StringVar(&setupAliasFlag, "alias", "", "define a shell alias for grove (bare --alias means 'w')")
+	setupCmd.Flags().Lookup("alias").NoOptDefVal = "w"
 	rootCmd.AddCommand(setupCmd)
 }
 
@@ -133,4 +160,50 @@ func rcFileContains(path, line string) bool {
 		}
 	}
 	return false
+}
+
+// isStaleGroveEvalLine matches rc lines that carry an old grove integration:
+// the deprecated `eval "$(grove init <shell>)"` form, or any
+// `eval "$(grove install ...)"` variant (the caller has already ruled out
+// the exact canonical line).
+func isStaleGroveEvalLine(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	return strings.HasPrefix(trimmed, `eval "$(grove init `) ||
+		strings.HasPrefix(trimmed, `eval "$(grove install `)
+}
+
+// migrateRCLine replaces the first line of the rc file matching the
+// predicate with newLine, leaving every other byte of the file unchanged.
+// Returns false (and does not create the file) when it doesn't exist or no
+// line matches.
+func migrateRCLine(path string, match func(string) bool, newLine string) (bool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to read %s: %w", path, err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return false, fmt.Errorf("failed to stat %s: %w", path, err)
+	}
+
+	lines := strings.Split(string(data), "\n")
+	replaced := false
+	for i, line := range lines {
+		if match(line) {
+			lines[i] = newLine
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		return false, nil
+	}
+
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")), info.Mode().Perm()); err != nil {
+		return false, fmt.Errorf("failed to update %s: %w", path, err)
+	}
+	return true, nil
 }
