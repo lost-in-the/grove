@@ -44,25 +44,30 @@ func FindRoot(startDir string) (string, error) {
 		gitRoot = strings.TrimSpace(string(out))
 	}
 
-	// Walk up the directory tree looking for .grove, stopping at git root
-	current := absDir
-	for {
-		groveDir := filepath.Join(current, ".grove")
-		if info, err := os.Stat(groveDir); err == nil && info.IsDir() {
-			return groveDir, nil
-		}
+	// Only walk when inside a git work tree. A .grove outside a git repo is
+	// never a project (grove init requires git); without a git-root boundary
+	// the walk would escape to the filesystem root and adopt the global
+	// ~/.grove dir (debug logs, update-check cache) as a project (#138).
+	if gitRoot != "" {
+		current := absDir
+		for {
+			groveDir := filepath.Join(current, ".grove")
+			if info, err := os.Stat(groveDir); err == nil && info.IsDir() {
+				return groveDir, nil
+			}
 
-		// Stop at git root — don't walk above the repository
-		if gitRoot != "" && current == gitRoot {
-			break
-		}
+			// Stop at git root — don't walk above the repository
+			if current == gitRoot {
+				break
+			}
 
-		// Move to parent directory
-		parent := filepath.Dir(current)
-		if parent == current {
-			break
+			// Move to parent directory
+			parent := filepath.Dir(current)
+			if parent == current {
+				break
+			}
+			current = parent
 		}
-		current = parent
 	}
 
 	// Fallback: find main worktree's .grove via git

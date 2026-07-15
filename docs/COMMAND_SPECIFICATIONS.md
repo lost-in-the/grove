@@ -90,6 +90,19 @@ Priority 3: Root directory name
 ~/projects/my-app/.grove/  →  project = (from config or "my-app")
 ```
 
+A `.grove/` directory is only recognized **inside a git work tree** — the
+upward search stops at the git repository root and never runs outside a git
+repo. The global `~/.grove` directory (debug logs, update-check cache) is
+never treated as a project.
+
+**Bare `grove` (no subcommand):**
+
+| Condition | Behavior |
+|-----------|----------|
+| Interactive TTY, in a grove project | Launch TUI dashboard |
+| Interactive TTY, not in a grove project | Print "not a grove project" diagnosis (same as other commands), exit 10 |
+| Not a TTY, or `GROVE_TUI=0` | Print help |
+
 ### Worktree Naming Convention
 
 **CRITICAL:** All worktree directories created by grove follow the project's
