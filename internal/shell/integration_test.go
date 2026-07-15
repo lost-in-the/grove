@@ -146,9 +146,14 @@ func TestBinaryResolutionUsesDynamicLookup(t *testing.T) {
 		t.Fatalf("GenerateZshIntegration() failed: %v", err)
 	}
 
-	// Should use command -v for dynamic resolution, not a hardcoded path
-	if !strings.Contains(output, "command -v grove") {
-		t.Error("shell integration should use 'command -v grove' for binary resolution")
+	// Must use a PATH-only lookup that ignores functions/aliases: on rc
+	// re-source the grove() function is already defined and `command -v`
+	// would resolve to it, tripping the recursion guard (#137).
+	if !strings.Contains(output, "whence -p grove") {
+		t.Error("zsh integration should use 'whence -p grove' for binary resolution")
+	}
+	if strings.Contains(output, "command -v grove") {
+		t.Error("zsh integration must not use 'command -v grove' — it resolves to the grove() function on re-source")
 	}
 
 	// Should NOT contain a hardcoded absolute path for __GROVE_BIN
@@ -167,7 +172,10 @@ func TestBashBinaryResolutionUsesDynamicLookup(t *testing.T) {
 		t.Fatalf("GenerateBashIntegration() failed: %v", err)
 	}
 
-	if !strings.Contains(output, "command -v grove") {
-		t.Error("bash integration should use 'command -v grove' for binary resolution")
+	if !strings.Contains(output, "type -P grove") {
+		t.Error("bash integration should use 'type -P grove' for binary resolution")
+	}
+	if strings.Contains(output, "command -v grove") {
+		t.Error("bash integration must not use 'command -v grove' — it resolves to the grove() function on re-source")
 	}
 }

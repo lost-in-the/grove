@@ -28,14 +28,23 @@ func GenerateBashIntegration() (string, error) {
 
 // generateIntegration produces shell integration code for the given shell.
 func generateIntegration(shell, rcFile, installCmd, template string) (string, error) {
-	// Resolve the binary path dynamically. If grove isn't on PATH when the
+	// Resolve the binary path dynamically, with a lookup that ignores shell
+	// functions and aliases. On an rc re-source the grove() wrapper from the
+	// previous eval is already defined, and `command -v grove` would return
+	// the function name "grove" instead of the binary path — permanently
+	// tripping the wrapper's recursion guard (#137). `whence -p` (zsh) and
+	// `type -P` (bash) search PATH only. If grove isn't on PATH when the
 	// shell sources this (e.g. PATH not yet set up in .zshrc), bail out
 	// instead of falling back to the bare name "grove" — that would cause
 	// the grove() function to call itself recursively (infinite loop).
-	binResolver := `__GROVE_BIN="$(command -v grove 2>/dev/null)" || {
+	lookup := "type -P grove"
+	if shell == "zsh" {
+		lookup = "whence -p grove"
+	}
+	binResolver := fmt.Sprintf(`__GROVE_BIN="$(%s 2>/dev/null)" || {
     echo "grove: binary not found on PATH — shell integration disabled" >&2
     return 0 2>/dev/null || true
-}`
+}`, lookup)
 
 	header := fmt.Sprintf(`# Grove shell integration for %s
 # ─────────────────────────────────────────────────────────────────────────────

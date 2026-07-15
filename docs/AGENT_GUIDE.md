@@ -159,7 +159,7 @@ source ~/.bashrc
 
 **Important: PATH setup for non-login shells**
 
-The `eval "$(grove install zsh)"` line resolves the grove binary via `command -v grove`. This requires the binary's directory to be in PATH for all shell types — not just login shells.
+The `eval "$(grove install zsh)"` line resolves the grove binary via a PATH-only lookup (`whence -p grove` in zsh, `type -P grove` in bash). This requires the binary's directory to be in PATH for all shell types — not just login shells.
 
 | File | When sourced | Use for |
 |------|-------------|---------|
