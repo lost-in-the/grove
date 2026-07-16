@@ -532,6 +532,8 @@ whence -w _grove_completion
 echo "exit:$?"
 `
 	cmd := exec.Command("zsh", "-c", script)
+	// compinit writes ~/.zcompdump — keep it out of the developer's real HOME.
+	cmd.Env = append(os.Environ(), "HOME="+t.TempDir(), "ZDOTDIR="+t.TempDir())
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

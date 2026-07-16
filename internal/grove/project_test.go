@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -408,6 +409,33 @@ func TestFindRoot_SymlinkedPathDoesNotEscapeRepo(t *testing.T) {
 	}
 	if found != "" {
 		t.Errorf("FindRoot() = %q, want empty — walk escaped the repo and found the stray .grove", found)
+	}
+}
+
+// TestFindRoot_GitErrorIsSurfaced: a rev-parse failure that does NOT mean
+// "not a git repository" (dubious ownership, unsupported repo format, broken
+// config) must be returned as an error, not silently treated as "no project"
+// — that would produce a false "not inside a git repository" diagnosis and
+// hide git's actionable message.
+func TestFindRoot_GitErrorIsSurfaced(t *testing.T) {
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	gitInit(t, dir)
+	if err := os.MkdirAll(filepath.Join(dir, ".grove"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Force a rev-parse failure that is not "not a git repository".
+	cfg := filepath.Join(dir, ".git", "config")
+	if err := os.WriteFile(cfg, []byte("[core]\n\trepositoryformatversion = 99\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := FindRoot(dir)
+	if err == nil {
+		t.Fatal("FindRoot() should surface a non-'not a git repo' git failure as an error")
+	}
+	if strings.Contains(err.Error(), "not a git repository") {
+		t.Errorf("error should carry git's real message, got: %v", err)
 	}
 }
 

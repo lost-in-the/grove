@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 
@@ -18,6 +19,7 @@ var setupAliasFlag string
 
 var setupCmd = &cobra.Command{
 	Use:   "setup",
+	Args:  cobra.NoArgs,
 	Short: "Set up shell integration interactively",
 	Long: `Detect your shell, find the appropriate config file, and add the grove
 shell integration line. Idempotent — safe to run multiple times, and it
@@ -58,31 +60,41 @@ no rc file edits needed.`,
 			return nil
 		}
 
+		// Preserve a previously opted-in alias: plain `grove setup` (e.g.
+		// re-run because `grove doctor` flagged an outdated ShellVersion)
+		// must not silently strip the user's --alias choice from the rc.
+		alias := setupAliasFlag
+		if alias == "" {
+			if existing := existingRCAlias(rcFile); existing != "" && shell.ValidateAlias(existing) == nil {
+				alias = existing
+			}
+		}
+
 		evalLine := fmt.Sprintf(`eval "$(grove install %s)"`, shellName)
-		if setupAliasFlag != "" {
-			evalLine = fmt.Sprintf(`eval "$(grove install %s --alias=%s)"`, shellName, setupAliasFlag)
+		if alias != "" {
+			evalLine = fmt.Sprintf(`eval "$(grove install %s --alias=%s)"`, shellName, alias)
 		}
 
 		_, _ = fmt.Fprintf(w, "  Shell:   %s\n", shellName)
 		_, _ = fmt.Fprintf(w, "  Config:  %s\n", rcFile)
 		_, _ = fmt.Fprintf(w, "  Line:    %s\n\n", evalLine)
 
-		// Check if already present
-		if rcFileContains(rcFile, evalLine) {
-			cli.Success(w, "Shell integration already configured in %s", rcFile)
-			_, _ = fmt.Fprintf(w, "\n  To apply changes now: source %s\n", rcFile)
-			return nil
-		}
-
-		// Self-heal: replace a deprecated `grove init` line or an
-		// out-of-date `grove install` line in place, keeping the rest of
-		// the rc file untouched.
-		migrated, err := migrateRCLine(rcFile, isStaleGroveEvalLine, evalLine)
+		// Self-heal every stale grove line (deprecated `grove init` form or
+		// an out-of-date `grove install` variant): the first is replaced by
+		// the canonical line (or deleted when the canonical line already
+		// exists), the rest are deleted. The rest of the file is untouched.
+		alreadyPresent := rcFileContains(rcFile, evalLine)
+		healed, err := healGroveRCLines(rcFile, evalLine)
 		if err != nil {
 			return err
 		}
-		if migrated {
-			cli.Success(w, "Updated existing grove line in %s", rcFile)
+		if healed {
+			cli.Success(w, "Updated grove line(s) in %s", rcFile)
+			_, _ = fmt.Fprintf(w, "\n  To apply changes now: source %s\n", rcFile)
+			return nil
+		}
+		if alreadyPresent {
+			cli.Success(w, "Shell integration already configured in %s", rcFile)
 			_, _ = fmt.Fprintf(w, "\n  To apply changes now: source %s\n", rcFile)
 			return nil
 		}
@@ -164,19 +176,48 @@ func rcFileContains(path, line string) bool {
 
 // isStaleGroveEvalLine matches rc lines that carry an old grove integration:
 // the deprecated `eval "$(grove init <shell>)"` form, or any
-// `eval "$(grove install ...)"` variant (the caller has already ruled out
-// the exact canonical line).
+// `eval "$(grove install ...)"` variant (callers exclude the canonical line).
 func isStaleGroveEvalLine(line string) bool {
 	trimmed := strings.TrimSpace(line)
 	return strings.HasPrefix(trimmed, `eval "$(grove init `) ||
 		strings.HasPrefix(trimmed, `eval "$(grove install `)
 }
 
-// migrateRCLine replaces the first line of the rc file matching the
-// predicate with newLine, leaving every other byte of the file unchanged.
-// Returns false (and does not create the file) when it doesn't exist or no
-// line matches.
-func migrateRCLine(path string, match func(string) bool, newLine string) (bool, error) {
+// rcAliasPattern extracts the alias name from a grove install rc line.
+// A bare `--alias` means "w" (the flag's NoOptDefVal).
+var rcAliasPattern = regexp.MustCompile(`--alias(?:=([^)"\s]+))?`)
+
+// existingRCAlias returns the alias carried by an existing grove install
+// line in the rc file, or "" if none.
+func existingRCAlias(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = f.Close() }()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, `eval "$(grove install `) {
+			continue
+		}
+		if m := rcAliasPattern.FindStringSubmatch(line); m != nil {
+			if m[1] == "" {
+				return "w" // bare --alias
+			}
+			return m[1]
+		}
+	}
+	return ""
+}
+
+// healGroveRCLines rewrites the rc file so that exactly one canonical grove
+// line remains: the first stale grove line is replaced with canonical (or
+// deleted when canonical is already present), and any further stale lines
+// are deleted. Every other byte of the file is unchanged. Returns false
+// (and does not create the file) when it doesn't exist or nothing is stale.
+func healGroveRCLines(path, canonical string) (bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -189,20 +230,35 @@ func migrateRCLine(path string, match func(string) bool, newLine string) (bool, 
 		return false, fmt.Errorf("failed to stat %s: %w", path, err)
 	}
 
+	canonicalTrim := strings.TrimSpace(canonical)
 	lines := strings.Split(string(data), "\n")
+
 	replaced := false
-	for i, line := range lines {
-		if match(line) {
-			lines[i] = newLine
-			replaced = true
+	for _, line := range lines {
+		if strings.TrimSpace(line) == canonicalTrim {
+			replaced = true // canonical already present — stale lines are just deleted
 			break
 		}
 	}
-	if !replaced {
+
+	out := make([]string, 0, len(lines))
+	changed := false
+	for _, line := range lines {
+		if strings.TrimSpace(line) != canonicalTrim && isStaleGroveEvalLine(line) {
+			changed = true
+			if !replaced {
+				out = append(out, canonical)
+				replaced = true
+			}
+			continue // drop the stale line
+		}
+		out = append(out, line)
+	}
+	if !changed {
 		return false, nil
 	}
 
-	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")), info.Mode().Perm()); err != nil {
+	if err := os.WriteFile(path, []byte(strings.Join(out, "\n")), info.Mode().Perm()); err != nil {
 		return false, fmt.Errorf("failed to update %s: %w", path, err)
 	}
 	return true, nil

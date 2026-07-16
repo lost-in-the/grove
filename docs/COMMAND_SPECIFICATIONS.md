@@ -200,8 +200,8 @@ Worktrees are created as **siblings** to the main project directory:
 ```
 ~/projects/
 ├── grove/              ← main project (where you run commands)
-├── grove-testing/      ← worktree created by `w new testing`
-├── grove-feature-auth/ ← worktree created by `w new feature-auth`
+├── grove-testing/      ← worktree created by `grove new testing`
+├── grove-feature-auth/ ← worktree created by `grove new feature-auth`
 └── my-other-project/       ← unrelated project
 ```
 

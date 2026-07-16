@@ -89,6 +89,13 @@ shorthand alias (e.g. 'w'). Use 'grove install --help' for details.`,
 			// diagnosis the RequireGroveContext commands print and exit 10.
 			// This runs before tea.NewProgram, so no terminal capability
 			// queries are emitted and nothing can leak onto the prompt.
+			// An explicit --check-update must still be honored here: the
+			// os.Exit below skips PersistentPostRunE where it normally runs.
+			if checkUpdateFlag {
+				if err := updatecheck.CheckNow(os.Stderr, version.Version); err != nil {
+					fmt.Fprintf(os.Stderr, "update check failed: %v\n", err)
+				}
+			}
 			cwd, _ := os.Getwd()
 			printNoGroveDiagnosis(cwd)
 			os.Exit(exitcode.NotGroveProject)
