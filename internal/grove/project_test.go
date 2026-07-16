@@ -115,6 +115,59 @@ func TestFindRoot_FromWorktree(t *testing.T) {
 	}
 }
 
+// TestFindRoot_SecondaryWorktreeWithLocalGroveResolvesToMain guards B1: a
+// grove-created secondary worktree has its OWN .grove holding only a
+// config.toml symlink (EnsureConfigSymlink). FindRoot must still resolve to the
+// MAIN worktree's .grove — otherwise state.json fragments per-worktree and
+// commands run from inside a worktree read/write a phantom state.
+func TestFindRoot_SecondaryWorktreeWithLocalGroveResolvesToMain(t *testing.T) {
+	mainDir := t.TempDir()
+	mainDir, _ = filepath.EvalSymlinks(mainDir)
+
+	run := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test", "GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("command %v failed: %v\n%s", args, err, out)
+		}
+	}
+	run(mainDir, "git", "init")
+	run(mainDir, "git", "commit", "--allow-empty", "-m", "init")
+
+	mainGrove := filepath.Join(mainDir, ".grove")
+	if err := os.MkdirAll(mainGrove, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(mainGrove, "config.toml"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	wtDir := mainDir + "-wt"
+	run(mainDir, "git", "worktree", "add", wtDir, "-b", "test-branch")
+	defer func() { _ = os.RemoveAll(wtDir) }()
+
+	// Secondary worktree's own .grove with only a config.toml symlink, exactly
+	// as grove.EnsureConfigSymlink leaves it after `grove new`.
+	wtGrove := filepath.Join(wtDir, ".grove")
+	if err := os.MkdirAll(wtGrove, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(mainGrove, "config.toml"), filepath.Join(wtGrove, "config.toml")); err != nil {
+		t.Fatal(err)
+	}
+
+	found, err := FindRoot(wtDir)
+	if err != nil {
+		t.Fatalf("FindRoot() error = %v", err)
+	}
+	if found != mainGrove {
+		t.Errorf("FindRoot(secondary worktree) = %q, want main's .grove %q", found, mainGrove)
+	}
+}
+
 func TestFindRoot_NoGroveDir(t *testing.T) {
 	// A git repo with no .grove should return empty
 	mainDir := t.TempDir()

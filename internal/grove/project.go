@@ -56,6 +56,19 @@ func FindRoot(startDir string) (string, error) {
 		return "", fmt.Errorf("failed to locate git repository: %w", err)
 	}
 
+	// The canonical .grove always lives in the MAIN worktree: `grove init`
+	// refuses to run from a linked worktree, so state.json only ever exists
+	// there. Resolve it via git's common dir (which points at the main
+	// worktree regardless of which worktree cwd is in) before walking. Without
+	// this, a grove-created secondary worktree — whose own .grove holds only a
+	// config.toml symlink (EnsureConfigSymlink), never state.json — makes the
+	// walk stop at the worktree-local .grove and fragment state per-worktree
+	// (B1): `grove new`/`rm`/`last` run from inside a worktree would read and
+	// write a phantom state.json instead of the project's.
+	if mainGrove, ok := mainWorktreeGroveDir(absDir); ok {
+		return mainGrove, nil
+	}
+
 	// Only walk when inside a git work tree. A .grove outside a git repo is
 	// never a project (grove init requires git); without a git-root boundary
 	// the walk would escape to the filesystem root and adopt the global
@@ -210,6 +223,30 @@ func EnsureConfigSymlink(mainPath, newWorktreePath string) error {
 	}
 
 	return os.Symlink(src, dst)
+}
+
+// mainWorktreeGroveDir resolves the main worktree's .grove directory from dir
+// via `git rev-parse --git-common-dir`, which returns the main worktree's .git
+// directory regardless of which worktree dir is in. Returns ok=false when dir
+// isn't a git repo, the common dir can't be resolved, or the main worktree has
+// no .grove (i.e. not a grove project — let the caller's fallbacks decide).
+func mainWorktreeGroveDir(dir string) (string, bool) {
+	out, err := cmdexec.Output(context.TODO(), "git", []string{"-C", dir, "rev-parse", "--git-common-dir"}, "", cmdexec.GitLocal)
+	if err != nil {
+		return "", false
+	}
+	commonDir := strings.TrimSpace(string(out))
+	if commonDir == "" {
+		return "", false
+	}
+	if !filepath.IsAbs(commonDir) {
+		commonDir = filepath.Join(dir, commonDir)
+	}
+	groveDir := filepath.Join(filepath.Dir(commonDir), ".grove")
+	if info, err := os.Stat(groveDir); err != nil || !info.IsDir() {
+		return "", false
+	}
+	return groveDir, true
 }
 
 // getMainWorktreePath returns the path of the main worktree by parsing

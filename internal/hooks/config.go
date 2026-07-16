@@ -159,28 +159,19 @@ func GetHooksConfigPaths(groveDir ...string) (string, string, error) {
 	if len(groveDir) > 0 && groveDir[0] != "" {
 		projectHooks = filepath.Join(groveDir[0], "hooks.toml")
 	} else if root, rootErr := grove.FindRoot(""); rootErr == nil && root != "" {
-		// Discover the project's .grove directory the same way the rest of
-		// grove does (walk up from cwd, bounded by the git root) instead of
-		// assuming cwd is the project root — otherwise project hooks are
-		// silently skipped when running from a subdirectory or a secondary
-		// worktree.
+		// FindRoot resolves to the MAIN worktree's .grove (state and config
+		// never fragment across worktrees — see grove.FindRoot / B1), so this
+		// is the project's hooks.toml by default, discovered correctly whether
+		// cwd is the main worktree, a subdirectory of it, or a linked worktree.
 		projectHooks = filepath.Join(root, "hooks.toml")
 
-		// Grove-created secondary worktrees get their own .grove containing
-		// only a config.toml symlink (grove.EnsureConfigSymlink) — never
-		// hooks.toml — so FindRoot's walk stops at the worktree's own
-		// .grove before it ever reaches the main worktree. When there's no
-		// hooks.toml at the discovered root, fall back to the main
-		// worktree's .grove (resolved via git's common dir, which always
-		// points at the main worktree's .git regardless of which worktree
-		// cwd is in) so project hooks aren't silently skipped from inside a
-		// linked worktree. A worktree-local hooks.toml, if one exists,
-		// still takes precedence.
-		if _, statErr := os.Stat(projectHooks); statErr != nil {
-			if cwd, cwdErr := os.Getwd(); cwdErr == nil {
-				if mainHooks, ok := mainWorktreeHooksPath(cwd); ok && mainHooks != projectHooks {
-					projectHooks = mainHooks
-				}
+		// A worktree-local hooks.toml still takes precedence, letting a linked
+		// worktree customize its own hooks. grove never creates one (secondary
+		// .grove dirs hold only the config.toml symlink), so this only fires
+		// when a user authored it deliberately.
+		if cwd, cwdErr := os.Getwd(); cwdErr == nil {
+			if localHooks, ok := worktreeLocalHooksPath(cwd); ok {
+				projectHooks = localHooks
 			}
 		}
 	} else {
@@ -194,29 +185,24 @@ func GetHooksConfigPaths(groveDir ...string) (string, string, error) {
 	return globalHooks, projectHooks, nil
 }
 
-// mainWorktreeHooksPath resolves the main worktree's hooks.toml path from
-// cwd via `git rev-parse --git-common-dir`, which returns the main
-// worktree's .git directory regardless of which worktree cwd is in. Returns
-// ok=false if cwd isn't a git repo, the common dir can't be resolved, or the
-// main worktree has no hooks.toml.
-func mainWorktreeHooksPath(cwd string) (string, bool) {
-	out, err := cmdexec.Output(context.TODO(), "git", []string{"-C", cwd, "rev-parse", "--git-common-dir"}, "", cmdexec.GitLocal)
+// worktreeLocalHooksPath returns the current worktree's own .grove/hooks.toml
+// (resolved from its git top-level) when that file exists. It lets a linked
+// worktree override the main worktree's hooks. Returns ok=false when cwd isn't
+// inside a git worktree or has no local hooks.toml.
+func worktreeLocalHooksPath(cwd string) (string, bool) {
+	out, err := cmdexec.Output(context.TODO(), "git", []string{"-C", cwd, "rev-parse", "--show-toplevel"}, "", cmdexec.GitLocal)
 	if err != nil {
 		return "", false
 	}
-	commonDir := strings.TrimSpace(string(out))
-	if commonDir == "" {
+	toplevel := strings.TrimSpace(string(out))
+	if toplevel == "" {
 		return "", false
 	}
-	if !filepath.IsAbs(commonDir) {
-		commonDir = filepath.Join(cwd, commonDir)
-	}
-
-	mainHooks := filepath.Join(filepath.Dir(commonDir), ".grove", "hooks.toml")
-	if _, err := os.Stat(mainHooks); err != nil {
+	localHooks := filepath.Join(toplevel, ".grove", "hooks.toml")
+	if _, err := os.Stat(localHooks); err != nil {
 		return "", false
 	}
-	return mainHooks, true
+	return localHooks, true
 }
 
 // LoadHooksConfig loads hooks configuration from global and project paths.
