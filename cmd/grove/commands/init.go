@@ -104,8 +104,8 @@ func runInit() error {
 		return err
 	}
 
-	if err := updateGitignore(cwd); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to update .gitignore: %v\n", err)
+	if err := ensureGroveIgnored(cwd); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to record grove's git excludes: %v\n", err)
 	}
 
 	writeEnvrc(groveDir, projectName)

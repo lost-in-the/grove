@@ -62,27 +62,72 @@ func detectMainBranch(dir string) string {
 	return "main"
 }
 
-func updateGitignore(dir string) error {
-	gitignorePath := filepath.Join(dir, ".gitignore")
+// groveIgnoreEntries are grove's machine-local .grove artifacts that must never
+// show up as uncommitted changes in any worktree. config.toml is included
+// because a secondary worktree carries it only as a machine-specific symlink
+// (EnsureConfigSymlink); listing it here is a no-op when the main worktree
+// already tracks a real config.toml (git never ignores tracked files).
+var groveIgnoreEntries = []string{
+	".grove/state.json",
+	".grove/state.json.bak",
+	".grove/state.lock",
+	".grove/ui_prefs.json",
+	".grove/.envrc",
+	".grove/config.local.toml",
+	".grove/config.toml",
+}
 
-	content, err := os.ReadFile(gitignorePath)
+// ensureGroveIgnored records grove's machine-local artifacts in the repository's
+// shared exclude file ($GIT_COMMON_DIR/info/exclude) rather than a committed
+// .gitignore. This matters for two reasons the old .gitignore approach got
+// wrong (B4): the exclude file applies to *every* worktree (so grove-created
+// worktrees aren't born dirty with an untracked .grove/, which used to make
+// `grove ls` report them dirty, force `grove rm` to demand --force, and break
+// `fork --copy-wip`), and it is never committed (so `grove init` doesn't leave
+// the repo with an uncommitted .gitignore of its own).
+func ensureGroveIgnored(dir string) error {
+	out, err := cmdexec.Output(context.TODO(), "git", []string{"-C", dir, "rev-parse", "--git-common-dir"}, "", cmdexec.GitLocal)
+	if err != nil {
+		return fmt.Errorf("resolve git common dir: %w", err)
+	}
+	commonDir := strings.TrimSpace(string(out))
+	if commonDir == "" {
+		return fmt.Errorf("empty git common dir")
+	}
+	if !filepath.IsAbs(commonDir) {
+		commonDir = filepath.Join(dir, commonDir)
+	}
+
+	excludePath := filepath.Join(commonDir, "info", "exclude")
+	content, err := os.ReadFile(excludePath)
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
-
 	if strings.Contains(string(content), ".grove/state.json") {
-		return nil
+		return nil // already recorded
 	}
 
-	entry := "\n# Grove (worktree manager)\n.grove/state.json\n.grove/state.json.bak\n.grove/.envrc\n"
+	if err := os.MkdirAll(filepath.Dir(excludePath), 0755); err != nil {
+		return err
+	}
 
-	f, err := os.OpenFile(gitignorePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	var b strings.Builder
+	if len(content) > 0 && !strings.HasSuffix(string(content), "\n") {
+		b.WriteString("\n")
+	}
+	b.WriteString("\n# Grove (worktree manager) — machine-local, applies to all worktrees\n")
+	for _, entry := range groveIgnoreEntries {
+		b.WriteString(entry)
+		b.WriteString("\n")
+	}
+
+	f, err := os.OpenFile(excludePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = f.Close() }()
 
-	_, err = f.WriteString(entry)
+	_, err = f.WriteString(b.String())
 	return err
 }
 
