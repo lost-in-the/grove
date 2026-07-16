@@ -129,6 +129,13 @@ func (m *Manager) CreateFromExisting(name, branch string) error {
 	return nil
 }
 
+// localBranchExists reports whether refs/heads/<branch> exists in the repo.
+func (m *Manager) localBranchExists(branch string) bool {
+	return cmdexec.Run(context.TODO(), "git",
+		[]string{"show-ref", "--verify", "--quiet", "refs/heads/" + branch},
+		m.repoRoot, cmdexec.GitLocal) == nil
+}
+
 // CreateFromBranch creates a worktree from a branch (local or remote).
 // For remote branches (e.g., PR branches), it fetches and checks out the branch.
 // The name parameter is the short name (e.g., "pr-123-fix-bug")
@@ -142,9 +149,17 @@ func (m *Manager) CreateFromBranch(name, branch string) error {
 		return err
 	}
 
-	// Fetch the branch if it doesn't exist locally (important for PR branches)
-	if err := cmdexec.Run(context.TODO(), "git", []string{"fetch", "origin", branch + ":" + branch}, m.repoRoot, cmdexec.GitRemote); err != nil {
-		log.Printf("fetch origin %s failed (may already exist locally): %v", branch, err)
+	// Fetch the branch only when it isn't already present locally. Fetching an
+	// existing local branch is a wasted network round-trip on the <500ms path
+	// (GitRemote budget is 30s) and actively wrong for `grove fork`, which
+	// created this branch locally moments earlier: a fast-forwardable
+	// origin/<branch> would move the fork onto the remote's commit instead of
+	// the HEAD the user forked (B10). PR/remote adoption still fetches because
+	// the branch is not local yet.
+	if !m.localBranchExists(branch) {
+		if err := cmdexec.Run(context.TODO(), "git", []string{"fetch", "origin", branch + ":" + branch}, m.repoRoot, cmdexec.GitRemote); err != nil {
+			log.Printf("fetch origin %s failed (may already exist locally): %v", branch, err)
+		}
 	}
 
 	// Create worktree from the branch

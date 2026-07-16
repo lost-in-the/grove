@@ -8,6 +8,64 @@ import (
 	"testing"
 )
 
+// TestCreateFromBranch_LocalBranchNotClobberedByRemote guards B10/P1: when the
+// branch already exists locally (as `grove fork` leaves it), CreateFromBranch
+// must not fetch — a fast-forwardable origin/<branch> would otherwise move the
+// new worktree onto the remote's commit instead of the local HEAD.
+func TestCreateFromBranch_LocalBranchNotClobberedByRemote(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	base := t.TempDir()
+	base, _ = filepath.EvalSymlinks(base)
+	git := func(dir string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+
+	// A "remote" bare repo with a branch `shared`, plus one extra commit on it.
+	remote := filepath.Join(base, "remote.git")
+	git(base, "init", "--bare", remote)
+	seed := filepath.Join(base, "seed")
+	git(base, "clone", remote, seed)
+	os.WriteFile(filepath.Join(seed, "a.txt"), []byte("1\n"), 0644)
+	git(seed, "add", "-A")
+	git(seed, "commit", "-m", "base")
+	git(seed, "branch", "shared")
+	git(seed, "push", "origin", "HEAD", "shared")
+
+	// Working clone; create a LOCAL `shared` at the base commit (as fork does),
+	// while origin/shared advances one commit ahead.
+	work := filepath.Join(base, "work")
+	git(base, "clone", remote, work)
+	localHead := git(work, "rev-parse", "HEAD")
+	git(work, "branch", "shared", localHead)
+	os.WriteFile(filepath.Join(seed, "a.txt"), []byte("1\n2\n"), 0644)
+	git(seed, "commit", "-am", "remote-ahead")
+	git(seed, "push", "origin", "shared")
+	git(work, "fetch", "origin")
+
+	m := &Manager{repoRoot: work}
+	if err := m.CreateFromBranch("wt-shared", "shared"); err != nil {
+		t.Fatalf("CreateFromBranch: %v", err)
+	}
+	wt, err := m.Find("wt-shared")
+	if err != nil || wt == nil {
+		t.Fatalf("Find: err=%v wt=%v", err, wt)
+	}
+	gotHead := git(wt.Path, "rev-parse", "HEAD")
+	if gotHead != localHead {
+		t.Errorf("worktree HEAD = %s, want local HEAD %s (fetch clobbered the local branch)", gotHead, localHead)
+	}
+}
+
 // setupTestRepo creates a temporary git repo for testing and returns cleanup function
 func setupTestRepo(t *testing.T) (string, func()) {
 	t.Helper()
