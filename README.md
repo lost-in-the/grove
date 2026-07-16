@@ -74,7 +74,7 @@ Grove wraps the full worktree lifecycle — create, switch, fork, clean up — a
 brew install lost-in-the/tap/grove
 ```
 
-Includes shell completions. Update with `brew update && brew upgrade lost-in-the/tap/grove`.
+Shell completions and directory switching are enabled by the one-line shell integration — run `grove setup` after installing. Update with `brew update && brew upgrade lost-in-the/tap/grove`.
 
 ### Go Install
 

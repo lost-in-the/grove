@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   lookups (`whence -p` in zsh, `type -P` in bash) so a second `eval "$(grove install …)"`
   no longer resolves the previously-defined `grove()` wrapper function and permanently
   trips the recursion guard (`ShellVersion` bumped to 7 — re-source your shell) (#137).
+- zsh integration sourced before `compinit` no longer errors with `command not found:
+  compdef` at shell startup — completion registration is guarded and degrades to no tab
+  completion (place the eval line after `compinit` for completion to register). README no
+  longer claims Homebrew ships static completions; completions come from the shell
+  integration line.
 
 ### Changed
 - The `w` shorthand is now **opt-in**: `grove install <shell> --alias[=name]` (bare

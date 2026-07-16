@@ -146,7 +146,7 @@ The shell integration registers completion functions for both shells.
 
 ### zsh
 
-Uses `compdef` with a `_grove_completion` function. Completion is registered automatically when you source the integration.
+Uses `compdef` with a `_grove_completion` function. Completion is registered automatically when you source the integration — but only if the completion system is loaded: registration is guarded by `(( $+functions[compdef] ))`, so sourcing the integration before `compinit` degrades to "no tab completion" instead of a startup error. For completion to work, keep the grove eval line **after** `compinit` in your `~/.zshrc`.
 
 ### bash
 
@@ -248,7 +248,11 @@ Add `eval "$(grove install zsh)"` (or bash) to your shell config and restart.
 
 Check that your shell loaded the integration by running `type _grove_completion`. If not found, the eval line may not have run.
 
-For zsh, ensure `compinit` has been called before or after the grove integration line — order matters for some zsh setups.
+For zsh, registration requires `compinit` to have run **before** the grove eval line. Sourcing in the other order no longer errors — the integration silently skips registration — but completion won't work. Diagnose with:
+
+```zsh
+(( $+functions[compdef] )) && echo "compinit loaded" || echo "compinit NOT loaded — move it above the grove line"
+```
 
 ### TUI closes but doesn't change directory
 
