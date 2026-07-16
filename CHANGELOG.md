@@ -5,7 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.9.0] - 2026-07-16
+
+> **Upgrading:** Shell integration is now **version 7** — re-source your shell (`grove setup` / `eval "$(grove install zsh)"`) or `grove doctor` will nag. Two behavior changes: the `w` alias is now **opt-in** (run `grove setup --alias` to keep it; the `alias` config key is gone and silently ignored if present), and interactive bare `grove` outside a project now prints a diagnosis and exits 10 instead of showing help. Everything else is drop-in.
 
 ### Fixed
 - Bare `grove` in a directory outside any git repository no longer false-positives on the
