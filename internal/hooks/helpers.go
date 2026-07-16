@@ -95,9 +95,11 @@ func copyDir(src, dst string) error {
 	return nil
 }
 
-// runCommand executes a shell command with a timeout
+// runCommand executes a shell command with a timeout. extraEnv is appended to
+// the inherited environment (used to pass GROVE_HOOK_* values that the command
+// string references safely; see Variables.InterpolateShell).
 // Output is streamed to the provided stdout/stderr writers in real-time
-func runCommand(command, workDir string, timeout time.Duration, stdout, stderr io.Writer) error {
+func runCommand(command, workDir string, timeout time.Duration, extraEnv []string, stdout, stderr io.Writer) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -109,7 +111,7 @@ func runCommand(command, workDir string, timeout time.Duration, stdout, stderr i
 	cmd.Stdin = nil
 
 	// Set up environment
-	cmd.Env = os.Environ()
+	cmd.Env = append(os.Environ(), extraEnv...)
 
 	err := cmd.Run()
 	if ctx.Err() == context.DeadlineExceeded {

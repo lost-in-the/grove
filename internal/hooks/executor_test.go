@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -53,6 +54,39 @@ func TestVariablesInterpolate(t *testing.T) {
 				t.Errorf("Interpolate(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestInterpolateShellPreventsInjection guards B13: a malicious branch name
+// (grove will check one out from an untrusted PR) must not inject shell
+// commands when interpolated into a command hook. The end-to-end check runs the
+// interpolated command via the same `sh -c` path builtinCommand uses and
+// asserts the injected side effect never happens.
+func TestInterpolateShellPreventsInjection(t *testing.T) {
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "pwned")
+
+	// A branch name crafted to break out of the command and create $marker,
+	// including a double-quote to escape the template's own quoting.
+	v := &Variables{Branch: `x"; touch ` + marker + `; echo "`}
+
+	// A hook that echoes the branch inside its own quotes — the classic docs
+	// recipe shape, and the case naive single-quoting fails to protect.
+	cmd := v.InterpolateShell(`echo "switched to {{.branch}}"`)
+
+	if err := runCommand(cmd, dir, 5*time.Second, v.ShellEnv(), &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runCommand error = %v (cmd=%q)", err, cmd)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatalf("command injection succeeded: %q created the marker file", marker)
+	}
+
+	// The value must be passed by reference, never spliced into the command.
+	if !strings.Contains(cmd, `"${GROVE_HOOK_branch}"`) {
+		t.Errorf("branch was not replaced with a quoted env reference: %q", cmd)
+	}
+	if strings.Contains(cmd, "touch") {
+		t.Errorf("raw branch value leaked into the command string: %q", cmd)
 	}
 }
 
@@ -680,7 +714,7 @@ func TestRunCommand(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		dir := t.TempDir()
 		var stdout, stderr bytes.Buffer
-		err := runCommand("echo hello", dir, 10*time.Second, &stdout, &stderr)
+		err := runCommand("echo hello", dir, 10*time.Second, nil, &stdout, &stderr)
 		if err != nil {
 			t.Fatalf("runCommand() error = %v", err)
 		}
@@ -689,7 +723,7 @@ func TestRunCommand(t *testing.T) {
 	t.Run("failure", func(t *testing.T) {
 		dir := t.TempDir()
 		var stdout, stderr bytes.Buffer
-		err := runCommand("exit 1", dir, 10*time.Second, &stdout, &stderr)
+		err := runCommand("exit 1", dir, 10*time.Second, nil, &stdout, &stderr)
 		if err == nil {
 			t.Error("runCommand() with failing command = nil, want error")
 		}
@@ -701,7 +735,7 @@ func TestRunCommand(t *testing.T) {
 			t.Fatalf("WriteFile: %v", err)
 		}
 		var stdout, stderr bytes.Buffer
-		err := runCommand("test -f marker.txt", dir, 10*time.Second, &stdout, &stderr)
+		err := runCommand("test -f marker.txt", dir, 10*time.Second, nil, &stdout, &stderr)
 		if err != nil {
 			t.Errorf("runCommand() working dir test = %v, want nil", err)
 		}
@@ -710,7 +744,7 @@ func TestRunCommand(t *testing.T) {
 	t.Run("output captured in writers", func(t *testing.T) {
 		dir := t.TempDir()
 		var stdout, stderr bytes.Buffer
-		err := runCommand("echo captured_output", dir, 10*time.Second, &stdout, &stderr)
+		err := runCommand("echo captured_output", dir, 10*time.Second, nil, &stdout, &stderr)
 		if err != nil {
 			t.Fatalf("runCommand() error = %v", err)
 		}
