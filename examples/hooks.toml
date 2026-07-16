@@ -142,7 +142,7 @@ on_failure = "ignore"
 # Clean up any leftover processes
 [[hooks.post_remove]]
 type = "command"
-command = "pkill -f '{{.worktree}}' 2>/dev/null || true"
+command = 'pkill -f "{{.worktree}}" 2>/dev/null || true'
 on_failure = "ignore"
 
 # =============================================================================

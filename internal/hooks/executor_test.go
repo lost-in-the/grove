@@ -82,8 +82,8 @@ func TestInterpolateShellPreventsInjection(t *testing.T) {
 	}
 
 	// The value must be passed by reference, never spliced into the command.
-	if !strings.Contains(cmd, `"${GROVE_HOOK_branch}"`) {
-		t.Errorf("branch was not replaced with a quoted env reference: %q", cmd)
+	if !strings.Contains(cmd, "${GROVE_HOOK_branch}") {
+		t.Errorf("branch was not replaced with an env reference: %q", cmd)
 	}
 	if strings.Contains(cmd, "touch") {
 		t.Errorf("raw branch value leaked into the command string: %q", cmd)

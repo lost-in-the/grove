@@ -213,10 +213,14 @@ func TestBootstrapWorktree_WorktreeFullMatchesDirectory(t *testing.T) {
 		t.Fatalf("mkdir wt: %v", err)
 	}
 
+	// Double-quote the token: command hooks interpolate values as shell
+	// variable references (${GROVE_HOOK_*}), so a double-quoted token expands
+	// to the value while staying injection-safe; a single-quoted token would
+	// be taken literally by the shell.
 	hooksToml := `[hooks]
 [[hooks.post_create]]
 type = "command"
-command = "printf '%s' '{{.worktree_full}}' > worktree_full.txt"
+command = "printf '%s' \"{{.worktree_full}}\" > worktree_full.txt"
 working_dir = "new"
 `
 	if err := os.WriteFile(filepath.Join(groveDir, "hooks.toml"), []byte(hooksToml), 0644); err != nil {

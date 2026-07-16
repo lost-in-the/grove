@@ -447,11 +447,11 @@ By default, global and project hooks **merge** (global runs first, project appen
 # ~/.config/grove/hooks.toml (global — applies to all projects)
 [[hooks.post_switch]]
 type    = "command"
-command = "echo 'switched to {{.worktree}}'"
+command = 'echo "switched to {{.worktree}}"'
 
 [[hooks.post_create]]
 type    = "command"
-command = "echo 'created {{.worktree}}'"
+command = 'echo "created {{.worktree}}"'
 ```
 
 ```toml
@@ -539,6 +539,15 @@ working_dir = "new"            # "new" (default) | "main" | absolute path
 timeout     = 300              # seconds before the command is killed (default: 60)
 on_failure  = "warn"           # "warn" (default) | "fail" | "ignore"
 ```
+
+Interpolation in `command` is injection-safe: each `{{.variable}}` is passed to
+the shell as a variable reference (values are supplied via the environment, not
+spliced into the command text), so a value containing shell metacharacters —
+including a `{{.branch}}` grove checked out from an untrusted PR — is always
+treated as literal data. When embedding a variable inside a larger quoted
+string, use **double** quotes so it expands, e.g.
+`command = 'echo "switched to {{.worktree}}"'`; a single-quoted token is taken
+literally by the shell.
 
 #### template
 
@@ -702,7 +711,7 @@ on_failure  = "fail"
 
 [[hooks.post_switch]]
 type    = "command"
-command = "echo 'Switched to {{.worktree}} on {{.branch}}'"
+command = 'echo "Switched to {{.worktree}} on {{.branch}}"'
 
 # Skip all hooks for dependabot branches
 [[overrides]]
@@ -787,7 +796,7 @@ on_failure  = "ignore"
 # Save session state
 [[hooks.pre_switch]]
 type    = "command"
-command = "echo '{{.worktree}}' > ~/.grove/last-worktree"
+command = 'echo "{{.worktree}}" > ~/.grove/last-worktree'
 ```
 
 #### pre_remove — Run before deleting a worktree

