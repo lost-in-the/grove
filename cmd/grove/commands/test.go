@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -105,7 +106,12 @@ Extra arguments are appended to the configured command:
 		}
 
 		if runErr != nil {
-			if exitErr, ok := runErr.(*exec.ExitError); ok {
+			// Docker-mode failures wrap the underlying *exec.ExitError
+			// (plugins/docker/run_error.go), so use errors.As rather than a
+			// direct type assertion to preserve the child's exit code — the
+			// spec requires `grove test` to exit with the command's own code.
+			var exitErr *exec.ExitError
+			if errors.As(runErr, &exitErr) {
 				os.Exit(exitErr.ExitCode())
 			}
 			return fmt.Errorf("test command failed: %w", runErr)

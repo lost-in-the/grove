@@ -291,20 +291,27 @@ func getDiffStats(repoPath, targetBranch string) (*DiffStats, error) {
 	return stats, nil
 }
 
-// parseDiffStatLine extracts file, insertion, and deletion counts from a git diff --stat summary line.
+// parseDiffStatLine extracts file, insertion, and deletion counts from a git
+// diff --stat summary line, e.g. "3 files changed, 10 insertions(+), 2
+// deletions(-)". Any of the three clauses may be absent (git omits a zero
+// insertion/deletion clause entirely). Each comma-separated clause begins with
+// its count, so scanning a leading integer per clause is both correct and
+// resilient to singular/plural wording.
 func parseDiffStatLine(line string, stats *DiffStats) {
-	_, _ = fmt.Sscanf(line, "%d file", &stats.FilesChanged)
-
-	if idx := strings.Index(line, "insertion"); idx > 0 {
-		_, _ = fmt.Sscanf(line[strings.LastIndex(line[:idx], " "):idx], "%d", &stats.Insertions)
-	}
-
-	if idx := strings.Index(line, "deletion"); idx > 0 {
-		start := strings.LastIndex(line[:idx], ",")
-		if start < 0 {
-			start = strings.LastIndex(line[:idx], " ")
+	for _, clause := range strings.Split(line, ",") {
+		clause = strings.TrimSpace(clause)
+		var n int
+		if _, err := fmt.Sscanf(clause, "%d", &n); err != nil {
+			continue
 		}
-		_, _ = fmt.Sscanf(line[start:idx], "%d", &stats.Deletions)
+		switch {
+		case strings.Contains(clause, "file"):
+			stats.FilesChanged = n
+		case strings.Contains(clause, "insertion"):
+			stats.Insertions = n
+		case strings.Contains(clause, "deletion"):
+			stats.Deletions = n
+		}
 	}
 }
 
