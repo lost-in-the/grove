@@ -68,26 +68,8 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 		}
 
 		if groveDir == "" {
-			stderr := cli.NewStderr()
-
 			cwd, _ := os.Getwd()
-			diag := grove.DiagnoseNoGrove(cwd)
-
-			switch diag.Reason {
-			case grove.ReasonNotGitRepo:
-				cli.Error(stderr, "not a grove project — not inside a git repository")
-			case grove.ReasonMainWorktreeMissingGrove:
-				cli.Error(stderr, "not a grove project — main worktree has no .grove directory")
-				fmt.Fprintln(os.Stderr)
-				cli.Faint(stderr, "Run 'grove init' from the main worktree:")
-				cli.Faint(stderr, "  cd %s && grove init", diag.MainWorktreePath)
-			default:
-				cli.Error(stderr, "not a grove project")
-				fmt.Fprintln(os.Stderr)
-				cli.Faint(stderr, "Run 'grove init' to initialize a new grove project,")
-				cli.Faint(stderr, "or change to a directory containing a .grove folder.")
-			}
-
+			printNoGroveDiagnosis(cwd)
 			os.Exit(exitcode.NotGroveProject)
 			return nil // unreachable
 		}
@@ -133,6 +115,29 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 		}
 
 		return fn(cmd, args, ctx)
+	}
+}
+
+// printNoGroveDiagnosis prints the "not a grove project" diagnosis for cwd to
+// stderr. Shared by RequireGroveContext and the bare-grove TUI path so the
+// wording cannot drift between the CLI and TUI entry points.
+func printNoGroveDiagnosis(cwd string) {
+	stderr := cli.NewStderr()
+	diag := grove.DiagnoseNoGrove(cwd)
+
+	switch diag.Reason {
+	case grove.ReasonNotGitRepo:
+		cli.Error(stderr, "not a grove project — not inside a git repository")
+	case grove.ReasonMainWorktreeMissingGrove:
+		cli.Error(stderr, "not a grove project — main worktree has no .grove directory")
+		fmt.Fprintln(os.Stderr)
+		cli.Faint(stderr, "Run 'grove init' from the main worktree:")
+		cli.Faint(stderr, "  cd %s && grove init", diag.MainWorktreePath)
+	default:
+		cli.Error(stderr, "not a grove project")
+		fmt.Fprintln(os.Stderr)
+		cli.Faint(stderr, "Run 'grove init' to initialize a new grove project,")
+		cli.Faint(stderr, "or change to a directory containing a .grove folder.")
 	}
 }
 

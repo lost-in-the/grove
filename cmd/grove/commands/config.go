@@ -135,7 +135,6 @@ Examples:
 		if cfg.ProjectName != "" {
 			cli.Label(w, "  project_name:", cfg.ProjectName)
 		}
-		cli.Label(w, "  alias:", cfg.Alias)
 		cli.Label(w, "  projects_dir:", cfg.ProjectsDir)
 		cli.Label(w, "  default_base_branch:", cfg.DefaultBranch)
 

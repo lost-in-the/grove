@@ -3,7 +3,10 @@ package grove
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -42,27 +45,41 @@ func FindRoot(startDir string) (string, error) {
 	var gitRoot string
 	if out, err := cmdexec.Output(context.TODO(), "git", []string{"-C", absDir, "rev-parse", "--show-toplevel"}, "", cmdexec.GitLocal); err == nil {
 		gitRoot = strings.TrimSpace(string(out))
+	} else if !isNotGitRepoErr(err) {
+		// rev-parse can fail for reasons other than "not a git repository"
+		// (dubious ownership in containers, unsupported repo format, git
+		// missing). Treating those as "no project" produces a false
+		// diagnosis — surface git's actual, actionable error instead.
+		if stderr := gitStderr(err); stderr != "" {
+			return "", fmt.Errorf("failed to locate git repository: %s", stderr)
+		}
+		return "", fmt.Errorf("failed to locate git repository: %w", err)
 	}
 
-	// Walk up the directory tree looking for .grove, stopping at git root
-	current := absDir
-	for {
-		groveDir := filepath.Join(current, ".grove")
-		if info, err := os.Stat(groveDir); err == nil && info.IsDir() {
-			return groveDir, nil
-		}
+	// Only walk when inside a git work tree. A .grove outside a git repo is
+	// never a project (grove init requires git); without a git-root boundary
+	// the walk would escape to the filesystem root and adopt the global
+	// ~/.grove dir (debug logs, update-check cache) as a project (#138).
+	if gitRoot != "" {
+		current := absDir
+		for {
+			groveDir := filepath.Join(current, ".grove")
+			if info, err := os.Stat(groveDir); err == nil && info.IsDir() {
+				return groveDir, nil
+			}
 
-		// Stop at git root — don't walk above the repository
-		if gitRoot != "" && current == gitRoot {
-			break
-		}
+			// Stop at git root — don't walk above the repository
+			if current == gitRoot {
+				break
+			}
 
-		// Move to parent directory
-		parent := filepath.Dir(current)
-		if parent == current {
-			break
+			// Move to parent directory
+			parent := filepath.Dir(current)
+			if parent == current {
+				break
+			}
+			current = parent
 		}
-		current = parent
 	}
 
 	// Fallback: find main worktree's .grove via git
@@ -75,6 +92,23 @@ func FindRoot(startDir string) (string, error) {
 	}
 
 	return "", nil
+}
+
+// isNotGitRepoErr reports whether a git command failure means "the directory
+// is not inside a git repository" (the one failure FindRoot treats as a clean
+// no-project answer), as opposed to git erroring for some other reason.
+func isNotGitRepoErr(err error) bool {
+	return strings.Contains(gitStderr(err), "not a git repository")
+}
+
+// gitStderr extracts the trimmed stderr of a failed git invocation, or ""
+// when unavailable (timeout, git not on PATH).
+func gitStderr(err error) string {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return strings.TrimSpace(string(exitErr.Stderr))
+	}
+	return ""
 }
 
 // IsGroveProject checks if the current directory is within a grove project.

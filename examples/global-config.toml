@@ -6,10 +6,6 @@
 #
 # This file is optional. Grove ships with sensible defaults.
 
-# Shell alias for the grove command. Default: "w"
-# Run `grove install` to add the alias to your shell profile.
-alias = "w"
-
 # Parent directory where all worktrees are created. Default: ~/projects
 projects_dir = "~/projects"
 

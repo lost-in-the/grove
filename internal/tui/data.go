@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -266,7 +265,8 @@ func FetchDetailMetrics(items []WorktreeItem, defaultBranch string) map[string]D
 func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager, pluginMgr ...*plugins.Manager) ([]WorktreeItem, error) {
 	trees, err := mgr.List()
 	if err != nil {
-		return nil, fmt.Errorf("failed to list worktrees: %w", err)
+		// Manager.List already wraps with "failed to list worktrees".
+		return nil, err
 	}
 
 	fc := loadFetchContext(mgr, stateMgr)

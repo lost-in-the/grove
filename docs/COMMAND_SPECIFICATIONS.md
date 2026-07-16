@@ -90,6 +90,19 @@ Priority 3: Root directory name
 ~/projects/my-app/.grove/  →  project = (from config or "my-app")
 ```
 
+A `.grove/` directory is only recognized **inside a git work tree** — the
+upward search stops at the git repository root and never runs outside a git
+repo. The global `~/.grove` directory (debug logs, update-check cache) is
+never treated as a project.
+
+**Bare `grove` (no subcommand):**
+
+| Condition | Behavior |
+|-----------|----------|
+| Interactive TTY, in a grove project | Launch TUI dashboard |
+| Interactive TTY, not in a grove project | Print "not a grove project" diagnosis (same as other commands), exit 10 |
+| Not a TTY, or `GROVE_TUI=0` | Print help |
+
 ### Worktree Naming Convention
 
 **CRITICAL:** All worktree directories created by grove follow the project's
@@ -174,10 +187,10 @@ When creating a worktree, grove creates a branch if needed:
 Default: branch name = worktree name (override with --branch)
 
 Examples:
-  w new testing          →  branch: testing
-  w new feature-auth     →  branch: feature-auth
-  w new is/123           →  branch: is/123 (issue integration)
-  w new pr/456           →  branch: pr/456 (PR integration)
+  grove new testing          →  branch: testing
+  grove new feature-auth     →  branch: feature-auth
+  grove new is/123           →  branch: is/123 (issue integration)
+  grove new pr/456           →  branch: pr/456 (PR integration)
 ```
 
 ### Directory Locations
@@ -187,8 +200,8 @@ Worktrees are created as **siblings** to the main project directory:
 ```
 ~/projects/
 ├── grove/              ← main project (where you run commands)
-├── grove-testing/      ← worktree created by `w new testing`
-├── grove-feature-auth/ ← worktree created by `w new feature-auth`
+├── grove-testing/      ← worktree created by `grove new testing`
+├── grove-feature-auth/ ← worktree created by `grove new feature-auth`
 └── my-other-project/       ← unrelated project
 ```
 
@@ -629,7 +642,7 @@ Please be more specific.
 | Already in target worktree | Message: "Already in 'testing'" (exit 0) |
 | Worktree directory missing | Error: "Worktree directory missing. Run: grove repair testing" |
 | Tmux not running | Start tmux server, create session, attach |
-| Partial name matches one | Switch to it (e.g., `w to test` → `testing` if unambiguous) |
+| Partial name matches one | Switch to it (e.g., `grove to test` → `testing` if unambiguous) |
 | Partial name matches multiple | Error with list of matches |
 | Frozen worktree | Auto-resume, then switch |
 | Session exists but wrong directory | Detect drift and correct per `tmux.on_switch` setting |
@@ -1938,7 +1951,6 @@ Configuration
   Config file: ~/projects/grove/.grove/config.toml
 
 General:
-  alias: w
   projects_dir: ~/projects
   default_base_branch: main
 

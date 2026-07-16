@@ -161,7 +161,9 @@ _grove_completion() {
     fi
 }
 
-compdef _grove_completion grove
-
-# Alias
-alias w=grove
+# Register completion only if the completion system is loaded (compinit).
+# Without it, degrade to no tab completion instead of a startup error.
+# (if-form so the eval'd script still exits 0 when compdef is absent)
+if (( $+functions[compdef] )); then
+    compdef _grove_completion grove
+fi

@@ -48,11 +48,12 @@ type grove
 
 ## What the Integration Does
 
-Running `eval "$(grove install <shell>)"` installs three things:
+Running `eval "$(grove install <shell>)"` installs two things:
 
 1. **`grove` shell function** — wraps the binary and handles directory changes
 2. **Tab completion** — for commands and worktree names
-3. **`w` alias** — shorthand for `grove`
+
+A shorthand alias is available opt-in via `--alias` (see [Alias](#alias)).
 
 ## How the Wrapper Works
 
@@ -145,7 +146,7 @@ The shell integration registers completion functions for both shells.
 
 ### zsh
 
-Uses `compdef` with a `_grove_completion` function. Completion is registered automatically when you source the integration.
+Uses `compdef` with a `_grove_completion` function. Completion is registered automatically when you source the integration — but only if the completion system is loaded: registration is guarded by `(( $+functions[compdef] ))`, so sourcing the integration before `compinit` degrades to "no tab completion" instead of a startup error. For completion to work, keep the grove eval line **after** `compinit` in your `~/.zshrc`.
 
 ### bash
 
@@ -163,12 +164,24 @@ Worktree names are fetched by running `grove ls -q` (quiet mode), which lists sh
 
 ## Alias
 
-The integration sets `w` as an alias for `grove`:
+A shorthand alias is opt-in. Pass `--alias` to `grove install` (or `grove
+setup`) — bare `--alias` means `w`, or pick your own name:
+
+```bash
+eval "$(grove install zsh --alias)"     # alias w=grove
+eval "$(grove install zsh --alias=g)"   # alias g=grove
+grove setup --alias                     # writes the aliased eval line to your rc
+```
+
+With the alias installed:
 
 ```bash
 w to feature       # same as: grove to feature
 w                  # same as: grove (opens TUI)
 ```
+
+Alias names are validated (`[A-Za-z_][A-Za-z0-9_.-]*`) since they are
+interpolated into shell code that your rc file evals.
 
 ## Recursion Guard
 
@@ -181,9 +194,11 @@ if [[ -z "$__GROVE_BIN" || "$__GROVE_BIN" == "grove" ]]; then
 fi
 ```
 
-**What `__GROVE_BIN` is:** When `grove install <shell>` runs, it emits shell code that sets `__GROVE_BIN` to the resolved path of the grove binary (via `command -v grove`). The shell function uses `$__GROVE_BIN` — not the bare word `grove` — to call the real binary.
+**What `__GROVE_BIN` is:** When `grove install <shell>` runs, it emits shell code that sets `__GROVE_BIN` to the resolved path of the grove binary — via `whence -p grove` (zsh) or `type -P grove` (bash). The shell function uses `$__GROVE_BIN` — not the bare word `grove` — to call the real binary.
 
-**What the guard prevents:** If the binary is not on `$PATH`, `command -v grove` returns nothing and `__GROVE_BIN` ends up empty or is literally the string `"grove"`. Without the guard, calling `$__GROVE_BIN` would invoke the shell function again, looping forever.
+**Why the lookup must be function-immune:** On an rc re-source, the `grove()` wrapper function from the previous eval is already defined. A plain `command -v grove` would resolve to that function and return the string `grove` instead of the binary path, permanently tripping the guard below for the rest of the shell session. `whence -p` / `type -P` search `$PATH` only, ignoring functions and aliases, which makes `eval "$(grove install <shell>)"` idempotent — re-sourcing your rc file is safe.
+
+**What the guard prevents:** If the binary is not on `$PATH`, the lookup returns nothing and `__GROVE_BIN` ends up empty or is literally the string `"grove"`. Without the guard, calling `$__GROVE_BIN` would invoke the shell function again, looping forever.
 
 **What users see:** When the guard fires, the shell prints `grove: binary not found (is grove on your PATH?)` to stderr and returns exit code 127. The command is a silent no-op from the user's perspective.
 
@@ -202,9 +217,9 @@ eval "$(grove install zsh)"   # or bash
 
 ## Version Bumps
 
-The constant `ShellVersion` in `internal/shell/version.go` tracks the shell integration template version. It is currently **6**.
+The constant `ShellVersion` in `internal/shell/version.go` tracks the shell integration template version. It is currently **7**.
 
-When the shell wrapper behavior changes incompatibly — new directives, changed passthrough logic, new env vars — increment `ShellVersion`. The grove binary reads `GROVE_SHELL_VERSION` (set by the wrapper) on every invocation and emits a warning when the running shell integration is older than `ShellVersion`.
+When the shell wrapper behavior changes incompatibly — new directives, changed passthrough logic, new env vars — increment `ShellVersion`. The grove binary reads `GROVE_SHELL_VERSION` (set by the wrapper) in grove-context commands and `grove doctor`, and emits a warning when the running shell integration is older than `ShellVersion`.
 
 **What users must do after a version bump:**
 
@@ -233,7 +248,11 @@ Add `eval "$(grove install zsh)"` (or bash) to your shell config and restart.
 
 Check that your shell loaded the integration by running `type _grove_completion`. If not found, the eval line may not have run.
 
-For zsh, ensure `compinit` has been called before or after the grove integration line — order matters for some zsh setups.
+For zsh, registration requires `compinit` to have run **before** the grove eval line. Sourcing in the other order no longer errors — the integration silently skips registration — but completion won't work. Diagnose with:
+
+```zsh
+(( $+functions[compdef] )) && echo "compinit loaded" || echo "compinit NOT loaded — move it above the grove line"
+```
 
 ### TUI closes but doesn't change directory
 

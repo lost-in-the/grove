@@ -10,6 +10,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/exitcode"
 	"github.com/lost-in-the/grove/internal/grove"
 	"github.com/lost-in-the/grove/internal/log"
 	"github.com/lost-in-the/grove/internal/state"
@@ -25,6 +26,30 @@ var (
 	checkUpdateFlag      bool
 )
 
+// bareAction is what a bare `grove` invocation (no subcommand) should do.
+type bareAction int
+
+const (
+	bareShowHelp  bareAction = iota // non-interactive or TUI disabled
+	bareDiagnose                    // interactive but not in a grove project
+	bareLaunchTUI                   // interactive, inside a grove project
+)
+
+// decideBareAction returns the action for a bare `grove` invocation.
+// Help never depends on project state, so callers may pass inProject=false
+// before running project detection and only detect when the result is not
+// bareShowHelp.
+func decideBareAction(isTTY, tuiDisabled, inProject bool) bareAction {
+	switch {
+	case !isTTY || tuiDisabled:
+		return bareShowHelp
+	case !inProject:
+		return bareDiagnose
+	default:
+		return bareLaunchTUI
+	}
+}
+
 var rootCmd = &cobra.Command{
 	Use:   "grove",
 	Short: "Zero-friction worktree management",
@@ -36,8 +61,8 @@ tmux session management. Every command completes in less than 500ms.
 GETTING STARTED: Add shell integration to your ~/.zshrc or ~/.bashrc:
   eval "$(grove install zsh)"   # or bash
 
-This enables directory switching, tab completion, and the 'w' alias.
-Use 'grove install --help' for details.`,
+This enables directory switching and tab completion. Add --alias for a
+shorthand alias (e.g. 'w'). Use 'grove install --help' for details.`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
@@ -48,10 +73,9 @@ Use 'grove install --help' for details.`,
 		// 1. No subcommand was invoked (this RunE only fires for bare "grove")
 		// 2. TTY is attached (interactive terminal)
 		// 3. TUI is not disabled via env var
-		if !term.IsTerminal(int(os.Stdin.Fd())) {
-			return cmd.Help()
-		}
-		if os.Getenv("GROVE_TUI") == "0" {
+		isTTY := term.IsTerminal(int(os.Stdin.Fd()))
+		tuiDisabled := os.Getenv("GROVE_TUI") == "0"
+		if decideBareAction(isTTY, tuiDisabled, false) == bareShowHelp {
 			return cmd.Help()
 		}
 
@@ -60,9 +84,21 @@ Use 'grove install --help' for details.`,
 		if err != nil {
 			return fmt.Errorf("failed to detect grove project: %w", err)
 		}
-		if groveDir == "" {
-			// Not in a grove project — fall through to help
-			return cmd.Help()
+		if decideBareAction(isTTY, tuiDisabled, groveDir != "") == bareDiagnose {
+			// Interactive but not in a grove project: print the same
+			// diagnosis the RequireGroveContext commands print and exit 10.
+			// This runs before tea.NewProgram, so no terminal capability
+			// queries are emitted and nothing can leak onto the prompt.
+			// An explicit --check-update must still be honored here: the
+			// os.Exit below skips PersistentPostRunE where it normally runs.
+			if checkUpdateFlag {
+				if err := updatecheck.CheckNow(os.Stderr, version.Version); err != nil {
+					fmt.Fprintf(os.Stderr, "update check failed: %v\n", err)
+				}
+			}
+			cwd, _ := os.Getwd()
+			printNoGroveDiagnosis(cwd)
+			os.Exit(exitcode.NotGroveProject)
 		}
 
 		projectRoot := grove.MustProjectRoot(groveDir)

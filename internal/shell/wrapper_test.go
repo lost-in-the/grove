@@ -10,8 +10,15 @@ import (
 
 // buildFakeGrove compiles the test binary and returns its path.
 func buildFakeGrove(t *testing.T) string {
+	return buildFakeGroveNamed(t, "fakegrove")
+}
+
+// buildFakeGroveNamed compiles the test binary under the given name.
+// Use name "grove" to put a real `grove` executable on PATH for tests that
+// exercise the integration's own binary resolution.
+func buildFakeGroveNamed(t *testing.T, name string) string {
 	t.Helper()
-	binPath := filepath.Join(t.TempDir(), "fakegrove")
+	binPath := filepath.Join(t.TempDir(), name)
 	src := filepath.Join("testdata", "fakegrove.go")
 	cmd := exec.Command("go", "build", "-o", binPath, src)
 	cmd.Stderr = os.Stderr
@@ -386,6 +393,163 @@ echo "exit:$?"
 
 	if !strings.Contains(stderr, "binary not found") {
 		t.Errorf("expected 'binary not found' warning, got stderr: %q", stderr)
+	}
+}
+
+// runResourcedIntegration sources the full generated integration TWICE in
+// one shell (simulating an rc re-source), then runs `grove version`.
+// Nothing is stripped: the completion registration must be safe to source
+// in a bare non-interactive shell (zsh guards compdef behind a compinit
+// check; bash's `complete` is a builtin).
+func runResourcedIntegration(t *testing.T, shellBin, integration, binDir string) (string, string) {
+	t.Helper()
+
+	if _, err := exec.LookPath(shellBin); err != nil {
+		t.Skipf("%s not available", shellBin)
+	}
+
+	script := `export PATH="` + binDir + `:$PATH"
+` + integration + `
+` + integration + `
+grove version
+echo "exit:$?"
+`
+	cmd := exec.Command(shellBin, "-c", script)
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	_ = cmd.Run()
+	return stdout.String(), stderr.String()
+}
+
+// Re-sourcing the rc file must not disable the integration: the second
+// source runs the binary resolver while the grove() function from the first
+// source is already defined, and the resolver must still find the BINARY,
+// not the function (#137).
+func TestWrapper_ResourceIdempotent_Zsh(t *testing.T) {
+	binDir := filepath.Dir(buildFakeGroveNamed(t, "grove"))
+
+	integration, err := GenerateZshIntegration("")
+	if err != nil {
+		t.Fatalf("GenerateZshIntegration error = %v", err)
+	}
+
+	stdout, stderr := runResourcedIntegration(t, "zsh", integration, binDir)
+	t.Logf("stdout: %q", stdout)
+	t.Logf("stderr: %q", stderr)
+
+	if strings.Contains(stderr, "binary not found") {
+		t.Errorf("re-source tripped the recursion guard, stderr: %q", stderr)
+	}
+	if !strings.Contains(stdout, "grove v1.0.0-test") {
+		t.Errorf("expected wrapper to run the binary after re-source, stdout: %q", stdout)
+	}
+	if !strings.Contains(stdout, "exit:0") {
+		t.Errorf("expected exit 0 after re-source, stdout: %q", stdout)
+	}
+}
+
+func TestWrapper_ResourceIdempotent_Bash(t *testing.T) {
+	binDir := filepath.Dir(buildFakeGroveNamed(t, "grove"))
+
+	integration, err := GenerateBashIntegration("")
+	if err != nil {
+		t.Fatalf("GenerateBashIntegration error = %v", err)
+	}
+
+	stdout, stderr := runResourcedIntegration(t, "bash", integration, binDir)
+	t.Logf("stdout: %q", stdout)
+	t.Logf("stderr: %q", stderr)
+
+	if strings.Contains(stderr, "binary not found") {
+		t.Errorf("re-source tripped the recursion guard, stderr: %q", stderr)
+	}
+	if !strings.Contains(stdout, "grove v1.0.0-test") {
+		t.Errorf("expected wrapper to run the binary after re-source, stdout: %q", stdout)
+	}
+	if !strings.Contains(stdout, "exit:0") {
+		t.Errorf("expected exit 0 after re-source, stdout: %q", stdout)
+	}
+}
+
+// The full integration (completion registration included) must be sourceable
+// in a shell where compinit has NOT run — e.g. an eval line placed above
+// compinit in the zshrc. Registration degrades to no completion instead of
+// erroring with `command not found: compdef`.
+func TestWrapper_FullIntegration_SourcesWithoutCompinit(t *testing.T) {
+	if _, err := exec.LookPath("zsh"); err != nil {
+		t.Skip("zsh not available")
+	}
+	binDir := filepath.Dir(buildFakeGroveNamed(t, "grove"))
+
+	integration, err := GenerateZshIntegration("")
+	if err != nil {
+		t.Fatalf("GenerateZshIntegration error = %v", err)
+	}
+
+	script := `export PATH="` + binDir + `:$PATH"
+` + integration + `
+grove version
+echo "exit:$?"
+`
+	cmd := exec.Command("zsh", "-c", script)
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	_ = cmd.Run()
+
+	t.Logf("stdout: %q", stdout.String())
+	t.Logf("stderr: %q", stderr.String())
+
+	if strings.Contains(stderr.String(), "compdef") || strings.Contains(stderr.String(), "command not found") {
+		t.Errorf("sourcing without compinit must not error, stderr: %q", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "exit:0") {
+		t.Errorf("expected exit 0, stdout: %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "grove v1.0.0-test") {
+		t.Errorf("wrapper should still run the binary, stdout: %q", stdout.String())
+	}
+}
+
+// When compinit IS loaded before the integration, completion must still
+// register — the guard must not turn into a silent never-registers.
+func TestWrapper_CompletionRegisters_WithCompinit(t *testing.T) {
+	if _, err := exec.LookPath("zsh"); err != nil {
+		t.Skip("zsh not available")
+	}
+	binDir := filepath.Dir(buildFakeGroveNamed(t, "grove"))
+
+	integration, err := GenerateZshIntegration("")
+	if err != nil {
+		t.Fatalf("GenerateZshIntegration error = %v", err)
+	}
+
+	script := `export PATH="` + binDir + `:$PATH"
+autoload -Uz compinit && compinit -u
+` + integration + `
+whence -w _grove_completion
+echo "exit:$?"
+`
+	cmd := exec.Command("zsh", "-c", script)
+	// compinit writes ~/.zcompdump — keep it out of the developer's real HOME.
+	cmd.Env = append(os.Environ(), "HOME="+t.TempDir(), "ZDOTDIR="+t.TempDir())
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	_ = cmd.Run()
+
+	t.Logf("stdout: %q", stdout.String())
+	t.Logf("stderr: %q", stderr.String())
+
+	if !strings.Contains(stdout.String(), "_grove_completion: function") {
+		t.Errorf("completion function should be defined with compinit loaded, stdout: %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "exit:0") {
+		t.Errorf("expected exit 0, stdout: %q", stdout.String())
+	}
+	if strings.Contains(stderr.String(), "command not found") {
+		t.Errorf("unexpected error during registration, stderr: %q", stderr.String())
 	}
 }
 

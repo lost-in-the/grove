@@ -15,10 +15,6 @@
 # name if not set.
 project_name = "my-project"
 
-# Shell alias for the grove command. Default: "w"
-# Set in your global config; rarely needed in project config.
-alias = "w"
-
 # Parent directory where worktrees are created. Default: ~/projects
 # Worktrees are placed at {projects_dir}/{project_name}-{name}
 projects_dir = "~/projects"

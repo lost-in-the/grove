@@ -9,9 +9,6 @@ import (
 
 func TestLoadDefaults_AllFields(t *testing.T) {
 	cfg := LoadDefaults()
-	if cfg.Alias != "w" {
-		t.Errorf("Alias = %q, want %q", cfg.Alias, "w")
-	}
 	if cfg.DefaultBranch != "main" {
 		t.Errorf("DefaultBranch = %q, want %q", cfg.DefaultBranch, "main")
 	}
@@ -39,7 +36,7 @@ func TestLoadConfigFromPath(t *testing.T) {
 	t.Run("valid toml", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "config.toml")
-		content := `alias = "g"
+		content := `project_name = "g"
 default_base_branch = "develop"
 `
 		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
@@ -49,8 +46,8 @@ default_base_branch = "develop"
 		if err != nil {
 			t.Fatalf("LoadConfigFromPath() error = %v", err)
 		}
-		if cfg.Alias != "g" {
-			t.Errorf("Alias = %q, want %q", cfg.Alias, "g")
+		if cfg.ProjectName != "g" {
+			t.Errorf("ProjectName = %q, want %q", cfg.ProjectName, "g")
 		}
 		if cfg.DefaultBranch != "develop" {
 			t.Errorf("DefaultBranch = %q, want %q", cfg.DefaultBranch, "develop")
@@ -87,7 +84,6 @@ default_base_branch = "develop"
 // TestValidate_DefaultBranch covers the empty DefaultBranch case not in config_test.go.
 func TestValidate_DefaultBranch(t *testing.T) {
 	cfg := &Config{
-		Alias:         "w",
 		DefaultBranch: "",
 		Switch:        SwitchConfig{DirtyHandling: "prompt"},
 	}
@@ -105,7 +101,6 @@ func TestValidate_DirtyHandlingValidValues(t *testing.T) {
 	for _, val := range []string{"auto-stash", "prompt", "refuse"} {
 		t.Run(val, func(t *testing.T) {
 			cfg := &Config{
-				Alias:         "w",
 				DefaultBranch: "main",
 				Switch:        SwitchConfig{DirtyHandling: val},
 			}
@@ -134,7 +129,6 @@ func TestValidate_TmuxMode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &Config{
-				Alias:         "w",
 				DefaultBranch: "main",
 				Switch:        SwitchConfig{DirtyHandling: "prompt"},
 				Tmux:          TmuxConfig{Mode: tt.mode},
@@ -169,7 +163,6 @@ func TestValidate_OnSwitch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &Config{
-				Alias:         "w",
 				DefaultBranch: "main",
 				Switch:        SwitchConfig{DirtyHandling: "prompt"},
 				Tmux:          TmuxConfig{OnSwitch: tt.onSwitch},
@@ -195,7 +188,6 @@ func TestValidateDockerPlugin_FileNotDir(t *testing.T) {
 	}
 
 	cfg := &Config{
-		Alias:         "w",
 		DefaultBranch: "main",
 		Switch:        SwitchConfig{DirtyHandling: "prompt"},
 		Plugins: PluginsConfig{

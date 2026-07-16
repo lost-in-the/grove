@@ -4,14 +4,29 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+// gitInit initializes a bare-bones git repo in dir so FindRoot treats it as
+// a valid project boundary (a .grove outside a git work tree is never a
+// project — see TestFindRoot_NonGitDirDoesNotWalkUp).
+func gitInit(t *testing.T, dir string) {
+	t.Helper()
+	cmd := exec.Command("git", "init")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init failed: %v\n%s", err, out)
+	}
+}
 
 func TestFindRoot(t *testing.T) {
 	t.Run("finds .grove in current directory", func(t *testing.T) {
 		// FindRoot resolves symlinks in the start dir (macOS t.TempDir lives
 		// under symlinked /var), so resolve the expected path the same way.
 		tmpDir, _ := filepath.EvalSymlinks(t.TempDir())
+		gitInit(t, tmpDir)
 		groveDir := filepath.Join(tmpDir, ".grove")
 		if err := os.MkdirAll(groveDir, 0755); err != nil {
 			t.Fatalf("failed to create .grove dir: %v", err)
@@ -28,6 +43,7 @@ func TestFindRoot(t *testing.T) {
 
 	t.Run("finds .grove in parent directory", func(t *testing.T) {
 		tmpDir, _ := filepath.EvalSymlinks(t.TempDir())
+		gitInit(t, tmpDir)
 		groveDir := filepath.Join(tmpDir, ".grove")
 		subDir := filepath.Join(tmpDir, "sub", "nested")
 
@@ -316,6 +332,7 @@ func TestProjectRoot(t *testing.T) {
 		tmpDir := t.TempDir()
 		// Resolve symlinks for consistent comparison (macOS /var -> /private/var)
 		tmpDir, _ = filepath.EvalSymlinks(tmpDir)
+		gitInit(t, tmpDir)
 
 		groveDir := filepath.Join(tmpDir, ".grove")
 		if err := os.MkdirAll(groveDir, 0755); err != nil {
@@ -392,5 +409,61 @@ func TestFindRoot_SymlinkedPathDoesNotEscapeRepo(t *testing.T) {
 	}
 	if found != "" {
 		t.Errorf("FindRoot() = %q, want empty — walk escaped the repo and found the stray .grove", found)
+	}
+}
+
+// TestFindRoot_GitErrorIsSurfaced: a rev-parse failure that does NOT mean
+// "not a git repository" (dubious ownership, unsupported repo format, broken
+// config) must be returned as an error, not silently treated as "no project"
+// — that would produce a false "not inside a git repository" diagnosis and
+// hide git's actionable message.
+func TestFindRoot_GitErrorIsSurfaced(t *testing.T) {
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	gitInit(t, dir)
+	if err := os.MkdirAll(filepath.Join(dir, ".grove"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Force a rev-parse failure that is not "not a git repository".
+	cfg := filepath.Join(dir, ".git", "config")
+	if err := os.WriteFile(cfg, []byte("[core]\n\trepositoryformatversion = 99\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := FindRoot(dir)
+	if err == nil {
+		t.Fatal("FindRoot() should surface a non-'not a git repo' git failure as an error")
+	}
+	if strings.Contains(err.Error(), "not a git repository") {
+		t.Errorf("error should carry git's real message, got: %v", err)
+	}
+}
+
+// TestFindRoot_NonGitDirDoesNotWalkUp: outside a git work tree there is no
+// git-root boundary to stop the upward walk, so the walk must not run at all.
+// Otherwise a stray .grove at or above the CWD — e.g. ~/.grove, created for
+// debug logs and the update-check cache — is adopted as a project root and
+// bare `grove` in $HOME launches the TUI against a non-repo (#138).
+func TestFindRoot_NonGitDirDoesNotWalkUp(t *testing.T) {
+	base, _ := filepath.EvalSymlinks(t.TempDir())
+
+	// Stray .grove like ~/.grove — must never be adopted outside a git repo.
+	if err := os.MkdirAll(filepath.Join(base, ".grove"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	deep := filepath.Join(base, "sub", "deep")
+	if err := os.MkdirAll(deep, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// From a subdirectory (CWD below ~) and from base itself (CWD == ~).
+	for _, dir := range []string{deep, base} {
+		found, err := FindRoot(dir)
+		if err != nil {
+			t.Fatalf("FindRoot(%q) error = %v", dir, err)
+		}
+		if found != "" {
+			t.Errorf("FindRoot(%q) = %q, want empty — adopted a .grove outside any git repo", dir, found)
+		}
 	}
 }

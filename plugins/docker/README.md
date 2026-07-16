@@ -20,7 +20,6 @@ Start containers for the current worktree.
 ```bash
 grove up              # Start containers in detached mode (default)
 grove up --detach=false  # Start containers in foreground
-w up                  # Using alias
 ```
 
 **Options:**
@@ -32,7 +31,6 @@ Stop containers for the current worktree.
 
 ```bash
 grove down   # Stop all containers
-w down       # Using alias
 ```
 
 ### `grove logs [service]`
@@ -43,7 +41,6 @@ View logs from running containers.
 grove logs           # Show logs from all services
 grove logs web       # Show logs from 'web' service only
 grove logs -f=false  # Show logs without following
-w logs db            # Using alias
 ```
 
 **Options:**
@@ -56,7 +53,6 @@ Restart container services.
 ```bash
 grove restart        # Restart all services
 grove restart web    # Restart 'web' service only
-w restart db         # Using alias
 ```
 
 ## Modes
@@ -378,30 +374,30 @@ In external mode, the compose file is expected to exist in the external compose 
 
 ```bash
 # Create a new worktree with a docker-compose.yml
-w new feature-api
+grove new feature-api
 
 # Switch to it (containers auto-start if docker-compose.yml exists)
-w to feature-api
+grove to feature-api
 
 # Check logs
-w logs
+grove logs
 
 # Restart a specific service
-w restart api
+grove restart api
 
 # Switch away (containers keep running by default)
-w last
+grove last
 
 # Manually stop containers in a worktree
 cd ~/projects/feature-api
-w down
+grove down
 ```
 
 ### External Mode: Multi-App Development
 
 ```bash
 # Create a new worktree — credentials are copied, symlinks created
-w new feature-x
+grove new feature-x
 #   copied config/credentials/development.key
 #   copied config/master.key
 #   symlinked vendor/bundle
@@ -411,39 +407,39 @@ w new feature-x
 #   1. grove stops app services (auto_stop)
 #   2. grove writes APP_DIR=/home/user/myapp-feature-x to .env.local
 #   3. grove runs: docker compose --env-file .env.local up -d app app_worker
-w to feature-x
+grove to feature-x
 
 # Check app logs from the external compose
-w logs app
+grove logs app
 
 # Switch back to main — same process, now APP_DIR=/home/user/myapp
-w to main
+grove to main
 
 # Manually stop app services
-w down
+grove down
 ```
 
 ### Local Mode: Development Workflow
 
 ```bash
 # Start working on a feature
-w new feature-auth
-w to feature-auth
+grove new feature-auth
+grove to feature-auth
 
 # Containers start automatically
 # Make code changes...
 
 # Check logs for your service
-w logs auth-service
+grove logs auth-service
 
 # Restart after configuration changes
-w restart auth-service
+grove restart auth-service
 
 # Switch to a different task (containers keep running)
-w to bugfix-login
+grove to bugfix-login
 
 # Come back later
-w to feature-auth
+grove to feature-auth
 # Containers are still running, ready to go
 ```
 

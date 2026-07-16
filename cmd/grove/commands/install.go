@@ -8,6 +8,8 @@ import (
 	"github.com/lost-in-the/grove/internal/shell"
 )
 
+var installAliasFlag string
+
 var installCmd = &cobra.Command{
 	Use:   "install [shell]",
 	Short: "Generate shell integration code",
@@ -27,7 +29,9 @@ Or apply immediately without restart:
 WHAT THIS ENABLES:
   • Directory switching - 'grove to <name>' changes your working directory
   • Tab completion - Complete commands and worktree names with <TAB>
-  • 'w' alias - Shorthand for 'grove' command
+  • Optional alias - pass --alias (defaults to 'w') for a shorthand:
+      eval "$(grove install zsh --alias)"     # alias w=grove
+      eval "$(grove install zsh --alias=g)"   # alias g=grove
 
 WHY EVAL: The integration defines shell functions and aliases that must run
 in your current shell (not a subprocess). Without eval, you'd just see the
@@ -48,9 +52,9 @@ NOTE: This is the recommended setup. For native zsh completion files only
 
 		switch shellType {
 		case shellZsh:
-			output, err = shell.GenerateZshIntegration()
+			output, err = shell.GenerateZshIntegration(installAliasFlag)
 		case shellBash:
-			output, err = shell.GenerateBashIntegration()
+			output, err = shell.GenerateBashIntegration(installAliasFlag)
 		default:
 			return fmt.Errorf("unsupported shell: %s (supported: zsh, bash)", shellType)
 		}
@@ -65,5 +69,8 @@ NOTE: This is the recommended setup. For native zsh completion files only
 }
 
 func init() {
+	installCmd.Flags().StringVar(&installAliasFlag, "alias", "", "define a shell alias for grove (bare --alias means 'w')")
+	// Bare --alias (no value) opts into the conventional shorthand 'w'.
+	installCmd.Flags().Lookup("alias").NoOptDefVal = "w"
 	rootCmd.AddCommand(installCmd)
 }

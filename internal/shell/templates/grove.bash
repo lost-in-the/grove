@@ -116,6 +116,3 @@ _grove_completion() {
 }
 
 complete -F _grove_completion grove
-
-# Alias
-alias w=grove

@@ -573,6 +573,13 @@ func TestGetHooksConfigPaths_DiscoversProjectRootFromSubdir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// FindRoot only recognizes .grove inside a git work tree.
+	gitCmd := exec.Command("git", "init")
+	gitCmd.Dir = tmpDir
+	gitCmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null")
+	if out, err := gitCmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init failed: %v\n%s", err, out)
+	}
 	groveDir := filepath.Join(tmpDir, ".grove")
 	subDir := filepath.Join(tmpDir, "src", "nested")
 	if err := os.MkdirAll(groveDir, 0755); err != nil {

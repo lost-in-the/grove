@@ -62,10 +62,6 @@ Add `.grove/config.local.toml` to your project's `.gitignore` (grove's own
 # Example: "my-app" produces worktrees named "my-app-feature", "my-app-main", etc.
 project_name = "my-app"            # string
 
-# Shell alias registered by grove shell integration.
-# Default: "w"
-alias = "w"                        # string
-
 # Directory where worktrees are created as siblings of the main repo.
 # Default: ~/projects
 projects_dir = "~/projects"        # string

@@ -74,7 +74,7 @@ Grove wraps the full worktree lifecycle — create, switch, fork, clean up — a
 brew install lost-in-the/tap/grove
 ```
 
-Includes shell completions. Update with `brew update && brew upgrade lost-in-the/tap/grove`.
+Shell completions and directory switching are enabled by the one-line shell integration — run `grove setup` after installing. Update with `brew update && brew upgrade lost-in-the/tap/grove`.
 
 ### Go Install
 
@@ -139,7 +139,7 @@ No breaking config changes in v0.7.0 — all new fields have defaults and existi
 - **`grove doctor --fix` is new.** If your project uses Docker and was initialized before v0.7.0, run `grove doctor` — it will flag any host install commands that should now be `docker:compose` hooks. `grove doctor --fix` rewrites them automatically.
 - **`prune` is a new alias for `grove trim`.** Scripts using `grove trim` or `grove clean` continue to work unchanged.
 - **State backfill runs automatically on first load.** Worktrees with zero-valued timestamps (from pre-v0.5.1 installs) are silently corrected the first time `grove ls` or the TUI runs. No action required.
-- **Shell integration is now version 5.** If `grove doctor` warns about a shell version mismatch, re-run `eval "$(grove install zsh)"` (or `bash`) and reload your shell. `grove setup` handles this automatically.
+- **Shell integration version bumps.** If `grove doctor` warns about a shell version mismatch, re-run `eval "$(grove install zsh)"` (or `bash`) and reload your shell. `grove setup` handles this automatically.
 
 ---
 

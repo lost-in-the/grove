@@ -17,7 +17,6 @@ func LoadDefaults() *Config {
 	falseVal := false
 
 	return &Config{
-		Alias:         "w",
 		ProjectsDir:   projectsDir,
 		DefaultBranch: "main",
 		Switch: SwitchConfig{
