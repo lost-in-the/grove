@@ -12,10 +12,10 @@ import (
 	"github.com/lost-in-the/grove/internal/worktree"
 )
 
-// TestRmForce_NodeModules exercises the os.RemoveAll fallback path in
-// worktree.Manager.Remove. git worktree remove --force refuses to delete
-// a worktree that contains an untracked directory (e.g. node_modules);
-// grove falls back to os.RemoveAll + git worktree prune.
+// TestRmForce_NodeModules exercises force removal of a worktree that contains
+// an untracked directory (e.g. a node_modules left by a post-create hook).
+// git's own `worktree remove --force` handles this; the os.RemoveAll fallback
+// in worktree.Manager.Remove covers the rarer cases where even that fails.
 func TestRmForce_NodeModules(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
@@ -51,8 +51,8 @@ func TestRmForce_NodeModules(t *testing.T) {
 		t.Fatalf("WriteFile index.js: %v", err)
 	}
 
-	// Remove must succeed even though node_modules is present.
-	if err := mgr.Remove(fullName); err != nil {
+	// Force removal must succeed even though node_modules is present.
+	if err := mgr.Remove(fullName, true); err != nil {
 		t.Fatalf("Remove with node_modules: %v", err)
 	}
 

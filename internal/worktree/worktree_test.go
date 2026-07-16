@@ -531,6 +531,33 @@ func TestFindByShortName(t *testing.T) {
 	}
 }
 
+// TestFindNamePrecedenceOverBranch guards B2: a worktree whose branch equals
+// the query must not shadow the worktree whose short name equals the query.
+func TestFindNamePrecedenceOverBranch(t *testing.T) {
+	tmpDir, _ := setupTestRepo(t)
+	m := &Manager{repoRoot: tmpDir}
+
+	// Worktree "alpha" checked out on a branch literally named "zzz".
+	if err := m.Create("alpha", "zzz"); err != nil {
+		t.Fatalf("Create(alpha, zzz) error = %v", err)
+	}
+	// Worktree "zzz" on its own branch.
+	if err := m.Create("zzz", "zzz-branch"); err != nil {
+		t.Fatalf("Create(zzz) error = %v", err)
+	}
+
+	wt, err := m.Find("zzz")
+	if err != nil {
+		t.Fatalf("Find(zzz) error = %v", err)
+	}
+	if wt == nil {
+		t.Fatal("Find(zzz) returned nil")
+	}
+	if wt.ShortName != "zzz" {
+		t.Errorf("Find(zzz) resolved to worktree %q (branch %q); want the worktree named \"zzz\"", wt.ShortName, wt.Branch)
+	}
+}
+
 func TestFindNotFound(t *testing.T) {
 	tmpDir, _ := setupTestRepo(t)
 
@@ -565,8 +592,8 @@ func TestRemove(t *testing.T) {
 		t.Fatalf("Find() expected worktree, got error=%v, wt=%v", err, wt)
 	}
 
-	// Remove it by name
-	err = m.Remove(fullName)
+	// Remove it by name (clean worktree — plain, non-force removal succeeds)
+	err = m.Remove(fullName, false)
 	if err != nil {
 		t.Fatalf("Remove() error = %v", err)
 	}
@@ -929,8 +956,8 @@ func TestRemove_ForceWithNonEmptyDir(t *testing.T) {
 		t.Fatalf("Find() expected worktree, got error=%v, wt=%v", err, wt)
 	}
 
-	// Plant a non-empty untracked directory inside the worktree. This makes
-	// `git worktree remove --force` refuse to proceed, forcing the fallback.
+	// Plant a non-empty untracked directory inside the worktree (git's own
+	// `--force` handles this fine; the os.RemoveAll fallback covers rarer cases).
 	nodeModules := filepath.Join(wt.Path, "node_modules")
 	if err := os.MkdirAll(filepath.Join(nodeModules, "some-pkg"), 0755); err != nil {
 		t.Fatalf("MkdirAll node_modules: %v", err)
@@ -939,9 +966,9 @@ func TestRemove_ForceWithNonEmptyDir(t *testing.T) {
 		t.Fatalf("WriteFile index.js: %v", err)
 	}
 
-	// Remove should succeed via the os.RemoveAll fallback.
-	if err := m.Remove(fullName); err != nil {
-		t.Fatalf("Remove() with non-empty untracked dir error = %v", err)
+	// Force removal should succeed for a non-empty untracked directory.
+	if err := m.Remove(fullName, true); err != nil {
+		t.Fatalf("Remove(force) with non-empty untracked dir error = %v", err)
 	}
 
 	// Verify the directory is gone.
@@ -953,6 +980,70 @@ func TestRemove_ForceWithNonEmptyDir(t *testing.T) {
 	wtAfter, _ := m.Find(fullName)
 	if wtAfter != nil {
 		t.Error("worktree should not be found after Remove()")
+	}
+}
+
+// TestRemoveLockedWorktreeRefused guards B3: a git-locked worktree must never
+// be force-deleted (git protects it deliberately; the os.RemoveAll fallback
+// would silently defeat the lock and leave a phantom registration).
+func TestRemoveLockedWorktreeRefused(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	tmpDir, _ := setupTestRepo(t)
+	m := &Manager{repoRoot: tmpDir}
+
+	if err := m.Create("locked-wt", "locked-branch"); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	fullName := m.GetProjectName() + "-locked-wt"
+	wt, err := m.Find(fullName)
+	if err != nil || wt == nil {
+		t.Fatalf("Find() expected worktree, got error=%v, wt=%v", err, wt)
+	}
+
+	// Lock it via git, exactly as a user protecting an in-progress worktree would.
+	if out, lockErr := exec.Command("git", "-C", tmpDir, "worktree", "lock", wt.Path).CombinedOutput(); lockErr != nil {
+		t.Fatalf("git worktree lock failed: %v: %s", lockErr, out)
+	}
+
+	// Even with force, Remove must refuse and leave the directory intact.
+	if err := m.Remove(fullName, true); err == nil {
+		t.Fatal("Remove(force) on a locked worktree returned nil; want refusal")
+	}
+	if _, statErr := os.Stat(wt.Path); os.IsNotExist(statErr) {
+		t.Errorf("locked worktree directory was deleted despite the lock: %s", wt.Path)
+	}
+}
+
+// TestRemoveNonForceSurfacesGitRefusal guards B3: without force, Remove must not
+// escalate to os.RemoveAll — a dirty worktree removal returns an error instead
+// of silently destroying the tree.
+func TestRemoveNonForceSurfacesGitRefusal(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	tmpDir, _ := setupTestRepo(t)
+	m := &Manager{repoRoot: tmpDir}
+
+	if err := m.Create("dirty-wt", "dirty-branch"); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	fullName := m.GetProjectName() + "-dirty-wt"
+	wt, err := m.Find(fullName)
+	if err != nil || wt == nil {
+		t.Fatalf("Find() expected worktree, got error=%v, wt=%v", err, wt)
+	}
+	// Make it dirty with a tracked-file modification (git refuses plain remove).
+	if err := os.WriteFile(filepath.Join(wt.Path, "README.md"), []byte("dirty change\n"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	if err := m.Remove(fullName, false); err == nil {
+		t.Fatal("Remove(non-force) on a dirty worktree returned nil; want git's refusal surfaced")
+	}
+	if _, statErr := os.Stat(wt.Path); os.IsNotExist(statErr) {
+		t.Errorf("dirty worktree was destroyed by a non-force Remove: %s", wt.Path)
 	}
 }
 
@@ -1002,7 +1093,7 @@ func TestRemoveByBranchName(t *testing.T) {
 		t.Fatalf("Find(branch) expected worktree, got error=%v, wt=%v", err, wt)
 	}
 
-	if err := m.Remove("feat/agent-slot-db"); err != nil {
+	if err := m.Remove("feat/agent-slot-db", false); err != nil {
 		t.Fatalf("Remove(branch) error = %v — Remove must accept every identifier Find accepts", err)
 	}
 

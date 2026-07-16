@@ -32,6 +32,7 @@ type Worktree struct {
 	IsMain           bool   // Whether this is the main worktree
 	ShortName        string // Short name without project prefix
 	IsPrunable       bool   // Whether the worktree directory is missing (stale)
+	IsLocked         bool   // Whether git has the worktree locked (grove must not force-delete it)
 }
 
 // Manager handles git worktree operations
@@ -212,11 +213,27 @@ func (m *Manager) Find(name string) (*Worktree, error) {
 
 	fullName := m.FullName(name)
 
-	for _, tree := range trees {
-		// Match by short name, display name, branch, full name, or path basename
-		baseName := filepath.Base(tree.Path)
-		if tree.ShortName == name || tree.DisplayName() == name || tree.Branch == name || baseName == name || baseName == fullName {
-			return tree, nil
+	// Resolve in precedence tiers so a worktree whose *branch* happens to equal
+	// the query can never shadow the worktree the user actually named. Identity
+	// fields (short/display name, then directory name) win over branch, which is
+	// the most collision-prone — e.g. worktree "alpha" checked out on branch
+	// "zzz" must not answer to `grove to zzz` when a worktree literally named
+	// "zzz" exists. Within a tier the first porcelain entry wins, but names and
+	// directories are unique so ties don't arise there.
+	tiers := []func(*Worktree) bool{
+		func(t *Worktree) bool { return t.ShortName == name || t.DisplayName() == name },
+		func(t *Worktree) bool {
+			base := filepath.Base(t.Path)
+			return base == name || base == fullName
+		},
+		func(t *Worktree) bool { return t.Branch == name },
+	}
+
+	for _, matches := range tiers {
+		for _, tree := range trees {
+			if matches(tree) {
+				return tree, nil
+			}
 		}
 	}
 
@@ -370,13 +387,21 @@ func (m *Manager) ListNames() ([]string, error) {
 // like `grove rm` run their safety checks against Find's result — resolving
 // with a narrower matcher here could delete a different worktree than the
 // one that was validated.
-func (m *Manager) Remove(name string) error {
+//
+// force gates the destructive escalation. Without it, Remove performs only a
+// plain `git worktree remove` and surfaces git's refusal (e.g. a dirty tree),
+// so a no-flag `grove rm` can never blow away work. With force, Remove escalates
+// to `git worktree remove --force` and, only as a last resort, `os.RemoveAll` +
+// prune. A git-*locked* worktree is never force-deleted regardless of force —
+// the lock is deliberate protection that must be cleared with `git worktree
+// unlock` first.
+func (m *Manager) Remove(name string, force bool) error {
 	if name == "" {
 		return fmt.Errorf("worktree name cannot be empty")
 	}
 
 	// Find uses listLight, which skips per-worktree dirty checks — Remove
-	// only needs the target's path/IsMain/IsPrunable to decide what to do.
+	// only needs the target's path/IsMain/IsPrunable/IsLocked to decide.
 	targetTree, err := m.Find(name)
 	if err != nil {
 		return err
@@ -402,23 +427,33 @@ func (m *Manager) Remove(name string) error {
 		return nil
 	}
 
-	// Remove the worktree normally
-	if _, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"worktree", "remove", targetTree.Path}, m.repoRoot, cmdexec.GitLocal); err == nil {
-		return nil
+	// A git-locked worktree is protected on purpose. Never override that (git
+	// itself refuses, and our os.RemoveAll fallback would silently defeat the
+	// lock and leave a phantom registration that `prune` can't clear).
+	if targetTree.IsLocked {
+		return fmt.Errorf("worktree '%s' is locked; run 'git worktree unlock %s' first", name, targetTree.Path)
 	}
 
-	// Try git's own --force first
+	// Plain removal — the only path taken without force. Git refuses a dirty or
+	// otherwise-risky tree here; surface that instead of escalating.
+	output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"worktree", "remove", targetTree.Path}, m.repoRoot, cmdexec.GitLocal)
+	if err == nil {
+		return nil
+	}
+	if !force {
+		return fmt.Errorf("failed to remove worktree (retry with --force): %s: %w", strings.TrimSpace(string(output)), err)
+	}
+
+	// force: let git's own --force try next.
 	forceOutput, forceErr := cmdexec.CombinedOutput(context.TODO(), "git", []string{"worktree", "remove", "--force", targetTree.Path}, m.repoRoot, cmdexec.GitLocal)
 	if forceErr == nil {
 		return nil
 	}
 
-	// Final fallback: nuke the directory ourselves and prune git's metadata.
-	// `git worktree remove --force` refuses to delete non-empty untracked
-	// directories (e.g. node_modules left behind by a post-create hook),
-	// so when git has already given up we tear the directory down directly.
-	// targetTree.Path comes from `git worktree list`, so it is bounded to a
-	// known worktree path rather than user input.
+	// Last resort (force only, non-locked): tear the directory down ourselves
+	// and prune git's metadata — for the rare cases git's own --force can't
+	// finish (corrupted metadata, cross-device links). targetTree.Path comes
+	// from `git worktree list`, so it is bounded to a known worktree path.
 	if rmErr := os.RemoveAll(targetTree.Path); rmErr != nil {
 		return fmt.Errorf("failed to remove worktree: %s: %w", string(forceOutput), forceErr)
 	}
@@ -537,6 +572,8 @@ func applyWorktreeAttribute(wt *Worktree, line string) {
 		wt.Branch = "detached"
 	case strings.HasPrefix(line, "prunable"):
 		wt.IsPrunable = true
+	case strings.HasPrefix(line, "locked"):
+		wt.IsLocked = true
 	}
 }
 

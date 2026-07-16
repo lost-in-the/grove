@@ -56,7 +56,9 @@ func deleteWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRo
 
 		runPreRemoveHooks(projectName, name, wt)
 
-		if err := mgr.Remove(name); err != nil {
+		// force=true: the dashboard shows dirty/warning state and the user
+		// confirmed the delete. A git-locked worktree is still refused by Remove.
+		if err := mgr.Remove(name, true); err != nil {
 			return worktreeDeletedMsg{name: name, deleteBranch: deleteBranch, err: err}
 		}
 

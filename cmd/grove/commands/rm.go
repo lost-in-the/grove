@@ -195,7 +195,7 @@ Examples:
 
 		// Shared removal sequence: pre-remove hooks, git removal, state
 		// cleanup, tmux session kill (also used by `grove trim`).
-		if err := removeWorktreeWithHooks(ctx, mgr, w, projectName, resolvedName, wt.Path, branchName); err != nil {
+		if err := removeWorktreeWithHooks(ctx, mgr, w, projectName, resolvedName, wt.Path, branchName, rmForce); err != nil {
 			return err
 		}
 

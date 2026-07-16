@@ -197,7 +197,10 @@ Examples:
 			// Shared removal sequence (same as `grove rm`): pre-remove hooks
 			// — including the plugin hook that stops agent Docker stacks —
 			// git removal, state cleanup, and tmux session kill.
-			if err := removeWorktreeWithHooks(ctx, mgr, w, projectName, c.Name, c.Path, c.Branch); err != nil {
+			// force only when the user opted into removing dirty worktrees;
+			// otherwise a plain removal is used and git-locked/dirty trees are
+			// surfaced rather than force-deleted.
+			if err := removeWorktreeWithHooks(ctx, mgr, w, projectName, c.Name, c.Path, c.Branch, cleanIncludeDirty); err != nil {
 				cli.Warning(w, "Failed to remove '%s': %v", c.Name, err)
 				failed++
 				continue

@@ -181,7 +181,7 @@ func currentWorktreeRoot(ctx *GroveContext) (string, error) {
 // hook (e.g. stop agent stacks), git worktree removal, state cleanup, and
 // tmux session kill. Returns an error only when the git removal itself fails;
 // ancillary failures are warned and skipped.
-func removeWorktreeWithHooks(ctx *GroveContext, mgr *worktree.Manager, w *cli.Writer, projectName, name, wtPath, branchName string) error {
+func removeWorktreeWithHooks(ctx *GroveContext, mgr *worktree.Manager, w *cli.Writer, projectName, name, wtPath, branchName string, force bool) error {
 	// Execute pre-remove hooks (user hooks from hooks.toml)
 	hookExecutor, hookErr := hooks.NewExecutor()
 	if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPreRemove) {
@@ -212,7 +212,7 @@ func removeWorktreeWithHooks(ctx *GroveContext, mgr *worktree.Manager, w *cli.Wr
 	}
 
 	// Remove worktree — the critical step, done before tmux kill
-	if err := mgr.Remove(name); err != nil {
+	if err := mgr.Remove(name, force); err != nil {
 		return fmt.Errorf("failed to remove worktree: %w", err)
 	}
 
