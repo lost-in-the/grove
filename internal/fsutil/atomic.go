@@ -7,10 +7,10 @@ import (
 )
 
 // AtomicWriteFile writes data to path atomically. It creates a uniquely-named
-// temp file in the destination directory, writes the data, fsync-equivalent
-// close, then renames over the destination. The unique suffix avoids clobbers
-// when multiple processes write concurrently — each writer renames its own
-// temp file, with last-rename winning.
+// temp file in the destination directory, writes the data, fsyncs it to disk,
+// closes it, then renames over the destination and fsyncs the parent directory.
+// The unique suffix avoids clobbers when multiple processes write concurrently —
+// each writer renames its own temp file, with last-rename winning.
 //
 // Creates the parent directory if it doesn't exist (mode 0o755). Cleans up
 // the temp file on every error path so partial writes don't leak.
@@ -33,6 +33,15 @@ func AtomicWriteFile(path string, data []byte, perm os.FileMode) error {
 		cleanup()
 		return fmt.Errorf("atomic write: write: %w", err)
 	}
+	// fsync the data to disk BEFORE the rename. Without this, a crash shortly
+	// after the rename can leave the destination pointing at not-yet-flushed
+	// (zero-length) content on journaled-metadata filesystems — which then
+	// fails to parse on the next load (B35).
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		cleanup()
+		return fmt.Errorf("atomic write: sync: %w", err)
+	}
 	if err := f.Close(); err != nil {
 		cleanup()
 		return fmt.Errorf("atomic write: close: %w", err)
@@ -46,6 +55,12 @@ func AtomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	if err := os.Rename(tmp, path); err != nil {
 		cleanup()
 		return fmt.Errorf("atomic write: rename: %w", err)
+	}
+	// Best-effort fsync of the directory so the rename itself is durable.
+	// Not all filesystems support directory fsync; ignore failures.
+	if d, err := os.Open(dir); err == nil {
+		_ = d.Sync()
+		_ = d.Close()
 	}
 	return nil
 }

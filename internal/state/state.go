@@ -8,6 +8,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/lost-in-the/grove/internal/fsutil"
 )
 
 // CurrentVersion is the current state schema version
@@ -413,12 +415,10 @@ func (m *Manager) save() error {
 		return fmt.Errorf("failed to marshal state: %w", err)
 	}
 
-	tmpFile := m.stateFile + ".tmp"
-	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
-		return fmt.Errorf("failed to write state file: %w", err)
-	}
-
-	if err := os.Rename(tmpFile, m.stateFile); err != nil {
+	// Durable atomic write: unique temp file, fsync, rename, dir fsync. Hand-
+	// rolling this previously skipped fsync (a crash could leave a zero-length
+	// state.json that failed to load, B35) and used a fixed .tmp name.
+	if err := fsutil.AtomicWriteFile(m.stateFile, data, 0644); err != nil {
 		return fmt.Errorf("failed to save state file: %w", err)
 	}
 

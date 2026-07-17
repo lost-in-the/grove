@@ -37,7 +37,12 @@ type Worktree struct {
 
 // Manager handles git worktree operations
 type Manager struct {
-	repoRoot    string // Root of the git repository
+	repoRoot string // Root of the git repository
+
+	// mu guards the lazily-populated caches below. A single Manager is shared
+	// across the TUI's per-worktree fetch goroutines, so the read-check-write
+	// on these fields would otherwise be a data race on a cold cache (B37).
+	mu          sync.Mutex
 	projectName string // Cached project name
 	namePattern string // Cached worktree naming pattern (see getNamePattern)
 }
@@ -633,16 +638,22 @@ func (w *Worktree) DisplayName() string {
 
 // GetProjectName returns the project name for the repository
 func (m *Manager) GetProjectName() string {
-	if m.projectName != "" {
-		return m.projectName
+	m.mu.Lock()
+	cached := m.projectName
+	m.mu.Unlock()
+	if cached != "" {
+		return cached
 	}
-
+	// Compute the main-worktree path outside the lock (it's a git call), then
+	// resolve+cache under the lock via projectNameAt.
 	return m.projectNameAt(m.getMainWorktreePath())
 }
 
 // projectNameAt is GetProjectName with the main worktree path already in
 // hand, so priming a cold cache doesn't re-exec `git worktree list`.
 func (m *Manager) projectNameAt(mainWorktreePath string) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.projectName == "" {
 		m.projectName = m.detectProjectNameAt(mainWorktreePath)
 	}

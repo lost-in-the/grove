@@ -211,8 +211,11 @@ func DeriveWorktreeName(branch, strategy string) string {
 // config` displays. Invalid patterns fall back to DefaultNamePattern with a
 // stderr warning so the fallback is visible.
 func (m *Manager) getNamePattern() string {
-	if m.namePattern != "" {
-		return m.namePattern
+	m.mu.Lock()
+	cached := m.namePattern
+	m.mu.Unlock()
+	if cached != "" {
+		return cached
 	}
 	return m.namePatternAt(m.getMainWorktreePath())
 }
@@ -220,24 +223,26 @@ func (m *Manager) getNamePattern() string {
 // namePatternAt is getNamePattern with the main worktree path already in
 // hand, so priming a cold cache doesn't re-exec `git worktree list`.
 func (m *Manager) namePatternAt(mainWorktreePath string) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.namePattern != "" {
 		return m.namePattern
 	}
-	m.namePattern = DefaultNamePattern
+	pattern := DefaultNamePattern
 
 	groveDir := filepath.Join(mainWorktreePath, ".grove")
 	cfg, err := config.LoadFromGroveDir(groveDir)
-	if err != nil || cfg == nil {
-		return m.namePattern
+	if err == nil && cfg != nil {
+		if perr := ValidateNamePattern(cfg.Naming.Pattern); perr != nil {
+			invalidPatternWarning.Do(func() {
+				fmt.Fprintf(os.Stderr, "grove: warning: ignoring invalid [naming] pattern %q: %v (using %q)\n",
+					cfg.Naming.Pattern, perr, DefaultNamePattern)
+			})
+		} else {
+			pattern = cfg.Naming.Pattern
+		}
 	}
-	if err := ValidateNamePattern(cfg.Naming.Pattern); err != nil {
-		invalidPatternWarning.Do(func() {
-			fmt.Fprintf(os.Stderr, "grove: warning: ignoring invalid [naming] pattern %q: %v (using %q)\n",
-				cfg.Naming.Pattern, err, DefaultNamePattern)
-		})
-		return m.namePattern
-	}
-	m.namePattern = cfg.Naming.Pattern
+	m.namePattern = pattern
 	return m.namePattern
 }
 
