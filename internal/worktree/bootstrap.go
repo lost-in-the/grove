@@ -1,6 +1,7 @@
 package worktree
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -12,6 +13,12 @@ import (
 	"github.com/lost-in-the/grove/internal/log"
 	"github.com/lost-in-the/grove/internal/state"
 )
+
+// ErrRequiredHookFailed is returned by BootstrapWorktree when a required
+// (on_failure="fail") post-create hook fails. Callers treat it as fatal (fail
+// the command) while other bootstrap failures — a symlink or state write — stay
+// recoverable via `grove repair` and are surfaced as warnings.
+var ErrRequiredHookFailed = errors.New("required post-create hook failed")
 
 // BootstrapOpts holds the inputs needed to bootstrap a worktree (whether
 // freshly created via grove new or adopted post-hoc via grove adopt).
@@ -121,10 +128,16 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 			NewPath:      opts.WorktreePath,
 		}
 		if err := hookExecutor.Execute(hooks.EventPostCreate, hookCtx); err != nil {
-			log.Printf("hooks: post-create project hook failed: %v", err)
+			// A required (on_failure="fail") post-create hook failing fails the
+			// operation (B7). The worktree already exists, so it is left in
+			// place for inspection rather than rolled back; the non-zero exit
+			// signals that provisioning did not complete. Non-required failures
+			// are handled inside Execute (warn) and don't reach here.
+			log.Printf("hooks: required post-create project hook failed: %v", err)
 			if w != nil {
-				cli.Warning(w, "post-create hook failed: %v", err)
+				cli.Warning(w, "required post-create hook failed (worktree kept): %v", err)
 			}
+			return fmt.Errorf("%w: %v", ErrRequiredHookFailed, err)
 		}
 	}
 

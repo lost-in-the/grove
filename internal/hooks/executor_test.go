@@ -125,6 +125,26 @@ func TestExecute(t *testing.T) {
 		}
 	})
 
+	// B7: a required failure aborts the remaining actions (it used to record
+	// the error but keep running).
+	t.Run("required failure aborts subsequent actions", func(t *testing.T) {
+		dir := t.TempDir()
+		marker := filepath.Join(dir, "second_ran")
+		cfg := &HooksConfig{}
+		cfg.Hooks.PostCreate = []HookAction{
+			{Type: "command", Command: "false", Required: true, Timeout: 60, WorkingDir: dir},
+			{Type: "command", Command: "touch " + marker, Timeout: 60, WorkingDir: dir},
+		}
+		e := NewExecutorWithConfig(cfg)
+		e.Output = &bytes.Buffer{}
+		if err := e.Execute(EventPostCreate, &ExecutionContext{NewPath: dir, MainPath: dir}); err == nil {
+			t.Fatal("Execute() = nil, want error from required failure")
+		}
+		if _, err := os.Stat(marker); err == nil {
+			t.Error("second action ran after a required failure; abort did not stop the sequence")
+		}
+	})
+
 	t.Run("OnFailure warn logs but returns nil", func(t *testing.T) {
 		cfg := &HooksConfig{}
 		cfg.Hooks.PostCreate = []HookAction{

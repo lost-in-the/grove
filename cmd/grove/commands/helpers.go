@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -240,8 +241,11 @@ func removeWorktreeWithHooks(ctx *GroveContext, mgr *worktree.Manager, w *cli.Wr
 			WorktreeFull: filepath.Base(wtPath),
 		}
 		cli.Step(w, "Running pre-remove hooks...")
+		// A required (on_failure="fail") pre-remove hook failing aborts the
+		// removal before the worktree is touched (B7). Non-required failures
+		// warn inside Execute and return nil.
 		if err := hookExecutor.Execute(hooks.EventPreRemove, hookCtx); err != nil {
-			cli.Warning(w, "Hook execution had errors: %v", err)
+			return fmt.Errorf("required pre-remove hook failed: %w", err)
 		}
 	}
 
@@ -323,14 +327,18 @@ func firePostRemoveHooks(ctx *GroveContext, w *cli.Writer, projectName, name, wt
 // out receives the hooks' own progress lines — route it to stderr on the switch
 // path so hook output never lands on the cd: stdout channel the shell wrapper
 // parses. mainPath is the project root, whose .grove holds hooks.toml.
-func runConfigHooks(out *cli.Writer, event, projectName, name, branch, worktreePath, prevWorktreePath, mainPath string) {
+//
+// Returns a non-nil error only when a required (on_failure="fail") action
+// failed, so callers can abort the operation (B7); a config-load failure or a
+// non-required hook failure is non-fatal and returns nil.
+func runConfigHooks(out *cli.Writer, event, projectName, name, branch, worktreePath, prevWorktreePath, mainPath string) error {
 	executor, err := hooks.NewExecutor(filepath.Join(mainPath, ".grove"))
 	if err != nil {
 		log.Printf("hooks: failed to load config for %s: %v", event, err)
-		return
+		return nil
 	}
 	if !executor.HasHooksForEvent(event) {
-		return
+		return nil
 	}
 	if out != nil {
 		executor.Output = out
@@ -345,9 +353,7 @@ func runConfigHooks(out *cli.Writer, event, projectName, name, branch, worktreeP
 		NewPath:      worktreePath,
 		PrevPath:     prevWorktreePath,
 	}
-	if err := executor.Execute(event, ec); err != nil {
-		cli.Warning(out, "%s hooks failed: %v", event, err)
-	}
+	return executor.Execute(event, ec)
 }
 
 // worktreeSetupOpts configures the post-create setup sequence.
@@ -393,6 +399,12 @@ func setupCreatedWorktree(ctx *GroveContext, mgr *worktree.Manager, name, branch
 		bootstrapWriter = w
 	}
 	if err := worktree.BootstrapWorktree(ctx.State, ctx.Config, bootstrapOpts, bootstrapWriter); err != nil {
+		// A required post-create hook failing fails the command (B7). Other
+		// bootstrap failures (symlink, state) are recoverable — warn and point
+		// at `grove repair` rather than aborting, preserving prior behavior.
+		if errors.Is(err, worktree.ErrRequiredHookFailed) {
+			return wt, err
+		}
 		if !opts.JSONOutput {
 			cli.Warning(w, "Bootstrap failed: %v", err)
 			cli.Faint(w, "run 'grove repair' to fix")

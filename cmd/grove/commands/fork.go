@@ -265,8 +265,11 @@ Examples:
 		// via BootstrapWorktree, but fork hand-rolls its bootstrap and skipped
 		// them, so a project's post_create recipe (bundle install, copy .env,
 		// …) silently never ran on a forked worktree (B32). Output to stderr so
-		// it stays off the cd: stdout channel.
-		runConfigHooks(stderr, hooks.EventPostCreate, mgr.GetProjectName(), name, newBranchName, newTree.Path, "", ctx.ProjectRoot)
+		// it stays off the cd: stdout channel. A required action failing fails
+		// the command (B7); the worktree is left in place for inspection.
+		if err := runConfigHooks(stderr, hooks.EventPostCreate, mgr.GetProjectName(), name, newBranchName, newTree.Path, "", ctx.ProjectRoot); err != nil {
+			return err
+		}
 
 		projectName := mgr.GetProjectName()
 

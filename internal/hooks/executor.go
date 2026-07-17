@@ -101,28 +101,30 @@ func (e *Executor) Execute(event string, ctx *ExecutionContext) error {
 		ctx.Output = e.Output
 	}
 	vars := e.buildVariables(ctx)
-	var firstRequiredErr error
 
 	for _, action := range actions {
 		err := e.executeAction(&action, ctx, vars)
+		if err == nil {
+			continue
+		}
 
-		if err != nil {
-			// Determine how to handle the error
-			if action.Required || action.OnFailure == "fail" {
-				e.printf("✗ Hook failed: %v\n", err)
-				if firstRequiredErr == nil {
-					firstRequiredErr = err
-				}
-			} else if action.OnFailure == "ignore" {
-				// Silent - do nothing
-			} else {
-				// Default: warn
-				e.printf("⚠ Hook warning: %v\n", err)
-			}
+		switch {
+		case action.Required || action.OnFailure == "fail":
+			// Abort: a required action failing stops the remaining actions and
+			// fails the operation (documented "abort the entire operation").
+			// required defaults to false, so this only affects hooks a user
+			// explicitly opted into aborting on.
+			e.printf("✗ Hook failed (required): %v\n", err)
+			return fmt.Errorf("required %s hook failed: %w", event, err)
+		case action.OnFailure == "ignore":
+			// Silent - do nothing
+		default:
+			// Default: warn and keep going.
+			e.printf("⚠ Hook warning: %v\n", err)
 		}
 	}
 
-	return firstRequiredErr
+	return nil
 }
 
 // HasHooksForEvent returns true if there are any hooks configured for the event

@@ -120,7 +120,7 @@ func TestBootstrapWorktree_HookFailure(t *testing.T) {
 		{
 			name:        "withWriter surfaces warning to stderr",
 			useWriter:   true,
-			wantWarning: "post-create hook failed",
+			wantWarning: "required post-create hook failed",
 		},
 		{
 			name:      "nilWriter does not panic",
@@ -175,9 +175,12 @@ required = true
 				ProjectName:  "test-proj",
 			}
 
-			// Hook failures are non-fatal — must always return nil.
-			if err := BootstrapWorktree(stateMgr, cfg, opts, w); err != nil {
-				t.Fatalf("BootstrapWorktree returned unexpected error: %v", err)
+			// A required (on_failure defaults, but here required=true)
+			// post-create hook failing fails the operation (B7): the worktree
+			// is kept but BootstrapWorktree returns an error so the command
+			// exits non-zero. It must not panic even with a nil writer.
+			if err := BootstrapWorktree(stateMgr, cfg, opts, w); err == nil {
+				t.Fatal("BootstrapWorktree with a failing required hook returned nil, want error")
 			}
 
 			if tt.wantWarning != "" {

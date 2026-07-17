@@ -153,8 +153,11 @@ When using shell integration, this will also change your current directory.`,
 				cli.Warning(stderr, "pre-switch hooks failed: %v", err)
 			}
 			// Config-file (hooks.toml) pre-switch actions. Output to stderr so it
-			// never collides with the cd: directive on stdout.
-			runConfigHooks(stderr, hooks.EventPreSwitch, mgr.GetProjectName(), name, targetTree.Branch, targetTree.Path, prevWorktreePath, ctx.ProjectRoot)
+			// never collides with the cd: directive on stdout. A required
+			// action failing aborts the switch before anything changes (B7).
+			if err := runConfigHooks(stderr, hooks.EventPreSwitch, mgr.GetProjectName(), name, targetTree.Branch, targetTree.Path, prevWorktreePath, ctx.ProjectRoot); err != nil {
+				return err
+			}
 		}
 
 		// Store current session as last if inside tmux
@@ -225,8 +228,11 @@ When using shell integration, this will also change your current directory.`,
 			}
 			// Config-file (hooks.toml) post-switch actions run after plugin
 			// hooks so a docker:compose action sees a started stack (e.g. the
-			// documented `bin/rails db:migrate` recipe). Output to stderr.
-			runConfigHooks(stderr, hooks.EventPostSwitch, mgr.GetProjectName(), name, targetTree.Branch, targetTree.Path, prevWorktreePath, ctx.ProjectRoot)
+			// documented `bin/rails db:migrate` recipe). Output to stderr. A
+			// required action failing fails the command (B7).
+			if err := runConfigHooks(stderr, hooks.EventPostSwitch, mgr.GetProjectName(), name, targetTree.Branch, targetTree.Path, prevWorktreePath, ctx.ProjectRoot); err != nil {
+				return err
+			}
 		}
 
 		// JSON output mode

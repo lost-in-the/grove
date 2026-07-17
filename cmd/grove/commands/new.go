@@ -128,8 +128,11 @@ Examples:
 
 		// Fire pre-create config hooks (hooks.toml) before the worktree exists.
 		// {{.new_path}} is the future directory; pre_create actions should set
-		// working_dir = "main" since the "new" path is not present yet (B6).
-		runConfigHooks(cli.NewStderr(), hooks.EventPreCreate, mgr.GetProjectName(), name, newBranch, mgr.PathForName(name), "", ctx.ProjectRoot)
+		// working_dir = "main" since the "new" path is not present yet (B6). A
+		// required action failing aborts before the worktree is created (B7).
+		if err := runConfigHooks(cli.NewStderr(), hooks.EventPreCreate, mgr.GetProjectName(), name, newBranch, mgr.PathForName(name), "", ctx.ProjectRoot); err != nil {
+			return err
+		}
 
 		var branchName string
 		isEnvironment := newMirror != ""
