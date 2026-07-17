@@ -1,6 +1,6 @@
 //go:build windows
 
-package docker
+package fsutil
 
 import (
 	"fmt"
@@ -17,11 +17,13 @@ var (
 
 const lockfileExclusiveLock = 0x00000002
 
-// openLocked opens (or creates) the slots file with an exclusive lock.
-func (sm *SlotManager) openLocked() (*os.File, error) {
-	f, err := os.OpenFile(sm.slotsFile, os.O_RDWR|os.O_CREATE, 0644)
+// LockFile opens (creating if needed) the file at path and acquires an
+// exclusive lock on it, returning the open, locked file. Call UnlockFile to
+// release the lock and close the file.
+func LockFile(path string) (*os.File, error) {
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		return nil, fmt.Errorf("open slots file: %w", err)
+		return nil, fmt.Errorf("open lock file %s: %w", path, err)
 	}
 	var ol syscall.Overlapped
 	r1, _, err := procLockFileEx.Call(
@@ -33,13 +35,13 @@ func (sm *SlotManager) openLocked() (*os.File, error) {
 	)
 	if r1 == 0 {
 		_ = f.Close()
-		return nil, fmt.Errorf("lock slots file: %w", err)
+		return nil, fmt.Errorf("acquire lock on %s: %w", path, err)
 	}
 	return f, nil
 }
 
-// closeUnlocked releases the lock and closes the file.
-func (sm *SlotManager) closeUnlocked(f *os.File) {
+// UnlockFile releases the lock acquired by LockFile and closes the file.
+func UnlockFile(f *os.File) {
 	var ol syscall.Overlapped
 	//nolint:errcheck
 	procUnlockFileEx.Call(f.Fd(), 0, 1, 0, uintptr(unsafe.Pointer(&ol)))
