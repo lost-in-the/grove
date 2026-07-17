@@ -66,17 +66,50 @@ where reproducible, an end-to-end re-check):
 | **S1** | Release Homebrew job uses `curl -fsSL` + `pipefail` + non-empty check before hashing |
 | **X1** | Formula + template license corrected to Apache-2.0 (grove repo + `homebrew-tap`) |
 
-**Deferred by decision — B7** (`required` / `on_failure = "fail"` aborting an
-operation): the executor and an explicit test (`bootstrap_test.go`: "hook
-failures are non-fatal — must always return nil") treat hook failures as
-advisory, which directly contradicts the docs' "abort the entire operation".
-Flipping this changes established behavior (a failing hook could start failing
-commands, or imply deleting a just-created worktree) and is a product decision,
-not a clear bug — left for an explicit call rather than changed unilaterally.
+### Second pass (medium bugs, hooks, TUI, perf, DRY, docs)
 
-Not yet addressed: the medium bugs B18–B22/B24–B31/B33–B38, the TUI/bootstrap
-consolidation B8, the remaining performance items P2–P7, the DRY refactors, and
-the documentation sweep D2–D6.
+| ID | Fix |
+|----|-----|
+| **B7** | `required` / `on_failure="fail"` hooks now abort the operation (stop the sequence, fail the command); opt-in, no worktree rollback, distinguished from recoverable bootstrap errors |
+| **B8** | TUI delete fires the plugin pre/post-remove hooks (docker slot teardown) and kills tmux after removal — no more leaked stacks/slots |
+| **B18** | `grove to <current>` short-circuits ("Already in X") instead of running the dirty gate against itself |
+| **B19/B20** | `grove last` shares `grove to`'s flow (`performSwitch`) — hooks + dirty handling; `--json` no longer relocates the tmux client |
+| **B21** | `grove open` uses the resolved name for tmux/state and honors agent mode |
+| **B22** | root registered in state under `"root"` (its runtime key), unfreezing last-access |
+| **B23** | `grove kick web db` restarts every listed service |
+| **B24** | `grove trim` no longer treats unknown-age worktrees as eligible |
+| **B25** | `grove doctor --all` skips the main worktree (no self-referential symlinks) |
+| **B27** | `grove issues`/`grove prs` route the switch through `GROVE_CD_FILE` — no literal `cd:` on the terminal |
+| **B28** | post-remove hook context carries `NewPath`/`WorktreeFull` (`rm -rf cache/{{.worktree_full}}` no longer becomes `rm -rf cache/`) |
+| **B29** | `[plugins.docker.external]` field-merges (a partial `config.local.toml` no longer wipes it) |
+| **B30** | tracker `runGH` reads stdout only (gh's stderr notice no longer corrupts JSON) |
+| **B31** | worktree names validated on create (`../escape`, `root`, control chars rejected); validator centralized in `internal/worktree` |
+| **B32** | `grove fork` runs `hooks.toml` post_create actions |
+| **B33** | worktree chooser uses `strconv.Atoi` (digit-leading names like `2024-fixes` no longer misparse) |
+| **B34** | bare `grove` requires a TTY stdout too (`grove > out.txt` prints help, not alt-screen escapes) |
+| **B35** | `AtomicWriteFile`/`state.save` fsync before rename + dir fsync (no zero-length state.json after a crash) |
+| **B36** | `.slots.json` read under the lock (no torn/empty reads) |
+| **B37** | `Manager` project-name/name-pattern caches guarded by a mutex (race-free under the TUI's goroutines; verified `-race`) |
+| **B38** | TUI: async refreshes keep an applied filter (return `SetItems`' cmd); `esc` clears the filter instead of quitting |
+| **P4** | `grove here` lists tmux sessions once, not twice (also fixes a wrong reported session name) |
+| **P5** | `grove ls --paths` uses the light listing (no N × `git status`) |
+| **P7** | update-check records its attempt before fetching (no re-attempt inside the fetch window) |
+| **DRY** | flock consolidated (4 files → `internal/fsutil`); default-branch detection shared between init and cleanup; `state.save` uses `AtomicWriteFile` |
+| **Docs** | D1 (`GROVE_NONINTERACTIVE` — now wired), D3 (`copy_dirs`), D5 (state README), D2/D4 (docker README flags/naming), D6 (examples), plus `repair`/hook-event/spec corrections |
+
+### Deferred (intentionally)
+
+- **P3** (config parsed ~3× per command): threading `ctx.Config` into
+  `worktree.NewManager` is a wide signature change for a sub-millisecond win
+  that the <500ms budget already absorbs — not worth the risk here.
+- **P6** (two un-batched state saves in the switch flow): batching across the
+  intervening hook/tmux code is invasive for two cheap writes.
+- **P2 tail / remaining DRY** (the 7 `git worktree list --porcelain` parsers,
+  project-name-from-remote ×2, tmux switch/attach epilogue, browser-open,
+  tilde-expansion, `truncate` ×3): pure cleanups with no behavior change; the
+  default-branch and flock consolidations (the ones with real drift/bug risk)
+  are done.
+- The docker-external-mode `grove test` `env:` leak (a narrower slice of B27).
 
 ---
 
