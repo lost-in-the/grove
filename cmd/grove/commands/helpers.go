@@ -301,6 +301,13 @@ func firePostRemoveHooks(ctx *GroveContext, w *cli.Writer, projectName, name, wt
 			Branch:   branchName,
 			Project:  projectName,
 			MainPath: ctx.ProjectRoot,
+			// Populate the removed worktree's path/name like pre-remove does.
+			// Without WorktreeFull, `{{.worktree_full}}` interpolated to "" and
+			// a cleanup like `rm -rf cache/{{.worktree_full}}` became
+			// `rm -rf cache/` (B28). The directory is already gone, so
+			// post_remove actions should use working_dir = "main".
+			NewPath:      wtPath,
+			WorktreeFull: filepath.Base(wtPath),
 		}
 		cli.Step(w, "Running post-remove hooks...")
 		if err := hookExecutor.Execute(hooks.EventPostRemove, hookCtx); err != nil {

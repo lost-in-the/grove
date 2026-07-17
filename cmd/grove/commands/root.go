@@ -71,9 +71,11 @@ shorthand alias (e.g. 'w'). Use 'grove install --help' for details.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Only launch TUI when:
 		// 1. No subcommand was invoked (this RunE only fires for bare "grove")
-		// 2. TTY is attached (interactive terminal)
+		// 2. Both stdin AND stdout are TTYs — otherwise `grove > out.txt` or
+		//    `grove | less` would render alt-screen escape sequences into the
+		//    file/pipe (B34); require an interactive stdout too.
 		// 3. TUI is not disabled via env var
-		isTTY := term.IsTerminal(int(os.Stdin.Fd()))
+		isTTY := term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
 		tuiDisabled := os.Getenv("GROVE_TUI") == "0"
 		if decideBareAction(isTTY, tuiDisabled, false) == bareShowHelp {
 			return cmd.Help()
