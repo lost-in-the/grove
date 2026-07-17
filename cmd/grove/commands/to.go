@@ -152,6 +152,9 @@ When using shell integration, this will also change your current directory.`,
 			if err := hooks.Fire(hooks.EventPreSwitch, hookCtx); err != nil {
 				cli.Warning(stderr, "pre-switch hooks failed: %v", err)
 			}
+			// Config-file (hooks.toml) pre-switch actions. Output to stderr so it
+			// never collides with the cd: directive on stdout.
+			runConfigHooks(stderr, hooks.EventPreSwitch, mgr.GetProjectName(), name, targetTree.Branch, targetTree.Path, prevWorktreePath, ctx.ProjectRoot)
 		}
 
 		// Store current session as last if inside tmux
@@ -220,6 +223,10 @@ When using shell integration, this will also change your current directory.`,
 			if err := hooks.Fire(hooks.EventPostSwitch, hookCtx); err != nil {
 				cli.Warning(stderr, "post-switch hooks failed: %v", err)
 			}
+			// Config-file (hooks.toml) post-switch actions run after plugin
+			// hooks so a docker:compose action sees a started stack (e.g. the
+			// documented `bin/rails db:migrate` recipe). Output to stderr.
+			runConfigHooks(stderr, hooks.EventPostSwitch, mgr.GetProjectName(), name, targetTree.Branch, targetTree.Path, prevWorktreePath, ctx.ProjectRoot)
 		}
 
 		// JSON output mode

@@ -480,12 +480,15 @@ runs **both** the global echo and the project migration.
 
 | Event | When it fires |
 |-------|--------------|
-| `pre_create` | Before a new worktree directory is created |
+| `pre_create` | Before a new worktree directory is created (`grove new`) |
 | `post_create` | After the worktree is created and checked out |
-| `pre_switch` | Before switching to a worktree |
-| `post_switch` | After switching to a worktree |
+| `pre_switch` | Before switching to a worktree (`grove to`) |
+| `post_switch` | After switching to a worktree; runs after plugin hooks so a stack is already up |
 | `pre_remove` | Before removing a worktree |
 | `post_remove` | After the worktree has been removed |
+
+`pre_create` runs before the worktree directory exists, so its actions should
+set `working_dir = "main"` (the default `"new"` path is not present yet).
 
 ### Failure Handling (`on_failure`)
 

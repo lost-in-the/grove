@@ -314,6 +314,42 @@ func firePostRemoveHooks(ctx *GroveContext, w *cli.Writer, projectName, name, wt
 	}
 }
 
+// runConfigHooks executes the user's hooks.toml actions for a lifecycle event —
+// the config-file counterpart to the plugin hooks.Fire registry. Failures are
+// non-fatal and surfaced as warnings, matching post-create bootstrap semantics.
+// Wiring this in is what makes documented pre_switch / post_switch / pre_create
+// recipes actually run; before it, those events silently did nothing (B6).
+//
+// out receives the hooks' own progress lines — route it to stderr on the switch
+// path so hook output never lands on the cd: stdout channel the shell wrapper
+// parses. mainPath is the project root, whose .grove holds hooks.toml.
+func runConfigHooks(out *cli.Writer, event, projectName, name, branch, worktreePath, prevWorktreePath, mainPath string) {
+	executor, err := hooks.NewExecutor(filepath.Join(mainPath, ".grove"))
+	if err != nil {
+		log.Printf("hooks: failed to load config for %s: %v", event, err)
+		return
+	}
+	if !executor.HasHooksForEvent(event) {
+		return
+	}
+	if out != nil {
+		executor.Output = out
+	}
+	ec := &hooks.ExecutionContext{
+		Event:        event,
+		Worktree:     name,
+		WorktreeFull: filepath.Base(worktreePath),
+		Branch:       branch,
+		Project:      projectName,
+		MainPath:     mainPath,
+		NewPath:      worktreePath,
+		PrevPath:     prevWorktreePath,
+	}
+	if err := executor.Execute(event, ec); err != nil {
+		cli.Warning(out, "%s hooks failed: %v", event, err)
+	}
+}
+
 // worktreeSetupOpts configures the post-create setup sequence.
 type worktreeSetupOpts struct {
 	IsEnvironment bool

@@ -11,6 +11,7 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/exitcode"
+	"github.com/lost-in-the/grove/internal/hooks"
 	"github.com/lost-in-the/grove/internal/output"
 	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/worktree"
@@ -124,6 +125,11 @@ Examples:
 			return fmt.Errorf("worktree '%s' already exists\n\nOptions:\n  • Switch to it: grove to %s\n  • Remove it first: grove rm %s\n  • Use different name: grove new %s-v2",
 				name, name, name, name)
 		}
+
+		// Fire pre-create config hooks (hooks.toml) before the worktree exists.
+		// {{.new_path}} is the future directory; pre_create actions should set
+		// working_dir = "main" since the "new" path is not present yet (B6).
+		runConfigHooks(cli.NewStderr(), hooks.EventPreCreate, mgr.GetProjectName(), name, newBranch, mgr.PathForName(name), "", ctx.ProjectRoot)
 
 		var branchName string
 		isEnvironment := newMirror != ""
