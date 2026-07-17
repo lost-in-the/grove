@@ -38,12 +38,12 @@ func TestDetectDefaultBranch_NoRemote(t *testing.T) {
 	// Repo with "main" branch but no remote — should find "main" via common names fallback
 	dir := initTestRepo(t, "main")
 
-	branch, err := detectDefaultBranch(dir)
+	branch, err := DetectDefaultBranch(dir)
 	if err != nil {
-		t.Fatalf("detectDefaultBranch() error = %v", err)
+		t.Fatalf("DetectDefaultBranch() error = %v", err)
 	}
 	if branch != "main" {
-		t.Errorf("detectDefaultBranch() = %q, want %q", branch, "main")
+		t.Errorf("DetectDefaultBranch() = %q, want %q", branch, "main")
 	}
 }
 
@@ -51,12 +51,12 @@ func TestDetectDefaultBranch_FallbackCurrent(t *testing.T) {
 	// Repo with a non-standard branch name, no remote — should fall back to current branch
 	dir := initTestRepo(t, "develop")
 
-	branch, err := detectDefaultBranch(dir)
+	branch, err := DetectDefaultBranch(dir)
 	if err != nil {
-		t.Fatalf("detectDefaultBranch() error = %v", err)
+		t.Fatalf("DetectDefaultBranch() error = %v", err)
 	}
 	if branch != "develop" {
-		t.Errorf("detectDefaultBranch() = %q, want %q", branch, "develop")
+		t.Errorf("DetectDefaultBranch() = %q, want %q", branch, "develop")
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/git"
 	"github.com/lost-in-the/grove/internal/hooks"
 	"github.com/lost-in-the/grove/internal/log"
 	"github.com/lost-in-the/grove/internal/tmux"
@@ -48,18 +49,15 @@ func detectProjectName(dir string) string {
 	return filepath.Base(dir)
 }
 
+// detectMainBranch resolves the branch `grove init` records as
+// default_base_branch. It delegates to git.DetectDefaultBranch — the same
+// detector `grove rm`/`grove trim` use — so init and the branch-cleanup checks
+// agree (origin/HEAD → init.defaultBranch → main/master → HEAD), instead of
+// init's older main/master-only heuristic recording a different branch.
 func detectMainBranch(dir string) string {
-	for _, branch := range []string{"main", "master"} {
-		if err := cmdexec.Run(context.TODO(), "git", []string{"rev-parse", "--verify", branch}, dir, cmdexec.GitLocal); err == nil {
-			return branch
-		}
+	if branch, err := git.DetectDefaultBranch(dir); err == nil && branch != "" {
+		return branch
 	}
-
-	output, err := cmdexec.Output(context.TODO(), "git", []string{"rev-parse", "--abbrev-ref", "HEAD"}, dir, cmdexec.GitLocal)
-	if err == nil {
-		return strings.TrimSpace(string(output))
-	}
-
 	return "main"
 }
 
