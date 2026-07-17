@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/git"
 	"github.com/lost-in-the/grove/internal/hooks"
@@ -173,27 +173,42 @@ type postCreateResult struct {
 	hookErr    error
 }
 
-// runPostCreateStreaming registers the worktree in state, creates a tmux session,
-// It sends progress lines to ch and returns the result.
-func runPostCreateStreaming(ch chan<- creationEvent, mgr *worktree.Manager, stateMgr *state.Manager, projectRoot, name string, wt *worktree.Worktree) postCreateResult {
+// runPostCreateStreaming runs the shared bootstrap sequence for a worktree the
+// dashboard just created, then creates its tmux session. It sends progress
+// lines to ch and returns the result.
+//
+// Bootstrap goes through worktree.BootstrapWorktree — the same sequence as
+// `grove new`/`grove adopt` — so dashboard-created worktrees get the git
+// excludes, SetupFiles (external compose artifacts), plugin post-create hooks
+// (docker container Up), and the required-hook abort semantics. The TUI used
+// to hand-roll state registration + config hooks only, leaving
+// external-compose projects unprovisioned when created from the dashboard.
+func runPostCreateStreaming(ch chan<- creationEvent, mgr *worktree.Manager, stateMgr *state.Manager, cfg *config.Config, projectRoot, name string, wt *worktree.Worktree) postCreateResult {
 	projectName := mgr.GetProjectName()
 
-	// Register in state
-	ch <- creationEvent{line: "Registering state..."}
-	if stateMgr != nil {
-		now := time.Now()
-		wsState := &state.WorktreeState{
-			Path:           wt.Path,
-			Branch:         wt.Branch,
-			CreatedAt:      now,
-			LastAccessedAt: now,
-		}
-		if err := stateMgr.AddWorktree(name, wsState); err != nil {
-			tuilog.Printf("warning: failed to register worktree %q in state: %v", name, err)
+	ch <- creationEvent{line: "Bootstrapping worktree..."}
+	// All bootstrap output (hook progress, warnings) is captured — writing to
+	// the terminal would corrupt the TUI — and streamed as log lines below.
+	var bootBuf bytes.Buffer
+	bootErr := worktree.BootstrapWorktree(stateMgr, cfg, worktree.BootstrapOpts{
+		Name:         name,
+		Branch:       wt.Branch,
+		WorktreePath: wt.Path,
+		MainPath:     projectRoot,
+		ProjectName:  projectName,
+	}, cli.NewWriter(&bootBuf, false))
+	if bootErr != nil {
+		tuilog.Printf("bootstrap failed for %q: %v", name, bootErr)
+	}
+	for _, line := range strings.Split(strings.TrimRight(bootBuf.String(), "\n"), "\n") {
+		if line != "" {
+			ch <- creationEvent{line: line}
 		}
 	}
 
-	// Create tmux session
+	// Create tmux session after bootstrap so hooks (docker Up, bundle
+	// install) have run by the time the user attaches — mirrors the CLI
+	// order (setupCreatedWorktree, then switch/tmux).
 	if tmux.IsTmuxAvailable() {
 		ch <- creationEvent{line: "Creating tmux session..."}
 		sessionName := worktree.TmuxSessionName(projectName, name)
@@ -202,37 +217,7 @@ func runPostCreateStreaming(ch chan<- creationEvent, mgr *worktree.Manager, stat
 		}
 	}
 
-	// Run post-create hooks, capturing output to avoid corrupting TUI
-	var hookBuf bytes.Buffer
-	var hookExecErr error
-	hookExecutor, hookErr := hooks.NewExecutor()
-	if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPostCreate) {
-		ch <- creationEvent{line: "Running post-create hooks..."}
-		hookExecutor.Output = &hookBuf
-		hookCtx := &hooks.ExecutionContext{
-			Event:        hooks.EventPostCreate,
-			Worktree:     name,
-			WorktreeFull: filepath.Base(wt.Path),
-			Branch:       wt.Branch,
-			Project:      projectName,
-			MainPath:     projectRoot,
-			NewPath:      wt.Path,
-		}
-		hookExecErr = hookExecutor.Execute(hooks.EventPostCreate, hookCtx)
-		if hookExecErr != nil {
-			tuilog.Printf("warning: post-create hook failed for %q: %v", name, hookExecErr)
-		}
-		// Stream hook output lines
-		if hookBuf.Len() > 0 {
-			for _, line := range strings.Split(strings.TrimRight(hookBuf.String(), "\n"), "\n") {
-				if line != "" {
-					ch <- creationEvent{line: line}
-				}
-			}
-		}
-	}
-
-	return postCreateResult{hookOutput: hookBuf.String(), hookErr: hookExecErr}
+	return postCreateResult{hookOutput: bootBuf.String(), hookErr: bootErr}
 }
 
 // readCreationLog returns a tea.Cmd that reads the next event from the
@@ -261,8 +246,8 @@ func readCreationLog(ch <-chan creationEvent, source string) tea.Cmd {
 // streamingCreateCmd runs a worktree creation in a goroutine with streaming
 // log output. The createFn performs the actual worktree creation; logLines
 // are sent to the channel before creation begins. After creation, the
-// worktree is looked up and post-create hooks are run.
-func streamingCreateCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot, name, source string, logLines []string, createFn func() error) tea.Cmd {
+// worktree is looked up and the shared bootstrap sequence runs.
+func streamingCreateCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *config.Config, projectRoot, name, source string, logLines []string, createFn func() error) tea.Cmd {
 	ch := make(chan creationEvent, 10)
 
 	go func() {
@@ -283,7 +268,7 @@ func streamingCreateCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectR
 			return
 		}
 
-		result := runPostCreateStreaming(ch, mgr, stateMgr, projectRoot, name, wt)
+		result := runPostCreateStreaming(ch, mgr, stateMgr, cfg, projectRoot, name, wt)
 		ch <- creationEvent{
 			done:       true,
 			name:       name,
@@ -296,7 +281,7 @@ func streamingCreateCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectR
 	return readCreationLog(ch, source)
 }
 
-func createWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot, name, baseBranch, newBranch, fromRef string) tea.Cmd {
+func createWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *config.Config, projectRoot, name, baseBranch, newBranch, fromRef string) tea.Cmd {
 	var logLines []string
 	var createFn func() error
 	if baseBranch != "" {
@@ -323,7 +308,7 @@ func createWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRo
 		}
 		createFn = func() error { return mgr.CreateFromRef(name, branch, fromRef) }
 	}
-	return streamingCreateCmd(mgr, stateMgr, projectRoot, name, "create", logLines, createFn)
+	return streamingCreateCmd(mgr, stateMgr, cfg, projectRoot, name, "create", logLines, createFn)
 }
 
 // lookupPRsCmd fetches open PRs and maps them to branches.

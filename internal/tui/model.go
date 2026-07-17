@@ -1433,7 +1433,7 @@ func (m *Model) startCreate(s *CreateState) (tea.Model, tea.Cmd) {
 	s.Error = ""
 	s.Creating = true
 	s.ActivityLog = NewActivityLog(60, 10)
-	return m, tea.Batch(m.spinner.Tick, createWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, s.Name, s.BaseBranch, s.NewBranchName, s.ForkBase))
+	return m, tea.Batch(m.spinner.Tick, createWorktreeCmd(m.worktreeMgr, m.stateMgr, m.cfg, m.projectRoot, s.Name, s.BaseBranch, s.NewBranchName, s.ForkBase))
 }
 
 // handleBranchChoiceKey handles the initial "Select existing" vs "Create new" choice.

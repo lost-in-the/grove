@@ -3,6 +3,7 @@ package worktree
 import (
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"time"
 
@@ -67,21 +68,23 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 		}
 	}
 
-	now := time.Now()
-	wsState := &state.WorktreeState{
-		Path:           opts.WorktreePath,
-		Branch:         opts.Branch,
-		Root:           false,
-		CreatedAt:      now,
-		LastAccessedAt: now,
-		Environment:    opts.IsEnvironment,
-	}
-	if opts.IsEnvironment {
-		wsState.Mirror = opts.Mirror
-		wsState.LastSyncedAt = &now
-	}
-	if err := stateMgr.AddWorktree(opts.Name, wsState); err != nil {
-		return fmt.Errorf("register worktree: %w", err)
+	if stateMgr != nil {
+		now := time.Now()
+		wsState := &state.WorktreeState{
+			Path:           opts.WorktreePath,
+			Branch:         opts.Branch,
+			Root:           false,
+			CreatedAt:      now,
+			LastAccessedAt: now,
+			Environment:    opts.IsEnvironment,
+		}
+		if opts.IsEnvironment {
+			wsState.Mirror = opts.Mirror
+			wsState.LastSyncedAt = &now
+		}
+		if err := stateMgr.AddWorktree(opts.Name, wsState); err != nil {
+			return fmt.Errorf("register worktree: %w", err)
+		}
 	}
 
 	// File setup (copy/symlink external compose artifacts) — must precede
@@ -121,6 +124,15 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 			cli.Warning(w, "post-create hooks: failed to load config: %v", hookErr)
 		}
 	} else if hookExecutor.HasHooksForEvent(hooks.EventPostCreate) {
+		// Hook output follows w (stdout for interactive callers, a capture
+		// buffer for the TUI). With no writer it is DISCARDED rather than
+		// falling through to the executor's os.Stdout default, which used to
+		// corrupt `grove new --json`'s machine-readable stdout whenever a
+		// post-create hook printed progress.
+		var hookOut io.Writer = io.Discard
+		if w != nil {
+			hookOut = w
+		}
 		hookCtx := &hooks.ExecutionContext{
 			Event:    hooks.EventPostCreate,
 			Worktree: opts.Name,
@@ -134,6 +146,7 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 			Project:      opts.ProjectName,
 			MainPath:     opts.MainPath,
 			NewPath:      opts.WorktreePath,
+			Output:       hookOut,
 		}
 		if err := hookExecutor.Execute(hooks.EventPostCreate, hookCtx); err != nil {
 			// A required (on_failure="fail") post-create hook failing fails the
