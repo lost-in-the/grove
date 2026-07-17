@@ -2,7 +2,6 @@ package commands
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -115,13 +114,21 @@ var hereCmd = &cobra.Command{
 		// bare project name) — ShortName is the directory basename for the
 		// main worktree and would name a session that doesn't exist.
 		tmuxSessionName := worktree.TmuxSessionName(projectName, tree.DisplayName())
-		tmuxStatus := tmux.GetSessionStatus(tmuxSessionName)
-
-		// Fallback: check with directory basename
-		if tmuxStatus == tmuxStatusNone {
-			tmuxSessionName = filepath.Base(tree.Path)
-			tmuxStatus = tmux.GetSessionStatus(tmuxSessionName)
+		// One tmux list-sessions, then check both the canonical name and the
+		// directory basename (as `grove ls` does via tmuxStatusFor), instead of
+		// two GetSessionStatus calls that each shell out (P4). The reported name
+		// stays canonical — the old basename fallback named a session grove
+		// never creates under a custom [naming] pattern.
+		var sessions map[string]*tmux.Session
+		if tmux.IsTmuxAvailable() {
+			if sessionList, err := tmux.ListSessions(); err == nil {
+				sessions = make(map[string]*tmux.Session, len(sessionList))
+				for _, s := range sessionList {
+					sessions[s.Name] = s
+				}
+			}
 		}
+		tmuxStatus := tmuxStatusFor(tree, projectName, sessions)
 
 		// Get environment info from state
 		isEnv, _ := ctx.State.IsEnvironment(displayName)

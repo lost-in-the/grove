@@ -307,6 +307,13 @@ func (m *Manager) List() ([]*Worktree, error) {
 // Use for callers that need the worktree set but not dirty state — much
 // faster in repos with many worktrees because it skips N parallel git status
 // invocations.
+// ListLight is the exported form of listLight for callers outside this package
+// (e.g. `grove ls --paths`) that need porcelain metadata without paying for the
+// per-worktree dirty checks List performs.
+func (m *Manager) ListLight() ([]*Worktree, error) {
+	return m.listLight()
+}
+
 func (m *Manager) listLight() ([]*Worktree, error) {
 	output, err := cmdexec.Output(context.TODO(), "git", []string{"worktree", "list", "--porcelain"}, m.repoRoot, cmdexec.GitLocal)
 	if err != nil {
