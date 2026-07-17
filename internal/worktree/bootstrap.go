@@ -33,7 +33,10 @@ type BootstrapOpts struct {
 }
 
 // BootstrapWorktree runs the post-git-worktree-add bootstrap sequence:
-//  1. Symlink config.toml from main worktree
+//  1. Record grove's machine-local artifacts in the shared git exclude, so
+//     fresh clones that never ran `grove init` on this machine still get
+//     born-clean worktrees (config resolution needs no per-worktree files —
+//     everything anchors at the main worktree via git's common dir)
 //  2. Register the worktree in state.json (idempotent — re-registers on second call)
 //  3. Copy/symlink external compose artifacts (SetupFiles) so plugin Up() sees them
 //  4. Fire global plugin post-create hooks (docker container Up, etc.)
@@ -43,7 +46,7 @@ type BootstrapOpts struct {
 // containers are up by the time user setup commands (which may target them
 // via docker:compose handlers) run.
 //
-// Returns an error only if state registration or symlinking fails irrecoverably.
+// Returns an error only if state registration fails irrecoverably.
 // Hook and SetupFiles failures are non-fatal; they are reported via w so the
 // user sees them on stderr. Pass a non-nil w for interactive callers (grove new,
 // grove adopt). Pass nil for JSON-mode callers where stderr would corrupt
@@ -55,8 +58,13 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 		return fmt.Errorf("WorktreePath and MainPath are required")
 	}
 
-	if err := grove.EnsureConfigSymlink(opts.MainPath, opts.WorktreePath); err != nil {
-		return fmt.Errorf("symlink config: %w", err)
+	// Best-effort: worktrees function without the excludes, they just show
+	// grove's machine-local files as untracked until `grove init` runs here.
+	if err := grove.EnsureGroveExcludes(opts.MainPath); err != nil {
+		log.Printf("record git excludes: %v", err)
+		if w != nil {
+			cli.Warning(w, "record git excludes: %v", err)
+		}
 	}
 
 	now := time.Now()

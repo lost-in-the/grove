@@ -261,7 +261,11 @@ func groveNotFoundError() error {
 	return fmt.Errorf("grove binary not found in PATH")
 }
 
-// checkConfigSymlinks validates .grove/config.toml symlinks across all worktrees.
+// checkConfigSymlinks validates .grove/config.toml symlinks across all
+// worktrees. Current grove no longer creates these (config resolution anchors
+// at the main worktree via the git common dir), but worktrees created by
+// older versions may still carry one — a broken target there shadows the real
+// config, so it's worth surfacing until the worktree is recreated.
 func checkConfigSymlinks(groveDir string) (string, error) {
 	projectRoot := filepath.Dir(groveDir)
 

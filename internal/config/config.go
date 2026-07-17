@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lost-in-the/grove/internal/fsutil"
+	"github.com/lost-in-the/grove/internal/grove"
 )
 
 // TestConfig controls test command behavior
@@ -157,7 +158,16 @@ type AgentStackConfig struct {
 }
 
 // GetConfigPaths returns the paths to check for config files
-// Returns global config path and project config path
+// Returns global config path and project config path.
+//
+// The project path anchors at the MAIN worktree's .grove directory
+// (grove.FindRoot), so every command reads — and `grove config set`/the TUI
+// settings editor WRITE — the same project config no matter which worktree or
+// subdirectory they run from. The old cwd-relative path made a linked
+// worktree read defaults instead of the project config, and worse, made
+// config writes materialize a private .grove/config.toml inside the linked
+// worktree, silently forking it from the project's. Falls back to cwd/.grove
+// when not inside a grove project (e.g. before `grove init`).
 func GetConfigPaths() (string, string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -166,7 +176,11 @@ func GetConfigPaths() (string, string, error) {
 
 	globalConfig := filepath.Join(homeDir, ".config", "grove", "config.toml")
 
-	// Get current working directory for project config
+	if groveDir, err := grove.FindRoot(""); err == nil && groveDir != "" {
+		return globalConfig, filepath.Join(groveDir, "config.toml"), nil
+	}
+
+	// Not in a grove project — fall back to cwd for pre-init flows.
 	cwd, err := os.Getwd()
 	if err != nil {
 		return globalConfig, "", err

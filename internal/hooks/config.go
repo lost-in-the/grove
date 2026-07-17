@@ -166,9 +166,9 @@ func GetHooksConfigPaths(groveDir ...string) (string, string, error) {
 		projectHooks = filepath.Join(root, "hooks.toml")
 
 		// A worktree-local hooks.toml still takes precedence, letting a linked
-		// worktree customize its own hooks. grove never creates one (secondary
-		// .grove dirs hold only the config.toml symlink), so this only fires
-		// when a user authored it deliberately.
+		// worktree customize its own hooks. grove never creates worktree-local
+		// .grove files of its own, so this only fires when a user authored it
+		// deliberately.
 		if cwd, cwdErr := os.Getwd(); cwdErr == nil {
 			if localHooks, ok := worktreeLocalHooksPath(cwd); ok {
 				projectHooks = localHooks

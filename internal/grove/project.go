@@ -60,11 +60,11 @@ func FindRoot(startDir string) (string, error) {
 	// refuses to run from a linked worktree, so state.json only ever exists
 	// there. Resolve it via git's common dir (which points at the main
 	// worktree regardless of which worktree cwd is in) before walking. Without
-	// this, a grove-created secondary worktree — whose own .grove holds only a
-	// config.toml symlink (EnsureConfigSymlink), never state.json — makes the
-	// walk stop at the worktree-local .grove and fragment state per-worktree
-	// (B1): `grove new`/`rm`/`last` run from inside a worktree would read and
-	// write a phantom state.json instead of the project's.
+	// this, a secondary worktree with its own .grove — e.g. the config.toml
+	// symlink older grove versions created there, never state.json — makes
+	// the walk stop at the worktree-local .grove and fragment state
+	// per-worktree (B1): `grove new`/`rm`/`last` run from inside a worktree
+	// would read and write a phantom state.json instead of the project's.
 	if mainGrove, ok := mainWorktreeGroveDir(absDir); ok {
 		return mainGrove, nil
 	}
@@ -203,44 +203,15 @@ func MustProjectRoot(groveDir string) string {
 	return filepath.Dir(groveDir)
 }
 
-// EnsureConfigSymlink creates a symlink to the main worktree's config.toml
-// in the new worktree's .grove directory. Creates .grove/ if needed.
-// No-op if main has no config.toml or target already exists.
-func EnsureConfigSymlink(mainPath, newWorktreePath string) error {
-	src := filepath.Join(mainPath, ".grove", "config.toml")
-	if _, err := os.Stat(src); err != nil {
-		return nil
-	}
-
-	dstDir := filepath.Join(newWorktreePath, ".grove")
-	if err := os.MkdirAll(dstDir, 0755); err != nil {
-		return err
-	}
-
-	dst := filepath.Join(dstDir, "config.toml")
-	if _, err := os.Lstat(dst); err == nil {
-		return nil
-	}
-
-	return os.Symlink(src, dst)
-}
-
 // mainWorktreeGroveDir resolves the main worktree's .grove directory from dir
-// via `git rev-parse --git-common-dir`, which returns the main worktree's .git
-// directory regardless of which worktree dir is in. Returns ok=false when dir
-// isn't a git repo, the common dir can't be resolved, or the main worktree has
-// no .grove (i.e. not a grove project — let the caller's fallbacks decide).
+// via GitCommonDir, which returns the main worktree's .git directory
+// regardless of which worktree dir is in. Returns ok=false when dir isn't a
+// git repo, the common dir can't be resolved, or the main worktree has no
+// .grove (i.e. not a grove project — let the caller's fallbacks decide).
 func mainWorktreeGroveDir(dir string) (string, bool) {
-	out, err := cmdexec.Output(context.TODO(), "git", []string{"-C", dir, "rev-parse", "--git-common-dir"}, "", cmdexec.GitLocal)
+	commonDir, err := GitCommonDir(dir)
 	if err != nil {
 		return "", false
-	}
-	commonDir := strings.TrimSpace(string(out))
-	if commonDir == "" {
-		return "", false
-	}
-	if !filepath.IsAbs(commonDir) {
-		commonDir = filepath.Join(dir, commonDir)
 	}
 	groveDir := filepath.Join(filepath.Dir(commonDir), ".grove")
 	if info, err := os.Stat(groveDir); err != nil || !info.IsDir() {

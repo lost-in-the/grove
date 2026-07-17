@@ -201,11 +201,11 @@ Examples:
 			cli.Success(w, "Created worktree '%s' with branch '%s'", name, newBranchName)
 		}
 
-		// Symlink config.toml from main worktree
-		if err := grove.EnsureConfigSymlink(ctx.ProjectRoot, newTree.Path); err != nil {
-			if !forkJSON {
-				cli.Warning(w, "Failed to symlink config: %v", err)
-			}
+		// Record grove's machine-local git excludes (best-effort) — fork
+		// hand-rolls its bootstrap, so it must mirror BootstrapWorktree here
+		// for fresh clones where `grove init` never ran on this machine.
+		if err := grove.EnsureGroveExcludes(ctx.ProjectRoot); err != nil && !forkJSON {
+			cli.Warning(w, "record git excludes: %v", err)
 		}
 
 		// Apply WIP patch to new worktree if needed

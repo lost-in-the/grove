@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lost-in-the/grove/internal/grove"
 )
 
 func TestResolveAdoptTarget_UsesCwdWhenNoArg(t *testing.T) {
@@ -143,13 +145,13 @@ func TestGitCommonDirAt_DistinguishesRepositories(t *testing.T) {
 	wt := filepath.Join(base, "repo-wt")
 	runAdoptGit(t, repo, "worktree", "add", wt)
 
-	repoCommon, err := gitCommonDirAt(repo)
+	repoCommon, err := grove.GitCommonDir(repo)
 	if err != nil {
-		t.Fatalf("gitCommonDirAt(repo): %v", err)
+		t.Fatalf("grove.GitCommonDir(repo): %v", err)
 	}
-	wtCommon, err := gitCommonDirAt(wt)
+	wtCommon, err := grove.GitCommonDir(wt)
 	if err != nil {
-		t.Fatalf("gitCommonDirAt(wt): %v", err)
+		t.Fatalf("grove.GitCommonDir(wt): %v", err)
 	}
 	if repoCommon != wtCommon {
 		t.Errorf("worktree common dir %q != repo common dir %q", wtCommon, repoCommon)
@@ -160,9 +162,9 @@ func TestGitCommonDirAt_DistinguishesRepositories(t *testing.T) {
 	if err := os.MkdirAll(sub, 0755); err != nil {
 		t.Fatalf("mkdir sub: %v", err)
 	}
-	subCommon, err := gitCommonDirAt(sub)
+	subCommon, err := grove.GitCommonDir(sub)
 	if err != nil {
-		t.Fatalf("gitCommonDirAt(sub): %v", err)
+		t.Fatalf("grove.GitCommonDir(sub): %v", err)
 	}
 	if subCommon != repoCommon {
 		t.Errorf("subdir common dir %q != repo common dir %q", subCommon, repoCommon)
@@ -177,9 +179,9 @@ func TestGitCommonDirAt_DistinguishesRepositories(t *testing.T) {
 	runAdoptGit(t, other, "init")
 	runAdoptGit(t, other, "commit", "--allow-empty", "-m", "init")
 
-	otherCommon, err := gitCommonDirAt(other)
+	otherCommon, err := grove.GitCommonDir(other)
 	if err != nil {
-		t.Fatalf("gitCommonDirAt(other): %v", err)
+		t.Fatalf("grove.GitCommonDir(other): %v", err)
 	}
 	if otherCommon == repoCommon {
 		t.Errorf("unrelated repo shares common dir %q — membership check would pass foreign repos", otherCommon)
