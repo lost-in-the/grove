@@ -90,6 +90,149 @@ func TestInterpolateShellPreventsInjection(t *testing.T) {
 	}
 }
 
+// runShellHook executes a rewritten hook command the same way builtinCommand
+// does and returns its combined output.
+func runShellHook(t *testing.T, v *Variables, template string) string {
+	t.Helper()
+	cmd := v.InterpolateShell(template)
+	var out bytes.Buffer
+	if err := runCommand(cmd, t.TempDir(), 5*time.Second, v.ShellEnv(), &out, &out); err != nil {
+		t.Fatalf("runCommand error = %v (cmd=%q)", err, cmd)
+	}
+	return out.String()
+}
+
+// TestInterpolateShellQuoteContexts pins the rewriting for each shell quoting
+// context a hook template can put a token in. Single quotes are the critical
+// case: ${...} never expands there, so a naive rewrite silently broke every
+// shipped recipe of the form `pkill -f '{{.worktree}}'` — the command matched
+// the literal string ${GROVE_HOOK_worktree} instead of the worktree name.
+func TestInterpolateShellQuoteContexts(t *testing.T) {
+	t.Run("single-quoted token expands", func(t *testing.T) {
+		v := &Variables{Worktree: "feat-x"}
+		got := runShellHook(t, v, `printf '%s' 'switched to {{.worktree}}'`)
+		if got != "switched to feat-x" {
+			t.Errorf("single-quoted token: output = %q, want %q", got, "switched to feat-x")
+		}
+	})
+
+	t.Run("double-quoted token expands", func(t *testing.T) {
+		v := &Variables{Branch: "feature/x"}
+		got := runShellHook(t, v, `printf '%s' "on {{.branch}}"`)
+		if got != "on feature/x" {
+			t.Errorf("double-quoted token: output = %q, want %q", got, "on feature/x")
+		}
+	})
+
+	t.Run("bare token with spaces stays one word", func(t *testing.T) {
+		// Paths legally contain spaces; an unquoted expansion would split
+		// `ls {{.new_path}}` into two arguments.
+		v := &Variables{NewPath: "/tmp/My Project"}
+		got := runShellHook(t, v, `printf '%s\n' {{.new_path}}`)
+		if got != "/tmp/My Project\n" {
+			t.Errorf("bare token word-split: output = %q, want %q", got, "/tmp/My Project\n")
+		}
+	})
+
+	t.Run("bare token with glob char is not expanded", func(t *testing.T) {
+		v := &Variables{Worktree: "*"}
+		got := runShellHook(t, v, `printf '%s' {{.worktree}}`)
+		if got != "*" {
+			t.Errorf("glob expanded: output = %q, want %q", got, "*")
+		}
+	})
+
+	t.Run("escaped quote does not confuse the tracker", func(t *testing.T) {
+		// The \" before the token is an escaped literal quote, not a context
+		// change — the token is still bare and must stay one word.
+		v := &Variables{Worktree: "a b"}
+		got := runShellHook(t, v, `printf '%s\n' \" {{.worktree}}`)
+		if got != "\"\na b\n" {
+			t.Errorf("output = %q, want %q", got, "\"\na b\n")
+		}
+	})
+}
+
+// TestCommandHookDefaultWorkingDir pins the event-aware default working
+// directory. The "new" worktree path is guaranteed ABSENT for exactly two
+// events — pre-create (not created yet) and post-remove (already deleted) —
+// so a default-configured command hook there must run from the main worktree
+// instead of failing chdir with ENOENT on every invocation.
+func TestCommandHookDefaultWorkingDir(t *testing.T) {
+	runIn := func(t *testing.T, event, newPath, mainPath string) string {
+		t.Helper()
+		var out bytes.Buffer
+		action := &HookAction{Type: "command", Command: "pwd", Timeout: 5}
+		ctx := &ExecutionContext{Event: event, NewPath: newPath, MainPath: mainPath, Output: &out}
+		if err := builtinCommand(action, ctx, &Variables{}); err != nil {
+			t.Fatalf("builtinCommand(%s) error = %v", event, err)
+		}
+		return strings.TrimSpace(strings.SplitN(out.String(), "\n", 2)[0])
+	}
+
+	mainDir := t.TempDir()
+	// Resolve symlinks so pwd's output compares equal on macOS /var→/private/var.
+	if resolved, err := filepath.EvalSymlinks(mainDir); err == nil {
+		mainDir = resolved
+	}
+	missing := filepath.Join(mainDir, "not-created-yet")
+
+	t.Run("pre-create defaults to main", func(t *testing.T) {
+		if got := runIn(t, EventPreCreate, missing, mainDir); got != mainDir {
+			t.Errorf("pre-create default dir = %q, want main %q", got, mainDir)
+		}
+	})
+
+	t.Run("post-remove defaults to main", func(t *testing.T) {
+		if got := runIn(t, EventPostRemove, missing, mainDir); got != mainDir {
+			t.Errorf("post-remove default dir = %q, want main %q", got, mainDir)
+		}
+	})
+
+	t.Run("post-create still defaults to new", func(t *testing.T) {
+		newDir := filepath.Join(mainDir, "wt")
+		if err := os.MkdirAll(newDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if got := runIn(t, EventPostCreate, newDir, mainDir); got != newDir {
+			t.Errorf("post-create default dir = %q, want new %q", got, newDir)
+		}
+	})
+}
+
+// TestInterpolateShellInjectionAllContexts extends the B13 guarantee to every
+// quoting context: whatever quoting the template uses, a hostile value must
+// never execute.
+func TestInterpolateShellInjectionAllContexts(t *testing.T) {
+	templates := map[string]string{
+		"bare":          `echo {{.branch}}`,
+		"double-quoted": `echo "{{.branch}}"`,
+		"single-quoted": `echo '{{.branch}}'`,
+	}
+	payloads := []string{
+		`x"; touch MARKER; echo "`,
+		`x'; touch MARKER; echo '`,
+		"`touch MARKER`",
+		`$(touch MARKER)`,
+	}
+	for ctxName, tmpl := range templates {
+		for _, payload := range payloads {
+			t.Run(ctxName+"/"+payload, func(t *testing.T) {
+				dir := t.TempDir()
+				marker := filepath.Join(dir, "pwned")
+				v := &Variables{Branch: strings.ReplaceAll(payload, "MARKER", marker)}
+				cmd := v.InterpolateShell(tmpl)
+				if err := runCommand(cmd, dir, 5*time.Second, v.ShellEnv(), &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+					t.Fatalf("runCommand error = %v (cmd=%q)", err, cmd)
+				}
+				if _, err := os.Stat(marker); err == nil {
+					t.Fatalf("injection in %s context succeeded (cmd=%q)", ctxName, cmd)
+				}
+			})
+		}
+	}
+}
+
 func TestExecute(t *testing.T) {
 	t.Run("nil config returns nil", func(t *testing.T) {
 		e := NewExecutorWithConfig(nil)
