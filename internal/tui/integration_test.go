@@ -392,6 +392,42 @@ func TestDeleteWorktreeCmd_NonExistent(t *testing.T) {
 	}
 }
 
+// TestDeleteWorktreeCmd_RequiredPreRemoveHookAborts mirrors the CLI's B7
+// guarantee in the dashboard: a required (on_failure="fail") pre-remove hook
+// that fails must abort the delete and leave the worktree in place — `grove
+// rm` already refused, but the TUI logged the failure and deleted anyway.
+func TestDeleteWorktreeCmd_RequiredPreRemoveHookAborts(t *testing.T) {
+	repo := setupRailsFixtureWithWorktrees(t, "guarded")
+	mgr, stateMgr := newTestManagers(t, repo)
+
+	hooksToml := `[hooks]
+[[hooks.pre_remove]]
+type = "command"
+command = "exit 1"
+on_failure = "fail"
+working_dir = "main"
+`
+	if err := os.WriteFile(filepath.Join(repo, ".grove", "hooks.toml"), []byte(hooksToml), 0o644); err != nil {
+		t.Fatalf("write hooks.toml: %v", err)
+	}
+
+	cmd := deleteWorktreeCmd(mgr, stateMgr, nil, repo, "guarded", false)
+	msg := cmd()
+
+	deleted, ok := msg.(worktreeDeletedMsg)
+	if !ok {
+		t.Fatalf("expected worktreeDeletedMsg, got %T", msg)
+	}
+	if deleted.err == nil {
+		t.Fatal("expected required pre-remove hook failure to abort the delete")
+	}
+
+	wtPath := filepath.Join(filepath.Dir(repo), "rails-app-guarded")
+	if _, err := os.Stat(wtPath); err != nil {
+		t.Errorf("worktree was deleted despite required hook failure: %v", err)
+	}
+}
+
 // --- bulkDeleteCmd ---
 
 func TestBulkDeleteCmd_Multiple(t *testing.T) {

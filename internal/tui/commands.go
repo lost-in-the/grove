@@ -61,7 +61,14 @@ func deleteWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *conf
 		// plugin hook (docker agent-slot teardown + env cleanup) was skipped by
 		// the TUI, so deleting a worktree with an isolated stack from the
 		// dashboard leaked the running stack and its slot (B8).
-		runPreRemoveHooks(projectName, name, wt)
+		//
+		// A required (on_failure="fail") hooks.toml action failing aborts the
+		// delete before the worktree is touched — same B7 guarantee as `grove
+		// rm` (removeWorktreeWithHooks); plugin hook failures stay warn-only
+		// on both paths.
+		if err := runPreRemoveHooks(projectRoot, projectName, name, wt); err != nil {
+			return worktreeDeletedMsg{name: name, deleteBranch: deleteBranch, err: err}
+		}
 		pluginCtx := &hooks.Context{Worktree: name, Config: cfg, WorktreePath: wtPath, MainPath: projectRoot}
 		if err := hooks.Fire(hooks.EventPreRemove, pluginCtx); err != nil {
 			tuilog.Printf("warning: plugin pre-remove hook failed for %q: %v", name, err)
@@ -108,12 +115,27 @@ func killTmuxSessionForWorktree(projectName, name string) {
 	}
 }
 
-func runPreRemoveHooks(projectName, name string, wt *worktree.Worktree) {
-	hookExecutor, err := hooks.NewExecutor()
-	if err != nil || !hookExecutor.HasHooksForEvent(hooks.EventPreRemove) {
-		return
+// runPreRemoveHooks executes hooks.toml pre-remove actions for a TUI delete.
+// The .grove dir is passed explicitly (rather than discovered from cwd) so
+// hooks resolve identically wherever the dashboard was launched from. The
+// returned error is non-nil only for a required (on_failure="fail") action —
+// Execute warns internally for everything else — and the caller must abort
+// the removal on it (B7 parity with `grove rm`).
+func runPreRemoveHooks(projectRoot, projectName, name string, wt *worktree.Worktree) error {
+	hookExecutor, err := hooks.NewExecutor(filepath.Join(projectRoot, ".grove"))
+	if err != nil {
+		// A broken hooks config shouldn't brick dashboard deletes — same
+		// soft-fail as the CLI path.
+		tuilog.Printf("warning: failed to load hooks config: %v", err)
+		return nil
 	}
-	hookExecutor.Output = &bytes.Buffer{}
+	if !hookExecutor.HasHooksForEvent(hooks.EventPreRemove) {
+		return nil
+	}
+	// Hook output can't go to the terminal (it would corrupt the TUI); keep
+	// it in a buffer and surface it in the error when the hook aborts.
+	var out bytes.Buffer
+	hookExecutor.Output = &out
 	hookCtx := &hooks.ExecutionContext{
 		Event:    hooks.EventPreRemove,
 		Worktree: name,
@@ -125,8 +147,10 @@ func runPreRemoveHooks(projectName, name string, wt *worktree.Worktree) {
 		hookCtx.WorktreeFull = filepath.Base(wt.Path)
 	}
 	if err := hookExecutor.Execute(hooks.EventPreRemove, hookCtx); err != nil {
-		tuilog.Printf("warning: pre-remove hook failed for %q: %v", name, err)
+		tuilog.Printf("pre-remove hook aborted delete of %q: %v (output: %s)", name, err, out.String())
+		return err
 	}
+	return nil
 }
 
 func deleteBranchIfRequested(deleteBranch bool, wt *worktree.Worktree, projectRoot string) error {
