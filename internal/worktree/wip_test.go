@@ -140,6 +140,23 @@ func TestListWIPFiles(t *testing.T) {
 			t.Errorf("expected at least 2 files, got %d: %v", len(files), files)
 		}
 	})
+
+	// A single worktree-modified tracked file is the first porcelain line and
+	// has a leading status space (" M path"). The name must come back intact,
+	// not shifted into ".txt" by trimming that leading space.
+	t.Run("worktree-modified first line keeps full filename", func(t *testing.T) {
+		dir := setupWIPTestRepo(t)
+		if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("modified"), 0644); err != nil {
+			t.Fatalf("failed to modify tracked.txt: %v", err)
+		}
+		files, err := NewWIPHandler(dir).ListWIPFiles()
+		if err != nil {
+			t.Fatalf("ListWIPFiles() error = %v", err)
+		}
+		if len(files) != 1 || files[0] != "tracked.txt" {
+			t.Errorf("ListWIPFiles() = %v, want [tracked.txt]", files)
+		}
+	})
 }
 
 func TestStashAndPop(t *testing.T) {

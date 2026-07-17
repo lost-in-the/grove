@@ -39,13 +39,16 @@ func (h *WIPHandler) ListWIPFiles() ([]string, error) {
 		return nil, fmt.Errorf("failed to list WIP files: %w", err)
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	var files []string
-	for _, line := range lines {
-		if len(line) >= 3 {
-			// Status format: XY filename (where XY is 2 chars + space)
-			files = append(files, strings.TrimSpace(line[3:]))
+	for _, line := range strings.Split(string(output), "\n") {
+		// Porcelain v1 format: "XY PATH" — the path starts at column 3. Trim
+		// only trailing whitespace/CR; trimming the *leading* status space (X
+		// is a space for worktree-only modifications) shifts the columns and
+		// mangles the first filename (" M a.txt" → ".txt").
+		if len(line) < 4 {
+			continue
 		}
+		files = append(files, strings.TrimRight(line[3:], " \r"))
 	}
 	return files, nil
 }
