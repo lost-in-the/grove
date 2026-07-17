@@ -256,7 +256,7 @@ sequenceDiagram
     I->>FS: Create .grove/ directory
     I->>FS: Write .grove/config.toml (project_name)
     I->>FS: Create state.json (project, main worktree)
-    I->>FS: Update .gitignore (add state.json)
+    I->>FS: Record machine-local excludes ($GIT_COMMON_DIR/info/exclude)
     I->>FS: Write .grove/.envrc
     I->>D: Auto-detect project type
     I->>FS: Generate .grove/hooks.toml

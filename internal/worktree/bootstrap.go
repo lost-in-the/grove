@@ -129,7 +129,7 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 		// falling through to the executor's os.Stdout default, which used to
 		// corrupt `grove new --json`'s machine-readable stdout whenever a
 		// post-create hook printed progress.
-		var hookOut io.Writer = io.Discard
+		var hookOut = io.Discard
 		if w != nil {
 			hookOut = w
 		}

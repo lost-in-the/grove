@@ -585,3 +585,34 @@ fake; startup does no heavy work before flag parsing.
 6. **P1** — the one real perf regression.
 7. Documentation sweep (D1–D6) — largely mechanical once the code behavior above
    is settled.
+
+---
+
+## PR #140 self-review — findings and remediation (second pass)
+
+An adversarial multi-angle review of the audit PR itself surfaced 16 findings
+(2 regressions the audit introduced, several audit fixes applied unevenly, and
+new latent bugs found while tracing). All are fixed on this branch:
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| R1 | `.grove/config.toml` listed in the machine-local excludes — a fresh `grove init`'s config was invisible to `git add .`, so the "commit this to your repo" workflow (README) silently failed | Entry removed; `EnsureGroveExcludes` migrates legacy exclude blocks in place; per-worktree config symlink removed entirely (config resolution anchors at the main worktree via `grove.GitCommonDir`); `grove init` nudges `git add .grove` |
+| R2 | Bare `${GROVE_HOOK_x}` rewrite silently broke single-quoted hook recipes (`pkill -f '{{.worktree}}'` shipped in examples) and word-split bare tokens on spacey paths | `InterpolateShell` is quote-context-aware: `"${VAR}"` bare, `${VAR}` in double quotes, `'"${VAR}"'` splice in single quotes; injection tests extended to all contexts |
+| R3 | TUI delete ignored the B7 required-hook abort (`runPreRemoveHooks` swallowed errors) | Error propagates; dashboard delete aborts with the worktree intact; explicit `.grove` dir passed to the executor |
+| R4 | `grove fork` skipped `ValidateWorktreeName` (`fork root` collided with reserved keys) | Same guard as new/open/rename/TUI wired in + e2e test |
+| R5 | `config.Load()` (TUI, `grove config`) stayed cwd-based — the B1 fragmentation on the config axis | `GetConfigPaths` resolves via `grove.FindRoot` with a cwd fallback for pre-init flows |
+| R6 | `pre_create`/`post_remove` command hooks defaulted `working_dir` to the guaranteed-absent "new" path (chdir ENOENT every run) | Event-aware default: those two events run from the main worktree; explicit `"new"` still honored |
+| R7 | `grove sync --json` error paths called `os.Exit` before emitting any JSON | `syncExit` prints the result document (skipped entry + reason) first, keeping the non-zero exit code |
+| R8 | Born-dirty fix only ran from `grove init` — a fresh clone + `grove new` recreated `?? .grove/` | `EnsureGroveExcludes` also called from worktree bootstrap and fork (best-effort) |
+| R9 | TUI bulk delete force-removed dirty worktrees with no indication | Bulk overlay marks dirty candidates (`⚠ uncommitted changes`) and counts selected dirty items before the confirm; single-delete overlay already warned |
+| R10 | `mergeExternalComposeConfig` mutated the base config through an aliased pointer and shared slice/Agent backing with the override | Fresh merged struct; every slice/pointer field cloned; regression test asserts inputs are never mutated |
+| R11 | Bare-token word-splitting on paths with spaces/globs | Folded into R2 (bare tokens now double-quoted) |
+| R12 | DRY leftovers: triplicate git-common-dir resolvers, double hooks.toml load per switch, ls/here session-map copy, performSwitch/open tmux-mode dup, stale comments | `grove.GitCommonDir`, `loadConfigHookExecutor`/`runConfigHooksWith`, `loadTmuxSessions`, `resolveTmuxMode`; comments fixed |
+| R13 | TUI create hand-rolled bootstrap — skipped SetupFiles, plugin post-create hooks (docker Up), excludes, required-abort | `runPostCreateStreaming` routes through `worktree.BootstrapWorktree` with a capture writer; tmux created after bootstrap (CLI order) |
+| R14 | `grove open`/`attach` fire no switch hooks (docker auto_start never runs on those paths) | **Deferred by design for now**: `open` is an editor/session command, not a switch — firing docker lifecycle hooks there changes its contract. Candidate for a follow-up decision |
+| R15 | `SetProjectConfigValues` wrote cwd-relative — from a linked worktree the atomic rename replaced the config symlink with a private diverging copy | Fixed by R5 (write path shares `GetConfigPaths`) + symlink removal; regression test writes from a linked worktree and asserts main's file changed |
+| R16 | `BootstrapWorktree` hook output fell through to `os.Stdout` (corrupting `grove new --json` and any TUI caller) | Hook output follows the caller's writer; discarded for silent/JSON callers |
+
+Plugin-track hooks (`hooks.Fire`) intentionally remain warn-and-continue on
+every path — infrastructure hooks don't abort user operations; only explicit
+`on_failure = "fail"` hooks.toml actions do.

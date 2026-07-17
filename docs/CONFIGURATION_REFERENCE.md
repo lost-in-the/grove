@@ -47,8 +47,12 @@ the file, still see the committed `auto`. The file matches the same schema as
 `.grove/config.toml` — only the fields you set are overridden, everything else
 falls through.
 
-Add `.grove/config.local.toml` to your project's `.gitignore` (grove's own
-`.gitignore` already does this).
+No `.gitignore` entry is needed: grove records `.grove/config.local.toml`
+(along with its other machine-local files — `state.json`, `ui_prefs.json`,
+`.envrc`) in the repository's shared exclude file
+(`$GIT_COMMON_DIR/info/exclude`) during `grove init` and worktree bootstrap.
+The project-level `.grove/config.toml` and `.grove/hooks.toml` are deliberately
+NOT excluded — commit those to share them with your team.
 
 ---
 
@@ -487,8 +491,10 @@ runs **both** the global echo and the project migration.
 | `pre_remove` | Before removing a worktree |
 | `post_remove` | After the worktree has been removed |
 
-`pre_create` runs before the worktree directory exists, so its actions should
-set `working_dir = "main"` (the default `"new"` path is not present yet).
+`pre_create` runs before the worktree directory exists and `post_remove` runs
+after it is deleted, so command actions for those two events default to
+`working_dir = "main"` (every other event defaults to `"new"`). An explicit
+`working_dir = "new"` on those events fails with a chdir error.
 
 ### Failure Handling (`on_failure`)
 
@@ -547,10 +553,10 @@ Interpolation in `command` is injection-safe: each `{{.variable}}` is passed to
 the shell as a variable reference (values are supplied via the environment, not
 spliced into the command text), so a value containing shell metacharacters —
 including a `{{.branch}}` grove checked out from an untrusted PR — is always
-treated as literal data. When embedding a variable inside a larger quoted
-string, use **double** quotes so it expands, e.g.
-`command = 'echo "switched to {{.worktree}}"'`; a single-quoted token is taken
-literally by the shell.
+treated as literal data. The rewrite is quoting-aware, so tokens expand
+correctly wherever they appear: bare (`ls {{.new_path}}` stays a single word
+even for paths with spaces), inside double quotes, or inside single quotes
+(`pkill -f '{{.worktree}}'` matches the worktree name).
 
 #### template
 

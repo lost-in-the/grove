@@ -414,7 +414,6 @@ Stale = `LastAccessedAt` older than threshold and no dirty changes. Protected wo
 
 If a worktree was created outside grove (typically by running `git worktree add` directly), grove won't have it in state and won't have run its bootstrap hooks. Symptoms:
 
-- Missing config symlink, so commands that resolve config from the worktree fail.
 - `grove ls` doesn't list the worktree.
 - Docker auto-start and post-create hooks never ran, so credentials/env files may be missing.
 
@@ -422,7 +421,7 @@ Grove detects drift automatically — running any command from a drifted worktre
 
 ```
 ⚠ this worktree (project-feature) wasn't created by grove and isn't registered in state
-  run 'grove adopt' to bootstrap it (symlinks config, runs hooks, registers state)
+  run 'grove adopt' to bootstrap it (registers state, records excludes, runs hooks)
 ```
 
 `grove doctor` also reports drift in its Tier-2 project checks.
@@ -909,13 +908,17 @@ After initializing, secondary worktrees will be detected via grove's main-worktr
 
 **`config symlink broken` warning**
 
-A worktree's `.grove/config.toml` is a symlink pointing to the main worktree's config, but the target doesn't exist. Usually means the main worktree's `.grove` was deleted or never created:
+Only affects worktrees created by older grove versions, which placed a
+`.grove/config.toml` symlink in each worktree. Current grove resolves config
+directly from the main worktree (via git's common dir) and creates no
+per-worktree copies; a broken legacy symlink means the main worktree's
+`.grove` was deleted or never created:
 ```bash
 # Check what the symlink points to
 ls -la .grove/config.toml
 
-# Fix: initialize the main worktree, or repair all symlinks
-grove repair
+# Fix: initialize the main worktree, or simply delete the stale symlink
+grove init   # from the main worktree, if .grove is missing entirely
 ```
 
 **Port conflicts between worktrees (local Docker mode)**

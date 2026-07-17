@@ -2079,7 +2079,7 @@ Repaired 1 issue.
 
 ### grove adopt
 
-**Purpose:** Bootstrap a git worktree that grove doesn't know about. Equivalent to the post-`git worktree add` portion of `grove new` — symlinks `config.toml`, registers state, fires post-create hooks.
+**Purpose:** Bootstrap a git worktree that grove doesn't know about. Equivalent to the post-`git worktree add` portion of `grove new` — records grove's git excludes, registers state, fires post-create hooks.
 
 **Usage:**
 ```
@@ -2097,7 +2097,7 @@ Arguments:
 2. Read the current branch via `git rev-parse --abbrev-ref HEAD`. If the directory isn't a git worktree, abort with an actionable error.
 3. Derive the short name by stripping the project prefix from the directory name (e.g., `grove-feature` → `feature`).
 4. If the worktree is already registered with the same path, print an info message and exit successfully (idempotent).
-5. Run the shared bootstrap: symlink `config.toml`, register state, fire per-project and global post-create hooks.
+5. Run the shared bootstrap: record grove's machine-local git excludes, register state, fire per-project and global post-create hooks. (Config needs no per-worktree files — every command resolves it from the main worktree via git's common dir.)
 
 **Drift detection:** Running any grove command from a drifted worktree prints a non-fatal warning suggesting `grove adopt`. `grove doctor` also reports drift in its Tier-2 project checks.
 
@@ -2105,7 +2105,7 @@ Arguments:
 ```
 ↪ Bootstrapping worktree "feature" at /path/to/project-feature ...
 ✓ adopted "feature" (branch: feature)
-  config symlinked, state registered, post-create hooks fired
+  state registered, excludes recorded, post-create hooks fired
 ```
 
 When already registered:
