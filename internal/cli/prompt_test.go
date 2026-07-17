@@ -8,6 +8,16 @@ import (
 	"time"
 )
 
+// TestIsInteractiveHonorsNonInteractiveEnv guards D1: GROVE_NONINTERACTIVE
+// forces IsInteractive() to false so prompts take their safe non-interactive
+// path instead of blocking on a PTY no human is watching.
+func TestIsInteractiveHonorsNonInteractiveEnv(t *testing.T) {
+	t.Setenv("GROVE_NONINTERACTIVE", "1")
+	if IsInteractive() {
+		t.Error("IsInteractive() = true with GROVE_NONINTERACTIVE=1, want false")
+	}
+}
+
 // replaceStdin swaps os.Stdin for the read end of a pipe and returns a
 // restore func. The test writes to wPipe and must close it when done.
 func replaceStdin(t *testing.T) (wPipe *os.File, restore func()) {

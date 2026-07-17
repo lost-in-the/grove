@@ -13,8 +13,17 @@ import (
 // ErrPromptCanceled is returned when the user cancels a prompt with Escape or Ctrl+C.
 var ErrPromptCanceled = errors.New("canceled")
 
-// IsInteractive returns true if stdin is connected to a terminal.
+// IsInteractive returns true if stdin is connected to a terminal AND the user
+// has not forced non-interactive mode via GROVE_NONINTERACTIVE. Setting that
+// variable (to any non-empty value) makes every prompt take its safe
+// non-interactive path — refuse a dirty switch, error instead of showing a
+// chooser, decline a confirmation — rather than blocking on a PTY no human is
+// watching. This is the behavior documented for agents and CI; before it, the
+// variable was parsed but had no effect.
 func IsInteractive() bool {
+	if os.Getenv("GROVE_NONINTERACTIVE") != "" {
+		return false
+	}
 	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
