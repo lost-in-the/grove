@@ -36,6 +36,17 @@ func (b *BulkState) SelectedItems() []WorktreeItem {
 	return result
 }
 
+// SelectedDirtyCount returns how many selected items have uncommitted changes.
+func (b *BulkState) SelectedDirtyCount() int {
+	count := 0
+	for i, s := range b.Selected {
+		if s && b.Items[i].IsDirty {
+			count++
+		}
+	}
+	return count
+}
+
 func renderBulk(s *BulkState) string {
 	var b strings.Builder
 
@@ -73,11 +84,23 @@ func renderBulk(s *BulkState) string {
 
 		name := item.ShortName
 		branch := Styles.DetailDim.Render(" (" + item.Branch + ")")
-		b.WriteString(cursor + checkbox + " " + name + branch + "\n")
+		row := cursor + checkbox + " " + name + branch
+		// Deletion is forced (no second chance at git's dirty refusal), so
+		// dirty candidates must be visible before the single confirm —
+		// parity with the single-delete overlay's warning box.
+		if item.IsDirty {
+			row += Styles.StatusWarning.Render(" ⚠ uncommitted changes")
+		}
+		b.WriteString(row + "\n")
 	}
 
 	if end < len(s.Items) {
 		b.WriteString(Styles.DetailDim.Render(fmt.Sprintf("  … and %d more", len(s.Items)-end)) + "\n")
+	}
+
+	if n := s.SelectedDirtyCount(); n > 0 {
+		b.WriteString("\n" + Styles.StatusWarning.Render(
+			fmt.Sprintf("⚠ %d selected worktree(s) have uncommitted changes — deleting discards them", n)) + "\n")
 	}
 
 	b.WriteString("\n" + Styles.Footer.Render("[space] toggle  [enter] delete selected  [esc] cancel"))
