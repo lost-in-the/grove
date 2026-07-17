@@ -10,7 +10,6 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/output"
 	"github.com/lost-in-the/grove/internal/tmux"
-	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 var lastJSON bool
@@ -64,35 +63,12 @@ var lastCmd = &cobra.Command{
 			return fmt.Errorf("last worktree '%s' not found", lastWorktree)
 		}
 
-		// Shared switch epilogue: single batched state save, tmux client
-		// switch (creating the session if it's missing instead of failing
-		// hard), suppressed in agent mode / tmux mode "off".
-		projectName := mgr.GetProjectName()
-		prevName := ""
-		if currentPath, err := mgr.CurrentPath(); err == nil {
-			prevName = mgr.DisplayNameForPath(currentPath)
-		}
-		suppressTmux := effectiveTmuxMode(ctx.Config.Tmux.Mode, ctx.Config.AgentMode, false, false) == tmuxModeOff
-		sessionName := worktree.TmuxSessionName(projectName, targetTree.DisplayName())
-		tmuxSwitched := switchToWorktree(ctx, stderr, prevName, targetTree.DisplayName(), sessionName, targetTree.Path, suppressTmux)
-
-		// JSON output mode
-		if lastJSON {
-			result := output.SwitchResult{
-				SwitchTo: targetTree.Path,
-				Name:     targetTree.DisplayName(),
-				Branch:   targetTree.Branch,
-				Path:     targetTree.Path,
-			}
-			return output.PrintJSON(result)
-		}
-
-		// Skip cd directive when tmux switch already moved the user
-		if !tmuxSwitched {
-			emitCdOrExplain(stderr, targetTree.Path)
-		}
-
-		return nil
+		// Delegate to the shared switch flow so `grove last` behaves exactly
+		// like `grove to <last>` — dirty handling, pre/post-switch hooks, and
+		// correct --json ordering (no tmux relocation before the JSON is
+		// emitted) all included, none of which the old lightweight epilogue did
+		// (B19/B20).
+		return performSwitch(ctx, targetTree.DisplayName(), lastJSON, false, false)
 	}),
 }
 
