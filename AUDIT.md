@@ -52,17 +52,31 @@ where reproducible, an end-to-end re-check):
 | **B3** | `Remove` gates `os.RemoveAll` on `--force` and never force-deletes a git-locked worktree |
 | **B4** | `init` records machine-local artifacts in `$GIT_COMMON_DIR/info/exclude`; worktrees are no longer born dirty |
 | **B5** | `graft --pick <short-sha>` no longer panics (`shortSHA` helper) |
+| **B6** | `pre_switch` / `post_switch` / `pre_create` config hooks now actually run (`grove to`, `grove new`) |
 | **B9** | `diff --stat` parses insertions/deletions correctly |
 | **B10 / P1** | `CreateFromBranch` fetches only when the branch isn't local — fork keeps local HEAD, no needless network call |
 | **B13** | Command hooks interpolate values as shell variable references — command injection via branch names is closed |
 | **B15** | `rename` operates on the resolved short name (state re-key + tmux rename no longer half-complete) |
+| **B17** | `sync <unknown>` exits non-zero instead of a silent skip |
+| **B23** | `kick web db` restarts every listed service, not just the first |
 | **B26** | docker-mode `grove test` propagates the child exit code (`errors.As`) |
+| **B32** | `fork` runs `hooks.toml` `post_create` actions like `grove new` |
+| **D1** | `GROVE_NONINTERACTIVE` is honored — prompts take their safe path instead of hanging agents |
+| **—** | `ListWIPFiles` no longer mangles the first dirty filename (`.txt` → `a.txt`) — found during this pass |
 | **S1** | Release Homebrew job uses `curl -fsSL` + `pipefail` + non-empty check before hashing |
 | **X1** | Formula + template license corrected to Apache-2.0 (grove repo + `homebrew-tap`) |
 
-Not yet addressed (tracked above): the medium bugs B18–B38, hook-execution
-wiring B6/B7, bootstrap-orchestration consolidation B8/B32, the remaining
-performance items P2–P7, the DRY refactors, and the documentation sweep D1–D6.
+**Deferred by decision — B7** (`required` / `on_failure = "fail"` aborting an
+operation): the executor and an explicit test (`bootstrap_test.go`: "hook
+failures are non-fatal — must always return nil") treat hook failures as
+advisory, which directly contradicts the docs' "abort the entire operation".
+Flipping this changes established behavior (a failing hook could start failing
+commands, or imply deleting a just-created worktree) and is a product decision,
+not a clear bug — left for an explicit call rather than changed unilaterally.
+
+Not yet addressed: the medium bugs B18–B22/B24–B31/B33–B38, the TUI/bootstrap
+consolidation B8, the remaining performance items P2–P7, the DRY refactors, and
+the documentation sweep D2–D6.
 
 ---
 
