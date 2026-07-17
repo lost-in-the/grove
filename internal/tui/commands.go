@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/git"
 	"github.com/lost-in-the/grove/internal/hooks"
 	"github.com/lost-in-the/grove/internal/state"
@@ -43,27 +44,45 @@ func fetchDetailMetricsCmd(gen int, items []WorktreeItem, defaultBranch string) 
 	}
 }
 
-func deleteWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot, name string, deleteBranch bool) tea.Cmd {
+func deleteWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *config.Config, projectRoot, name string, deleteBranch bool) tea.Cmd {
 	return func() tea.Msg {
 		projectName := mgr.GetProjectName()
-
-		killTmuxSessionForWorktree(projectName, name)
 
 		wt, findErr := mgr.Find(name)
 		if findErr != nil {
 			tuilog.Printf("warning: failed to find worktree %q for branch capture: %v", name, findErr)
 		}
+		var wtPath string
+		if wt != nil {
+			wtPath = wt.Path
+		}
 
+		// Fire the config-file (hooks.toml) and plugin pre-remove hooks. The
+		// plugin hook (docker agent-slot teardown + env cleanup) was skipped by
+		// the TUI, so deleting a worktree with an isolated stack from the
+		// dashboard leaked the running stack and its slot (B8).
 		runPreRemoveHooks(projectName, name, wt)
+		pluginCtx := &hooks.Context{Worktree: name, Config: cfg, WorktreePath: wtPath, MainPath: projectRoot}
+		if err := hooks.Fire(hooks.EventPreRemove, pluginCtx); err != nil {
+			tuilog.Printf("warning: plugin pre-remove hook failed for %q: %v", name, err)
+		}
 
 		// force=true: the dashboard shows dirty/warning state and the user
 		// confirmed the delete. A git-locked worktree is still refused by Remove.
+		// Kill the tmux session only after removal succeeds — killing it first
+		// (as before) lost the session even when removal failed.
 		if err := mgr.Remove(name, true); err != nil {
 			return worktreeDeletedMsg{name: name, deleteBranch: deleteBranch, err: err}
 		}
 
+		killTmuxSessionForWorktree(projectName, name)
+
 		if err := stateMgr.RemoveWorktree(name); err != nil {
 			tuilog.Printf("warning: failed to remove %q from state: %v", name, err)
+		}
+
+		if err := hooks.Fire(hooks.EventPostRemove, pluginCtx); err != nil {
+			tuilog.Printf("warning: plugin post-remove hook failed for %q: %v", name, err)
 		}
 
 		branchErr := deleteBranchIfRequested(deleteBranch, wt, projectRoot)

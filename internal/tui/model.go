@@ -303,7 +303,9 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 	if m.sortMode != SortByName {
 		listItems = sortWorktreeItems(listItems, m.sortMode)
 	}
-	m.list.SetItems(listItems)
+	// Capture SetItems' cmd: with a filter applied it re-runs the filter, and
+	// dropping it left the list showing no items until the user re-filtered (B38).
+	setItemsCmd := m.list.SetItems(listItems)
 	m.computeColumnWidths()
 	m.loading = false
 
@@ -343,6 +345,7 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 	// dropped by handleDetailMetricsLoaded.
 	m.detailMetricsGen++
 	return m, tea.Batch(
+		setItemsCmd,
 		lookupPRsCmd(branches),
 		fetchDetailMetricsCmd(m.detailMetricsGen, msg.items, ResolveDefaultBranch(m.cfg)),
 	)
@@ -367,12 +370,15 @@ func (m Model) handleDetailMetricsLoaded(msg detailMetricsLoadedMsg) (tea.Model,
 			listItems[i] = item
 		}
 	}
-	m.list.SetItems(listItems)
+	// Return SetItems' cmd so an active filter is re-applied instead of
+	// blanking the list (B38).
+	cmd := m.list.SetItems(listItems)
 	m.updateDetailContent()
-	return m, nil
+	return m, cmd
 }
 
 func (m Model) handlePRLookup(msg prLookupMsg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
 	if msg.prs != nil {
 		listItems := m.list.Items()
 		for i, li := range listItems {
@@ -383,10 +389,11 @@ func (m Model) handlePRLookup(msg prLookupMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		m.list.SetItems(listItems)
+		// Return SetItems' cmd so an active filter is re-applied (B38).
+		cmd = m.list.SetItems(listItems)
 		m.updateDetailContent()
 	}
-	return m, nil
+	return m, cmd
 }
 
 func (m Model) handleWorktreeDeleted(msg worktreeDeletedMsg) (tea.Model, tea.Cmd) {
@@ -975,6 +982,14 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch {
+	// With a filter applied, esc clears it (the list's own ClearFilter
+	// behavior) instead of quitting the whole dashboard, which is what the
+	// docs promise and what the un-reached list binding intended (B38). q
+	// still quits regardless.
+	case key.Matches(msg, m.keys.Escape) && m.list.FilterState() == list.FilterApplied:
+		m.list.ResetFilter()
+		return m, nil
+
 	case key.Matches(msg, m.keys.Quit), key.Matches(msg, m.keys.Escape):
 		return m, tea.Quit
 
@@ -1230,7 +1245,7 @@ func (m Model) handleDeleteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		name := m.deleteState.Item.ShortName
 		m.deleteState.Deleting = true
-		return m, tea.Batch(m.spinner.Tick, deleteWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, name, m.deleteState.DeleteBranch))
+		return m, tea.Batch(m.spinner.Tick, deleteWorktreeCmd(m.worktreeMgr, m.stateMgr, m.cfg, m.projectRoot, name, m.deleteState.DeleteBranch))
 
 	case key.Matches(msg, m.keys.Escape), key.Matches(msg, m.keys.Deny):
 		m.activeView = ViewDashboard
@@ -1837,7 +1852,7 @@ func (m Model) bulkDeleteCmd(items []WorktreeItem) tea.Cmd {
 	return func() tea.Msg {
 		failed := make(map[string]string)
 		for _, item := range items {
-			result := deleteWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, item.ShortName, false)()
+			result := deleteWorktreeCmd(m.worktreeMgr, m.stateMgr, m.cfg, m.projectRoot, item.ShortName, false)()
 			if msg, ok := result.(worktreeDeletedMsg); ok && msg.err != nil {
 				failed[item.ShortName] = msg.err.Error()
 			}

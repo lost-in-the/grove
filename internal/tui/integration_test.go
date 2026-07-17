@@ -334,7 +334,7 @@ func TestDeleteWorktreeCmd_Basic(t *testing.T) {
 	repo := setupRailsFixtureWithWorktrees(t, "to-delete")
 	mgr, stateMgr := newTestManagers(t, repo)
 
-	cmd := deleteWorktreeCmd(mgr, stateMgr, repo, "to-delete", false)
+	cmd := deleteWorktreeCmd(mgr, stateMgr, nil, repo, "to-delete", false)
 	msg := cmd()
 
 	deleted, ok := msg.(worktreeDeletedMsg)
@@ -355,7 +355,7 @@ func TestDeleteWorktreeCmd_WithBranch(t *testing.T) {
 	repo := setupRailsFixtureWithWorktrees(t, "del-branch")
 	mgr, stateMgr := newTestManagers(t, repo)
 
-	cmd := deleteWorktreeCmd(mgr, stateMgr, repo, "del-branch", true)
+	cmd := deleteWorktreeCmd(mgr, stateMgr, nil, repo, "del-branch", true)
 	msg := cmd()
 
 	deleted, ok := msg.(worktreeDeletedMsg)
@@ -380,7 +380,7 @@ func TestDeleteWorktreeCmd_NonExistent(t *testing.T) {
 	repo := setupRailsFixture(t)
 	mgr, stateMgr := newTestManagers(t, repo)
 
-	cmd := deleteWorktreeCmd(mgr, stateMgr, repo, "ghost", false)
+	cmd := deleteWorktreeCmd(mgr, stateMgr, nil, repo, "ghost", false)
 	msg := cmd()
 
 	deleted, ok := msg.(worktreeDeletedMsg)
