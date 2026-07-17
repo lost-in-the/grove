@@ -261,6 +261,13 @@ Examples:
 			cli.Warning(stderr, "Post-create hook failed: %v", err)
 		}
 
+		// Config-file (hooks.toml) post-create actions — `grove new` runs these
+		// via BootstrapWorktree, but fork hand-rolls its bootstrap and skipped
+		// them, so a project's post_create recipe (bundle install, copy .env,
+		// …) silently never ran on a forked worktree (B32). Output to stderr so
+		// it stays off the cd: stdout channel.
+		runConfigHooks(stderr, hooks.EventPostCreate, mgr.GetProjectName(), name, newBranchName, newTree.Path, "", ctx.ProjectRoot)
+
 		projectName := mgr.GetProjectName()
 
 		// Create tmux session
