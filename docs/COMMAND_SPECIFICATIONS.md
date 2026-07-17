@@ -2048,14 +2048,15 @@ Apply this configuration? [Y/n]: y
 
 **Usage:**
 ```
-grove repair [name] [flags]
-
-Arguments:
-  name    Worktree to repair (default: all)
+grove repair [flags]
 
 Flags:
       --dry-run    Show what would be done
 ```
+
+`grove repair` audits and repairs the whole project's state; it takes no
+worktree-name argument. (For per-worktree copy/symlink repair, see
+`grove doctor <name> --fix`.)
 
 **Behavior:**
 

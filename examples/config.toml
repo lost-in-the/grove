@@ -42,17 +42,16 @@ dirty_handling = "prompt"
 
 [naming]
 # Pattern used to generate worktree directory names.
-# Default: "{type}/{description}"
+# Default: "{project}-{name}"
 #
-# Available variables:
-#   {project}     - The project_name value
-#   {name}        - The short name given to `grove new`
-#   {type}        - Conventional commit type (feat, fix, etc.)
-#   {description} - The description portion of the name
+# Available variables (each must appear exactly once; literals limited to
+# [A-Za-z0-9._-]):
+#   {project} - The project_name value
+#   {name}    - The short name given to `grove new`
 #
 # Examples:
-#   "{project}-{name}"     -> my-project-auth-feature
-#   "{type}/{description}" -> feat/auth-feature
+#   "{project}-{name}" -> my-project-auth
+#   "wt_{name}.{project}" -> wt_auth.my-project
 pattern = "{project}-{name}"
 
 # =============================================================================
@@ -124,9 +123,10 @@ immutable = ["production"]
 skip_branch_notice = false
 
 # Action to take when skip_branch_notice is true and a branch already exists.
-# Options: "split" (create new branch from base), "fork" (use existing branch)
-# Default: not set
-default_branch_action = "fork"
+# Options: "split" (check out the selected branch directly),
+#          "fork"  (create a new branch based on the selected base branch)
+# Default: "split"
+default_branch_action = "split"
 
 # =============================================================================
 # Test Command

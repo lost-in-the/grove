@@ -79,12 +79,12 @@ Isolated stacks allow multiple independent Docker environments to run simultaneo
 **Starting an isolated stack:**
 
 ```bash
-grove up --isolated          # Allocate a slot and start services
-grove up --isolated --slot 3 # Use a specific slot number
+grove up --isolated          # Allocate the lowest free slot and start services
 ```
 
-Each isolated stack gets:
-- A unique compose project name (`{project}-{worktree}-slot-{N}`)
+The slot is allocated automatically (lowest free, numbered from 1); there is no
+`--slot` flag. Each isolated stack gets:
+- A unique compose project name (`{project}-agent-{N}`, where N is the slot)
 - Its own set of containers with port offsets based on the slot number
 - An isolated database volume
 
@@ -98,8 +98,7 @@ grove agent-status --json    # Machine-readable JSON output
 **Stopping an isolated stack:**
 
 ```bash
-grove down --slot 3          # Stop a specific isolated stack
-grove down                   # Auto-detects and stops the current stack
+grove down                   # Auto-detects and stops the current worktree's stack
 ```
 
 #### Configuration
@@ -110,7 +109,7 @@ Configure isolated stacks in `.grove/config.toml`:
 [plugins.docker.external.agent]
 max_slots = 5           # Maximum concurrent isolated stacks (default: 5)
 network = "shared"      # Docker network for isolated stacks
-url_pattern = "http://localhost:{port}"  # URL template for service discovery
+url_pattern = "http://localhost:30{slot}0"  # URL template; {slot} is substituted
 ```
 
 #### Agent Config Reference
@@ -119,7 +118,7 @@ url_pattern = "http://localhost:{port}"  # URL template for service discovery
 |-------|---------|-------------|
 | `max_slots` | `5` | Maximum number of concurrent isolated stacks |
 | `network` | `"shared"` | Docker network name for inter-service communication |
-| `url_pattern` | `"http://localhost:{port}"` | URL template; `{port}` is replaced with the allocated port |
+| `url_pattern` | `""` | URL template; `{slot}` is replaced with the allocated slot number |
 
 #### Example Workflow
 
@@ -136,13 +135,12 @@ grove up --isolated          # Gets slot 2, different ports
 
 # Check what's running
 grove agent-status
-# SLOT  PROJECT                    STATUS   PORTS
-# 1     myapp-feature-x-slot-1     running  3101, 3111
-# 2     myapp-feature-x-slot-2     running  3102, 3112
+# SLOT  PROJECT            STATUS   PORTS
+# 1     myapp-agent-1      running  3101, 3111
+# 2     myapp-agent-2      running  3102, 3112
 
-# Clean up
-grove down --slot 1
-grove down --slot 2
+# Clean up — run from each worktree, or remove the worktree with grove rm
+grove down
 ```
 
 ## Hook Integration

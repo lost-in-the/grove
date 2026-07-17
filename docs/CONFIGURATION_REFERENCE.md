@@ -360,7 +360,7 @@ copy_files = [".env.local", "config/master.key"]  # string array
 # rotate, like decrypted credentials. Paths are relative to the worktree root.
 # Default: [] (nothing symlinked)
 # NOTE: On Windows, symlinks require Developer Mode or administrator privileges.
-# Use copy_files / copy_dirs instead for Windows-friendly setups.
+# Use copy_files instead for Windows-friendly setups.
 # See CONTRIBUTING.md — Platform Notes for details.
 symlink_files = ["config/credentials/development.key"]  # string array
 
@@ -369,8 +369,8 @@ symlink_files = ["config/credentials/development.key"]  # string array
 # Paths are relative to the worktree root.
 # Default: [] (nothing symlinked)
 # NOTE: On Windows, symlinks require Developer Mode or administrator privileges.
-# Use copy_dirs instead for Windows-friendly setups.
-# See CONTRIBUTING.md — Platform Notes for details.
+# There is no copy equivalent for directories yet, so symlink_dirs needs
+# Developer Mode on Windows. See CONTRIBUTING.md — Platform Notes for details.
 symlink_dirs = ["node_modules", "vendor"]         # string array
 ```
 
