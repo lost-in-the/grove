@@ -14,6 +14,27 @@ func Directive(kind, value string) {
 	_, _ = fmt.Fprintf(os.Stdout, "%s:%s\n", kind, value)
 }
 
+// CdDirective requests a directory change through whichever channel the shell
+// wrapper is listening on. Commands the wrapper runs WITHOUT output capture —
+// the bare-`grove` TUI and the issue/PR browsers — get GROVE_CD_FILE set and
+// read the target from that file; capture-based commands (to, new, …) have no
+// such file and receive a cd: line on stdout. Preferring the file when present
+// keeps the directive off the terminal for the un-captured commands (B27).
+// Returns true when a directive was emitted.
+func CdDirective(path string) bool {
+	if cdFile := os.Getenv("GROVE_CD_FILE"); cdFile != "" {
+		if err := os.WriteFile(cdFile, []byte(path), 0600); err == nil {
+			return true
+		}
+		// fall through to stdout if the file can't be written
+	}
+	if IsShellIntegration() {
+		Directive("cd", path)
+		return true
+	}
+	return false
+}
+
 // TmuxAttachDirective emits the appropriate tmux attach directive based on control mode.
 func TmuxAttachDirective(sessionName string, controlMode bool) {
 	if controlMode {

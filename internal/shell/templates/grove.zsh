@@ -23,6 +23,19 @@ grove() {
     # Only directive-producing commands need output capture.
     # All other commands run directly for streaming support.
     case "$1" in
+        issues|prs)
+            # Interactive browsers may launch a TUI, so run un-captured (they
+            # need the real terminal) but route the selected worktree's cd
+            # through a temp file instead of a raw cd: line on stdout.
+            local cd_file=$(mktemp "${TMPDIR:-/tmp}/grove-cd.XXXXXX")
+            GROVE_SHELL=1 GROVE_SHELL_VERSION="$__GROVE_SHELL_VERSION" GROVE_CD_FILE="$cd_file" "$__GROVE_BIN" "$@"
+            local exit_code=$?
+            if [[ -s "$cd_file" ]]; then
+                cd "$(cat "$cd_file")" 2>/dev/null
+            fi
+            rm -f "$cd_file"
+            return $exit_code
+            ;;
         new|spawn|n|to|t|switch|last|la|fork|fo|split|fetch|f|attach|join|a|j|open|o|up|u|kick|k|restart)
             # Capture output and parse for cd:/tmux-attach:/env: directives
             local output exit_code

@@ -220,6 +220,44 @@ func TestWrapper_NewCommand_ParsesCdDirective(t *testing.T) {
 	}
 }
 
+func TestWrapper_IssuesBrowser_RoutesCdThroughFile(t *testing.T) {
+	binPath := buildFakeGrove(t)
+
+	// B27: `grove issues`/`grove prs` used to run in passthrough, so the cd:
+	// directive they emit when a worktree is selected printed raw on the
+	// terminal instead of changing directory. The wrapper now runs them with
+	// GROVE_CD_FILE, so the directive is consumed via the file, not stdout.
+	stdout, _, exitCode := runZshWrapper(t, binPath, "issues")
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+	if !strings.Contains(stdout, "BROWSER_RENDERED") {
+		t.Errorf("expected browser output in stdout, got: %q", stdout)
+	}
+	if strings.Contains(stdout, "cd:/tmp") {
+		t.Errorf("cd: directive leaked to stdout for issues browser: %q", stdout)
+	}
+}
+
+func TestWrapper_IssuesPrs_UseCdFile(t *testing.T) {
+	// Both wrappers must run issues/prs through the GROVE_CD_FILE path.
+	for _, tmpl := range []struct{ name, body string }{{"zsh", zshTemplate}, {"bash", bashTemplate}} {
+		idx := strings.Index(tmpl.body, "issues|prs)")
+		if idx < 0 {
+			t.Errorf("%s template missing issues|prs case", tmpl.name)
+			continue
+		}
+		end := strings.Index(tmpl.body[idx:], ";;")
+		if end < 0 {
+			t.Errorf("%s issues|prs case has no terminator", tmpl.name)
+			continue
+		}
+		if !strings.Contains(tmpl.body[idx:idx+end], "GROVE_CD_FILE") {
+			t.Errorf("%s issues|prs case does not use GROVE_CD_FILE", tmpl.name)
+		}
+	}
+}
+
 func TestWrapper_NewAliases_AreCaptured(t *testing.T) {
 	// grove new's aliases (spawn, n) must also be in the capture case list,
 	// otherwise the cd: directive prints raw when invoked via an alias.

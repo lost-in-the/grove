@@ -2,7 +2,6 @@ package commands
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
@@ -76,9 +75,10 @@ func setupFetchedWorktree(ctx *GroveContext, mgr *worktree.Manager, w *cli.Write
 		}
 	}
 
-	if os.Getenv("GROVE_SHELL") == "1" {
-		cli.Directive("cd", wt.Path)
-	} else {
+	// Prefer GROVE_CD_FILE: `grove issues`/`grove prs` run un-captured (they may
+	// launch a TUI), so a raw cd: line on stdout would print literally instead
+	// of changing directory (B27).
+	if !cli.CdDirective(wt.Path) {
 		fmt.Printf("\nTo switch to this worktree:\n  grove to %s\n", worktreeName)
 	}
 	return nil

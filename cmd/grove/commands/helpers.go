@@ -137,8 +137,9 @@ func ensureGroveIgnored(dir string) error {
 // integration and change directory manually. Shared by every command that
 // lands the user in a different worktree without a tmux client switch.
 func emitCdOrExplain(stderr *cli.Writer, path string) {
-	if os.Getenv("GROVE_SHELL") == "1" {
-		cli.Directive("cd", path)
+	// Prefers GROVE_CD_FILE when the wrapper set one (un-captured commands),
+	// else a cd: line on stdout for capture-based commands.
+	if cli.CdDirective(path) {
 		return
 	}
 	cli.Faint(stderr, "Note: Directory switching requires shell integration.")

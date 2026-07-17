@@ -78,13 +78,13 @@ export ADMIN_DIR=./admin-feature
 cd /Users/you/work/myproject-feature
 ```
 
-### TUI Mode (`grove` with no arguments)
+### TUI / Browser Mode (`grove` with no arguments, `grove issues`, `grove prs`)
 
-The TUI uses a different mechanism because it runs in alt-screen mode and stdout is not captured:
+The TUI and the interactive issue/PR browsers use a different mechanism because they render to the terminal (alt-screen) and their stdout is not captured — a raw `cd:` line would print literally instead of changing directory:
 
 1. The wrapper creates a temporary file via `mktemp`
 2. It sets `GROVE_CD_FILE` to the temp file path and launches the binary
-3. After the TUI exits, the wrapper reads the temp file for a path to switch to
+3. After the binary exits, the wrapper reads the temp file for a path to switch to
 4. It performs the `cd` and cleans up the temp file
 
 ```bash
@@ -99,7 +99,7 @@ rm -f "$cd_file"
 
 ### All Other Commands (passthrough)
 
-Commands that never emit directives — `grove ls`, `grove logs`, `grove test`, `grove down`, `grove here`, etc. — run the binary directly without output capture:
+Commands that never emit directives — `grove ls`, `grove logs`, `grove down`, `grove here`, etc. — run the binary directly without output capture:
 
 ```bash
 GROVE_SHELL=1 "$__GROVE_BIN" "$@"
@@ -127,7 +127,7 @@ Lines that do not match any directive prefix are treated as normal output and pr
 
 ### TUI Directive (file-based)
 
-When `GROVE_CD_FILE` is set, the TUI writes the target path to the file instead of printing a `cd:` directive. This is necessary because the TUI runs in alt-screen mode and its stdout is not suitable for directive parsing.
+When `GROVE_CD_FILE` is set, the TUI and the issue/PR browsers write the target path to the file instead of printing a `cd:` directive. This is necessary because they render to the terminal and their stdout is not suitable for directive parsing.
 
 ## Environment Variables
 
