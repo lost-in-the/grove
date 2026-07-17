@@ -119,6 +119,13 @@ Examples:
 					Name:   name,
 					Reason: "not found in state",
 				})
+				// A named target that doesn't exist is an error (a typo must not
+				// exit 0), matching the not-an-environment case below. Under
+				// --all a stale state entry is simply skipped.
+				if !syncAll {
+					fmt.Fprintf(os.Stderr, "Error: worktree '%s' not found\n", name)
+					os.Exit(exitcode.ResourceNotFound)
+				}
 				continue
 			}
 
