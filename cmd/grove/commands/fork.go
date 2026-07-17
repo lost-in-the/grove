@@ -74,6 +74,12 @@ Examples:
 		if name == "" {
 			return fmt.Errorf("worktree name cannot be empty")
 		}
+		// Same guard as `grove new`/`grove open`/the TUI overlays: without it,
+		// `grove fork root` collides with the main worktree's reserved state
+		// and tmux keys, and separators like "/" escape the projects dir.
+		if msg := worktree.ValidateWorktreeName(name); msg != "" {
+			return fmt.Errorf("invalid worktree name '%s': %s", name, msg)
+		}
 
 		mgr, err := ctx.WorktreeManager()
 		if err != nil {
