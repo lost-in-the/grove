@@ -44,7 +44,10 @@ func TestTo_FiresSwitchConfigHooks(t *testing.T) {
 	run(repo, "git", "commit", "-m", "init")
 
 	// `grove init` records the machine-local .grove artifacts in the shared
-	// exclude (B4), so the tree stays clean through new/switch.
+	// exclude (B4), so the tree stays clean through new/switch. The
+	// project-level files (config.toml, hooks.toml) are deliberately NOT
+	// excluded — they're meant to be committed, so commit them like a user
+	// following the README would.
 	run(repo, binary, "init")
 
 	hooks := `[hooks]
@@ -58,8 +61,8 @@ command = "touch post_switch_ran.txt"
 working_dir = "new"
 `
 	testhelper.WriteFile(t, filepath.Join(repo, ".grove", "hooks.toml"), hooks)
-	run(repo, "git", "add", ".grove/hooks.toml")
-	run(repo, "git", "commit", "-m", "hooks")
+	run(repo, "git", "add", ".grove")
+	run(repo, "git", "commit", "-m", "grove project files")
 
 	run(repo, binary, "new", "feat", "--no-tmux")
 	run(repo, binary, "to", "feat", "--no-tmux")

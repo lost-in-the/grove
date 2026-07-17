@@ -121,6 +121,7 @@ func runInit() error {
 
 	fmt.Println("")
 	fmt.Println("Next steps:")
+	fmt.Println("  git add .grove && git commit   Share the project config with your team")
 	fmt.Println("  grove new <name>   Create a new worktree")
 	fmt.Println("  grove ls           List all worktrees")
 	fmt.Println("  grove to <name>    Switch to a worktree")

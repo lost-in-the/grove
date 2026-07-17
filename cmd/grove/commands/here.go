@@ -8,7 +8,6 @@ import (
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/output"
-	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/worktree"
 	"github.com/lost-in-the/grove/plugins/docker"
 )
@@ -119,16 +118,7 @@ var hereCmd = &cobra.Command{
 		// two GetSessionStatus calls that each shell out (P4). The reported name
 		// stays canonical — the old basename fallback named a session grove
 		// never creates under a custom [naming] pattern.
-		var sessions map[string]*tmux.Session
-		if tmux.IsTmuxAvailable() {
-			if sessionList, err := tmux.ListSessions(); err == nil {
-				sessions = make(map[string]*tmux.Session, len(sessionList))
-				for _, s := range sessionList {
-					sessions[s.Name] = s
-				}
-			}
-		}
-		tmuxStatus := tmuxStatusFor(tree, projectName, sessions)
+		tmuxStatus := tmuxStatusFor(tree, projectName, loadTmuxSessions())
 
 		// Get environment info from state
 		isEnv, _ := ctx.State.IsEnvironment(displayName)

@@ -128,11 +128,7 @@ Examples:
 		// suppresses it (grove open outside tmux would otherwise run a blocking
 		// attach and take over an agent's terminal, the thing agent mode exists
 		// to prevent).
-		tmuxMode := ctx.Config.Tmux.Mode
-		if tmuxMode == "" {
-			tmuxMode = tmuxModeAuto
-		}
-		tmuxMode = effectiveTmuxMode(tmuxMode, ctx.Config.AgentMode, false, false)
+		tmuxMode := resolveTmuxMode(ctx.Config, false, false)
 
 		if tmuxMode == tmuxModeOff || !tmux.IsTmuxAvailable() {
 			if openJSON {

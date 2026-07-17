@@ -61,6 +61,24 @@ func detectMainBranch(dir string) string {
 	return "main"
 }
 
+// loadTmuxSessions returns the running tmux sessions keyed by name, or nil
+// when tmux is unavailable or listing fails — tmuxStatusFor treats a nil map
+// as "no session". Shared by `grove ls` and `grove here`.
+func loadTmuxSessions() map[string]*tmux.Session {
+	if !tmux.IsTmuxAvailable() {
+		return nil
+	}
+	sessionList, err := tmux.ListSessions()
+	if err != nil {
+		return nil
+	}
+	sessions := make(map[string]*tmux.Session, len(sessionList))
+	for _, s := range sessionList {
+		sessions[s.Name] = s
+	}
+	return sessions
+}
+
 // emitCdOrExplain emits the cd: directive for the shell wrapper when shell
 // integration is active; otherwise it explains how to set up shell
 // integration and change directory manually. Shared by every command that
@@ -81,7 +99,8 @@ func emitCdOrExplain(stderr *cli.Writer, path string) {
 	cli.Faint(stderr, "  cd %s", path)
 }
 
-// switchToWorktree runs the shared switch epilogue used by new/fork/last:
+// switchToWorktree runs the shared switch epilogue used by new/fork
+// (`grove to` and `grove last` route through performSwitch instead):
 // batches SetLastWorktree + TouchWorktree into a single state save, stores
 // the current tmux session as "last", and switches the tmux client to the
 // target session (creating it if missing). Returns whether the client was
@@ -255,30 +274,33 @@ func firePostRemoveHooks(ctx *GroveContext, w *cli.Writer, projectName, name, wt
 	}
 }
 
-// runConfigHooks executes the user's hooks.toml actions for a lifecycle event —
-// the config-file counterpart to the plugin hooks.Fire registry. Failures are
-// non-fatal and surfaced as warnings, matching post-create bootstrap semantics.
-// Wiring this in is what makes documented pre_switch / post_switch / pre_create
-// recipes actually run; before it, those events silently did nothing (B6).
-//
-// out receives the hooks' own progress lines — route it to stderr on the switch
-// path so hook output never lands on the cd: stdout channel the shell wrapper
-// parses. mainPath is the project root, whose .grove holds hooks.toml.
-//
-// Returns a non-nil error only when a required (on_failure="fail") action
-// failed, so callers can abort the operation (B7); a config-load failure or a
-// non-required hook failure is non-fatal and returns nil.
-func runConfigHooks(out *cli.Writer, event, projectName, name, branch, worktreePath, prevWorktreePath, mainPath string) error {
+// loadConfigHookExecutor loads the hooks.toml executor rooted at mainPath's
+// .grove directory, sending hook progress to out. Returns nil (logged, not
+// fatal) when the config can't be loaded — callers skip hooks in that case.
+// Load once per command and reuse across events: every construction re-reads
+// global + project hooks.toml from disk.
+func loadConfigHookExecutor(out *cli.Writer, mainPath string) *hooks.Executor {
 	executor, err := hooks.NewExecutor(filepath.Join(mainPath, ".grove"))
 	if err != nil {
-		log.Printf("hooks: failed to load config for %s: %v", event, err)
-		return nil
-	}
-	if !executor.HasHooksForEvent(event) {
+		log.Printf("hooks: failed to load config: %v", err)
 		return nil
 	}
 	if out != nil {
 		executor.Output = out
+	}
+	return executor
+}
+
+// runConfigHooksWith fires one lifecycle event's hooks.toml actions on a
+// previously loaded executor (nil-safe — a nil executor means the config
+// failed to load and hooks are skipped).
+//
+// Returns a non-nil error only when a required (on_failure="fail") action
+// failed, so callers can abort the operation (B7); a non-required hook
+// failure warns inside Execute and returns nil.
+func runConfigHooksWith(executor *hooks.Executor, event, projectName, name, branch, worktreePath, prevWorktreePath, mainPath string) error {
+	if executor == nil || !executor.HasHooksForEvent(event) {
+		return nil
 	}
 	ec := &hooks.ExecutionContext{
 		Event:        event,
@@ -291,6 +313,21 @@ func runConfigHooks(out *cli.Writer, event, projectName, name, branch, worktreeP
 		PrevPath:     prevWorktreePath,
 	}
 	return executor.Execute(event, ec)
+}
+
+// runConfigHooks executes the user's hooks.toml actions for a lifecycle event —
+// the config-file counterpart to the plugin hooks.Fire registry. Wiring this in
+// is what makes documented pre_switch / post_switch / pre_create recipes
+// actually run; before it, those events silently did nothing (B6).
+//
+// out receives the hooks' own progress lines — route it to stderr on the switch
+// path so hook output never lands on the cd: stdout channel the shell wrapper
+// parses. mainPath is the project root, whose .grove holds hooks.toml.
+//
+// Loads the hooks config on every call; commands firing multiple events
+// should load once with loadConfigHookExecutor and use runConfigHooksWith.
+func runConfigHooks(out *cli.Writer, event, projectName, name, branch, worktreePath, prevWorktreePath, mainPath string) error {
+	return runConfigHooksWith(loadConfigHookExecutor(out, mainPath), event, projectName, name, branch, worktreePath, prevWorktreePath, mainPath)
 }
 
 // worktreeSetupOpts configures the post-create setup sequence.

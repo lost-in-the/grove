@@ -114,16 +114,7 @@ var lsCmd = &cobra.Command{
 
 		// Get tmux sessions for status
 		tmuxAvailable := tmux.IsTmuxAvailable()
-		var sessions map[string]*tmux.Session
-		if tmuxAvailable {
-			sessionList, err := tmux.ListSessions()
-			if err == nil {
-				sessions = make(map[string]*tmux.Session)
-				for _, s := range sessionList {
-					sessions[s.Name] = s
-				}
-			}
-		}
+		sessions := loadTmuxSessions()
 
 		// Collect plugin statuses
 		var pluginStatuses map[string][]plugins.StatusEntry

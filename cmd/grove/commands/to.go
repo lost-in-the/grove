@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/lost-in-the/grove/internal/cli"
+	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/hooks"
 	"github.com/lost-in-the/grove/internal/log"
 	"github.com/lost-in-the/grove/internal/output"
@@ -180,6 +181,13 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 		MainPath:         ctx.ProjectRoot,
 	}
 
+	// Load the hooks.toml config once for both switch events — each load
+	// re-reads global + project hooks.toml from disk.
+	var switchHooks *hooks.Executor
+	if !peek {
+		switchHooks = loadConfigHookExecutor(stderr, ctx.ProjectRoot)
+	}
+
 	// Fire pre-switch hooks (skip when --peek)
 	if !peek {
 		if !jsonOut {
@@ -191,7 +199,7 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 		// Config-file (hooks.toml) pre-switch actions. Output to stderr so it
 		// never collides with the cd: directive on stdout. A required
 		// action failing aborts the switch before anything changes (B7).
-		if err := runConfigHooks(stderr, hooks.EventPreSwitch, mgr.GetProjectName(), name, targetTree.Branch, targetTree.Path, prevWorktreePath, ctx.ProjectRoot); err != nil {
+		if err := runConfigHooksWith(switchHooks, hooks.EventPreSwitch, mgr.GetProjectName(), name, targetTree.Branch, targetTree.Path, prevWorktreePath, ctx.ProjectRoot); err != nil {
 			return err
 		}
 	}
@@ -208,12 +216,8 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 
 	projectName := mgr.GetProjectName()
 	cfg := ctx.Config
-	tmuxMode := cfg.Tmux.Mode
-	if tmuxMode == "" {
-		tmuxMode = tmuxModeAuto
-	}
 	useCC := tmux.ShouldUseControlMode(cfg.Tmux.ControlMode)
-	tmuxMode = effectiveTmuxMode(tmuxMode, cfg.AgentMode, noTmux, peek)
+	tmuxMode := resolveTmuxMode(cfg, noTmux, peek)
 
 	// Handle tmux session (unless mode is "off")
 	var sessionName string
@@ -266,7 +270,7 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 		// hooks so a docker:compose action sees a started stack (e.g. the
 		// documented `bin/rails db:migrate` recipe). Output to stderr. A
 		// required action failing fails the command (B7).
-		if err := runConfigHooks(stderr, hooks.EventPostSwitch, mgr.GetProjectName(), name, targetTree.Branch, targetTree.Path, prevWorktreePath, ctx.ProjectRoot); err != nil {
+		if err := runConfigHooksWith(switchHooks, hooks.EventPostSwitch, mgr.GetProjectName(), name, targetTree.Branch, targetTree.Path, prevWorktreePath, ctx.ProjectRoot); err != nil {
 			return err
 		}
 	}
@@ -329,6 +333,18 @@ func effectiveTmuxMode(mode string, agentMode, noTmux, peek bool) string {
 		return tmuxModeOff
 	}
 	return mode
+}
+
+// resolveTmuxMode returns the effective tmux mode for this invocation: the
+// configured mode (defaulting to "auto" when unset) filtered through the
+// per-invocation suppressors. Shared by performSwitch and `grove open` so
+// the defaulting rule can't drift between them.
+func resolveTmuxMode(cfg *config.Config, noTmux, peek bool) string {
+	mode := cfg.Tmux.Mode
+	if mode == "" {
+		mode = tmuxModeAuto
+	}
+	return effectiveTmuxMode(mode, cfg.AgentMode, noTmux, peek)
 }
 
 // handleDirectoryDrift detects if a tmux session's active pane has drifted
