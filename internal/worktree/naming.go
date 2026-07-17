@@ -17,6 +17,35 @@ import (
 	"github.com/lost-in-the/grove/internal/config"
 )
 
+// ValidateWorktreeName reports why name is unusable as a worktree short name,
+// or "" if it is valid (an empty name is treated as valid here — callers reject
+// empties separately). It rejects path separators and shell/tmux
+// metacharacters (so `grove new ../escape` can't place a worktree outside the
+// project, and names stay safe in tmux targets), control characters including
+// newlines (which would corrupt the cd: shell-integration protocol), a leading
+// - or . (flag parsing / hidden files), and the reserved name "root" (the main
+// worktree's display name). Shared by the CLI create/rename paths and the TUI.
+func ValidateWorktreeName(name string) string {
+	if name == "" {
+		return ""
+	}
+	if name == "root" {
+		return `"root" is reserved for the main worktree`
+	}
+	if strings.ContainsAny(name, " /\\:*?\"<>|") {
+		return "name contains invalid characters"
+	}
+	for _, r := range name {
+		if r < 0x20 || r == 0x7f {
+			return "name contains control characters"
+		}
+	}
+	if strings.HasPrefix(name, "-") || strings.HasPrefix(name, ".") {
+		return "name cannot start with - or ."
+	}
+	return ""
+}
+
 // TestEnvNumber derives a stable TEST_ENV_NUMBER in range [50, 99] from a worktree name.
 // The same name always produces the same number (deterministic via MD5 hash).
 func TestEnvNumber(name string) int {

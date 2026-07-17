@@ -92,6 +92,12 @@ Examples:
 				return fmt.Errorf("worktree '%s' not found (use 'grove open %s' without --no-create to create it)", name, name)
 			}
 
+			// Only reached when creating a brand-new worktree (Find matched
+			// nothing), so validate the name before it becomes a path/branch.
+			if msg := worktree.ValidateWorktreeName(name); msg != "" {
+				return fmt.Errorf("invalid worktree name '%s': %s", name, msg)
+			}
+
 			// Create the worktree
 			branchName := name
 			if err := mgr.Create(name, branchName); err != nil {

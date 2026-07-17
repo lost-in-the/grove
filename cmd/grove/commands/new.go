@@ -91,6 +91,9 @@ Examples:
 		if name == "" {
 			return fmt.Errorf("worktree name cannot be empty")
 		}
+		if msg := worktree.ValidateWorktreeName(name); msg != "" {
+			return fmt.Errorf("invalid worktree name '%s': %s", name, msg)
+		}
 
 		// --dirty only makes sense paired with --from-branch (adopting an
 		// existing branch). For the default flow (new branch from HEAD) the
