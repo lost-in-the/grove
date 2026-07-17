@@ -120,7 +120,12 @@ Examples:
 				candidate.ExcludeReason = "environment worktree"
 			} else if tree.IsDirty && !cleanIncludeDirty {
 				candidate.ExcludeReason = "dirty (use --include-dirty)"
-			} else if candidate.DaysSince >= 0 && candidate.DaysSince < cleanOlderThan {
+			} else if candidate.DaysSince < 0 {
+				// Unknown age (no state timestamp, no reachable HEAD time) — never
+				// trim it. We can't confirm it's older than the threshold, and a
+				// negative sentinel used to slip past the age check as eligible (B24).
+				candidate.ExcludeReason = "last access unknown"
+			} else if candidate.DaysSince < cleanOlderThan {
 				candidate.ExcludeReason = fmt.Sprintf("accessed %d days ago (threshold: %d)", candidate.DaysSince, cleanOlderThan)
 			}
 

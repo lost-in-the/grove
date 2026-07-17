@@ -371,8 +371,55 @@ func mergeDockerConfig(result, override *DockerPluginConfig) {
 	if override.Mode != "" {
 		result.Mode = override.Mode
 	}
-	if override.External != nil {
-		result.External = override.External
+	mergeExternalComposeConfig(&result.External, override.External)
+}
+
+// mergeExternalComposeConfig field-merges an [plugins.docker.external] override
+// onto the base. Previously the whole struct was replaced when an override
+// existed, so a config.local.toml that set a single external field wiped the
+// rest — the merged config then failed validation and grove silently fell back
+// to full defaults (local mode). Merge field-by-field like every other section
+// so "only the fields you set are overridden" holds (B29).
+func mergeExternalComposeConfig(result **ExternalComposeConfig, override *ExternalComposeConfig) {
+	if override == nil {
+		return
+	}
+	if *result == nil {
+		// Nothing to merge onto — adopt a copy of the override wholesale.
+		clone := *override
+		*result = &clone
+		return
+	}
+	base := *result
+	if override.Path != "" {
+		base.Path = override.Path
+	}
+	if override.EnvVar != "" {
+		base.EnvVar = override.EnvVar
+	}
+	if override.EnvFile != "" {
+		base.EnvFile = override.EnvFile
+	}
+	if len(override.Services) > 0 {
+		base.Services = override.Services
+	}
+	if len(override.NonBlockingServices) > 0 {
+		base.NonBlockingServices = override.NonBlockingServices
+	}
+	if len(override.CopyFiles) > 0 {
+		base.CopyFiles = override.CopyFiles
+	}
+	if len(override.SymlinkFiles) > 0 {
+		base.SymlinkFiles = override.SymlinkFiles
+	}
+	if len(override.SymlinkDirs) > 0 {
+		base.SymlinkDirs = override.SymlinkDirs
+	}
+	if override.MountDest != "" {
+		base.MountDest = override.MountDest
+	}
+	if override.Agent != nil {
+		base.Agent = override.Agent
 	}
 }
 

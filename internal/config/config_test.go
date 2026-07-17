@@ -679,6 +679,50 @@ func TestMergeConfigsExternalDocker(t *testing.T) {
 	}
 }
 
+// TestMergeConfigsExternalDockerPartialOverride guards B29: an override that
+// sets a single external field must field-merge, not replace the whole struct
+// (which used to wipe the rest and make Validate fall back to local defaults).
+func TestMergeConfigsExternalDockerPartialOverride(t *testing.T) {
+	base := &Config{
+		Plugins: PluginsConfig{
+			Docker: DockerPluginConfig{
+				Mode: "external",
+				External: &ExternalComposeConfig{
+					Path:     "/tmp/shared-infra",
+					EnvVar:   "APP_DIR",
+					EnvFile:  ".env",
+					Services: []string{"app", "db"},
+				},
+			},
+		},
+	}
+	// A config.local.toml that only changes the env file.
+	override := &Config{
+		Plugins: PluginsConfig{
+			Docker: DockerPluginConfig{
+				External: &ExternalComposeConfig{EnvFile: ".env.local"},
+			},
+		},
+	}
+
+	ext := mergeConfigs(base, override).Plugins.Docker.External
+	if ext == nil {
+		t.Fatal("External config was wiped by a partial override")
+	}
+	if ext.EnvFile != ".env.local" {
+		t.Errorf("EnvFile = %q, want overridden .env.local", ext.EnvFile)
+	}
+	if ext.Path != "/tmp/shared-infra" {
+		t.Errorf("Path = %q, want base value preserved", ext.Path)
+	}
+	if ext.EnvVar != "APP_DIR" {
+		t.Errorf("EnvVar = %q, want base value preserved", ext.EnvVar)
+	}
+	if len(ext.Services) != 2 {
+		t.Errorf("Services = %v, want base [app db] preserved", ext.Services)
+	}
+}
+
 func TestValidateDockerPlugin(t *testing.T) {
 	tmpDir := t.TempDir()
 
