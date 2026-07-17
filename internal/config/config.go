@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/lost-in-the/grove/internal/fsutil"
@@ -394,47 +395,69 @@ func mergeDockerConfig(result, override *DockerPluginConfig) {
 // rest — the merged config then failed validation and grove silently fell back
 // to full defaults (local mode). Merge field-by-field like every other section
 // so "only the fields you set are overridden" holds (B29).
+//
+// The merge builds a fresh struct and clones every slice/pointer field:
+// *result may alias the caller's base config (mergeConfigs shallow-copies
+// Config, sharing the External pointer), so writing through it — or adopting
+// the override's slices by reference — would let one config layer corrupt
+// another. Merging must never mutate its inputs.
 func mergeExternalComposeConfig(result **ExternalComposeConfig, override *ExternalComposeConfig) {
 	if override == nil {
 		return
 	}
-	if *result == nil {
-		// Nothing to merge onto — adopt a copy of the override wholesale.
-		clone := *override
-		*result = &clone
-		return
+	var merged ExternalComposeConfig
+	if *result != nil {
+		merged = **result
 	}
-	base := *result
 	if override.Path != "" {
-		base.Path = override.Path
+		merged.Path = override.Path
 	}
 	if override.EnvVar != "" {
-		base.EnvVar = override.EnvVar
+		merged.EnvVar = override.EnvVar
 	}
 	if override.EnvFile != "" {
-		base.EnvFile = override.EnvFile
+		merged.EnvFile = override.EnvFile
 	}
 	if len(override.Services) > 0 {
-		base.Services = override.Services
+		merged.Services = override.Services
 	}
 	if len(override.NonBlockingServices) > 0 {
-		base.NonBlockingServices = override.NonBlockingServices
+		merged.NonBlockingServices = override.NonBlockingServices
 	}
 	if len(override.CopyFiles) > 0 {
-		base.CopyFiles = override.CopyFiles
+		merged.CopyFiles = override.CopyFiles
 	}
 	if len(override.SymlinkFiles) > 0 {
-		base.SymlinkFiles = override.SymlinkFiles
+		merged.SymlinkFiles = override.SymlinkFiles
 	}
 	if len(override.SymlinkDirs) > 0 {
-		base.SymlinkDirs = override.SymlinkDirs
+		merged.SymlinkDirs = override.SymlinkDirs
 	}
 	if override.MountDest != "" {
-		base.MountDest = override.MountDest
+		merged.MountDest = override.MountDest
 	}
 	if override.Agent != nil {
-		base.Agent = override.Agent
+		merged.Agent = override.Agent
 	}
+
+	// Detach all shared backing, wherever each field came from.
+	merged.Services = slices.Clone(merged.Services)
+	merged.NonBlockingServices = slices.Clone(merged.NonBlockingServices)
+	merged.CopyFiles = slices.Clone(merged.CopyFiles)
+	merged.SymlinkFiles = slices.Clone(merged.SymlinkFiles)
+	merged.SymlinkDirs = slices.Clone(merged.SymlinkDirs)
+	if merged.Agent != nil {
+		agent := *merged.Agent
+		agent.Services = slices.Clone(agent.Services)
+		agent.TemplateOverlays = slices.Clone(agent.TemplateOverlays)
+		if agent.Enabled != nil {
+			enabled := *agent.Enabled
+			agent.Enabled = &enabled
+		}
+		merged.Agent = &agent
+	}
+
+	*result = &merged
 }
 
 func mergeTUIConfig(result, override *TUIConfig) {
