@@ -199,7 +199,11 @@ func initializeState(groveDir, cwd, projectName string) error {
 		CreatedAt:      now,
 		LastAccessedAt: now,
 	}
-	return stateMgr.AddWorktree("main", mainState)
+	// Key the root under "root", the name DisplayName()/DisplayNameForPath()
+	// return for the main worktree. Registering it as "main" meant every
+	// runtime TouchWorktree("root")/GetWorktree("root") missed it, so the
+	// root's last_accessed_at was frozen at init time (B22).
+	return stateMgr.AddWorktree("root", mainState)
 }
 
 func writeEnvrc(groveDir, projectName string) {

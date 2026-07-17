@@ -76,12 +76,36 @@ When using shell integration, this will also change your current directory.`,
 			return fmt.Errorf("worktree '%s' is stale (directory missing). Run 'grove rm %s' to clean up", name, name)
 		}
 
+		// Resolve the current worktree once (used for the already-here check,
+		// hook context, and state update).
+		currentPath, _ := mgr.CurrentPath()
+
+		// Already in the target worktree — no-op (spec: "Already in X", exit 0).
+		// Without this, a self-switch runs the dirty gate against the worktree
+		// you're standing in (refusing a no-op move when dirty_handling="refuse")
+		// and mis-records last_worktree as the current one, breaking the A↔B
+		// toggle (B18).
+		if currentPath != "" && currentPath == targetTree.Path {
+			if toJSON {
+				return output.PrintJSON(output.SwitchResult{
+					SwitchTo: targetTree.Path,
+					Name:     targetTree.DisplayName(),
+					Branch:   targetTree.Branch,
+					Path:     targetTree.Path,
+				})
+			}
+			if !toPeek {
+				cli.Info(stderr, "Already in '%s'", targetTree.DisplayName())
+			}
+			return nil
+		}
+
 		// Get current worktree for hook context and state update. Path +
 		// display name are all that's needed — the WIP handler does its own
 		// per-path dirty check below.
 		var prevWorktree string
 		var prevWorktreePath string
-		if currentPath, err := mgr.CurrentPath(); err == nil && currentPath != "" {
+		if currentPath != "" {
 			prevWorktree = mgr.DisplayNameForPath(currentPath)
 			prevWorktreePath = currentPath
 
