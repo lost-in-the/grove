@@ -198,6 +198,44 @@ func TestCommandHookDefaultWorkingDir(t *testing.T) {
 			t.Errorf("post-create default dir = %q, want new %q", got, newDir)
 		}
 	})
+
+	// The full load path: LoadHooksConfig used to normalize working_dir=""
+	// to "new" at parse time, erasing the "unset" signal before the executor
+	// could apply the event-aware default — the unit cases above pass a raw
+	// action and would miss that.
+	t.Run("default survives config load", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir()) // isolate from any global hooks.toml
+		groveDir := t.TempDir()
+		hooksToml := `[hooks]
+[[hooks.pre_create]]
+type = "command"
+command = "pwd > out.txt"
+`
+		if err := os.WriteFile(filepath.Join(groveDir, "hooks.toml"), []byte(hooksToml), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := LoadHooksConfig(groveDir)
+		if err != nil {
+			t.Fatalf("LoadHooksConfig: %v", err)
+		}
+		e := NewExecutorWithConfig(cfg)
+		e.Output = &bytes.Buffer{}
+
+		mainDir := t.TempDir()
+		ctx := &ExecutionContext{
+			Event:    EventPreCreate,
+			NewPath:  filepath.Join(mainDir, "not-created-yet"),
+			MainPath: mainDir,
+			Output:   &bytes.Buffer{},
+		}
+		if err := e.Execute(EventPreCreate, ctx); err != nil {
+			t.Fatalf("Execute: %v", err)
+		}
+		// The command ran iff chdir succeeded — out.txt lands in main.
+		if _, err := os.Stat(filepath.Join(mainDir, "out.txt")); err != nil {
+			t.Errorf("pre_create command did not run from the main worktree: %v", err)
+		}
+	})
 }
 
 // TestInterpolateShellInjectionAllContexts extends the B13 guarantee to every

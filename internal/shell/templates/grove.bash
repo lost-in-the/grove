@@ -38,9 +38,13 @@ grove() {
             return $exit_code
             ;;
         new|spawn|n|to|t|switch|last|la|fork|fo|split|fetch|f|attach|join|a|j|open|o|up|u|kick|k|restart)
-            # Capture output and parse for cd:/tmux-attach:/env: directives
+            # Capture output and parse for cd:/tmux-attach:/env: directives.
+            # GROVE_CD_FILE is explicitly cleared: a tmux server started from
+            # an issues/prs invocation inherits that (long-deleted) temp path
+            # into every later pane, and grove would silently write the cd
+            # target there instead of emitting the cd: line this branch parses.
             local output exit_code
-            output=$(GROVE_SHELL=1 GROVE_SHELL_VERSION="$__GROVE_SHELL_VERSION" "$__GROVE_BIN" "$@")
+            output=$(GROVE_SHELL=1 GROVE_SHELL_VERSION="$__GROVE_SHELL_VERSION" GROVE_CD_FILE= "$__GROVE_BIN" "$@")
             exit_code=$?
 
             local should_cd=0

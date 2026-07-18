@@ -278,14 +278,18 @@ func setActionDefaults(hooks *EventHooks) {
 	setDefaultsForActions(hooks.PostRemove)
 }
 
-// setDefaultsForActions sets defaults for a slice of hook actions
+// setDefaultsForActions sets defaults for a slice of hook actions.
+//
+// WorkingDir is deliberately NOT defaulted here: an empty value means "the
+// user didn't choose", and the executor needs that signal to pick an
+// event-aware default (pre-create and post-remove run from the main worktree
+// because the "new" path is guaranteed absent there — see
+// defaultCommandWorkDir). Baking "new" in at load time erased the signal and
+// made default-configured pre_create hooks fail chdir on every run.
 func setDefaultsForActions(actions []HookAction) {
 	for i := range actions {
 		if actions[i].Timeout == 0 {
 			actions[i].Timeout = 60 // Default 60 seconds
-		}
-		if actions[i].WorkingDir == "" {
-			actions[i].WorkingDir = "new" // Default to new worktree
 		}
 		if actions[i].OnFailure == "" {
 			actions[i].OnFailure = "warn" // Default to warn

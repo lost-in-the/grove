@@ -616,3 +616,23 @@ new latent bugs found while tracing). All are fixed on this branch:
 Plugin-track hooks (`hooks.Fire`) intentionally remain warn-and-continue on
 every path — infrastructure hooks don't abort user operations; only explicit
 `on_failure = "fail"` hooks.toml actions do.
+
+### Second review wave (line-by-line + removed-behavior finders)
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| R17 | Load-time normalization (`working_dir "" → "new"`) erased the unset signal before the executor's event-aware default could fire — default-configured `pre_create` hooks still failed chdir (caught end-to-end; the unit test had bypassed the load path) | Normalization removed; regression test goes through `LoadHooksConfig` |
+| R18 | `AtomicWriteFile`'s explicit `Chmod(0644)` ignores the umask — pre-audit writers used `O_CREATE` perms, so `state.json` was 0600 under `umask 077`; the consolidation silently made it world-readable | Temp file now created with `perm` at `O_CREATE` (umask-filtered, `os.WriteFile` semantics); unix test pins it |
+| R19 | Agent section wholesale-replaced on override — a `config.local.toml` setting only `agent.max_slots` wiped `template_path` (B29 one level deeper) | `mergeAgentStackConfig` field-merges, returns a fresh struct |
+| R20 | Required `pre_switch` hook abort fired *after* auto-stash + `SetLastWorktree` — an aborted switch silently parked the user's work in a stash and corrupted the `grove last` toggle | Abort pops the auto-stash back (with recovery hint on pop failure); `last_worktree` recorded only once the switch proceeds; e2e test |
+| R21 | `grove open`'s agent-mode/tmux-off early return skipped `TouchWorktree`, so `grove trim` saw actively-used worktrees as stale | Touch moved above the tmux branching |
+| R22 | `grove fetch pr/N` re-fetch used a stale local branch (B10's fetch-skip is right for fork, wrong for fetch) | fetch fast-forwards the local PR ref first (non-fatal on divergence/offline) |
+| R23 | Captured commands run in panes of a tmux server that inherited a stale `GROVE_CD_FILE` wrote the cd target to the dead temp file — no `cd:` line, shell silently stayed put | Wrapper capture branch clears `GROVE_CD_FILE` explicitly; ShellVersion 8→9 |
+
+Reviewed and left as-is (with rationale): the `grove to` self-switch no-op is
+spec-mandated (B18); `grove last` attaching tmux outside shell integration is
+the intended "behave exactly like `grove to`" alignment (B19); main-worktree
+`.grove` taking precedence over a nested subproject `.grove` is the B1
+anchoring working as designed — nested grove projects inside one repo are not
+a supported layout; a required `post_switch` failure aborting after state
+touches is inherent to post-hooks (the switch has effectively happened).

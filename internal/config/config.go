@@ -436,9 +436,7 @@ func mergeExternalComposeConfig(result **ExternalComposeConfig, override *Extern
 	if override.MountDest != "" {
 		merged.MountDest = override.MountDest
 	}
-	if override.Agent != nil {
-		merged.Agent = override.Agent
-	}
+	merged.Agent = mergeAgentStackConfig(merged.Agent, override.Agent)
 
 	// Detach all shared backing, wherever each field came from.
 	merged.Services = slices.Clone(merged.Services)
@@ -458,6 +456,44 @@ func mergeExternalComposeConfig(result **ExternalComposeConfig, override *Extern
 	}
 
 	*result = &merged
+}
+
+// mergeAgentStackConfig field-merges an [plugins.docker.external.agent]
+// override onto the base, returning a fresh struct (never one of the inputs).
+// Wholesale pointer replacement meant a config.local.toml that set only
+// max_slots wiped the required template_path — the B29 partial-override wipe
+// one section deeper. "Only the fields you set are overridden" applies at
+// every nesting level.
+func mergeAgentStackConfig(base, override *AgentStackConfig) *AgentStackConfig {
+	if override == nil {
+		return base
+	}
+	var merged AgentStackConfig
+	if base != nil {
+		merged = *base
+	}
+	if override.Enabled != nil {
+		merged.Enabled = override.Enabled
+	}
+	if override.MaxSlots != 0 {
+		merged.MaxSlots = override.MaxSlots
+	}
+	if len(override.Services) > 0 {
+		merged.Services = override.Services
+	}
+	if override.TemplatePath != "" {
+		merged.TemplatePath = override.TemplatePath
+	}
+	if len(override.TemplateOverlays) > 0 {
+		merged.TemplateOverlays = override.TemplateOverlays
+	}
+	if override.URLPattern != "" {
+		merged.URLPattern = override.URLPattern
+	}
+	if override.Network != "" {
+		merged.Network = override.Network
+	}
+	return &merged
 }
 
 func mergeTUIConfig(result, override *TUIConfig) {

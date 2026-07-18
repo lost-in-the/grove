@@ -118,12 +118,14 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 	// per-path dirty check below.
 	var prevWorktree string
 	var prevWorktreePath string
+	var wip *worktree.WIPHandler
+	autoStashed := false
 	if currentPath != "" {
 		prevWorktree = mgr.DisplayNameForPath(currentPath)
 		prevWorktreePath = currentPath
 
 		// Check for dirty worktree before allowing switch
-		wip := worktree.NewWIPHandler(currentPath)
+		wip = worktree.NewWIPHandler(currentPath)
 		hasDirty, wipErr := wip.HasWIP()
 		if wipErr != nil {
 			log.Printf("failed to check dirty state: %v", wipErr)
@@ -144,6 +146,7 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 			if stashErr := wip.Stash(stashMsg); stashErr != nil {
 				return fmt.Errorf("failed to auto-stash changes: %w", stashErr)
 			}
+			autoStashed = true
 			if !jsonOut {
 				cli.Success(stderr, "Stashed changes in '%s'", prevWorktree)
 			}
@@ -163,11 +166,6 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 			if promptErr != nil || !confirmed {
 				return fmt.Errorf("switch aborted: worktree has uncommitted changes")
 			}
-		}
-
-		// Update last_worktree in state before switching
-		if err := ctx.State.SetLastWorktree(prevWorktree); err != nil {
-			log.Printf("failed to set last worktree %q: %v", prevWorktree, err)
 		}
 	}
 
@@ -198,9 +196,28 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 		}
 		// Config-file (hooks.toml) pre-switch actions. Output to stderr so it
 		// never collides with the cd: directive on stdout. A required
-		// action failing aborts the switch before anything changes (B7).
+		// action failing aborts the switch (B7) — and must leave the tree as
+		// it was found, so an auto-stash made moments ago is popped back
+		// instead of silently swallowing the user's uncommitted work.
 		if err := runConfigHooksWith(switchHooks, hooks.EventPreSwitch, mgr.GetProjectName(), name, targetTree.Branch, targetTree.Path, prevWorktreePath, ctx.ProjectRoot); err != nil {
+			if autoStashed {
+				if popErr := wip.PopStash(); popErr != nil {
+					cli.Warning(stderr, "switch aborted, but restoring the auto-stash failed: %v", popErr)
+					cli.Faint(stderr, "recover with: git -C %s stash pop", prevWorktreePath)
+				} else if !jsonOut {
+					cli.Info(stderr, "Restored auto-stashed changes after aborted switch")
+				}
+			}
 			return err
+		}
+	}
+
+	// Record last_worktree only now that the switch is actually happening —
+	// recording it before the required-hook gate corrupted the A↔B toggle
+	// (`grove last`) whenever a pre-switch hook aborted the operation.
+	if prevWorktree != "" {
+		if err := ctx.State.SetLastWorktree(prevWorktree); err != nil {
+			log.Printf("failed to set last worktree %q: %v", prevWorktree, err)
 		}
 	}
 

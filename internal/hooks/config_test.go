@@ -205,12 +205,14 @@ timeout = 30
 		if action.Type != "copy" {
 			t.Errorf("action.Type = %q, want %q", action.Type, "copy")
 		}
-		// Defaults applied: OnFailure → "warn", WorkingDir → "new"
+		// Defaults applied: OnFailure → "warn". WorkingDir stays "" — the
+		// executor resolves it per event (pre-create/post-remove default to
+		// main because the "new" path is guaranteed absent there).
 		if action.OnFailure != "warn" {
 			t.Errorf("action.OnFailure = %q, want %q", action.OnFailure, "warn")
 		}
-		if action.WorkingDir != "new" {
-			t.Errorf("action.WorkingDir = %q, want %q", action.WorkingDir, "new")
+		if action.WorkingDir != "" {
+			t.Errorf("action.WorkingDir = %q, want %q (unset — executor decides per event)", action.WorkingDir, "")
 		}
 		// Explicit timeout preserved
 		if action.Timeout != 30 {
@@ -316,11 +318,14 @@ func TestSetDefaultsForActions(t *testing.T) {
 		}
 	})
 
-	t.Run("empty WorkingDir gets new", func(t *testing.T) {
+	t.Run("empty WorkingDir stays empty for event-aware defaulting", func(t *testing.T) {
+		// "" must survive load: it is the executor's signal that the user
+		// didn't choose, so pre-create/post-remove can default to the main
+		// worktree (defaultCommandWorkDir) instead of the absent "new" path.
 		actions := []HookAction{{Type: "copy", WorkingDir: ""}}
 		setDefaultsForActions(actions)
-		if actions[0].WorkingDir != "new" {
-			t.Errorf("WorkingDir = %q, want %q", actions[0].WorkingDir, "new")
+		if actions[0].WorkingDir != "" {
+			t.Errorf("WorkingDir = %q, want %q (unset)", actions[0].WorkingDir, "")
 		}
 	})
 

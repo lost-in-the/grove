@@ -124,6 +124,14 @@ Examples:
 		// session name and state key are both keyed on the short name (B21).
 		displayName := wt.DisplayName()
 
+		// Record the access before any tmux branching: agent-mode and
+		// tmux-off users reach worktrees through `grove open` too, and
+		// skipping the touch on that path made `grove trim` flag their
+		// actively-used worktrees as stale.
+		if err := ctx.State.TouchWorktree(displayName); err != nil {
+			log.Printf("failed to touch worktree %q: %v", displayName, err)
+		}
+
 		// Step 2: Ensure tmux session exists — unless agent mode / tmux "off"
 		// suppresses it (grove open outside tmux would otherwise run a blocking
 		// attach and take over an agent's terminal, the thing agent mode exists
@@ -179,11 +187,6 @@ Examples:
 					cli.Success(w, "Launched '%s' in existing session", sessionCmd)
 				}
 			}
-		}
-
-		// Update state
-		if err := ctx.State.TouchWorktree(displayName); err != nil {
-			log.Printf("failed to touch worktree %q: %v", displayName, err)
 		}
 
 		// JSON output mode

@@ -35,6 +35,47 @@ func TestMergeConfigs_DoesNotMutateInputs(t *testing.T) {
 		}
 	})
 
+	// The agent section must field-merge like its parent: wholesale pointer
+	// replacement meant a config.local.toml setting only max_slots wiped the
+	// required template_path, failing validation — the exact B29 partial-
+	// override bug one level down.
+	t.Run("agent overrides field-merge, not replace", func(t *testing.T) {
+		enabled := true
+		base := LoadDefaults()
+		base.Plugins.Docker.External = &ExternalComposeConfig{
+			Path: "/x",
+			Agent: &AgentStackConfig{
+				Enabled:      &enabled,
+				TemplatePath: "agent-stacks/template.yml",
+				Services:     []string{"app"},
+				Network:      "grove-net",
+			},
+		}
+		override := LoadDefaults()
+		override.Plugins.Docker.External = &ExternalComposeConfig{
+			Agent: &AgentStackConfig{MaxSlots: 10},
+		}
+
+		merged := mergeConfigs(base, override)
+		agent := merged.Plugins.Docker.External.Agent
+
+		if agent.MaxSlots != 10 {
+			t.Errorf("MaxSlots = %d, want 10 (override)", agent.MaxSlots)
+		}
+		if agent.TemplatePath != "agent-stacks/template.yml" {
+			t.Errorf("TemplatePath = %q, want base value (wiped by wholesale replace)", agent.TemplatePath)
+		}
+		if len(agent.Services) != 1 || agent.Services[0] != "app" {
+			t.Errorf("Services = %v, want base [app]", agent.Services)
+		}
+		if agent.Network != "grove-net" {
+			t.Errorf("Network = %q, want base value", agent.Network)
+		}
+		if agent.Enabled == nil || !*agent.Enabled {
+			t.Errorf("Enabled = %v, want base true", agent.Enabled)
+		}
+	})
+
 	t.Run("override slices and agent are not shared", func(t *testing.T) {
 		enabled := true
 		base := LoadDefaults() // External nil — exercises the adopt-copy branch

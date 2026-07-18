@@ -129,6 +129,13 @@ Lines that do not match any directive prefix are treated as normal output and pr
 
 When `GROVE_CD_FILE` is set, the TUI and the issue/PR browsers write the target path to the file instead of printing a `cd:` directive. This is necessary because they render to the terminal and their stdout is not suitable for directive parsing.
 
+Because `GROVE_CD_FILE` takes precedence, the wrapper's capture branch (to,
+new, open, …) invokes the binary with `GROVE_CD_FILE=` explicitly cleared. A
+tmux server started from an issues/prs invocation inherits that invocation's
+(long-deleted) temp path into every later pane; without the clear, grove
+would silently write the cd target to the stale file and the captured `cd:`
+line the wrapper parses would never be emitted.
+
 ## Environment Variables
 
 | Variable | Description |

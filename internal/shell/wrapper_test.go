@@ -258,6 +258,29 @@ func TestWrapper_IssuesPrs_UseCdFile(t *testing.T) {
 	}
 }
 
+func TestWrapper_CaptureBranch_ClearsInheritedCdFile(t *testing.T) {
+	// A tmux server started from an issues/prs invocation inherits that
+	// invocation's GROVE_CD_FILE (a long-deleted temp path) into every later
+	// pane. The capture branch parses cd: lines from stdout, so it must run
+	// grove with GROVE_CD_FILE explicitly cleared — otherwise CdDirective
+	// silently writes the stale file and the shell never changes directory.
+	for _, tmpl := range []struct{ name, body string }{{"zsh", zshTemplate}, {"bash", bashTemplate}} {
+		idx := strings.Index(tmpl.body, "new|spawn|n|")
+		if idx < 0 {
+			t.Errorf("%s template missing capture case", tmpl.name)
+			continue
+		}
+		end := strings.Index(tmpl.body[idx:], ";;")
+		if end < 0 {
+			t.Errorf("%s capture case has no terminator", tmpl.name)
+			continue
+		}
+		if !strings.Contains(tmpl.body[idx:idx+end], `GROVE_CD_FILE= "$__GROVE_BIN"`) {
+			t.Errorf("%s capture branch does not clear inherited GROVE_CD_FILE", tmpl.name)
+		}
+	}
+}
+
 func TestWrapper_NewAliases_AreCaptured(t *testing.T) {
 	// grove new's aliases (spawn, n) must also be in the capture case list,
 	// otherwise the cd: directive prints raw when invoked via an alias.
