@@ -104,8 +104,14 @@ func TestGitCommonDir(t *testing.T) {
 func TestEnsureGroveExcludes(t *testing.T) {
 	t.Run("machine-local files ignored, config.toml stays committable", func(t *testing.T) {
 		mainDir, _ := gitRepoWithWorktree(t)
-		if err := EnsureGroveExcludes(mainDir); err != nil {
+		migrated, err := EnsureGroveExcludes(mainDir)
+		if err != nil {
 			t.Fatalf("EnsureGroveExcludes() error = %v", err)
+		}
+		// A routine first-time write is not a migration — the upgrade notice
+		// must not fire for fresh repos.
+		if migrated {
+			t.Error("migrated = true on a fresh write, want false")
 		}
 
 		groveDir := filepath.Join(mainDir, ".grove")
@@ -134,7 +140,7 @@ func TestEnsureGroveExcludes(t *testing.T) {
 
 	t.Run("idempotent", func(t *testing.T) {
 		mainDir, _ := gitRepoWithWorktree(t)
-		if err := EnsureGroveExcludes(mainDir); err != nil {
+		if _, err := EnsureGroveExcludes(mainDir); err != nil {
 			t.Fatal(err)
 		}
 		excludePath := filepath.Join(mainDir, ".git", "info", "exclude")
@@ -142,7 +148,7 @@ func TestEnsureGroveExcludes(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := EnsureGroveExcludes(mainDir); err != nil {
+		if _, err := EnsureGroveExcludes(mainDir); err != nil {
 			t.Fatal(err)
 		}
 		after, err := os.ReadFile(excludePath)
@@ -170,8 +176,14 @@ func TestEnsureGroveExcludes(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := EnsureGroveExcludes(mainDir); err != nil {
+		migrated, err := EnsureGroveExcludes(mainDir)
+		if err != nil {
 			t.Fatalf("EnsureGroveExcludes() error = %v", err)
+		}
+		// Removing the legacy entry IS the migration — the one-time upgrade
+		// notice keys off this flag.
+		if !migrated {
+			t.Error("migrated = false when a legacy config.toml entry was removed, want true")
 		}
 
 		content, err := os.ReadFile(excludePath)
@@ -187,9 +199,13 @@ func TestEnsureGroveExcludes(t *testing.T) {
 		if !strings.Contains(string(content), "userfile.txt") {
 			t.Errorf("user content lost in migration:\n%s", content)
 		}
-		// A user's own entries after our block must survive too.
-		if err := EnsureGroveExcludes(mainDir); err != nil {
+		// The second run is a no-op: the notice can never repeat.
+		migrated, err = EnsureGroveExcludes(mainDir)
+		if err != nil {
 			t.Fatal(err)
+		}
+		if migrated {
+			t.Error("migrated = true on the idempotent re-run, want false")
 		}
 	})
 
@@ -204,7 +220,7 @@ func TestEnsureGroveExcludes(t *testing.T) {
 		if err := os.WriteFile(excludePath, []byte("# mine\n.grove/config.toml\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if err := EnsureGroveExcludes(mainDir); err != nil {
+		if _, err := EnsureGroveExcludes(mainDir); err != nil {
 			t.Fatal(err)
 		}
 		content, _ := os.ReadFile(excludePath)
@@ -218,7 +234,7 @@ func TestEnsureGroveExcludes(t *testing.T) {
 
 	t.Run("works from a linked worktree", func(t *testing.T) {
 		mainDir, linkedDir := gitRepoWithWorktree(t)
-		if err := EnsureGroveExcludes(linkedDir); err != nil {
+		if _, err := EnsureGroveExcludes(linkedDir); err != nil {
 			t.Fatalf("EnsureGroveExcludes(linked) error = %v", err)
 		}
 		content, err := os.ReadFile(filepath.Join(mainDir, ".git", "info", "exclude"))

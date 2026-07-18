@@ -921,6 +921,48 @@ ls -la .grove/config.toml
 grove init   # from the main worktree, if .grove is missing entirely
 ```
 
+### Upgrading across the config-layout change
+
+Older grove versions git-ignored `.grove/config.toml` (so it could never be
+committed) and planted a `config.toml` symlink in every worktree. Current
+grove treats `config.toml`/`hooks.toml` as **committable project files**,
+resolves config from the main worktree on every command, and keeps only
+genuinely machine-local files (`state.json`, `state.lock`, `ui_prefs.json`,
+`.envrc`, `config.local.toml`) in the git exclude.
+
+The upgrade is self-healing: the first grove command in a legacy repo rewrites
+the exclude block and prints this one-time stderr notice (it cannot repeat —
+the migration is idempotent):
+
+```
+grove: migrated git excludes — .grove/config.toml is no longer ignored; commit it to share project config
+grove: worktrees showing an untracked .grove/config.toml carry a legacy symlink — run 'grove doctor' for cleanup steps
+```
+
+Agents: this notice (and every grove notice) goes to **stderr**, so `--json`
+stdout contracts are unaffected — never treat it as command output, and don't
+re-trigger work because of it. If a user asks for help after upgrading, walk
+this checklist:
+
+1. **`git add .grove/config.toml` refused as "ignored"** — the repo hasn't run
+   a current-grove command yet. Run any grove command (e.g. `grove ls`) to
+   auto-migrate, or remove the `.grove/config.toml` line from the grove block
+   in `.git/info/exclude` by hand.
+2. **A worktree shows untracked or typechanged `.grove/config.toml`** — legacy
+   symlink debris. In that worktree:
+   ```bash
+   rm .grove/config.toml                     # delete the symlink
+   git checkout -- .grove/config.toml        # only if the project commits it
+   rmdir .grove 2>/dev/null || true          # drop the dir if now empty
+   ```
+   `grove doctor` lists every affected worktree.
+3. **Project config not yet shared** — from the main worktree:
+   `git add .grove && git commit` (config.toml + hooks.toml are the
+   committable pair; machine-local files are already excluded).
+4. **Config seems wrong from a worktree** — confirm the grove binary is
+   current (`grove version`); old binaries still read the worktree-local
+   path.
+
 **Port conflicts between worktrees (local Docker mode)**
 
 Two worktrees running containers that bind the same host ports:

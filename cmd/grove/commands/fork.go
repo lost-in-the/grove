@@ -210,7 +210,7 @@ Examples:
 		// Record grove's machine-local git excludes (best-effort) — fork
 		// hand-rolls its bootstrap, so it must mirror BootstrapWorktree here
 		// for fresh clones where `grove init` never ran on this machine.
-		if err := grove.EnsureGroveExcludes(ctx.ProjectRoot); err != nil && !forkJSON {
+		if _, err := grove.EnsureGroveExcludes(ctx.ProjectRoot); err != nil && !forkJSON {
 			cli.Warning(w, "record git excludes: %v", err)
 		}
 

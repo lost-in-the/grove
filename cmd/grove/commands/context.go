@@ -74,6 +74,8 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 			return nil // unreachable
 		}
 
+		migrateGroveExcludes(groveDir)
+
 		// Create state manager
 		stateMgr, err := state.NewManager(groveDir)
 		if err != nil {
@@ -118,6 +120,34 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 	}
 }
 
+// migrateGroveExcludes self-heals the repository's git excludes on every
+// project command (idempotent, one git call + one file read when already
+// current) and surfaces the upgrade notice exactly once: older grove versions
+// git-ignored .grove/config.toml — the committable project config — and
+// waiting for the next `grove init`/`grove new` to migrate would leave
+// `git add .grove/config.toml` silently refused in the meantime. Failures are
+// logged, never fatal: excludes are a convenience, not a precondition.
+// Modeled on the shell-integration version preflight above.
+func migrateGroveExcludes(groveDir string) {
+	migrated, err := grove.EnsureGroveExcludes(grove.MustProjectRoot(groveDir))
+	if err != nil {
+		log.Printf("git excludes migration: %v", err)
+		return
+	}
+	if migrated {
+		emitExcludesMigrationNotice()
+	}
+}
+
+// emitExcludesMigrationNotice is the one-time (per repository) upgrade notice
+// for the config-layout change. It fires only when a legacy exclude entry was
+// actually removed — the migration is idempotent, so the message can never
+// repeat. Kept in one place so init and the command context share wording.
+func emitExcludesMigrationNotice() {
+	fmt.Fprintln(os.Stderr, "grove: migrated git excludes — .grove/config.toml is no longer ignored; commit it to share project config")
+	fmt.Fprintln(os.Stderr, "grove: worktrees showing an untracked .grove/config.toml carry a legacy symlink — run 'grove doctor' for cleanup steps")
+}
+
 // printNoGroveDiagnosis prints the "not a grove project" diagnosis for cwd to
 // stderr. Shared by RequireGroveContext and the bare-grove TUI path so the
 // wording cannot drift between the CLI and TUI entry points.
@@ -149,7 +179,7 @@ func emitDriftNotice(w *cli.Writer, name string, reason grove.DriftReason) {
 		return
 	}
 	cli.Warning(w, "this worktree (%s) wasn't created by grove and isn't registered in state", name)
-	cli.Faint(w, "run 'grove adopt' to bootstrap it (symlinks config, runs hooks, registers state)")
+	cli.Faint(w, "run 'grove adopt' to bootstrap it (registers state, records excludes, runs hooks)")
 }
 
 var pluginsRegistered bool

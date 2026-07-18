@@ -54,35 +54,48 @@ const groveExcludeHeader = "# Grove (worktree manager) — machine-local, applie
 // older grove (which wrongly excluded the committable config.toml) is
 // migrated in place. Idempotent — an up-to-date file is left untouched.
 //
-// Called from `grove init` and from worktree bootstrap, so fresh clones that
-// never ran init on this machine still get the entries recorded.
-func EnsureGroveExcludes(dir string) error {
+// Called from `grove init`, from worktree bootstrap, and from the shared
+// command context, so fresh clones that never ran init on this machine still
+// get the entries recorded and legacy repos self-heal on the first grove
+// command after an upgrade.
+//
+// migrated is true only when a legacy entry was removed from the managed
+// block — i.e. this invocation just un-ignored a committable project file.
+// Callers surface that one-time event to the user (the notice never fires
+// again because the rewrite is idempotent); routine first-time block writes
+// return false.
+func EnsureGroveExcludes(dir string) (migrated bool, err error) {
 	commonDir, err := GitCommonDir(dir)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	excludePath := filepath.Join(commonDir, "info", "exclude")
 	content, err := os.ReadFile(excludePath)
 	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("read %s: %w", excludePath, err)
+		return false, fmt.Errorf("read %s: %w", excludePath, err)
 	}
 
-	updated, changed := spliceGroveExcludeBlock(string(content))
+	updated, changed, legacyRemoved := spliceGroveExcludeBlock(string(content))
 	if !changed {
-		return nil
+		return false, nil
 	}
 
 	if err := os.MkdirAll(filepath.Dir(excludePath), 0o755); err != nil {
-		return fmt.Errorf("create %s: %w", filepath.Dir(excludePath), err)
+		return false, fmt.Errorf("create %s: %w", filepath.Dir(excludePath), err)
 	}
-	return fsutil.AtomicWriteFile(excludePath, []byte(updated), 0o644)
+	if err := fsutil.AtomicWriteFile(excludePath, []byte(updated), 0o644); err != nil {
+		return false, err
+	}
+	return legacyRemoved, nil
 }
 
 // spliceGroveExcludeBlock returns content with the grove-managed block
 // replaced by (or appended as) the current desired block. changed is false
-// when the file already contains exactly the desired block.
-func spliceGroveExcludeBlock(content string) (updated string, changed bool) {
+// when the file already contains exactly the desired block. legacyRemoved
+// reports whether the replaced block contained entries from an older grove
+// (e.g. the .grove/config.toml exclusion).
+func spliceGroveExcludeBlock(content string) (updated string, changed, legacyRemoved bool) {
 	desired := append([]string{groveExcludeHeader}, groveExcludeEntries...)
 
 	lines := []string{}
@@ -115,17 +128,25 @@ func spliceGroveExcludeBlock(content string) (updated string, changed bool) {
 	}
 
 	if start >= 0 {
+		legacy := make(map[string]bool, len(legacyGroveExcludeEntries))
+		for _, e := range legacyGroveExcludeEntries {
+			legacy[e] = true
+		}
 		current := make([]string, 0, end-start)
 		for _, line := range lines[start:end] {
-			current = append(current, strings.TrimSpace(line))
+			trimmed := strings.TrimSpace(line)
+			current = append(current, trimmed)
+			if legacy[trimmed] {
+				legacyRemoved = true
+			}
 		}
 		if slicesEqual(current, desired) {
-			return content, false
+			return content, false, false
 		}
 		replaced := append([]string{}, lines[:start]...)
 		replaced = append(replaced, desired...)
 		replaced = append(replaced, lines[end:]...)
-		return strings.Join(replaced, "\n"), true
+		return strings.Join(replaced, "\n"), true, legacyRemoved
 	}
 
 	// No managed block yet — append one, separated from existing content.
@@ -139,7 +160,7 @@ func spliceGroveExcludeBlock(content string) (updated string, changed bool) {
 	}
 	b.WriteString(strings.Join(desired, "\n"))
 	b.WriteString("\n")
-	return b.String(), true
+	return b.String(), true, false
 }
 
 func slicesEqual(a, b []string) bool {

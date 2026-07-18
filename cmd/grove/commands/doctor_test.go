@@ -949,12 +949,15 @@ func TestCheckConfigSymlinks(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		detail, err := checkConfigSymlinks(groveDir)
-		if err != nil {
-			t.Errorf("expected pass, got error: %v", err)
+		// Any grove-created config symlink is legacy debris now — config
+		// resolves from the main worktree, and with config.toml no longer
+		// git-ignored the symlink shows up as dirt in its worktree.
+		_, err := checkConfigSymlinks(groveDir)
+		if err == nil {
+			t.Fatal("expected legacy-symlink finding, got pass")
 		}
-		if !strings.Contains(detail, "worktrees checked") {
-			t.Errorf("expected 'worktrees checked' in detail, got %q", detail)
+		if !strings.Contains(err.Error(), "legacy config symlinks") {
+			t.Errorf("expected 'legacy config symlinks' in error, got %q", err.Error())
 		}
 	})
 
@@ -987,8 +990,8 @@ func TestCheckConfigSymlinks(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for broken symlink, got nil")
 		}
-		if !strings.Contains(err.Error(), "broken symlinks") {
-			t.Errorf("expected 'broken symlinks' in error, got %q", err.Error())
+		if !strings.Contains(err.Error(), "legacy config symlinks") || !strings.Contains(err.Error(), "(broken)") {
+			t.Errorf("expected legacy finding with broken annotation, got %q", err.Error())
 		}
 	})
 

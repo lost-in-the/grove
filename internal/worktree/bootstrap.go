@@ -61,7 +61,10 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 
 	// Best-effort: worktrees function without the excludes, they just show
 	// grove's machine-local files as untracked until `grove init` runs here.
-	if err := grove.EnsureGroveExcludes(opts.MainPath); err != nil {
+	// (The one-time legacy-migration notice is handled by the command context,
+	// which runs this same migration on every invocation — no need to surface
+	// it from inside bootstrap.)
+	if _, err := grove.EnsureGroveExcludes(opts.MainPath); err != nil {
 		log.Printf("record git excludes: %v", err)
 		if w != nil {
 			cli.Warning(w, "record git excludes: %v", err)

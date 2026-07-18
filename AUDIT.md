@@ -629,6 +629,8 @@ every path — infrastructure hooks don't abort user operations; only explicit
 | R22 | `grove fetch pr/N` re-fetch used a stale local branch (B10's fetch-skip is right for fork, wrong for fetch) | fetch fast-forwards the local PR ref first (non-fatal on divergence/offline) |
 | R23 | Captured commands run in panes of a tmux server that inherited a stale `GROVE_CD_FILE` wrote the cd target to the dead temp file — no `cd:` line, shell silently stayed put | Wrapper capture branch clears `GROVE_CD_FILE` explicitly; ShellVersion 8→9 |
 
+| R24 | Upgrade surfacing: the excludes migration ran only on init/bootstrap, so upgraded repos hit the ignored-config symptom with no explanation until the next worktree creation | Self-healing migration on every project command (`RequireGroveContext` + bare-grove TUI, beside the shell-version preflight) with a one-time stderr notice keyed off actual legacy-entry removal — idempotent, so it can never repeat and needs no "seen" state; `grove doctor` flags legacy per-worktree symlinks with the exact removal commands; AGENTS.md + AGENT_GUIDE gained upgrade-assist sections |
+
 Reviewed and left as-is (with rationale): the `grove to` self-switch no-op is
 spec-mandated (B18); `grove last` attaching tmux outside shell integration is
 the intended "behave exactly like `grove to`" alignment (B19); main-worktree

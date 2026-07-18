@@ -103,6 +103,11 @@ shorthand alias (e.g. 'w'). Use 'grove install --help' for details.`,
 			os.Exit(exitcode.NotGroveProject)
 		}
 
+		// Same self-healing excludes migration RequireGroveContext performs —
+		// the bare-grove TUI is many users' only entry point, and this runs
+		// before the alt-screen takes over so the stderr notice stays visible.
+		migrateGroveExcludes(groveDir)
+
 		projectRoot := grove.MustProjectRoot(groveDir)
 
 		mgr, err := worktree.NewManager(projectRoot)

@@ -261,11 +261,13 @@ func groveNotFoundError() error {
 	return fmt.Errorf("grove binary not found in PATH")
 }
 
-// checkConfigSymlinks validates .grove/config.toml symlinks across all
-// worktrees. Current grove no longer creates these (config resolution anchors
-// at the main worktree via the git common dir), but worktrees created by
-// older versions may still carry one — a broken target there shadows the real
-// config, so it's worth surfacing until the worktree is recreated.
+// checkConfigSymlinks finds legacy .grove/config.toml symlinks across all
+// worktrees. Current grove creates none — config resolution anchors at the
+// main worktree via the git common dir — so ANY such symlink is debris from
+// an older version. Since the upgrade also un-ignores config.toml, these
+// leftovers surface as untracked/typechanged files in their worktrees; the
+// fix is simply deleting them (and restoring the tracked file if the project
+// committed one). Broken targets are annotated but need the same cleanup.
 func checkConfigSymlinks(groveDir string) (string, error) {
 	projectRoot := filepath.Dir(groveDir)
 
@@ -274,7 +276,7 @@ func checkConfigSymlinks(groveDir string) (string, error) {
 		return "", fmt.Errorf("failed to list worktrees: %w", err)
 	}
 
-	var broken []string
+	var legacy []string
 	var total int
 
 	for _, line := range strings.Split(string(out), "\n") {
@@ -285,19 +287,19 @@ func checkConfigSymlinks(groveDir string) (string, error) {
 		total++
 
 		configPath := filepath.Join(path, ".grove", "config.toml")
-		target, err := os.Readlink(configPath)
-		if err != nil {
-			continue // Not a symlink or no .grove — skip
+		if _, err := os.Readlink(configPath); err != nil {
+			continue // Not a symlink or no .grove — fine
 		}
 
-		// It's a symlink — check if target exists
+		entry := filepath.Base(path)
 		if _, statErr := os.Stat(configPath); statErr != nil {
-			broken = append(broken, fmt.Sprintf("%s → %s", filepath.Base(path), target))
+			entry += " (broken)"
 		}
+		legacy = append(legacy, entry)
 	}
 
-	if len(broken) > 0 {
-		return "", fmt.Errorf("broken symlinks: %s", strings.Join(broken, ", "))
+	if len(legacy) > 0 {
+		return "", fmt.Errorf("legacy config symlinks in: %s — config now resolves from the main worktree; remove with `rm <worktree>/.grove/config.toml` (then `git checkout -- .grove/config.toml` there if the project commits it)", strings.Join(legacy, ", "))
 	}
 
 	return fmt.Sprintf("%d worktrees checked", total), nil

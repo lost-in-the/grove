@@ -104,8 +104,10 @@ func runInit() error {
 		return err
 	}
 
-	if err := grove.EnsureGroveExcludes(cwd); err != nil {
+	if migrated, err := grove.EnsureGroveExcludes(cwd); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to record grove's git excludes: %v\n", err)
+	} else if migrated {
+		emitExcludesMigrationNotice()
 	}
 
 	writeEnvrc(groveDir, projectName)

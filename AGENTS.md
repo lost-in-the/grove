@@ -171,9 +171,29 @@ shells, CI pipelines, and tool invocations from editors like Claude Code.
 ## Config Layering
 
 Defaults → `~/.config/grove/config.toml` → `.grove/config.toml` →
-`.grove/config.local.toml` (gitignored, per-developer overlay) → env overrides.
+`.grove/config.local.toml` (per-developer overlay, auto-excluded) → env overrides.
 `[protection]` lists are **unioned** across layers — branches are never silently dropped.
 Full schema: [`docs/CONFIGURATION_REFERENCE.md`](docs/CONFIGURATION_REFERENCE.md).
+
+Config always resolves (and writes) at the **main worktree's** `.grove/`, from any
+worktree or subdirectory. `.grove/config.toml` and `.grove/hooks.toml` are the
+committable pair — commit them to share project settings; grove auto-records its
+machine-local files (`state.json`, `config.local.toml`, …) in the repo's git exclude.
+
+## Config Layout Upgrade (older grove → current)
+
+Older grove git-ignored `.grove/config.toml` and symlinked it into every worktree.
+On the first command in a legacy repo, grove self-heals the exclude file and prints
+one stderr notice (`grove: migrated git excludes — …`). If you (as an agent) see it,
+or hit these symptoms, remediate:
+
+| Symptom | Fix |
+|---------|-----|
+| `git add .grove/config.toml` refused as "ignored" | Run any grove command (auto-migrates), then retry |
+| Worktree shows untracked/typechanged `.grove/config.toml` | Legacy symlink: `rm <worktree>/.grove/config.toml`, then `git checkout -- .grove/config.toml` there if the project commits it |
+| Unsure what's stale | `grove doctor` lists legacy symlinks with commands |
+
+Full walkthrough: [`docs/AGENT_GUIDE.md` → Upgrading across the config-layout change](docs/AGENT_GUIDE.md#upgrading-across-the-config-layout-change).
 
 ## Plugins
 
