@@ -169,9 +169,30 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 		}
 	}
 
-	// Build hook context (used by pre/post-switch hooks unless --peek)
+	// If we auto-stashed, guarantee the user's working tree is restored on any
+	// abort before the switch is committed — a required hook failing OR a tmux
+	// error. Only a completed switch keeps the stash (popped on the way back).
+	// One rollback covers every early return, so no site has to remember to pop.
+	switchCommitted := false
+	if autoStashed {
+		defer func() {
+			if switchCommitted {
+				return
+			}
+			if popErr := wip.PopStash(); popErr != nil {
+				cli.Warning(stderr, "switch aborted, but restoring the auto-stash failed: %v", popErr)
+				cli.Faint(stderr, "recover with: git -C %s stash pop", prevWorktreePath)
+			} else if !jsonOut {
+				cli.Info(stderr, "Restored auto-stashed changes after aborted switch")
+			}
+		}()
+	}
+
+	// Build hook context (used by pre/post-switch hooks unless --peek). Worktree
+	// is the resolved short name — Find also matches by branch or directory, so
+	// the raw argument could name something that isn't the worktree (B21).
 	hookCtx := &hooks.Context{
-		Worktree:         name,
+		Worktree:         targetTree.DisplayName(),
 		PrevWorktree:     prevWorktree,
 		Config:           ctx.Config,
 		WorktreePath:     targetTree.Path,
@@ -195,29 +216,11 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 			cli.Warning(stderr, "pre-switch hooks failed: %v", err)
 		}
 		// Config-file (hooks.toml) pre-switch actions. Output to stderr so it
-		// never collides with the cd: directive on stdout. A required
-		// action failing aborts the switch (B7) — and must leave the tree as
-		// it was found, so an auto-stash made moments ago is popped back
-		// instead of silently swallowing the user's uncommitted work.
-		if err := runConfigHooksWith(switchHooks, hooks.EventPreSwitch, mgr.GetProjectName(), name, targetTree.Branch, targetTree.Path, prevWorktreePath, ctx.ProjectRoot); err != nil {
-			if autoStashed {
-				if popErr := wip.PopStash(); popErr != nil {
-					cli.Warning(stderr, "switch aborted, but restoring the auto-stash failed: %v", popErr)
-					cli.Faint(stderr, "recover with: git -C %s stash pop", prevWorktreePath)
-				} else if !jsonOut {
-					cli.Info(stderr, "Restored auto-stashed changes after aborted switch")
-				}
-			}
+		// never collides with the cd: directive on stdout. A required action
+		// failing aborts the switch (B7); the deferred rollback restores the
+		// auto-stash so the tree is left as it was found.
+		if err := runConfigHooksWith(switchHooks, hooks.EventPreSwitch, mgr.GetProjectName(), targetTree.DisplayName(), targetTree.Branch, targetTree.Path, prevWorktreePath, ctx.ProjectRoot); err != nil {
 			return err
-		}
-	}
-
-	// Record last_worktree only now that the switch is actually happening —
-	// recording it before the required-hook gate corrupted the A↔B toggle
-	// (`grove last`) whenever a pre-switch hook aborted the operation.
-	if prevWorktree != "" {
-		if err := ctx.State.SetLastWorktree(prevWorktree); err != nil {
-			log.Printf("failed to set last worktree %q: %v", prevWorktree, err)
 		}
 	}
 
@@ -267,11 +270,6 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 		// auto mode outside tmux: handled below via shell directive or direct attach
 	}
 
-	// Update last_accessed_at for target worktree
-	if err := ctx.State.TouchWorktree(targetTree.DisplayName()); err != nil {
-		log.Printf("failed to touch worktree %q: %v", targetTree.DisplayName(), err)
-	}
-
 	// Fire post-switch hooks (Docker start, etc.) BEFORE the tmux switch
 	// so the user sees Docker progress in the current session. After the
 	// tmux switch the old session's stderr is no longer visible.
@@ -286,11 +284,27 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 		// Config-file (hooks.toml) post-switch actions run after plugin
 		// hooks so a docker:compose action sees a started stack (e.g. the
 		// documented `bin/rails db:migrate` recipe). Output to stderr. A
-		// required action failing fails the command (B7).
-		if err := runConfigHooksWith(switchHooks, hooks.EventPostSwitch, mgr.GetProjectName(), name, targetTree.Branch, targetTree.Path, prevWorktreePath, ctx.ProjectRoot); err != nil {
+		// required action failing fails the command (B7); the deferred
+		// rollback restores the auto-stash.
+		if err := runConfigHooksWith(switchHooks, hooks.EventPostSwitch, mgr.GetProjectName(), targetTree.DisplayName(), targetTree.Branch, targetTree.Path, prevWorktreePath, ctx.ProjectRoot); err != nil {
 			return err
 		}
 	}
+
+	// The switch has now cleared every gate that can abort it. Commit it:
+	// record state and mark it committed so the deferred rollback keeps the
+	// auto-stash instead of restoring it. Recording last_worktree/last_accessed
+	// only here keeps an aborted attempt from corrupting the A↔B toggle or the
+	// target's access time.
+	if prevWorktree != "" {
+		if err := ctx.State.SetLastWorktree(prevWorktree); err != nil {
+			log.Printf("failed to set last worktree %q: %v", prevWorktree, err)
+		}
+	}
+	if err := ctx.State.TouchWorktree(targetTree.DisplayName()); err != nil {
+		log.Printf("failed to touch worktree %q: %v", targetTree.DisplayName(), err)
+	}
+	switchCommitted = true
 
 	// JSON output mode
 	if jsonOut {

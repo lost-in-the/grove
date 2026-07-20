@@ -149,3 +149,73 @@ func TestTo_AbortedSwitchRestoresAutoStash(t *testing.T) {
 		t.Errorf("auto-stash not restored after aborted switch:\n%s", stashes)
 	}
 }
+
+// TestTo_AbortedPostSwitchRestoresAutoStash: the same guarantee as the
+// pre_switch case, but for a required post_switch hook that fails after the
+// worktree work is otherwise done. The single deferred rollback in
+// performSwitch must restore the stash here too — this path previously
+// returned without popping, silently swallowing the user's changes.
+func TestTo_AbortedPostSwitchRestoresAutoStash(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	binary := buildGroveBinary(t)
+
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := filepath.Join(base, "proj")
+	testhelper.Must(t, os.MkdirAll(repo, 0755))
+
+	env := testhelper.GitEnv()
+	run := func(dir, name string, args ...string) []byte {
+		t.Helper()
+		cmd := exec.Command(name, args...)
+		cmd.Dir = dir
+		cmd.Env = env
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("%s %v: %v\n%s", name, args, err, out)
+		}
+		return out
+	}
+
+	run(repo, "git", "init", "-b", "main")
+	testhelper.WriteFile(t, filepath.Join(repo, "a.txt"), "x\n")
+	run(repo, "git", "add", "-A")
+	run(repo, "git", "commit", "-m", "init")
+	run(repo, binary, "init")
+
+	// auto-stash on switch + a required post_switch hook that always fails.
+	testhelper.WriteFile(t, filepath.Join(repo, ".grove", "config.toml"),
+		"project_name = \"proj\"\n\n[switch]\ndirty_handling = \"auto-stash\"\n")
+	testhelper.WriteFile(t, filepath.Join(repo, ".grove", "hooks.toml"),
+		"[hooks]\n[[hooks.post_switch]]\ntype = \"command\"\ncommand = \"exit 1\"\non_failure = \"fail\"\nworking_dir = \"main\"\n")
+	run(repo, "git", "add", ".grove")
+	run(repo, "git", "commit", "-m", "grove files")
+
+	run(repo, binary, "new", "feat", "--no-tmux")
+
+	testhelper.WriteFile(t, filepath.Join(repo, "a.txt"), "modified\n")
+
+	cmd := exec.Command(binary, "to", "feat", "--no-tmux")
+	cmd.Dir = repo
+	cmd.Env = env
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("grove to succeeded despite required post_switch failure\n%s", out)
+	}
+
+	data, readErr := os.ReadFile(filepath.Join(repo, "a.txt"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(data) != "modified\n" {
+		t.Errorf("uncommitted change lost after aborted post_switch: a.txt = %q\noutput:\n%s", data, out)
+	}
+	stashes := run(repo, "git", "stash", "list")
+	if len(strings.TrimSpace(string(stashes))) != 0 {
+		t.Errorf("auto-stash not restored after aborted post_switch:\n%s", stashes)
+	}
+}
