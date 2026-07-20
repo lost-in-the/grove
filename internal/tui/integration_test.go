@@ -235,6 +235,51 @@ working_dir = "main"
 	}
 }
 
+// TestForkWorktreeCmd_RunsBootstrap: the dashboard fork overlay used to
+// register state + tmux only, skipping the excludes/SetupFiles/post_create
+// bootstrap that `grove fork` and dashboard create run. It must now route
+// through BootstrapWorktree — so post_create hooks fire and the fork's parent
+// is recorded in state.
+func TestForkWorktreeCmd_RunsBootstrap(t *testing.T) {
+	repo := setupRailsFixtureWithWorktrees(t, "src")
+	mgr, stateMgr := newTestManagers(t, repo)
+
+	hooksToml := `[hooks]
+[[hooks.post_create]]
+type = "command"
+command = "touch fork-post-create-ran"
+working_dir = "main"
+`
+	if err := os.WriteFile(filepath.Join(repo, ".grove", "hooks.toml"), []byte(hooksToml), 0o644); err != nil {
+		t.Fatalf("write hooks.toml: %v", err)
+	}
+
+	srcPath := filepath.Join(filepath.Dir(repo), "rails-app-src")
+	forkState := &ForkState{
+		Source: WorktreeItem{ShortName: "src", Branch: "src", Path: srcPath},
+		Name:   "forked",
+	}
+	msg := forkWorktreeCmd(mgr, stateMgr, nil, repo, forkState)()
+	done, ok := msg.(forkCompleteMsg)
+	if !ok {
+		t.Fatalf("expected forkCompleteMsg, got %T", msg)
+	}
+	if done.err != nil {
+		t.Fatalf("fork failed: %v", done.err)
+	}
+
+	if _, err := os.Stat(filepath.Join(repo, "fork-post-create-ran")); err != nil {
+		t.Errorf("post_create hook did not run on dashboard fork: %v", err)
+	}
+	st, err := stateMgr.GetWorktree("forked")
+	if err != nil || st == nil {
+		t.Fatalf("forked worktree not registered in state: %v", err)
+	}
+	if st.ParentWorktree != "src" {
+		t.Errorf("fork state ParentWorktree = %q, want %q", st.ParentWorktree, "src")
+	}
+}
+
 func TestCreateWorktreeCmd_WithBaseBranch(t *testing.T) {
 	repo := setupRailsFixture(t)
 	mgr, stateMgr := newTestManagers(t, repo)

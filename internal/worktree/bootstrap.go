@@ -24,13 +24,14 @@ var ErrRequiredHookFailed = errors.New("required post-create hook failed")
 // BootstrapOpts holds the inputs needed to bootstrap a worktree (whether
 // freshly created via grove new or adopted post-hoc via grove adopt).
 type BootstrapOpts struct {
-	Name          string // short worktree name (e.g., "feature")
-	Branch        string // branch the worktree is on
-	WorktreePath  string // absolute path to the worktree directory
-	MainPath      string // absolute path to the main worktree (parent of .grove)
-	ProjectName   string // project name for hook context
-	IsEnvironment bool   // true for environment worktrees
-	Mirror        string // mirror name when IsEnvironment is true
+	Name           string // short worktree name (e.g., "feature")
+	Branch         string // branch the worktree is on
+	WorktreePath   string // absolute path to the worktree directory
+	MainPath       string // absolute path to the main worktree (parent of .grove)
+	ProjectName    string // project name for hook context
+	IsEnvironment  bool   // true for environment worktrees
+	Mirror         string // mirror name when IsEnvironment is true
+	ParentWorktree string // source worktree short name when this is a fork
 }
 
 // BootstrapWorktree runs the post-git-worktree-add bootstrap sequence:
@@ -80,6 +81,7 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 			CreatedAt:      now,
 			LastAccessedAt: now,
 			Environment:    opts.IsEnvironment,
+			ParentWorktree: opts.ParentWorktree,
 		}
 		if opts.IsEnvironment {
 			wsState.Mirror = opts.Mirror
