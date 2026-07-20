@@ -205,6 +205,36 @@ func TestCreateWorktreeCmd_NewBranch(t *testing.T) {
 	}
 }
 
+// TestCreateWorktreeCmd_RequiredPreCreateHookAborts: a required pre_create
+// hook that fails must abort the dashboard create before the worktree exists,
+// same as `grove new` (B7). The dashboard previously created unconditionally,
+// bypassing policy gates.
+func TestCreateWorktreeCmd_RequiredPreCreateHookAborts(t *testing.T) {
+	repo := setupRailsFixture(t)
+	mgr, stateMgr := newTestManagers(t, repo)
+
+	hooksToml := `[hooks]
+[[hooks.pre_create]]
+type = "command"
+command = "exit 1"
+on_failure = "fail"
+working_dir = "main"
+`
+	if err := os.WriteFile(filepath.Join(repo, ".grove", "hooks.toml"), []byte(hooksToml), 0o644); err != nil {
+		t.Fatalf("write hooks.toml: %v", err)
+	}
+
+	cmd := createWorktreeCmd(mgr, stateMgr, nil, repo, "gated", "", "", "")
+	created := drainCreationStream(t, cmd)
+	if created.err == nil {
+		t.Fatal("expected required pre-create hook failure to abort the create")
+	}
+	wtPath := filepath.Join(filepath.Dir(repo), "rails-app-gated")
+	if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+		t.Errorf("worktree was created despite required pre-create hook failure")
+	}
+}
+
 func TestCreateWorktreeCmd_WithBaseBranch(t *testing.T) {
 	repo := setupRailsFixture(t)
 	mgr, stateMgr := newTestManagers(t, repo)

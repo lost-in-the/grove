@@ -251,6 +251,41 @@ func runPostRemoveHooks(projectRoot, projectName, name string, wt *worktree.Work
 	}
 }
 
+// runPreCreateHooks executes hooks.toml pre-create actions before a dashboard
+// create, mirroring `grove new`. A required (on_failure="fail") action failing
+// returns a non-nil error and the caller must abort before creating the
+// worktree (B7); the worktree doesn't exist yet, so actions default to the main
+// worktree. Output is captured so it never reaches the alt screen.
+func runPreCreateHooks(projectRoot, projectName, name, branch, futurePath string) error {
+	hookExecutor, err := hooks.NewExecutor(filepath.Join(projectRoot, ".grove"))
+	if err != nil {
+		tuilog.Printf("warning: failed to load hooks config for pre-create: %v", err)
+		return nil
+	}
+	if !hookExecutor.HasHooksForEvent(hooks.EventPreCreate) {
+		return nil
+	}
+	var out bytes.Buffer
+	hookExecutor.Output = &out
+	hookCtx := &hooks.ExecutionContext{
+		Event:        hooks.EventPreCreate,
+		Worktree:     name,
+		Project:      projectName,
+		Branch:       branch,
+		NewPath:      futurePath,
+		WorktreeFull: filepath.Base(futurePath),
+		MainPath:     projectRoot,
+	}
+	captured, execErr := captureStdio(func() error {
+		return hookExecutor.Execute(hooks.EventPreCreate, hookCtx)
+	})
+	if execErr != nil {
+		tuilog.Printf("pre-create hook aborted create of %q: %v (output: %s%s)", name, execErr, out.String(), captured)
+		return execErr
+	}
+	return nil
+}
+
 func deleteBranchIfRequested(deleteBranch bool, wt *worktree.Worktree, projectRoot string) error {
 	if !deleteBranch || wt == nil || wt.Branch == "" {
 		return nil
@@ -285,20 +320,26 @@ func runPostCreateStreaming(ch chan<- creationEvent, mgr *worktree.Manager, stat
 	projectName := mgr.GetProjectName()
 
 	ch <- creationEvent{line: "Bootstrapping worktree..."}
-	// All bootstrap output (hook progress, warnings) is captured — writing to
-	// the terminal would corrupt the TUI — and streamed as log lines below.
+	// Config-hook progress goes to bootBuf via the writer; the plugin
+	// post-create hook (docker env: directive, persist warnings) writes to
+	// os.Stdout/os.Stderr, so wrap the whole call in captureStdio too — either
+	// stream would corrupt the alt screen. Both are surfaced as log lines below.
 	var bootBuf bytes.Buffer
-	bootErr := worktree.BootstrapWorktree(stateMgr, cfg, worktree.BootstrapOpts{
-		Name:         name,
-		Branch:       wt.Branch,
-		WorktreePath: wt.Path,
-		MainPath:     projectRoot,
-		ProjectName:  projectName,
-	}, cli.NewWriter(&bootBuf, false))
+	var bootErr error
+	pluginOut, _ := captureStdio(func() error {
+		bootErr = worktree.BootstrapWorktree(stateMgr, cfg, worktree.BootstrapOpts{
+			Name:         name,
+			Branch:       wt.Branch,
+			WorktreePath: wt.Path,
+			MainPath:     projectRoot,
+			ProjectName:  projectName,
+		}, cli.NewWriter(&bootBuf, false))
+		return bootErr
+	})
 	if bootErr != nil {
 		tuilog.Printf("bootstrap failed for %q: %v", name, bootErr)
 	}
-	for _, line := range strings.Split(strings.TrimRight(bootBuf.String(), "\n"), "\n") {
+	for _, line := range strings.Split(strings.TrimRight(bootBuf.String()+pluginOut, "\n"), "\n") {
 		if line != "" {
 			ch <- creationEvent{line: line}
 		}
@@ -345,7 +386,7 @@ func readCreationLog(ch <-chan creationEvent, source string) tea.Cmd {
 // log output. The createFn performs the actual worktree creation; logLines
 // are sent to the channel before creation begins. After creation, the
 // worktree is looked up and the shared bootstrap sequence runs.
-func streamingCreateCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *config.Config, projectRoot, name, source string, logLines []string, createFn func() error) tea.Cmd {
+func streamingCreateCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *config.Config, projectRoot, name, branch, source string, logLines []string, createFn func() error) tea.Cmd {
 	ch := make(chan creationEvent, 10)
 
 	go func() {
@@ -353,6 +394,14 @@ func streamingCreateCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *con
 
 		for _, line := range logLines {
 			ch <- creationEvent{line: line}
+		}
+
+		// Fire pre_create hooks before the worktree exists — a required action
+		// failing aborts creation, same as `grove new` (B7). The dashboard used
+		// to create unconditionally, bypassing policy gates like a quota check.
+		if err := runPreCreateHooks(projectRoot, mgr.GetProjectName(), name, branch, mgr.PathForName(name)); err != nil {
+			ch <- creationEvent{done: true, name: name, err: err}
+			return
 		}
 
 		if err := createFn(); err != nil {
@@ -382,14 +431,16 @@ func streamingCreateCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *con
 func createWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *config.Config, projectRoot, name, baseBranch, newBranch, fromRef string) tea.Cmd {
 	var logLines []string
 	var createFn func() error
+	var branch string
 	if baseBranch != "" {
 		// Split: check out an existing branch into the new worktree.
+		branch = baseBranch
 		logLines = []string{fmt.Sprintf("Creating worktree '%s' from branch '%s'...", name, baseBranch)}
 		createFn = func() error { return mgr.CreateFromBranch(name, baseBranch) }
 	} else {
 		// New branch (optionally forked from fromRef). When no explicit branch
 		// name is given (e.g. the fork action), name the branch after the worktree.
-		branch := newBranch
+		branch = newBranch
 		if branch == "" {
 			branch = name
 		}
@@ -406,7 +457,7 @@ func createWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *conf
 		}
 		createFn = func() error { return mgr.CreateFromRef(name, branch, fromRef) }
 	}
-	return streamingCreateCmd(mgr, stateMgr, cfg, projectRoot, name, "create", logLines, createFn)
+	return streamingCreateCmd(mgr, stateMgr, cfg, projectRoot, name, branch, "create", logLines, createFn)
 }
 
 // lookupPRsCmd fetches open PRs and maps them to branches.
