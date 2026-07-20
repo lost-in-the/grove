@@ -133,9 +133,14 @@ func TestStateBackfill_NonZeroTimestampsUntouched(t *testing.T) {
 	}
 
 	st := mgr.GetState()
-	ws, ok := st.Worktrees["test-project-main"]
+	// The root-flagged entry was keyed "test-project-main" by pre-0.10 grove and
+	// is rekeyed to "root" on migration; its timestamps must survive that.
+	if _, stale := st.Worktrees["test-project-main"]; stale {
+		t.Error(`legacy "test-project-main" key should have been rekeyed to "root"`)
+	}
+	ws, ok := st.Worktrees["root"]
 	if !ok || ws == nil {
-		t.Fatal("expected test-project-main in state")
+		t.Fatal(`expected the main worktree under the "root" key after migration`)
 	}
 
 	// Timestamps should be preserved — backfill only touches zero values.
