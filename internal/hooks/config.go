@@ -61,14 +61,17 @@ func ApplyOverride(actions []HookAction, override *Override, mainPath string) []
 		})
 	}
 
-	// Add extra run actions
+	// Add extra run actions. WorkingDir is left unset so the executor applies
+	// the event-aware default (the main worktree for pre_create/post_remove,
+	// where the "new" path is absent, and the new worktree otherwise) — the same
+	// default a plain [[hooks.*]] command gets. Hardcoding "new" here re-broke
+	// override-injected commands on pre_create/post_remove with a chdir ENOENT.
 	for _, cmd := range override.ExtraRun {
 		filtered = append(filtered, HookAction{
-			Type:       "command",
-			Command:    cmd,
-			WorkingDir: "new",
-			Timeout:    300,
-			OnFailure:  "warn",
+			Type:      "command",
+			Command:   cmd,
+			Timeout:   300,
+			OnFailure: "warn",
 		})
 	}
 
