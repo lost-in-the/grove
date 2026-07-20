@@ -346,7 +346,7 @@ Flags:
    git worktree add <path> <branch>
    ```
 
-3. **Symlink config** from main worktree to new worktree directory.
+3. **Record machine-local git excludes** in the shared `$GIT_COMMON_DIR/info/exclude` so grove's per-worktree artifacts don't show as untracked. (Config is no longer symlinked per worktree — it resolves from the main worktree via git's common dir.)
 
 4. **Register in state** (`AddWorktree`) with path, branch, created/accessed timestamps.
 
