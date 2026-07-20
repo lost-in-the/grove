@@ -428,6 +428,47 @@ working_dir = "main"
 	}
 }
 
+// TestDeleteWorktreeCmd_RunsMainDirHooks pins two dashboard-delete fixes at
+// once: a pre_remove hook with working_dir="main" must run in the project root
+// (proving MainPath is set — an empty one ran it in the dashboard's cwd and
+// expanded {{.main_path}} to nothing), and hooks.toml post_remove actions must
+// run at all (the TUI used to skip them, unlike `grove rm`).
+func TestDeleteWorktreeCmd_RunsMainDirHooks(t *testing.T) {
+	repo := setupRailsFixtureWithWorktrees(t, "cleanup")
+	mgr, stateMgr := newTestManagers(t, repo)
+
+	hooksToml := `[hooks]
+[[hooks.pre_remove]]
+type = "command"
+command = "touch pre-remove-ran"
+working_dir = "main"
+[[hooks.post_remove]]
+type = "command"
+command = "touch post-remove-ran"
+working_dir = "main"
+`
+	if err := os.WriteFile(filepath.Join(repo, ".grove", "hooks.toml"), []byte(hooksToml), 0o644); err != nil {
+		t.Fatalf("write hooks.toml: %v", err)
+	}
+
+	cmd := deleteWorktreeCmd(mgr, stateMgr, nil, repo, "cleanup", false)
+	msg := cmd()
+	deleted, ok := msg.(worktreeDeletedMsg)
+	if !ok {
+		t.Fatalf("expected worktreeDeletedMsg, got %T", msg)
+	}
+	if deleted.err != nil {
+		t.Fatalf("delete failed: %v", deleted.err)
+	}
+
+	if _, err := os.Stat(filepath.Join(repo, "pre-remove-ran")); err != nil {
+		t.Errorf("pre_remove working_dir=main did not run in the main worktree (MainPath unset?): %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "post-remove-ran")); err != nil {
+		t.Errorf("post_remove hook did not run on TUI delete: %v", err)
+	}
+}
+
 // --- bulkDeleteCmd ---
 
 func TestBulkDeleteCmd_Multiple(t *testing.T) {

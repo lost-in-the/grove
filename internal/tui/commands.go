@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -21,6 +24,46 @@ import (
 )
 
 var errWorktreeNotFound = errors.New("worktree created but not found")
+
+// stdioMu serializes captureStdio's process-global os.Stdout/os.Stderr swap so
+// concurrent tea.Cmds (e.g. a bulk delete) can't race on it.
+var stdioMu sync.Mutex
+
+// captureStdio runs fn with os.Stdout and os.Stderr redirected to an in-memory
+// pipe, returning everything written to them. The bubbletea renderer captured
+// its own output handle at tea.NewProgram time, so it keeps drawing to the real
+// terminal while legacy code that writes straight to os.Stdout/os.Stderr — the
+// docker plugin's compose streaming, agent-slot messages, and env: directives —
+// is captured here instead of scribbling over the alt screen. Subprocesses that
+// wire cmd.Stderr = os.Stderr inherit the pipe too, so their output is captured
+// as well. On pipe-setup failure fn still runs (uncaptured) rather than being
+// skipped.
+func captureStdio(fn func() error) (string, error) {
+	r, w, pipeErr := os.Pipe()
+	if pipeErr != nil {
+		return "", fn()
+	}
+
+	stdioMu.Lock()
+	origOut, origErr := os.Stdout, os.Stderr
+	os.Stdout, os.Stderr = w, w
+
+	done := make(chan string, 1)
+	go func() {
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, r)
+		done <- buf.String()
+	}()
+
+	fnErr := fn()
+
+	os.Stdout, os.Stderr = origOut, origErr
+	stdioMu.Unlock()
+	_ = w.Close()
+	captured := <-done
+	_ = r.Close()
+	return captured, fnErr
+}
 
 func (m Model) fetchWorktrees() tea.Msg {
 	items, err := FetchWorktrees(m.worktreeMgr, m.stateMgr, m.pluginMgr)
@@ -70,8 +113,13 @@ func deleteWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *conf
 			return worktreeDeletedMsg{name: name, deleteBranch: deleteBranch, err: err}
 		}
 		pluginCtx := &hooks.Context{Worktree: name, Config: cfg, WorktreePath: wtPath, MainPath: projectRoot}
-		if err := hooks.Fire(hooks.EventPreRemove, pluginCtx); err != nil {
-			tuilog.Printf("warning: plugin pre-remove hook failed for %q: %v", name, err)
+		// The docker plugin's teardown streams `docker compose down` and slot
+		// messages to os.Stderr; capture them so they don't corrupt the alt
+		// screen (they're logged, not user-facing during a dashboard delete).
+		if out, err := captureStdio(func() error { return hooks.Fire(hooks.EventPreRemove, pluginCtx) }); err != nil {
+			tuilog.Printf("warning: plugin pre-remove hook failed for %q: %v (output: %s)", name, err, out)
+		} else if strings.TrimSpace(out) != "" {
+			tuilog.Printf("plugin pre-remove output for %q: %s", name, out)
 		}
 
 		// force=true: the dashboard shows dirty/warning state and the user
@@ -88,8 +136,15 @@ func deleteWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *conf
 			tuilog.Printf("warning: failed to remove %q from state: %v", name, err)
 		}
 
-		if err := hooks.Fire(hooks.EventPostRemove, pluginCtx); err != nil {
-			tuilog.Printf("warning: plugin post-remove hook failed for %q: %v", name, err)
+		// hooks.toml post_remove actions (e.g. per-worktree cache cleanup) —
+		// the CLI runs these via firePostRemoveHooks, but the dashboard used to
+		// skip them, silently leaving that cleanup undone (B28 on the TUI path).
+		runPostRemoveHooks(projectRoot, projectName, name, wt)
+
+		if out, err := captureStdio(func() error { return hooks.Fire(hooks.EventPostRemove, pluginCtx) }); err != nil {
+			tuilog.Printf("warning: plugin post-remove hook failed for %q: %v (output: %s)", name, err, out)
+		} else if strings.TrimSpace(out) != "" {
+			tuilog.Printf("plugin post-remove output for %q: %s", name, out)
 		}
 
 		branchErr := deleteBranchIfRequested(deleteBranch, wt, projectRoot)
@@ -132,25 +187,68 @@ func runPreRemoveHooks(projectRoot, projectName, name string, wt *worktree.Workt
 	if !hookExecutor.HasHooksForEvent(hooks.EventPreRemove) {
 		return nil
 	}
-	// Hook output can't go to the terminal (it would corrupt the TUI); keep
-	// it in a buffer and surface it in the error when the hook aborts.
+	// Hook output can't go to the terminal (it would corrupt the TUI); keep the
+	// executor's own progress in a buffer, and capture any docker subprocess
+	// streaming (which writes to os.Stderr) via captureStdio. MainPath is set so
+	// working_dir = "main" resolves to the project root and {{.main_path}} is
+	// non-empty — without it a `rm -rf {{.main_path}}/...` cleanup would run from
+	// the dashboard's cwd against a root-anchored path.
 	var out bytes.Buffer
 	hookExecutor.Output = &out
 	hookCtx := &hooks.ExecutionContext{
 		Event:    hooks.EventPreRemove,
 		Worktree: name,
 		Project:  projectName,
+		MainPath: projectRoot,
 	}
 	if wt != nil {
 		hookCtx.Branch = wt.Branch
 		hookCtx.NewPath = wt.Path
 		hookCtx.WorktreeFull = filepath.Base(wt.Path)
 	}
-	if err := hookExecutor.Execute(hooks.EventPreRemove, hookCtx); err != nil {
-		tuilog.Printf("pre-remove hook aborted delete of %q: %v (output: %s)", name, err, out.String())
-		return err
+	captured, execErr := captureStdio(func() error {
+		return hookExecutor.Execute(hooks.EventPreRemove, hookCtx)
+	})
+	if execErr != nil {
+		tuilog.Printf("pre-remove hook aborted delete of %q: %v (output: %s%s)", name, execErr, out.String(), captured)
+		return execErr
 	}
 	return nil
+}
+
+// runPostRemoveHooks executes hooks.toml post-remove actions for a TUI delete,
+// mirroring the CLI's firePostRemoveHooks. The worktree is already gone, so
+// these are warn-only (never abort) and default to working_dir = "main"; the
+// .grove dir is pinned to the project root so hooks resolve identically
+// wherever the dashboard was launched from.
+func runPostRemoveHooks(projectRoot, projectName, name string, wt *worktree.Worktree) {
+	hookExecutor, err := hooks.NewExecutor(filepath.Join(projectRoot, ".grove"))
+	if err != nil {
+		tuilog.Printf("warning: failed to load hooks config for post-remove: %v", err)
+		return
+	}
+	if !hookExecutor.HasHooksForEvent(hooks.EventPostRemove) {
+		return
+	}
+	var out bytes.Buffer
+	hookExecutor.Output = &out
+	hookCtx := &hooks.ExecutionContext{
+		Event:    hooks.EventPostRemove,
+		Worktree: name,
+		Project:  projectName,
+		MainPath: projectRoot,
+	}
+	if wt != nil {
+		hookCtx.Branch = wt.Branch
+		hookCtx.NewPath = wt.Path
+		hookCtx.WorktreeFull = filepath.Base(wt.Path)
+	}
+	captured, execErr := captureStdio(func() error {
+		return hookExecutor.Execute(hooks.EventPostRemove, hookCtx)
+	})
+	if execErr != nil {
+		tuilog.Printf("warning: post-remove hook had errors for %q: %v (output: %s%s)", name, execErr, out.String(), captured)
+	}
 }
 
 func deleteBranchIfRequested(deleteBranch bool, wt *worktree.Worktree, projectRoot string) error {
