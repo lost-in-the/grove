@@ -47,6 +47,18 @@ Examples:
 			return err
 		}
 
+		// Normalize to the worktree root. adopt operates on whole worktrees, but
+		// the target may be a subdirectory (the drift notice nudges `grove adopt`
+		// from any subdir of an unregistered worktree). Without this, the subdir
+		// passes the common-dir membership check below and gets registered as a
+		// bogus worktree named after the subdir, while the real worktree stays
+		// unregistered.
+		root, topErr := worktreeTopLevel(target)
+		if topErr != nil {
+			return fmt.Errorf("not a git worktree at %s: %w", target, topErr)
+		}
+		target = root
+
 		// Verify target is a git worktree of the main repo
 		branch, gitErr := gitBranchAt(target)
 		if gitErr != nil {
@@ -142,6 +154,25 @@ func resolveAdoptTarget(cwd string, args []string) (string, error) {
 		return resolved, nil
 	}
 	return abs, nil
+}
+
+// worktreeTopLevel returns the root of the git worktree containing dir
+// (`git rev-parse --show-toplevel`), EvalSymlinks-resolved to match
+// resolveAdoptTarget's normalization. Used so adopting from a subdirectory
+// registers the worktree, not the subdirectory.
+func worktreeTopLevel(dir string) (string, error) {
+	out, err := cmdexec.Output(context.TODO(), "git", []string{"rev-parse", "--show-toplevel"}, dir, cmdexec.GitLocal)
+	if err != nil {
+		return "", err
+	}
+	top := strings.TrimSpace(string(out))
+	if top == "" {
+		return "", fmt.Errorf("empty toplevel for %s", dir)
+	}
+	if resolved, err := filepath.EvalSymlinks(top); err == nil {
+		return resolved, nil
+	}
+	return top, nil
 }
 
 // gitBranchAt returns the current branch name of the git worktree at dir.
