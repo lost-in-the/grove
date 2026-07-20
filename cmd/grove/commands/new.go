@@ -184,8 +184,10 @@ Examples:
 			// Adopt an existing branch into a new worktree. No new branch is
 			// created; the worktree checks out newFromBranch directly (branchName
 			// already equals it). Git refuses if the branch is already checked out
-			// elsewhere — that guardrail is intentional and surfaces as-is.
-			if err := mgr.CreateFromBranch(name, newFromBranch); err != nil {
+			// elsewhere — that guardrail is intentional and surfaces as-is. Refresh
+			// the local branch to origin first (fast-forward only) so the worktree
+			// starts at the remote's current tip rather than a stale local commit.
+			if err := mgr.CreateFromBranchRefreshing(name, newFromBranch); err != nil {
 				return fmt.Errorf("failed to create worktree from branch %q: %w", newFromBranch, err)
 			}
 

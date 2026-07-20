@@ -66,6 +66,66 @@ func TestCreateFromBranch_LocalBranchNotClobberedByRemote(t *testing.T) {
 	}
 }
 
+// TestCreateFromBranchRefreshing_FastForwardsLocal is the counterpart to the
+// B10 test: the create-from-existing-branch flow (grove new --from-branch,
+// dashboard create-from-base) DOES want a behind-origin local branch brought up
+// to the remote's tip before the worktree is created.
+func TestCreateFromBranchRefreshing_FastForwardsLocal(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	base := t.TempDir()
+	base, _ = filepath.EvalSymlinks(base)
+	git := func(dir string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+
+	remote := filepath.Join(base, "remote.git")
+	git(base, "init", "--bare", remote)
+	seed := filepath.Join(base, "seed")
+	git(base, "clone", remote, seed)
+	os.WriteFile(filepath.Join(seed, "a.txt"), []byte("1\n"), 0644)
+	git(seed, "add", "-A")
+	git(seed, "commit", "-m", "base")
+	git(seed, "branch", "shared")
+	git(seed, "push", "origin", "HEAD", "shared")
+
+	// Working clone with a LOCAL `shared` at the base commit, while origin/shared
+	// advances one commit ahead (fast-forwardable).
+	work := filepath.Join(base, "work")
+	git(base, "clone", remote, work)
+	localHead := git(work, "rev-parse", "HEAD")
+	git(work, "branch", "shared", localHead)
+	// Advance origin/shared one commit (on the shared branch itself, so the
+	// remote ref genuinely moves ahead of the local one).
+	git(seed, "checkout", "shared")
+	os.WriteFile(filepath.Join(seed, "a.txt"), []byte("1\n2\n"), 0644)
+	git(seed, "commit", "-am", "remote-ahead")
+	git(seed, "push", "origin", "shared")
+	remoteHead := git(seed, "rev-parse", "HEAD")
+
+	m := &Manager{repoRoot: work}
+	if err := m.CreateFromBranchRefreshing("wt-shared", "shared"); err != nil {
+		t.Fatalf("CreateFromBranchRefreshing: %v", err)
+	}
+	wt, err := m.Find("wt-shared")
+	if err != nil || wt == nil {
+		t.Fatalf("Find: err=%v wt=%v", err, wt)
+	}
+	gotHead := git(wt.Path, "rev-parse", "HEAD")
+	if gotHead != remoteHead {
+		t.Errorf("worktree HEAD = %s, want remote HEAD %s (local branch was not fast-forwarded)", gotHead, remoteHead)
+	}
+}
+
 // setupTestRepo creates a temporary git repo for testing and returns cleanup function
 func setupTestRepo(t *testing.T) (string, func()) {
 	t.Helper()

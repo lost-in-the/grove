@@ -177,6 +177,29 @@ func (m *Manager) CreateFromBranch(name, branch string) error {
 	return nil
 }
 
+// CreateFromBranchRefreshing is CreateFromBranch for an existing local branch
+// the caller wants brought up to date first. It fast-forwards
+// refs/heads/<branch> to origin/<branch> when possible — a non-force fetch, so
+// a diverged branch is left untouched — before creating the worktree, then
+// delegates to CreateFromBranch (which sees the branch is now local and skips
+// its own fetch). Used by `grove new --from-branch` and the dashboard
+// create-from-base flow, where the user expects the worktree at the remote's
+// current tip. `grove fork` deliberately uses plain CreateFromBranch instead: a
+// fast-forward there would move the fork off the HEAD it was forked from (B10).
+func (m *Manager) CreateFromBranchRefreshing(name, branch string) error {
+	if branch == "" {
+		return fmt.Errorf("branch name cannot be empty")
+	}
+	if m.localBranchExists(branch) {
+		// Best-effort fast-forward; offline, no remote, or a diverged branch all
+		// leave the local tip in place and we create from that.
+		if err := cmdexec.Run(context.TODO(), "git", []string{"fetch", "origin", branch + ":" + branch}, m.repoRoot, cmdexec.GitRemote); err != nil {
+			log.Printf("refresh %s from origin failed (using local tip): %v", branch, err)
+		}
+	}
+	return m.CreateFromBranch(name, branch)
+}
+
 // Move renames a worktree directory using git worktree move.
 // Both oldName and newName are short names (without project prefix).
 func (m *Manager) Move(oldName, newName string) error {

@@ -436,7 +436,9 @@ func createWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *conf
 		// Split: check out an existing branch into the new worktree.
 		branch = baseBranch
 		logLines = []string{fmt.Sprintf("Creating worktree '%s' from branch '%s'...", name, baseBranch)}
-		createFn = func() error { return mgr.CreateFromBranch(name, baseBranch) }
+		// Refresh the local base branch to origin (fast-forward only) so the new
+		// worktree starts at the remote's current tip, not a stale local commit.
+		createFn = func() error { return mgr.CreateFromBranchRefreshing(name, baseBranch) }
 	} else {
 		// New branch (optionally forked from fromRef). When no explicit branch
 		// name is given (e.g. the fork action), name the branch after the worktree.
