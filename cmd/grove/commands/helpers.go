@@ -304,19 +304,17 @@ func loadConfigHookExecutor(out *cli.Writer, mainPath string) *hooks.Executor {
 // Returns a non-nil error only when a required (on_failure="fail") action
 // failed, so callers can abort the operation (B7); a non-required hook
 // failure warns inside Execute and returns nil.
-func runConfigHooksWith(executor *hooks.Executor, event, projectName, name, branch, worktreePath, prevWorktreePath, mainPath string) error {
+// The caller passes a *hooks.ExecutionContext built with named fields rather
+// than a run of same-typed positional strings — a transposed pair there
+// compiled silently and mis-filled hook variables. Event is stamped here, and
+// WorktreeFull is derived from NewPath when the caller left it unset.
+func runConfigHooksWith(executor *hooks.Executor, event string, ec *hooks.ExecutionContext) error {
 	if executor == nil || !executor.HasHooksForEvent(event) {
 		return nil
 	}
-	ec := &hooks.ExecutionContext{
-		Event:        event,
-		Worktree:     name,
-		WorktreeFull: filepath.Base(worktreePath),
-		Branch:       branch,
-		Project:      projectName,
-		MainPath:     mainPath,
-		NewPath:      worktreePath,
-		PrevPath:     prevWorktreePath,
+	ec.Event = event
+	if ec.WorktreeFull == "" && ec.NewPath != "" {
+		ec.WorktreeFull = filepath.Base(ec.NewPath)
 	}
 	return executor.Execute(event, ec)
 }
@@ -332,8 +330,8 @@ func runConfigHooksWith(executor *hooks.Executor, event, projectName, name, bran
 //
 // Loads the hooks config on every call; commands firing multiple events
 // should load once with loadConfigHookExecutor and use runConfigHooksWith.
-func runConfigHooks(out *cli.Writer, event, projectName, name, branch, worktreePath, prevWorktreePath, mainPath string) error {
-	return runConfigHooksWith(loadConfigHookExecutor(out, mainPath), event, projectName, name, branch, worktreePath, prevWorktreePath, mainPath)
+func runConfigHooks(out *cli.Writer, event string, ec *hooks.ExecutionContext) error {
+	return runConfigHooksWith(loadConfigHookExecutor(out, ec.MainPath), event, ec)
 }
 
 // worktreeSetupOpts configures the post-create setup sequence.

@@ -201,8 +201,18 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 	}
 
 	// Load the hooks.toml config once for both switch events — each load
-	// re-reads global + project hooks.toml from disk.
+	// re-reads global + project hooks.toml from disk — and build the shared
+	// execution context once (both events use the same fields; only the event
+	// differs).
 	var switchHooks *hooks.Executor
+	switchEC := &hooks.ExecutionContext{
+		Worktree: targetTree.DisplayName(),
+		Branch:   targetTree.Branch,
+		Project:  mgr.GetProjectName(),
+		MainPath: ctx.ProjectRoot,
+		NewPath:  targetTree.Path,
+		PrevPath: prevWorktreePath,
+	}
 	if !peek {
 		switchHooks = loadConfigHookExecutor(stderr, ctx.ProjectRoot)
 	}
@@ -219,7 +229,7 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 		// never collides with the cd: directive on stdout. A required action
 		// failing aborts the switch (B7); the deferred rollback restores the
 		// auto-stash so the tree is left as it was found.
-		if err := runConfigHooksWith(switchHooks, hooks.EventPreSwitch, mgr.GetProjectName(), targetTree.DisplayName(), targetTree.Branch, targetTree.Path, prevWorktreePath, ctx.ProjectRoot); err != nil {
+		if err := runConfigHooksWith(switchHooks, hooks.EventPreSwitch, switchEC); err != nil {
 			return err
 		}
 	}
@@ -286,7 +296,7 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 		// documented `bin/rails db:migrate` recipe). Output to stderr. A
 		// required action failing fails the command (B7); the deferred
 		// rollback restores the auto-stash.
-		if err := runConfigHooksWith(switchHooks, hooks.EventPostSwitch, mgr.GetProjectName(), targetTree.DisplayName(), targetTree.Branch, targetTree.Path, prevWorktreePath, ctx.ProjectRoot); err != nil {
+		if err := runConfigHooksWith(switchHooks, hooks.EventPostSwitch, switchEC); err != nil {
 			return err
 		}
 	}

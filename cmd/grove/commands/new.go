@@ -139,7 +139,13 @@ Examples:
 		// explicit working_dir run from the main worktree here, since the "new"
 		// path is not present yet (B6). A required action failing aborts before
 		// the worktree is created (B7).
-		if err := runConfigHooks(cli.NewStderr(), hooks.EventPreCreate, mgr.GetProjectName(), name, branchName, mgr.PathForName(name), "", ctx.ProjectRoot); err != nil {
+		if err := runConfigHooks(cli.NewStderr(), hooks.EventPreCreate, &hooks.ExecutionContext{
+			Worktree: name,
+			Branch:   branchName,
+			Project:  mgr.GetProjectName(),
+			MainPath: ctx.ProjectRoot,
+			NewPath:  mgr.PathForName(name),
+		}); err != nil {
 			return err
 		}
 

@@ -273,7 +273,13 @@ Examples:
 		// …) silently never ran on a forked worktree (B32). Output to stderr so
 		// it stays off the cd: stdout channel. A required action failing fails
 		// the command (B7); the worktree is left in place for inspection.
-		if err := runConfigHooks(stderr, hooks.EventPostCreate, mgr.GetProjectName(), name, newBranchName, newTree.Path, "", ctx.ProjectRoot); err != nil {
+		if err := runConfigHooks(stderr, hooks.EventPostCreate, &hooks.ExecutionContext{
+			Worktree: name,
+			Branch:   newBranchName,
+			Project:  mgr.GetProjectName(),
+			MainPath: ctx.ProjectRoot,
+			NewPath:  newTree.Path,
+		}); err != nil {
 			return err
 		}
 
