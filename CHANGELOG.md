@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - Unreleased
+
+> **Upgrading:** Shell integration is now **version 9** — re-source your shell (`grove setup` / `eval "$(grove install zsh)"`) or `grove doctor` will nag. Two behavior changes to know about. **First:** `.grove/config.toml` is committable now (and should be committed — it's the shared project config). Older grove git-ignored it; the first command you run in an existing repo migrates the exclude file automatically and prints a one-time notice. Worktrees no longer receive per-worktree config symlinks — config always resolves from the main worktree — and `grove doctor` lists any legacy symlinks with exact cleanup commands. **Second:** hooks.toml actions marked `required` / `on_failure = "fail"` now genuinely abort the operation (create, switch, remove — CLI and dashboard alike). Everything else is drop-in.
+
+### Security
+- Hook command injection closed: command hooks spliced `{{.branch}}` — attacker-influenced via `grove fetch pr/<n>` — literally into `sh -c`. Values now travel by environment reference with quote-context-aware rewriting, so bare, double-quoted, **and single-quoted** tokens all expand correctly (`pkill -f '{{.worktree}}'` works again) and none can execute, in any quoting context.
+- `state.json` — and every atomic file write — respects the process umask again: an explicit chmod in the write path made grove's state world-readable `0644` on hosts running `umask 077`.
+
+### Fixed
+- State no longer fragments per worktree: `.grove` (state *and* config) resolves via git's common dir from any worktree or subdirectory, so `grove new`/`rm`/`last` run inside a worktree stopped reading and writing a phantom `state.json`. Config **writes** anchor there too — `grove config set` and the TUI settings editor from a linked worktree previously materialized a private, silently diverging config copy.
+- `grove rm`/`to`/`rename` can no longer hit the wrong worktree: resolution uses precedence tiers (name → directory → branch) so a branch name can't shadow the worktree you actually named; plain `grove rm` never escalates to `os.RemoveAll` (that now requires `--force`), and a git-locked worktree is never force-deleted.
+- Worktrees are born clean on fresh clones too: grove's machine-local files are recorded in `$GIT_COMMON_DIR/info/exclude` during worktree bootstrap, not just `grove init`.
+- `grove graft` no longer panics on short SHAs; `grove diff --stat` no longer reports zero changes; `grove fork` skips the network fetch that could silently move the forked base; `grove fetch pr/<n>` fast-forwards a stale local PR branch instead of building the worktree from it.
+- Switch flow: `grove last` behaves exactly like `grove to` (dirty handling, pre/post-switch hooks, `--json` emitted before any tmux relocation); switching to the worktree you're already in is a clean no-op; an aborted switch (required pre-switch hook failure) pops its auto-stash back and leaves `last_worktree` untouched instead of swallowing your changes for a switch that never happened.
+- Hooks: documented `pre_switch`/`post_switch`/`pre_create` recipes actually run; `{{.worktree_full}}` is the real directory name under custom `[naming]` patterns; command actions without `working_dir` run from the main worktree on `pre_create`/`post_remove` (the "new" path is guaranteed absent exactly there); hook output can no longer corrupt `grove new --json` stdout or the dashboard.
+- `grove sync --json` emits the result document (with the skip reason) before exiting non-zero — error paths previously produced empty stdout.
+- Config layering: partial `[plugins.docker.external]` and `[…external.agent]` overrides merge field-by-field instead of wiping the section, and merging never mutates the underlying config layers.
+- TUI: dashboard deletes fire the same pre/post-remove hooks as `grove rm` (docker slot teardown included) and honor required-hook aborts; bulk delete marks dirty candidates and counts them before the single confirm; dashboard-created worktrees run the full bootstrap (SetupFiles, plugin post-create hooks, excludes); list refreshes keep an active filter; esc clears a filter before quitting.
+- Durability and races: state writes fsync before the atomic rename; docker slot reads happen under the file lock; the worktree manager's lazy caches are race-free under `go test -race`.
+- Fewer subprocess spawns on `ls`, `here`, and the update check.
+
+### Added
+- Self-healing upgrade path: every command migrates a legacy exclude file (idempotent, one-time stderr notice); `grove doctor` flags legacy per-worktree config symlinks with the exact removal commands; `grove init` nudges `git add .grove && git commit`.
+- `grove fork` validates worktree names like every other creation path — `grove fork root` is rejected instead of colliding with the main worktree's reserved state and tmux keys.
+- `AGENTS.md` gained a config-layout upgrade section, and `docs/AGENT_GUIDE.md` a full walkthrough for agents assisting the upgrade (including the verbatim notice text for stderr pattern-matching).
+
+### Changed
+- The shell wrapper's capture path explicitly clears an inherited `GROVE_CD_FILE`, so `grove to` inside tmux panes spawned from an `issues`/`prs` browser session changes directory again instead of silently writing to a dead temp file (`ShellVersion` 8 → 9).
+- Release workflow hardened (`set -euo pipefail`, verified downloads, non-empty tarball checks) and the Homebrew formula license corrected to **Apache-2.0** (template and published formula — companion tap PR).
+- The audit trail for all of the above lives in [`AUDIT.md`](AUDIT.md) (findings `B1`–`B38`, `P*`, `D*`, review items `R1`–`R24`).
+
 ## [0.9.0] - 2026-07-16
 
 > **Upgrading:** Shell integration is now **version 7** — re-source your shell (`grove setup` / `eval "$(grove install zsh)"`) or `grove doctor` will nag. Two behavior changes: the `w` alias is now **opt-in** (run `grove setup --alias` to keep it; the `alias` config key is gone and silently ignored if present), and interactive bare `grove` outside a project now prints a diagnosis and exits 10 instead of showing help. Everything else is drop-in.
