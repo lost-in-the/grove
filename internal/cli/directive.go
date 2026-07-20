@@ -23,10 +23,20 @@ func Directive(kind, value string) {
 // Returns true when a directive was emitted.
 func CdDirective(path string) bool {
 	if cdFile := os.Getenv("GROVE_CD_FILE"); cdFile != "" {
-		if err := os.WriteFile(cdFile, []byte(path), 0600); err == nil {
-			return true
+		// The wrapper mktemps this file before launching grove (see
+		// SHELL_INTEGRATION), so it must already exist. Open WITHOUT O_CREATE: a
+		// set-but-missing path means a stale value leaked into this process's env
+		// — e.g. a tmux server started by `grove prs` whose temp file was since
+		// removed — and recreating it would silently write the cd target to a
+		// file no wrapper is reading. On a missing/unwritable file, fall through
+		// to the stdout cd: line the capture-based commands already use.
+		if f, err := os.OpenFile(cdFile, os.O_WRONLY|os.O_TRUNC, 0600); err == nil {
+			_, werr := f.WriteString(path)
+			cerr := f.Close()
+			if werr == nil && cerr == nil {
+				return true
+			}
 		}
-		// fall through to stdout if the file can't be written
 	}
 	if IsShellIntegration() {
 		Directive("cd", path)
