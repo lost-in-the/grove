@@ -254,3 +254,47 @@ func TestBackupAndRestore(t *testing.T) {
 		}
 	})
 }
+
+func TestMigrateStateVersion_RekeysMainToRoot(t *testing.T) {
+	st := &State{
+		Version: CurrentVersion,
+		Worktrees: map[string]*WorktreeState{
+			"main":    {Path: "/repo", Root: true},
+			"feature": {Path: "/repo-feature"},
+		},
+	}
+	if err := migrateStateVersion(st); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if _, ok := st.Worktrees["main"]; ok {
+		t.Error(`legacy "main" key still present after migration`)
+	}
+	root, ok := st.Worktrees["root"]
+	if !ok {
+		t.Fatal(`main worktree not rekeyed to "root"`)
+	}
+	if root.Path != "/repo" || !root.Root {
+		t.Errorf("root entry wrong after rekey: %+v", root)
+	}
+	if _, ok := st.Worktrees["feature"]; !ok {
+		t.Error("non-root worktree should be untouched")
+	}
+}
+
+func TestMigrateStateVersion_KeepsExistingRoot(t *testing.T) {
+	// A repo already on the new scheme must not have its root clobbered, even if
+	// a stray "main"-keyed entry also exists.
+	st := &State{
+		Version: CurrentVersion,
+		Worktrees: map[string]*WorktreeState{
+			"root": {Path: "/repo-new", Root: true},
+			"main": {Path: "/repo-old", Root: true},
+		},
+	}
+	if err := migrateStateVersion(st); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if st.Worktrees["root"].Path != "/repo-new" {
+		t.Errorf("existing root entry was clobbered: %+v", st.Worktrees["root"])
+	}
+}

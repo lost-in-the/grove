@@ -84,6 +84,23 @@ func migrateStateVersion(state *State) error {
 		state.Worktrees = make(map[string]*WorktreeState)
 	}
 
+	// Rekey the main worktree entry to "root". Grove <=0.9 keyed it "main", but
+	// runtime lookups moved to the literal "root" key (B22); without this rename
+	// every TouchWorktree("root")/GetWorktree("root") silently misses on upgraded
+	// repos — freezing the root's last-access, leaving a stale "main" entry, and
+	// letting a later `grove new main` overwrite it. The main entry is identified
+	// by its Root flag (set since v0.5), never by key, so a coincidentally
+	// "main"-named non-root worktree is left alone. Skip if "root" already exists.
+	if _, ok := state.Worktrees["root"]; !ok {
+		for key, ws := range state.Worktrees {
+			if ws != nil && ws.Root && key != "root" {
+				state.Worktrees["root"] = ws
+				delete(state.Worktrees, key)
+				break
+			}
+		}
+	}
+
 	// Backfill zero-valued timestamps from earlier versions of grove that
 	// initialized worktree state without stamping CreatedAt/LastAccessedAt
 	// (e.g. v0.6.1 and earlier created the main worktree's state without
