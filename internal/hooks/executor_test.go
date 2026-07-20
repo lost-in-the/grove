@@ -153,6 +153,91 @@ func TestInterpolateShellQuoteContexts(t *testing.T) {
 	})
 }
 
+// TestInterpolateShellComplexContexts pins interpolation for shell contexts
+// beyond flat quoting, each of which the earlier flat scanner got wrong:
+//   - command substitution `$( )` and backticks restart quoting, so the outer
+//     quotes must not leak in — a single-quoted token there had emitted a bare
+//     ${...} the shell then treated literally;
+//   - POSIX arithmetic `$(( ))` takes no quoting, and a quoted operand is a
+//     syntax error on dash (`/bin/sh` on Debian);
+//   - heredoc bodies do no word-splitting, so an added "..." wrapper lands
+//     literally in the emitted text.
+//
+// A token in any of these must still expand to the value, unquoted where the
+// context demands it.
+func TestInterpolateShellComplexContexts(t *testing.T) {
+	t.Run("command substitution with inner single quotes", func(t *testing.T) {
+		v := &Variables{Worktree: "feat-x"}
+		got := runShellHook(t, v, `printf '%s' "$(printf '%s' '{{.worktree}}')"`)
+		if got != "feat-x" {
+			t.Errorf("cmd-sub single-quote: output = %q, want %q", got, "feat-x")
+		}
+	})
+
+	t.Run("command substitution with inner double quotes", func(t *testing.T) {
+		v := &Variables{Branch: "feature/x"}
+		got := runShellHook(t, v, `printf '%s' "$(printf '%s' "{{.branch}}")"`)
+		if got != "feature/x" {
+			t.Errorf("cmd-sub double-quote: output = %q, want %q", got, "feature/x")
+		}
+	})
+
+	t.Run("command substitution bare token keeps spaces", func(t *testing.T) {
+		v := &Variables{NewPath: "/tmp/My Project"}
+		got := runShellHook(t, v, `printf '%s' "$(printf '%s' {{.new_path}})"`)
+		if got != "/tmp/My Project" {
+			t.Errorf("cmd-sub bare: output = %q, want %q", got, "/tmp/My Project")
+		}
+	})
+
+	t.Run("backticks with inner single quotes", func(t *testing.T) {
+		v := &Variables{Worktree: "feat-x"}
+		got := runShellHook(t, v, "printf '%s' `printf '%s' '{{.worktree}}'`")
+		if got != "feat-x" {
+			t.Errorf("backtick single-quote: output = %q, want %q", got, "feat-x")
+		}
+	})
+
+	t.Run("arithmetic operand is not quoted", func(t *testing.T) {
+		v := &Variables{Port: 41}
+		cmd := v.InterpolateShell(`echo $(({{.port}} + 1))`)
+		if strings.Contains(cmd, `"${GROVE_HOOK_port}"`) {
+			t.Errorf("arithmetic operand was quoted (breaks on dash): %q", cmd)
+		}
+		got := strings.TrimSpace(runShellHook(t, v, `echo $(({{.port}} + 1))`))
+		if got != "42" {
+			t.Errorf("arithmetic: output = %q, want %q", got, "42")
+		}
+	})
+
+	t.Run("heredoc body token expands without quote wrapping", func(t *testing.T) {
+		v := &Variables{Branch: "feature/x"}
+		got := runShellHook(t, v, "cat <<EOF\nbranch={{.branch}}\nEOF\n")
+		if got != "branch=feature/x\n" {
+			t.Errorf("heredoc: output = %q, want %q", got, "branch=feature/x\n")
+		}
+	})
+
+	t.Run("heredoc body preserves spaces without splitting", func(t *testing.T) {
+		v := &Variables{NewPath: "/tmp/My Project"}
+		got := runShellHook(t, v, "cat <<EOF\n{{.new_path}}\nEOF\n")
+		if got != "/tmp/My Project\n" {
+			t.Errorf("heredoc spaces: output = %q, want %q", got, "/tmp/My Project\n")
+		}
+	})
+
+	t.Run("quoted heredoc delimiter still fills the value", func(t *testing.T) {
+		// `<<'EOF'` suppresses shell expansion entirely, so a ${...} reference
+		// would land literally. The body is emitted verbatim by the shell, so
+		// substituting the value directly is both correct and injection-safe.
+		v := &Variables{Branch: "feature/x"}
+		got := runShellHook(t, v, "cat <<'EOF'\nbranch={{.branch}}\nEOF\n")
+		if got != "branch=feature/x\n" {
+			t.Errorf("quoted heredoc: output = %q, want %q", got, "branch=feature/x\n")
+		}
+	})
+}
+
 // TestCommandHookDefaultWorkingDir pins the event-aware default working
 // directory. The "new" worktree path is guaranteed ABSENT for exactly two
 // events — pre-create (not created yet) and post-remove (already deleted) —
@@ -243,9 +328,13 @@ command = "pwd > out.txt"
 // never execute.
 func TestInterpolateShellInjectionAllContexts(t *testing.T) {
 	templates := map[string]string{
-		"bare":          `echo {{.branch}}`,
-		"double-quoted": `echo "{{.branch}}"`,
-		"single-quoted": `echo '{{.branch}}'`,
+		"bare":           `echo {{.branch}}`,
+		"double-quoted":  `echo "{{.branch}}"`,
+		"single-quoted":  `echo '{{.branch}}'`,
+		"command-sub":    `echo "$(echo '{{.branch}}')"`,
+		"backtick":       "echo `echo '{{.branch}}'`",
+		"heredoc":        "cat <<EOF\n{{.branch}}\nEOF\n",
+		"heredoc-quoted": "cat <<'EOF'\n{{.branch}}\nEOF\n",
 	}
 	payloads := []string{
 		`x"; touch MARKER; echo "`,

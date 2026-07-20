@@ -281,64 +281,279 @@ func (v *Variables) shellVarBindings() []shellVarBinding {
 // both). Single-quoted tokens use the POSIX close-splice-reopen idiom,
 // because ${...} never expands inside single quotes — a flat rewrite there
 // leaked the literal reference and silently broke shipped recipes like
-// `pkill -f '{{.worktree}}'`. In every context the expansion itself is
-// double-quoted or in a double-quoted string, so the result is never
-// re-parsed for operators or split.
+// `pkill -f '{{.worktree}}'`.
+//
+// Flat quoting is not enough: command substitution `$( )` and backticks
+// restart quoting (the outer quotes do not reach inside), POSIX arithmetic
+// `$(( ))` takes no quoting at all (a quoted operand is a syntax error on
+// dash, which is `/bin/sh` on Debian), and heredoc bodies do no word-splitting
+// (an added "..." wrapper would land literally in the output). A small stack of
+// shell contexts models these so the reference is emitted correctly in each:
+//
+//	bare:           echo {{.branch}}          → echo "${GROVE_HOOK_branch}"
+//	double-quoted:  echo "on {{.branch}}"     → echo "on ${GROVE_HOOK_branch}"
+//	single-quoted:  echo 'on {{.branch}}'     → echo 'on '"${GROVE_HOOK_branch}"''
+//	command-sub:    "$(f '{{.worktree}}')"    → "$(f ''"${GROVE_HOOK_worktree}"'')"
+//	arithmetic:     $(({{.port}} + 1))        → $((${GROVE_HOOK_port} + 1))
+//	heredoc body:   BRANCH={{.branch}}         → BRANCH=${GROVE_HOOK_branch}
+//
+// A quoted heredoc delimiter (`<<'EOF'`) suppresses shell expansion entirely,
+// so the body is emitted verbatim by the shell; there the literal value is
+// substituted directly — correct (a ${...} reference would never expand) and
+// still injection-safe (nothing in the body is re-parsed).
 //
 // Interpolate (literal substitution) remains correct for filesystem paths and
 // template bodies, which Go handles directly and which never reach a shell.
 func (v *Variables) InterpolateShell(s string) string {
 	bindings := v.shellVarBindings()
 	envByToken := make(map[string]string, len(bindings))
+	valByToken := make(map[string]string, len(bindings))
 	for _, b := range bindings {
 		envByToken[b.token] = b.env
+		valByToken[b.token] = b.value
 	}
 
 	var out strings.Builder
 	out.Grow(len(s) + 32)
-	inSingle, inDouble := false, false
-	for i := 0; i < len(s); {
-		// Token rewrite, sensitive to the current quoting context.
+
+	// A stack of nested shell contexts. `$( )` and backticks push a fresh frame
+	// (quoting restarts inside them); `$(( ))` pushes an arithmetic frame that
+	// carries no quoting. The innermost frame decides how a token is emitted.
+	type frame struct {
+		arith              bool
+		backtick           bool
+		inSingle, inDouble bool
+	}
+	stack := []frame{{}}
+	top := func() *frame { return &stack[len(stack)-1] }
+
+	writeRef := func(env string) {
+		t := top()
+		switch {
+		case t.arith:
+			// Operand position: bare; arithmetic does no word-splitting.
+			out.WriteString("${" + env + "}")
+		case t.inSingle:
+			// ${...} never expands inside '...': close, expand double-quoted,
+			// reopen. Valid inside $( ) and backticks too.
+			out.WriteString(`'"${` + env + `}"'`)
+		case t.inDouble:
+			out.WriteString("${" + env + "}")
+		default:
+			out.WriteString(`"${` + env + `}"`)
+		}
+	}
+
+	var heredocs []heredocSpec // FIFO of heredocs opened on the current line
+	i := 0
+	for i < len(s) {
+		// Token rewrite, sensitive to the current context.
 		if strings.HasPrefix(s[i:], "{{.") {
 			if rel := strings.Index(s[i:], "}}"); rel >= 0 {
 				token := s[i : i+rel+2]
 				if env, ok := envByToken[token]; ok {
-					switch {
-					case inSingle:
-						out.WriteString(`'"${` + env + `}"'`)
-					case inDouble:
-						out.WriteString("${" + env + "}")
-					default:
-						out.WriteString(`"${` + env + `}"`)
-					}
+					writeRef(env)
 					i += rel + 2
 					continue
 				}
 			}
 		}
 
-		c := s[i]
+		t := top()
+
 		// A backslash escapes the next character everywhere except inside
-		// single quotes (where it is literal), so an escaped quote must not
-		// toggle the context. Inside double quotes this over-approximates
-		// (\x keeps the backslash for ordinary x), but the skipped character
-		// is never context-relevant there — ' doesn't toggle inside "..."
-		// anyway.
-		if c == '\\' && !inSingle && i+1 < len(s) {
-			out.WriteByte(c)
+		// single quotes (where it is literal). Arithmetic has no quoting to
+		// protect, but a stray backslash there is unusual and copied through.
+		if s[i] == '\\' && !t.inSingle && i+1 < len(s) {
+			out.WriteByte(s[i])
 			out.WriteByte(s[i+1])
 			i += 2
 			continue
 		}
-		if c == '\'' && !inDouble {
-			inSingle = !inSingle
-		} else if c == '"' && !inSingle {
-			inDouble = !inDouble
+
+		// Operators are only meaningful outside single quotes.
+		if !t.inSingle {
+			switch {
+			case strings.HasPrefix(s[i:], "$(("):
+				out.WriteString("$((")
+				stack = append(stack, frame{arith: true})
+				i += 3
+				continue
+			case strings.HasPrefix(s[i:], "$("):
+				out.WriteString("$(")
+				stack = append(stack, frame{})
+				i += 2
+				continue
+			case s[i] == ')' && t.arith && strings.HasPrefix(s[i:], "))"):
+				out.WriteString("))")
+				if len(stack) > 1 {
+					stack = stack[:len(stack)-1]
+				}
+				i += 2
+				continue
+			case s[i] == ')' && !t.arith && !t.backtick && len(stack) > 1:
+				out.WriteByte(')')
+				stack = stack[:len(stack)-1]
+				i++
+				continue
+			case s[i] == '`':
+				out.WriteByte('`')
+				if t.backtick {
+					if len(stack) > 1 {
+						stack = stack[:len(stack)-1]
+					}
+				} else {
+					stack = append(stack, frame{backtick: true})
+				}
+				i++
+				continue
+			case !t.arith && strings.HasPrefix(s[i:], "<<"):
+				if spec, consumed, ok := parseHeredocIntroducer(s[i:]); ok {
+					out.WriteString(s[i : i+consumed])
+					heredocs = append(heredocs, spec)
+					i += consumed
+					continue
+				}
+			}
 		}
-		out.WriteByte(c)
-		i++
+
+		switch c := s[i]; {
+		case c == '\'' && !t.inDouble && !t.arith:
+			t.inSingle = !t.inSingle
+			out.WriteByte(c)
+			i++
+		case c == '"' && !t.inSingle && !t.arith:
+			t.inDouble = !t.inDouble
+			out.WriteByte(c)
+			i++
+		case c == '\n' && len(heredocs) > 0:
+			// The newline ends the introducer line; heredoc bodies follow in
+			// order until each terminator line.
+			out.WriteByte('\n')
+			i++
+			for _, hd := range heredocs {
+				i = writeHeredocBody(&out, s, i, hd, envByToken, valByToken)
+			}
+			heredocs = nil
+		default:
+			out.WriteByte(c)
+			i++
+		}
 	}
 	return out.String()
+}
+
+// heredocSpec describes a heredoc opened by a `<<[-]DELIM` introducer.
+type heredocSpec struct {
+	delim     string // terminator word
+	quoted    bool   // <<'X' / <<"X": the shell performs no expansion in the body
+	stripTabs bool   // <<-X: leading tabs are stripped before the terminator match
+}
+
+// parseHeredocIntroducer parses a heredoc operator (`<<`, `<<-`, with an
+// optionally quoted delimiter word) at the start of s. It returns the spec, the
+// number of bytes consumed through the delimiter, and whether one was found.
+// Only the operator and delimiter word are consumed; the rest of the line
+// scans normally. A here-string (`<<<`) is rejected.
+func parseHeredocIntroducer(s string) (heredocSpec, int, bool) {
+	if len(s) >= 3 && s[2] == '<' {
+		return heredocSpec{}, 0, false // here-string <<<, not a heredoc
+	}
+	j := 2 // past "<<"
+	var spec heredocSpec
+	if j < len(s) && s[j] == '-' {
+		spec.stripTabs = true
+		j++
+	}
+	for j < len(s) && (s[j] == ' ' || s[j] == '\t') {
+		j++
+	}
+	if j >= len(s) {
+		return heredocSpec{}, 0, false
+	}
+	if q := s[j]; q == '\'' || q == '"' {
+		j++
+		start := j
+		for j < len(s) && s[j] != q {
+			j++
+		}
+		if j >= len(s) || j == start {
+			return heredocSpec{}, 0, false
+		}
+		spec.delim = s[start:j]
+		spec.quoted = true
+		return spec, j + 1, true
+	}
+	start := j
+	for j < len(s) && isHeredocDelimByte(s[j]) {
+		j++
+	}
+	if j == start {
+		return heredocSpec{}, 0, false
+	}
+	spec.delim = s[start:j]
+	return spec, j, true
+}
+
+func isHeredocDelimByte(b byte) bool {
+	return b == '_' || b == '-' || b == '.' ||
+		(b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9')
+}
+
+// writeHeredocBody emits the heredoc body from s[i] up to and including the
+// terminator line, rewriting tokens, and returns the index just past it. In an
+// unquoted heredoc the shell expands parameters, so a bare ${...} reference is
+// emitted (a heredoc does no word-splitting, and quotes would be literal); in a
+// quoted heredoc the shell expands nothing, so the literal value is substituted
+// — correct and injection-safe because the body is treated verbatim.
+func writeHeredocBody(out *strings.Builder, s string, i int, hd heredocSpec, envByToken, valByToken map[string]string) int {
+	for i < len(s) {
+		nl := strings.IndexByte(s[i:], '\n')
+		var line string
+		var next int
+		if nl < 0 {
+			line, next = s[i:], len(s)
+		} else {
+			line, next = s[i:i+nl], i+nl+1
+		}
+		match := line
+		if hd.stripTabs {
+			match = strings.TrimLeft(match, "\t")
+		}
+		if strings.TrimRight(match, "\r") == hd.delim {
+			out.WriteString(s[i:next]) // terminator line, verbatim
+			return next
+		}
+		writeHeredocLine(out, line, hd.quoted, envByToken, valByToken)
+		if nl >= 0 {
+			out.WriteByte('\n')
+		}
+		i = next
+	}
+	return i
+}
+
+func writeHeredocLine(out *strings.Builder, line string, quoted bool, envByToken, valByToken map[string]string) {
+	for j := 0; j < len(line); {
+		if strings.HasPrefix(line[j:], "{{.") {
+			if rel := strings.Index(line[j:], "}}"); rel >= 0 {
+				token := line[j : j+rel+2]
+				if quoted {
+					if val, ok := valByToken[token]; ok {
+						out.WriteString(val)
+						j += rel + 2
+						continue
+					}
+				} else if env, ok := envByToken[token]; ok {
+					out.WriteString("${" + env + "}")
+					j += rel + 2
+					continue
+				}
+			}
+		}
+		out.WriteByte(line[j])
+		j++
+	}
 }
 
 // ShellEnv returns the GROVE_HOOK_*=value assignments that back the references
