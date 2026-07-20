@@ -26,6 +26,7 @@ var groveExcludeEntries = []string{
 	".grove/ui_prefs.json",
 	".grove/.envrc",
 	".grove/config.local.toml",
+	".grove/" + configMigrationSentinel,
 }
 
 // legacyGroveExcludeEntries were written by older grove versions; they are

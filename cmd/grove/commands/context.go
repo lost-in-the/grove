@@ -129,12 +129,20 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 // logged, never fatal: excludes are a convenience, not a precondition.
 // Modeled on the shell-integration version preflight above.
 func migrateGroveExcludes(groveDir string) {
-	migrated, err := grove.EnsureGroveExcludes(grove.MustProjectRoot(groveDir))
+	projectRoot := grove.MustProjectRoot(groveDir)
+	migrated, err := grove.EnsureGroveExcludes(projectRoot)
 	if err != nil {
 		log.Printf("git excludes migration: %v", err)
-		return
+		// Fall through: the legacy-symlink notice is independent of the excludes.
 	}
-	if migrated {
+	// Surface the config-layout upgrade notice once. `migrated` covers repos
+	// touched by a mid-development build (config.toml removed from the exclude
+	// block); NeedsConfigMigrationNotice covers the case real upgraders hit —
+	// released grove never excluded config.toml, so the only durable signal is
+	// the legacy per-worktree config symlinks left in existing worktrees. Both
+	// are gated so the message fires at most once.
+	notify := grove.NeedsConfigMigrationNotice(groveDir, projectRoot)
+	if migrated || notify {
 		emitExcludesMigrationNotice()
 	}
 }
@@ -144,8 +152,8 @@ func migrateGroveExcludes(groveDir string) {
 // actually removed — the migration is idempotent, so the message can never
 // repeat. Kept in one place so init and the command context share wording.
 func emitExcludesMigrationNotice() {
-	fmt.Fprintln(os.Stderr, "grove: migrated git excludes — .grove/config.toml is no longer ignored; commit it to share project config")
-	fmt.Fprintln(os.Stderr, "grove: worktrees showing an untracked .grove/config.toml carry a legacy symlink — run 'grove doctor' for cleanup steps")
+	fmt.Fprintln(os.Stderr, "grove: .grove/config.toml is now a committable project file — commit it to share config with your team")
+	fmt.Fprintln(os.Stderr, "grove: existing worktrees may carry a legacy .grove/config.toml symlink (shows as untracked) — run 'grove doctor' for cleanup steps")
 }
 
 // printNoGroveDiagnosis prints the "not a grove project" diagnosis for cwd to

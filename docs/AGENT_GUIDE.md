@@ -931,12 +931,15 @@ genuinely machine-local files (`state.json`, `state.lock`, `ui_prefs.json`,
 `.envrc`, `config.local.toml`) in the git exclude.
 
 The upgrade is self-healing: the first grove command in a legacy repo rewrites
-the exclude block and prints this one-time stderr notice (it cannot repeat —
-the migration is idempotent):
+the exclude block and prints this one-time stderr notice. It fires when the repo
+still carries the pre-0.10 layout — either a mid-development exclude block that
+listed `config.toml`, or (the case real upgraders hit) the legacy per-worktree
+`.grove/config.toml` symlinks left in existing worktrees — and is recorded via a
+machine-local sentinel so it shows at most once per clone:
 
 ```
-grove: migrated git excludes — .grove/config.toml is no longer ignored; commit it to share project config
-grove: worktrees showing an untracked .grove/config.toml carry a legacy symlink — run 'grove doctor' for cleanup steps
+grove: .grove/config.toml is now a committable project file — commit it to share config with your team
+grove: existing worktrees may carry a legacy .grove/config.toml symlink (shows as untracked) — run 'grove doctor' for cleanup steps
 ```
 
 Agents: this notice (and every grove notice) goes to **stderr**, so `--json`

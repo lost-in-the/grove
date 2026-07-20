@@ -54,10 +54,10 @@ func TestUpgradeMigration_ExcludesNoticeFiresOnce(t *testing.T) {
 
 	// First command after "upgrade": migrates and notifies.
 	stdout, stderr := runLs()
-	if !strings.Contains(stderr, "migrated git excludes") {
+	if !strings.Contains(stderr, "committable project file") {
 		t.Errorf("first run after upgrade: migration notice missing from stderr:\n%s", stderr)
 	}
-	if strings.Contains(stdout, "migrated git excludes") {
+	if strings.Contains(stdout, "committable project file") {
 		t.Errorf("migration notice leaked to stdout (breaks --json consumers):\n%s", stdout)
 	}
 	content, err := os.ReadFile(excludePath)
@@ -70,7 +70,7 @@ func TestUpgradeMigration_ExcludesNoticeFiresOnce(t *testing.T) {
 
 	// Second command: nothing left to migrate, no notice.
 	_, stderr = runLs()
-	if strings.Contains(stderr, "migrated git excludes") {
+	if strings.Contains(stderr, "committable project file") {
 		t.Errorf("migration notice repeated on the second run:\n%s", stderr)
 	}
 }

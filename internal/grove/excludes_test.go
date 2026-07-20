@@ -246,3 +246,44 @@ func TestEnsureGroveExcludes(t *testing.T) {
 		}
 	})
 }
+
+func TestNeedsConfigMigrationNotice_SilentWithoutLegacySymlinks(t *testing.T) {
+	mainDir, _ := gitRepoWithWorktree(t)
+	groveDir := filepath.Join(mainDir, ".grove")
+	if err := os.MkdirAll(groveDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if NeedsConfigMigrationNotice(groveDir, mainDir) {
+		t.Error("notice fired with no legacy config symlinks present")
+	}
+	if _, err := os.Stat(filepath.Join(groveDir, configMigrationSentinel)); err != nil {
+		t.Errorf("sentinel not written after first check: %v", err)
+	}
+}
+
+func TestNeedsConfigMigrationNotice_FiresOnceForLegacySymlink(t *testing.T) {
+	mainDir, linkedDir := gitRepoWithWorktree(t)
+	groveDir := filepath.Join(mainDir, ".grove")
+	if err := os.MkdirAll(groveDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(groveDir, "config.toml"), []byte("x = 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Plant a legacy per-worktree config.toml symlink in the linked worktree,
+	// the artifact a pre-0.10 repo carries.
+	linkedGrove := filepath.Join(linkedDir, ".grove")
+	if err := os.MkdirAll(linkedGrove, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(groveDir, "config.toml"), filepath.Join(linkedGrove, "config.toml")); err != nil {
+		t.Fatal(err)
+	}
+
+	if !NeedsConfigMigrationNotice(groveDir, mainDir) {
+		t.Fatal("expected the notice to fire for a legacy config symlink")
+	}
+	if NeedsConfigMigrationNotice(groveDir, mainDir) {
+		t.Error("notice fired a second time; the sentinel should make it one-shot")
+	}
+}
