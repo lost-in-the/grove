@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/lost-in-the/grove/internal/fsutil"
@@ -82,9 +83,7 @@ func EnsureGroveExcludes(dir string) (migrated bool, err error) {
 		return false, nil
 	}
 
-	if err := os.MkdirAll(filepath.Dir(excludePath), 0o755); err != nil {
-		return false, fmt.Errorf("create %s: %w", filepath.Dir(excludePath), err)
-	}
+	// AtomicWriteFile creates the parent directory (info/) itself.
 	if err := fsutil.AtomicWriteFile(excludePath, []byte(updated), 0o644); err != nil {
 		return false, err
 	}
@@ -141,7 +140,7 @@ func spliceGroveExcludeBlock(content string) (updated string, changed, legacyRem
 				legacyRemoved = true
 			}
 		}
-		if slicesEqual(current, desired) {
+		if slices.Equal(current, desired) {
 			return content, false, false
 		}
 		replaced := append([]string{}, lines[:start]...)
@@ -162,16 +161,4 @@ func spliceGroveExcludeBlock(content string) (updated string, changed, legacyRem
 	b.WriteString(strings.Join(desired, "\n"))
 	b.WriteString("\n")
 	return b.String(), true, false
-}
-
-func slicesEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }

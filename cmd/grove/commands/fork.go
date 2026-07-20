@@ -308,7 +308,7 @@ Examples:
 		// "off" suppress the client switch (terminal takeover) — same policy
 		// as `grove new` and `grove to`.
 		if !forkNoSwitch {
-			suppressTmux := effectiveTmuxMode(ctx.Config.Tmux.Mode, ctx.Config.AgentMode, false, false) == tmuxModeOff
+			suppressTmux := resolveTmuxMode(ctx.Config, false, false) == tmuxModeOff
 			sessionName := worktree.TmuxSessionName(projectName, name)
 			if !switchToWorktree(ctx, stderr, parentName, name, sessionName, newTree.Path, suppressTmux) {
 				emitCdOrExplain(stderr, newTree.Path)

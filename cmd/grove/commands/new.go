@@ -284,7 +284,7 @@ Examples:
 		// Switch to new worktree unless --no-switch. Agent mode, --no-tmux,
 		// and tmux mode "off" suppress the client switch (terminal takeover).
 		if !newNoSwitch {
-			suppressTmux := effectiveTmuxMode(ctx.Config.Tmux.Mode, ctx.Config.AgentMode, newNoTmux, false) == tmuxModeOff
+			suppressTmux := resolveTmuxMode(ctx.Config, newNoTmux, false) == tmuxModeOff
 			sessionName := worktree.TmuxSessionName(projectName, name)
 			if !switchToWorktree(ctx, stderr, currentWorktreeName, name, sessionName, wt.Path, suppressTmux) {
 				emitCdOrExplain(stderr, wt.Path)

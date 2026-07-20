@@ -479,7 +479,7 @@ func printHooksSummary(profile *detect.ProjectProfile) {
 // createInitialWorktrees creates the --with-testing/--with-scratch/--full
 // worktrees through the same path as `grove new`: worktree.Manager.Create
 // (which honors the [naming] pattern instead of hardcoding {project}-{name})
-// followed by setupCreatedWorktree (state registration, config symlink,
+// followed by setupCreatedWorktree (state registration, git excludes,
 // hooks.toml post_create hooks, docker auto-start). Without this, worktrees
 // grove itself just created weren't registered in state, so entering one and
 // running any grove command reported it as an unrecognized drifted worktree.
