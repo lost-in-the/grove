@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/exitcode"
 	"github.com/lost-in-the/grove/internal/grove"
@@ -103,9 +104,12 @@ shorthand alias (e.g. 'w'). Use 'grove install --help' for details.`,
 			os.Exit(exitcode.NotGroveProject)
 		}
 
-		// Same self-healing excludes migration RequireGroveContext performs —
-		// the bare-grove TUI is many users' only entry point, and this runs
-		// before the alt-screen takes over so the stderr notice stays visible.
+		// Same startup notices RequireGroveContext emits — this runs before the
+		// alt-screen takes over so the stderr messages stay visible. The bare-
+		// grove TUI is many users' only entry point, so skipping them here (as it
+		// used to) hid the shell-integration and config-migration nudges from
+		// exactly the audience most likely to need them.
+		warnOutdatedShellIntegration()
 		migrateGroveExcludes(groveDir)
 
 		projectRoot := grove.MustProjectRoot(groveDir)
@@ -123,6 +127,7 @@ shorthand alias (e.g. 'w'). Use 'grove install --help' for details.`,
 		cfg, cfgErr := config.LoadFromGroveDir(groveDir)
 		if cfgErr != nil {
 			log.Printf("config load failed, using defaults: %v", cfgErr)
+			cli.Warning(cli.NewStderr(), "Failed to load config, using defaults: %v", cfgErr)
 			cfg = config.LoadDefaults()
 		}
 		pluginMgr := registerPlugins(cfg)

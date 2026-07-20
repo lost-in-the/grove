@@ -60,12 +60,7 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 
 		log.Printf("grove dir resolved to: %s", groveDir)
 
-		// Warn if shell integration is outdated
-		if v := os.Getenv("GROVE_SHELL_VERSION"); v != "" {
-			if shellVer, err := strconv.Atoi(v); err == nil && shellVer < shell.ShellVersion {
-				fmt.Fprintf(os.Stderr, "grove: shell integration outdated (v%d, current v%d) — run: grove setup\n", shellVer, shell.ShellVersion)
-			}
-		}
+		warnOutdatedShellIntegration()
 
 		if groveDir == "" {
 			cwd, _ := os.Getwd()
@@ -154,6 +149,18 @@ func migrateGroveExcludes(groveDir string) {
 func emitExcludesMigrationNotice() {
 	fmt.Fprintln(os.Stderr, "grove: .grove/config.toml is now a committable project file — commit it to share config with your team")
 	fmt.Fprintln(os.Stderr, "grove: existing worktrees may carry a legacy .grove/config.toml symlink (shows as untracked) — run 'grove doctor' for cleanup steps")
+}
+
+// warnOutdatedShellIntegration prints a one-line stderr nudge when the sourced
+// shell wrapper is older than the binary's ShellVersion. Shared by
+// RequireGroveContext and the bare-grove TUI entry point so the check can't
+// drift between them.
+func warnOutdatedShellIntegration() {
+	if v := os.Getenv("GROVE_SHELL_VERSION"); v != "" {
+		if shellVer, err := strconv.Atoi(v); err == nil && shellVer < shell.ShellVersion {
+			fmt.Fprintf(os.Stderr, "grove: shell integration outdated (v%d, current v%d) — run: grove setup\n", shellVer, shell.ShellVersion)
+		}
+	}
 }
 
 // printNoGroveDiagnosis prints the "not a grove project" diagnosis for cwd to
