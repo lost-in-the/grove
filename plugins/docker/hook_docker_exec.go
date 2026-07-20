@@ -19,7 +19,10 @@ func (p *Plugin) dockerExecHandler(action *hooks.HookAction, ctx *hooks.Executio
 	if container == "" {
 		return fmt.Errorf("docker:exec hook: 'container' is required")
 	}
-	command := vars.Interpolate(action.Command)
+	// Reference GROVE_HOOK_* env vars instead of splicing values into the shell
+	// command; the values ride along as `docker exec -e` environment so an
+	// untrusted {{.branch}} cannot inject a command (B13).
+	command := vars.InterpolateShell(action.Command)
 	if command == "" {
 		return fmt.Errorf("docker:exec hook: 'command' is required")
 	}
@@ -49,7 +52,9 @@ func (p *Plugin) dockerExecHandler(action *hooks.HookAction, ctx *hooks.Executio
 	cctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	args := append([]string{"exec", container}, parts...)
+	args := append([]string{"exec"}, dockerEnvArgs(vars.ShellEnv())...)
+	args = append(args, container)
+	args = append(args, parts...)
 	args = append(args, command)
 	cmd := exec.CommandContext(cctx, "docker", args...)
 	w := ctx.Out()

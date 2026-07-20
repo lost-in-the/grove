@@ -55,7 +55,7 @@ where reproducible, an end-to-end re-check):
 | **B6** | `pre_switch` / `post_switch` / `pre_create` config hooks now actually run (`grove to`, `grove new`) |
 | **B9** | `diff --stat` parses insertions/deletions correctly |
 | **B10 / P1** | `CreateFromBranch` fetches only when the branch isn't local — fork keeps local HEAD, no needless network call |
-| **B13** | Command hooks interpolate values as shell variable references — command injection via branch names is closed |
+| **B13** | Command hooks interpolate values as shell variable references — command injection via branch names is closed across all sinks: the `sh -c` builtin path AND the `docker:compose` / `docker:exec` handlers (values ride as container `-e` env, never spliced into `bash -cil`) |
 | **B15** | `rename` operates on the resolved short name (state re-key + tmux rename no longer half-complete) |
 | **B17** | `sync <unknown>` exits non-zero instead of a silent skip |
 | **B23** | `kick web db` restarts every listed service, not just the first |
@@ -317,6 +317,17 @@ not interpolated values.
 
 **Fix:** pass interpolated values as argv (not concatenated into `sh -c`), or
 shell-quote every substitution.
+
+**Resolved:** `InterpolateShell` rewrites `{{.x}}` to `${GROVE_HOOK_x}` references
+with values supplied out-of-band via `ShellEnv()` — expanded after the shell
+parses the command, so metacharacters can't inject. This covers three sinks:
+the `sh -c` builtin command path, and the `docker:compose` / `docker:exec`
+handlers, where the values are passed into the container as `-e KEY=VALUE`
+(a single argv element to the docker binary, referenced as `${KEY}` inside
+`bash -cil`). The reference scanner models nested shell contexts — command
+substitution, arithmetic, backticks, heredocs — so the rewrite is correct as
+well as safe (see the injection + context test matrices in
+`internal/hooks/executor_test.go` and `plugins/docker/hook_compose_test.go`).
 
 ### B14 — `os.RemoveAll` / `CopyFile` follow a symlink at the destination → can truncate the source **[repro by syscall]**
 `internal/fsutil/copy.go:30`

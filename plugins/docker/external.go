@@ -121,7 +121,7 @@ func (s *externalStrategy) Logs(_ string, service string, follow bool) error {
 	return cmd.Run()
 }
 
-func (s *externalStrategy) Run(worktreePath string, service string, command string) error {
+func (s *externalStrategy) Run(worktreePath string, service string, command string, hookEnv []string) error {
 	// Persist so the env file stays consistent with what we're running against
 	if err := s.persistEnvVar(worktreePath); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: failed to persist %s to %s: %v\n", s.ext.EnvVar, s.ext.EnvFileName(), err)
@@ -137,14 +137,14 @@ func (s *externalStrategy) Run(worktreePath string, service string, command stri
 		env = append(env, fmt.Sprintf("TEST_ENV_NUMBER=%d", envNum))
 	}
 
-	args := buildRunArgs(s.cfg, worktreePath, service, command)
+	args := buildRunArgs(s.cfg, worktreePath, service, command, hookEnv)
 
 	cmd := composeCommand(s.composePath(), s.ext.EnvFileName(), env, args...)
 	return runWithErrorTranslation(cmd, s.cfg.Test.IncludeDepsValue())
 }
 
 // Exec runs a command in an already-running container of the external compose.
-func (s *externalStrategy) Exec(worktreePath string, service string, command string) error {
+func (s *externalStrategy) Exec(worktreePath string, service string, command string, hookEnv []string) error {
 	if err := s.persistEnvVar(worktreePath); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: failed to persist %s to %s: %v\n", s.ext.EnvVar, s.ext.EnvFileName(), err)
 	}
@@ -157,7 +157,9 @@ func (s *externalStrategy) Exec(worktreePath string, service string, command str
 		env = append(env, fmt.Sprintf("TEST_ENV_NUMBER=%d", envNum))
 	}
 
-	cmd := composeCommand(s.composePath(), s.ext.EnvFileName(), env, "exec", service, "bash", "-cil", command)
+	execArgs := append([]string{"exec"}, dockerEnvArgs(hookEnv)...)
+	execArgs = append(execArgs, service, "bash", "-cil", command)
+	cmd := composeCommand(s.composePath(), s.ext.EnvFileName(), env, execArgs...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin

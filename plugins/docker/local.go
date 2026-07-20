@@ -96,23 +96,25 @@ func (s *localStrategy) Logs(worktreePath string, service string, follow bool) e
 	return cmd.Run()
 }
 
-func (s *localStrategy) Run(worktreePath string, service string, command string) error {
+func (s *localStrategy) Run(worktreePath string, service string, command string, hookEnv []string) error {
 	if !hasDockerCompose(worktreePath) {
 		return ErrNoComposeFile
 	}
 
-	args := buildRunArgs(s.cfg, worktreePath, service, command)
+	args := buildRunArgs(s.cfg, worktreePath, service, command, hookEnv)
 	cmd := composeCommand(worktreePath, "", nil, args...)
 	return runWithErrorTranslation(cmd, s.cfg.Test.IncludeDepsValue())
 }
 
 // Exec runs a command in an already-running container (compose exec).
-func (s *localStrategy) Exec(worktreePath string, service string, command string) error {
+func (s *localStrategy) Exec(worktreePath string, service string, command string, hookEnv []string) error {
 	if !hasDockerCompose(worktreePath) {
 		return ErrNoComposeFile
 	}
 
-	cmd := composeCommand(worktreePath, "", nil, "exec", service, "bash", "-cil", command)
+	execArgs := append([]string{"exec"}, dockerEnvArgs(hookEnv)...)
+	execArgs = append(execArgs, service, "bash", "-cil", command)
+	cmd := composeCommand(worktreePath, "", nil, execArgs...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin

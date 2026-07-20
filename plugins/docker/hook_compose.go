@@ -22,10 +22,15 @@ func (p *Plugin) composeHandler(action *hooks.HookAction, ctx *hooks.ExecutionCo
 	if service == "" {
 		return fmt.Errorf("docker:compose hook: 'service' is required")
 	}
-	command := vars.Interpolate(action.Command)
+	// Rewrite the command to reference GROVE_HOOK_* env vars rather than splice
+	// values into the `bash -cil` string; the values ride along as container
+	// environment (hookEnv), so an untrusted {{.branch}} from `grove fetch pr/N`
+	// cannot inject a command (B13).
+	command := vars.InterpolateShell(action.Command)
 	if command == "" {
 		return fmt.Errorf("docker:compose hook: 'command' is required")
 	}
+	hookEnv := vars.ShellEnv()
 
 	wtPath := ctx.NewPath
 	if wtPath == "" {
@@ -45,7 +50,7 @@ func (p *Plugin) composeHandler(action *hooks.HookAction, ctx *hooks.ExecutionCo
 	switch mode {
 	case "run":
 		// `compose run --rm` brings up service deps on demand.
-		if err := p.strategy.Run(wtPath, service, command); err != nil {
+		if err := p.strategy.Run(wtPath, service, command, hookEnv); err != nil {
 			if errors.Is(err, ErrNoComposeFile) {
 				return fmt.Errorf("docker:compose hook: no compose file found at %s — did you mean type = \"docker:exec\"?", wtPath)
 			}
@@ -56,7 +61,7 @@ func (p *Plugin) composeHandler(action *hooks.HookAction, ctx *hooks.ExecutionCo
 		// config hooks (helpers.go runPostCreateHooks), so a stack with
 		// auto_start = true will already be up. We do NOT call Up() here —
 		// silent side effects in a hook are surprising.
-		if err := p.strategy.Exec(wtPath, service, command); err != nil {
+		if err := p.strategy.Exec(wtPath, service, command, hookEnv); err != nil {
 			if errors.Is(err, ErrNoComposeFile) {
 				return fmt.Errorf("docker:compose hook: no compose file found at %s — did you mean type = \"docker:exec\"?", wtPath)
 			}

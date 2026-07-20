@@ -206,7 +206,7 @@ func (s *agentExternalStrategy) agentContext(worktreePath string) agentCtx {
 }
 
 // Run executes a command in an ephemeral container using the agent compose project.
-func (s *agentExternalStrategy) Run(worktreePath string, service string, command string) error {
+func (s *agentExternalStrategy) Run(worktreePath string, service string, command string, hookEnv []string) error {
 	ac := s.agentContext(worktreePath)
 
 	env := ac.env
@@ -216,12 +216,14 @@ func (s *agentExternalStrategy) Run(worktreePath string, service string, command
 		env = append(env, fmt.Sprintf("TEST_ENV_NUMBER=%d", envNum))
 	}
 
-	cmd := agentComposeCommand(ac.composePath, ac.templatePaths, ac.projectName, env, "run", "--rm", service, "bash", "-cil", command)
+	runArgs := append([]string{"run", "--rm"}, dockerEnvArgs(hookEnv)...)
+	runArgs = append(runArgs, service, "bash", "-cil", command)
+	cmd := agentComposeCommand(ac.composePath, ac.templatePaths, ac.projectName, env, runArgs...)
 	return runWithErrorTranslation(cmd, s.cfg.Test.IncludeDepsValue())
 }
 
 // Exec runs a command in an already-running agent container.
-func (s *agentExternalStrategy) Exec(worktreePath string, service string, command string) error {
+func (s *agentExternalStrategy) Exec(worktreePath string, service string, command string, hookEnv []string) error {
 	ac := s.agentContext(worktreePath)
 
 	env := ac.env
@@ -230,7 +232,9 @@ func (s *agentExternalStrategy) Exec(worktreePath string, service string, comman
 		env = append(env, fmt.Sprintf("TEST_ENV_NUMBER=%d", envNum))
 	}
 
-	cmd := agentComposeCommand(ac.composePath, ac.templatePaths, ac.projectName, env, "exec", service, "bash", "-cil", command)
+	execArgs := append([]string{"exec"}, dockerEnvArgs(hookEnv)...)
+	execArgs = append(execArgs, service, "bash", "-cil", command)
+	cmd := agentComposeCommand(ac.composePath, ac.templatePaths, ac.projectName, env, execArgs...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin

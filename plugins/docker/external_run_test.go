@@ -21,7 +21,7 @@ func TestExternalRun_DefaultUsesNoDeps(t *testing.T) {
 		Test: config.TestConfig{Command: "bin/rspec", Service: "app"},
 	}
 
-	args := buildRunArgs(cfg, "/tmp/wt", "app", "bin/rspec")
+	args := buildRunArgs(cfg, "/tmp/wt", "app", "bin/rspec", nil)
 
 	found := false
 	for _, a := range args {
@@ -56,7 +56,7 @@ func TestExternalRun_IncludeDepsTrueOmitsNoDeps(t *testing.T) {
 		},
 	}
 
-	args := buildRunArgs(cfg, "/tmp/wt", "app", "bin/rspec")
+	args := buildRunArgs(cfg, "/tmp/wt", "app", "bin/rspec", nil)
 
 	for _, a := range args {
 		if a == "--no-deps" {
@@ -83,7 +83,7 @@ func TestExternalRun_BindMountAddsVolumeFlag(t *testing.T) {
 		},
 	}
 
-	args := buildRunArgs(cfg, "/tmp/wt", "app", "bin/rspec")
+	args := buildRunArgs(cfg, "/tmp/wt", "app", "bin/rspec", nil)
 
 	joined := strings.Join(args, " ")
 	if !strings.Contains(joined, "-v /tmp/wt:/app") {
