@@ -327,3 +327,28 @@ func TestApplyDirtyPatch_RoundTrip(t *testing.T) {
 		t.Errorf("target file contents = %q, want %q", string(got), "hello\nworld\n")
 	}
 }
+
+func TestResolveNewBranch(t *testing.T) {
+	tests := []struct {
+		name       string
+		wtName     string
+		mirror     string
+		fromBranch string
+		branch     string
+		want       string
+	}{
+		{"default flow uses worktree name", "feat", "", "", "", "feat"},
+		{"explicit --branch wins over name", "feat", "", "", "custom", "custom"},
+		{"--from-branch checks out that branch", "feat", "", "fix/login", "", "fix/login"},
+		{"--mirror creates env/<name>", "staging", "origin/main", "", "", "env/staging"},
+		{"mirror precedence over stray branch", "staging", "origin/main", "", "b", "env/staging"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := resolveNewBranch(tt.wtName, tt.mirror, tt.fromBranch, tt.branch); got != tt.want {
+				t.Errorf("resolveNewBranch(%q,%q,%q,%q) = %q, want %q",
+					tt.wtName, tt.mirror, tt.fromBranch, tt.branch, got, tt.want)
+			}
+		})
+	}
+}
