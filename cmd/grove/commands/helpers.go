@@ -177,8 +177,12 @@ func currentWorktreeRoot(ctx *GroveContext) (string, error) {
 // tmux session kill. Returns an error only when the git removal itself fails;
 // ancillary failures are warned and skipped.
 func removeWorktreeWithHooks(ctx *GroveContext, mgr *worktree.Manager, w *cli.Writer, projectName, name, wtPath, branchName string, force bool) error {
-	// Execute pre-remove hooks (user hooks from hooks.toml)
-	hookExecutor, hookErr := hooks.NewExecutor()
+	// Execute pre-remove hooks (user hooks from hooks.toml). Pin resolution to
+	// the main worktree's .grove — a no-arg NewExecutor() resolves from cwd and
+	// would honor a linked worktree's own hooks.toml when `grove rm B` runs from
+	// inside worktree A, diverging from the project's hooks (and from the TUI
+	// delete path, which pins to main).
+	hookExecutor, hookErr := hooks.NewExecutor(filepath.Join(ctx.ProjectRoot, ".grove"))
 	if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPreRemove) {
 		hookCtx := &hooks.ExecutionContext{
 			Event:        hooks.EventPreRemove,
@@ -241,7 +245,9 @@ func removeWorktreeWithHooks(ctx *GroveContext, mgr *worktree.Manager, w *cli.Wr
 // from removeWorktreeWithHooks so `grove rm` can interleave branch deletion
 // before the post-remove hooks, preserving its established ordering.
 func firePostRemoveHooks(ctx *GroveContext, w *cli.Writer, projectName, name, wtPath, branchName string) {
-	hookExecutor, hookErr := hooks.NewExecutor()
+	// Pin to the main worktree's .grove (see removeWorktreeWithHooks) so post-
+	// remove cleanup resolves the project's hooks regardless of the cwd.
+	hookExecutor, hookErr := hooks.NewExecutor(filepath.Join(ctx.ProjectRoot, ".grove"))
 	if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPostRemove) {
 		hookCtx := &hooks.ExecutionContext{
 			Event:    hooks.EventPostRemove,
