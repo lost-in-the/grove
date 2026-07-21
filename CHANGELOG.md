@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `AGENTS.md` gained a config-layout upgrade section, and `docs/AGENT_GUIDE.md` a full walkthrough for agents assisting the upgrade (including the verbatim notice text for stderr pattern-matching).
 
 ### Changed
+- Docker auto-start after worktree creation is one explicit knob shared by every surface: `plugins.docker.auto_up = true` opts in for `grove new` **and** the dashboard create flow (which previously never auto-started, #141), and agent stacks no longer flip it on implicitly — set `auto_up = true` to keep that behavior.
 - The shell wrapper's capture path explicitly clears an inherited `GROVE_CD_FILE` (`ShellVersion` 8 → 9), and the binary now requires that file to already exist before writing (the wrapper `mktemp`s it), so a stale value leaked into a tmux pane from an `issues`/`prs` session no longer resurrects a dead temp file — directory switching falls through to the stdout `cd:` line instead of silently breaking.
 - `git rev-parse --git-common-dir` is memoized per process, collapsing the duplicate resolutions each command previously spawned.
 - Release workflow hardened (`set -euo pipefail`, verified downloads, non-empty tarball checks) and the Homebrew formula license corrected to **Apache-2.0** (template and published formula — companion tap PR).

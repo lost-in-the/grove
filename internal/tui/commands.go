@@ -20,8 +20,12 @@ import (
 	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/tuilog"
 	"github.com/lost-in-the/grove/internal/worktree"
+	"github.com/lost-in-the/grove/plugins/docker"
 	"github.com/lost-in-the/grove/plugins/tracker"
 )
+
+// dockerAutoUp is a seam over docker.AutoUp so tests can stub the stack start.
+var dockerAutoUp = docker.AutoUp
 
 var errWorktreeNotFound = errors.New("worktree created but not found")
 
@@ -345,6 +349,12 @@ func runPostCreateStreaming(ch chan<- creationEvent, mgr *worktree.Manager, stat
 		}
 	}
 
+	// Auto-start the docker stack when auto_up opts in — the same epilogue
+	// `grove new` runs after bootstrap (autoStartDocker), so dashboard-created
+	// worktrees come up provisioned identically (#141). Runs before the tmux
+	// session exists so the stack is up by the time the user attaches.
+	runDockerAutoUp(ch, cfg, name, wt.Path)
+
 	// Create tmux session after bootstrap so hooks (docker Up, bundle
 	// install) have run by the time the user attaches — mirrors the CLI
 	// order (setupCreatedWorktree, then switch/tmux).
@@ -357,6 +367,37 @@ func runPostCreateStreaming(ch chan<- creationEvent, mgr *worktree.Manager, stat
 	}
 
 	return postCreateResult{hookOutput: bootBuf.String(), hookErr: bootErr}
+}
+
+// runDockerAutoUp brings the docker stack up for a dashboard-created worktree
+// when [plugins.docker] auto_up opts in, streaming progress to ch. Compose
+// output goes to os.Stderr, so the call is wrapped in captureStdio and
+// re-emitted as log lines; failures are surfaced as a log line (warn-only,
+// same as the CLI epilogue — the worktree itself was created fine).
+func runDockerAutoUp(ch chan<- creationEvent, cfg *config.Config, name, wtPath string) {
+	if !docker.ShouldAutoUp(cfg) {
+		return
+	}
+	ch <- creationEvent{line: "Starting Docker stack..."}
+	var started bool
+	captured, err := captureStdio(func() error {
+		var upErr error
+		started, upErr = dockerAutoUp(cfg, wtPath)
+		return upErr
+	})
+	for _, line := range strings.Split(strings.TrimRight(captured, "\n"), "\n") {
+		if line != "" {
+			ch <- creationEvent{line: line}
+		}
+	}
+	if err != nil {
+		tuilog.Printf("warning: docker auto-start failed for %q: %v", name, err)
+		ch <- creationEvent{line: fmt.Sprintf("Docker auto-start failed: %v", err)}
+		return
+	}
+	if started {
+		ch <- creationEvent{line: "Docker stack started"}
+	}
 }
 
 // readCreationLog returns a tea.Cmd that reads the next event from the

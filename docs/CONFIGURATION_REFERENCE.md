@@ -288,8 +288,10 @@ auto_start = true                  # bool
 # Default: false
 auto_stop = false                  # bool
 
-# Auto-start Docker on `grove new` (runs `docker compose up` after worktree creation).
-# Default: false (true when agent stacks are configured and enabled)
+# Auto-start Docker after creating a worktree: `grove new` and the dashboard
+# create flow run `docker compose up` once the worktree is bootstrapped.
+# Explicit opt-in — agent stacks no longer imply auto-up.
+# Default: false
 auto_up = false                    # bool
 
 # Docker Compose mode.
