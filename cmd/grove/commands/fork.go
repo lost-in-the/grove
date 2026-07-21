@@ -2,19 +2,16 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/exitcode"
-	"github.com/lost-in-the/grove/internal/grove"
-	"github.com/lost-in-the/grove/internal/hooks"
 	"github.com/lost-in-the/grove/internal/output"
-	"github.com/lost-in-the/grove/internal/state"
 	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
@@ -207,14 +204,8 @@ Examples:
 			cli.Success(w, "Created worktree '%s' with branch '%s'", name, newBranchName)
 		}
 
-		// Record grove's machine-local git excludes (best-effort) — fork
-		// hand-rolls its bootstrap, so it must mirror BootstrapWorktree here
-		// for fresh clones where `grove init` never ran on this machine.
-		if _, err := grove.EnsureGroveExcludes(ctx.ProjectRoot); err != nil && !forkJSON {
-			cli.Warning(w, "record git excludes: %v", err)
-		}
-
-		// Apply WIP patch to new worktree if needed
+		// Apply WIP patch to new worktree if needed — BEFORE bootstrap, so the
+		// post_create hooks below see the copied changes.
 		if len(wipPatch) > 0 && (forkMoveWIP || forkCopyWIP) {
 			newWipHandler := worktree.NewWIPHandler(newTree.Path)
 			if err := newWipHandler.ApplyPatch(wipPatch); err != nil {
@@ -240,47 +231,32 @@ Examples:
 			}
 		}
 
-		// Register in state with parent tracking
-		now := time.Now()
-		wsState := &state.WorktreeState{
-			Path:           newTree.Path,
+		// Provision through the shared bootstrap — git excludes, state
+		// registration (with parent tracking), SetupFiles, and plugin + config
+		// post_create hooks — the same sequence as grove new, instead of the
+		// hand-rolled mirror fork used to keep in sync by hand (this is how the
+		// post_create B32 gap slipped in). Output routing matches
+		// setupCreatedWorktree: nil in JSON mode so stdout stays machine-clean.
+		var bootstrapWriter *cli.Writer
+		if !forkJSON {
+			bootstrapWriter = w
+		}
+		if err := worktree.BootstrapWorktree(ctx.State, ctx.Config, worktree.BootstrapOpts{
+			Name:           name,
 			Branch:         newBranchName,
-			CreatedAt:      now,
-			LastAccessedAt: now,
+			WorktreePath:   newTree.Path,
+			MainPath:       ctx.ProjectRoot,
+			ProjectName:    mgr.GetProjectName(),
 			ParentWorktree: parentName,
-		}
-		if err := ctx.State.AddWorktree(name, wsState); err != nil {
-			cli.Warning(stderr, "worktree created but state tracking failed: %v", err)
+		}, bootstrapWriter); err != nil {
+			// A required post-create hook failing fails the command (B7); other
+			// bootstrap issues (state, setup) stay recoverable — warn and point
+			// at `grove repair`, preserving fork's prior leniency.
+			if errors.Is(err, worktree.ErrRequiredHookFailed) {
+				return err
+			}
+			cli.Warning(stderr, "worktree created but provisioning had issues: %v", err)
 			cli.Info(stderr, "run 'grove repair' to fix")
-		}
-
-		runFileSetup(ctx.Config, newTree.Path, ctx.ProjectRoot, w, forkJSON)
-
-		// Fire post-create hook
-		hookCtx := &hooks.Context{
-			Worktree:     name,
-			Config:       ctx.Config,
-			WorktreePath: newTree.Path,
-			MainPath:     ctx.ProjectRoot,
-		}
-		if err := hooks.Fire(hooks.EventPostCreate, hookCtx); err != nil {
-			cli.Warning(stderr, "Post-create hook failed: %v", err)
-		}
-
-		// Config-file (hooks.toml) post-create actions — `grove new` runs these
-		// via BootstrapWorktree, but fork hand-rolls its bootstrap and skipped
-		// them, so a project's post_create recipe (bundle install, copy .env,
-		// …) silently never ran on a forked worktree (B32). Output to stderr so
-		// it stays off the cd: stdout channel. A required action failing fails
-		// the command (B7); the worktree is left in place for inspection.
-		if err := runConfigHooks(stderr, hooks.EventPostCreate, &hooks.ExecutionContext{
-			Worktree: name,
-			Branch:   newBranchName,
-			Project:  mgr.GetProjectName(),
-			MainPath: ctx.ProjectRoot,
-			NewPath:  newTree.Path,
-		}); err != nil {
-			return err
 		}
 
 		projectName := mgr.GetProjectName()
