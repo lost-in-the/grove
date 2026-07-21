@@ -56,43 +56,48 @@ func FindRoot(startDir string) (string, error) {
 		return "", fmt.Errorf("failed to locate git repository: %w", err)
 	}
 
-	// The canonical .grove always lives in the MAIN worktree: `grove init`
-	// refuses to run from a linked worktree, so state.json only ever exists
-	// there. Resolve it via git's common dir (which points at the main
-	// worktree regardless of which worktree cwd is in) before walking. Without
-	// this, a secondary worktree with its own .grove — e.g. the config.toml
-	// symlink older grove versions created there, never state.json — makes
-	// the walk stop at the worktree-local .grove and fragment state
-	// per-worktree (B1): `grove new`/`rm`/`last` run from inside a worktree
-	// would read and write a phantom state.json instead of the project's.
-	if mainGrove, ok := mainWorktreeGroveDir(absDir); ok {
-		return mainGrove, nil
+	// Resolve the main worktree root — the parent of git's common dir, which
+	// points at the main worktree from any worktree. The canonical .grove lives
+	// there: `grove init` refuses to run from a linked worktree, so state.json
+	// only ever exists in the main worktree.
+	mainRoot := ""
+	if commonDir, err := GitCommonDir(absDir); err == nil {
+		mainRoot = filepath.Dir(commonDir)
 	}
 
-	// Only walk when inside a git work tree. A .grove outside a git repo is
-	// never a project (grove init requires git); without a git-root boundary
-	// the walk would escape to the filesystem root and adopt the global
-	// ~/.grove dir (debug logs, update-check cache) as a project (#138).
-	if gitRoot != "" {
+	// When cwd is inside the MAIN worktree (its git toplevel IS the main root),
+	// walk up from cwd to the main root and honor the nearest .grove — so a
+	// genuine nested project (a .grove between cwd and the root) isn't shadowed
+	// by the root's. This can't pick up a legacy per-worktree .grove: those only
+	// ever existed in LINKED worktrees (older grove's config.toml symlink), and
+	// the anchor below handles those. The git-root boundary also keeps the walk
+	// from escaping to the global ~/.grove (debug logs, update cache) (#138).
+	if gitRoot != "" && gitRoot == mainRoot {
 		current := absDir
 		for {
 			groveDir := filepath.Join(current, ".grove")
 			if info, err := os.Stat(groveDir); err == nil && info.IsDir() {
 				return groveDir, nil
 			}
-
-			// Stop at git root — don't walk above the repository
 			if current == gitRoot {
 				break
 			}
-
-			// Move to parent directory
 			parent := filepath.Dir(current)
 			if parent == current {
 				break
 			}
 			current = parent
 		}
+	}
+
+	// Anchor: from a LINKED worktree (git toplevel != main root), or if the
+	// main-worktree walk found nothing, resolve the main worktree's .grove
+	// directly — skipping any legacy per-worktree .grove a linked worktree might
+	// still carry (older grove's config.toml symlink, never state.json), which
+	// would otherwise fragment state per-worktree (B1): `grove new`/`rm`/`last`
+	// run from inside a worktree would read and write a phantom state.json.
+	if mainGrove, ok := mainWorktreeGroveDir(absDir); ok {
+		return mainGrove, nil
 	}
 
 	// Fallback: find main worktree's .grove via git

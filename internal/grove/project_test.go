@@ -422,3 +422,60 @@ func TestFindRoot_NonGitDirDoesNotWalkUp(t *testing.T) {
 		}
 	}
 }
+
+// TestFindRoot_NestedGroveInMainWorktreeIsHonored: a .grove in a subdirectory
+// of the MAIN worktree (a nested project) must win over the root's .grove when
+// cwd is under it — without reintroducing the B1 fragmentation for LINKED
+// worktrees (covered by TestFindRoot_SecondaryWorktreeWithLocalGroveResolvesToMain).
+func TestFindRoot_NestedGroveInMainWorktreeIsHonored(t *testing.T) {
+	mainDir := t.TempDir()
+	mainDir, _ = filepath.EvalSymlinks(mainDir)
+
+	run := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test", "GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("command %v failed: %v\n%s", args, err, out)
+		}
+	}
+	run(mainDir, "git", "init")
+	run(mainDir, "git", "commit", "--allow-empty", "-m", "init")
+
+	rootGrove := filepath.Join(mainDir, ".grove")
+	if err := os.MkdirAll(rootGrove, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	nestedDir := filepath.Join(mainDir, "services", "api")
+	nestedGrove := filepath.Join(nestedDir, ".grove")
+	if err := os.MkdirAll(nestedGrove, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// From the nested subdir → the nested .grove (previously shadowed by root's).
+	if found, err := FindRoot(nestedDir); err != nil {
+		t.Fatalf("FindRoot(nested) error = %v", err)
+	} else if found != nestedGrove {
+		t.Errorf("FindRoot(nested subdir) = %q, want nested .grove %q", found, nestedGrove)
+	}
+
+	// From a subdir with no nested .grove → the root .grove.
+	plainSub := filepath.Join(mainDir, "docs")
+	if err := os.MkdirAll(plainSub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if found, err := FindRoot(plainSub); err != nil {
+		t.Fatalf("FindRoot(plain subdir) error = %v", err)
+	} else if found != rootGrove {
+		t.Errorf("FindRoot(plain subdir) = %q, want root .grove %q", found, rootGrove)
+	}
+
+	// From the main root → the root .grove.
+	if found, err := FindRoot(mainDir); err != nil {
+		t.Fatalf("FindRoot(root) error = %v", err)
+	} else if found != rootGrove {
+		t.Errorf("FindRoot(root) = %q, want root .grove %q", found, rootGrove)
+	}
+}
