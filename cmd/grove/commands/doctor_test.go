@@ -1408,3 +1408,74 @@ func TestCheckAgentNetwork_EmptyNetworkNoOp(t *testing.T) {
 		t.Error("expected allPassed unchanged for empty network")
 	}
 }
+
+func TestFixConfigSymlinks_RemovesLegacySymlinks(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	git := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null",
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	mainWt := filepath.Join(base, "main")
+	if err := os.MkdirAll(filepath.Join(mainWt, ".grove"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	git(base, "init", mainWt)
+	testWrite(t, filepath.Join(mainWt, ".grove", "config.toml"), "project_name = \"m\"\n")
+	testWrite(t, filepath.Join(mainWt, "f"), "x")
+	git(mainWt, "add", "-A")
+	git(mainWt, "commit", "-m", "init")
+
+	linked := filepath.Join(base, "linked")
+	git(mainWt, "worktree", "add", linked, "-b", "feat")
+
+	// Replace the linked worktree's checked-out config.toml with a legacy
+	// per-worktree symlink (what pre-0.10 grove created).
+	lc := filepath.Join(linked, ".grove", "config.toml")
+	if err := os.Remove(lc); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(mainWt, ".grove", "config.toml"), lc); err != nil {
+		t.Fatal(err)
+	}
+
+	groveDir := filepath.Join(mainWt, ".grove")
+	if _, err := checkConfigSymlinks(groveDir); err == nil {
+		t.Fatal("checkConfigSymlinks should flag the planted symlink")
+	}
+
+	removed, err := fixConfigSymlinks(groveDir)
+	if err != nil {
+		t.Fatalf("fixConfigSymlinks: %v", err)
+	}
+	if removed != 1 {
+		t.Errorf("removed = %d, want 1", removed)
+	}
+	// The symlink must be gone (the committed real file is restored in its place).
+	if fi, err := os.Lstat(lc); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		t.Errorf("config.toml is still a symlink after --fix")
+	}
+	if _, err := checkConfigSymlinks(groveDir); err != nil {
+		t.Errorf("checkConfigSymlinks should pass after fix, got: %v", err)
+	}
+}
+
+func testWrite(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}

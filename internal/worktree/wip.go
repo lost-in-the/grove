@@ -7,7 +7,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/lost-in-the/grove/internal/cmdexec"
@@ -78,6 +80,16 @@ func (h *WIPHandler) CreatePatch() ([]byte, error) {
 	// First, add all untracked files to index temporarily
 	if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", h.repoPath, "add", "--all"}, "", cmdexec.GitLocal); err != nil {
 		return nil, fmt.Errorf("failed to stage files: %w\n%s", err, output)
+	}
+
+	// A legacy per-worktree .grove/config.toml symlink (older grove created
+	// these; current grove never does) is untracked, so `add --all` sweeps it
+	// in and fork --copy-wip would then propagate a machine-absolute symlink
+	// into the new worktree. Unstage it — only when it really is a symlink, so a
+	// genuine edit to a committed config.toml still rides along. `grove doctor
+	// --fix` removes the originals.
+	if fi, err := os.Lstat(filepath.Join(h.repoPath, ".grove", "config.toml")); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		_ = cmdexec.Run(context.TODO(), "git", []string{"-C", h.repoPath, "reset", "-q", "--", ".grove/config.toml"}, "", cmdexec.GitLocal)
 	}
 
 	// Create patch from staged changes

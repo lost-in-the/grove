@@ -28,7 +28,7 @@ var (
 )
 
 func init() {
-	doctorCmd.Flags().BoolVar(&doctorFix, "fix", false, "Apply automatic fixes for detected issues (host-install hook rewrite at project level; missing copy_files / symlink entries at per-worktree level)")
+	doctorCmd.Flags().BoolVar(&doctorFix, "fix", false, "Apply automatic fixes for detected issues (host-install hook rewrite and legacy config-symlink removal at project level; missing copy_files / symlink entries at per-worktree level)")
 	doctorCmd.Flags().BoolVar(&doctorAll, "all", false, "Audit every registered worktree's copy_files / symlink_files / symlink_dirs entries")
 	rootCmd.AddCommand(doctorCmd)
 }
@@ -179,6 +179,15 @@ Examples:
 				return checkConfigSymlinks(groveDir)
 			}) && allPassed
 
+			// Auto-remove legacy config symlinks when --fix is set.
+			if doctorFix {
+				if removed, err := fixConfigSymlinks(groveDir); err != nil {
+					cli.Warning(w, "config-symlink cleanup failed: %v", err)
+				} else if removed > 0 {
+					cli.Success(w, "Removed %d legacy config symlink(s)", removed)
+				}
+			}
+
 			// Check: all git worktrees are registered in state.json
 			allPassed = runCheck(w, "Worktree registration", func() (string, error) {
 				return checkWorktreeRegistration(groveDir)
@@ -261,6 +270,41 @@ func groveNotFoundError() error {
 	return fmt.Errorf("grove binary not found in PATH")
 }
 
+// fixConfigSymlinks removes legacy per-worktree .grove/config.toml symlinks
+// across all worktrees (grove doctor --fix). For each symlink it unstages the
+// path (in case fork --copy-wip propagated a staged copy), deletes the symlink,
+// then restores the committed config.toml if the project tracks one (a no-op
+// otherwise). Returns the number removed.
+func fixConfigSymlinks(groveDir string) (int, error) {
+	projectRoot := filepath.Dir(groveDir)
+	out, err := cmdexec.Output(context.TODO(), "git", []string{"-C", projectRoot, "worktree", "list", "--porcelain"}, "", cmdexec.GitLocal)
+	if err != nil {
+		return 0, fmt.Errorf("failed to list worktrees: %w", err)
+	}
+
+	removed := 0
+	for _, line := range strings.Split(string(out), "\n") {
+		path, found := strings.CutPrefix(line, "worktree ")
+		if !found {
+			continue
+		}
+		configPath := filepath.Join(path, ".grove", "config.toml")
+		fi, err := os.Lstat(configPath)
+		if err != nil || fi.Mode()&os.ModeSymlink == 0 {
+			continue
+		}
+		// Unstage (handles a propagated, staged symlink), delete the symlink,
+		// then restore the committed file if one is tracked.
+		_ = cmdexec.Run(context.TODO(), "git", []string{"-C", path, "reset", "-q", "--", ".grove/config.toml"}, "", cmdexec.GitLocal)
+		if err := os.Remove(configPath); err != nil {
+			continue
+		}
+		_ = cmdexec.Run(context.TODO(), "git", []string{"-C", path, "checkout", "-q", "--", ".grove/config.toml"}, "", cmdexec.GitLocal)
+		removed++
+	}
+	return removed, nil
+}
+
 // checkConfigSymlinks finds legacy .grove/config.toml symlinks across all
 // worktrees. Current grove creates none — config resolution anchors at the
 // main worktree via the git common dir — so ANY such symlink is debris from
@@ -299,7 +343,7 @@ func checkConfigSymlinks(groveDir string) (string, error) {
 	}
 
 	if len(legacy) > 0 {
-		return "", fmt.Errorf("legacy config symlinks in: %s — config now resolves from the main worktree; remove with `rm <worktree>/.grove/config.toml` (then `git checkout -- .grove/config.toml` there if the project commits it)", strings.Join(legacy, ", "))
+		return "", fmt.Errorf("legacy config symlinks in: %s — config now resolves from the main worktree; run `grove doctor --fix` to remove them (or `rm <worktree>/.grove/config.toml`, then `git checkout -- .grove/config.toml` there if the project commits it)", strings.Join(legacy, ", "))
 	}
 
 	return fmt.Sprintf("%d worktrees checked", total), nil
