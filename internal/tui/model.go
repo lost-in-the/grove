@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"charm.land/bubbles/v2/help"
@@ -120,7 +121,9 @@ type Model struct {
 
 // NewModel creates a new TUI model.
 func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, pluginMgr ...*plugins.Manager) Model {
-	cfg, cfgErr := config.Load()
+	// projectRoot is already resolved — load config from its .grove directly
+	// instead of re-discovering it via FindRoot's git spawns (#142).
+	cfg, cfgErr := config.LoadFromGroveDir(filepath.Join(projectRoot, ".grove"))
 	if cfgErr != nil {
 		tuilog.Printf("warning: failed to load config: %v", cfgErr)
 	}

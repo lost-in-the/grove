@@ -408,54 +408,23 @@ func runFileSetup(cfg *config.Config, newPath, mainPath string, w *cli.Writer, j
 }
 
 // autoStartDocker starts the Docker stack for a new worktree if configured.
+// The decision (docker.ShouldAutoUp) and the stack start (docker.AutoUp) are
+// shared with the TUI create path so both surfaces provision identically.
 func autoStartDocker(w *cli.Writer, cfg *config.Config, wtPath string, noDocker, jsonOutput bool) {
-	if noDocker || !shouldAutoDocker(cfg) {
+	if noDocker || !docker.ShouldAutoUp(cfg) {
 		return
 	}
 	if !jsonOutput {
 		cli.Step(w, "Starting Docker stack...")
 	}
-	dockerPlugin := docker.New()
-	if cfg.AgentMode {
-		dockerPlugin.SetIsolated(true)
-	}
-	if err := dockerPlugin.Init(cfg); err != nil {
-		if !jsonOutput {
-			cli.Warning(w, "Docker init failed: %v", err)
-		}
-		return
-	}
-	if !dockerPlugin.Enabled() {
-		return
-	}
-	if err := dockerPlugin.Up(wtPath, true); err != nil {
+	started, err := docker.AutoUp(cfg, wtPath)
+	if err != nil {
 		if !jsonOutput {
 			cli.Warning(w, "Docker auto-start failed: %v", err)
 		}
-	} else if !jsonOutput {
+		return
+	}
+	if started && !jsonOutput {
 		cli.Success(w, "Docker stack started")
 	}
-}
-
-// shouldAutoDocker returns true when Docker should be auto-started on grove new.
-// Enabled by default when agent stacks are configured, or explicitly via auto_up.
-func shouldAutoDocker(cfg *config.Config) bool {
-	if cfg == nil {
-		return false
-	}
-
-	// Explicit auto_up setting takes precedence
-	if cfg.Plugins.Docker.AutoUp != nil {
-		return *cfg.Plugins.Docker.AutoUp
-	}
-
-	// Default: auto-start when agent stacks are configured and enabled
-	if cfg.IsExternalDockerMode() {
-		ext := cfg.Plugins.Docker.External
-		if ext != nil && ext.Agent != nil && ext.Agent.Enabled != nil && *ext.Agent.Enabled {
-			return true
-		}
-	}
-
-	return false
 }

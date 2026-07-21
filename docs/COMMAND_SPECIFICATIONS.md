@@ -359,8 +359,9 @@ Flags:
 7. **Execute post-create hooks** (user-configured and plugin hooks).
 
 8. **Auto-start Docker** (unless `--no-docker`):
-   - Only runs when `shouldAutoDocker()` returns true: agent stacks configured (`plugins.docker.external.agent.enabled = true`) or `plugins.docker.auto_up = true`
+   - Only runs when `plugins.docker.auto_up = true` — an explicit opt-in, off by default (agent stacks no longer imply it)
    - Calls `docker.Up()` for the new worktree path
+   - The dashboard create flow runs the same epilogue, so CLI- and TUI-created worktrees provision identically
 
 9. **(If `--dirty`) Apply the captured patch** via `git -C <new-worktree> apply <tempfile>`:
    - Empty patch (no uncommitted changes in source): informational message, no-op
