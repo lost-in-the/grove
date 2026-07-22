@@ -3,6 +3,7 @@ package hooks
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -238,6 +239,134 @@ func TestInterpolateShellComplexContexts(t *testing.T) {
 	})
 }
 
+// TestInterpolateShellScannerRegressions pins four context-model bugs found in
+// a security review of InterpolateShell (injection itself was already closed —
+// values ride as env — but the scanner misjudged these constructs):
+//
+//   - `<<` inside double quotes is literal text, not a heredoc introducer; the
+//     phantom heredoc swallowed the rest of the command as "body" and emitted
+//     every later token unquoted (word-splitting/globbing on the value);
+//   - a bare subshell/case-pattern `)` inside `$( )` popped the substitution
+//     frame early, so later tokens were emitted in the wrong context — and a
+//     `)` inside a double-quoted region is literal and must not pop either;
+//   - a backslash immediately before a token consumed the token's opening `{`,
+//     so `\{{.branch}}` was emitted literally instead of substituted.
+//
+// Each case runs the rewritten command through real `sh` the same way
+// builtinCommand does; wantContains additionally pins the load-bearing
+// fragment of the rewrite.
+func TestInterpolateShellScannerRegressions(t *testing.T) {
+	tests := []struct {
+		name         string
+		vars         *Variables
+		template     string
+		want         string // combined output through `sh -c`
+		wantContains string // fragment the rewritten command must contain ("" to skip)
+	}{
+		{
+			name:         "double-quoted << is not a heredoc",
+			vars:         &Variables{NewPath: "/tmp/My Project"},
+			template:     "printf '%s\\n' \"a << b\"\nprintf '%s' {{.new_path}}",
+			want:         "a << b\n/tmp/My Project",
+			wantContains: `"${GROVE_HOOK_new_path}"`,
+		},
+		{
+			name:         "subshell close paren inside command substitution",
+			vars:         &Variables{Branch: "a b"},
+			template:     `printf '%s' "$( (exit 0) && printf '%s' {{.branch}} )"`,
+			want:         "a b",
+			wantContains: `"${GROVE_HOOK_branch}"`,
+		},
+		{
+			name:     "double-quoted close paren inside command substitution",
+			vars:     &Variables{Branch: "feature/x"},
+			template: `printf '%s' "$(printf '%s' "a)b {{.branch}}")"`,
+			want:     "a)b feature/x",
+		},
+		{
+			name:     "case pattern close paren inside command substitution",
+			vars:     &Variables{Worktree: "feat x"},
+			template: `printf '%s' "$(case y in (y) printf '%s' '{{.worktree}}';; esac)"`,
+			want:     "feat x",
+		},
+		{
+			name:         "backslash before bare token still substitutes",
+			vars:         &Variables{Branch: "feature/x"},
+			template:     `printf '%s' \{{.branch}}`,
+			want:         "feature/x",
+			wantContains: `"${GROVE_HOOK_branch}"`,
+		},
+		{
+			name:     "backslash before double-quoted token keeps literal backslash",
+			vars:     &Variables{Branch: "feature/x"},
+			template: `printf '%s' "\{{.branch}}"`,
+			want:     `\feature/x`,
+		},
+		{
+			name:     "backslash before single-quoted token keeps literal backslash",
+			vars:     &Variables{Branch: "feature/x"},
+			template: `printf '%s' '\{{.branch}}'`,
+			want:     `\feature/x`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.wantContains != "" {
+				if cmd := tt.vars.InterpolateShell(tt.template); !strings.Contains(cmd, tt.wantContains) {
+					t.Errorf("InterpolateShell(%q) = %q, missing %q", tt.template, cmd, tt.wantContains)
+				}
+			}
+			if got := runShellHook(t, tt.vars, tt.template); got != tt.want {
+				t.Errorf("output = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestInterpolateShellAnsiCQuoting pins $'...' (ANSI-C quoting) handling. The
+// old close-splice reopened with a plain ' — the remainder lost its ANSI-C
+// escape semantics — and an escaped \' wrongly toggled single-quote state,
+// corrupting the rest of the rewrite. A token splice must reopen with $'.
+// $'...' is a bash/ksh construct (the docker plugin's `bash -cil` sink), not
+// POSIX sh, so the runtime leg uses bash directly.
+func TestInterpolateShellAnsiCQuoting(t *testing.T) {
+	runBash := func(t *testing.T, v *Variables, template string) string {
+		t.Helper()
+		bash, err := exec.LookPath("bash")
+		if err != nil {
+			t.Skipf("bash not available: %v", err)
+		}
+		cmd := v.InterpolateShell(template)
+		c := exec.Command(bash, "-c", cmd)
+		c.Env = append(os.Environ(), v.ShellEnv()...)
+		out, err := c.CombinedOutput()
+		if err != nil {
+			t.Fatalf("bash -c error = %v (cmd=%q, out=%q)", err, cmd, out)
+		}
+		return string(out)
+	}
+
+	t.Run("token splice reopens with ANSI-C quoting", func(t *testing.T) {
+		v := &Variables{Branch: "feature/x"}
+		tmpl := `printf '%s' $'a\n{{.branch}}\tz'`
+		if cmd := v.InterpolateShell(tmpl); !strings.Contains(cmd, `'"${GROVE_HOOK_branch}"$'`) {
+			t.Errorf("splice did not reopen ANSI-C quoting: %q", cmd)
+		}
+		if got, want := runBash(t, v, tmpl), "a\nfeature/x\tz"; got != want {
+			t.Errorf("output = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("escaped quote does not close ANSI-C quoting", func(t *testing.T) {
+		v := &Variables{Worktree: "feat-x"}
+		got := runBash(t, v, `printf '%s' $'don\'t {{.worktree}}'`)
+		if got != "don't feat-x" {
+			t.Errorf("output = %q, want %q", got, "don't feat-x")
+		}
+	})
+}
+
 // TestCommandHookDefaultWorkingDir pins the event-aware default working
 // directory. The "new" worktree path is guaranteed ABSENT for exactly two
 // events — pre-create (not created yet) and post-remove (already deleted) —
@@ -328,13 +457,17 @@ command = "pwd > out.txt"
 // never execute.
 func TestInterpolateShellInjectionAllContexts(t *testing.T) {
 	templates := map[string]string{
-		"bare":           `echo {{.branch}}`,
-		"double-quoted":  `echo "{{.branch}}"`,
-		"single-quoted":  `echo '{{.branch}}'`,
-		"command-sub":    `echo "$(echo '{{.branch}}')"`,
-		"backtick":       "echo `echo '{{.branch}}'`",
-		"heredoc":        "cat <<EOF\n{{.branch}}\nEOF\n",
-		"heredoc-quoted": "cat <<'EOF'\n{{.branch}}\nEOF\n",
+		"bare":                 `echo {{.branch}}`,
+		"double-quoted":        `echo "{{.branch}}"`,
+		"single-quoted":        `echo '{{.branch}}'`,
+		"command-sub":          `echo "$(echo '{{.branch}}')"`,
+		"command-sub-subshell": `echo "$( (exit 0) && echo {{.branch}} )"`,
+		"command-sub-paren":    `echo "$(echo "a)b {{.branch}}")"`,
+		"backtick":             "echo `echo '{{.branch}}'`",
+		"backslash":            `echo \{{.branch}}`,
+		"ansi-c":               `echo $'{{.branch}}'`,
+		"heredoc":              "cat <<EOF\n{{.branch}}\nEOF\n",
+		"heredoc-quoted":       "cat <<'EOF'\n{{.branch}}\nEOF\n",
 	}
 	payloads := []string{
 		`x"; touch MARKER; echo "`,

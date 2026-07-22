@@ -302,6 +302,12 @@ func (v *Variables) shellVarBindings() []shellVarBinding {
 // substituted directly — correct (a ${...} reference would never expand) and
 // still injection-safe (nothing in the body is re-parsed).
 //
+// Two more constructs the flat model got wrong: bare parens are counted per
+// frame so a subshell or case-pattern `)` inside `$( )` doesn't close the
+// substitution frame early, and `$'…'` (ANSI-C quoting, honored by the bash
+// sinks such as docker's `bash -cil`) is tracked so a token splice reopens
+// with `$'` and the remainder keeps its escape semantics.
+//
 // Interpolate (literal substitution) remains correct for filesystem paths and
 // template bodies, which Go handles directly and which never reach a shell.
 func (v *Variables) InterpolateShell(s string) string {
@@ -319,10 +325,15 @@ func (v *Variables) InterpolateShell(s string) string {
 	// A stack of nested shell contexts. `$( )` and backticks push a fresh frame
 	// (quoting restarts inside them); `$(( ))` pushes an arithmetic frame that
 	// carries no quoting. The innermost frame decides how a token is emitted.
+	// parenDepth counts bare `(` (subshell, group, case pattern, arithmetic
+	// grouping) opened in the frame, so their `)` isn't mistaken for the
+	// frame's own closer.
 	type frame struct {
 		arith              bool
 		backtick           bool
 		inSingle, inDouble bool
+		ansi               bool // inside $'...' (ANSI-C quoting)
+		parenDepth         int
 	}
 	stack := []frame{{}}
 	top := func() *frame { return &stack[len(stack)-1] }
@@ -337,6 +348,11 @@ func (v *Variables) InterpolateShell(s string) string {
 			// ${...} never expands inside '...': close, expand double-quoted,
 			// reopen. Valid inside $( ) and backticks too.
 			out.WriteString(`'"${` + env + `}"'`)
+		case t.ansi:
+			// Same splice, but reopen with $' so the remainder of the string
+			// keeps its ANSI-C escape semantics (a plain ' would demote \n
+			// and friends to literal text).
+			out.WriteString(`'"${` + env + `}"$'`)
 		case t.inDouble:
 			out.WriteString("${" + env + "}")
 		default:
@@ -344,19 +360,28 @@ func (v *Variables) InterpolateShell(s string) string {
 		}
 	}
 
+	// matchToken reports whether rest begins with a known {{.x}} token,
+	// returning its env name and byte length.
+	matchToken := func(rest string) (env string, size int, ok bool) {
+		if !strings.HasPrefix(rest, "{{.") {
+			return "", 0, false
+		}
+		rel := strings.Index(rest, "}}")
+		if rel < 0 {
+			return "", 0, false
+		}
+		env, ok = envByToken[rest[:rel+2]]
+		return env, rel + 2, ok
+	}
+
 	var heredocs []heredocSpec // FIFO of heredocs opened on the current line
 	i := 0
 	for i < len(s) {
 		// Token rewrite, sensitive to the current context.
-		if strings.HasPrefix(s[i:], "{{.") {
-			if rel := strings.Index(s[i:], "}}"); rel >= 0 {
-				token := s[i : i+rel+2]
-				if env, ok := envByToken[token]; ok {
-					writeRef(env)
-					i += rel + 2
-					continue
-				}
-			}
+		if env, size, ok := matchToken(s[i:]); ok {
+			writeRef(env)
+			i += size
+			continue
 		}
 
 		t := top()
@@ -364,15 +389,29 @@ func (v *Variables) InterpolateShell(s string) string {
 		// A backslash escapes the next character everywhere except inside
 		// single quotes (where it is literal). Arithmetic has no quoting to
 		// protect, but a stray backslash there is unusual and copied through.
+		// When the escaped character opens a {{.x}} token, the token must
+		// still substitute (plain Interpolate does): the backslash spent
+		// itself on template syntax, so it survives only where the shell
+		// would keep it literally — double quotes (before a non-special
+		// character) and $'...', emitted as an escaped backslash so it can't
+		// disturb the spliced reference.
 		if s[i] == '\\' && !t.inSingle && i+1 < len(s) {
+			if env, size, ok := matchToken(s[i+1:]); ok {
+				if t.inDouble || t.ansi {
+					out.WriteString(`\\`)
+				}
+				writeRef(env)
+				i += 1 + size
+				continue
+			}
 			out.WriteByte(s[i])
 			out.WriteByte(s[i+1])
 			i += 2
 			continue
 		}
 
-		// Operators are only meaningful outside single quotes.
-		if !t.inSingle {
+		// Operators are only meaningful outside single quotes and $'...'.
+		if !t.inSingle && !t.ansi {
 			switch {
 			case strings.HasPrefix(s[i:], "$(("):
 				out.WriteString("$((")
@@ -384,6 +423,22 @@ func (v *Variables) InterpolateShell(s string) string {
 				stack = append(stack, frame{})
 				i += 2
 				continue
+			case strings.HasPrefix(s[i:], "$'") && !t.inDouble && !t.arith:
+				t.ansi = true
+				out.WriteString("$'")
+				i += 2
+				continue
+			case s[i] == '(' && !t.inDouble:
+				t.parenDepth++
+				out.WriteByte('(')
+				i++
+				continue
+			case s[i] == ')' && t.parenDepth > 0 && !t.inDouble:
+				// Closes a bare paren from this frame, not the frame itself.
+				t.parenDepth--
+				out.WriteByte(')')
+				i++
+				continue
 			case s[i] == ')' && t.arith && strings.HasPrefix(s[i:], "))"):
 				out.WriteString("))")
 				if len(stack) > 1 {
@@ -391,7 +446,7 @@ func (v *Variables) InterpolateShell(s string) string {
 				}
 				i += 2
 				continue
-			case s[i] == ')' && !t.arith && !t.backtick && len(stack) > 1:
+			case s[i] == ')' && !t.arith && !t.backtick && !t.inDouble && len(stack) > 1:
 				out.WriteByte(')')
 				stack = stack[:len(stack)-1]
 				i++
@@ -407,7 +462,9 @@ func (v *Variables) InterpolateShell(s string) string {
 				}
 				i++
 				continue
-			case !t.arith && strings.HasPrefix(s[i:], "<<"):
+			case !t.arith && !t.inDouble && strings.HasPrefix(s[i:], "<<"):
+				// Inside double quotes `<<` is literal text; treating it as a
+				// heredoc there swallowed the rest of the command as "body".
 				if spec, consumed, ok := parseHeredocIntroducer(s[i:]); ok {
 					out.WriteString(s[i : i+consumed])
 					heredocs = append(heredocs, spec)
@@ -418,11 +475,16 @@ func (v *Variables) InterpolateShell(s string) string {
 		}
 
 		switch c := s[i]; {
+		case c == '\'' && t.ansi:
+			// Unescaped ' terminates $'...' (escaped \' was consumed above).
+			t.ansi = false
+			out.WriteByte(c)
+			i++
 		case c == '\'' && !t.inDouble && !t.arith:
 			t.inSingle = !t.inSingle
 			out.WriteByte(c)
 			i++
-		case c == '"' && !t.inSingle && !t.arith:
+		case c == '"' && !t.inSingle && !t.ansi && !t.arith:
 			t.inDouble = !t.inDouble
 			out.WriteByte(c)
 			i++
