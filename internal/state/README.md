@@ -13,9 +13,11 @@ and the `last_worktree` used by `grove last`.
 
 - **JSON persistence** at `.grove/state.json` (see [DATA_FLOWS.md](../../docs/DATA_FLOWS.md)).
 - **Cross-process safety**: `save()` takes an exclusive `flock` on
-  `.grove/state.lock`, re-reads and rebases the on-disk state under the lock,
-  then writes atomically (unique temp file + fsync + rename via
-  `internal/fsutil.AtomicWriteFile`).
+  `.grove/state.lock`, re-reads the on-disk state under the lock, re-applies
+  schema migration to it (so a legacy file written by an older grove can't
+  resurrect pre-migration keys through the merge), rebases this process's
+  tracked mutations on top, then writes atomically (unique temp file + fsync +
+  rename via `internal/fsutil.AtomicWriteFile`).
 - **In-process safety**: an `sync.RWMutex` guards goroutine access.
 - **Batched writes**: `Batch` coalesces several mutations into a single save.
 

@@ -32,7 +32,8 @@ default_base_branch = "main"
 #
 # Options:
 #   prompt     - Ask the user what to do (default)
-#   auto-stash - Automatically stash and restore changes
+#   auto-stash - Automatically stash changes before switching (restored only
+#                if the switch aborts; run `git stash pop` there to resume)
 #   refuse     - Refuse to switch until changes are committed or stashed
 dirty_handling = "prompt"
 
