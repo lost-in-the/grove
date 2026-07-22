@@ -379,6 +379,15 @@ func (m *Manager) save() error {
 	if diskData, err := os.ReadFile(m.stateFile); err == nil {
 		var diskState State
 		if err := json.Unmarshal(diskData, &diskState); err == nil {
+			// Rebase onto a *migrated* view of disk. load() only migrates the
+			// in-memory copy, so merging against the raw file would resurrect
+			// legacy keys (the pre-0.10 "main" root entry) on disk and — via
+			// `m.state = merged` below — revert the in-memory migration too,
+			// breaking every subsequent "root" lookup. A migration error here
+			// means the file is from a newer grove; refuse to overwrite it.
+			if err := migrateStateVersion(&diskState); err != nil {
+				return fmt.Errorf("refusing to overwrite state: %w", err)
+			}
 			merged := &diskState
 			if merged.Worktrees == nil {
 				merged.Worktrees = make(map[string]*WorktreeState)

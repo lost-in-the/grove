@@ -99,6 +99,18 @@ func migrateStateVersion(state *State) error {
 				break
 			}
 		}
+	} else {
+		// "root" already exists: drop any *other* Root:true entry. Two root
+		// entries can only come from a half-applied rekey (a pre-fix build
+		// that persisted the dirty "root" entry without removing "main");
+		// keeping the stale one would pin it on disk forever, since this
+		// branch otherwise skips it. Non-root entries — including a worktree
+		// legitimately named "main" — are never touched.
+		for key, ws := range state.Worktrees {
+			if ws != nil && ws.Root && key != "root" {
+				delete(state.Worktrees, key)
+			}
+		}
 	}
 
 	// Backfill zero-valued timestamps from earlier versions of grove that
