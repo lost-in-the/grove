@@ -209,6 +209,60 @@ func TestEnsureGroveExcludes(t *testing.T) {
 		}
 	})
 
+	t.Run("adds atomic temp pattern to an already-migrated block", func(t *testing.T) {
+		mainDir, _ := gitRepoWithWorktree(t)
+		excludePath := filepath.Join(mainDir, ".git", "info", "exclude")
+		if err := os.MkdirAll(filepath.Dir(excludePath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		// Layout an exclude file as the previous grove wrote it: a managed
+		// block that predates the atomic-temp pattern. The self-heal splice
+		// must notice the block is stale and add the new entry — not treat
+		// "header present" as up to date.
+		stale := groveExcludeHeader + "\n" +
+			".grove/state.json\n.grove/state.json.bak\n.grove/state.lock\n" +
+			".grove/ui_prefs.json\n.grove/.envrc\n.grove/config.local.toml\n" +
+			".grove/" + configMigrationSentinel + "\n"
+		if err := os.WriteFile(excludePath, []byte(stale), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		migrated, err := EnsureGroveExcludes(mainDir)
+		if err != nil {
+			t.Fatalf("EnsureGroveExcludes() error = %v", err)
+		}
+		// Adding entries is routine self-heal, not the legacy config.toml
+		// migration — the upgrade notice must not fire.
+		if migrated {
+			t.Error("migrated = true when only adding new entries, want false")
+		}
+
+		content, err := os.ReadFile(excludePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(content), ".grove/*.tmp-*") {
+			t.Errorf("atomic temp pattern missing after self-heal:\n%s", content)
+		}
+
+		// A crash-leaked atomic-write temp (fsutil createUniqueTemp naming:
+		// <file>.tmp-<pid>-<n>) must be ignored so the main worktree doesn't
+		// read dirty.
+		for _, leaked := range []string{
+			".grove/state.json.tmp-12345-0",
+			".grove/state.json.bak.tmp-12345-3",
+			".grove/config.toml.tmp-999-1",
+		} {
+			if !isIgnored(t, mainDir, leaked) {
+				t.Errorf("leaked temp %s should be ignored", leaked)
+			}
+		}
+		// The pattern must not swallow the committable config itself.
+		if isIgnored(t, mainDir, ".grove/config.toml") {
+			t.Error(".grove/config.toml must NOT be ignored by the temp pattern")
+		}
+	})
+
 	t.Run("user entry outside the managed block is preserved", func(t *testing.T) {
 		mainDir, _ := gitRepoWithWorktree(t)
 		excludePath := filepath.Join(mainDir, ".git", "info", "exclude")

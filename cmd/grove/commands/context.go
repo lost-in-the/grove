@@ -101,18 +101,34 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 			PluginManager: pluginMgr,
 		}
 
-		// Drift detection: warn if cwd is a worktree that isn't in state.
-		// Skip when running `grove adopt` itself — it's the resolution.
+		// Drift detection: warn if cwd is inside a worktree that isn't in
+		// state. Skip when running `grove adopt` itself — it's the resolution.
 		if cmd.Name() != "adopt" {
 			if cwd, err := os.Getwd(); err == nil {
-				if reason := grove.DiagnoseDrift(cwd, ctx.ProjectRoot); reason == grove.ReasonDriftedWorktree {
-					emitDriftNotice(cli.NewStderr(), filepath.Base(cwd), reason)
+				dir := driftProbeDir(cwd)
+				if reason := grove.DiagnoseDrift(dir, ctx.ProjectRoot); reason == grove.ReasonDriftedWorktree {
+					emitDriftNotice(cli.NewStderr(), filepath.Base(dir), reason)
 				}
 			}
 		}
 
 		return fn(cmd, args, ctx)
 	}
+}
+
+// driftProbeDir returns the directory drift detection should diagnose: the
+// top level of the git worktree containing dir. Passing a raw cwd would make
+// DiagnoseDrift compare `<worktree>/sub/deep` against state.json's worktree
+// paths and emit a spurious "this worktree (deep) wasn't created by grove"
+// notice from any subdirectory. Falls back to dir itself when the toplevel
+// can't be resolved (not a repo, bare repo) — DiagnoseDrift then behaves as
+// before.
+func driftProbeDir(dir string) string {
+	top, err := worktreeTopLevel(dir)
+	if err != nil || top == "" {
+		return dir
+	}
+	return top
 }
 
 // migrateGroveExcludes self-heals the repository's git excludes on every

@@ -27,6 +27,12 @@ var groveExcludeEntries = []string{
 	".grove/ui_prefs.json",
 	".grove/.envrc",
 	".grove/config.local.toml",
+	// Atomic-write temp files (fsutil createUniqueTemp: "<file>.tmp-<pid>-<n>")
+	// leak when the process dies between create and rename; a leaked temp
+	// next to state.json or config.toml must not make the main worktree read
+	// dirty (B4 symptoms). Any .tmp-* name directly under .grove is by
+	// construction such a leftover, so one glob covers every atomic target.
+	".grove/*.tmp-*",
 	".grove/" + configMigrationSentinel,
 }
 

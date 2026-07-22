@@ -324,6 +324,35 @@ func TestProjectRoot(t *testing.T) {
 	})
 }
 
+// TestIsWithinDir pins the containment boundary the main-worktree walk uses:
+// the walk must stop as soon as current leaves gitRoot, even when the
+// `current == gitRoot` equality never fires (EvalSymlinks divergence), and a
+// sibling directory sharing a name prefix must not count as inside.
+func TestIsWithinDir(t *testing.T) {
+	sep := string(filepath.Separator)
+	tests := []struct {
+		path, dir string
+		want      bool
+	}{
+		{"/repo", "/repo", true},
+		{"/repo/sub", "/repo", true},
+		{"/repo/sub/deep", "/repo", true},
+		{"/repo-other", "/repo", false},
+		{"/repo-other/sub", "/repo", false},
+		{"/", "/repo", false},
+		{"/elsewhere", "/repo", false},
+		{"/repo/sub", "/", true}, // dir "/" already ends in the separator
+		{"/", "/", true},
+	}
+	for _, tt := range tests {
+		path := filepath.FromSlash(tt.path)
+		dir := filepath.FromSlash(tt.dir)
+		if got := isWithinDir(path, dir); got != tt.want {
+			t.Errorf("isWithinDir(%q, %q) = %v, want %v (sep %q)", path, dir, got, tt.want, sep)
+		}
+	}
+}
+
 // TestFindRoot_SymlinkedPathDoesNotEscapeRepo: git returns the symlink-
 // resolved repo root while the walk may start from a logical (symlinked)
 // path. Without resolving both sides, the git-root boundary never fires and

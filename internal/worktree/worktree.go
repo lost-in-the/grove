@@ -480,7 +480,10 @@ func (m *Manager) Remove(name string, force bool) error {
 	// A git-locked worktree is protected on purpose. Never override that (git
 	// itself refuses, and our os.RemoveAll fallback would silently defeat the
 	// lock and leave a phantom registration that `prune` can't clear).
-	if targetTree.IsLocked {
+	// IsLocked comes from the porcelain `locked` attribute, which git only
+	// emits since 2.36 — back it with a direct on-disk check so the guard
+	// holds on the older gits grove supports (2.30+).
+	if targetTree.IsLocked || m.isLockedOnDisk(targetTree.Path) {
 		return fmt.Errorf("worktree '%s' is locked; run 'git worktree unlock %s' first", name, targetTree.Path)
 	}
 
@@ -512,6 +515,27 @@ func (m *Manager) Remove(name string, force bool) error {
 	}
 
 	return nil
+}
+
+// isLockedOnDisk reports whether the worktree at path carries git's on-disk
+// lock marker (<worktree-gitdir>/locked, the file `git worktree lock` writes).
+// `git worktree list --porcelain` only reports the `locked` attribute since
+// Git 2.36, while grove supports 2.30+ — on older versions IsLocked is never
+// populated and Remove's force fallback would silently defeat a deliberate
+// lock. The marker file is how every supported git stores the lock, so
+// checking it directly is version-independent. Errors (worktree gone, git
+// failure) report unlocked — the caller's own git operations surface those.
+func (m *Manager) isLockedOnDisk(path string) bool {
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"rev-parse", "--absolute-git-dir"}, path, cmdexec.GitLocal)
+	if err != nil {
+		return false
+	}
+	gitDir := strings.TrimSpace(string(output))
+	if gitDir == "" {
+		return false
+	}
+	_, err = os.Stat(filepath.Join(gitDir, "locked"))
+	return err == nil
 }
 
 // GetCurrent returns the current worktree, enriched with commit info and

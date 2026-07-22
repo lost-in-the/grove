@@ -73,8 +73,14 @@ func FindRoot(startDir string) (string, error) {
 	// the anchor below handles those. The git-root boundary also keeps the walk
 	// from escaping to the global ~/.grove (debug logs, update cache) (#138).
 	if gitRoot != "" && gitRoot == mainRoot {
+		// The loop condition is a containment check, not just the equality
+		// below: if EvalSymlinks left absDir and gitRoot diverged (partial
+		// resolution failures, case-mangled paths), `current == gitRoot`
+		// would never fire and the walk would escape the repository — the
+		// exact bug the boundary exists to prevent. Outside gitRoot the walk
+		// simply doesn't run and the main-worktree anchor below decides.
 		current := absDir
-		for {
+		for isWithinDir(current, gitRoot) {
 			groveDir := filepath.Join(current, ".grove")
 			if info, err := os.Stat(groveDir); err == nil && info.IsDir() {
 				return groveDir, nil
@@ -110,6 +116,18 @@ func FindRoot(startDir string) (string, error) {
 	}
 
 	return "", nil
+}
+
+// isWithinDir reports whether path is dir itself or a descendant of it.
+// Separator-aware: "/repo-other" is NOT within "/repo", so a plain prefix
+// check can't be fooled by sibling directories sharing a name prefix.
+// Both paths must already be absolute and cleaned (FindRoot guarantees this
+// via filepath.Abs/EvalSymlinks and git's own output).
+func isWithinDir(path, dir string) bool {
+	if path == dir {
+		return true
+	}
+	return strings.HasPrefix(path, strings.TrimSuffix(dir, string(filepath.Separator))+string(filepath.Separator))
 }
 
 // isNotGitRepoErr reports whether a git command failure means "the directory

@@ -27,7 +27,8 @@ grove() {
             # Interactive browsers may launch a TUI, so run un-captured (they
             # need the real terminal) but route the selected worktree's cd
             # through a temp file instead of a raw cd: line on stdout.
-            local cd_file=$(mktemp "${TMPDIR:-/tmp}/grove-cd.XXXXXX")
+            local cd_file
+            cd_file=$(mktemp "${TMPDIR:-/tmp}/grove-cd.XXXXXX")
             GROVE_SHELL=1 GROVE_SHELL_VERSION="$__GROVE_SHELL_VERSION" GROVE_CD_FILE="$cd_file" "$__GROVE_BIN" "$@"
             local exit_code=$?
             if [[ -s "$cd_file" ]]; then

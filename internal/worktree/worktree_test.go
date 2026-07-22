@@ -1134,6 +1134,67 @@ func TestRemoveLockedWorktreeRefused(t *testing.T) {
 	}
 }
 
+// TestRemoveLockedWorktreeRefused_LockAttributeAbsent covers Git 2.30–2.35:
+// those versions honor worktree locks but never emit the `locked` attribute in
+// `git worktree list --porcelain`, so IsLocked stays false and the guard in
+// Remove would fall through to os.RemoveAll. The on-disk lock marker
+// (<worktree-gitdir>/locked) exists on every supported git version — plant it
+// directly (bypassing `git worktree lock`, simulating the old porcelain being
+// silent) and assert Remove(force) still refuses.
+func TestRemoveLockedWorktreeRefused_LockAttributeAbsent(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	tmpDir, _ := setupTestRepo(t)
+	m := &Manager{repoRoot: tmpDir}
+
+	if err := m.Create("disk-locked-wt", "disk-locked-branch"); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	fullName := m.GetProjectName() + "-disk-locked-wt"
+	wt, err := m.Find(fullName)
+	if err != nil || wt == nil {
+		t.Fatalf("Find() expected worktree, got error=%v, wt=%v", err, wt)
+	}
+
+	// Touch the lock marker in the worktree's private gitdir directly — this
+	// is the on-disk representation `git worktree lock` writes, but without
+	// going through git so the test doesn't depend on porcelain reporting it.
+	out, err := exec.Command("git", "-C", wt.Path, "rev-parse", "--absolute-git-dir").Output()
+	if err != nil {
+		t.Fatalf("rev-parse --absolute-git-dir: %v", err)
+	}
+	lockFile := filepath.Join(strings.TrimSpace(string(out)), "locked")
+	if err := os.WriteFile(lockFile, []byte("protected\n"), 0644); err != nil {
+		t.Fatalf("WriteFile lock marker: %v", err)
+	}
+
+	// The direct check must see the lock regardless of porcelain support.
+	if !m.isLockedOnDisk(wt.Path) {
+		t.Error("isLockedOnDisk() = false with lock marker present, want true")
+	}
+
+	// Even with force, Remove must refuse and leave the directory intact.
+	if err := m.Remove(fullName, true); err == nil {
+		t.Fatal("Remove(force) on an on-disk-locked worktree returned nil; want refusal")
+	}
+	if _, statErr := os.Stat(wt.Path); os.IsNotExist(statErr) {
+		t.Errorf("locked worktree directory was deleted despite the lock marker: %s", wt.Path)
+	}
+
+	// Clearing the marker unlocks removal — proves the guard keys off the
+	// marker file, not some unrelated failure.
+	if err := os.Remove(lockFile); err != nil {
+		t.Fatalf("remove lock marker: %v", err)
+	}
+	if m.isLockedOnDisk(wt.Path) {
+		t.Error("isLockedOnDisk() = true after lock marker removed, want false")
+	}
+	if err := m.Remove(fullName, true); err != nil {
+		t.Errorf("Remove(force) after unlock error = %v, want nil", err)
+	}
+}
+
 // TestRemoveNonForceSurfacesGitRefusal guards B3: without force, Remove must not
 // escalate to os.RemoveAll — a dirty worktree removal returns an error instead
 // of silently destroying the tree.
