@@ -1,7 +1,9 @@
 package worktree
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"time"
 
@@ -13,20 +15,30 @@ import (
 	"github.com/lost-in-the/grove/internal/state"
 )
 
+// ErrRequiredHookFailed is returned by BootstrapWorktree when a required
+// (on_failure="fail") post-create hook fails. Callers treat it as fatal (fail
+// the command) while other bootstrap failures — a symlink or state write — stay
+// recoverable via `grove repair` and are surfaced as warnings.
+var ErrRequiredHookFailed = errors.New("required post-create hook failed")
+
 // BootstrapOpts holds the inputs needed to bootstrap a worktree (whether
 // freshly created via grove new or adopted post-hoc via grove adopt).
 type BootstrapOpts struct {
-	Name          string // short worktree name (e.g., "feature")
-	Branch        string // branch the worktree is on
-	WorktreePath  string // absolute path to the worktree directory
-	MainPath      string // absolute path to the main worktree (parent of .grove)
-	ProjectName   string // project name for hook context
-	IsEnvironment bool   // true for environment worktrees
-	Mirror        string // mirror name when IsEnvironment is true
+	Name           string // short worktree name (e.g., "feature")
+	Branch         string // branch the worktree is on
+	WorktreePath   string // absolute path to the worktree directory
+	MainPath       string // absolute path to the main worktree (parent of .grove)
+	ProjectName    string // project name for hook context
+	IsEnvironment  bool   // true for environment worktrees
+	Mirror         string // mirror name when IsEnvironment is true
+	ParentWorktree string // source worktree short name when this is a fork
 }
 
 // BootstrapWorktree runs the post-git-worktree-add bootstrap sequence:
-//  1. Symlink config.toml from main worktree
+//  1. Record grove's machine-local artifacts in the shared git exclude, so
+//     fresh clones that never ran `grove init` on this machine still get
+//     born-clean worktrees (config resolution needs no per-worktree files —
+//     everything anchors at the main worktree via git's common dir)
 //  2. Register the worktree in state.json (idempotent — re-registers on second call)
 //  3. Copy/symlink external compose artifacts (SetupFiles) so plugin Up() sees them
 //  4. Fire global plugin post-create hooks (docker container Up, etc.)
@@ -36,7 +48,7 @@ type BootstrapOpts struct {
 // containers are up by the time user setup commands (which may target them
 // via docker:compose handlers) run.
 //
-// Returns an error only if state registration or symlinking fails irrecoverably.
+// Returns an error only if state registration fails irrecoverably.
 // Hook and SetupFiles failures are non-fatal; they are reported via w so the
 // user sees them on stderr. Pass a non-nil w for interactive callers (grove new,
 // grove adopt). Pass nil for JSON-mode callers where stderr would corrupt
@@ -48,25 +60,36 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 		return fmt.Errorf("WorktreePath and MainPath are required")
 	}
 
-	if err := grove.EnsureConfigSymlink(opts.MainPath, opts.WorktreePath); err != nil {
-		return fmt.Errorf("symlink config: %w", err)
+	// Best-effort: worktrees function without the excludes, they just show
+	// grove's machine-local files as untracked until `grove init` runs here.
+	// (The one-time legacy-migration notice is handled by the command context,
+	// which runs this same migration on every invocation — no need to surface
+	// it from inside bootstrap.)
+	if _, err := grove.EnsureGroveExcludes(opts.MainPath); err != nil {
+		log.Printf("record git excludes: %v", err)
+		if w != nil {
+			cli.Warning(w, "record git excludes: %v", err)
+		}
 	}
 
-	now := time.Now()
-	wsState := &state.WorktreeState{
-		Path:           opts.WorktreePath,
-		Branch:         opts.Branch,
-		Root:           false,
-		CreatedAt:      now,
-		LastAccessedAt: now,
-		Environment:    opts.IsEnvironment,
-	}
-	if opts.IsEnvironment {
-		wsState.Mirror = opts.Mirror
-		wsState.LastSyncedAt = &now
-	}
-	if err := stateMgr.AddWorktree(opts.Name, wsState); err != nil {
-		return fmt.Errorf("register worktree: %w", err)
+	if stateMgr != nil {
+		now := time.Now()
+		wsState := &state.WorktreeState{
+			Path:           opts.WorktreePath,
+			Branch:         opts.Branch,
+			Root:           false,
+			CreatedAt:      now,
+			LastAccessedAt: now,
+			Environment:    opts.IsEnvironment,
+			ParentWorktree: opts.ParentWorktree,
+		}
+		if opts.IsEnvironment {
+			wsState.Mirror = opts.Mirror
+			wsState.LastSyncedAt = &now
+		}
+		if err := stateMgr.AddWorktree(opts.Name, wsState); err != nil {
+			return fmt.Errorf("register worktree: %w", err)
+		}
 	}
 
 	// File setup (copy/symlink external compose artifacts) — must precede
@@ -106,6 +129,15 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 			cli.Warning(w, "post-create hooks: failed to load config: %v", hookErr)
 		}
 	} else if hookExecutor.HasHooksForEvent(hooks.EventPostCreate) {
+		// Hook output follows w (stdout for interactive callers, a capture
+		// buffer for the TUI). With no writer it is DISCARDED rather than
+		// falling through to the executor's os.Stdout default, which used to
+		// corrupt `grove new --json`'s machine-readable stdout whenever a
+		// post-create hook printed progress.
+		var hookOut = io.Discard
+		if w != nil {
+			hookOut = w
+		}
 		hookCtx := &hooks.ExecutionContext{
 			Event:    hooks.EventPostCreate,
 			Worktree: opts.Name,
@@ -119,12 +151,19 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 			Project:      opts.ProjectName,
 			MainPath:     opts.MainPath,
 			NewPath:      opts.WorktreePath,
+			Output:       hookOut,
 		}
 		if err := hookExecutor.Execute(hooks.EventPostCreate, hookCtx); err != nil {
-			log.Printf("hooks: post-create project hook failed: %v", err)
+			// A required (on_failure="fail") post-create hook failing fails the
+			// operation (B7). The worktree already exists, so it is left in
+			// place for inspection rather than rolled back; the non-zero exit
+			// signals that provisioning did not complete. Non-required failures
+			// are handled inside Execute (warn) and don't reach here.
+			log.Printf("hooks: required post-create project hook failed: %v", err)
 			if w != nil {
-				cli.Warning(w, "post-create hook failed: %v", err)
+				cli.Warning(w, "required post-create hook failed (worktree kept): %v", err)
 			}
+			return fmt.Errorf("%w: %v", ErrRequiredHookFailed, err)
 		}
 	}
 

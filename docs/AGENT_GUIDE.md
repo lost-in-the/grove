@@ -414,7 +414,6 @@ Stale = `LastAccessedAt` older than threshold and no dirty changes. Protected wo
 
 If a worktree was created outside grove (typically by running `git worktree add` directly), grove won't have it in state and won't have run its bootstrap hooks. Symptoms:
 
-- Missing config symlink, so commands that resolve config from the worktree fail.
 - `grove ls` doesn't list the worktree.
 - Docker auto-start and post-create hooks never ran, so credentials/env files may be missing.
 
@@ -422,7 +421,7 @@ Grove detects drift automatically — running any command from a drifted worktre
 
 ```
 ⚠ this worktree (project-feature) wasn't created by grove and isn't registered in state
-  run 'grove adopt' to bootstrap it (symlinks config, runs hooks, registers state)
+  run 'grove adopt' to bootstrap it (registers state, records excludes, runs hooks)
 ```
 
 `grove doctor` also reports drift in its Tier-2 project checks.
@@ -909,14 +908,63 @@ After initializing, secondary worktrees will be detected via grove's main-worktr
 
 **`config symlink broken` warning**
 
-A worktree's `.grove/config.toml` is a symlink pointing to the main worktree's config, but the target doesn't exist. Usually means the main worktree's `.grove` was deleted or never created:
+Only affects worktrees created by older grove versions, which placed a
+`.grove/config.toml` symlink in each worktree. Current grove resolves config
+directly from the main worktree (via git's common dir) and creates no
+per-worktree copies; a broken legacy symlink means the main worktree's
+`.grove` was deleted or never created:
 ```bash
 # Check what the symlink points to
 ls -la .grove/config.toml
 
-# Fix: initialize the main worktree, or repair all symlinks
-grove repair
+# Fix: initialize the main worktree, or simply delete the stale symlink
+grove init   # from the main worktree, if .grove is missing entirely
 ```
+
+### Upgrading across the config-layout change
+
+Older grove versions git-ignored `.grove/config.toml` (so it could never be
+committed) and planted a `config.toml` symlink in every worktree. Current
+grove treats `config.toml`/`hooks.toml` as **committable project files**,
+resolves config from the main worktree on every command, and keeps only
+genuinely machine-local files (`state.json`, `state.lock`, `ui_prefs.json`,
+`.envrc`, `config.local.toml`) in the git exclude.
+
+The upgrade is self-healing: the first grove command in a legacy repo rewrites
+the exclude block and prints this one-time stderr notice. It fires when the repo
+still carries the pre-0.10 layout — either a mid-development exclude block that
+listed `config.toml`, or (the case real upgraders hit) the legacy per-worktree
+`.grove/config.toml` symlinks left in existing worktrees — and is recorded via a
+machine-local sentinel so it shows at most once per clone:
+
+```
+grove: .grove/config.toml is now a committable project file — commit it to share config with your team
+grove: existing worktrees may carry a legacy .grove/config.toml symlink (shows as untracked) — run 'grove doctor' for cleanup steps
+```
+
+Agents: this notice (and every grove notice) goes to **stderr**, so `--json`
+stdout contracts are unaffected — never treat it as command output, and don't
+re-trigger work because of it. If a user asks for help after upgrading, walk
+this checklist:
+
+1. **`git add .grove/config.toml` refused as "ignored"** — the repo hasn't run
+   a current-grove command yet. Run any grove command (e.g. `grove ls`) to
+   auto-migrate, or remove the `.grove/config.toml` line from the grove block
+   in `.git/info/exclude` by hand.
+2. **A worktree shows untracked or typechanged `.grove/config.toml`** — legacy
+   symlink debris. In that worktree:
+   ```bash
+   rm .grove/config.toml                     # delete the symlink
+   git checkout -- .grove/config.toml        # only if the project commits it
+   rmdir .grove 2>/dev/null || true          # drop the dir if now empty
+   ```
+   `grove doctor` lists every affected worktree.
+3. **Project config not yet shared** — from the main worktree:
+   `git add .grove && git commit` (config.toml + hooks.toml are the
+   committable pair; machine-local files are already excluded).
+4. **Config seems wrong from a worktree** — confirm the grove binary is
+   current (`grove version`); old binaries still read the worktree-local
+   path.
 
 **Port conflicts between worktrees (local Docker mode)**
 

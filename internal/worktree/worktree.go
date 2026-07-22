@@ -32,11 +32,17 @@ type Worktree struct {
 	IsMain           bool   // Whether this is the main worktree
 	ShortName        string // Short name without project prefix
 	IsPrunable       bool   // Whether the worktree directory is missing (stale)
+	IsLocked         bool   // Whether git has the worktree locked (grove must not force-delete it)
 }
 
 // Manager handles git worktree operations
 type Manager struct {
-	repoRoot    string // Root of the git repository
+	repoRoot string // Root of the git repository
+
+	// mu guards the lazily-populated caches below. A single Manager is shared
+	// across the TUI's per-worktree fetch goroutines, so the read-check-write
+	// on these fields would otherwise be a data race on a cold cache (B37).
+	mu          sync.Mutex
 	projectName string // Cached project name
 	namePattern string // Cached worktree naming pattern (see getNamePattern)
 }
@@ -128,6 +134,13 @@ func (m *Manager) CreateFromExisting(name, branch string) error {
 	return nil
 }
 
+// localBranchExists reports whether refs/heads/<branch> exists in the repo.
+func (m *Manager) localBranchExists(branch string) bool {
+	return cmdexec.Run(context.TODO(), "git",
+		[]string{"show-ref", "--verify", "--quiet", "refs/heads/" + branch},
+		m.repoRoot, cmdexec.GitLocal) == nil
+}
+
 // CreateFromBranch creates a worktree from a branch (local or remote).
 // For remote branches (e.g., PR branches), it fetches and checks out the branch.
 // The name parameter is the short name (e.g., "pr-123-fix-bug")
@@ -141,9 +154,17 @@ func (m *Manager) CreateFromBranch(name, branch string) error {
 		return err
 	}
 
-	// Fetch the branch if it doesn't exist locally (important for PR branches)
-	if err := cmdexec.Run(context.TODO(), "git", []string{"fetch", "origin", branch + ":" + branch}, m.repoRoot, cmdexec.GitRemote); err != nil {
-		log.Printf("fetch origin %s failed (may already exist locally): %v", branch, err)
+	// Fetch the branch only when it isn't already present locally. Fetching an
+	// existing local branch is a wasted network round-trip on the <500ms path
+	// (GitRemote budget is 30s) and actively wrong for `grove fork`, which
+	// created this branch locally moments earlier: a fast-forwardable
+	// origin/<branch> would move the fork onto the remote's commit instead of
+	// the HEAD the user forked (B10). PR/remote adoption still fetches because
+	// the branch is not local yet.
+	if !m.localBranchExists(branch) {
+		if err := cmdexec.Run(context.TODO(), "git", []string{"fetch", "origin", branch + ":" + branch}, m.repoRoot, cmdexec.GitRemote); err != nil {
+			log.Printf("fetch origin %s failed (may already exist locally): %v", branch, err)
+		}
 	}
 
 	// Create worktree from the branch
@@ -154,6 +175,29 @@ func (m *Manager) CreateFromBranch(name, branch string) error {
 	}
 
 	return nil
+}
+
+// CreateFromBranchRefreshing is CreateFromBranch for an existing local branch
+// the caller wants brought up to date first. It fast-forwards
+// refs/heads/<branch> to origin/<branch> when possible — a non-force fetch, so
+// a diverged branch is left untouched — before creating the worktree, then
+// delegates to CreateFromBranch (which sees the branch is now local and skips
+// its own fetch). Used by `grove new --from-branch` and the dashboard
+// create-from-base flow, where the user expects the worktree at the remote's
+// current tip. `grove fork` deliberately uses plain CreateFromBranch instead: a
+// fast-forward there would move the fork off the HEAD it was forked from (B10).
+func (m *Manager) CreateFromBranchRefreshing(name, branch string) error {
+	if branch == "" {
+		return fmt.Errorf("branch name cannot be empty")
+	}
+	if m.localBranchExists(branch) {
+		// Best-effort fast-forward; offline, no remote, or a diverged branch all
+		// leave the local tip in place and we create from that.
+		if err := cmdexec.Run(context.TODO(), "git", []string{"fetch", "origin", branch + ":" + branch}, m.repoRoot, cmdexec.GitRemote); err != nil {
+			log.Printf("refresh %s from origin failed (using local tip): %v", branch, err)
+		}
+	}
+	return m.CreateFromBranch(name, branch)
 }
 
 // Move renames a worktree directory using git worktree move.
@@ -212,11 +256,27 @@ func (m *Manager) Find(name string) (*Worktree, error) {
 
 	fullName := m.FullName(name)
 
-	for _, tree := range trees {
-		// Match by short name, display name, branch, full name, or path basename
-		baseName := filepath.Base(tree.Path)
-		if tree.ShortName == name || tree.DisplayName() == name || tree.Branch == name || baseName == name || baseName == fullName {
-			return tree, nil
+	// Resolve in precedence tiers so a worktree whose *branch* happens to equal
+	// the query can never shadow the worktree the user actually named. Identity
+	// fields (short/display name, then directory name) win over branch, which is
+	// the most collision-prone — e.g. worktree "alpha" checked out on branch
+	// "zzz" must not answer to `grove to zzz` when a worktree literally named
+	// "zzz" exists. Within a tier the first porcelain entry wins, but names and
+	// directories are unique so ties don't arise there.
+	tiers := []func(*Worktree) bool{
+		func(t *Worktree) bool { return t.ShortName == name || t.DisplayName() == name },
+		func(t *Worktree) bool {
+			base := filepath.Base(t.Path)
+			return base == name || base == fullName
+		},
+		func(t *Worktree) bool { return t.Branch == name },
+	}
+
+	for _, matches := range tiers {
+		for _, tree := range trees {
+			if matches(tree) {
+				return tree, nil
+			}
 		}
 	}
 
@@ -260,6 +320,13 @@ func (m *Manager) List() ([]*Worktree, error) {
 	wg.Wait()
 
 	return trees, nil
+}
+
+// ListLight is the exported form of listLight for callers outside this package
+// (e.g. `grove ls --paths`) that need porcelain metadata without paying for the
+// per-worktree dirty checks List performs.
+func (m *Manager) ListLight() ([]*Worktree, error) {
+	return m.listLight()
 }
 
 // listLight returns worktrees parsed from `git worktree list --porcelain`
@@ -370,13 +437,21 @@ func (m *Manager) ListNames() ([]string, error) {
 // like `grove rm` run their safety checks against Find's result — resolving
 // with a narrower matcher here could delete a different worktree than the
 // one that was validated.
-func (m *Manager) Remove(name string) error {
+//
+// force gates the destructive escalation. Without it, Remove performs only a
+// plain `git worktree remove` and surfaces git's refusal (e.g. a dirty tree),
+// so a no-flag `grove rm` can never blow away work. With force, Remove escalates
+// to `git worktree remove --force` and, only as a last resort, `os.RemoveAll` +
+// prune. A git-*locked* worktree is never force-deleted regardless of force —
+// the lock is deliberate protection that must be cleared with `git worktree
+// unlock` first.
+func (m *Manager) Remove(name string, force bool) error {
 	if name == "" {
 		return fmt.Errorf("worktree name cannot be empty")
 	}
 
 	// Find uses listLight, which skips per-worktree dirty checks — Remove
-	// only needs the target's path/IsMain/IsPrunable to decide what to do.
+	// only needs the target's path/IsMain/IsPrunable/IsLocked to decide.
 	targetTree, err := m.Find(name)
 	if err != nil {
 		return err
@@ -402,23 +477,36 @@ func (m *Manager) Remove(name string) error {
 		return nil
 	}
 
-	// Remove the worktree normally
-	if _, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"worktree", "remove", targetTree.Path}, m.repoRoot, cmdexec.GitLocal); err == nil {
-		return nil
+	// A git-locked worktree is protected on purpose. Never override that (git
+	// itself refuses, and our os.RemoveAll fallback would silently defeat the
+	// lock and leave a phantom registration that `prune` can't clear).
+	// IsLocked comes from the porcelain `locked` attribute, which git only
+	// emits since 2.36 — back it with a direct on-disk check so the guard
+	// holds on the older gits grove supports (2.30+).
+	if targetTree.IsLocked || m.isLockedOnDisk(targetTree.Path) {
+		return fmt.Errorf("worktree '%s' is locked; run 'git worktree unlock %s' first", name, targetTree.Path)
 	}
 
-	// Try git's own --force first
+	// Plain removal — the only path taken without force. Git refuses a dirty or
+	// otherwise-risky tree here; surface that instead of escalating.
+	output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"worktree", "remove", targetTree.Path}, m.repoRoot, cmdexec.GitLocal)
+	if err == nil {
+		return nil
+	}
+	if !force {
+		return fmt.Errorf("failed to remove worktree (retry with --force): %s: %w", strings.TrimSpace(string(output)), err)
+	}
+
+	// force: let git's own --force try next.
 	forceOutput, forceErr := cmdexec.CombinedOutput(context.TODO(), "git", []string{"worktree", "remove", "--force", targetTree.Path}, m.repoRoot, cmdexec.GitLocal)
 	if forceErr == nil {
 		return nil
 	}
 
-	// Final fallback: nuke the directory ourselves and prune git's metadata.
-	// `git worktree remove --force` refuses to delete non-empty untracked
-	// directories (e.g. node_modules left behind by a post-create hook),
-	// so when git has already given up we tear the directory down directly.
-	// targetTree.Path comes from `git worktree list`, so it is bounded to a
-	// known worktree path rather than user input.
+	// Last resort (force only, non-locked): tear the directory down ourselves
+	// and prune git's metadata — for the rare cases git's own --force can't
+	// finish (corrupted metadata, cross-device links). targetTree.Path comes
+	// from `git worktree list`, so it is bounded to a known worktree path.
 	if rmErr := os.RemoveAll(targetTree.Path); rmErr != nil {
 		return fmt.Errorf("failed to remove worktree: %s: %w", string(forceOutput), forceErr)
 	}
@@ -427,6 +515,27 @@ func (m *Manager) Remove(name string) error {
 	}
 
 	return nil
+}
+
+// isLockedOnDisk reports whether the worktree at path carries git's on-disk
+// lock marker (<worktree-gitdir>/locked, the file `git worktree lock` writes).
+// `git worktree list --porcelain` only reports the `locked` attribute since
+// Git 2.36, while grove supports 2.30+ — on older versions IsLocked is never
+// populated and Remove's force fallback would silently defeat a deliberate
+// lock. The marker file is how every supported git stores the lock, so
+// checking it directly is version-independent. Errors (worktree gone, git
+// failure) report unlocked — the caller's own git operations surface those.
+func (m *Manager) isLockedOnDisk(path string) bool {
+	output, err := cmdexec.Output(context.TODO(), "git", []string{"rev-parse", "--absolute-git-dir"}, path, cmdexec.GitLocal)
+	if err != nil {
+		return false
+	}
+	gitDir := strings.TrimSpace(string(output))
+	if gitDir == "" {
+		return false
+	}
+	_, err = os.Stat(filepath.Join(gitDir, "locked"))
+	return err == nil
 }
 
 // GetCurrent returns the current worktree, enriched with commit info and
@@ -537,6 +646,8 @@ func applyWorktreeAttribute(wt *Worktree, line string) {
 		wt.Branch = "detached"
 	case strings.HasPrefix(line, "prunable"):
 		wt.IsPrunable = true
+	case strings.HasPrefix(line, "locked"):
+		wt.IsLocked = true
 	}
 }
 
@@ -581,16 +692,22 @@ func (w *Worktree) DisplayName() string {
 
 // GetProjectName returns the project name for the repository
 func (m *Manager) GetProjectName() string {
-	if m.projectName != "" {
-		return m.projectName
+	m.mu.Lock()
+	cached := m.projectName
+	m.mu.Unlock()
+	if cached != "" {
+		return cached
 	}
-
+	// Compute the main-worktree path outside the lock (it's a git call), then
+	// resolve+cache under the lock via projectNameAt.
 	return m.projectNameAt(m.getMainWorktreePath())
 }
 
 // projectNameAt is GetProjectName with the main worktree path already in
 // hand, so priming a cold cache doesn't re-exec `git worktree list`.
 func (m *Manager) projectNameAt(mainWorktreePath string) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.projectName == "" {
 		m.projectName = m.detectProjectNameAt(mainWorktreePath)
 	}

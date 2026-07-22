@@ -3,7 +3,9 @@ package tracker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -269,13 +271,21 @@ func (g *GitHubAdapter) ListPRs(opts ListOptions) ([]*PullRequest, error) {
 	return prs, nil
 }
 
-// runGH executes a gh CLI command and returns the output.
+// runGH executes a gh CLI command and returns its stdout. Uses Output (not
+// CombinedOutput) so gh's stderr notices — e.g. "A new release of gh is
+// available" printed on otherwise-successful commands — don't get interleaved
+// into the JSON the callers parse (B30). On failure, gh's stderr is still
+// available via the ExitError for the diagnostic message.
 func (g *GitHubAdapter) runGH(args ...string) ([]byte, error) {
-	output, err := cmdexec.CombinedOutput(context.TODO(), "gh", args, "", cmdexec.GHCLI)
+	output, err := cmdexec.Output(context.TODO(), "gh", args, "", cmdexec.GHCLI)
 	if err != nil {
-		outputStr := strings.TrimSpace(string(output))
-		if outputStr != "" {
-			return nil, fmt.Errorf("failed to run gh %s: %w\nOutput: %s", strings.Join(args, " "), err, outputStr)
+		var stderr string
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			stderr = strings.TrimSpace(string(exitErr.Stderr))
+		}
+		if stderr != "" {
+			return nil, fmt.Errorf("failed to run gh %s: %w\nOutput: %s", strings.Join(args, " "), err, stderr)
 		}
 		return nil, fmt.Errorf("failed to run gh %s: %w", strings.Join(args, " "), err)
 	}

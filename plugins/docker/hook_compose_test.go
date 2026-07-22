@@ -16,10 +16,12 @@ type fakeStrategy struct {
 	runCalled   int
 	runService  string
 	runCommand  string
+	runEnv      []string
 	runErr      error
 	execCalled  int
 	execService string
 	execCommand string
+	execEnv     []string
 	execErr     error
 }
 
@@ -33,16 +35,18 @@ func (f *fakeStrategy) Up(_ string, _ bool) error {
 func (f *fakeStrategy) Down(_ string) error                   { return nil }
 func (f *fakeStrategy) Logs(_ string, _ string, _ bool) error { return nil }
 func (f *fakeStrategy) Restart(_ string, _ string) error      { return nil }
-func (f *fakeStrategy) Run(_ string, service, command string) error {
+func (f *fakeStrategy) Run(_ string, service, command string, hookEnv []string) error {
 	f.runCalled++
 	f.runService = service
 	f.runCommand = command
+	f.runEnv = hookEnv
 	return f.runErr
 }
-func (f *fakeStrategy) Exec(_ string, service, command string) error {
+func (f *fakeStrategy) Exec(_ string, service, command string, hookEnv []string) error {
 	f.execCalled++
 	f.execService = service
 	f.execCommand = command
+	f.execEnv = hookEnv
 	return f.execErr
 }
 
@@ -72,6 +76,68 @@ func TestComposeHandler_RunMode_CallsRun(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "service: web") {
 		t.Errorf("expected status line, got %q", buf.String())
+	}
+}
+
+// TestComposeHandler_InterpolatesByReference guards B13 for docker:compose:
+// a hostile value in {{.branch}} (grove checks branches out from untrusted
+// PRs) must reach the container as environment, never spliced into the
+// `bash -cil` command where it could execute.
+func TestComposeHandler_InterpolatesByReference(t *testing.T) {
+	for _, mode := range []string{"run", "exec"} {
+		t.Run(mode, func(t *testing.T) {
+			p, fs := newFakePlugin()
+			var buf bytes.Buffer
+			action := &hooks.HookAction{
+				Type:    "docker:compose",
+				Service: "app",
+				Command: "deploy {{.branch}}",
+				Mode:    mode,
+			}
+			ctx := &hooks.ExecutionContext{NewPath: "/tmp/wt", Output: &buf}
+			vars := &hooks.Variables{Branch: `x$(touch /tmp/pwned)`}
+
+			if err := p.composeHandler(action, ctx, vars); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			gotCmd := fs.runCommand
+			gotEnv := fs.runEnv
+			if mode == "exec" {
+				gotCmd = fs.execCommand
+				gotEnv = fs.execEnv
+			}
+			if strings.Contains(gotCmd, "touch") {
+				t.Errorf("raw branch value leaked into container command: %q", gotCmd)
+			}
+			if !strings.Contains(gotCmd, "${GROVE_HOOK_branch}") {
+				t.Errorf("command did not reference the hook env var: %q", gotCmd)
+			}
+			wantEnv := `GROVE_HOOK_branch=x$(touch /tmp/pwned)`
+			found := false
+			for _, e := range gotEnv {
+				if e == wantEnv {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("hook value not passed as container env %q; got %v", wantEnv, gotEnv)
+			}
+		})
+	}
+}
+
+// TestDockerEnvArgs_ValueIsOneArgv confirms a value with shell metacharacters
+// becomes a single `-e KEY=VALUE` argv element (handed to docker, never a
+// shell), so it cannot be re-parsed and injected.
+func TestDockerEnvArgs_ValueIsOneArgv(t *testing.T) {
+	got := dockerEnvArgs([]string{`GROVE_HOOK_branch=x$(id);rm -rf /`})
+	want := []string{"-e", `GROVE_HOOK_branch=x$(id);rm -rf /`}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("dockerEnvArgs = %v, want %v", got, want)
+	}
+	if dockerEnvArgs(nil) != nil {
+		t.Errorf("dockerEnvArgs(nil) should be nil")
 	}
 }
 
@@ -212,6 +278,10 @@ func TestComposeHandler_ExecError(t *testing.T) {
 
 func TestComposeHandler_VariableInterpolation(t *testing.T) {
 	// Interpolation applies to service AND command (both can be per-worktree).
+	// The service name is a literal argv element to docker (safe), so it is
+	// substituted directly; the command is executed by `bash -cil` inside the
+	// container, so it is rewritten to a GROVE_HOOK_* reference with the value
+	// carried as container env (B13).
 	p, fs := newFakePlugin()
 	action := &hooks.HookAction{Service: "{{.worktree}}-app", Command: "echo {{.worktree}}"}
 	ctx := &hooks.ExecutionContext{NewPath: "/tmp/wt"}
@@ -223,7 +293,17 @@ func TestComposeHandler_VariableInterpolation(t *testing.T) {
 	if fs.runService != "feature-x-app" {
 		t.Errorf("expected interpolated service, got %q", fs.runService)
 	}
-	if fs.runCommand != "echo feature-x" {
-		t.Errorf("expected interpolated command, got %q", fs.runCommand)
+	if fs.runCommand != `echo "${GROVE_HOOK_worktree}"` {
+		t.Errorf("expected reference-rewritten command, got %q", fs.runCommand)
+	}
+	wantEnv := "GROVE_HOOK_worktree=feature-x"
+	found := false
+	for _, e := range fs.runEnv {
+		if e == wantEnv {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected %q in container env, got %v", wantEnv, fs.runEnv)
 	}
 }

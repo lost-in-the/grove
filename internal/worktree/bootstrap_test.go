@@ -120,7 +120,7 @@ func TestBootstrapWorktree_HookFailure(t *testing.T) {
 		{
 			name:        "withWriter surfaces warning to stderr",
 			useWriter:   true,
-			wantWarning: "post-create hook failed",
+			wantWarning: "required post-create hook failed",
 		},
 		{
 			name:      "nilWriter does not panic",
@@ -175,9 +175,12 @@ required = true
 				ProjectName:  "test-proj",
 			}
 
-			// Hook failures are non-fatal — must always return nil.
-			if err := BootstrapWorktree(stateMgr, cfg, opts, w); err != nil {
-				t.Fatalf("BootstrapWorktree returned unexpected error: %v", err)
+			// A required (on_failure defaults, but here required=true)
+			// post-create hook failing fails the operation (B7): the worktree
+			// is kept but BootstrapWorktree returns an error so the command
+			// exits non-zero. It must not panic even with a nil writer.
+			if err := BootstrapWorktree(stateMgr, cfg, opts, w); err == nil {
+				t.Fatal("BootstrapWorktree with a failing required hook returned nil, want error")
 			}
 
 			if tt.wantWarning != "" {
@@ -213,10 +216,14 @@ func TestBootstrapWorktree_WorktreeFullMatchesDirectory(t *testing.T) {
 		t.Fatalf("mkdir wt: %v", err)
 	}
 
+	// Double-quote the token: command hooks interpolate values as shell
+	// variable references (${GROVE_HOOK_*}), so a double-quoted token expands
+	// to the value while staying injection-safe; a single-quoted token would
+	// be taken literally by the shell.
 	hooksToml := `[hooks]
 [[hooks.post_create]]
 type = "command"
-command = "printf '%s' '{{.worktree_full}}' > worktree_full.txt"
+command = "printf '%s' \"{{.worktree_full}}\" > worktree_full.txt"
 working_dir = "new"
 `
 	if err := os.WriteFile(filepath.Join(groveDir, "hooks.toml"), []byte(hooksToml), 0644); err != nil {

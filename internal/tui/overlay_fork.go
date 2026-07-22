@@ -1,16 +1,18 @@
 package tui
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
+	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/state"
 	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/tuilog"
@@ -79,7 +81,7 @@ type forkCompleteMsg struct {
 }
 
 // forkWorktreeCmd creates a forked worktree with optional WIP handling.
-func forkWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, forkState *ForkState) tea.Cmd {
+func forkWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *config.Config, projectRoot string, forkState *ForkState) tea.Cmd {
 	return func() tea.Msg {
 		source := forkState.Source
 		name := forkState.Name
@@ -107,8 +109,38 @@ func forkWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, forkState *
 			return forkCompleteMsg{name: name, path: newTree.Path, err: err}
 		}
 
-		// Register in state and create tmux session
-		forkRegister(mgr, stateMgr, name, newBranchName, newTree.Path, source.ShortName)
+		// Provision through the shared bootstrap — the dashboard fork used to
+		// register state + tmux only, skipping git excludes, SetupFiles, and the
+		// plugin/config post_create hooks that `grove fork` and dashboard create
+		// both run, leaving forked worktrees unprovisioned (no compose artifacts,
+		// no post_create recipes). ParentWorktree records the fork source in
+		// state. Bootstrap output is captured off the alt screen.
+		var bootBuf bytes.Buffer
+		pluginOut, bootErr := captureStdio(func() error {
+			return worktree.BootstrapWorktree(stateMgr, cfg, worktree.BootstrapOpts{
+				Name:           name,
+				Branch:         newBranchName,
+				WorktreePath:   newTree.Path,
+				MainPath:       projectRoot,
+				ProjectName:    mgr.GetProjectName(),
+				ParentWorktree: source.ShortName,
+			}, cli.NewWriter(&bootBuf, false))
+		})
+		if trimmed := strings.TrimSpace(joinCaptured(bootBuf.String(), pluginOut)); trimmed != "" {
+			tuilog.Printf("fork bootstrap output for %q: %s", name, trimmed)
+		}
+		if bootErr != nil {
+			// The worktree exists but bootstrap (e.g. a required post_create
+			// hook) failed — surface it as a warning, not silent success.
+			// Setting name marks it worktree-created-but-provisioning-failed,
+			// which handleForkComplete shows as a warning toast, mirroring how
+			// dashboard create threads hookErr. Skip the tmux session like the
+			// create path does on bootstrap failure.
+			tuilog.Printf("fork bootstrap failed for %q: %v", name, bootErr)
+			return forkCompleteMsg{name: name, path: newTree.Path, err: fmt.Errorf("bootstrap failed: %w", bootErr)}
+		}
+
+		forkCreateTmuxSession(mgr, name, newTree.Path)
 
 		return forkCompleteMsg{name: name, path: newTree.Path}
 	}
@@ -172,26 +204,15 @@ func forkApplyWIP(forkState *ForkState, newPath string, wipPatch []byte) error {
 	return nil
 }
 
-// forkRegister registers the new worktree in state and creates a tmux session.
-func forkRegister(mgr *worktree.Manager, stateMgr *state.Manager, name, branchName, path, parentName string) {
-	now := time.Now()
-	wsState := &state.WorktreeState{
-		Path:           path,
-		Branch:         branchName,
-		CreatedAt:      now,
-		LastAccessedAt: now,
-		ParentWorktree: parentName,
+// forkCreateTmuxSession creates the tmux session for a freshly forked worktree.
+// State registration now happens inside BootstrapWorktree.
+func forkCreateTmuxSession(mgr *worktree.Manager, name, path string) {
+	if !tmux.IsTmuxAvailable() {
+		return
 	}
-	if err := stateMgr.AddWorktree(name, wsState); err != nil {
-		tuilog.Printf("warning: failed to register forked worktree %q in state: %v", name, err)
-	}
-
-	projectName := mgr.GetProjectName()
-	if tmux.IsTmuxAvailable() {
-		sessionName := worktree.TmuxSessionName(projectName, name)
-		if err := tmux.CreateSession(sessionName, path); err != nil {
-			tuilog.Printf("warning: failed to create tmux session %q: %v", sessionName, err)
-		}
+	sessionName := worktree.TmuxSessionName(mgr.GetProjectName(), name)
+	if err := tmux.CreateSession(sessionName, path); err != nil {
+		tuilog.Printf("warning: failed to create tmux session %q: %v", sessionName, err)
 	}
 }
 
@@ -325,7 +346,7 @@ func (m Model) handleForkConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		s.Forking = true
-		return m, tea.Batch(m.spinner.Tick, forkWorktreeCmd(m.worktreeMgr, m.stateMgr, s))
+		return m, tea.Batch(m.spinner.Tick, forkWorktreeCmd(m.worktreeMgr, m.stateMgr, m.cfg, m.projectRoot, s))
 	}
 
 	return m, nil

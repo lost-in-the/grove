@@ -44,8 +44,8 @@ type modeStrategy interface {
 	Down(worktreePath string) error
 	Logs(worktreePath string, service string, follow bool) error
 	Restart(worktreePath string, service string) error
-	Run(worktreePath string, service string, command string) error
-	Exec(worktreePath string, service string, command string) error
+	Run(worktreePath string, service string, command string, hookEnv []string) error
+	Exec(worktreePath string, service string, command string, hookEnv []string) error
 }
 
 // Plugin implements the docker plugin for grove
@@ -360,5 +360,6 @@ func (p *Plugin) Run(worktreePath string, service string, command string) error 
 	if p.strategy == nil {
 		return fmt.Errorf("docker plugin not initialized")
 	}
-	return p.strategy.Run(worktreePath, service, command)
+	// `grove test` runs a trusted, config-defined command with no hook vars.
+	return p.strategy.Run(worktreePath, service, command, nil)
 }

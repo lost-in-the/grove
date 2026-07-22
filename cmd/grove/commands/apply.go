@@ -283,15 +283,22 @@ func resolveCommits(stderr *cli.Writer, sourcePath string, shas []string, jsonOu
 	return commits
 }
 
+// shortSHA abbreviates a commit SHA to 7 characters for display. The user may
+// pass a shorter abbreviation to `graft --pick` (git resolves e.g. a 5-char
+// prefix fine), so slicing to [:7] unconditionally would panic — return the
+// value unchanged when it is already at or below 7 characters.
+func shortSHA(sha string) string {
+	if len(sha) > 7 {
+		return sha[:7]
+	}
+	return sha
+}
+
 // printCommitList displays the commits that will be applied.
 func printCommitList(w *cli.Writer, commits []CommitInfo) {
 	cli.Bold(w, "Commits to apply (%d):", len(commits))
 	for _, c := range commits {
-		shortSHA := c.SHA
-		if len(shortSHA) > 7 {
-			shortSHA = shortSHA[:7]
-		}
-		cli.Faint(w, "  %s %s", shortSHA, c.Message)
+		cli.Faint(w, "  %s %s", shortSHA(c.SHA), c.Message)
 	}
 }
 
@@ -310,7 +317,7 @@ func cherryPickCommits(w, stderr *cli.Writer, targetPath string, commits []Commi
 		}
 
 		if !jsonOutput {
-			cli.Success(w, "%s", c.SHA[:7])
+			cli.Success(w, "%s", shortSHA(c.SHA))
 		}
 	}
 
@@ -319,7 +326,7 @@ func cherryPickCommits(w, stderr *cli.Writer, targetPath string, commits []Commi
 
 // reportCherryPickConflict prints conflict resolution instructions.
 func reportCherryPickConflict(stderr *cli.Writer, sha string, output []byte) {
-	cli.Error(stderr, "Conflict applying %s", sha[:7])
+	cli.Error(stderr, "Conflict applying %s", shortSHA(sha))
 	_, _ = fmt.Fprintf(stderr, "%s\n", output)
 	cli.Faint(stderr, "To resolve:")
 	cli.Faint(stderr, "  1. Fix conflicts in the affected files")

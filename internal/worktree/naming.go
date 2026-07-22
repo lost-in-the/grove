@@ -17,6 +17,35 @@ import (
 	"github.com/lost-in-the/grove/internal/config"
 )
 
+// ValidateWorktreeName reports why name is unusable as a worktree short name,
+// or "" if it is valid (an empty name is treated as valid here — callers reject
+// empties separately). It rejects path separators and shell/tmux
+// metacharacters (so `grove new ../escape` can't place a worktree outside the
+// project, and names stay safe in tmux targets), control characters including
+// newlines (which would corrupt the cd: shell-integration protocol), a leading
+// - or . (flag parsing / hidden files), and the reserved name "root" (the main
+// worktree's display name). Shared by the CLI create/rename paths and the TUI.
+func ValidateWorktreeName(name string) string {
+	if name == "" {
+		return ""
+	}
+	if name == "root" {
+		return `"root" is reserved for the main worktree`
+	}
+	if strings.ContainsAny(name, " /\\:*?\"<>|") {
+		return "name contains invalid characters"
+	}
+	for _, r := range name {
+		if r < 0x20 || r == 0x7f {
+			return "name contains control characters"
+		}
+	}
+	if strings.HasPrefix(name, "-") || strings.HasPrefix(name, ".") {
+		return "name cannot start with - or ."
+	}
+	return ""
+}
+
 // TestEnvNumber derives a stable TEST_ENV_NUMBER in range [50, 99] from a worktree name.
 // The same name always produces the same number (deterministic via MD5 hash).
 func TestEnvNumber(name string) int {
@@ -182,8 +211,11 @@ func DeriveWorktreeName(branch, strategy string) string {
 // config` displays. Invalid patterns fall back to DefaultNamePattern with a
 // stderr warning so the fallback is visible.
 func (m *Manager) getNamePattern() string {
-	if m.namePattern != "" {
-		return m.namePattern
+	m.mu.Lock()
+	cached := m.namePattern
+	m.mu.Unlock()
+	if cached != "" {
+		return cached
 	}
 	return m.namePatternAt(m.getMainWorktreePath())
 }
@@ -191,24 +223,26 @@ func (m *Manager) getNamePattern() string {
 // namePatternAt is getNamePattern with the main worktree path already in
 // hand, so priming a cold cache doesn't re-exec `git worktree list`.
 func (m *Manager) namePatternAt(mainWorktreePath string) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.namePattern != "" {
 		return m.namePattern
 	}
-	m.namePattern = DefaultNamePattern
+	pattern := DefaultNamePattern
 
 	groveDir := filepath.Join(mainWorktreePath, ".grove")
 	cfg, err := config.LoadFromGroveDir(groveDir)
-	if err != nil || cfg == nil {
-		return m.namePattern
+	if err == nil && cfg != nil {
+		if perr := ValidateNamePattern(cfg.Naming.Pattern); perr != nil {
+			invalidPatternWarning.Do(func() {
+				fmt.Fprintf(os.Stderr, "grove: warning: ignoring invalid [naming] pattern %q: %v (using %q)\n",
+					cfg.Naming.Pattern, perr, DefaultNamePattern)
+			})
+		} else {
+			pattern = cfg.Naming.Pattern
+		}
 	}
-	if err := ValidateNamePattern(cfg.Naming.Pattern); err != nil {
-		invalidPatternWarning.Do(func() {
-			fmt.Fprintf(os.Stderr, "grove: warning: ignoring invalid [naming] pattern %q: %v (using %q)\n",
-				cfg.Naming.Pattern, err, DefaultNamePattern)
-		})
-		return m.namePattern
-	}
-	m.namePattern = cfg.Naming.Pattern
+	m.namePattern = pattern
 	return m.namePattern
 }
 

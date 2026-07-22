@@ -8,6 +8,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/lost-in-the/grove/internal/fsutil"
 )
 
 // CurrentVersion is the current state schema version
@@ -377,6 +379,15 @@ func (m *Manager) save() error {
 	if diskData, err := os.ReadFile(m.stateFile); err == nil {
 		var diskState State
 		if err := json.Unmarshal(diskData, &diskState); err == nil {
+			// Rebase onto a *migrated* view of disk. load() only migrates the
+			// in-memory copy, so merging against the raw file would resurrect
+			// legacy keys (the pre-0.10 "main" root entry) on disk and — via
+			// `m.state = merged` below — revert the in-memory migration too,
+			// breaking every subsequent "root" lookup. A migration error here
+			// means the file is from a newer grove; refuse to overwrite it.
+			if err := migrateStateVersion(&diskState); err != nil {
+				return fmt.Errorf("refusing to overwrite state: %w", err)
+			}
 			merged := &diskState
 			if merged.Worktrees == nil {
 				merged.Worktrees = make(map[string]*WorktreeState)
@@ -413,12 +424,10 @@ func (m *Manager) save() error {
 		return fmt.Errorf("failed to marshal state: %w", err)
 	}
 
-	tmpFile := m.stateFile + ".tmp"
-	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
-		return fmt.Errorf("failed to write state file: %w", err)
-	}
-
-	if err := os.Rename(tmpFile, m.stateFile); err != nil {
+	// Durable atomic write: unique temp file, fsync, rename, dir fsync. Hand-
+	// rolling this previously skipped fsync (a crash could leave a zero-length
+	// state.json that failed to load, B35) and used a fixed .tmp name.
+	if err := fsutil.AtomicWriteFile(m.stateFile, data, 0644); err != nil {
 		return fmt.Errorf("failed to save state file: %w", err)
 	}
 

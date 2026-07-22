@@ -72,12 +72,24 @@ jobs:
         env:
           TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
+
           # Extract version from tag (strip leading 'v')
           VERSION="${GITHUB_REF_NAME#v}"
 
-          # Download source tarball and compute SHA256
+          # Download source tarball and compute SHA256. Use -f so a transient
+          # 404/5xx fails the job instead of hashing an error page, and verify
+          # the download is non-empty before trusting the digest — a bad hash
+          # here would publish a broken formula (brew install would then fail
+          # checksum verification for every user).
           TARBALL_URL="https://github.com/lost-in-the/grove/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
-          SHA256=$(curl -sL "$TARBALL_URL" | sha256sum | awk '{print $1}')
+          TARBALL="$(mktemp)"
+          curl -fsSL --retry 3 --retry-delay 2 "$TARBALL_URL" -o "$TARBALL"
+          if [ ! -s "$TARBALL" ]; then
+            echo "::error::Downloaded source tarball is empty: $TARBALL_URL"
+            exit 1
+          fi
+          SHA256=$(sha256sum "$TARBALL" | awk '{print $1}')
 
           # Generate formula from template
           sed -e "s/VERSION/${VERSION}/g" -e "s/SHA256/${SHA256}/g" .github/formula.rb.tmpl > grove.rb

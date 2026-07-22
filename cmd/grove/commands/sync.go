@@ -99,9 +99,11 @@ Examples:
 
 			isEnv, _ := ctx.State.IsEnvironment(currentName)
 			if !isEnv {
-				fmt.Fprintf(os.Stderr, "Error: current worktree '%s' is not an environment worktree\n", currentName)
-				fmt.Fprintf(os.Stderr, "Use 'grove sync <name>' to specify an environment worktree, or --all\n")
-				os.Exit(exitcode.ConstraintViolated)
+				syncExit(SyncResult{
+					Synced:  []SyncedWorktree{},
+					Skipped: []SkippedSync{{Name: currentName, Reason: "not an environment worktree"}},
+				}, exitcode.ConstraintViolated,
+					"Error: current worktree '%s' is not an environment worktree\nUse 'grove sync <name>' to specify an environment worktree, or --all\n", currentName)
 			}
 			targets = []string{currentName}
 		}
@@ -119,6 +121,12 @@ Examples:
 					Name:   name,
 					Reason: "not found in state",
 				})
+				// A named target that doesn't exist is an error (a typo must not
+				// exit 0), matching the not-an-environment case below. Under
+				// --all a stale state entry is simply skipped.
+				if !syncAll {
+					syncExit(result, exitcode.ResourceNotFound, "Error: worktree '%s' not found\n", name)
+				}
 				continue
 			}
 
@@ -128,8 +136,7 @@ Examples:
 					Reason: "not an environment worktree",
 				})
 				if !syncAll {
-					fmt.Fprintf(os.Stderr, "Error: '%s' is not an environment worktree\n", name)
-					os.Exit(exitcode.ConstraintViolated)
+					syncExit(result, exitcode.ConstraintViolated, "Error: '%s' is not an environment worktree\n", name)
 				}
 				continue
 			}
@@ -228,6 +235,20 @@ Examples:
 
 		return nil
 	}),
+}
+
+// syncExit terminates sync with a non-zero exit code, emitting the JSON
+// result document first when --json is active — a bare os.Exit used to
+// swallow the document entirely, leaving machine consumers with empty stdout
+// on exactly the error paths they need to detect (same convention as
+// printApplyJSONError). In human mode the message goes to stderr instead.
+func syncExit(result SyncResult, code int, format string, args ...any) {
+	if syncJSON {
+		_ = output.PrintJSON(result)
+	} else {
+		fmt.Fprintf(os.Stderr, format, args...)
+	}
+	os.Exit(code)
 }
 
 // getCurrentCommit returns the current HEAD commit SHA (short, 7 chars)

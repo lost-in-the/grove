@@ -8,6 +8,124 @@ import (
 	"testing"
 )
 
+// TestCreateFromBranch_LocalBranchNotClobberedByRemote guards B10/P1: when the
+// branch already exists locally (as `grove fork` leaves it), CreateFromBranch
+// must not fetch — a fast-forwardable origin/<branch> would otherwise move the
+// new worktree onto the remote's commit instead of the local HEAD.
+func TestCreateFromBranch_LocalBranchNotClobberedByRemote(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	base := t.TempDir()
+	base, _ = filepath.EvalSymlinks(base)
+	git := func(dir string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+
+	// A "remote" bare repo with a branch `shared`, plus one extra commit on it.
+	remote := filepath.Join(base, "remote.git")
+	git(base, "init", "--bare", remote)
+	seed := filepath.Join(base, "seed")
+	git(base, "clone", remote, seed)
+	os.WriteFile(filepath.Join(seed, "a.txt"), []byte("1\n"), 0644)
+	git(seed, "add", "-A")
+	git(seed, "commit", "-m", "base")
+	git(seed, "branch", "shared")
+	git(seed, "push", "origin", "HEAD", "shared")
+
+	// Working clone; create a LOCAL `shared` at the base commit (as fork does),
+	// while origin/shared advances one commit ahead.
+	work := filepath.Join(base, "work")
+	git(base, "clone", remote, work)
+	localHead := git(work, "rev-parse", "HEAD")
+	git(work, "branch", "shared", localHead)
+	os.WriteFile(filepath.Join(seed, "a.txt"), []byte("1\n2\n"), 0644)
+	git(seed, "commit", "-am", "remote-ahead")
+	git(seed, "push", "origin", "shared")
+	git(work, "fetch", "origin")
+
+	m := &Manager{repoRoot: work}
+	if err := m.CreateFromBranch("wt-shared", "shared"); err != nil {
+		t.Fatalf("CreateFromBranch: %v", err)
+	}
+	wt, err := m.Find("wt-shared")
+	if err != nil || wt == nil {
+		t.Fatalf("Find: err=%v wt=%v", err, wt)
+	}
+	gotHead := git(wt.Path, "rev-parse", "HEAD")
+	if gotHead != localHead {
+		t.Errorf("worktree HEAD = %s, want local HEAD %s (fetch clobbered the local branch)", gotHead, localHead)
+	}
+}
+
+// TestCreateFromBranchRefreshing_FastForwardsLocal is the counterpart to the
+// B10 test: the create-from-existing-branch flow (grove new --from-branch,
+// dashboard create-from-base) DOES want a behind-origin local branch brought up
+// to the remote's tip before the worktree is created.
+func TestCreateFromBranchRefreshing_FastForwardsLocal(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	base := t.TempDir()
+	base, _ = filepath.EvalSymlinks(base)
+	git := func(dir string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+
+	remote := filepath.Join(base, "remote.git")
+	git(base, "init", "--bare", remote)
+	seed := filepath.Join(base, "seed")
+	git(base, "clone", remote, seed)
+	os.WriteFile(filepath.Join(seed, "a.txt"), []byte("1\n"), 0644)
+	git(seed, "add", "-A")
+	git(seed, "commit", "-m", "base")
+	git(seed, "branch", "shared")
+	git(seed, "push", "origin", "HEAD", "shared")
+
+	// Working clone with a LOCAL `shared` at the base commit, while origin/shared
+	// advances one commit ahead (fast-forwardable).
+	work := filepath.Join(base, "work")
+	git(base, "clone", remote, work)
+	localHead := git(work, "rev-parse", "HEAD")
+	git(work, "branch", "shared", localHead)
+	// Advance origin/shared one commit (on the shared branch itself, so the
+	// remote ref genuinely moves ahead of the local one).
+	git(seed, "checkout", "shared")
+	os.WriteFile(filepath.Join(seed, "a.txt"), []byte("1\n2\n"), 0644)
+	git(seed, "commit", "-am", "remote-ahead")
+	git(seed, "push", "origin", "shared")
+	remoteHead := git(seed, "rev-parse", "HEAD")
+
+	m := &Manager{repoRoot: work}
+	if err := m.CreateFromBranchRefreshing("wt-shared", "shared"); err != nil {
+		t.Fatalf("CreateFromBranchRefreshing: %v", err)
+	}
+	wt, err := m.Find("wt-shared")
+	if err != nil || wt == nil {
+		t.Fatalf("Find: err=%v wt=%v", err, wt)
+	}
+	gotHead := git(wt.Path, "rev-parse", "HEAD")
+	if gotHead != remoteHead {
+		t.Errorf("worktree HEAD = %s, want remote HEAD %s (local branch was not fast-forwarded)", gotHead, remoteHead)
+	}
+}
+
 // setupTestRepo creates a temporary git repo for testing and returns cleanup function
 func setupTestRepo(t *testing.T) (string, func()) {
 	t.Helper()
@@ -531,6 +649,33 @@ func TestFindByShortName(t *testing.T) {
 	}
 }
 
+// TestFindNamePrecedenceOverBranch guards B2: a worktree whose branch equals
+// the query must not shadow the worktree whose short name equals the query.
+func TestFindNamePrecedenceOverBranch(t *testing.T) {
+	tmpDir, _ := setupTestRepo(t)
+	m := &Manager{repoRoot: tmpDir}
+
+	// Worktree "alpha" checked out on a branch literally named "zzz".
+	if err := m.Create("alpha", "zzz"); err != nil {
+		t.Fatalf("Create(alpha, zzz) error = %v", err)
+	}
+	// Worktree "zzz" on its own branch.
+	if err := m.Create("zzz", "zzz-branch"); err != nil {
+		t.Fatalf("Create(zzz) error = %v", err)
+	}
+
+	wt, err := m.Find("zzz")
+	if err != nil {
+		t.Fatalf("Find(zzz) error = %v", err)
+	}
+	if wt == nil {
+		t.Fatal("Find(zzz) returned nil")
+	}
+	if wt.ShortName != "zzz" {
+		t.Errorf("Find(zzz) resolved to worktree %q (branch %q); want the worktree named \"zzz\"", wt.ShortName, wt.Branch)
+	}
+}
+
 func TestFindNotFound(t *testing.T) {
 	tmpDir, _ := setupTestRepo(t)
 
@@ -565,8 +710,8 @@ func TestRemove(t *testing.T) {
 		t.Fatalf("Find() expected worktree, got error=%v, wt=%v", err, wt)
 	}
 
-	// Remove it by name
-	err = m.Remove(fullName)
+	// Remove it by name (clean worktree — plain, non-force removal succeeds)
+	err = m.Remove(fullName, false)
 	if err != nil {
 		t.Fatalf("Remove() error = %v", err)
 	}
@@ -929,8 +1074,8 @@ func TestRemove_ForceWithNonEmptyDir(t *testing.T) {
 		t.Fatalf("Find() expected worktree, got error=%v, wt=%v", err, wt)
 	}
 
-	// Plant a non-empty untracked directory inside the worktree. This makes
-	// `git worktree remove --force` refuse to proceed, forcing the fallback.
+	// Plant a non-empty untracked directory inside the worktree (git's own
+	// `--force` handles this fine; the os.RemoveAll fallback covers rarer cases).
 	nodeModules := filepath.Join(wt.Path, "node_modules")
 	if err := os.MkdirAll(filepath.Join(nodeModules, "some-pkg"), 0755); err != nil {
 		t.Fatalf("MkdirAll node_modules: %v", err)
@@ -939,9 +1084,9 @@ func TestRemove_ForceWithNonEmptyDir(t *testing.T) {
 		t.Fatalf("WriteFile index.js: %v", err)
 	}
 
-	// Remove should succeed via the os.RemoveAll fallback.
-	if err := m.Remove(fullName); err != nil {
-		t.Fatalf("Remove() with non-empty untracked dir error = %v", err)
+	// Force removal should succeed for a non-empty untracked directory.
+	if err := m.Remove(fullName, true); err != nil {
+		t.Fatalf("Remove(force) with non-empty untracked dir error = %v", err)
 	}
 
 	// Verify the directory is gone.
@@ -953,6 +1098,131 @@ func TestRemove_ForceWithNonEmptyDir(t *testing.T) {
 	wtAfter, _ := m.Find(fullName)
 	if wtAfter != nil {
 		t.Error("worktree should not be found after Remove()")
+	}
+}
+
+// TestRemoveLockedWorktreeRefused guards B3: a git-locked worktree must never
+// be force-deleted (git protects it deliberately; the os.RemoveAll fallback
+// would silently defeat the lock and leave a phantom registration).
+func TestRemoveLockedWorktreeRefused(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	tmpDir, _ := setupTestRepo(t)
+	m := &Manager{repoRoot: tmpDir}
+
+	if err := m.Create("locked-wt", "locked-branch"); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	fullName := m.GetProjectName() + "-locked-wt"
+	wt, err := m.Find(fullName)
+	if err != nil || wt == nil {
+		t.Fatalf("Find() expected worktree, got error=%v, wt=%v", err, wt)
+	}
+
+	// Lock it via git, exactly as a user protecting an in-progress worktree would.
+	if out, lockErr := exec.Command("git", "-C", tmpDir, "worktree", "lock", wt.Path).CombinedOutput(); lockErr != nil {
+		t.Fatalf("git worktree lock failed: %v: %s", lockErr, out)
+	}
+
+	// Even with force, Remove must refuse and leave the directory intact.
+	if err := m.Remove(fullName, true); err == nil {
+		t.Fatal("Remove(force) on a locked worktree returned nil; want refusal")
+	}
+	if _, statErr := os.Stat(wt.Path); os.IsNotExist(statErr) {
+		t.Errorf("locked worktree directory was deleted despite the lock: %s", wt.Path)
+	}
+}
+
+// TestRemoveLockedWorktreeRefused_LockAttributeAbsent covers Git 2.30–2.35:
+// those versions honor worktree locks but never emit the `locked` attribute in
+// `git worktree list --porcelain`, so IsLocked stays false and the guard in
+// Remove would fall through to os.RemoveAll. The on-disk lock marker
+// (<worktree-gitdir>/locked) exists on every supported git version — plant it
+// directly (bypassing `git worktree lock`, simulating the old porcelain being
+// silent) and assert Remove(force) still refuses.
+func TestRemoveLockedWorktreeRefused_LockAttributeAbsent(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	tmpDir, _ := setupTestRepo(t)
+	m := &Manager{repoRoot: tmpDir}
+
+	if err := m.Create("disk-locked-wt", "disk-locked-branch"); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	fullName := m.GetProjectName() + "-disk-locked-wt"
+	wt, err := m.Find(fullName)
+	if err != nil || wt == nil {
+		t.Fatalf("Find() expected worktree, got error=%v, wt=%v", err, wt)
+	}
+
+	// Touch the lock marker in the worktree's private gitdir directly — this
+	// is the on-disk representation `git worktree lock` writes, but without
+	// going through git so the test doesn't depend on porcelain reporting it.
+	out, err := exec.Command("git", "-C", wt.Path, "rev-parse", "--absolute-git-dir").Output()
+	if err != nil {
+		t.Fatalf("rev-parse --absolute-git-dir: %v", err)
+	}
+	lockFile := filepath.Join(strings.TrimSpace(string(out)), "locked")
+	if err := os.WriteFile(lockFile, []byte("protected\n"), 0644); err != nil {
+		t.Fatalf("WriteFile lock marker: %v", err)
+	}
+
+	// The direct check must see the lock regardless of porcelain support.
+	if !m.isLockedOnDisk(wt.Path) {
+		t.Error("isLockedOnDisk() = false with lock marker present, want true")
+	}
+
+	// Even with force, Remove must refuse and leave the directory intact.
+	if err := m.Remove(fullName, true); err == nil {
+		t.Fatal("Remove(force) on an on-disk-locked worktree returned nil; want refusal")
+	}
+	if _, statErr := os.Stat(wt.Path); os.IsNotExist(statErr) {
+		t.Errorf("locked worktree directory was deleted despite the lock marker: %s", wt.Path)
+	}
+
+	// Clearing the marker unlocks removal — proves the guard keys off the
+	// marker file, not some unrelated failure.
+	if err := os.Remove(lockFile); err != nil {
+		t.Fatalf("remove lock marker: %v", err)
+	}
+	if m.isLockedOnDisk(wt.Path) {
+		t.Error("isLockedOnDisk() = true after lock marker removed, want false")
+	}
+	if err := m.Remove(fullName, true); err != nil {
+		t.Errorf("Remove(force) after unlock error = %v, want nil", err)
+	}
+}
+
+// TestRemoveNonForceSurfacesGitRefusal guards B3: without force, Remove must not
+// escalate to os.RemoveAll — a dirty worktree removal returns an error instead
+// of silently destroying the tree.
+func TestRemoveNonForceSurfacesGitRefusal(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	tmpDir, _ := setupTestRepo(t)
+	m := &Manager{repoRoot: tmpDir}
+
+	if err := m.Create("dirty-wt", "dirty-branch"); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	fullName := m.GetProjectName() + "-dirty-wt"
+	wt, err := m.Find(fullName)
+	if err != nil || wt == nil {
+		t.Fatalf("Find() expected worktree, got error=%v, wt=%v", err, wt)
+	}
+	// Make it dirty with a tracked-file modification (git refuses plain remove).
+	if err := os.WriteFile(filepath.Join(wt.Path, "README.md"), []byte("dirty change\n"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	if err := m.Remove(fullName, false); err == nil {
+		t.Fatal("Remove(non-force) on a dirty worktree returned nil; want git's refusal surfaced")
+	}
+	if _, statErr := os.Stat(wt.Path); os.IsNotExist(statErr) {
+		t.Errorf("dirty worktree was destroyed by a non-force Remove: %s", wt.Path)
 	}
 }
 
@@ -1002,7 +1272,7 @@ func TestRemoveByBranchName(t *testing.T) {
 		t.Fatalf("Find(branch) expected worktree, got error=%v, wt=%v", err, wt)
 	}
 
-	if err := m.Remove("feat/agent-slot-db"); err != nil {
+	if err := m.Remove("feat/agent-slot-db", false); err != nil {
 		t.Fatalf("Remove(branch) error = %v — Remove must accept every identifier Find accepts", err)
 	}
 

@@ -114,16 +114,18 @@ func refreshFromPathWithFetcher(path string, interval time.Duration, fetcher fun
 	if !c.LastCheckedAt.IsZero() && time.Since(c.LastCheckedAt) < interval {
 		return
 	}
+	// Record the attempt BEFORE fetching, preserving any previously cached
+	// release info. The main command only waits RefreshWaitBudget for this
+	// goroutine before proceeding, while the fetch itself runs up to its own
+	// (longer) timeout; without the pre-write, a command started inside that
+	// window re-enters and pays the wait budget again. A host that is offline,
+	// firewalled, or slow thus stops re-attempting on every command (P7).
+	c.LastCheckedAt = time.Now()
+	_ = WriteCacheToPath(path, c)
+
 	rel, err := fetcher()
 	if err != nil {
-		// Record the attempt even on failure, preserving any previously
-		// cached release info. Otherwise a host where the fetch always
-		// fails or times out (offline, firewalled, slow DNS/TLS) never
-		// gets a written cache, so every subsequent command re-attempts
-		// the network fetch and blocks for the full RefreshWaitBudget
-		// instead of the interval applying to failures too.
-		c.LastCheckedAt = time.Now()
-		_ = WriteCacheToPath(path, c)
+		// Attempt already recorded above; keep the prior release info.
 		return
 	}
 	_ = WriteCacheToPath(path, Cache{

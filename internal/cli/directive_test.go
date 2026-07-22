@@ -2,9 +2,50 @@ package cli
 
 import (
 	"os"
+	"path/filepath"
 	"regexp"
 	"testing"
 )
+
+func TestCdDirective_RequiresExistingFile(t *testing.T) {
+	t.Run("writes to an existing cd file", func(t *testing.T) {
+		cdFile := filepath.Join(t.TempDir(), "cd")
+		if err := os.WriteFile(cdFile, nil, 0600); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("GROVE_CD_FILE", cdFile)
+		if !CdDirective("/target") {
+			t.Fatal("expected true for an existing cd file")
+		}
+		if got, _ := os.ReadFile(cdFile); string(got) != "/target" {
+			t.Errorf("cd file = %q, want %q", got, "/target")
+		}
+	})
+
+	t.Run("does not resurrect a deleted cd file", func(t *testing.T) {
+		cdFile := filepath.Join(t.TempDir(), "gone")
+		t.Setenv("GROVE_CD_FILE", cdFile)
+		t.Setenv("GROVE_SHELL", "") // not shell integration → falls through to false
+		if CdDirective("/target") {
+			t.Error("expected fall-through (false) for a missing cd file")
+		}
+		if _, err := os.Stat(cdFile); !os.IsNotExist(err) {
+			t.Error("CdDirective recreated the deleted cd file")
+		}
+	})
+
+	t.Run("missing cd file falls through to stdout under shell integration", func(t *testing.T) {
+		cdFile := filepath.Join(t.TempDir(), "gone")
+		t.Setenv("GROVE_CD_FILE", cdFile)
+		t.Setenv("GROVE_SHELL", "1")
+		if !CdDirective("/target") {
+			t.Error("expected a stdout directive (true) under GROVE_SHELL=1")
+		}
+		if _, err := os.Stat(cdFile); !os.IsNotExist(err) {
+			t.Error("CdDirective recreated the deleted cd file")
+		}
+	})
+}
 
 func TestDirective_NoANSI(t *testing.T) {
 	// Capture stdout

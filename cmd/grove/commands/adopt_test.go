@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lost-in-the/grove/internal/grove"
 )
 
 func TestResolveAdoptTarget_UsesCwdWhenNoArg(t *testing.T) {
@@ -143,13 +145,13 @@ func TestGitCommonDirAt_DistinguishesRepositories(t *testing.T) {
 	wt := filepath.Join(base, "repo-wt")
 	runAdoptGit(t, repo, "worktree", "add", wt)
 
-	repoCommon, err := gitCommonDirAt(repo)
+	repoCommon, err := grove.GitCommonDir(repo)
 	if err != nil {
-		t.Fatalf("gitCommonDirAt(repo): %v", err)
+		t.Fatalf("grove.GitCommonDir(repo): %v", err)
 	}
-	wtCommon, err := gitCommonDirAt(wt)
+	wtCommon, err := grove.GitCommonDir(wt)
 	if err != nil {
-		t.Fatalf("gitCommonDirAt(wt): %v", err)
+		t.Fatalf("grove.GitCommonDir(wt): %v", err)
 	}
 	if repoCommon != wtCommon {
 		t.Errorf("worktree common dir %q != repo common dir %q", wtCommon, repoCommon)
@@ -160,9 +162,9 @@ func TestGitCommonDirAt_DistinguishesRepositories(t *testing.T) {
 	if err := os.MkdirAll(sub, 0755); err != nil {
 		t.Fatalf("mkdir sub: %v", err)
 	}
-	subCommon, err := gitCommonDirAt(sub)
+	subCommon, err := grove.GitCommonDir(sub)
 	if err != nil {
-		t.Fatalf("gitCommonDirAt(sub): %v", err)
+		t.Fatalf("grove.GitCommonDir(sub): %v", err)
 	}
 	if subCommon != repoCommon {
 		t.Errorf("subdir common dir %q != repo common dir %q", subCommon, repoCommon)
@@ -177,11 +179,52 @@ func TestGitCommonDirAt_DistinguishesRepositories(t *testing.T) {
 	runAdoptGit(t, other, "init")
 	runAdoptGit(t, other, "commit", "--allow-empty", "-m", "init")
 
-	otherCommon, err := gitCommonDirAt(other)
+	otherCommon, err := grove.GitCommonDir(other)
 	if err != nil {
-		t.Fatalf("gitCommonDirAt(other): %v", err)
+		t.Fatalf("grove.GitCommonDir(other): %v", err)
 	}
 	if otherCommon == repoCommon {
 		t.Errorf("unrelated repo shares common dir %q — membership check would pass foreign repos", otherCommon)
+	}
+}
+
+func TestWorktreeTopLevel_ResolvesFromSubdir(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	repo, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	git("init")
+	if err := os.WriteFile(filepath.Join(repo, "f.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git("add", "-A")
+	git("commit", "-m", "init")
+
+	// Adopting from a subdirectory must resolve to the worktree root, not the
+	// subdir (otherwise adopt registers a bogus worktree named after the subdir).
+	sub := filepath.Join(repo, "cmd", "app")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, err := worktreeTopLevel(sub)
+	if err != nil {
+		t.Fatalf("worktreeTopLevel: %v", err)
+	}
+	if got != repo {
+		t.Errorf("worktreeTopLevel(subdir) = %q, want repo root %q", got, repo)
 	}
 }

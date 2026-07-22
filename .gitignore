@@ -42,7 +42,12 @@ __pycache__/
 dist/
 
 # Development tools
-.claude/
+# Keep .claude local-only except the committed web-session setup
+# (SessionStart hook + shared settings).
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
+.claude/settings.local.json
 .serena/
 
 # Ralph Wiggum logs

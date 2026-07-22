@@ -2,7 +2,10 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"testing"
+
+	"github.com/lost-in-the/grove/internal/config"
 )
 
 func TestReadCreationLog_Line(t *testing.T) {
@@ -149,4 +152,92 @@ func TestCreationDoneMsg_Error(t *testing.T) {
 	if m.createState.Creating {
 		t.Error("Creating should be false after error")
 	}
+}
+
+// collectCreationEvents drains ch (which fn must close by returning) into a
+// slice of log lines.
+func collectDockerAutoUpLines(t *testing.T, cfg *config.Config, name, path string) []string {
+	t.Helper()
+	ch := make(chan creationEvent, 20)
+	done := make(chan struct{})
+	var lines []string
+	go func() {
+		defer close(done)
+		for ev := range ch {
+			lines = append(lines, ev.line)
+		}
+	}()
+	runDockerAutoUp(ch, cfg, name, path)
+	close(ch)
+	<-done
+	return lines
+}
+
+func TestRunDockerAutoUp_OffByDefault(t *testing.T) {
+	called := false
+	restore := stubDockerAutoUp(t, func(cfg *config.Config, wtPath string) (bool, error) {
+		called = true
+		return true, nil
+	})
+	defer restore()
+
+	lines := collectDockerAutoUpLines(t, &config.Config{}, "wt", "/tmp/wt")
+	if called {
+		t.Error("docker.AutoUp should not run when auto_up is unset")
+	}
+	if len(lines) != 0 {
+		t.Errorf("expected no log lines, got %v", lines)
+	}
+}
+
+func TestRunDockerAutoUp_StartsWhenOptedIn(t *testing.T) {
+	restore := stubDockerAutoUp(t, func(cfg *config.Config, wtPath string) (bool, error) {
+		// Simulate compose streaming to stderr — must be captured, not leaked.
+		fmt.Fprintln(os.Stderr, "container app-1 started")
+		return true, nil
+	})
+	defer restore()
+
+	autoUp := true
+	cfg := &config.Config{}
+	cfg.Plugins.Docker.AutoUp = &autoUp
+
+	lines := collectDockerAutoUpLines(t, cfg, "wt", "/tmp/wt")
+	want := []string{"Starting Docker stack...", "container app-1 started", "Docker stack started"}
+	if len(lines) != len(want) {
+		t.Fatalf("lines = %v, want %v", lines, want)
+	}
+	for i := range want {
+		if lines[i] != want[i] {
+			t.Errorf("lines[%d] = %q, want %q", i, lines[i], want[i])
+		}
+	}
+}
+
+func TestRunDockerAutoUp_SurfacesFailure(t *testing.T) {
+	restore := stubDockerAutoUp(t, func(cfg *config.Config, wtPath string) (bool, error) {
+		return false, fmt.Errorf("compose exploded")
+	})
+	defer restore()
+
+	autoUp := true
+	cfg := &config.Config{}
+	cfg.Plugins.Docker.AutoUp = &autoUp
+
+	lines := collectDockerAutoUpLines(t, cfg, "wt", "/tmp/wt")
+	if len(lines) != 2 {
+		t.Fatalf("expected start + failure lines, got %v", lines)
+	}
+	if lines[1] != "Docker auto-start failed: compose exploded" {
+		t.Errorf("failure line = %q", lines[1])
+	}
+}
+
+// stubDockerAutoUp swaps the package seam for docker.AutoUp and returns a
+// restore func.
+func stubDockerAutoUp(t *testing.T, fn func(*config.Config, string) (bool, error)) func() {
+	t.Helper()
+	orig := dockerAutoUp
+	dockerAutoUp = fn
+	return func() { dockerAutoUp = orig }
 }

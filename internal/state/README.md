@@ -1,91 +1,75 @@
 # State Management Package
 
-This package provides state persistence for Grove, specifically managing frozen worktree states.
+Per-project runtime state for Grove, persisted to `.grove/state.json` in the
+**main** worktree. It tracks the project name, the set of worktrees grove knows
+about (with their paths, branches, timestamps, and environment/mirror flags),
+and the `last_worktree` used by `grove last`.
+
+> Note: an earlier "frozen worktree" API (`Freeze`/`Resume`/`IsFrozen`) and a
+> global `~/.config/grove/state/frozen.json` location no longer exist. State is
+> per-project and lives in the project's `.grove/` directory.
 
 ## Features
 
-- **JSON-based persistence**: State is stored in `$HOME/.config/grove/state/frozen.json`
-- **Thread-safe operations**: All operations are protected with mutex locks
-- **Idempotent operations**: Safe to call freeze/resume multiple times
-- **Atomic writes**: State files are written atomically using temp files and rename
+- **JSON persistence** at `.grove/state.json` (see [DATA_FLOWS.md](../../docs/DATA_FLOWS.md)).
+- **Cross-process safety**: `save()` takes an exclusive `flock` on
+  `.grove/state.lock`, re-reads the on-disk state under the lock, re-applies
+  schema migration to it (so a legacy file written by an older grove can't
+  resurrect pre-migration keys through the merge), rebases this process's
+  tracked mutations on top, then writes atomically (unique temp file + fsync +
+  rename via `internal/fsutil.AtomicWriteFile`).
+- **In-process safety**: an `sync.RWMutex` guards goroutine access.
+- **Batched writes**: `Batch` coalesces several mutations into a single save.
 
 ## Usage
 
 ```go
 import "github.com/lost-in-the/grove/internal/state"
 
-// Create a manager (empty string uses default location)
-mgr, err := state.NewManager("")
+// groveDir is the project's .grove directory (must be non-empty).
+mgr, err := state.NewManager(groveDir)
 if err != nil {
     log.Fatal(err)
 }
 
-// Freeze a worktree
-if err := mgr.Freeze("feature-auth"); err != nil {
-    log.Fatal(err)
-}
+// Register / update a worktree.
+_ = mgr.AddWorktree("feature-auth", &state.WorktreeState{
+    Path:   "/work/app-feature-auth",
+    Branch: "feature-auth",
+})
 
-// Check if frozen
-frozen, err := mgr.IsFrozen("feature-auth")
-if err != nil {
-    log.Fatal(err)
-}
+// Read it back.
+ws, _ := mgr.GetWorktree("feature-auth")
 
-// List all frozen worktrees
-list, err := mgr.ListFrozen()
-if err != nil {
-    log.Fatal(err)
-}
+// Update last_accessed_at, or the last-used worktree.
+_ = mgr.TouchWorktree("feature-auth")
+_ = mgr.SetLastWorktree("feature-auth")
 
-// Resume a worktree
-if err := mgr.Resume("feature-auth"); err != nil {
-    log.Fatal(err)
-}
+// Coalesce several mutations into one save.
+_ = mgr.Batch(func() error {
+    _ = mgr.RenameWorktree("feature-auth", "auth")
+    return mgr.TouchWorktree("auth")
+})
 ```
 
 ## State File Format
 
-The state is stored as JSON:
-
 ```json
 {
-  "frozen": {
-    "feature-auth": {
-      "name": "feature-auth",
-      "frozen_at": "2024-01-18T12:34:56Z"
-    },
-    "bugfix-123": {
-      "name": "bugfix-123",
-      "frozen_at": "2024-01-18T11:22:33Z"
-    }
+  "version": 1,
+  "project": "app",
+  "last_worktree": "feature-auth",
+  "worktrees": {
+    "root": {"path": "/work/app", "branch": "main", "root": true},
+    "feature-auth": {"path": "/work/app-feature-auth", "branch": "feature-auth"}
   }
 }
 ```
 
-## Design Decisions
-
-1. **JSON over binary**: Human-readable and debuggable
-2. **Map structure**: O(1) lookups for frozen checks
-3. **Mutex protection**: Safe for concurrent use
-4. **Sorted list output**: Consistent and predictable
-5. **Atomic writes**: Prevents partial writes on crashes
+The main worktree is keyed `"root"` with `"root": true`.
 
 ## Testing
 
-The package has comprehensive test coverage (85.7%) including:
-- Basic operations (freeze, resume, check)
-- Persistence across manager instances
-- Concurrent operations
-- Edge cases (empty names, idempotency)
-
-Run tests:
 ```bash
 go test ./internal/state/... -v
 ```
-
-## Performance
-
-All operations complete in <1ms under normal conditions:
-- Freeze/Resume: Single file write
-- IsFrozen: Map lookup (O(1))
-- ListFrozen: Map iteration + sort

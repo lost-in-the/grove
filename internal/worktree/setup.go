@@ -135,7 +135,7 @@ func createSymlink(src, dst string) error {
 
 	if err := os.Symlink(src, dst); err != nil {
 		if runtime.GOOS == "windows" {
-			return fmt.Errorf("%w\n  hint: symlinks on Windows require Developer Mode or administrator privileges; consider using copy_files / copy_dirs instead", err)
+			return fmt.Errorf("%w\n  hint: symlinks on Windows require Developer Mode or administrator privileges; for files, use copy_files instead", err)
 		}
 		return err
 	}

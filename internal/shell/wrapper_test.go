@@ -70,6 +70,54 @@ grove ` + groveArgs + `
 	return stdout.String(), stderr.String(), exitCode
 }
 
+// runBashWrapper is the bash twin of runZshWrapper: it sources the bash
+// template's grove() function with __GROVE_BIN pointed at binPath, runs the
+// given grove invocation, and returns stdout, stderr, exit code. The script
+// additionally reports the shell's final working directory on stdout as
+// "PWD_AFTER:<dir>" so tests can assert the wrapper really changed directory
+// (not merely swallowed the directive). Skips cleanly when bash is absent.
+func runBashWrapper(t *testing.T, binPath string, groveArgs string, env ...string) (string, string, int) {
+	t.Helper()
+
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash not available")
+	}
+
+	// Extract only the grove() function from the template (skip completion)
+	funcEnd := strings.Index(bashTemplate, "\n# Tab completion")
+	wrapperFunc := bashTemplate
+	if funcEnd > 0 {
+		wrapperFunc = bashTemplate[:funcEnd]
+	}
+
+	script := `
+__GROVE_BIN="` + binPath + `"
+` + wrapperFunc + `
+# Invoke the wrapper, then report where the shell ended up
+grove ` + groveArgs + `
+rc=$?
+echo "PWD_AFTER:$PWD"
+exit $rc
+`
+	cmd := exec.Command("bash", "-c", script)
+	cmd.Env = append(os.Environ(), env...)
+
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	exitCode := 0
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		} else {
+			t.Fatalf("failed to run bash wrapper: %v", err)
+		}
+	}
+	return stdout.String(), stderr.String(), exitCode
+}
+
 func TestWrapper_BareInvocation_RunsDirectly(t *testing.T) {
 	binPath := buildFakeGrove(t)
 
@@ -217,6 +265,67 @@ func TestWrapper_NewCommand_ParsesCdDirective(t *testing.T) {
 	// cd: directive must be consumed by the wrapper, not printed
 	if strings.Contains(stdout, "cd:/tmp") {
 		t.Errorf("cd: directive leaked to stdout: %q", stdout)
+	}
+}
+
+func TestWrapper_IssuesBrowser_RoutesCdThroughFile(t *testing.T) {
+	binPath := buildFakeGrove(t)
+
+	// B27: `grove issues`/`grove prs` used to run in passthrough, so the cd:
+	// directive they emit when a worktree is selected printed raw on the
+	// terminal instead of changing directory. The wrapper now runs them with
+	// GROVE_CD_FILE, so the directive is consumed via the file, not stdout.
+	stdout, _, exitCode := runZshWrapper(t, binPath, "issues")
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+	if !strings.Contains(stdout, "BROWSER_RENDERED") {
+		t.Errorf("expected browser output in stdout, got: %q", stdout)
+	}
+	if strings.Contains(stdout, "cd:/tmp") {
+		t.Errorf("cd: directive leaked to stdout for issues browser: %q", stdout)
+	}
+}
+
+func TestWrapper_IssuesPrs_UseCdFile(t *testing.T) {
+	// Both wrappers must run issues/prs through the GROVE_CD_FILE path.
+	for _, tmpl := range []struct{ name, body string }{{"zsh", zshTemplate}, {"bash", bashTemplate}} {
+		idx := strings.Index(tmpl.body, "issues|prs)")
+		if idx < 0 {
+			t.Errorf("%s template missing issues|prs case", tmpl.name)
+			continue
+		}
+		end := strings.Index(tmpl.body[idx:], ";;")
+		if end < 0 {
+			t.Errorf("%s issues|prs case has no terminator", tmpl.name)
+			continue
+		}
+		if !strings.Contains(tmpl.body[idx:idx+end], "GROVE_CD_FILE") {
+			t.Errorf("%s issues|prs case does not use GROVE_CD_FILE", tmpl.name)
+		}
+	}
+}
+
+func TestWrapper_CaptureBranch_ClearsInheritedCdFile(t *testing.T) {
+	// A tmux server started from an issues/prs invocation inherits that
+	// invocation's GROVE_CD_FILE (a long-deleted temp path) into every later
+	// pane. The capture branch parses cd: lines from stdout, so it must run
+	// grove with GROVE_CD_FILE explicitly cleared — otherwise CdDirective
+	// silently writes the stale file and the shell never changes directory.
+	for _, tmpl := range []struct{ name, body string }{{"zsh", zshTemplate}, {"bash", bashTemplate}} {
+		idx := strings.Index(tmpl.body, "new|spawn|n|")
+		if idx < 0 {
+			t.Errorf("%s template missing capture case", tmpl.name)
+			continue
+		}
+		end := strings.Index(tmpl.body[idx:], ";;")
+		if end < 0 {
+			t.Errorf("%s capture case has no terminator", tmpl.name)
+			continue
+		}
+		if !strings.Contains(tmpl.body[idx:idx+end], `GROVE_CD_FILE= "$__GROVE_BIN"`) {
+			t.Errorf("%s capture branch does not clear inherited GROVE_CD_FILE", tmpl.name)
+		}
 	}
 }
 
@@ -560,5 +669,180 @@ func TestWrapper_FailCommand_PropagatesExitCode(t *testing.T) {
 
 	if exitCode == 0 {
 		t.Errorf("expected non-zero exit code for fail command")
+	}
+}
+
+// --- bash behavioral twins -------------------------------------------------
+// The zsh tests above skip on hosts without zsh; the bash tests below keep the
+// wrapper's key behaviors covered wherever bash exists (CLAUDE.md: shell
+// integration must work in both zsh and bash).
+
+// TestBashWrapper_BareInvocation_WritesCdFile: the fresh cd-file flow. Bare
+// `grove` mktemps a cd file, passes it via GROVE_CD_FILE, and cd's to whatever
+// the binary wrote there after it exits.
+func TestBashWrapper_BareInvocation_WritesCdFile(t *testing.T) {
+	binPath := buildFakeGrove(t)
+
+	targetDir := filepath.Join(t.TempDir(), "cd-target")
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, exitCode := runBashWrapper(t, binPath, "", /* no args */
+		"FAKEGROVE_CD_TARGET="+targetDir,
+	)
+
+	t.Logf("stdout: %q", stdout)
+	t.Logf("stderr: %q", stderr)
+
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+	// TUI output must appear directly (binary runs un-captured).
+	if !strings.Contains(stdout, "TUI_RENDERED") {
+		t.Errorf("expected TUI_RENDERED in stdout, got: %q", stdout)
+	}
+	// The wrapper must have cd'd to the path fakegrove wrote into the cd file.
+	if !strings.Contains(stdout, "PWD_AFTER:"+targetDir) {
+		t.Errorf("expected shell to cd to %q via cd file, stdout: %q", targetDir, stdout)
+	}
+}
+
+// TestBashWrapper_ToCommand_ParsesCdDirective: the capture branch must consume
+// the cd: directive (not leak it to the terminal) and actually change
+// directory.
+func TestBashWrapper_ToCommand_ParsesCdDirective(t *testing.T) {
+	binPath := buildFakeGrove(t)
+
+	targetDir := "/tmp/fakegrove-bashto"
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(targetDir) }()
+
+	stdout, stderr, exitCode := runBashWrapper(t, binPath, "to bashto")
+
+	t.Logf("stdout: %q", stdout)
+	t.Logf("stderr: %q", stderr)
+
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+	for _, line := range strings.Split(strings.TrimSpace(stdout), "\n") {
+		if strings.HasPrefix(line, "cd:") {
+			t.Errorf("cd: directive should be consumed by wrapper, but appeared in stdout: %q", line)
+		}
+	}
+	if !strings.Contains(stdout, "PWD_AFTER:"+targetDir) {
+		t.Errorf("expected shell to cd to %q, stdout: %q", targetDir, stdout)
+	}
+}
+
+// TestBashWrapper_CaptureBranch_ClearsInheritedStaleCdFile is the behavioral
+// form of TestWrapper_CaptureBranch_ClearsInheritedCdFile: a pane whose
+// environment inherited GROVE_CD_FILE from an old issues/prs invocation runs a
+// capture-branch command. The wrapper must clear the variable so the binary
+// emits the cd: line this branch parses — instead of silently writing the
+// stale file and leaving the shell where it was. The fake binary speaks real
+// grove's protocol: write to GROVE_CD_FILE when set, emit cd: otherwise.
+func TestBashWrapper_CaptureBranch_ClearsInheritedStaleCdFile(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash not available")
+	}
+
+	dir := t.TempDir()
+	fakeBin := filepath.Join(dir, "fakecd")
+	fakeScript := `#!/usr/bin/env bash
+if [ -n "$GROVE_CD_FILE" ]; then
+  printf '%s' "$FAKECD_TARGET" > "$GROVE_CD_FILE"
+else
+  echo "cd:$FAKECD_TARGET"
+fi
+`
+	if err := os.WriteFile(fakeBin, []byte(fakeScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	targetDir := filepath.Join(dir, "target")
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	staleFile := filepath.Join(dir, "stale-cd-file")
+	if err := os.WriteFile(staleFile, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, exitCode := runBashWrapper(t, fakeBin, "new myfeature",
+		"GROVE_CD_FILE="+staleFile,
+		"FAKECD_TARGET="+targetDir,
+	)
+
+	t.Logf("stdout: %q", stdout)
+	t.Logf("stderr: %q", stderr)
+
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+	// The binary must have seen GROVE_CD_FILE cleared: nothing written to the
+	// stale inherited path...
+	if data, err := os.ReadFile(staleFile); err != nil {
+		t.Fatalf("read stale cd file: %v", err)
+	} else if len(data) != 0 {
+		t.Errorf("stale inherited GROVE_CD_FILE was written to (%q) — capture branch did not clear it", data)
+	}
+	// ...the cd: line consumed by the wrapper...
+	if strings.Contains(stdout, "cd:"+targetDir) {
+		t.Errorf("cd: directive leaked to stdout: %q", stdout)
+	}
+	// ...and the shell actually changed directory.
+	if !strings.Contains(stdout, "PWD_AFTER:"+targetDir) {
+		t.Errorf("expected shell to cd to %q, stdout: %q", targetDir, stdout)
+	}
+}
+
+// TestBashWrapper_IssuesBrowser_RoutesCdThroughFile: the issues/prs branch
+// runs un-captured but must route the selected worktree's cd through a fresh
+// temp file — overriding any stale inherited GROVE_CD_FILE — and cd there
+// afterwards.
+func TestBashWrapper_IssuesBrowser_RoutesCdThroughFile(t *testing.T) {
+	binPath := buildFakeGrove(t)
+
+	// fakegrove writes /tmp/fakegrove-selected into whatever cd file it gets.
+	selectedDir := "/tmp/fakegrove-selected"
+	if err := os.MkdirAll(selectedDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(selectedDir) }()
+
+	staleFile := filepath.Join(t.TempDir(), "stale-cd-file")
+	if err := os.WriteFile(staleFile, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, exitCode := runBashWrapper(t, binPath, "issues",
+		"GROVE_CD_FILE="+staleFile,
+	)
+
+	t.Logf("stdout: %q", stdout)
+	t.Logf("stderr: %q", stderr)
+
+	if exitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", exitCode)
+	}
+	if !strings.Contains(stdout, "BROWSER_RENDERED") {
+		t.Errorf("expected browser output in stdout, got: %q", stdout)
+	}
+	if strings.Contains(stdout, "cd:/tmp") {
+		t.Errorf("cd: directive leaked to stdout for issues browser: %q", stdout)
+	}
+	// The selection must go through the wrapper's own fresh temp file, never
+	// the stale inherited one.
+	if data, err := os.ReadFile(staleFile); err != nil {
+		t.Fatalf("read stale cd file: %v", err)
+	} else if len(data) != 0 {
+		t.Errorf("stale inherited GROVE_CD_FILE was written to (%q) — issues branch did not override it", data)
+	}
+	if !strings.Contains(stdout, "PWD_AFTER:"+selectedDir) {
+		t.Errorf("expected shell to cd to %q via cd file, stdout: %q", selectedDir, stdout)
 	}
 }

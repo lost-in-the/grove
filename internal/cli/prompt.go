@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,8 +14,17 @@ import (
 // ErrPromptCanceled is returned when the user cancels a prompt with Escape or Ctrl+C.
 var ErrPromptCanceled = errors.New("canceled")
 
-// IsInteractive returns true if stdin is connected to a terminal.
+// IsInteractive returns true if stdin is connected to a terminal AND the user
+// has not forced non-interactive mode via GROVE_NONINTERACTIVE. Setting that
+// variable (to any non-empty value) makes every prompt take its safe
+// non-interactive path — refuse a dirty switch, error instead of showing a
+// chooser, decline a confirmation — rather than blocking on a PTY no human is
+// watching. This is the behavior documented for agents and CI; before it, the
+// variable was parsed but had no effect.
 func IsInteractive() bool {
+	if os.Getenv("GROVE_NONINTERACTIVE") != "" {
+		return false
+	}
 	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
@@ -215,10 +225,17 @@ func ChooseIndex(title string, options []string) (int, error) {
 		return -1, err
 	}
 
-	var choice int
-	if _, err := fmt.Sscanf(input, "%d", &choice); err != nil || choice < 1 || choice > len(options) {
-		return -1, fmt.Errorf("invalid choice %q: expected a number between 1 and %d", input, len(options))
-	}
+	return parseChoice(input, len(options))
+}
 
+// parseChoice converts a 1-based menu answer into a 0-based option index.
+// strconv.Atoi (unlike Sscanf "%d") rejects a trailing non-numeric suffix, so
+// input like "2abc" is an invalid choice rather than being misread as 2 —
+// the same misparse class B33 fixed in the worktree selector.
+func parseChoice(input string, numOptions int) (int, error) {
+	choice, err := strconv.Atoi(strings.TrimSpace(input))
+	if err != nil || choice < 1 || choice > numOptions {
+		return -1, fmt.Errorf("invalid choice %q: expected a number between 1 and %d", input, numOptions)
+	}
 	return choice - 1, nil
 }

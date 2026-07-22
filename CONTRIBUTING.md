@@ -396,7 +396,7 @@ Grove is distributed for Windows (amd64) via GoReleaser, but a few features have
 
 **Recommendation for Windows users and contributors:**
 
-- Use `copy_files` / `copy_dirs` (external config) or `type = "copy"` hooks instead of their symlink counterparts. Copies work without elevation and are functionally equivalent for most workflows.
+- Use `copy_files` (external config) or `type = "copy"` hooks instead of their symlink counterparts for files. Copies work without elevation. Directory sharing (`symlink_dirs`) has no copy equivalent yet, so it needs Developer Mode on Windows.
 - If symlinks are important for your setup, enable Developer Mode in Windows Settings → Privacy & Security → For Developers, or run grove from an elevated terminal.
 - When writing platform-sensitive tests, use `//go:build !windows` to skip symlink assertions on Windows, or use `t.Skip` with a runtime GOOS check.
 

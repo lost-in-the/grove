@@ -114,7 +114,7 @@ func TestLocalRun_DefaultUsesNoDeps(t *testing.T) {
 	cfg := &config.Config{
 		Test: config.TestConfig{Command: "bin/rspec", Service: "app"},
 	}
-	args := buildRunArgs(cfg, tmpDir, "app", "bin/rspec")
+	args := buildRunArgs(cfg, tmpDir, "app", "bin/rspec", nil)
 
 	found := false
 	for _, a := range args {
@@ -139,7 +139,7 @@ func TestLocalRun_IncludeDepsTrueOmitsNoDeps(t *testing.T) {
 			IncludeDeps: &trueVal,
 		},
 	}
-	args := buildRunArgs(cfg, "/tmp", "app", "bin/rspec")
+	args := buildRunArgs(cfg, "/tmp", "app", "bin/rspec", nil)
 
 	for _, a := range args {
 		if a == "--no-deps" {

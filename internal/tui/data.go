@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -125,7 +126,10 @@ func loadFetchContext(mgr *worktree.Manager, stateMgr *state.Manager) fetchConte
 		mgr:         mgr,
 	}
 
-	cfg, cfgErr := config.Load()
+	// The manager already knows the project root, so load config from its
+	// .grove directly — config.Load() would re-discover it via FindRoot,
+	// spawning git on every dashboard refresh (#142).
+	cfg, cfgErr := config.LoadFromGroveDir(filepath.Join(mgr.GetRepoRoot(), ".grove"))
 	if cfgErr != nil {
 		tuilog.Printf("warning: failed to load config for protection checks: %v", cfgErr)
 	}

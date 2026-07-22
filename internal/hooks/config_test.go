@@ -160,8 +160,11 @@ func TestApplyOverride(t *testing.T) {
 			if a.Type != "command" {
 				t.Errorf("ExtraRun action type = %q, want %q", a.Type, "command")
 			}
-			if a.WorkingDir != "new" {
-				t.Errorf("ExtraRun action WorkingDir = %q, want %q", a.WorkingDir, "new")
+			// WorkingDir is left unset so the executor applies the event-aware
+			// default (main worktree for pre_create/post_remove, new otherwise) —
+			// hardcoding "new" broke override commands on those events.
+			if a.WorkingDir != "" {
+				t.Errorf("ExtraRun action WorkingDir = %q, want %q", a.WorkingDir, "")
 			}
 			if a.Timeout != 300 {
 				t.Errorf("ExtraRun action Timeout = %d, want 300", a.Timeout)
@@ -205,12 +208,14 @@ timeout = 30
 		if action.Type != "copy" {
 			t.Errorf("action.Type = %q, want %q", action.Type, "copy")
 		}
-		// Defaults applied: OnFailure → "warn", WorkingDir → "new"
+		// Defaults applied: OnFailure → "warn". WorkingDir stays "" — the
+		// executor resolves it per event (pre-create/post-remove default to
+		// main because the "new" path is guaranteed absent there).
 		if action.OnFailure != "warn" {
 			t.Errorf("action.OnFailure = %q, want %q", action.OnFailure, "warn")
 		}
-		if action.WorkingDir != "new" {
-			t.Errorf("action.WorkingDir = %q, want %q", action.WorkingDir, "new")
+		if action.WorkingDir != "" {
+			t.Errorf("action.WorkingDir = %q, want %q (unset — executor decides per event)", action.WorkingDir, "")
 		}
 		// Explicit timeout preserved
 		if action.Timeout != 30 {
@@ -316,11 +321,14 @@ func TestSetDefaultsForActions(t *testing.T) {
 		}
 	})
 
-	t.Run("empty WorkingDir gets new", func(t *testing.T) {
+	t.Run("empty WorkingDir stays empty for event-aware defaulting", func(t *testing.T) {
+		// "" must survive load: it is the executor's signal that the user
+		// didn't choose, so pre-create/post-remove can default to the main
+		// worktree (defaultCommandWorkDir) instead of the absent "new" path.
 		actions := []HookAction{{Type: "copy", WorkingDir: ""}}
 		setDefaultsForActions(actions)
-		if actions[0].WorkingDir != "new" {
-			t.Errorf("WorkingDir = %q, want %q", actions[0].WorkingDir, "new")
+		if actions[0].WorkingDir != "" {
+			t.Errorf("WorkingDir = %q, want %q (unset)", actions[0].WorkingDir, "")
 		}
 	})
 
@@ -598,5 +606,22 @@ func TestGetHooksConfigPaths_DiscoversProjectRootFromSubdir(t *testing.T) {
 	want := filepath.Join(groveDir, "hooks.toml")
 	if projectPath != want {
 		t.Errorf("project hooks path = %q, want %q (discovered from project root, not cwd)", projectPath, want)
+	}
+}
+
+func TestApplyOverride_ExtraRunUsesEventDefaultWorkingDir(t *testing.T) {
+	ov := &Override{ExtraRun: []string{"./notify.sh"}}
+	actions := ApplyOverride(nil, ov, "/main")
+	found := false
+	for _, a := range actions {
+		if a.Type == "command" && a.Command == "./notify.sh" {
+			found = true
+			if a.WorkingDir != "" {
+				t.Errorf("extra_run WorkingDir = %q, want \"\" so the executor applies the event-aware default", a.WorkingDir)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("extra_run command action was not injected")
 	}
 }

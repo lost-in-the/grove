@@ -7,7 +7,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/lost-in-the/grove/internal/cmdexec"
@@ -39,13 +41,16 @@ func (h *WIPHandler) ListWIPFiles() ([]string, error) {
 		return nil, fmt.Errorf("failed to list WIP files: %w", err)
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	var files []string
-	for _, line := range lines {
-		if len(line) >= 3 {
-			// Status format: XY filename (where XY is 2 chars + space)
-			files = append(files, strings.TrimSpace(line[3:]))
+	for _, line := range strings.Split(string(output), "\n") {
+		// Porcelain v1 format: "XY PATH" — the path starts at column 3. Trim
+		// only trailing whitespace/CR; trimming the *leading* status space (X
+		// is a space for worktree-only modifications) shifts the columns and
+		// mangles the first filename (" M a.txt" → ".txt").
+		if len(line) < 4 {
+			continue
 		}
+		files = append(files, strings.TrimRight(line[3:], " \r"))
 	}
 	return files, nil
 }
@@ -62,6 +67,24 @@ func (h *WIPHandler) Stash(message string) error {
 	return nil
 }
 
+// StashWithRef saves uncommitted changes like Stash and additionally returns
+// the SHA of the created stash commit. Callers that pop later (the switch
+// rollback) must target that exact entry: the stash list is repo-wide and
+// hooks or concurrent grove processes can push their own entries in between,
+// so a blind `git stash pop` may restore someone else's stash. A failure to
+// resolve the SHA after a successful push returns "" with a nil error — the
+// caller degrades to the blind pop rather than stranding the fresh stash.
+func (h *WIPHandler) StashWithRef(message string) (string, error) {
+	if err := h.Stash(message); err != nil {
+		return "", err
+	}
+	out, err := cmdexec.Output(context.TODO(), "git", []string{"-C", h.repoPath, "rev-parse", "refs/stash"}, "", cmdexec.GitLocal)
+	if err != nil {
+		return "", nil
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 // PopStash applies and removes the most recent stash entry.
 func (h *WIPHandler) PopStash() error {
 	if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", h.repoPath, "stash", "pop"}, "", cmdexec.GitLocal); err != nil {
@@ -70,11 +93,45 @@ func (h *WIPHandler) PopStash() error {
 	return nil
 }
 
+// PopStashRef applies and removes the stash entry whose commit SHA is sha
+// (as returned by StashWithRef), wherever it currently sits in the stash
+// list. An empty sha falls back to popping the most recent entry.
+func (h *WIPHandler) PopStashRef(sha string) error {
+	if sha == "" {
+		return h.PopStash()
+	}
+	out, err := cmdexec.Output(context.TODO(), "git", []string{"-C", h.repoPath, "stash", "list", "--format=%H"}, "", cmdexec.GitLocal)
+	if err != nil {
+		return fmt.Errorf("failed to list stashes: %w", err)
+	}
+	for i, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if strings.TrimSpace(line) != sha {
+			continue
+		}
+		ref := fmt.Sprintf("stash@{%d}", i)
+		if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", h.repoPath, "stash", "pop", ref}, "", cmdexec.GitLocal); err != nil {
+			return fmt.Errorf("failed to pop stash %s: %w\n%s", ref, err, output)
+		}
+		return nil
+	}
+	return fmt.Errorf("stash %.7s not found in stash list", sha)
+}
+
 // CreatePatch creates a patch file from all uncommitted changes (staged and unstaged).
 func (h *WIPHandler) CreatePatch() ([]byte, error) {
 	// First, add all untracked files to index temporarily
 	if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", h.repoPath, "add", "--all"}, "", cmdexec.GitLocal); err != nil {
 		return nil, fmt.Errorf("failed to stage files: %w\n%s", err, output)
+	}
+
+	// A legacy per-worktree .grove/config.toml symlink (older grove created
+	// these; current grove never does) is untracked, so `add --all` sweeps it
+	// in and fork --copy-wip would then propagate a machine-absolute symlink
+	// into the new worktree. Unstage it — only when it really is a symlink, so a
+	// genuine edit to a committed config.toml still rides along. `grove doctor
+	// --fix` removes the originals.
+	if fi, err := os.Lstat(filepath.Join(h.repoPath, ".grove", "config.toml")); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		_ = cmdexec.Run(context.TODO(), "git", []string{"-C", h.repoPath, "reset", "-q", "--", ".grove/config.toml"}, "", cmdexec.GitLocal)
 	}
 
 	// Create patch from staged changes

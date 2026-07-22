@@ -78,13 +78,13 @@ export ADMIN_DIR=./admin-feature
 cd /Users/you/work/myproject-feature
 ```
 
-### TUI Mode (`grove` with no arguments)
+### TUI / Browser Mode (`grove` with no arguments, `grove issues`, `grove prs`)
 
-The TUI uses a different mechanism because it runs in alt-screen mode and stdout is not captured:
+The TUI and the interactive issue/PR browsers use a different mechanism because they render to the terminal (alt-screen) and their stdout is not captured — a raw `cd:` line would print literally instead of changing directory:
 
 1. The wrapper creates a temporary file via `mktemp`
 2. It sets `GROVE_CD_FILE` to the temp file path and launches the binary
-3. After the TUI exits, the wrapper reads the temp file for a path to switch to
+3. After the binary exits, the wrapper reads the temp file for a path to switch to
 4. It performs the `cd` and cleans up the temp file
 
 ```bash
@@ -99,7 +99,7 @@ rm -f "$cd_file"
 
 ### All Other Commands (passthrough)
 
-Commands that never emit directives — `grove ls`, `grove logs`, `grove test`, `grove down`, `grove here`, etc. — run the binary directly without output capture:
+Commands that never emit directives — `grove ls`, `grove logs`, `grove down`, `grove here`, etc. — run the binary directly without output capture:
 
 ```bash
 GROVE_SHELL=1 "$__GROVE_BIN" "$@"
@@ -127,7 +127,14 @@ Lines that do not match any directive prefix are treated as normal output and pr
 
 ### TUI Directive (file-based)
 
-When `GROVE_CD_FILE` is set, the TUI writes the target path to the file instead of printing a `cd:` directive. This is necessary because the TUI runs in alt-screen mode and its stdout is not suitable for directive parsing.
+When `GROVE_CD_FILE` is set, the TUI and the issue/PR browsers write the target path to the file instead of printing a `cd:` directive. This is necessary because they render to the terminal and their stdout is not suitable for directive parsing.
+
+Because `GROVE_CD_FILE` takes precedence, the wrapper's capture branch (to,
+new, open, …) invokes the binary with `GROVE_CD_FILE=` explicitly cleared. A
+tmux server started from an issues/prs invocation inherits that invocation's
+(long-deleted) temp path into every later pane; without the clear, grove
+would silently write the cd target to the stale file and the captured `cd:`
+line the wrapper parses would never be emitted.
 
 ## Environment Variables
 
@@ -135,7 +142,7 @@ When `GROVE_CD_FILE` is set, the TUI writes the target path to the file instead 
 |----------|-------------|
 | `GROVE_SHELL` | Set to `1` by the wrapper. The binary uses this to enable directive output. Without it, commands print human-readable output only. |
 | `GROVE_SHELL_VERSION` | Shell integration version number. The binary checks this and warns when the shell integration is outdated. |
-| `GROVE_CD_FILE` | Path to a temp file where the TUI writes a directory to switch to. Set by the wrapper for bare `grove` invocations. |
+| `GROVE_CD_FILE` | Path to a temp file where the TUI and the issue/PR browsers write a directory to switch to. Set by the wrapper for bare `grove`, `grove issues`, and `grove prs` invocations; explicitly cleared in the capture branch. |
 | `GROVE_TUI` | Set to `0` to disable the TUI. When disabled, bare `grove` prints usage instead of launching the dashboard. |
 | `GROVE_HIGH_CONTRAST` | Set to `1` to enable high-contrast mode in the TUI's form elements. |
 | `GROVE_LOG` | Set to `1` to enable debug logging to `~/.grove/grove.log`. Set to a path to log to a custom file. |
@@ -217,7 +224,7 @@ eval "$(grove install zsh)"   # or bash
 
 ## Version Bumps
 
-The constant `ShellVersion` in `internal/shell/version.go` tracks the shell integration template version. It is currently **7**.
+The constant `ShellVersion` in `internal/shell/version.go` tracks the shell integration template version. It is currently **9**.
 
 When the shell wrapper behavior changes incompatibly — new directives, changed passthrough logic, new env vars — increment `ShellVersion`. The grove binary reads `GROVE_SHELL_VERSION` (set by the wrapper) in grove-context commands and `grove doctor`, and emits a warning when the running shell integration is older than `ShellVersion`.
 

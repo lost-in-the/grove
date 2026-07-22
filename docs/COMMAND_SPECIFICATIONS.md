@@ -346,7 +346,7 @@ Flags:
    git worktree add <path> <branch>
    ```
 
-3. **Symlink config** from main worktree to new worktree directory.
+3. **Record machine-local git excludes** in the shared `$GIT_COMMON_DIR/info/exclude` so grove's per-worktree artifacts don't show as untracked. (Config is no longer symlinked per worktree — it resolves from the main worktree via git's common dir.)
 
 4. **Register in state** (`AddWorktree`) with path, branch, created/accessed timestamps.
 
@@ -359,8 +359,9 @@ Flags:
 7. **Execute post-create hooks** (user-configured and plugin hooks).
 
 8. **Auto-start Docker** (unless `--no-docker`):
-   - Only runs when `shouldAutoDocker()` returns true: agent stacks configured (`plugins.docker.external.agent.enabled = true`) or `plugins.docker.auto_up = true`
+   - Only runs when `plugins.docker.auto_up = true` — an explicit opt-in, off by default (agent stacks no longer imply it)
    - Calls `docker.Up()` for the new worktree path
+   - The dashboard create flow runs the same epilogue, so CLI- and TUI-created worktrees provision identically
 
 9. **(If `--dirty`) Apply the captured patch** via `git -C <new-worktree> apply <tempfile>`:
    - Empty patch (no uncommitted changes in source): informational message, no-op
@@ -639,7 +640,7 @@ Please be more specific.
 
 | Scenario | Behavior |
 |----------|----------|
-| Already in target worktree | Message: "Already in 'testing'" (exit 0) |
+| Already in target worktree | Message: "Already in 'testing'" (exit 0). Skips the dirty gate, hooks, and state recording, but still cd's back to the worktree root from a subdirectory and — outside tmux — creates/attaches the session like a real switch |
 | Worktree directory missing | Error: "Worktree directory missing. Run: grove repair testing" |
 | Tmux not running | Start tmux server, create session, attach |
 | Partial name matches one | Switch to it (e.g., `grove to test` → `testing` if unambiguous) |
@@ -1148,8 +1149,8 @@ With `--json`:
 - Creating a new worktree and auto-switching updates "last"
 
 **Exit Codes:**
-- 0: Success
-- 1: No previous worktree or it no longer exists
+- 0: Success — including the graceful "no previous worktree yet" no-op (behavior note 4 above; the JSON form carries an empty `switch_to`)
+- 1: The recorded previous worktree no longer exists
 
 ---
 
@@ -2048,14 +2049,15 @@ Apply this configuration? [Y/n]: y
 
 **Usage:**
 ```
-grove repair [name] [flags]
-
-Arguments:
-  name    Worktree to repair (default: all)
+grove repair [flags]
 
 Flags:
       --dry-run    Show what would be done
 ```
+
+`grove repair` audits and repairs the whole project's state; it takes no
+worktree-name argument. (For per-worktree copy/symlink repair, see
+`grove doctor <name> --fix`.)
 
 **Behavior:**
 
@@ -2078,7 +2080,7 @@ Repaired 1 issue.
 
 ### grove adopt
 
-**Purpose:** Bootstrap a git worktree that grove doesn't know about. Equivalent to the post-`git worktree add` portion of `grove new` — symlinks `config.toml`, registers state, fires post-create hooks.
+**Purpose:** Bootstrap a git worktree that grove doesn't know about. Equivalent to the post-`git worktree add` portion of `grove new` — records grove's git excludes, registers state, fires post-create hooks.
 
 **Usage:**
 ```
@@ -2096,7 +2098,7 @@ Arguments:
 2. Read the current branch via `git rev-parse --abbrev-ref HEAD`. If the directory isn't a git worktree, abort with an actionable error.
 3. Derive the short name by stripping the project prefix from the directory name (e.g., `grove-feature` → `feature`).
 4. If the worktree is already registered with the same path, print an info message and exit successfully (idempotent).
-5. Run the shared bootstrap: symlink `config.toml`, register state, fire per-project and global post-create hooks.
+5. Run the shared bootstrap: record grove's machine-local git excludes, register state, fire per-project and global post-create hooks. (Config needs no per-worktree files — every command resolves it from the main worktree via git's common dir.)
 
 **Drift detection:** Running any grove command from a drifted worktree prints a non-fatal warning suggesting `grove adopt`. `grove doctor` also reports drift in its Tier-2 project checks.
 
@@ -2104,7 +2106,7 @@ Arguments:
 ```
 ↪ Bootstrapping worktree "feature" at /path/to/project-feature ...
 ✓ adopted "feature" (branch: feature)
-  config symlinked, state registered, post-create hooks fired
+  state registered, excludes recorded, post-create hooks fired
 ```
 
 When already registered:

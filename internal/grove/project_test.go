@@ -115,6 +115,59 @@ func TestFindRoot_FromWorktree(t *testing.T) {
 	}
 }
 
+// TestFindRoot_SecondaryWorktreeWithLocalGroveResolvesToMain guards B1: a
+// grove-created secondary worktree has its OWN .grove holding only a
+// config.toml symlink (EnsureConfigSymlink). FindRoot must still resolve to the
+// MAIN worktree's .grove — otherwise state.json fragments per-worktree and
+// commands run from inside a worktree read/write a phantom state.
+func TestFindRoot_SecondaryWorktreeWithLocalGroveResolvesToMain(t *testing.T) {
+	mainDir := t.TempDir()
+	mainDir, _ = filepath.EvalSymlinks(mainDir)
+
+	run := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test", "GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("command %v failed: %v\n%s", args, err, out)
+		}
+	}
+	run(mainDir, "git", "init")
+	run(mainDir, "git", "commit", "--allow-empty", "-m", "init")
+
+	mainGrove := filepath.Join(mainDir, ".grove")
+	if err := os.MkdirAll(mainGrove, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(mainGrove, "config.toml"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	wtDir := mainDir + "-wt"
+	run(mainDir, "git", "worktree", "add", wtDir, "-b", "test-branch")
+	defer func() { _ = os.RemoveAll(wtDir) }()
+
+	// Secondary worktree's own .grove with only a config.toml symlink, exactly
+	// as grove.EnsureConfigSymlink leaves it after `grove new`.
+	wtGrove := filepath.Join(wtDir, ".grove")
+	if err := os.MkdirAll(wtGrove, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(mainGrove, "config.toml"), filepath.Join(wtGrove, "config.toml")); err != nil {
+		t.Fatal(err)
+	}
+
+	found, err := FindRoot(wtDir)
+	if err != nil {
+		t.Fatalf("FindRoot() error = %v", err)
+	}
+	if found != mainGrove {
+		t.Errorf("FindRoot(secondary worktree) = %q, want main's .grove %q", found, mainGrove)
+	}
+}
+
 func TestFindRoot_NoGroveDir(t *testing.T) {
 	// A git repo with no .grove should return empty
 	mainDir := t.TempDir()
@@ -174,104 +227,6 @@ func TestIsInsideWorktree(t *testing.T) {
 		}
 		if !isWT {
 			t.Error("IsInsideWorktree() = false, want true for worktree")
-		}
-	})
-}
-
-func TestEnsureConfigSymlink(t *testing.T) {
-	t.Run("creates symlink when main has config", func(t *testing.T) {
-		mainDir := t.TempDir()
-		newDir := t.TempDir()
-
-		// Create main's config.toml
-		mainGrove := filepath.Join(mainDir, ".grove")
-		_ = os.MkdirAll(mainGrove, 0755)
-		configContent := []byte("[plugins.docker]\nenabled = true\n")
-		_ = os.WriteFile(filepath.Join(mainGrove, "config.toml"), configContent, 0644)
-
-		err := EnsureConfigSymlink(mainDir, newDir)
-		if err != nil {
-			t.Fatalf("EnsureConfigSymlink() error = %v", err)
-		}
-
-		dst := filepath.Join(newDir, ".grove", "config.toml")
-		info, err := os.Lstat(dst)
-		if err != nil {
-			t.Fatalf("symlink not created: %v", err)
-		}
-		if info.Mode()&os.ModeSymlink == 0 {
-			t.Error("expected symlink, got regular file")
-		}
-
-		// Verify readable and correct content
-		data, err := os.ReadFile(dst)
-		if err != nil {
-			t.Fatalf("failed to read symlink: %v", err)
-		}
-		if string(data) != string(configContent) {
-			t.Errorf("content = %q, want %q", data, configContent)
-		}
-	})
-
-	t.Run("no-op when main has no config", func(t *testing.T) {
-		mainDir := t.TempDir()
-		newDir := t.TempDir()
-
-		err := EnsureConfigSymlink(mainDir, newDir)
-		if err != nil {
-			t.Fatalf("EnsureConfigSymlink() error = %v", err)
-		}
-
-		dst := filepath.Join(newDir, ".grove", "config.toml")
-		if _, err := os.Stat(dst); !os.IsNotExist(err) {
-			t.Error("expected no file created when main has no config")
-		}
-	})
-
-	t.Run("does not overwrite existing config", func(t *testing.T) {
-		mainDir := t.TempDir()
-		newDir := t.TempDir()
-
-		// Create main config
-		mainGrove := filepath.Join(mainDir, ".grove")
-		_ = os.MkdirAll(mainGrove, 0755)
-		_ = os.WriteFile(filepath.Join(mainGrove, "config.toml"), []byte("main"), 0644)
-
-		// Create existing config in new worktree
-		newGrove := filepath.Join(newDir, ".grove")
-		_ = os.MkdirAll(newGrove, 0755)
-		_ = os.WriteFile(filepath.Join(newGrove, "config.toml"), []byte("existing"), 0644)
-
-		err := EnsureConfigSymlink(mainDir, newDir)
-		if err != nil {
-			t.Fatalf("EnsureConfigSymlink() error = %v", err)
-		}
-
-		// Should still have original content
-		data, _ := os.ReadFile(filepath.Join(newGrove, "config.toml"))
-		if string(data) != "existing" {
-			t.Errorf("existing config was overwritten, got %q", data)
-		}
-	})
-
-	t.Run("symlink target is correct", func(t *testing.T) {
-		mainDir := t.TempDir()
-		newDir := t.TempDir()
-
-		mainGrove := filepath.Join(mainDir, ".grove")
-		_ = os.MkdirAll(mainGrove, 0755)
-		_ = os.WriteFile(filepath.Join(mainGrove, "config.toml"), []byte("test"), 0644)
-
-		_ = EnsureConfigSymlink(mainDir, newDir)
-
-		dst := filepath.Join(newDir, ".grove", "config.toml")
-		target, err := os.Readlink(dst)
-		if err != nil {
-			t.Fatalf("Readlink() error = %v", err)
-		}
-		expected := filepath.Join(mainDir, ".grove", "config.toml")
-		if target != expected {
-			t.Errorf("symlink target = %q, want %q", target, expected)
 		}
 	})
 }
@@ -367,6 +322,35 @@ func TestProjectRoot(t *testing.T) {
 			t.Errorf("ProjectRoot() = %q, want empty", root)
 		}
 	})
+}
+
+// TestIsWithinDir pins the containment boundary the main-worktree walk uses:
+// the walk must stop as soon as current leaves gitRoot, even when the
+// `current == gitRoot` equality never fires (EvalSymlinks divergence), and a
+// sibling directory sharing a name prefix must not count as inside.
+func TestIsWithinDir(t *testing.T) {
+	sep := string(filepath.Separator)
+	tests := []struct {
+		path, dir string
+		want      bool
+	}{
+		{"/repo", "/repo", true},
+		{"/repo/sub", "/repo", true},
+		{"/repo/sub/deep", "/repo", true},
+		{"/repo-other", "/repo", false},
+		{"/repo-other/sub", "/repo", false},
+		{"/", "/repo", false},
+		{"/elsewhere", "/repo", false},
+		{"/repo/sub", "/", true}, // dir "/" already ends in the separator
+		{"/", "/", true},
+	}
+	for _, tt := range tests {
+		path := filepath.FromSlash(tt.path)
+		dir := filepath.FromSlash(tt.dir)
+		if got := isWithinDir(path, dir); got != tt.want {
+			t.Errorf("isWithinDir(%q, %q) = %v, want %v (sep %q)", path, dir, got, tt.want, sep)
+		}
+	}
 }
 
 // TestFindRoot_SymlinkedPathDoesNotEscapeRepo: git returns the symlink-
@@ -465,5 +449,62 @@ func TestFindRoot_NonGitDirDoesNotWalkUp(t *testing.T) {
 		if found != "" {
 			t.Errorf("FindRoot(%q) = %q, want empty — adopted a .grove outside any git repo", dir, found)
 		}
+	}
+}
+
+// TestFindRoot_NestedGroveInMainWorktreeIsHonored: a .grove in a subdirectory
+// of the MAIN worktree (a nested project) must win over the root's .grove when
+// cwd is under it — without reintroducing the B1 fragmentation for LINKED
+// worktrees (covered by TestFindRoot_SecondaryWorktreeWithLocalGroveResolvesToMain).
+func TestFindRoot_NestedGroveInMainWorktreeIsHonored(t *testing.T) {
+	mainDir := t.TempDir()
+	mainDir, _ = filepath.EvalSymlinks(mainDir)
+
+	run := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test", "GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("command %v failed: %v\n%s", args, err, out)
+		}
+	}
+	run(mainDir, "git", "init")
+	run(mainDir, "git", "commit", "--allow-empty", "-m", "init")
+
+	rootGrove := filepath.Join(mainDir, ".grove")
+	if err := os.MkdirAll(rootGrove, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	nestedDir := filepath.Join(mainDir, "services", "api")
+	nestedGrove := filepath.Join(nestedDir, ".grove")
+	if err := os.MkdirAll(nestedGrove, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// From the nested subdir → the nested .grove (previously shadowed by root's).
+	if found, err := FindRoot(nestedDir); err != nil {
+		t.Fatalf("FindRoot(nested) error = %v", err)
+	} else if found != nestedGrove {
+		t.Errorf("FindRoot(nested subdir) = %q, want nested .grove %q", found, nestedGrove)
+	}
+
+	// From a subdir with no nested .grove → the root .grove.
+	plainSub := filepath.Join(mainDir, "docs")
+	if err := os.MkdirAll(plainSub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if found, err := FindRoot(plainSub); err != nil {
+		t.Fatalf("FindRoot(plain subdir) error = %v", err)
+	} else if found != rootGrove {
+		t.Errorf("FindRoot(plain subdir) = %q, want root .grove %q", found, rootGrove)
+	}
+
+	// From the main root → the root .grove.
+	if found, err := FindRoot(mainDir); err != nil {
+		t.Fatalf("FindRoot(root) error = %v", err)
+	} else if found != rootGrove {
+		t.Errorf("FindRoot(root) = %q, want root .grove %q", found, rootGrove)
 	}
 }

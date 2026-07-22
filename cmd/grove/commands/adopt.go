@@ -11,6 +11,7 @@ import (
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
+	"github.com/lost-in-the/grove/internal/grove"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
 
@@ -25,7 +26,7 @@ var adoptCmd = &cobra.Command{
 
 Use when a worktree was created with 'git worktree add' instead of 'grove new':
 the worktree exists, but grove never ran its bootstrap (state registration,
-config symlink, post-create hooks, docker auto-start).
+git excludes, post-create hooks, docker auto-start).
 
 If [path] is omitted, the current directory is adopted.
 
@@ -45,6 +46,18 @@ Examples:
 		if err != nil {
 			return err
 		}
+
+		// Normalize to the worktree root. adopt operates on whole worktrees, but
+		// the target may be a subdirectory (the drift notice nudges `grove adopt`
+		// from any subdir of an unregistered worktree). Without this, the subdir
+		// passes the common-dir membership check below and gets registered as a
+		// bogus worktree named after the subdir, while the real worktree stays
+		// unregistered.
+		root, topErr := worktreeTopLevel(target)
+		if topErr != nil {
+			return fmt.Errorf("not a git worktree at %s: %w", target, topErr)
+		}
+		target = root
 
 		// Verify target is a git worktree of the main repo
 		branch, gitErr := gitBranchAt(target)
@@ -67,13 +80,12 @@ Examples:
 		// Verify the target belongs to THIS repository. gitBranchAt succeeds
 		// in any git repository (or subdirectory of one), so without this
 		// check adopt would register an unrelated repo in this project's
-		// state, symlink this project's config into it, and fire this
-		// project's post-create hooks there.
-		targetCommon, err := gitCommonDirAt(target)
+		// state and fire this project's post-create hooks there.
+		targetCommon, err := grove.GitCommonDir(target)
 		if err != nil {
 			return fmt.Errorf("resolve git dir for %s: %w", target, err)
 		}
-		rootCommon, err := gitCommonDirAt(ctx.ProjectRoot)
+		rootCommon, err := grove.GitCommonDir(ctx.ProjectRoot)
 		if err != nil {
 			return fmt.Errorf("resolve git dir for %s: %w", ctx.ProjectRoot, err)
 		}
@@ -115,7 +127,7 @@ Examples:
 		}
 
 		cli.Success(w, "adopted %q (branch: %s)", name, branch)
-		cli.Faint(w, "config symlinked, state registered, post-create hooks fired")
+		cli.Faint(w, "state registered, excludes recorded, post-create hooks fired")
 		return nil
 	}),
 }
@@ -144,23 +156,23 @@ func resolveAdoptTarget(cwd string, args []string) (string, error) {
 	return abs, nil
 }
 
-// gitCommonDirAt returns the absolute, symlink-resolved path of the git
-// common directory (the shared .git dir) for the repository containing dir.
-// Two directories belong to the same repository iff their common dirs match.
-func gitCommonDirAt(dir string) (string, error) {
-	out, err := cmdexec.Output(context.TODO(), "git", []string{"rev-parse", "--git-common-dir"}, dir, cmdexec.GitLocal)
+// worktreeTopLevel returns the root of the git worktree containing dir
+// (`git rev-parse --show-toplevel`), EvalSymlinks-resolved to match
+// resolveAdoptTarget's normalization. Used so adopting from a subdirectory
+// registers the worktree, not the subdirectory.
+func worktreeTopLevel(dir string) (string, error) {
+	out, err := cmdexec.Output(context.TODO(), "git", []string{"rev-parse", "--show-toplevel"}, dir, cmdexec.GitLocal)
 	if err != nil {
 		return "", err
 	}
-	p := strings.TrimSpace(string(out))
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(dir, p)
+	top := strings.TrimSpace(string(out))
+	if top == "" {
+		return "", fmt.Errorf("empty toplevel for %s", dir)
 	}
-	p = filepath.Clean(p)
-	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+	if resolved, err := filepath.EvalSymlinks(top); err == nil {
 		return resolved, nil
 	}
-	return p, nil
+	return top, nil
 }
 
 // gitBranchAt returns the current branch name of the git worktree at dir.

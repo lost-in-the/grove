@@ -60,12 +60,7 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 
 		log.Printf("grove dir resolved to: %s", groveDir)
 
-		// Warn if shell integration is outdated
-		if v := os.Getenv("GROVE_SHELL_VERSION"); v != "" {
-			if shellVer, err := strconv.Atoi(v); err == nil && shellVer < shell.ShellVersion {
-				fmt.Fprintf(os.Stderr, "grove: shell integration outdated (v%d, current v%d) — run: grove setup\n", shellVer, shell.ShellVersion)
-			}
-		}
+		warnOutdatedShellIntegration()
 
 		if groveDir == "" {
 			cwd, _ := os.Getwd()
@@ -73,6 +68,8 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 			os.Exit(exitcode.NotGroveProject)
 			return nil // unreachable
 		}
+
+		migrateGroveExcludes(groveDir)
 
 		// Create state manager
 		stateMgr, err := state.NewManager(groveDir)
@@ -104,17 +101,81 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 			PluginManager: pluginMgr,
 		}
 
-		// Drift detection: warn if cwd is a worktree that isn't in state.
-		// Skip when running `grove adopt` itself — it's the resolution.
+		// Drift detection: warn if cwd is inside a worktree that isn't in
+		// state. Skip when running `grove adopt` itself — it's the resolution.
 		if cmd.Name() != "adopt" {
 			if cwd, err := os.Getwd(); err == nil {
-				if reason := grove.DiagnoseDrift(cwd, ctx.ProjectRoot); reason == grove.ReasonDriftedWorktree {
-					emitDriftNotice(cli.NewStderr(), filepath.Base(cwd), reason)
+				dir := driftProbeDir(cwd)
+				if reason := grove.DiagnoseDrift(dir, ctx.ProjectRoot); reason == grove.ReasonDriftedWorktree {
+					emitDriftNotice(cli.NewStderr(), filepath.Base(dir), reason)
 				}
 			}
 		}
 
 		return fn(cmd, args, ctx)
+	}
+}
+
+// driftProbeDir returns the directory drift detection should diagnose: the
+// top level of the git worktree containing dir. Passing a raw cwd would make
+// DiagnoseDrift compare `<worktree>/sub/deep` against state.json's worktree
+// paths and emit a spurious "this worktree (deep) wasn't created by grove"
+// notice from any subdirectory. Falls back to dir itself when the toplevel
+// can't be resolved (not a repo, bare repo) — DiagnoseDrift then behaves as
+// before.
+func driftProbeDir(dir string) string {
+	top, err := worktreeTopLevel(dir)
+	if err != nil || top == "" {
+		return dir
+	}
+	return top
+}
+
+// migrateGroveExcludes self-heals the repository's git excludes on every
+// project command (idempotent, one git call + one file read when already
+// current) and surfaces the upgrade notice exactly once: older grove versions
+// git-ignored .grove/config.toml — the committable project config — and
+// waiting for the next `grove init`/`grove new` to migrate would leave
+// `git add .grove/config.toml` silently refused in the meantime. Failures are
+// logged, never fatal: excludes are a convenience, not a precondition.
+// Modeled on the shell-integration version preflight above.
+func migrateGroveExcludes(groveDir string) {
+	projectRoot := grove.MustProjectRoot(groveDir)
+	migrated, err := grove.EnsureGroveExcludes(projectRoot)
+	if err != nil {
+		log.Printf("git excludes migration: %v", err)
+		// Fall through: the legacy-symlink notice is independent of the excludes.
+	}
+	// Surface the config-layout upgrade notice once. `migrated` covers repos
+	// touched by a mid-development build (config.toml removed from the exclude
+	// block); NeedsConfigMigrationNotice covers the case real upgraders hit —
+	// released grove never excluded config.toml, so the only durable signal is
+	// the legacy per-worktree config symlinks left in existing worktrees. Both
+	// are gated so the message fires at most once.
+	notify := grove.NeedsConfigMigrationNotice(groveDir, projectRoot)
+	if migrated || notify {
+		emitExcludesMigrationNotice()
+	}
+}
+
+// emitExcludesMigrationNotice is the one-time (per repository) upgrade notice
+// for the config-layout change. It fires only when a legacy exclude entry was
+// actually removed — the migration is idempotent, so the message can never
+// repeat. Kept in one place so init and the command context share wording.
+func emitExcludesMigrationNotice() {
+	fmt.Fprintln(os.Stderr, "grove: .grove/config.toml is now a committable project file — commit it to share config with your team")
+	fmt.Fprintln(os.Stderr, "grove: existing worktrees may carry a legacy .grove/config.toml symlink (shows as untracked) — run 'grove doctor' for cleanup steps")
+}
+
+// warnOutdatedShellIntegration prints a one-line stderr nudge when the sourced
+// shell wrapper is older than the binary's ShellVersion. Shared by
+// RequireGroveContext and the bare-grove TUI entry point so the check can't
+// drift between them.
+func warnOutdatedShellIntegration() {
+	if v := os.Getenv("GROVE_SHELL_VERSION"); v != "" {
+		if shellVer, err := strconv.Atoi(v); err == nil && shellVer < shell.ShellVersion {
+			fmt.Fprintf(os.Stderr, "grove: shell integration outdated (v%d, current v%d) — run: grove setup\n", shellVer, shell.ShellVersion)
+		}
 	}
 }
 
@@ -149,7 +210,7 @@ func emitDriftNotice(w *cli.Writer, name string, reason grove.DriftReason) {
 		return
 	}
 	cli.Warning(w, "this worktree (%s) wasn't created by grove and isn't registered in state", name)
-	cli.Faint(w, "run 'grove adopt' to bootstrap it (symlinks config, runs hooks, registers state)")
+	cli.Faint(w, "run 'grove adopt' to bootstrap it (registers state, records excludes, runs hooks)")
 }
 
 var pluginsRegistered bool

@@ -120,7 +120,12 @@ Examples:
 				candidate.ExcludeReason = "environment worktree"
 			} else if tree.IsDirty && !cleanIncludeDirty {
 				candidate.ExcludeReason = "dirty (use --include-dirty)"
-			} else if candidate.DaysSince >= 0 && candidate.DaysSince < cleanOlderThan {
+			} else if candidate.DaysSince < 0 {
+				// Unknown age (no state timestamp, no reachable HEAD time) — never
+				// trim it. We can't confirm it's older than the threshold, and a
+				// negative sentinel used to slip past the age check as eligible (B24).
+				candidate.ExcludeReason = "last access unknown"
+			} else if candidate.DaysSince < cleanOlderThan {
 				candidate.ExcludeReason = fmt.Sprintf("accessed %d days ago (threshold: %d)", candidate.DaysSince, cleanOlderThan)
 			}
 
@@ -197,7 +202,10 @@ Examples:
 			// Shared removal sequence (same as `grove rm`): pre-remove hooks
 			// — including the plugin hook that stops agent Docker stacks —
 			// git removal, state cleanup, and tmux session kill.
-			if err := removeWorktreeWithHooks(ctx, mgr, w, projectName, c.Name, c.Path, c.Branch); err != nil {
+			// force only when the user opted into removing dirty worktrees;
+			// otherwise a plain removal is used and git-locked/dirty trees are
+			// surfaced rather than force-deleted.
+			if err := removeWorktreeWithHooks(ctx, mgr, w, projectName, c.Name, c.Path, c.Branch, cleanIncludeDirty); err != nil {
 				cli.Warning(w, "Failed to remove '%s': %v", c.Name, err)
 				failed++
 				continue

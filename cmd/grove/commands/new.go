@@ -11,6 +11,7 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/exitcode"
+	"github.com/lost-in-the/grove/internal/hooks"
 	"github.com/lost-in-the/grove/internal/output"
 	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/worktree"
@@ -90,6 +91,9 @@ Examples:
 		if name == "" {
 			return fmt.Errorf("worktree name cannot be empty")
 		}
+		if msg := worktree.ValidateWorktreeName(name); msg != "" {
+			return fmt.Errorf("invalid worktree name '%s': %s", name, msg)
+		}
 
 		// --dirty only makes sense paired with --from-branch (adopting an
 		// existing branch). For the default flow (new branch from HEAD) the
@@ -125,7 +129,26 @@ Examples:
 				name, name, name, name)
 		}
 
-		var branchName string
+		// Resolve the branch the worktree will actually be created on up front,
+		// so pre_create hooks see the real {{.branch}}. The raw --branch flag is
+		// empty in the default, --from-branch, and --mirror flows.
+		branchName := resolveNewBranch(name, newMirror, newFromBranch, newBranch)
+
+		// Fire pre-create config hooks (hooks.toml) before the worktree exists.
+		// {{.new_path}} is the future directory; command actions without an
+		// explicit working_dir run from the main worktree here, since the "new"
+		// path is not present yet (B6). A required action failing aborts before
+		// the worktree is created (B7).
+		if err := runConfigHooks(cli.NewStderr(), hooks.EventPreCreate, &hooks.ExecutionContext{
+			Worktree: name,
+			Branch:   branchName,
+			Project:  mgr.GetProjectName(),
+			MainPath: ctx.ProjectRoot,
+			NewPath:  mgr.PathForName(name),
+		}); err != nil {
+			return err
+		}
+
 		isEnvironment := newMirror != ""
 		mirror := newMirror
 
@@ -149,12 +172,11 @@ Examples:
 				os.Exit(exitcode.ResourceNotFound)
 			}
 
-			// Use env/{name} as local branch for environment worktrees. Must
-			// actually create that branch (git worktree add -b) rather than
-			// checking out the remote ref directly — the latter leaves the
-			// worktree on a detached HEAD while state/JSON output/hooks still
-			// report "env/{name}" as the branch, a branch that doesn't exist.
-			branchName = "env/" + name
+			// branchName is env/{name} (resolveNewBranch). Must actually create
+			// that branch (git worktree add -b) rather than checking out the
+			// remote ref directly — the latter leaves the worktree on a detached
+			// HEAD while state/JSON output/hooks still report "env/{name}" as the
+			// branch, a branch that doesn't exist.
 
 			// Create worktree with a new local branch tracking the remote ref
 			if err := mgr.CreateFromRef(name, branchName, mirror); err != nil {
@@ -166,11 +188,12 @@ Examples:
 			}
 		} else if newFromBranch != "" {
 			// Adopt an existing branch into a new worktree. No new branch is
-			// created; the worktree checks out newFromBranch directly. Git
-			// refuses if the branch is already checked out elsewhere — that
-			// guardrail is intentional and surfaces to the user as-is.
-			branchName = newFromBranch
-			if err := mgr.CreateFromBranch(name, newFromBranch); err != nil {
+			// created; the worktree checks out newFromBranch directly (branchName
+			// already equals it). Git refuses if the branch is already checked out
+			// elsewhere — that guardrail is intentional and surfaces as-is. Refresh
+			// the local branch to origin first (fast-forward only) so the worktree
+			// starts at the remote's current tip rather than a stale local commit.
+			if err := mgr.CreateFromBranchRefreshing(name, newFromBranch); err != nil {
 				return fmt.Errorf("failed to create worktree from branch %q: %w", newFromBranch, err)
 			}
 
@@ -178,13 +201,7 @@ Examples:
 				cli.Success(w, "Created worktree '%s' from branch '%s'", name, newFromBranch)
 			}
 		} else {
-			// Regular worktree - use --branch if provided, otherwise name
-			if newBranch != "" {
-				branchName = newBranch
-			} else {
-				branchName = name
-			}
-
+			// Regular worktree - branchName is --branch or the worktree name.
 			if newFrom != "" {
 				// Create branch from specified ref
 				if err := mgr.CreateFromRef(name, branchName, newFrom); err != nil {
@@ -273,7 +290,7 @@ Examples:
 		// Switch to new worktree unless --no-switch. Agent mode, --no-tmux,
 		// and tmux mode "off" suppress the client switch (terminal takeover).
 		if !newNoSwitch {
-			suppressTmux := effectiveTmuxMode(ctx.Config.Tmux.Mode, ctx.Config.AgentMode, newNoTmux, false) == tmuxModeOff
+			suppressTmux := resolveTmuxMode(ctx.Config, newNoTmux, false) == tmuxModeOff
 			sessionName := worktree.TmuxSessionName(projectName, name)
 			if !switchToWorktree(ctx, stderr, currentWorktreeName, name, sessionName, wt.Path, suppressTmux) {
 				emitCdOrExplain(stderr, wt.Path)
@@ -309,6 +326,26 @@ func applyDirtyPatch(worktreePath string, patch []byte) error {
 		return fmt.Errorf("git apply: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil
+}
+
+// resolveNewBranch returns the branch `grove new` will actually put the
+// worktree on, matching the precedence of the creation flows: --mirror creates
+// env/<name>, --from-branch checks out that branch, otherwise --branch when
+// given, else the worktree name. Computed before pre_create hooks fire so they
+// see the real {{.branch}} rather than the raw --branch flag (empty in every
+// flow but an explicit --branch). The flags are mutually exclusive per init(),
+// so this precedence never has to arbitrate a genuine conflict.
+func resolveNewBranch(name, mirror, fromBranch, branch string) string {
+	switch {
+	case mirror != "":
+		return "env/" + name
+	case fromBranch != "":
+		return fromBranch
+	case branch != "":
+		return branch
+	default:
+		return name
+	}
 }
 
 func init() {

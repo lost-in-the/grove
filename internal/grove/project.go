@@ -56,30 +56,54 @@ func FindRoot(startDir string) (string, error) {
 		return "", fmt.Errorf("failed to locate git repository: %w", err)
 	}
 
-	// Only walk when inside a git work tree. A .grove outside a git repo is
-	// never a project (grove init requires git); without a git-root boundary
-	// the walk would escape to the filesystem root and adopt the global
-	// ~/.grove dir (debug logs, update-check cache) as a project (#138).
-	if gitRoot != "" {
+	// Resolve the main worktree root — the parent of git's common dir, which
+	// points at the main worktree from any worktree. The canonical .grove lives
+	// there: `grove init` refuses to run from a linked worktree, so state.json
+	// only ever exists in the main worktree.
+	mainRoot := ""
+	if commonDir, err := GitCommonDir(absDir); err == nil {
+		mainRoot = filepath.Dir(commonDir)
+	}
+
+	// When cwd is inside the MAIN worktree (its git toplevel IS the main root),
+	// walk up from cwd to the main root and honor the nearest .grove — so a
+	// genuine nested project (a .grove between cwd and the root) isn't shadowed
+	// by the root's. This can't pick up a legacy per-worktree .grove: those only
+	// ever existed in LINKED worktrees (older grove's config.toml symlink), and
+	// the anchor below handles those. The git-root boundary also keeps the walk
+	// from escaping to the global ~/.grove (debug logs, update cache) (#138).
+	if gitRoot != "" && gitRoot == mainRoot {
+		// The loop condition is a containment check, not just the equality
+		// below: if EvalSymlinks left absDir and gitRoot diverged (partial
+		// resolution failures, case-mangled paths), `current == gitRoot`
+		// would never fire and the walk would escape the repository — the
+		// exact bug the boundary exists to prevent. Outside gitRoot the walk
+		// simply doesn't run and the main-worktree anchor below decides.
 		current := absDir
-		for {
+		for isWithinDir(current, gitRoot) {
 			groveDir := filepath.Join(current, ".grove")
 			if info, err := os.Stat(groveDir); err == nil && info.IsDir() {
 				return groveDir, nil
 			}
-
-			// Stop at git root — don't walk above the repository
 			if current == gitRoot {
 				break
 			}
-
-			// Move to parent directory
 			parent := filepath.Dir(current)
 			if parent == current {
 				break
 			}
 			current = parent
 		}
+	}
+
+	// Anchor: from a LINKED worktree (git toplevel != main root), or if the
+	// main-worktree walk found nothing, resolve the main worktree's .grove
+	// directly — skipping any legacy per-worktree .grove a linked worktree might
+	// still carry (older grove's config.toml symlink, never state.json), which
+	// would otherwise fragment state per-worktree (B1): `grove new`/`rm`/`last`
+	// run from inside a worktree would read and write a phantom state.json.
+	if mainGrove, ok := mainWorktreeGroveDir(absDir); ok {
+		return mainGrove, nil
 	}
 
 	// Fallback: find main worktree's .grove via git
@@ -92,6 +116,18 @@ func FindRoot(startDir string) (string, error) {
 	}
 
 	return "", nil
+}
+
+// isWithinDir reports whether path is dir itself or a descendant of it.
+// Separator-aware: "/repo-other" is NOT within "/repo", so a plain prefix
+// check can't be fooled by sibling directories sharing a name prefix.
+// Both paths must already be absolute and cleaned (FindRoot guarantees this
+// via filepath.Abs/EvalSymlinks and git's own output).
+func isWithinDir(path, dir string) bool {
+	if path == dir {
+		return true
+	}
+	return strings.HasPrefix(path, strings.TrimSuffix(dir, string(filepath.Separator))+string(filepath.Separator))
 }
 
 // isNotGitRepoErr reports whether a git command failure means "the directory
@@ -190,26 +226,21 @@ func MustProjectRoot(groveDir string) string {
 	return filepath.Dir(groveDir)
 }
 
-// EnsureConfigSymlink creates a symlink to the main worktree's config.toml
-// in the new worktree's .grove directory. Creates .grove/ if needed.
-// No-op if main has no config.toml or target already exists.
-func EnsureConfigSymlink(mainPath, newWorktreePath string) error {
-	src := filepath.Join(mainPath, ".grove", "config.toml")
-	if _, err := os.Stat(src); err != nil {
-		return nil
+// mainWorktreeGroveDir resolves the main worktree's .grove directory from dir
+// via GitCommonDir, which returns the main worktree's .git directory
+// regardless of which worktree dir is in. Returns ok=false when dir isn't a
+// git repo, the common dir can't be resolved, or the main worktree has no
+// .grove (i.e. not a grove project — let the caller's fallbacks decide).
+func mainWorktreeGroveDir(dir string) (string, bool) {
+	commonDir, err := GitCommonDir(dir)
+	if err != nil {
+		return "", false
 	}
-
-	dstDir := filepath.Join(newWorktreePath, ".grove")
-	if err := os.MkdirAll(dstDir, 0755); err != nil {
-		return err
+	groveDir := filepath.Join(filepath.Dir(commonDir), ".grove")
+	if info, err := os.Stat(groveDir); err != nil || !info.IsDir() {
+		return "", false
 	}
-
-	dst := filepath.Join(dstDir, "config.toml")
-	if _, err := os.Lstat(dst); err == nil {
-		return nil
-	}
-
-	return os.Symlink(src, dst)
+	return groveDir, true
 }
 
 // getMainWorktreePath returns the path of the main worktree by parsing

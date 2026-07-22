@@ -256,7 +256,7 @@ sequenceDiagram
     I->>FS: Create .grove/ directory
     I->>FS: Write .grove/config.toml (project_name)
     I->>FS: Create state.json (project, main worktree)
-    I->>FS: Update .gitignore (add state.json)
+    I->>FS: Record machine-local excludes ($GIT_COMMON_DIR/info/exclude)
     I->>FS: Write .grove/.envrc
     I->>D: Auto-detect project type
     I->>FS: Generate .grove/hooks.toml
@@ -299,7 +299,7 @@ sequenceDiagram
         N->>W: Create(name, branchName)
     end
     N->>W: Find(name) -- get path
-    N-->>N: EnsureConfigSymlink (main -> new)
+    N-->>N: EnsureGroveExcludes (info/exclude)
     N->>S: AddWorktree(name, state)
     N->>T: CreateSession(sessionName, path)
     N->>H: Executor.Execute(post-create)
@@ -402,7 +402,7 @@ sequenceDiagram
     F-->>F: git branch <newBranch> <baseRef>
     F->>W: CreateFromBranch(name, newBranch)
     F->>W: Find(name)
-    F-->>F: EnsureConfigSymlink
+    F-->>F: BootstrapWorktree (excludes, state, hooks)
     opt WIP patch exists
         F->>WIP: ApplyPatch(patch) on new worktree
     end

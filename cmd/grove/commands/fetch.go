@@ -1,14 +1,15 @@
 package commands
 
 import (
+	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/lost-in-the/grove/internal/cli"
+	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/log"
 	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/worktree"
@@ -41,13 +42,26 @@ func createFetchedWorktree(mgr *worktree.Manager, itemType, worktreeName, branch
 	}
 
 	if itemType == "pr" {
+		// The PR branch may already exist locally from an earlier `grove
+		// fetch` of the same PR (worktree since removed, branch kept).
+		// CreateFromBranch deliberately skips fetching local branches — a
+		// fetch there would move a fork's base (B10) — but this command's
+		// whole point is the remote's CURRENT state, so fast-forward the
+		// local ref first. Failure is non-fatal (offline, diverged local
+		// edits, branch checked out elsewhere): the worktree is then created
+		// from the local branch and any real conflict surfaces via git.
+		if err := cmdexec.Run(context.TODO(), "git",
+			[]string{"fetch", "origin", branchName + ":" + branchName},
+			mgr.GetRepoRoot(), cmdexec.GitRemote); err != nil {
+			log.Printf("fetch origin %s: %v (creating from local state)", branchName, err)
+		}
 		return mgr.CreateFromBranch(worktreeName, branchName)
 	}
 	return mgr.Create(worktreeName, branchName)
 }
 
 func setupFetchedWorktree(ctx *GroveContext, mgr *worktree.Manager, w *cli.Writer, worktreeName, branchName string) error {
-	// Run the same bootstrap as `grove new`/`grove open`: config symlink,
+	// Run the same bootstrap as `grove new`/`grove open`: git excludes,
 	// state registration, file setup, post-create hooks, docker auto-start.
 	// Fetched worktrees previously only registered state, leaving them
 	// silently unprovisioned (#112).
@@ -76,9 +90,10 @@ func setupFetchedWorktree(ctx *GroveContext, mgr *worktree.Manager, w *cli.Write
 		}
 	}
 
-	if os.Getenv("GROVE_SHELL") == "1" {
-		cli.Directive("cd", wt.Path)
-	} else {
+	// Prefer GROVE_CD_FILE: `grove issues`/`grove prs` run un-captured (they may
+	// launch a TUI), so a raw cd: line on stdout would print literally instead
+	// of changing directory (B27).
+	if !cli.CdDirective(wt.Path) {
 		fmt.Printf("\nTo switch to this worktree:\n  grove to %s\n", worktreeName)
 	}
 	return nil

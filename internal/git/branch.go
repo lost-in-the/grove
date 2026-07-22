@@ -26,7 +26,7 @@ type BranchManager struct {
 // NewBranchManager creates a new branch manager for the given repository
 func NewBranchManager(repoPath string) (*BranchManager, error) {
 	// Detect default branch
-	defaultBranch, err := detectDefaultBranch(repoPath)
+	defaultBranch, err := DetectDefaultBranch(repoPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect default branch: %w", err)
 	}
@@ -251,8 +251,8 @@ func (b *BranchManager) branchUsedByWorktree(branch string, excludeWorktree stri
 	return "", nil
 }
 
-// detectDefaultBranch attempts to determine the default branch for a repository
-func detectDefaultBranch(repoPath string) (string, error) {
+// DetectDefaultBranch attempts to determine the default branch for a repository
+func DetectDefaultBranch(repoPath string) (string, error) {
 	// Try to get from remote HEAD reference
 	output, err := cmdexec.Output(context.TODO(), "git", []string{"-C", repoPath, "symbolic-ref", "refs/remotes/origin/HEAD"}, "", cmdexec.GitLocal)
 	if err == nil {

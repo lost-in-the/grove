@@ -100,7 +100,7 @@ func (sm *SlotManager) Release(worktreeName string) error {
 
 // FindSlot returns the slot number for a worktree, or 0 if not found.
 func (sm *SlotManager) FindSlot(worktreeName string) (int, error) {
-	slots, err := sm.readSlotsNoLock()
+	slots, err := sm.readSlotsLocked()
 	if err != nil {
 		return 0, err
 	}
@@ -114,7 +114,7 @@ func (sm *SlotManager) FindSlot(worktreeName string) (int, error) {
 
 // ListActive returns all currently allocated slots.
 func (sm *SlotManager) ListActive() ([]SlotInfo, error) {
-	return sm.readSlotsNoLock()
+	return sm.readSlotsLocked()
 }
 
 // readSlots reads the current slot list from an already-open file.
@@ -151,21 +151,20 @@ func (sm *SlotManager) writeSlots(f *os.File, slots []SlotInfo) error {
 	return nil
 }
 
-// readSlotsNoLock reads slots without acquiring a file lock (for read-only queries).
-func (sm *SlotManager) readSlotsNoLock() ([]SlotInfo, error) {
-	data, err := os.ReadFile(sm.slotsFile)
-	if os.IsNotExist(err) {
+// readSlotsLocked reads the slot list under the file lock for read-only
+// queries. Reading unlocked used to race a concurrent writer's in-place
+// Truncate+Encode and observe 0 bytes (misdetecting slots as free) or partial
+// JSON (a hard error) — B36. Writes are rare (up/down/rm), so the lock cost on
+// this path is negligible. A missing file is an empty list and is NOT created
+// (the Stat guard avoids openLocked's O_CREATE side effect on a pure query).
+func (sm *SlotManager) readSlotsLocked() ([]SlotInfo, error) {
+	if _, err := os.Stat(sm.slotsFile); os.IsNotExist(err) {
 		return []SlotInfo{}, nil
 	}
+	f, err := sm.openLocked()
 	if err != nil {
-		return nil, fmt.Errorf("read slots file: %w", err)
+		return nil, err
 	}
-	if len(data) == 0 {
-		return []SlotInfo{}, nil
-	}
-	var slots []SlotInfo
-	if err := json.Unmarshal(data, &slots); err != nil {
-		return nil, fmt.Errorf("decode slots file: %w", err)
-	}
-	return slots, nil
+	defer sm.closeUnlocked(f)
+	return sm.readSlots(f)
 }

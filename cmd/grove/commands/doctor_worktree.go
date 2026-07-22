@@ -192,11 +192,20 @@ func runWorktreeAudit(w *cli.Writer, args []string, all, fix bool) error {
 
 	var targets []*worktree.Worktree
 	if all {
-		all, err := mgr.List()
+		list, err := mgr.List()
 		if err != nil {
 			return fmt.Errorf("list worktrees: %w", err)
 		}
-		targets = all
+		// The main worktree is the source of copy_files/symlink_dirs entries;
+		// auditing it against itself reports every source as "missing" and, with
+		// --fix, creates self-referential (ELOOP) symlinks that every future
+		// `grove new` then propagates (B25). Skip it.
+		for _, wt := range list {
+			if wt.IsMain {
+				continue
+			}
+			targets = append(targets, wt)
+		}
 	} else {
 		name := args[0]
 		wt, err := mgr.Find(name)

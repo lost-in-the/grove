@@ -47,8 +47,12 @@ the file, still see the committed `auto`. The file matches the same schema as
 `.grove/config.toml` — only the fields you set are overridden, everything else
 falls through.
 
-Add `.grove/config.local.toml` to your project's `.gitignore` (grove's own
-`.gitignore` already does this).
+No `.gitignore` entry is needed: grove records `.grove/config.local.toml`
+(along with its other machine-local files — `state.json`, `ui_prefs.json`,
+`.envrc`) in the repository's shared exclude file
+(`$GIT_COMMON_DIR/info/exclude`) during `grove init` and worktree bootstrap.
+The project-level `.grove/config.toml` and `.grove/hooks.toml` are deliberately
+NOT excluded — commit those to share them with your team.
 
 ---
 
@@ -81,7 +85,9 @@ Controls behavior when switching to a worktree that has uncommitted changes in t
 [switch]
 # How to handle a dirty working tree on switch.
 # "prompt"     — ask the user what to do (default)
-# "auto-stash" — automatically stash changes before switching, unstash on return
+# "auto-stash" — stash changes before switching (restored automatically only if
+#                the switch aborts; after a completed switch, run `git stash pop`
+#                in that worktree to take the changes back up)
 # "refuse"     — abort the switch if changes are present
 dirty_handling = "prompt"          # string: prompt | auto-stash | refuse
 
@@ -284,8 +290,10 @@ auto_start = true                  # bool
 # Default: false
 auto_stop = false                  # bool
 
-# Auto-start Docker on `grove new` (runs `docker compose up` after worktree creation).
-# Default: false (true when agent stacks are configured and enabled)
+# Auto-start Docker after creating a worktree: `grove new` and the dashboard
+# create flow run `docker compose up` once the worktree is bootstrapped.
+# Explicit opt-in — agent stacks no longer imply auto-up.
+# Default: false
 auto_up = false                    # bool
 
 # Docker Compose mode.
@@ -360,7 +368,7 @@ copy_files = [".env.local", "config/master.key"]  # string array
 # rotate, like decrypted credentials. Paths are relative to the worktree root.
 # Default: [] (nothing symlinked)
 # NOTE: On Windows, symlinks require Developer Mode or administrator privileges.
-# Use copy_files / copy_dirs instead for Windows-friendly setups.
+# Use copy_files instead for Windows-friendly setups.
 # See CONTRIBUTING.md — Platform Notes for details.
 symlink_files = ["config/credentials/development.key"]  # string array
 
@@ -369,8 +377,8 @@ symlink_files = ["config/credentials/development.key"]  # string array
 # Paths are relative to the worktree root.
 # Default: [] (nothing symlinked)
 # NOTE: On Windows, symlinks require Developer Mode or administrator privileges.
-# Use copy_dirs instead for Windows-friendly setups.
-# See CONTRIBUTING.md — Platform Notes for details.
+# There is no copy equivalent for directories yet, so symlink_dirs needs
+# Developer Mode on Windows. See CONTRIBUTING.md — Platform Notes for details.
 symlink_dirs = ["node_modules", "vendor"]         # string array
 ```
 
@@ -447,11 +455,11 @@ By default, global and project hooks **merge** (global runs first, project appen
 # ~/.config/grove/hooks.toml (global — applies to all projects)
 [[hooks.post_switch]]
 type    = "command"
-command = "echo 'switched to {{.worktree}}'"
+command = 'echo "switched to {{.worktree}}"'
 
 [[hooks.post_create]]
 type    = "command"
-command = "echo 'created {{.worktree}}'"
+command = 'echo "created {{.worktree}}"'
 ```
 
 ```toml
@@ -480,12 +488,17 @@ runs **both** the global echo and the project migration.
 
 | Event | When it fires |
 |-------|--------------|
-| `pre_create` | Before a new worktree directory is created |
+| `pre_create` | Before a new worktree directory is created (`grove new`) |
 | `post_create` | After the worktree is created and checked out |
-| `pre_switch` | Before switching to a worktree |
-| `post_switch` | After switching to a worktree |
+| `pre_switch` | Before switching to a worktree (`grove to`) |
+| `post_switch` | After switching to a worktree; runs after plugin hooks so a stack is already up |
 | `pre_remove` | Before removing a worktree |
 | `post_remove` | After the worktree has been removed |
+
+`pre_create` runs before the worktree directory exists and `post_remove` runs
+after it is deleted, so command actions for those two events default to
+`working_dir = "main"` (every other event defaults to `"new"`). An explicit
+`working_dir = "new"` on those events fails with a chdir error.
 
 ### Failure Handling (`on_failure`)
 
@@ -539,6 +552,15 @@ working_dir = "new"            # "new" (default) | "main" | absolute path
 timeout     = 300              # seconds before the command is killed (default: 60)
 on_failure  = "warn"           # "warn" (default) | "fail" | "ignore"
 ```
+
+Interpolation in `command` is injection-safe: each `{{.variable}}` is passed to
+the shell as a variable reference (values are supplied via the environment, not
+spliced into the command text), so a value containing shell metacharacters —
+including a `{{.branch}}` grove checked out from an untrusted PR — is always
+treated as literal data. The rewrite is quoting-aware, so tokens expand
+correctly wherever they appear: bare (`ls {{.new_path}}` stays a single word
+even for paths with spaces), inside double quotes, or inside single quotes
+(`pkill -f '{{.worktree}}'` matches the worktree name).
 
 #### template
 
@@ -702,7 +724,7 @@ on_failure  = "fail"
 
 [[hooks.post_switch]]
 type    = "command"
-command = "echo 'Switched to {{.worktree}} on {{.branch}}'"
+command = 'echo "Switched to {{.worktree}} on {{.branch}}"'
 
 # Skip all hooks for dependabot branches
 [[overrides]]
@@ -787,7 +809,7 @@ on_failure  = "ignore"
 # Save session state
 [[hooks.pre_switch]]
 type    = "command"
-command = "echo '{{.worktree}}' > ~/.grove/last-worktree"
+command = 'echo "{{.worktree}}" > ~/.grove/last-worktree'
 ```
 
 #### pre_remove — Run before deleting a worktree

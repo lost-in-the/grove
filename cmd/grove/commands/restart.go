@@ -14,12 +14,13 @@ func init() {
 }
 
 var restartCmd = &cobra.Command{
-	Use:     "kick [service]",
+	Use:     "kick [services...]",
 	Aliases: []string{"restart", "k"},
 	Short:   "Kick (restart) container services",
 	Long: `Kick (restart) Docker container services for the current worktree.
 
-If no service is specified, restarts all services.
+If no service is specified, restarts all services. Multiple services may be
+listed and are each restarted.
 
 If the worktree has an isolated stack running, the restart targets
 that stack's containers automatically.
@@ -27,6 +28,7 @@ that stack's containers automatically.
 Examples:
   grove kick           # Restart all services
   grove kick web       # Restart 'web' service only
+  grove kick web db    # Restart 'web' and 'db'
   w kick db            # Using alias`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		w := cli.NewStdout()
@@ -37,12 +39,6 @@ Examples:
 		root, err := currentWorktreeRoot(ctx)
 		if err != nil {
 			return err
-		}
-
-		// Get service name if provided
-		service := ""
-		if len(args) > 0 {
-			service = args[0]
 		}
 
 		// Create docker plugin — auto-detect isolated stacks
@@ -56,19 +52,23 @@ Examples:
 
 		// Restart service(s) — no spinner: docker compose writes its own progress
 		stderr := cli.NewStderr()
-		if service != "" {
-			cli.Step(stderr, "Restarting %s...", service)
-		} else {
+		if len(args) == 0 {
 			cli.Step(stderr, "Restarting containers...")
-		}
-		if err := plugin.Restart(root, service); err != nil {
-			return fmt.Errorf("failed to restart: %w", err)
+			if err := plugin.Restart(root, ""); err != nil {
+				return fmt.Errorf("failed to restart: %w", err)
+			}
+			cli.Success(w, "All services restarted")
+			return nil
 		}
 
-		if service != "" {
+		// Every listed service is restarted; the first failure aborts so the
+		// user isn't told a service restarted when a later one errored.
+		for _, service := range args {
+			cli.Step(stderr, "Restarting %s...", service)
+			if err := plugin.Restart(root, service); err != nil {
+				return fmt.Errorf("failed to restart %s: %w", service, err)
+			}
 			cli.Success(w, "Service '%s' restarted", service)
-		} else {
-			cli.Success(w, "All services restarted")
 		}
 		return nil
 	}),

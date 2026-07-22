@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/lost-in-the/grove/internal/cli"
+	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/hooks"
 	"github.com/lost-in-the/grove/internal/log"
 	"github.com/lost-in-the/grove/internal/output"
@@ -40,8 +41,6 @@ When using shell integration, this will also change your current directory.`,
 	Args:              cobra.MaximumNArgs(1),
 	ValidArgsFunction: completeWorktreeNames,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
-		stderr := cli.NewStderr()
-
 		var name string
 		if len(args) == 0 {
 			selected, err := selectWorktree(ctx, "Switch to which worktree?")
@@ -57,219 +56,385 @@ When using shell integration, this will also change your current directory.`,
 			return fmt.Errorf("worktree name cannot be empty")
 		}
 
-		mgr, err := ctx.WorktreeManager()
-		if err != nil {
-			return err
-		}
+		return performSwitch(ctx, name, toJSON, toPeek, toNoTmux)
+	}),
+}
 
-		// Find worktree by short name or full name
-		targetTree, err := mgr.Find(name)
-		if err != nil {
-			return fmt.Errorf("failed to find worktree: %w", err)
-		}
-		if targetTree == nil {
-			return fmt.Errorf("worktree '%s' not found", name)
-		}
+// performSwitch executes the full switch-to-worktree flow shared by `grove to`
+// and `grove last`: resolve the target, honor dirty handling, fire pre/post
+// switch hooks, manage the tmux session, and emit the cd/attach directives.
+// The JSON result is emitted before the tmux client is relocated, so a machine
+// caller (--json) never has its terminal moved (B20); sharing this flow also
+// gives `grove last` the hooks and dirty handling it previously skipped (B19).
+// jsonOut/peek/noTmux are the per-invocation flags.
+func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) error {
+	stderr := cli.NewStderr()
 
-		// Check if worktree is stale (directory missing)
-		if targetTree.IsPrunable {
-			return fmt.Errorf("worktree '%s' is stale (directory missing). Run 'grove rm %s' to clean up", name, name)
-		}
+	mgr, err := ctx.WorktreeManager()
+	if err != nil {
+		return err
+	}
 
-		// Get current worktree for hook context and state update. Path +
-		// display name are all that's needed — the WIP handler does its own
-		// per-path dirty check below.
-		var prevWorktree string
-		var prevWorktreePath string
-		if currentPath, err := mgr.CurrentPath(); err == nil && currentPath != "" {
-			prevWorktree = mgr.DisplayNameForPath(currentPath)
-			prevWorktreePath = currentPath
+	// Find worktree by short name or full name
+	targetTree, err := mgr.Find(name)
+	if err != nil {
+		return fmt.Errorf("failed to find worktree: %w", err)
+	}
+	if targetTree == nil {
+		return fmt.Errorf("worktree '%s' not found", name)
+	}
 
-			// Check for dirty worktree before allowing switch
-			wip := worktree.NewWIPHandler(currentPath)
-			hasDirty, wipErr := wip.HasWIP()
-			if wipErr != nil {
-				log.Printf("failed to check dirty state: %v", wipErr)
-				// Treat check failure as clean to avoid blocking the user
-			}
-			action := worktree.ResolveDirtyAction(ctx.Config.Switch.DirtyHandling, hasDirty, toPeek, cli.IsInteractive())
-			switch action {
-			case worktree.DirtyRefuse:
-				files, _ := wip.ListWIPFiles()
-				msg := fmt.Sprintf("worktree '%s' has uncommitted changes", prevWorktree)
-				if len(files) > 0 {
-					msg += ":\n  " + strings.Join(files, "\n  ")
-				}
-				msg += "\n\nCommit or stash your changes, or set dirty_handling = \"auto-stash\" in .grove/config.toml"
-				return fmt.Errorf("%s", msg)
-			case worktree.DirtyStash:
-				stashMsg := fmt.Sprintf("grove: auto-stash before switch to %s", name)
-				if stashErr := wip.Stash(stashMsg); stashErr != nil {
-					return fmt.Errorf("failed to auto-stash changes: %w", stashErr)
-				}
-				if !toJSON {
-					cli.Success(stderr, "Stashed changes in '%s'", prevWorktree)
-				}
-			case worktree.DirtyPrompt:
-				files, _ := wip.ListWIPFiles()
-				details := files
-				if len(details) == 0 {
-					details = []string{"(uncommitted changes detected)"}
-				}
-				confirmed, promptErr := cli.ConfirmWithDetails(
-					stderr,
-					fmt.Sprintf("Worktree '%s' has uncommitted changes:", prevWorktree),
-					details,
-					"Switch anyway?",
-					false,
-				)
-				if promptErr != nil || !confirmed {
-					return fmt.Errorf("switch aborted: worktree has uncommitted changes")
-				}
-			}
+	// Check if worktree is stale (directory missing)
+	if targetTree.IsPrunable {
+		return fmt.Errorf("worktree '%s' is stale (directory missing). Run 'grove rm %s' to clean up", name, name)
+	}
 
-			// Update last_worktree in state before switching
-			if err := ctx.State.SetLastWorktree(prevWorktree); err != nil {
-				log.Printf("failed to set last worktree %q: %v", prevWorktree, err)
-			}
-		}
+	// Resolve the current worktree once (used for the already-here check,
+	// hook context, and state update).
+	currentPath, _ := mgr.CurrentPath()
 
-		// Build hook context (used by pre/post-switch hooks unless --peek)
-		hookCtx := &hooks.Context{
-			Worktree:         name,
-			PrevWorktree:     prevWorktree,
-			Config:           ctx.Config,
-			WorktreePath:     targetTree.Path,
-			PrevWorktreePath: prevWorktreePath,
-			MainPath:         ctx.ProjectRoot,
-		}
-
-		// Fire pre-switch hooks (skip when --peek)
-		if !toPeek {
-			if !toJSON {
-				cli.Step(stderr, "Switching to '%s'...", name)
-			}
-			if err := hooks.Fire(hooks.EventPreSwitch, hookCtx); err != nil {
-				cli.Warning(stderr, "pre-switch hooks failed: %v", err)
-			}
-		}
-
-		// Store current session as last if inside tmux
-		if tmux.IsInsideTmux() {
-			currentSession, err := tmux.GetCurrentSession()
-			if err == nil {
-				if err := tmux.StoreLastSession(currentSession); err != nil {
-					log.Printf("failed to store last session %q: %v", currentSession, err)
-				}
-			}
-		}
-
-		projectName := mgr.GetProjectName()
-		cfg := ctx.Config
-		tmuxMode := cfg.Tmux.Mode
-		if tmuxMode == "" {
-			tmuxMode = tmuxModeAuto
-		}
-		useCC := tmux.ShouldUseControlMode(cfg.Tmux.ControlMode)
-		tmuxMode = effectiveTmuxMode(tmuxMode, cfg.AgentMode, toNoTmux, toPeek)
-
-		// Handle tmux session (unless mode is "off")
-		var sessionName string
-		var tmuxSwitched bool
-		if tmuxMode != tmuxModeOff && tmux.IsTmuxAvailable() {
-			sessionName = worktree.TmuxSessionName(projectName, targetTree.DisplayName())
-			exists, err := tmux.SessionExists(sessionName)
-			if err != nil {
-				return fmt.Errorf("failed to check session: %w", err)
-			}
-
-			if !exists {
-				if err := tmux.CreateSession(sessionName, targetTree.Path); err != nil {
-					return fmt.Errorf("failed to create session: %w", err)
-				}
-				if !toJSON {
-					cli.Success(stderr, "Created tmux session '%s'", sessionName)
-				}
-			}
-
-			if tmux.IsInsideTmux() {
-				// Detect and correct directory drift before switching
-				if exists {
-					handleDirectoryDrift(sessionName, targetTree.Path, cfg.Tmux.OnSwitch, stderr)
-				}
-			} else if tmuxMode == "manual" && !toJSON {
-				cli.Success(stderr, "Tmux session '%s' ready", sessionName)
-				cli.Faint(stderr, "Run: tmux attach -t %s", sessionName)
-			}
-			// auto mode outside tmux: handled below via shell directive or direct attach
-		}
-
-		// Update last_accessed_at for target worktree
-		if err := ctx.State.TouchWorktree(targetTree.DisplayName()); err != nil {
-			log.Printf("failed to touch worktree %q: %v", targetTree.DisplayName(), err)
-		}
-
-		// Fire post-switch hooks (Docker start, etc.) BEFORE the tmux switch
-		// so the user sees Docker progress in the current session. After the
-		// tmux switch the old session's stderr is no longer visible.
-		// Also fire before the JSON return so machine consumers get hooks too.
-		if !toPeek {
-			if hooks.HasHooks(hooks.EventPostSwitch) {
-				cli.Step(stderr, "Starting services...")
-			}
-			if err := hooks.Fire(hooks.EventPostSwitch, hookCtx); err != nil {
-				cli.Warning(stderr, "post-switch hooks failed: %v", err)
-			}
-		}
-
-		// JSON output mode
-		if toJSON {
-			result := output.SwitchResult{
+	// Already in the target worktree — no-op (spec: "Already in X", exit 0).
+	// Without this, a self-switch runs the dirty gate against the worktree
+	// you're standing in (refusing a no-op move when dirty_handling="refuse")
+	// and mis-records last_worktree as the current one, breaking the A↔B
+	// toggle (B18).
+	if currentPath != "" && currentPath == targetTree.Path {
+		if jsonOut {
+			return output.PrintJSON(output.SwitchResult{
 				SwitchTo: targetTree.Path,
 				Name:     targetTree.DisplayName(),
 				Branch:   targetTree.Branch,
 				Path:     targetTree.Path,
-			}
-			return output.PrintJSON(result)
+			})
 		}
-
-		// Output directory change command for shell integration
-		hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
-
-		// Now perform the tmux session switch (if inside tmux)
-		if tmuxMode != tmuxModeOff && sessionName != "" && tmux.IsInsideTmux() {
-			if err := tmux.SwitchSession(sessionName); err != nil {
-				return fmt.Errorf("failed to switch session: %w", err)
-			}
-			tmuxSwitched = true
+		if !peek {
+			cli.Info(stderr, "Already in '%s'", targetTree.DisplayName())
 		}
-
-		// Skip cd directive when tmux switch already moved the user to the
-		// target session — emitting cd: here would change the OLD session's
-		// directory, not the one the user is now viewing.
-		if !tmuxSwitched {
+		// Skipping the dirty gate, hooks, and state recording (B18) doesn't
+		// mean skipping the epilogue: from a subdirectory the shell should
+		// still return to the worktree root, and outside tmux the session
+		// should be created/attached exactly as a real switch would (spec:
+		// "Tmux not running → start server, create session, attach"). Inside
+		// tmux there is nothing to do — the client is already in the session.
+		if !tmux.IsInsideTmux() {
 			emitCdOrExplain(stderr, targetTree.Path)
-			// In auto mode outside tmux: emit the tmux-attach directive for
-			// the shell wrapper, or attach directly without it.
-			if tmuxMode == tmuxModeAuto && sessionName != "" {
-				if hasShellIntegration {
-					cli.TmuxAttachDirective(sessionName, useCC)
+			return selfSwitchTmuxEpilogue(ctx, mgr, targetTree, stderr, noTmux, peek)
+		}
+		return nil
+	}
+
+	// Get current worktree for hook context and state update. Path +
+	// display name are all that's needed — the WIP handler does its own
+	// per-path dirty check below.
+	var prevWorktree string
+	var prevWorktreePath string
+	var wip *worktree.WIPHandler
+	autoStashed := false
+	stashRef := ""
+	if currentPath != "" {
+		prevWorktree = mgr.DisplayNameForPath(currentPath)
+		prevWorktreePath = currentPath
+
+		// Check for dirty worktree before allowing switch
+		wip = worktree.NewWIPHandler(currentPath)
+		hasDirty, wipErr := wip.HasWIP()
+		if wipErr != nil {
+			log.Printf("failed to check dirty state: %v", wipErr)
+			// Treat check failure as clean to avoid blocking the user
+		}
+		action := worktree.ResolveDirtyAction(ctx.Config.Switch.DirtyHandling, hasDirty, peek, cli.IsInteractive())
+		switch action {
+		case worktree.DirtyRefuse:
+			files, _ := wip.ListWIPFiles()
+			msg := fmt.Sprintf("worktree '%s' has uncommitted changes", prevWorktree)
+			if len(files) > 0 {
+				msg += ":\n  " + strings.Join(files, "\n  ")
+			}
+			msg += "\n\nCommit or stash your changes, or set dirty_handling = \"auto-stash\" in .grove/config.toml"
+			return fmt.Errorf("%s", msg)
+		case worktree.DirtyStash:
+			stashMsg := fmt.Sprintf("grove: auto-stash before switch to %s", name)
+			ref, stashErr := wip.StashWithRef(stashMsg)
+			if stashErr != nil {
+				return fmt.Errorf("failed to auto-stash changes: %w", stashErr)
+			}
+			autoStashed = true
+			stashRef = ref
+			if !jsonOut {
+				cli.Success(stderr, "Stashed changes in '%s'", prevWorktree)
+			}
+		case worktree.DirtyPrompt:
+			files, _ := wip.ListWIPFiles()
+			details := files
+			if len(details) == 0 {
+				details = []string{"(uncommitted changes detected)"}
+			}
+			confirmed, promptErr := cli.ConfirmWithDetails(
+				stderr,
+				fmt.Sprintf("Worktree '%s' has uncommitted changes:", prevWorktree),
+				details,
+				"Switch anyway?",
+				false,
+			)
+			if promptErr != nil || !confirmed {
+				return fmt.Errorf("switch aborted: worktree has uncommitted changes")
+			}
+		}
+	}
+
+	// If we auto-stashed, guarantee the user's working tree is restored on any
+	// abort before the switch is committed — a required hook failing OR a tmux
+	// error. A completed switch keeps the stash parked; `git stash pop` in the
+	// worktree restores it. One rollback covers every early return, so no site
+	// has to remember to pop. The pop targets the exact stash entry created
+	// above (by SHA): hooks run arbitrary commands between stash and rollback
+	// and may push their own entries, which a blind pop would restore instead.
+	switchCommitted := false
+	if autoStashed {
+		defer func() {
+			if switchCommitted {
+				return
+			}
+			if popErr := wip.PopStashRef(stashRef); popErr != nil {
+				cli.Warning(stderr, "switch aborted, but restoring the auto-stash failed: %v", popErr)
+				cli.Faint(stderr, "recover with: git -C %s stash pop", prevWorktreePath)
+			} else if !jsonOut {
+				cli.Info(stderr, "Restored auto-stashed changes after aborted switch")
+			}
+		}()
+	}
+
+	// Build hook context (used by pre/post-switch hooks unless --peek). Worktree
+	// is the resolved short name — Find also matches by branch or directory, so
+	// the raw argument could name something that isn't the worktree (B21).
+	hookCtx := &hooks.Context{
+		Worktree:         targetTree.DisplayName(),
+		PrevWorktree:     prevWorktree,
+		Config:           ctx.Config,
+		WorktreePath:     targetTree.Path,
+		PrevWorktreePath: prevWorktreePath,
+		MainPath:         ctx.ProjectRoot,
+	}
+
+	// Load the hooks.toml config once for both switch events — each load
+	// re-reads global + project hooks.toml from disk — and build the shared
+	// execution context once (both events use the same fields; only the event
+	// differs).
+	var switchHooks *hooks.Executor
+	switchEC := &hooks.ExecutionContext{
+		Worktree: targetTree.DisplayName(),
+		Branch:   targetTree.Branch,
+		Project:  mgr.GetProjectName(),
+		MainPath: ctx.ProjectRoot,
+		NewPath:  targetTree.Path,
+		PrevPath: prevWorktreePath,
+	}
+	if !peek {
+		switchHooks = loadConfigHookExecutor(stderr, ctx.ProjectRoot)
+	}
+
+	// Fire pre-switch hooks (skip when --peek)
+	if !peek {
+		if !jsonOut {
+			cli.Step(stderr, "Switching to '%s'...", name)
+		}
+		if err := hooks.Fire(hooks.EventPreSwitch, hookCtx); err != nil {
+			cli.Warning(stderr, "pre-switch hooks failed: %v", err)
+		}
+		// Config-file (hooks.toml) pre-switch actions. Output to stderr so it
+		// never collides with the cd: directive on stdout. A required action
+		// failing aborts the switch (B7); the deferred rollback restores the
+		// auto-stash so the tree is left as it was found.
+		if err := runConfigHooksWith(switchHooks, hooks.EventPreSwitch, switchEC); err != nil {
+			return err
+		}
+	}
+
+	// Store current session as last if inside tmux
+	if tmux.IsInsideTmux() {
+		currentSession, err := tmux.GetCurrentSession()
+		if err == nil {
+			if err := tmux.StoreLastSession(currentSession); err != nil {
+				log.Printf("failed to store last session %q: %v", currentSession, err)
+			}
+		}
+	}
+
+	projectName := mgr.GetProjectName()
+	cfg := ctx.Config
+	useCC := tmux.ShouldUseControlMode(cfg.Tmux.ControlMode)
+	tmuxMode := resolveTmuxMode(cfg, noTmux, peek)
+
+	// Handle tmux session (unless mode is "off")
+	var sessionName string
+	var tmuxSwitched bool
+	if tmuxMode != tmuxModeOff && tmux.IsTmuxAvailable() {
+		sessionName = worktree.TmuxSessionName(projectName, targetTree.DisplayName())
+		exists, err := tmux.SessionExists(sessionName)
+		if err != nil {
+			return fmt.Errorf("failed to check session: %w", err)
+		}
+
+		if !exists {
+			if err := tmux.CreateSession(sessionName, targetTree.Path); err != nil {
+				return fmt.Errorf("failed to create session: %w", err)
+			}
+			if !jsonOut {
+				cli.Success(stderr, "Created tmux session '%s'", sessionName)
+			}
+		}
+
+		if tmux.IsInsideTmux() {
+			// Detect and correct directory drift before switching
+			if exists {
+				handleDirectoryDrift(sessionName, targetTree.Path, cfg.Tmux.OnSwitch, stderr)
+			}
+		} else if tmuxMode == "manual" && !jsonOut {
+			cli.Success(stderr, "Tmux session '%s' ready", sessionName)
+			cli.Faint(stderr, "Run: tmux attach -t %s", sessionName)
+		}
+		// auto mode outside tmux: handled below via shell directive or direct attach
+	}
+
+	// Fire post-switch hooks (Docker start, etc.) BEFORE the tmux switch
+	// so the user sees Docker progress in the current session. After the
+	// tmux switch the old session's stderr is no longer visible.
+	// Also fire before the JSON return so machine consumers get hooks too.
+	if !peek {
+		if hooks.HasHooks(hooks.EventPostSwitch) {
+			cli.Step(stderr, "Starting services...")
+		}
+		if err := hooks.Fire(hooks.EventPostSwitch, hookCtx); err != nil {
+			cli.Warning(stderr, "post-switch hooks failed: %v", err)
+		}
+		// Config-file (hooks.toml) post-switch actions run after plugin
+		// hooks so a docker:compose action sees a started stack (e.g. the
+		// documented `bin/rails db:migrate` recipe). Output to stderr. A
+		// required action failing fails the command (B7); the deferred
+		// rollback restores the auto-stash.
+		if err := runConfigHooksWith(switchHooks, hooks.EventPostSwitch, switchEC); err != nil {
+			return err
+		}
+	}
+
+	// Commit the switch: record state and mark it committed so the deferred
+	// rollback keeps the auto-stash instead of restoring it. Called only at
+	// the point the user is actually moved — right before the terminal
+	// directive/relocation for each output mode — so a failure anywhere
+	// earlier (hooks, session checks, the tmux client switch itself) still
+	// rolls back. Recording last_worktree/last_accessed only here keeps an
+	// aborted attempt from corrupting the A↔B toggle or the target's access
+	// time.
+	commitSwitch := func() {
+		if prevWorktree != "" {
+			if err := ctx.State.SetLastWorktree(prevWorktree); err != nil {
+				log.Printf("failed to set last worktree %q: %v", prevWorktree, err)
+			}
+		}
+		if err := ctx.State.TouchWorktree(targetTree.DisplayName()); err != nil {
+			log.Printf("failed to touch worktree %q: %v", targetTree.DisplayName(), err)
+		}
+		switchCommitted = true
+	}
+
+	// JSON output mode: PrintJSON is the success terminal — the machine
+	// caller performs the cd — so the switch commits here.
+	if jsonOut {
+		result := output.SwitchResult{
+			SwitchTo: targetTree.Path,
+			Name:     targetTree.DisplayName(),
+			Branch:   targetTree.Branch,
+			Path:     targetTree.Path,
+		}
+		commitSwitch()
+		return output.PrintJSON(result)
+	}
+
+	// Output directory change command for shell integration
+	hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
+
+	// Now perform the tmux session switch (if inside tmux). This can still
+	// fail, so the switch is only committed after it succeeds — a failed
+	// client switch leaves the user exactly where they were, and the rollback
+	// restores the auto-stash.
+	if tmuxMode != tmuxModeOff && sessionName != "" && tmux.IsInsideTmux() {
+		if err := tmux.SwitchSession(sessionName); err != nil {
+			return err
+		}
+		tmuxSwitched = true
+	}
+	commitSwitch()
+
+	// Skip cd directive when tmux switch already moved the user to the
+	// target session — emitting cd: here would change the OLD session's
+	// directory, not the one the user is now viewing.
+	if !tmuxSwitched {
+		emitCdOrExplain(stderr, targetTree.Path)
+		// In auto mode outside tmux: emit the tmux-attach directive for
+		// the shell wrapper, or attach directly without it.
+		if tmuxMode == tmuxModeAuto && sessionName != "" {
+			if hasShellIntegration {
+				cli.TmuxAttachDirective(sessionName, useCC)
+			} else {
+				var attachErr error
+				if useCC {
+					attachErr = tmux.AttachSessionControlMode(sessionName)
 				} else {
-					var attachErr error
-					if useCC {
-						attachErr = tmux.AttachSessionControlMode(sessionName)
-					} else {
-						attachErr = tmux.AttachSession(sessionName)
-					}
-					if attachErr != nil {
-						return fmt.Errorf("failed to attach session: %w", attachErr)
-					}
+					attachErr = tmux.AttachSession(sessionName)
+				}
+				if attachErr != nil {
+					return fmt.Errorf("failed to attach session: %w", attachErr)
 				}
 			}
 		}
+	}
 
+	return nil
+}
+
+// selfSwitchTmuxEpilogue ensures the target worktree's tmux session exists and
+// is reachable when `grove to <current>` runs outside tmux — mirroring the
+// session handling a real switch performs, minus hooks/dirty/state (which a
+// self-switch deliberately skips, B18).
+func selfSwitchTmuxEpilogue(ctx *GroveContext, mgr *worktree.Manager, targetTree *worktree.Worktree, stderr *cli.Writer, noTmux, peek bool) error {
+	tmuxMode := resolveTmuxMode(ctx.Config, noTmux, peek)
+	if tmuxMode == tmuxModeOff || !tmux.IsTmuxAvailable() {
 		return nil
-	}),
+	}
+
+	sessionName := worktree.TmuxSessionName(mgr.GetProjectName(), targetTree.DisplayName())
+	exists, err := tmux.SessionExists(sessionName)
+	if err != nil {
+		return fmt.Errorf("failed to check session: %w", err)
+	}
+	if !exists {
+		if err := tmux.CreateSession(sessionName, targetTree.Path); err != nil {
+			return fmt.Errorf("failed to create session: %w", err)
+		}
+		cli.Success(stderr, "Created tmux session '%s'", sessionName)
+	}
+
+	if tmuxMode != tmuxModeAuto {
+		cli.Success(stderr, "Tmux session '%s' ready", sessionName)
+		cli.Faint(stderr, "Run: tmux attach -t %s", sessionName)
+		return nil
+	}
+
+	useCC := tmux.ShouldUseControlMode(ctx.Config.Tmux.ControlMode)
+	if os.Getenv("GROVE_SHELL") == "1" {
+		cli.TmuxAttachDirective(sessionName, useCC)
+		return nil
+	}
+	var attachErr error
+	if useCC {
+		attachErr = tmux.AttachSessionControlMode(sessionName)
+	} else {
+		attachErr = tmux.AttachSession(sessionName)
+	}
+	if attachErr != nil {
+		return fmt.Errorf("failed to attach session: %w", attachErr)
+	}
+	return nil
 }
 
 // effectiveTmuxMode returns the tmux mode after per-invocation overrides.
@@ -281,6 +446,18 @@ func effectiveTmuxMode(mode string, agentMode, noTmux, peek bool) string {
 		return tmuxModeOff
 	}
 	return mode
+}
+
+// resolveTmuxMode returns the effective tmux mode for this invocation: the
+// configured mode (defaulting to "auto" when unset) filtered through the
+// per-invocation suppressors. Shared by performSwitch and `grove open` so
+// the defaulting rule can't drift between them.
+func resolveTmuxMode(cfg *config.Config, noTmux, peek bool) string {
+	mode := cfg.Tmux.Mode
+	if mode == "" {
+		mode = tmuxModeAuto
+	}
+	return effectiveTmuxMode(mode, cfg.AgentMode, noTmux, peek)
 }
 
 // handleDirectoryDrift detects if a tmux session's active pane has drifted

@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/git"
 	"github.com/lost-in-the/grove/internal/hooks"
 	"github.com/lost-in-the/grove/internal/log"
 	"github.com/lost-in-the/grove/internal/tmux"
@@ -47,43 +49,34 @@ func detectProjectName(dir string) string {
 	return filepath.Base(dir)
 }
 
+// detectMainBranch resolves the branch `grove init` records as
+// default_base_branch. It delegates to git.DetectDefaultBranch — the same
+// detector `grove rm`/`grove trim` use — so init and the branch-cleanup checks
+// agree (origin/HEAD → init.defaultBranch → main/master → HEAD), instead of
+// init's older main/master-only heuristic recording a different branch.
 func detectMainBranch(dir string) string {
-	for _, branch := range []string{"main", "master"} {
-		if err := cmdexec.Run(context.TODO(), "git", []string{"rev-parse", "--verify", branch}, dir, cmdexec.GitLocal); err == nil {
-			return branch
-		}
+	if branch, err := git.DetectDefaultBranch(dir); err == nil && branch != "" {
+		return branch
 	}
-
-	output, err := cmdexec.Output(context.TODO(), "git", []string{"rev-parse", "--abbrev-ref", "HEAD"}, dir, cmdexec.GitLocal)
-	if err == nil {
-		return strings.TrimSpace(string(output))
-	}
-
 	return "main"
 }
 
-func updateGitignore(dir string) error {
-	gitignorePath := filepath.Join(dir, ".gitignore")
-
-	content, err := os.ReadFile(gitignorePath)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-
-	if strings.Contains(string(content), ".grove/state.json") {
+// loadTmuxSessions returns the running tmux sessions keyed by name, or nil
+// when tmux is unavailable or listing fails — tmuxStatusFor treats a nil map
+// as "no session". Shared by `grove ls` and `grove here`.
+func loadTmuxSessions() map[string]*tmux.Session {
+	if !tmux.IsTmuxAvailable() {
 		return nil
 	}
-
-	entry := "\n# Grove (worktree manager)\n.grove/state.json\n.grove/state.json.bak\n.grove/.envrc\n"
-
-	f, err := os.OpenFile(gitignorePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	sessionList, err := tmux.ListSessions()
 	if err != nil {
-		return err
+		return nil
 	}
-	defer func() { _ = f.Close() }()
-
-	_, err = f.WriteString(entry)
-	return err
+	sessions := make(map[string]*tmux.Session, len(sessionList))
+	for _, s := range sessionList {
+		sessions[s.Name] = s
+	}
+	return sessions
 }
 
 // emitCdOrExplain emits the cd: directive for the shell wrapper when shell
@@ -91,8 +84,9 @@ func updateGitignore(dir string) error {
 // integration and change directory manually. Shared by every command that
 // lands the user in a different worktree without a tmux client switch.
 func emitCdOrExplain(stderr *cli.Writer, path string) {
-	if os.Getenv("GROVE_SHELL") == "1" {
-		cli.Directive("cd", path)
+	// Prefers GROVE_CD_FILE when the wrapper set one (un-captured commands),
+	// else a cd: line on stdout for capture-based commands.
+	if cli.CdDirective(path) {
 		return
 	}
 	cli.Faint(stderr, "Note: Directory switching requires shell integration.")
@@ -105,7 +99,8 @@ func emitCdOrExplain(stderr *cli.Writer, path string) {
 	cli.Faint(stderr, "  cd %s", path)
 }
 
-// switchToWorktree runs the shared switch epilogue used by new/fork/last:
+// switchToWorktree runs the shared switch epilogue used by new/fork
+// (`grove to` and `grove last` route through performSwitch instead):
 // batches SetLastWorktree + TouchWorktree into a single state save, stores
 // the current tmux session as "last", and switches the tmux client to the
 // target session (creating it if missing). Returns whether the client was
@@ -181,9 +176,13 @@ func currentWorktreeRoot(ctx *GroveContext) (string, error) {
 // hook (e.g. stop agent stacks), git worktree removal, state cleanup, and
 // tmux session kill. Returns an error only when the git removal itself fails;
 // ancillary failures are warned and skipped.
-func removeWorktreeWithHooks(ctx *GroveContext, mgr *worktree.Manager, w *cli.Writer, projectName, name, wtPath, branchName string) error {
-	// Execute pre-remove hooks (user hooks from hooks.toml)
-	hookExecutor, hookErr := hooks.NewExecutor()
+func removeWorktreeWithHooks(ctx *GroveContext, mgr *worktree.Manager, w *cli.Writer, projectName, name, wtPath, branchName string, force bool) error {
+	// Execute pre-remove hooks (user hooks from hooks.toml). Pin resolution to
+	// the main worktree's .grove — a no-arg NewExecutor() resolves from cwd and
+	// would honor a linked worktree's own hooks.toml when `grove rm B` runs from
+	// inside worktree A, diverging from the project's hooks (and from the TUI
+	// delete path, which pins to main).
+	hookExecutor, hookErr := hooks.NewExecutor(filepath.Join(ctx.ProjectRoot, ".grove"))
 	if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPreRemove) {
 		hookCtx := &hooks.ExecutionContext{
 			Event:        hooks.EventPreRemove,
@@ -195,8 +194,11 @@ func removeWorktreeWithHooks(ctx *GroveContext, mgr *worktree.Manager, w *cli.Wr
 			WorktreeFull: filepath.Base(wtPath),
 		}
 		cli.Step(w, "Running pre-remove hooks...")
+		// A required (on_failure="fail") pre-remove hook failing aborts the
+		// removal before the worktree is touched (B7). Non-required failures
+		// warn inside Execute and return nil.
 		if err := hookExecutor.Execute(hooks.EventPreRemove, hookCtx); err != nil {
-			cli.Warning(w, "Hook execution had errors: %v", err)
+			return fmt.Errorf("required pre-remove hook failed: %w", err)
 		}
 	}
 
@@ -212,7 +214,7 @@ func removeWorktreeWithHooks(ctx *GroveContext, mgr *worktree.Manager, w *cli.Wr
 	}
 
 	// Remove worktree — the critical step, done before tmux kill
-	if err := mgr.Remove(name); err != nil {
+	if err := mgr.Remove(name, force); err != nil {
 		return fmt.Errorf("failed to remove worktree: %w", err)
 	}
 
@@ -243,7 +245,9 @@ func removeWorktreeWithHooks(ctx *GroveContext, mgr *worktree.Manager, w *cli.Wr
 // from removeWorktreeWithHooks so `grove rm` can interleave branch deletion
 // before the post-remove hooks, preserving its established ordering.
 func firePostRemoveHooks(ctx *GroveContext, w *cli.Writer, projectName, name, wtPath, branchName string) {
-	hookExecutor, hookErr := hooks.NewExecutor()
+	// Pin to the main worktree's .grove (see removeWorktreeWithHooks) so post-
+	// remove cleanup resolves the project's hooks regardless of the cwd.
+	hookExecutor, hookErr := hooks.NewExecutor(filepath.Join(ctx.ProjectRoot, ".grove"))
 	if hookErr == nil && hookExecutor.HasHooksForEvent(hooks.EventPostRemove) {
 		hookCtx := &hooks.ExecutionContext{
 			Event:    hooks.EventPostRemove,
@@ -251,6 +255,13 @@ func firePostRemoveHooks(ctx *GroveContext, w *cli.Writer, projectName, name, wt
 			Branch:   branchName,
 			Project:  projectName,
 			MainPath: ctx.ProjectRoot,
+			// Populate the removed worktree's path/name like pre-remove does.
+			// Without WorktreeFull, `{{.worktree_full}}` interpolated to "" and
+			// a cleanup like `rm -rf cache/{{.worktree_full}}` became
+			// `rm -rf cache/` (B28). The directory is already gone, so
+			// post_remove actions should use working_dir = "main".
+			NewPath:      wtPath,
+			WorktreeFull: filepath.Base(wtPath),
 		}
 		cli.Step(w, "Running post-remove hooks...")
 		if err := hookExecutor.Execute(hooks.EventPostRemove, hookCtx); err != nil {
@@ -269,6 +280,60 @@ func firePostRemoveHooks(ctx *GroveContext, w *cli.Writer, projectName, name, wt
 	}
 }
 
+// loadConfigHookExecutor loads the hooks.toml executor rooted at mainPath's
+// .grove directory, sending hook progress to out. Returns nil (logged, not
+// fatal) when the config can't be loaded — callers skip hooks in that case.
+// Load once per command and reuse across events: every construction re-reads
+// global + project hooks.toml from disk.
+func loadConfigHookExecutor(out *cli.Writer, mainPath string) *hooks.Executor {
+	executor, err := hooks.NewExecutor(filepath.Join(mainPath, ".grove"))
+	if err != nil {
+		log.Printf("hooks: failed to load config: %v", err)
+		return nil
+	}
+	if out != nil {
+		executor.Output = out
+	}
+	return executor
+}
+
+// runConfigHooksWith fires one lifecycle event's hooks.toml actions on a
+// previously loaded executor (nil-safe — a nil executor means the config
+// failed to load and hooks are skipped).
+//
+// Returns a non-nil error only when a required (on_failure="fail") action
+// failed, so callers can abort the operation (B7); a non-required hook
+// failure warns inside Execute and returns nil.
+// The caller passes a *hooks.ExecutionContext built with named fields rather
+// than a run of same-typed positional strings — a transposed pair there
+// compiled silently and mis-filled hook variables. Event is stamped here, and
+// WorktreeFull is derived from NewPath when the caller left it unset.
+func runConfigHooksWith(executor *hooks.Executor, event string, ec *hooks.ExecutionContext) error {
+	if executor == nil || !executor.HasHooksForEvent(event) {
+		return nil
+	}
+	ec.Event = event
+	if ec.WorktreeFull == "" && ec.NewPath != "" {
+		ec.WorktreeFull = filepath.Base(ec.NewPath)
+	}
+	return executor.Execute(event, ec)
+}
+
+// runConfigHooks executes the user's hooks.toml actions for a lifecycle event —
+// the config-file counterpart to the plugin hooks.Fire registry. Wiring this in
+// is what makes documented pre_switch / post_switch / pre_create recipes
+// actually run; before it, those events silently did nothing (B6).
+//
+// out receives the hooks' own progress lines — route it to stderr on the switch
+// path so hook output never lands on the cd: stdout channel the shell wrapper
+// parses. mainPath is the project root, whose .grove holds hooks.toml.
+//
+// Loads the hooks config on every call; commands firing multiple events
+// should load once with loadConfigHookExecutor and use runConfigHooksWith.
+func runConfigHooks(out *cli.Writer, event string, ec *hooks.ExecutionContext) error {
+	return runConfigHooksWith(loadConfigHookExecutor(out, ec.MainPath), event, ec)
+}
+
 // worktreeSetupOpts configures the post-create setup sequence.
 type worktreeSetupOpts struct {
 	IsEnvironment bool
@@ -278,7 +343,7 @@ type worktreeSetupOpts struct {
 }
 
 // setupCreatedWorktree runs the shared post-create sequence: find the worktree,
-// symlink config, register state, execute hooks, and auto-start Docker.
+// record git excludes, register state, execute hooks, and auto-start Docker.
 func setupCreatedWorktree(ctx *GroveContext, mgr *worktree.Manager, name, branchName string, opts worktreeSetupOpts, w *cli.Writer) (*worktree.Worktree, error) {
 	// Compute the canonical path directly. The worktree was just created by
 	// the caller at the standard location, so re-running List() to find it
@@ -312,6 +377,12 @@ func setupCreatedWorktree(ctx *GroveContext, mgr *worktree.Manager, name, branch
 		bootstrapWriter = w
 	}
 	if err := worktree.BootstrapWorktree(ctx.State, ctx.Config, bootstrapOpts, bootstrapWriter); err != nil {
+		// A required post-create hook failing fails the command (B7). Other
+		// bootstrap failures (symlink, state) are recoverable — warn and point
+		// at `grove repair` rather than aborting, preserving prior behavior.
+		if errors.Is(err, worktree.ErrRequiredHookFailed) {
+			return wt, err
+		}
 		if !opts.JSONOutput {
 			cli.Warning(w, "Bootstrap failed: %v", err)
 			cli.Faint(w, "run 'grove repair' to fix")
@@ -337,54 +408,23 @@ func runFileSetup(cfg *config.Config, newPath, mainPath string, w *cli.Writer, j
 }
 
 // autoStartDocker starts the Docker stack for a new worktree if configured.
+// The decision (docker.ShouldAutoUp) and the stack start (docker.AutoUp) are
+// shared with the TUI create path so both surfaces provision identically.
 func autoStartDocker(w *cli.Writer, cfg *config.Config, wtPath string, noDocker, jsonOutput bool) {
-	if noDocker || !shouldAutoDocker(cfg) {
+	if noDocker || !docker.ShouldAutoUp(cfg) {
 		return
 	}
 	if !jsonOutput {
 		cli.Step(w, "Starting Docker stack...")
 	}
-	dockerPlugin := docker.New()
-	if cfg.AgentMode {
-		dockerPlugin.SetIsolated(true)
-	}
-	if err := dockerPlugin.Init(cfg); err != nil {
-		if !jsonOutput {
-			cli.Warning(w, "Docker init failed: %v", err)
-		}
-		return
-	}
-	if !dockerPlugin.Enabled() {
-		return
-	}
-	if err := dockerPlugin.Up(wtPath, true); err != nil {
+	started, err := docker.AutoUp(cfg, wtPath)
+	if err != nil {
 		if !jsonOutput {
 			cli.Warning(w, "Docker auto-start failed: %v", err)
 		}
-	} else if !jsonOutput {
+		return
+	}
+	if started && !jsonOutput {
 		cli.Success(w, "Docker stack started")
 	}
-}
-
-// shouldAutoDocker returns true when Docker should be auto-started on grove new.
-// Enabled by default when agent stacks are configured, or explicitly via auto_up.
-func shouldAutoDocker(cfg *config.Config) bool {
-	if cfg == nil {
-		return false
-	}
-
-	// Explicit auto_up setting takes precedence
-	if cfg.Plugins.Docker.AutoUp != nil {
-		return *cfg.Plugins.Docker.AutoUp
-	}
-
-	// Default: auto-start when agent stacks are configured and enabled
-	if cfg.IsExternalDockerMode() {
-		ext := cfg.Plugins.Docker.External
-		if ext != nil && ext.Agent != nil && ext.Agent.Enabled != nil && *ext.Agent.Enabled {
-			return true
-		}
-	}
-
-	return false
 }

@@ -91,6 +91,18 @@ func main() {
 		fmt.Println("cd:/tmp/fakegrove-mixed")
 		fmt.Println("some output after")
 
+	case "issues", "prs":
+		// Simulates the issue/PR browser: renders (TUI-style) to the terminal
+		// and routes the selected worktree's cd through GROVE_CD_FILE, exactly
+		// as the real TUI does. Falls back to a raw cd: line only when the
+		// wrapper provided no file — which is the leak the wrapper fix prevents.
+		fmt.Println("BROWSER_RENDERED")
+		if cdFile := os.Getenv("GROVE_CD_FILE"); cdFile != "" {
+			os.WriteFile(cdFile, []byte("/tmp/fakegrove-selected"), 0600)
+		} else if shell == "1" {
+			fmt.Println("cd:/tmp/fakegrove-selected")
+		}
+
 	case "version":
 		// Simple output command — used to test passthrough (no directives)
 		fmt.Println("grove v1.0.0-test")

@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/lost-in-the/grove/internal/fsutil"
+	"github.com/lost-in-the/grove/internal/grove"
 )
 
 // TestConfig controls test command behavior
@@ -157,7 +159,16 @@ type AgentStackConfig struct {
 }
 
 // GetConfigPaths returns the paths to check for config files
-// Returns global config path and project config path
+// Returns global config path and project config path.
+//
+// The project path anchors at the MAIN worktree's .grove directory
+// (grove.FindRoot), so every command reads — and `grove config set`/the TUI
+// settings editor WRITE — the same project config no matter which worktree or
+// subdirectory they run from. The old cwd-relative path made a linked
+// worktree read defaults instead of the project config, and worse, made
+// config writes materialize a private .grove/config.toml inside the linked
+// worktree, silently forking it from the project's. Falls back to cwd/.grove
+// when not inside a grove project (e.g. before `grove init`).
 func GetConfigPaths() (string, string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -166,7 +177,11 @@ func GetConfigPaths() (string, string, error) {
 
 	globalConfig := filepath.Join(homeDir, ".config", "grove", "config.toml")
 
-	// Get current working directory for project config
+	if groveDir, err := grove.FindRoot(""); err == nil && groveDir != "" {
+		return globalConfig, filepath.Join(groveDir, "config.toml"), nil
+	}
+
+	// Not in a grove project — fall back to cwd for pre-init flows.
 	cwd, err := os.Getwd()
 	if err != nil {
 		return globalConfig, "", err
@@ -371,9 +386,114 @@ func mergeDockerConfig(result, override *DockerPluginConfig) {
 	if override.Mode != "" {
 		result.Mode = override.Mode
 	}
-	if override.External != nil {
-		result.External = override.External
+	mergeExternalComposeConfig(&result.External, override.External)
+}
+
+// mergeExternalComposeConfig field-merges an [plugins.docker.external] override
+// onto the base. Previously the whole struct was replaced when an override
+// existed, so a config.local.toml that set a single external field wiped the
+// rest — the merged config then failed validation and grove silently fell back
+// to full defaults (local mode). Merge field-by-field like every other section
+// so "only the fields you set are overridden" holds (B29).
+//
+// The merge builds a fresh struct and clones every slice/pointer field:
+// *result may alias the caller's base config (mergeConfigs shallow-copies
+// Config, sharing the External pointer), so writing through it — or adopting
+// the override's slices by reference — would let one config layer corrupt
+// another. Merging must never mutate its inputs.
+func mergeExternalComposeConfig(result **ExternalComposeConfig, override *ExternalComposeConfig) {
+	if override == nil {
+		return
 	}
+	var merged ExternalComposeConfig
+	if *result != nil {
+		merged = **result
+	}
+	if override.Path != "" {
+		merged.Path = override.Path
+	}
+	if override.EnvVar != "" {
+		merged.EnvVar = override.EnvVar
+	}
+	if override.EnvFile != "" {
+		merged.EnvFile = override.EnvFile
+	}
+	if len(override.Services) > 0 {
+		merged.Services = override.Services
+	}
+	if len(override.NonBlockingServices) > 0 {
+		merged.NonBlockingServices = override.NonBlockingServices
+	}
+	if len(override.CopyFiles) > 0 {
+		merged.CopyFiles = override.CopyFiles
+	}
+	if len(override.SymlinkFiles) > 0 {
+		merged.SymlinkFiles = override.SymlinkFiles
+	}
+	if len(override.SymlinkDirs) > 0 {
+		merged.SymlinkDirs = override.SymlinkDirs
+	}
+	if override.MountDest != "" {
+		merged.MountDest = override.MountDest
+	}
+	merged.Agent = mergeAgentStackConfig(merged.Agent, override.Agent)
+
+	// Detach all shared backing, wherever each field came from.
+	merged.Services = slices.Clone(merged.Services)
+	merged.NonBlockingServices = slices.Clone(merged.NonBlockingServices)
+	merged.CopyFiles = slices.Clone(merged.CopyFiles)
+	merged.SymlinkFiles = slices.Clone(merged.SymlinkFiles)
+	merged.SymlinkDirs = slices.Clone(merged.SymlinkDirs)
+	if merged.Agent != nil {
+		agent := *merged.Agent
+		agent.Services = slices.Clone(agent.Services)
+		agent.TemplateOverlays = slices.Clone(agent.TemplateOverlays)
+		if agent.Enabled != nil {
+			enabled := *agent.Enabled
+			agent.Enabled = &enabled
+		}
+		merged.Agent = &agent
+	}
+
+	*result = &merged
+}
+
+// mergeAgentStackConfig field-merges an [plugins.docker.external.agent]
+// override onto the base, returning a fresh struct (never one of the inputs).
+// Wholesale pointer replacement meant a config.local.toml that set only
+// max_slots wiped the required template_path — the B29 partial-override wipe
+// one section deeper. "Only the fields you set are overridden" applies at
+// every nesting level.
+func mergeAgentStackConfig(base, override *AgentStackConfig) *AgentStackConfig {
+	if override == nil {
+		return base
+	}
+	var merged AgentStackConfig
+	if base != nil {
+		merged = *base
+	}
+	if override.Enabled != nil {
+		merged.Enabled = override.Enabled
+	}
+	if override.MaxSlots != 0 {
+		merged.MaxSlots = override.MaxSlots
+	}
+	if len(override.Services) > 0 {
+		merged.Services = override.Services
+	}
+	if override.TemplatePath != "" {
+		merged.TemplatePath = override.TemplatePath
+	}
+	if len(override.TemplateOverlays) > 0 {
+		merged.TemplateOverlays = override.TemplateOverlays
+	}
+	if override.URLPattern != "" {
+		merged.URLPattern = override.URLPattern
+	}
+	if override.Network != "" {
+		merged.Network = override.Network
+	}
+	return &merged
 }
 
 func mergeTUIConfig(result, override *TUIConfig) {

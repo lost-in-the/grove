@@ -92,6 +92,12 @@ Examples:
 				return fmt.Errorf("worktree '%s' not found (use 'grove open %s' without --no-create to create it)", name, name)
 			}
 
+			// Only reached when creating a brand-new worktree (Find matched
+			// nothing), so validate the name before it becomes a path/branch.
+			if msg := worktree.ValidateWorktreeName(name); msg != "" {
+				return fmt.Errorf("invalid worktree name '%s': %s", name, msg)
+			}
+
 			// Create the worktree
 			branchName := name
 			if err := mgr.Create(name, branchName); err != nil {
@@ -113,19 +119,39 @@ Examples:
 			}
 		}
 
-		// Step 2: Ensure tmux session exists
-		if !tmux.IsTmuxAvailable() {
+		// Operate on the resolved short name, not the raw argument — Find also
+		// matches by branch or full directory name, and the canonical tmux
+		// session name and state key are both keyed on the short name (B21).
+		displayName := wt.DisplayName()
+
+		// Record the access before any tmux branching: agent-mode and
+		// tmux-off users reach worktrees through `grove open` too, and
+		// skipping the touch on that path made `grove trim` flag their
+		// actively-used worktrees as stale.
+		if err := ctx.State.TouchWorktree(displayName); err != nil {
+			log.Printf("failed to touch worktree %q: %v", displayName, err)
+		}
+
+		// Step 2: Ensure tmux session exists — unless agent mode / tmux "off"
+		// suppresses it (grove open outside tmux would otherwise run a blocking
+		// attach and take over an agent's terminal, the thing agent mode exists
+		// to prevent).
+		tmuxMode := resolveTmuxMode(ctx.Config, false, false)
+
+		if tmuxMode == tmuxModeOff || !tmux.IsTmuxAvailable() {
 			if openJSON {
-				return printOpenJSON(wt, name, created)
+				return printOpenJSON(wt, displayName, created)
 			}
-			cli.Faint(stderr, "tmux not available, skipping session management")
+			if !tmux.IsTmuxAvailable() {
+				cli.Faint(stderr, "tmux not available, skipping session management")
+			}
 			// Only emit the raw cd: protocol line when the shell wrapper is
 			// listening; otherwise explain how to switch manually.
 			emitCdOrExplain(stderr, wt.Path)
 			return nil
 		}
 
-		sessionName := worktree.TmuxSessionName(projectName, name)
+		sessionName := worktree.TmuxSessionName(projectName, displayName)
 		sessionExists, err := tmux.SessionExists(sessionName)
 		if err != nil {
 			return fmt.Errorf("failed to check session: %w", err)
@@ -163,14 +189,9 @@ Examples:
 			}
 		}
 
-		// Update state
-		if err := ctx.State.TouchWorktree(name); err != nil {
-			log.Printf("failed to touch worktree %q: %v", name, err)
-		}
-
 		// JSON output mode
 		if openJSON {
-			return printOpenJSON(wt, name, created)
+			return printOpenJSON(wt, displayName, created)
 		}
 
 		// Step 3: Attach — popup or switch/attach

@@ -9,7 +9,6 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/exitcode"
 	"github.com/lost-in-the/grove/internal/tmux"
-	"github.com/lost-in-the/grove/internal/tui"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
 
@@ -78,6 +77,14 @@ Examples:
 			os.Exit(exitcode.ResourceNotFound)
 		}
 
+		// Operate on the resolved short name, not the raw argument. Find
+		// accepts a branch or full directory name too (B2); using the typed
+		// value for the protection check, state re-key, and tmux rename would
+		// half-complete the rename — move the directory but leave state keyed
+		// by the old short name and skip the session rename (B15). Mirrors the
+		// resolvedName fix in `grove rm`.
+		resolvedOld := wt.ShortName
+
 		// Check if new name is already taken
 		existing, err := mgr.Find(newName)
 		if err != nil {
@@ -90,7 +97,7 @@ Examples:
 		if currentPath, err := mgr.CurrentPath(); err == nil {
 			currentTree = &worktree.Worktree{Path: currentPath}
 		}
-		if err := validateRename(wt, existing, currentTree, ctx.Config, oldName, newName); err != nil {
+		if err := validateRename(wt, existing, currentTree, ctx.Config, resolvedOld, newName); err != nil {
 			cli.Error(stderr, "%s", err)
 			if err == errCurrentWorktree {
 				cli.Info(stderr, "Switch to another worktree first: grove to <name>")
@@ -99,7 +106,7 @@ Examples:
 		}
 
 		// Step 1: Move the git worktree directory
-		if err := mgr.Move(oldName, newName); err != nil {
+		if err := mgr.Move(resolvedOld, newName); err != nil {
 			return fmt.Errorf("failed to move worktree: %w", err)
 		}
 
@@ -108,7 +115,7 @@ Examples:
 		// state.json twice.
 		newFullName := mgr.FullName(newName)
 		batchErr := ctx.State.Batch(func() error {
-			if err := ctx.State.RenameWorktree(oldName, newName); err != nil {
+			if err := ctx.State.RenameWorktree(resolvedOld, newName); err != nil {
 				cli.Warning(w, "Worktree moved but state update failed: %v", err)
 			}
 
@@ -127,12 +134,12 @@ Examples:
 			cli.Warning(w, "state save failed: %v", batchErr)
 		}
 
-		cli.Success(w, "Renamed worktree '%s' to '%s'", oldName, newName)
+		cli.Success(w, "Renamed worktree '%s' to '%s'", resolvedOld, newName)
 
 		// Step 4: Rename tmux session if it exists
 		if tmux.IsTmuxAvailable() {
 			projectName := mgr.GetProjectName()
-			oldSessionName := worktree.TmuxSessionName(projectName, oldName)
+			oldSessionName := worktree.TmuxSessionName(projectName, resolvedOld)
 			newSessionName := worktree.TmuxSessionName(projectName, newName)
 
 			exists, err := tmux.SessionExists(oldSessionName)
@@ -156,10 +163,9 @@ var (
 
 // validateRename checks rename preconditions: not main, not protected,
 // not a name collision, not the current worktree, and that the new name is
-// a valid worktree name — the same character/prefix check create/fork's TUI
-// overlays enforce (internal/tui.ValidateWorktreeName), which the CLI rename
-// path skipped entirely. Without it, `grove rename x ../escape` or
-// `grove rename x -flag` would reach mgr.Move with an unvalidated path
+// a valid worktree name — the same worktree.ValidateWorktreeName check the
+// create paths and TUI overlays enforce. Without it, `grove rename x ../escape`
+// or `grove rename x -flag` would reach mgr.Move with an unvalidated path
 // component.
 func validateRename(wt, existing, current *worktree.Worktree, cfg interface{ IsProtected(string) bool }, oldName, newName string) error {
 	if wt.IsMain {
@@ -174,7 +180,7 @@ func validateRename(wt, existing, current *worktree.Worktree, cfg interface{ IsP
 	if current != nil && current.Path == wt.Path {
 		return errCurrentWorktree
 	}
-	if errMsg := tui.ValidateWorktreeName(newName); errMsg != "" {
+	if errMsg := worktree.ValidateWorktreeName(newName); errMsg != "" {
 		return fmt.Errorf("invalid new name '%s': %s", newName, errMsg)
 	}
 	return nil

@@ -86,18 +86,11 @@ func filteredBranches(branches []string, filter string) []string {
 	return result
 }
 
-// ValidateWorktreeName checks if a name is valid for a worktree.
+// ValidateWorktreeName checks if a name is valid for a worktree. Delegates to
+// the canonical validator in internal/worktree so the TUI and CLI enforce
+// identical rules.
 func ValidateWorktreeName(name string) string {
-	if name == "" {
-		return ""
-	}
-	if strings.ContainsAny(name, " /\\:*?\"<>|") {
-		return "name contains invalid characters"
-	}
-	if strings.HasPrefix(name, "-") || strings.HasPrefix(name, ".") {
-		return "name cannot start with - or ."
-	}
-	return ""
+	return worktree.ValidateWorktreeName(name)
 }
 
 // scrollWindow computes the visible start/end indices for a cursor-following

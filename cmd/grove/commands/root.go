@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/exitcode"
 	"github.com/lost-in-the/grove/internal/grove"
@@ -71,9 +72,11 @@ shorthand alias (e.g. 'w'). Use 'grove install --help' for details.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Only launch TUI when:
 		// 1. No subcommand was invoked (this RunE only fires for bare "grove")
-		// 2. TTY is attached (interactive terminal)
+		// 2. Both stdin AND stdout are TTYs — otherwise `grove > out.txt` or
+		//    `grove | less` would render alt-screen escape sequences into the
+		//    file/pipe (B34); require an interactive stdout too.
 		// 3. TUI is not disabled via env var
-		isTTY := term.IsTerminal(int(os.Stdin.Fd()))
+		isTTY := term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
 		tuiDisabled := os.Getenv("GROVE_TUI") == "0"
 		if decideBareAction(isTTY, tuiDisabled, false) == bareShowHelp {
 			return cmd.Help()
@@ -101,6 +104,14 @@ shorthand alias (e.g. 'w'). Use 'grove install --help' for details.`,
 			os.Exit(exitcode.NotGroveProject)
 		}
 
+		// Same startup notices RequireGroveContext emits — this runs before the
+		// alt-screen takes over so the stderr messages stay visible. The bare-
+		// grove TUI is many users' only entry point, so skipping them here (as it
+		// used to) hid the shell-integration and config-migration nudges from
+		// exactly the audience most likely to need them.
+		warnOutdatedShellIntegration()
+		migrateGroveExcludes(groveDir)
+
 		projectRoot := grove.MustProjectRoot(groveDir)
 
 		mgr, err := worktree.NewManager(projectRoot)
@@ -116,6 +127,7 @@ shorthand alias (e.g. 'w'). Use 'grove install --help' for details.`,
 		cfg, cfgErr := config.LoadFromGroveDir(groveDir)
 		if cfgErr != nil {
 			log.Printf("config load failed, using defaults: %v", cfgErr)
+			cli.Warning(cli.NewStderr(), "Failed to load config, using defaults: %v", cfgErr)
 			cfg = config.LoadDefaults()
 		}
 		pluginMgr := registerPlugins(cfg)

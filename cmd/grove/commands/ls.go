@@ -59,9 +59,7 @@ var lsCmd = &cobra.Command{
 			return err
 		}
 
-		// Fast path: quiet mode skips dirty checks entirely. (--paths still
-		// pays for List()'s per-worktree git status; hoisting it needs a
-		// light path listing in internal/worktree.)
+		// Fast path: quiet mode skips dirty checks entirely.
 		if lsQuiet {
 			names, err := mgr.ListNames()
 			if err != nil {
@@ -73,22 +71,27 @@ var lsCmd = &cobra.Command{
 			return nil
 		}
 
+		// --paths only needs porcelain paths, so use the light listing and skip
+		// List()'s N parallel `git status` calls (P5).
+		if lsPaths {
+			trees, err := mgr.ListLight()
+			if err != nil {
+				return fmt.Errorf("failed to list worktrees: %w", err)
+			}
+			for _, tree := range trees {
+				fmt.Println(tree.Path)
+			}
+			return nil
+		}
+
 		trees, err := mgr.List()
 		if err != nil {
 			return fmt.Errorf("failed to list worktrees: %w", err)
 		}
 
 		if len(trees) == 0 {
-			if !lsPaths && !lsJSON {
+			if !lsJSON {
 				fmt.Println("No worktrees found")
-			}
-			return nil
-		}
-
-		// Paths only mode
-		if lsPaths {
-			for _, tree := range trees {
-				fmt.Println(tree.Path)
 			}
 			return nil
 		}
@@ -111,16 +114,7 @@ var lsCmd = &cobra.Command{
 
 		// Get tmux sessions for status
 		tmuxAvailable := tmux.IsTmuxAvailable()
-		var sessions map[string]*tmux.Session
-		if tmuxAvailable {
-			sessionList, err := tmux.ListSessions()
-			if err == nil {
-				sessions = make(map[string]*tmux.Session)
-				for _, s := range sessionList {
-					sessions[s.Name] = s
-				}
-			}
-		}
+		sessions := loadTmuxSessions()
 
 		// Collect plugin statuses
 		var pluginStatuses map[string][]plugins.StatusEntry

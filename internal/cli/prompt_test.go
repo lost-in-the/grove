@@ -8,6 +8,16 @@ import (
 	"time"
 )
 
+// TestIsInteractiveHonorsNonInteractiveEnv guards D1: GROVE_NONINTERACTIVE
+// forces IsInteractive() to false so prompts take their safe non-interactive
+// path instead of blocking on a PTY no human is watching.
+func TestIsInteractiveHonorsNonInteractiveEnv(t *testing.T) {
+	t.Setenv("GROVE_NONINTERACTIVE", "1")
+	if IsInteractive() {
+		t.Error("IsInteractive() = true with GROVE_NONINTERACTIVE=1, want false")
+	}
+}
+
 // replaceStdin swaps os.Stdin for the read end of a pipe and returns a
 // restore func. The test writes to wPipe and must close it when done.
 func replaceStdin(t *testing.T) (wPipe *os.File, restore func()) {
@@ -211,6 +221,43 @@ func TestChoose_NonInteractive(t *testing.T) {
 	_, err := Choose("pick one", []string{"a", "b", "c"})
 	if err == nil {
 		t.Error("Choose() expected error in non-interactive mode, got nil")
+	}
+}
+
+// TestParseChoice guards the B33 misparse class in ChooseIndex: Sscanf "%d"
+// accepted "2abc" as 2, silently dispatching on a mistyped answer. strconv.Atoi
+// must reject any trailing garbage so the caller's error path (re-prompt or
+// abort) runs instead.
+func TestParseChoice(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      string
+		numOptions int
+		want       int
+		wantErr    bool
+	}{
+		{"plain number", "2", 3, 1, false},
+		{"first option", "1", 3, 0, false},
+		{"last option", "3", 3, 2, false},
+		{"surrounding whitespace", " 2 ", 3, 1, false},
+		{"trailing garbage rejected", "2abc", 3, -1, true},
+		{"leading garbage rejected", "abc2", 3, -1, true},
+		{"non-numeric", "abc", 3, -1, true},
+		{"empty", "", 3, -1, true},
+		{"zero out of range", "0", 3, -1, true},
+		{"above range", "4", 3, -1, true},
+		{"negative", "-1", 3, -1, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseChoice(tt.input, tt.numOptions)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("parseChoice(%q, %d) error = %v, wantErr %v", tt.input, tt.numOptions, err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Errorf("parseChoice(%q, %d) = %d, want %d", tt.input, tt.numOptions, got, tt.want)
+			}
+		})
 	}
 }
 

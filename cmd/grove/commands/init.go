@@ -104,8 +104,10 @@ func runInit() error {
 		return err
 	}
 
-	if err := updateGitignore(cwd); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to update .gitignore: %v\n", err)
+	if migrated, err := grove.EnsureGroveExcludes(cwd); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to record grove's git excludes: %v\n", err)
+	} else if migrated {
+		emitExcludesMigrationNotice()
 	}
 
 	writeEnvrc(groveDir, projectName)
@@ -121,6 +123,7 @@ func runInit() error {
 
 	fmt.Println("")
 	fmt.Println("Next steps:")
+	fmt.Println("  git add .grove && git commit   Share the project config with your team")
 	fmt.Println("  grove new <name>   Create a new worktree")
 	fmt.Println("  grove ls           List all worktrees")
 	fmt.Println("  grove to <name>    Switch to a worktree")
@@ -199,7 +202,11 @@ func initializeState(groveDir, cwd, projectName string) error {
 		CreatedAt:      now,
 		LastAccessedAt: now,
 	}
-	return stateMgr.AddWorktree("main", mainState)
+	// Key the root under "root", the name DisplayName()/DisplayNameForPath()
+	// return for the main worktree. Registering it as "main" meant every
+	// runtime TouchWorktree("root")/GetWorktree("root") missed it, so the
+	// root's last_accessed_at was frozen at init time (B22).
+	return stateMgr.AddWorktree("root", mainState)
 }
 
 func writeEnvrc(groveDir, projectName string) {
@@ -472,7 +479,7 @@ func printHooksSummary(profile *detect.ProjectProfile) {
 // createInitialWorktrees creates the --with-testing/--with-scratch/--full
 // worktrees through the same path as `grove new`: worktree.Manager.Create
 // (which honors the [naming] pattern instead of hardcoding {project}-{name})
-// followed by setupCreatedWorktree (state registration, config symlink,
+// followed by setupCreatedWorktree (state registration, git excludes,
 // hooks.toml post_create hooks, docker auto-start). Without this, worktrees
 // grove itself just created weren't registered in state, so entering one and
 // running any grove command reported it as an unrecognized drifted worktree.

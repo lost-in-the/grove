@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"charm.land/bubbles/v2/help"
@@ -14,6 +15,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	lipgloss "charm.land/lipgloss/v2"
 
+	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/git"
 	"github.com/lost-in-the/grove/internal/plugins"
@@ -120,7 +122,9 @@ type Model struct {
 
 // NewModel creates a new TUI model.
 func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, pluginMgr ...*plugins.Manager) Model {
-	cfg, cfgErr := config.Load()
+	// projectRoot is already resolved — load config from its .grove directly
+	// instead of re-discovering it via FindRoot's git spawns (#142).
+	cfg, cfgErr := config.LoadFromGroveDir(filepath.Join(projectRoot, ".grove"))
 	if cfgErr != nil {
 		tuilog.Printf("warning: failed to load config: %v", cfgErr)
 	}
@@ -303,7 +307,9 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 	if m.sortMode != SortByName {
 		listItems = sortWorktreeItems(listItems, m.sortMode)
 	}
-	m.list.SetItems(listItems)
+	// Capture SetItems' cmd: with a filter applied it re-runs the filter, and
+	// dropping it left the list showing no items until the user re-filtered (B38).
+	setItemsCmd := m.list.SetItems(listItems)
 	m.computeColumnWidths()
 	m.loading = false
 
@@ -343,6 +349,7 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 	// dropped by handleDetailMetricsLoaded.
 	m.detailMetricsGen++
 	return m, tea.Batch(
+		setItemsCmd,
 		lookupPRsCmd(branches),
 		fetchDetailMetricsCmd(m.detailMetricsGen, msg.items, ResolveDefaultBranch(m.cfg)),
 	)
@@ -367,12 +374,15 @@ func (m Model) handleDetailMetricsLoaded(msg detailMetricsLoadedMsg) (tea.Model,
 			listItems[i] = item
 		}
 	}
-	m.list.SetItems(listItems)
+	// Return SetItems' cmd so an active filter is re-applied instead of
+	// blanking the list (B38).
+	cmd := m.list.SetItems(listItems)
 	m.updateDetailContent()
-	return m, nil
+	return m, cmd
 }
 
 func (m Model) handlePRLookup(msg prLookupMsg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
 	if msg.prs != nil {
 		listItems := m.list.Items()
 		for i, li := range listItems {
@@ -383,10 +393,11 @@ func (m Model) handlePRLookup(msg prLookupMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		m.list.SetItems(listItems)
+		// Return SetItems' cmd so an active filter is re-applied (B38).
+		cmd = m.list.SetItems(listItems)
 		m.updateDetailContent()
 	}
-	return m, nil
+	return m, cmd
 }
 
 func (m Model) handleWorktreeDeleted(msg worktreeDeletedMsg) (tea.Model, tea.Cmd) {
@@ -975,6 +986,14 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch {
+	// With a filter applied, esc clears it (the list's own ClearFilter
+	// behavior) instead of quitting the whole dashboard, which is what the
+	// docs promise and what the un-reached list binding intended (B38). q
+	// still quits regardless.
+	case key.Matches(msg, m.keys.Escape) && m.list.FilterState() == list.FilterApplied:
+		m.list.ResetFilter()
+		return m, nil
+
 	case key.Matches(msg, m.keys.Quit), key.Matches(msg, m.keys.Escape):
 		return m, tea.Quit
 
@@ -1230,7 +1249,7 @@ func (m Model) handleDeleteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		name := m.deleteState.Item.ShortName
 		m.deleteState.Deleting = true
-		return m, tea.Batch(m.spinner.Tick, deleteWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, name, m.deleteState.DeleteBranch))
+		return m, tea.Batch(m.spinner.Tick, deleteWorktreeCmd(m.worktreeMgr, m.stateMgr, m.cfg, m.projectRoot, name, m.deleteState.DeleteBranch))
 
 	case key.Matches(msg, m.keys.Escape), key.Matches(msg, m.keys.Deny):
 		m.activeView = ViewDashboard
@@ -1418,7 +1437,7 @@ func (m *Model) startCreate(s *CreateState) (tea.Model, tea.Cmd) {
 	s.Error = ""
 	s.Creating = true
 	s.ActivityLog = NewActivityLog(60, 10)
-	return m, tea.Batch(m.spinner.Tick, createWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, s.Name, s.BaseBranch, s.NewBranchName, s.ForkBase))
+	return m, tea.Batch(m.spinner.Tick, createWorktreeCmd(m.worktreeMgr, m.stateMgr, m.cfg, m.projectRoot, s.Name, s.BaseBranch, s.NewBranchName, s.ForkBase))
 }
 
 // handleBranchChoiceKey handles the initial "Select existing" vs "Create new" choice.
@@ -1837,7 +1856,7 @@ func (m Model) bulkDeleteCmd(items []WorktreeItem) tea.Cmd {
 	return func() tea.Msg {
 		failed := make(map[string]string)
 		for _, item := range items {
-			result := deleteWorktreeCmd(m.worktreeMgr, m.stateMgr, m.projectRoot, item.ShortName, false)()
+			result := deleteWorktreeCmd(m.worktreeMgr, m.stateMgr, m.cfg, m.projectRoot, item.ShortName, false)()
 			if msg, ok := result.(worktreeDeletedMsg); ok && msg.err != nil {
 				failed[item.ShortName] = msg.err.Error()
 			}
@@ -2489,19 +2508,21 @@ func runModel(model Model) (string, bool, error) {
 		tmuxSwitched := m.handleTmuxSwitch(switchPath)
 
 		if !tmuxSwitched {
-			if cdFile := os.Getenv("GROVE_CD_FILE"); cdFile != "" {
-				tuilog.Printf("runModel: writing switchTo=%q to GROVE_CD_FILE=%q", switchPath, cdFile)
-				if err := os.WriteFile(cdFile, []byte(switchPath), 0600); err != nil {
-					return "", false, fmt.Errorf("failed to write cd file: %w", err)
-				}
-			} else if os.Getenv("GROVE_SHELL") == "1" {
-				tuilog.Printf("runModel: printing cd directive for switchTo=%q", switchPath)
-				// Leading newline ensures cd: directive is on its own line,
-				// separated from any bubbletea alt-screen exit escape codes
-				// that may precede it on stdout.
-				fmt.Printf("\ncd:%s\n", switchPath)
+			// Route through cli.CdDirective: it prefers a pre-existing
+			// GROVE_CD_FILE (never recreating a stale one — B27 hardening) and
+			// falls back to a cd: line on stdout under GROVE_SHELL; a cd-file
+			// write failure degrades to that fallback instead of failing
+			// runModel. When the stdout fallback is the channel in play, print
+			// a leading newline first so the directive lands on its own line,
+			// separated from any bubbletea alt-screen exit escape codes that
+			// may precede it on stdout.
+			if os.Getenv("GROVE_CD_FILE") == "" && cli.IsShellIntegration() {
+				fmt.Println()
+			}
+			if cli.CdDirective(switchPath) {
+				tuilog.Printf("runModel: emitted cd directive for switchTo=%q", switchPath)
 			} else {
-				tuilog.Printf("runModel: switchTo=%q but no GROVE_CD_FILE or GROVE_SHELL set — cannot switch", switchPath)
+				tuilog.Printf("runModel: switchTo=%q but no usable GROVE_CD_FILE or GROVE_SHELL — cannot switch", switchPath)
 			}
 		}
 	}

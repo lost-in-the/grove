@@ -418,3 +418,29 @@ func TestGetNamePatternFromConfig(t *testing.T) {
 		}
 	})
 }
+
+func TestValidateWorktreeName(t *testing.T) {
+	tests := []struct {
+		name string
+		want string // "" = valid
+	}{
+		{"", ""},
+		{"valid-name", ""},
+		{"also_valid", ""},
+		{"feat.2", ""},
+		{"root", `"root" is reserved for the main worktree`},
+		{"../escape", "name contains invalid characters"},
+		{"a/b", "name contains invalid characters"},
+		{"has space", "name contains invalid characters"},
+		{"has:colon", "name contains invalid characters"},
+		{"-dash", "name cannot start with - or ."},
+		{".dot", "name cannot start with - or ."},
+		{"new\nline", "name contains control characters"},
+		{"tab\there", "name contains control characters"},
+	}
+	for _, tt := range tests {
+		if got := ValidateWorktreeName(tt.name); got != tt.want {
+			t.Errorf("ValidateWorktreeName(%q) = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}

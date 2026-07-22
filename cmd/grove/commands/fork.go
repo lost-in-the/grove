@@ -2,19 +2,16 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/exitcode"
-	"github.com/lost-in-the/grove/internal/grove"
-	"github.com/lost-in-the/grove/internal/hooks"
 	"github.com/lost-in-the/grove/internal/output"
-	"github.com/lost-in-the/grove/internal/state"
 	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
@@ -73,6 +70,12 @@ Examples:
 
 		if name == "" {
 			return fmt.Errorf("worktree name cannot be empty")
+		}
+		// Same guard as `grove new`/`grove open`/the TUI overlays: without it,
+		// `grove fork root` collides with the main worktree's reserved state
+		// and tmux keys, and separators like "/" escape the projects dir.
+		if msg := worktree.ValidateWorktreeName(name); msg != "" {
+			return fmt.Errorf("invalid worktree name '%s': %s", name, msg)
 		}
 
 		mgr, err := ctx.WorktreeManager()
@@ -201,14 +204,8 @@ Examples:
 			cli.Success(w, "Created worktree '%s' with branch '%s'", name, newBranchName)
 		}
 
-		// Symlink config.toml from main worktree
-		if err := grove.EnsureConfigSymlink(ctx.ProjectRoot, newTree.Path); err != nil {
-			if !forkJSON {
-				cli.Warning(w, "Failed to symlink config: %v", err)
-			}
-		}
-
-		// Apply WIP patch to new worktree if needed
+		// Apply WIP patch to new worktree if needed — BEFORE bootstrap, so the
+		// post_create hooks below see the copied changes.
 		if len(wipPatch) > 0 && (forkMoveWIP || forkCopyWIP) {
 			newWipHandler := worktree.NewWIPHandler(newTree.Path)
 			if err := newWipHandler.ApplyPatch(wipPatch); err != nil {
@@ -234,31 +231,32 @@ Examples:
 			}
 		}
 
-		// Register in state with parent tracking
-		now := time.Now()
-		wsState := &state.WorktreeState{
-			Path:           newTree.Path,
+		// Provision through the shared bootstrap — git excludes, state
+		// registration (with parent tracking), SetupFiles, and plugin + config
+		// post_create hooks — the same sequence as grove new, instead of the
+		// hand-rolled mirror fork used to keep in sync by hand (this is how the
+		// post_create B32 gap slipped in). Output routing matches
+		// setupCreatedWorktree: nil in JSON mode so stdout stays machine-clean.
+		var bootstrapWriter *cli.Writer
+		if !forkJSON {
+			bootstrapWriter = w
+		}
+		if err := worktree.BootstrapWorktree(ctx.State, ctx.Config, worktree.BootstrapOpts{
+			Name:           name,
 			Branch:         newBranchName,
-			CreatedAt:      now,
-			LastAccessedAt: now,
+			WorktreePath:   newTree.Path,
+			MainPath:       ctx.ProjectRoot,
+			ProjectName:    mgr.GetProjectName(),
 			ParentWorktree: parentName,
-		}
-		if err := ctx.State.AddWorktree(name, wsState); err != nil {
-			cli.Warning(stderr, "worktree created but state tracking failed: %v", err)
+		}, bootstrapWriter); err != nil {
+			// A required post-create hook failing fails the command (B7); other
+			// bootstrap issues (state, setup) stay recoverable — warn and point
+			// at `grove repair`, preserving fork's prior leniency.
+			if errors.Is(err, worktree.ErrRequiredHookFailed) {
+				return err
+			}
+			cli.Warning(stderr, "worktree created but provisioning had issues: %v", err)
 			cli.Info(stderr, "run 'grove repair' to fix")
-		}
-
-		runFileSetup(ctx.Config, newTree.Path, ctx.ProjectRoot, w, forkJSON)
-
-		// Fire post-create hook
-		hookCtx := &hooks.Context{
-			Worktree:     name,
-			Config:       ctx.Config,
-			WorktreePath: newTree.Path,
-			MainPath:     ctx.ProjectRoot,
-		}
-		if err := hooks.Fire(hooks.EventPostCreate, hookCtx); err != nil {
-			cli.Warning(stderr, "Post-create hook failed: %v", err)
 		}
 
 		projectName := mgr.GetProjectName()
@@ -292,7 +290,7 @@ Examples:
 		// "off" suppress the client switch (terminal takeover) — same policy
 		// as `grove new` and `grove to`.
 		if !forkNoSwitch {
-			suppressTmux := effectiveTmuxMode(ctx.Config.Tmux.Mode, ctx.Config.AgentMode, false, false) == tmuxModeOff
+			suppressTmux := resolveTmuxMode(ctx.Config, false, false) == tmuxModeOff
 			sessionName := worktree.TmuxSessionName(projectName, name)
 			if !switchToWorktree(ctx, stderr, parentName, name, sessionName, newTree.Path, suppressTmux) {
 				emitCdOrExplain(stderr, newTree.Path)

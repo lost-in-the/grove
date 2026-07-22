@@ -3,7 +3,9 @@ package hooks
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -56,6 +58,441 @@ func TestVariablesInterpolate(t *testing.T) {
 	}
 }
 
+// TestInterpolateShellPreventsInjection guards B13: a malicious branch name
+// (grove will check one out from an untrusted PR) must not inject shell
+// commands when interpolated into a command hook. The end-to-end check runs the
+// interpolated command via the same `sh -c` path builtinCommand uses and
+// asserts the injected side effect never happens.
+func TestInterpolateShellPreventsInjection(t *testing.T) {
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "pwned")
+
+	// A branch name crafted to break out of the command and create $marker,
+	// including a double-quote to escape the template's own quoting.
+	v := &Variables{Branch: `x"; touch ` + marker + `; echo "`}
+
+	// A hook that echoes the branch inside its own quotes — the classic docs
+	// recipe shape, and the case naive single-quoting fails to protect.
+	cmd := v.InterpolateShell(`echo "switched to {{.branch}}"`)
+
+	if err := runCommand(cmd, dir, 5*time.Second, v.ShellEnv(), &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runCommand error = %v (cmd=%q)", err, cmd)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatalf("command injection succeeded: %q created the marker file", marker)
+	}
+
+	// The value must be passed by reference, never spliced into the command.
+	if !strings.Contains(cmd, "${GROVE_HOOK_branch}") {
+		t.Errorf("branch was not replaced with an env reference: %q", cmd)
+	}
+	if strings.Contains(cmd, "touch") {
+		t.Errorf("raw branch value leaked into the command string: %q", cmd)
+	}
+}
+
+// runShellHook executes a rewritten hook command the same way builtinCommand
+// does and returns its combined output.
+func runShellHook(t *testing.T, v *Variables, template string) string {
+	t.Helper()
+	cmd := v.InterpolateShell(template)
+	var out bytes.Buffer
+	if err := runCommand(cmd, t.TempDir(), 5*time.Second, v.ShellEnv(), &out, &out); err != nil {
+		t.Fatalf("runCommand error = %v (cmd=%q)", err, cmd)
+	}
+	return out.String()
+}
+
+// TestInterpolateShellQuoteContexts pins the rewriting for each shell quoting
+// context a hook template can put a token in. Single quotes are the critical
+// case: ${...} never expands there, so a naive rewrite silently broke every
+// shipped recipe of the form `pkill -f '{{.worktree}}'` — the command matched
+// the literal string ${GROVE_HOOK_worktree} instead of the worktree name.
+func TestInterpolateShellQuoteContexts(t *testing.T) {
+	t.Run("single-quoted token expands", func(t *testing.T) {
+		v := &Variables{Worktree: "feat-x"}
+		got := runShellHook(t, v, `printf '%s' 'switched to {{.worktree}}'`)
+		if got != "switched to feat-x" {
+			t.Errorf("single-quoted token: output = %q, want %q", got, "switched to feat-x")
+		}
+	})
+
+	t.Run("double-quoted token expands", func(t *testing.T) {
+		v := &Variables{Branch: "feature/x"}
+		got := runShellHook(t, v, `printf '%s' "on {{.branch}}"`)
+		if got != "on feature/x" {
+			t.Errorf("double-quoted token: output = %q, want %q", got, "on feature/x")
+		}
+	})
+
+	t.Run("bare token with spaces stays one word", func(t *testing.T) {
+		// Paths legally contain spaces; an unquoted expansion would split
+		// `ls {{.new_path}}` into two arguments.
+		v := &Variables{NewPath: "/tmp/My Project"}
+		got := runShellHook(t, v, `printf '%s\n' {{.new_path}}`)
+		if got != "/tmp/My Project\n" {
+			t.Errorf("bare token word-split: output = %q, want %q", got, "/tmp/My Project\n")
+		}
+	})
+
+	t.Run("bare token with glob char is not expanded", func(t *testing.T) {
+		v := &Variables{Worktree: "*"}
+		got := runShellHook(t, v, `printf '%s' {{.worktree}}`)
+		if got != "*" {
+			t.Errorf("glob expanded: output = %q, want %q", got, "*")
+		}
+	})
+
+	t.Run("escaped quote does not confuse the tracker", func(t *testing.T) {
+		// The \" before the token is an escaped literal quote, not a context
+		// change — the token is still bare and must stay one word.
+		v := &Variables{Worktree: "a b"}
+		got := runShellHook(t, v, `printf '%s\n' \" {{.worktree}}`)
+		if got != "\"\na b\n" {
+			t.Errorf("output = %q, want %q", got, "\"\na b\n")
+		}
+	})
+}
+
+// TestInterpolateShellComplexContexts pins interpolation for shell contexts
+// beyond flat quoting, each of which the earlier flat scanner got wrong:
+//   - command substitution `$( )` and backticks restart quoting, so the outer
+//     quotes must not leak in — a single-quoted token there had emitted a bare
+//     ${...} the shell then treated literally;
+//   - POSIX arithmetic `$(( ))` takes no quoting, and a quoted operand is a
+//     syntax error on dash (`/bin/sh` on Debian);
+//   - heredoc bodies do no word-splitting, so an added "..." wrapper lands
+//     literally in the emitted text.
+//
+// A token in any of these must still expand to the value, unquoted where the
+// context demands it.
+func TestInterpolateShellComplexContexts(t *testing.T) {
+	t.Run("command substitution with inner single quotes", func(t *testing.T) {
+		v := &Variables{Worktree: "feat-x"}
+		got := runShellHook(t, v, `printf '%s' "$(printf '%s' '{{.worktree}}')"`)
+		if got != "feat-x" {
+			t.Errorf("cmd-sub single-quote: output = %q, want %q", got, "feat-x")
+		}
+	})
+
+	t.Run("command substitution with inner double quotes", func(t *testing.T) {
+		v := &Variables{Branch: "feature/x"}
+		got := runShellHook(t, v, `printf '%s' "$(printf '%s' "{{.branch}}")"`)
+		if got != "feature/x" {
+			t.Errorf("cmd-sub double-quote: output = %q, want %q", got, "feature/x")
+		}
+	})
+
+	t.Run("command substitution bare token keeps spaces", func(t *testing.T) {
+		v := &Variables{NewPath: "/tmp/My Project"}
+		got := runShellHook(t, v, `printf '%s' "$(printf '%s' {{.new_path}})"`)
+		if got != "/tmp/My Project" {
+			t.Errorf("cmd-sub bare: output = %q, want %q", got, "/tmp/My Project")
+		}
+	})
+
+	t.Run("backticks with inner single quotes", func(t *testing.T) {
+		v := &Variables{Worktree: "feat-x"}
+		got := runShellHook(t, v, "printf '%s' `printf '%s' '{{.worktree}}'`")
+		if got != "feat-x" {
+			t.Errorf("backtick single-quote: output = %q, want %q", got, "feat-x")
+		}
+	})
+
+	t.Run("arithmetic operand is not quoted", func(t *testing.T) {
+		v := &Variables{Port: 41}
+		cmd := v.InterpolateShell(`echo $(({{.port}} + 1))`)
+		if strings.Contains(cmd, `"${GROVE_HOOK_port}"`) {
+			t.Errorf("arithmetic operand was quoted (breaks on dash): %q", cmd)
+		}
+		got := strings.TrimSpace(runShellHook(t, v, `echo $(({{.port}} + 1))`))
+		if got != "42" {
+			t.Errorf("arithmetic: output = %q, want %q", got, "42")
+		}
+	})
+
+	t.Run("heredoc body token expands without quote wrapping", func(t *testing.T) {
+		v := &Variables{Branch: "feature/x"}
+		got := runShellHook(t, v, "cat <<EOF\nbranch={{.branch}}\nEOF\n")
+		if got != "branch=feature/x\n" {
+			t.Errorf("heredoc: output = %q, want %q", got, "branch=feature/x\n")
+		}
+	})
+
+	t.Run("heredoc body preserves spaces without splitting", func(t *testing.T) {
+		v := &Variables{NewPath: "/tmp/My Project"}
+		got := runShellHook(t, v, "cat <<EOF\n{{.new_path}}\nEOF\n")
+		if got != "/tmp/My Project\n" {
+			t.Errorf("heredoc spaces: output = %q, want %q", got, "/tmp/My Project\n")
+		}
+	})
+
+	t.Run("quoted heredoc delimiter still fills the value", func(t *testing.T) {
+		// `<<'EOF'` suppresses shell expansion entirely, so a ${...} reference
+		// would land literally. The body is emitted verbatim by the shell, so
+		// substituting the value directly is both correct and injection-safe.
+		v := &Variables{Branch: "feature/x"}
+		got := runShellHook(t, v, "cat <<'EOF'\nbranch={{.branch}}\nEOF\n")
+		if got != "branch=feature/x\n" {
+			t.Errorf("quoted heredoc: output = %q, want %q", got, "branch=feature/x\n")
+		}
+	})
+}
+
+// TestInterpolateShellScannerRegressions pins four context-model bugs found in
+// a security review of InterpolateShell (injection itself was already closed —
+// values ride as env — but the scanner misjudged these constructs):
+//
+//   - `<<` inside double quotes is literal text, not a heredoc introducer; the
+//     phantom heredoc swallowed the rest of the command as "body" and emitted
+//     every later token unquoted (word-splitting/globbing on the value);
+//   - a bare subshell/case-pattern `)` inside `$( )` popped the substitution
+//     frame early, so later tokens were emitted in the wrong context — and a
+//     `)` inside a double-quoted region is literal and must not pop either;
+//   - a backslash immediately before a token consumed the token's opening `{`,
+//     so `\{{.branch}}` was emitted literally instead of substituted.
+//
+// Each case runs the rewritten command through real `sh` the same way
+// builtinCommand does; wantContains additionally pins the load-bearing
+// fragment of the rewrite.
+func TestInterpolateShellScannerRegressions(t *testing.T) {
+	tests := []struct {
+		name         string
+		vars         *Variables
+		template     string
+		want         string // combined output through `sh -c`
+		wantContains string // fragment the rewritten command must contain ("" to skip)
+	}{
+		{
+			name:         "double-quoted << is not a heredoc",
+			vars:         &Variables{NewPath: "/tmp/My Project"},
+			template:     "printf '%s\\n' \"a << b\"\nprintf '%s' {{.new_path}}",
+			want:         "a << b\n/tmp/My Project",
+			wantContains: `"${GROVE_HOOK_new_path}"`,
+		},
+		{
+			name:         "subshell close paren inside command substitution",
+			vars:         &Variables{Branch: "a b"},
+			template:     `printf '%s' "$( (exit 0) && printf '%s' {{.branch}} )"`,
+			want:         "a b",
+			wantContains: `"${GROVE_HOOK_branch}"`,
+		},
+		{
+			name:     "double-quoted close paren inside command substitution",
+			vars:     &Variables{Branch: "feature/x"},
+			template: `printf '%s' "$(printf '%s' "a)b {{.branch}}")"`,
+			want:     "a)b feature/x",
+		},
+		{
+			name:     "case pattern close paren inside command substitution",
+			vars:     &Variables{Worktree: "feat x"},
+			template: `printf '%s' "$(case y in (y) printf '%s' '{{.worktree}}';; esac)"`,
+			want:     "feat x",
+		},
+		{
+			name:         "backslash before bare token still substitutes",
+			vars:         &Variables{Branch: "feature/x"},
+			template:     `printf '%s' \{{.branch}}`,
+			want:         "feature/x",
+			wantContains: `"${GROVE_HOOK_branch}"`,
+		},
+		{
+			name:     "backslash before double-quoted token keeps literal backslash",
+			vars:     &Variables{Branch: "feature/x"},
+			template: `printf '%s' "\{{.branch}}"`,
+			want:     `\feature/x`,
+		},
+		{
+			name:     "backslash before single-quoted token keeps literal backslash",
+			vars:     &Variables{Branch: "feature/x"},
+			template: `printf '%s' '\{{.branch}}'`,
+			want:     `\feature/x`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.wantContains != "" {
+				if cmd := tt.vars.InterpolateShell(tt.template); !strings.Contains(cmd, tt.wantContains) {
+					t.Errorf("InterpolateShell(%q) = %q, missing %q", tt.template, cmd, tt.wantContains)
+				}
+			}
+			if got := runShellHook(t, tt.vars, tt.template); got != tt.want {
+				t.Errorf("output = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestInterpolateShellAnsiCQuoting pins $'...' (ANSI-C quoting) handling. The
+// old close-splice reopened with a plain ' — the remainder lost its ANSI-C
+// escape semantics — and an escaped \' wrongly toggled single-quote state,
+// corrupting the rest of the rewrite. A token splice must reopen with $'.
+// $'...' is a bash/ksh construct (the docker plugin's `bash -cil` sink), not
+// POSIX sh, so the runtime leg uses bash directly.
+func TestInterpolateShellAnsiCQuoting(t *testing.T) {
+	runBash := func(t *testing.T, v *Variables, template string) string {
+		t.Helper()
+		bash, err := exec.LookPath("bash")
+		if err != nil {
+			t.Skipf("bash not available: %v", err)
+		}
+		cmd := v.InterpolateShell(template)
+		c := exec.Command(bash, "-c", cmd)
+		c.Env = append(os.Environ(), v.ShellEnv()...)
+		out, err := c.CombinedOutput()
+		if err != nil {
+			t.Fatalf("bash -c error = %v (cmd=%q, out=%q)", err, cmd, out)
+		}
+		return string(out)
+	}
+
+	t.Run("token splice reopens with ANSI-C quoting", func(t *testing.T) {
+		v := &Variables{Branch: "feature/x"}
+		tmpl := `printf '%s' $'a\n{{.branch}}\tz'`
+		if cmd := v.InterpolateShell(tmpl); !strings.Contains(cmd, `'"${GROVE_HOOK_branch}"$'`) {
+			t.Errorf("splice did not reopen ANSI-C quoting: %q", cmd)
+		}
+		if got, want := runBash(t, v, tmpl), "a\nfeature/x\tz"; got != want {
+			t.Errorf("output = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("escaped quote does not close ANSI-C quoting", func(t *testing.T) {
+		v := &Variables{Worktree: "feat-x"}
+		got := runBash(t, v, `printf '%s' $'don\'t {{.worktree}}'`)
+		if got != "don't feat-x" {
+			t.Errorf("output = %q, want %q", got, "don't feat-x")
+		}
+	})
+}
+
+// TestCommandHookDefaultWorkingDir pins the event-aware default working
+// directory. The "new" worktree path is guaranteed ABSENT for exactly two
+// events — pre-create (not created yet) and post-remove (already deleted) —
+// so a default-configured command hook there must run from the main worktree
+// instead of failing chdir with ENOENT on every invocation.
+func TestCommandHookDefaultWorkingDir(t *testing.T) {
+	runIn := func(t *testing.T, event, newPath, mainPath string) string {
+		t.Helper()
+		var out bytes.Buffer
+		action := &HookAction{Type: "command", Command: "pwd", Timeout: 5}
+		ctx := &ExecutionContext{Event: event, NewPath: newPath, MainPath: mainPath, Output: &out}
+		if err := builtinCommand(action, ctx, &Variables{}); err != nil {
+			t.Fatalf("builtinCommand(%s) error = %v", event, err)
+		}
+		return strings.TrimSpace(strings.SplitN(out.String(), "\n", 2)[0])
+	}
+
+	mainDir := t.TempDir()
+	// Resolve symlinks so pwd's output compares equal on macOS /var→/private/var.
+	if resolved, err := filepath.EvalSymlinks(mainDir); err == nil {
+		mainDir = resolved
+	}
+	missing := filepath.Join(mainDir, "not-created-yet")
+
+	t.Run("pre-create defaults to main", func(t *testing.T) {
+		if got := runIn(t, EventPreCreate, missing, mainDir); got != mainDir {
+			t.Errorf("pre-create default dir = %q, want main %q", got, mainDir)
+		}
+	})
+
+	t.Run("post-remove defaults to main", func(t *testing.T) {
+		if got := runIn(t, EventPostRemove, missing, mainDir); got != mainDir {
+			t.Errorf("post-remove default dir = %q, want main %q", got, mainDir)
+		}
+	})
+
+	t.Run("post-create still defaults to new", func(t *testing.T) {
+		newDir := filepath.Join(mainDir, "wt")
+		if err := os.MkdirAll(newDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if got := runIn(t, EventPostCreate, newDir, mainDir); got != newDir {
+			t.Errorf("post-create default dir = %q, want new %q", got, newDir)
+		}
+	})
+
+	// The full load path: LoadHooksConfig used to normalize working_dir=""
+	// to "new" at parse time, erasing the "unset" signal before the executor
+	// could apply the event-aware default — the unit cases above pass a raw
+	// action and would miss that.
+	t.Run("default survives config load", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir()) // isolate from any global hooks.toml
+		groveDir := t.TempDir()
+		hooksToml := `[hooks]
+[[hooks.pre_create]]
+type = "command"
+command = "pwd > out.txt"
+`
+		if err := os.WriteFile(filepath.Join(groveDir, "hooks.toml"), []byte(hooksToml), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := LoadHooksConfig(groveDir)
+		if err != nil {
+			t.Fatalf("LoadHooksConfig: %v", err)
+		}
+		e := NewExecutorWithConfig(cfg)
+		e.Output = &bytes.Buffer{}
+
+		mainDir := t.TempDir()
+		ctx := &ExecutionContext{
+			Event:    EventPreCreate,
+			NewPath:  filepath.Join(mainDir, "not-created-yet"),
+			MainPath: mainDir,
+			Output:   &bytes.Buffer{},
+		}
+		if err := e.Execute(EventPreCreate, ctx); err != nil {
+			t.Fatalf("Execute: %v", err)
+		}
+		// The command ran iff chdir succeeded — out.txt lands in main.
+		if _, err := os.Stat(filepath.Join(mainDir, "out.txt")); err != nil {
+			t.Errorf("pre_create command did not run from the main worktree: %v", err)
+		}
+	})
+}
+
+// TestInterpolateShellInjectionAllContexts extends the B13 guarantee to every
+// quoting context: whatever quoting the template uses, a hostile value must
+// never execute.
+func TestInterpolateShellInjectionAllContexts(t *testing.T) {
+	templates := map[string]string{
+		"bare":                 `echo {{.branch}}`,
+		"double-quoted":        `echo "{{.branch}}"`,
+		"single-quoted":        `echo '{{.branch}}'`,
+		"command-sub":          `echo "$(echo '{{.branch}}')"`,
+		"command-sub-subshell": `echo "$( (exit 0) && echo {{.branch}} )"`,
+		"command-sub-paren":    `echo "$(echo "a)b {{.branch}}")"`,
+		"backtick":             "echo `echo '{{.branch}}'`",
+		"backslash":            `echo \{{.branch}}`,
+		"ansi-c":               `echo $'{{.branch}}'`,
+		"heredoc":              "cat <<EOF\n{{.branch}}\nEOF\n",
+		"heredoc-quoted":       "cat <<'EOF'\n{{.branch}}\nEOF\n",
+	}
+	payloads := []string{
+		`x"; touch MARKER; echo "`,
+		`x'; touch MARKER; echo '`,
+		"`touch MARKER`",
+		`$(touch MARKER)`,
+	}
+	for ctxName, tmpl := range templates {
+		for _, payload := range payloads {
+			t.Run(ctxName+"/"+payload, func(t *testing.T) {
+				dir := t.TempDir()
+				marker := filepath.Join(dir, "pwned")
+				v := &Variables{Branch: strings.ReplaceAll(payload, "MARKER", marker)}
+				cmd := v.InterpolateShell(tmpl)
+				if err := runCommand(cmd, dir, 5*time.Second, v.ShellEnv(), &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+					t.Fatalf("runCommand error = %v (cmd=%q)", err, cmd)
+				}
+				if _, err := os.Stat(marker); err == nil {
+					t.Fatalf("injection in %s context succeeded (cmd=%q)", ctxName, cmd)
+				}
+			})
+		}
+	}
+}
+
 func TestExecute(t *testing.T) {
 	t.Run("nil config returns nil", func(t *testing.T) {
 		e := NewExecutorWithConfig(nil)
@@ -88,6 +525,26 @@ func TestExecute(t *testing.T) {
 		err := e.Execute(EventPostCreate, &ExecutionContext{})
 		if err == nil {
 			t.Error("Execute() with required failing action = nil, want error")
+		}
+	})
+
+	// B7: a required failure aborts the remaining actions (it used to record
+	// the error but keep running).
+	t.Run("required failure aborts subsequent actions", func(t *testing.T) {
+		dir := t.TempDir()
+		marker := filepath.Join(dir, "second_ran")
+		cfg := &HooksConfig{}
+		cfg.Hooks.PostCreate = []HookAction{
+			{Type: "command", Command: "false", Required: true, Timeout: 60, WorkingDir: dir},
+			{Type: "command", Command: "touch " + marker, Timeout: 60, WorkingDir: dir},
+		}
+		e := NewExecutorWithConfig(cfg)
+		e.Output = &bytes.Buffer{}
+		if err := e.Execute(EventPostCreate, &ExecutionContext{NewPath: dir, MainPath: dir}); err == nil {
+			t.Fatal("Execute() = nil, want error from required failure")
+		}
+		if _, err := os.Stat(marker); err == nil {
+			t.Error("second action ran after a required failure; abort did not stop the sequence")
 		}
 	})
 
@@ -680,7 +1137,7 @@ func TestRunCommand(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		dir := t.TempDir()
 		var stdout, stderr bytes.Buffer
-		err := runCommand("echo hello", dir, 10*time.Second, &stdout, &stderr)
+		err := runCommand("echo hello", dir, 10*time.Second, nil, &stdout, &stderr)
 		if err != nil {
 			t.Fatalf("runCommand() error = %v", err)
 		}
@@ -689,7 +1146,7 @@ func TestRunCommand(t *testing.T) {
 	t.Run("failure", func(t *testing.T) {
 		dir := t.TempDir()
 		var stdout, stderr bytes.Buffer
-		err := runCommand("exit 1", dir, 10*time.Second, &stdout, &stderr)
+		err := runCommand("exit 1", dir, 10*time.Second, nil, &stdout, &stderr)
 		if err == nil {
 			t.Error("runCommand() with failing command = nil, want error")
 		}
@@ -701,7 +1158,7 @@ func TestRunCommand(t *testing.T) {
 			t.Fatalf("WriteFile: %v", err)
 		}
 		var stdout, stderr bytes.Buffer
-		err := runCommand("test -f marker.txt", dir, 10*time.Second, &stdout, &stderr)
+		err := runCommand("test -f marker.txt", dir, 10*time.Second, nil, &stdout, &stderr)
 		if err != nil {
 			t.Errorf("runCommand() working dir test = %v, want nil", err)
 		}
@@ -710,7 +1167,7 @@ func TestRunCommand(t *testing.T) {
 	t.Run("output captured in writers", func(t *testing.T) {
 		dir := t.TempDir()
 		var stdout, stderr bytes.Buffer
-		err := runCommand("echo captured_output", dir, 10*time.Second, &stdout, &stderr)
+		err := runCommand("echo captured_output", dir, 10*time.Second, nil, &stdout, &stderr)
 		if err != nil {
 			t.Fatalf("runCommand() error = %v", err)
 		}

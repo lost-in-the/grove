@@ -3,6 +3,7 @@
 package tui
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/state"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
@@ -189,7 +191,7 @@ func TestCreateWorktreeCmd_NewBranch(t *testing.T) {
 	repo := setupRailsFixture(t)
 	mgr, stateMgr := newTestManagers(t, repo)
 
-	cmd := createWorktreeCmd(mgr, stateMgr, repo, "new-feature", "", "", "")
+	cmd := createWorktreeCmd(mgr, stateMgr, nil, repo, "new-feature", "", "", "")
 	created := drainCreationStream(t, cmd)
 	if created.err != nil {
 		t.Fatalf("unexpected error: %v", created.err)
@@ -205,6 +207,81 @@ func TestCreateWorktreeCmd_NewBranch(t *testing.T) {
 	}
 }
 
+// TestCreateWorktreeCmd_RequiredPreCreateHookAborts: a required pre_create
+// hook that fails must abort the dashboard create before the worktree exists,
+// same as `grove new` (B7). The dashboard previously created unconditionally,
+// bypassing policy gates.
+func TestCreateWorktreeCmd_RequiredPreCreateHookAborts(t *testing.T) {
+	repo := setupRailsFixture(t)
+	mgr, stateMgr := newTestManagers(t, repo)
+
+	hooksToml := `[hooks]
+[[hooks.pre_create]]
+type = "command"
+command = "exit 1"
+on_failure = "fail"
+working_dir = "main"
+`
+	if err := os.WriteFile(filepath.Join(repo, ".grove", "hooks.toml"), []byte(hooksToml), 0o644); err != nil {
+		t.Fatalf("write hooks.toml: %v", err)
+	}
+
+	cmd := createWorktreeCmd(mgr, stateMgr, nil, repo, "gated", "", "", "")
+	created := drainCreationStream(t, cmd)
+	if created.err == nil {
+		t.Fatal("expected required pre-create hook failure to abort the create")
+	}
+	wtPath := filepath.Join(filepath.Dir(repo), "rails-app-gated")
+	if _, err := os.Stat(wtPath); !os.IsNotExist(err) {
+		t.Errorf("worktree was created despite required pre-create hook failure")
+	}
+}
+
+// TestForkWorktreeCmd_RunsBootstrap: the dashboard fork overlay used to
+// register state + tmux only, skipping the excludes/SetupFiles/post_create
+// bootstrap that `grove fork` and dashboard create run. It must now route
+// through BootstrapWorktree — so post_create hooks fire and the fork's parent
+// is recorded in state.
+func TestForkWorktreeCmd_RunsBootstrap(t *testing.T) {
+	repo := setupRailsFixtureWithWorktrees(t, "src")
+	mgr, stateMgr := newTestManagers(t, repo)
+
+	hooksToml := `[hooks]
+[[hooks.post_create]]
+type = "command"
+command = "touch fork-post-create-ran"
+working_dir = "main"
+`
+	if err := os.WriteFile(filepath.Join(repo, ".grove", "hooks.toml"), []byte(hooksToml), 0o644); err != nil {
+		t.Fatalf("write hooks.toml: %v", err)
+	}
+
+	srcPath := filepath.Join(filepath.Dir(repo), "rails-app-src")
+	forkState := &ForkState{
+		Source: WorktreeItem{ShortName: "src", Branch: "src", Path: srcPath},
+		Name:   "forked",
+	}
+	msg := forkWorktreeCmd(mgr, stateMgr, nil, repo, forkState)()
+	done, ok := msg.(forkCompleteMsg)
+	if !ok {
+		t.Fatalf("expected forkCompleteMsg, got %T", msg)
+	}
+	if done.err != nil {
+		t.Fatalf("fork failed: %v", done.err)
+	}
+
+	if _, err := os.Stat(filepath.Join(repo, "fork-post-create-ran")); err != nil {
+		t.Errorf("post_create hook did not run on dashboard fork: %v", err)
+	}
+	st, err := stateMgr.GetWorktree("forked")
+	if err != nil || st == nil {
+		t.Fatalf("forked worktree not registered in state: %v", err)
+	}
+	if st.ParentWorktree != "src" {
+		t.Errorf("fork state ParentWorktree = %q, want %q", st.ParentWorktree, "src")
+	}
+}
+
 func TestCreateWorktreeCmd_WithBaseBranch(t *testing.T) {
 	repo := setupRailsFixture(t)
 	mgr, stateMgr := newTestManagers(t, repo)
@@ -214,7 +291,7 @@ func TestCreateWorktreeCmd_WithBaseBranch(t *testing.T) {
 	// already exist and not be checked out elsewhere — main fails because
 	// the fixture repo itself is checked out at main.
 	runGit(t, repo, "branch", "feature-base")
-	cmd := createWorktreeCmd(mgr, stateMgr, repo, "auth-work", "feature-base", "", "")
+	cmd := createWorktreeCmd(mgr, stateMgr, nil, repo, "auth-work", "feature-base", "", "")
 	created := drainCreationStream(t, cmd)
 	if created.err != nil {
 		t.Fatalf("unexpected error: %v", created.err)
@@ -236,7 +313,7 @@ func TestCreateWorktreeCmd_NewBranchNameThreaded(t *testing.T) {
 	// Worktree name "login" differs from the typed branch "feature/login-fix".
 	// Before the fix, the branch was named after the worktree and the typed
 	// name was silently lost.
-	cmd := createWorktreeCmd(mgr, stateMgr, repo, "login", "", "feature/login-fix", "")
+	cmd := createWorktreeCmd(mgr, stateMgr, nil, repo, "login", "", "feature/login-fix", "")
 	created := drainCreationStream(t, cmd)
 	if created.err != nil {
 		t.Fatalf("unexpected error: %v", created.err)
@@ -271,7 +348,7 @@ func TestCreateWorktreeCmd_ForkFromBase(t *testing.T) {
 	}
 
 	// Fork: no explicit new-branch name (named after the worktree), fromRef=develop.
-	cmd := createWorktreeCmd(mgr, stateMgr, repo, "forked", "", "", "develop")
+	cmd := createWorktreeCmd(mgr, stateMgr, nil, repo, "forked", "", "", "develop")
 	created := drainCreationStream(t, cmd)
 	if created.err != nil {
 		t.Fatalf("unexpected error: %v", created.err)
@@ -293,10 +370,10 @@ func TestCreateWorktreeCmd_InvalidName(t *testing.T) {
 	mgr, stateMgr := newTestManagers(t, repo)
 
 	// Create a worktree, then try to create it again (duplicate)
-	cmd := createWorktreeCmd(mgr, stateMgr, repo, "dup-test", "", "", "")
+	cmd := createWorktreeCmd(mgr, stateMgr, nil, repo, "dup-test", "", "", "")
 	drainCreationStream(t, cmd) // first creation
 
-	cmd2 := createWorktreeCmd(mgr, stateMgr, repo, "dup-test", "", "", "")
+	cmd2 := createWorktreeCmd(mgr, stateMgr, nil, repo, "dup-test", "", "", "")
 	created := drainCreationStream(t, cmd2)
 	if created.err == nil {
 		t.Error("expected error for duplicate worktree creation")
@@ -307,7 +384,7 @@ func TestCreateWorktreeCmd_BranchInState(t *testing.T) {
 	repo := setupRailsFixture(t)
 	mgr, stateMgr := newTestManagers(t, repo)
 
-	cmd := createWorktreeCmd(mgr, stateMgr, repo, "my-feature", "", "", "")
+	cmd := createWorktreeCmd(mgr, stateMgr, nil, repo, "my-feature", "", "", "")
 	created := drainCreationStream(t, cmd)
 	if created.err != nil {
 		t.Fatalf("unexpected error: %v", created.err)
@@ -334,7 +411,7 @@ func TestDeleteWorktreeCmd_Basic(t *testing.T) {
 	repo := setupRailsFixtureWithWorktrees(t, "to-delete")
 	mgr, stateMgr := newTestManagers(t, repo)
 
-	cmd := deleteWorktreeCmd(mgr, stateMgr, repo, "to-delete", false)
+	cmd := deleteWorktreeCmd(mgr, stateMgr, nil, repo, "to-delete", false)
 	msg := cmd()
 
 	deleted, ok := msg.(worktreeDeletedMsg)
@@ -355,7 +432,7 @@ func TestDeleteWorktreeCmd_WithBranch(t *testing.T) {
 	repo := setupRailsFixtureWithWorktrees(t, "del-branch")
 	mgr, stateMgr := newTestManagers(t, repo)
 
-	cmd := deleteWorktreeCmd(mgr, stateMgr, repo, "del-branch", true)
+	cmd := deleteWorktreeCmd(mgr, stateMgr, nil, repo, "del-branch", true)
 	msg := cmd()
 
 	deleted, ok := msg.(worktreeDeletedMsg)
@@ -380,7 +457,7 @@ func TestDeleteWorktreeCmd_NonExistent(t *testing.T) {
 	repo := setupRailsFixture(t)
 	mgr, stateMgr := newTestManagers(t, repo)
 
-	cmd := deleteWorktreeCmd(mgr, stateMgr, repo, "ghost", false)
+	cmd := deleteWorktreeCmd(mgr, stateMgr, nil, repo, "ghost", false)
 	msg := cmd()
 
 	deleted, ok := msg.(worktreeDeletedMsg)
@@ -389,6 +466,83 @@ func TestDeleteWorktreeCmd_NonExistent(t *testing.T) {
 	}
 	if deleted.err == nil {
 		t.Error("expected error for non-existent worktree")
+	}
+}
+
+// TestDeleteWorktreeCmd_RequiredPreRemoveHookAborts mirrors the CLI's B7
+// guarantee in the dashboard: a required (on_failure="fail") pre-remove hook
+// that fails must abort the delete and leave the worktree in place — `grove
+// rm` already refused, but the TUI logged the failure and deleted anyway.
+func TestDeleteWorktreeCmd_RequiredPreRemoveHookAborts(t *testing.T) {
+	repo := setupRailsFixtureWithWorktrees(t, "guarded")
+	mgr, stateMgr := newTestManagers(t, repo)
+
+	hooksToml := `[hooks]
+[[hooks.pre_remove]]
+type = "command"
+command = "exit 1"
+on_failure = "fail"
+working_dir = "main"
+`
+	if err := os.WriteFile(filepath.Join(repo, ".grove", "hooks.toml"), []byte(hooksToml), 0o644); err != nil {
+		t.Fatalf("write hooks.toml: %v", err)
+	}
+
+	cmd := deleteWorktreeCmd(mgr, stateMgr, nil, repo, "guarded", false)
+	msg := cmd()
+
+	deleted, ok := msg.(worktreeDeletedMsg)
+	if !ok {
+		t.Fatalf("expected worktreeDeletedMsg, got %T", msg)
+	}
+	if deleted.err == nil {
+		t.Fatal("expected required pre-remove hook failure to abort the delete")
+	}
+
+	wtPath := filepath.Join(filepath.Dir(repo), "rails-app-guarded")
+	if _, err := os.Stat(wtPath); err != nil {
+		t.Errorf("worktree was deleted despite required hook failure: %v", err)
+	}
+}
+
+// TestDeleteWorktreeCmd_RunsMainDirHooks pins two dashboard-delete fixes at
+// once: a pre_remove hook with working_dir="main" must run in the project root
+// (proving MainPath is set — an empty one ran it in the dashboard's cwd and
+// expanded {{.main_path}} to nothing), and hooks.toml post_remove actions must
+// run at all (the TUI used to skip them, unlike `grove rm`).
+func TestDeleteWorktreeCmd_RunsMainDirHooks(t *testing.T) {
+	repo := setupRailsFixtureWithWorktrees(t, "cleanup")
+	mgr, stateMgr := newTestManagers(t, repo)
+
+	hooksToml := `[hooks]
+[[hooks.pre_remove]]
+type = "command"
+command = "touch pre-remove-ran"
+working_dir = "main"
+[[hooks.post_remove]]
+type = "command"
+command = "touch post-remove-ran"
+working_dir = "main"
+`
+	if err := os.WriteFile(filepath.Join(repo, ".grove", "hooks.toml"), []byte(hooksToml), 0o644); err != nil {
+		t.Fatalf("write hooks.toml: %v", err)
+	}
+
+	cmd := deleteWorktreeCmd(mgr, stateMgr, nil, repo, "cleanup", false)
+	msg := cmd()
+	deleted, ok := msg.(worktreeDeletedMsg)
+	if !ok {
+		t.Fatalf("expected worktreeDeletedMsg, got %T", msg)
+	}
+	if deleted.err != nil {
+		t.Fatalf("delete failed: %v", deleted.err)
+	}
+
+	if _, err := os.Stat(filepath.Join(repo, "pre-remove-ran")); err != nil {
+		t.Errorf("pre_remove working_dir=main did not run in the main worktree (MainPath unset?): %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "post-remove-ran")); err != nil {
+		t.Errorf("post_remove hook did not run on TUI delete: %v", err)
 	}
 }
 
@@ -492,7 +646,7 @@ func TestCreateWorktreeCmd_DockerComposeInherited(t *testing.T) {
 	repo := setupRailsFixture(t)
 	mgr, stateMgr := newTestManagers(t, repo)
 
-	cmd := createWorktreeCmd(mgr, stateMgr, repo, "docker-test", "", "", "")
+	cmd := createWorktreeCmd(mgr, stateMgr, nil, repo, "docker-test", "", "", "")
 	created := drainCreationStream(t, cmd)
 	if created.err != nil {
 		t.Fatalf("unexpected error: %v", created.err)
@@ -589,5 +743,183 @@ func TestUpdate_BulkDeleteDoneMsg(t *testing.T) {
 	}
 	if m.toast.Message() == "" {
 		t.Error("expected non-empty status message after bulk delete")
+	}
+}
+
+// --- review-finding regressions: ghost delete, delete ordering, bootstrap failures ---
+
+// TestDeleteWorktreeCmd_GhostAbortsBeforeHooks pins the ghost-worktree fix: a
+// delete whose worktree can't be resolved must abort with an error before any
+// pre-remove hook runs — previously it plowed ahead with wt == nil and ran the
+// hooks anchored to the process cwd. `grove rm` exits before hooks in the same
+// situation.
+func TestDeleteWorktreeCmd_GhostAbortsBeforeHooks(t *testing.T) {
+	repo := setupRailsFixture(t)
+	mgr, stateMgr := newTestManagers(t, repo)
+
+	hooksToml := `[hooks]
+[[hooks.pre_remove]]
+type = "command"
+command = "touch pre-remove-ran"
+working_dir = "main"
+`
+	if err := os.WriteFile(filepath.Join(repo, ".grove", "hooks.toml"), []byte(hooksToml), 0o644); err != nil {
+		t.Fatalf("write hooks.toml: %v", err)
+	}
+
+	cmd := deleteWorktreeCmd(mgr, stateMgr, nil, repo, "ghost", false)
+	msg := cmd()
+
+	deleted, ok := msg.(worktreeDeletedMsg)
+	if !ok {
+		t.Fatalf("expected worktreeDeletedMsg, got %T", msg)
+	}
+	if deleted.err == nil {
+		t.Fatal("expected an error for a ghost worktree delete")
+	}
+	if _, err := os.Stat(filepath.Join(repo, "pre-remove-ran")); !os.IsNotExist(err) {
+		t.Error("pre-remove hook ran for a ghost worktree delete")
+	}
+}
+
+// TestDeleteWorktreeCmd_BranchDeletedBeforePostRemoveHooks pins the TUI delete
+// ordering to the CLI's: `grove rm` deletes the branch BEFORE the post-remove
+// hooks fire, so a post_remove hook must observe the branch already gone.
+func TestDeleteWorktreeCmd_BranchDeletedBeforePostRemoveHooks(t *testing.T) {
+	repo := setupRailsFixtureWithWorktrees(t, "ordered")
+	mgr, stateMgr := newTestManagers(t, repo)
+
+	hooksToml := `[hooks]
+[[hooks.post_remove]]
+type = "command"
+command = "git branch --list ordered > post-remove-branches"
+working_dir = "main"
+`
+	if err := os.WriteFile(filepath.Join(repo, ".grove", "hooks.toml"), []byte(hooksToml), 0o644); err != nil {
+		t.Fatalf("write hooks.toml: %v", err)
+	}
+
+	cmd := deleteWorktreeCmd(mgr, stateMgr, nil, repo, "ordered", true)
+	msg := cmd()
+
+	deleted, ok := msg.(worktreeDeletedMsg)
+	if !ok {
+		t.Fatalf("expected worktreeDeletedMsg, got %T", msg)
+	}
+	if deleted.err != nil {
+		t.Fatalf("delete failed: %v", deleted.err)
+	}
+	if deleted.branchErr != nil {
+		t.Fatalf("branch deletion failed: %v", deleted.branchErr)
+	}
+
+	content, err := os.ReadFile(filepath.Join(repo, "post-remove-branches"))
+	if err != nil {
+		t.Fatalf("post_remove hook did not run: %v", err)
+	}
+	if got := strings.TrimSpace(string(content)); got != "" {
+		t.Errorf("branch %q still existed when the post_remove hook ran (want deleted first): %q", "ordered", got)
+	}
+}
+
+// TestForkWorktreeCmd_BootstrapFailureSurfaced pins the dashboard fork error
+// path: a required post_create hook failing during bootstrap must be threaded
+// into forkCompleteMsg (with name set, since the worktree exists) so the
+// dashboard shows a warning toast instead of a success one.
+func TestForkWorktreeCmd_BootstrapFailureSurfaced(t *testing.T) {
+	repo := setupRailsFixtureWithWorktrees(t, "src")
+	mgr, stateMgr := newTestManagers(t, repo)
+
+	hooksToml := `[hooks]
+[[hooks.post_create]]
+type = "command"
+command = "exit 1"
+on_failure = "fail"
+working_dir = "main"
+`
+	if err := os.WriteFile(filepath.Join(repo, ".grove", "hooks.toml"), []byte(hooksToml), 0o644); err != nil {
+		t.Fatalf("write hooks.toml: %v", err)
+	}
+
+	srcPath := filepath.Join(filepath.Dir(repo), "rails-app-src")
+	forkState := &ForkState{
+		Source: WorktreeItem{ShortName: "src", Branch: "src", Path: srcPath},
+		Name:   "forked",
+	}
+	msg := forkWorktreeCmd(mgr, stateMgr, nil, repo, forkState)()
+	done, ok := msg.(forkCompleteMsg)
+	if !ok {
+		t.Fatalf("expected forkCompleteMsg, got %T", msg)
+	}
+	if done.err == nil {
+		t.Fatal("expected bootstrap failure to be surfaced, got success")
+	}
+	if !errors.Is(done.err, worktree.ErrRequiredHookFailed) {
+		t.Errorf("err = %v, want wrapped worktree.ErrRequiredHookFailed", done.err)
+	}
+	if done.name != "forked" {
+		t.Errorf("name = %q, want %q (worktree exists, so the failure surfaces as a warning toast)", done.name, "forked")
+	}
+	// The worktree itself was created and is kept for inspection.
+	if _, err := os.Stat(filepath.Join(filepath.Dir(repo), "rails-app-forked")); err != nil {
+		t.Errorf("forked worktree missing: %v", err)
+	}
+}
+
+// TestRunPostCreateStreaming_BootstrapFailureSkipsDocker pins CLI parity for
+// the TUI create epilogue: when bootstrap fails (required post_create hook),
+// docker auto-up must be skipped — setupCreatedWorktree returns before
+// autoStartDocker on the CLI path — and the error threaded out as hookErr so
+// the dashboard shows the warning toast.
+func TestRunPostCreateStreaming_BootstrapFailureSkipsDocker(t *testing.T) {
+	repo := setupRailsFixtureWithWorktrees(t, "halfway")
+	mgr, stateMgr := newTestManagers(t, repo)
+
+	hooksToml := `[hooks]
+[[hooks.post_create]]
+type = "command"
+command = "exit 1"
+on_failure = "fail"
+working_dir = "main"
+`
+	if err := os.WriteFile(filepath.Join(repo, ".grove", "hooks.toml"), []byte(hooksToml), 0o644); err != nil {
+		t.Fatalf("write hooks.toml: %v", err)
+	}
+
+	dockerCalled := false
+	restore := stubDockerAutoUp(t, func(cfg *config.Config, wtPath string) (bool, error) {
+		dockerCalled = true
+		return true, nil
+	})
+	defer restore()
+
+	autoUp := true
+	cfg := &config.Config{}
+	cfg.Plugins.Docker.AutoUp = &autoUp
+
+	wt, err := mgr.Find("halfway")
+	if err != nil || wt == nil {
+		t.Fatalf("Find(halfway): wt=%v err=%v", wt, err)
+	}
+
+	ch := make(chan creationEvent, 100)
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		for range ch {
+		}
+	}()
+	result := runPostCreateStreaming(ch, mgr, stateMgr, cfg, repo, "halfway", wt)
+	close(ch)
+	<-drained
+
+	if result.hookErr == nil {
+		t.Fatal("expected hookErr for a failing required post_create hook")
+	}
+	if !errors.Is(result.hookErr, worktree.ErrRequiredHookFailed) {
+		t.Errorf("hookErr = %v, want wrapped worktree.ErrRequiredHookFailed", result.hookErr)
+	}
+	if dockerCalled {
+		t.Error("docker auto-up ran despite bootstrap failure (CLI skips it)")
 	}
 }

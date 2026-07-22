@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -138,6 +139,23 @@ func TestListWIPFiles(t *testing.T) {
 		}
 		if len(files) < 2 {
 			t.Errorf("expected at least 2 files, got %d: %v", len(files), files)
+		}
+	})
+
+	// A single worktree-modified tracked file is the first porcelain line and
+	// has a leading status space (" M path"). The name must come back intact,
+	// not shifted into ".txt" by trimming that leading space.
+	t.Run("worktree-modified first line keeps full filename", func(t *testing.T) {
+		dir := setupWIPTestRepo(t)
+		if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("modified"), 0644); err != nil {
+			t.Fatalf("failed to modify tracked.txt: %v", err)
+		}
+		files, err := NewWIPHandler(dir).ListWIPFiles()
+		if err != nil {
+			t.Fatalf("ListWIPFiles() error = %v", err)
+		}
+		if len(files) != 1 || files[0] != "tracked.txt" {
+			t.Errorf("ListWIPFiles() = %v, want [tracked.txt]", files)
 		}
 	})
 }
@@ -359,5 +377,66 @@ func TestHasUntrackedFiles(t *testing.T) {
 				t.Errorf("HasUntrackedFiles() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestPopStashRef_PopsExactEntryNotTop(t *testing.T) {
+	// The rollback must restore *its* auto-stash even when something (a hook,
+	// another process) pushed a newer stash after it — a blind `stash pop`
+	// would restore the wrong one and strand the auto-stash.
+	dir := setupWIPTestRepo(t)
+	h := NewWIPHandler(dir)
+
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("command %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	// Auto-stash: a change to tracked.txt.
+	if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("mine"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	sha, err := h.StashWithRef("grove: auto-stash")
+	if err != nil {
+		t.Fatalf("StashWithRef: %v", err)
+	}
+	if sha == "" {
+		t.Fatal("StashWithRef returned empty SHA on a healthy repo")
+	}
+
+	// A hook pushes its own stash on top.
+	if err := os.WriteFile(filepath.Join(dir, "hook.txt"), []byte("hook"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	run("git", "stash", "push", "--include-untracked", "-m", "hook stash")
+
+	if err := h.PopStashRef(sha); err != nil {
+		t.Fatalf("PopStashRef: %v", err)
+	}
+
+	// Our change is back...
+	data, err := os.ReadFile(filepath.Join(dir, "tracked.txt"))
+	if err != nil || string(data) != "mine" {
+		t.Errorf("auto-stashed change not restored: %q, err=%v", data, err)
+	}
+	// ...the hook's stash is untouched and still stashed.
+	if _, err := os.Stat(filepath.Join(dir, "hook.txt")); !os.IsNotExist(err) {
+		t.Error("hook's stash was popped instead of left in place")
+	}
+	out, _ := exec.Command("git", "-C", dir, "stash", "list").Output()
+	if !strings.Contains(string(out), "hook stash") {
+		t.Errorf("hook stash missing from stash list: %q", out)
+	}
+}
+
+func TestPopStashRef_MissingShaErrors(t *testing.T) {
+	dir := setupWIPTestRepo(t)
+	h := NewWIPHandler(dir)
+	if err := h.PopStashRef("0123456789abcdef0123456789abcdef01234567"); err == nil {
+		t.Fatal("expected error for unknown stash SHA")
 	}
 }

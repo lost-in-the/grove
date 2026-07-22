@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/lost-in-the/grove/internal/cli"
@@ -76,9 +77,10 @@ func chooseWorktree(mgr *worktree.Manager, trees []*worktree.Worktree, prompt st
 		return "", fmt.Errorf("no selection made")
 	}
 
-	// Try selection by number
-	var choice int
-	if _, err := fmt.Sscanf(input, "%d", &choice); err == nil {
+	// Try selection by number. strconv.Atoi (unlike Sscanf "%d") rejects a
+	// trailing non-numeric suffix, so a name like "2024-fixes" or "2abc" falls
+	// through to name matching instead of being misread as a position (B33).
+	if choice, convErr := strconv.Atoi(input); convErr == nil {
 		if choice < 1 || choice > len(trees) {
 			return "", fmt.Errorf("invalid choice %d: expected 1-%d", choice, len(trees))
 		}
