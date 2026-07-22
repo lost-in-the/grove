@@ -67,12 +67,54 @@ func (h *WIPHandler) Stash(message string) error {
 	return nil
 }
 
+// StashWithRef saves uncommitted changes like Stash and additionally returns
+// the SHA of the created stash commit. Callers that pop later (the switch
+// rollback) must target that exact entry: the stash list is repo-wide and
+// hooks or concurrent grove processes can push their own entries in between,
+// so a blind `git stash pop` may restore someone else's stash. A failure to
+// resolve the SHA after a successful push returns "" with a nil error — the
+// caller degrades to the blind pop rather than stranding the fresh stash.
+func (h *WIPHandler) StashWithRef(message string) (string, error) {
+	if err := h.Stash(message); err != nil {
+		return "", err
+	}
+	out, err := cmdexec.Output(context.TODO(), "git", []string{"-C", h.repoPath, "rev-parse", "refs/stash"}, "", cmdexec.GitLocal)
+	if err != nil {
+		return "", nil
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 // PopStash applies and removes the most recent stash entry.
 func (h *WIPHandler) PopStash() error {
 	if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", h.repoPath, "stash", "pop"}, "", cmdexec.GitLocal); err != nil {
 		return fmt.Errorf("failed to pop stash: %w\n%s", err, output)
 	}
 	return nil
+}
+
+// PopStashRef applies and removes the stash entry whose commit SHA is sha
+// (as returned by StashWithRef), wherever it currently sits in the stash
+// list. An empty sha falls back to popping the most recent entry.
+func (h *WIPHandler) PopStashRef(sha string) error {
+	if sha == "" {
+		return h.PopStash()
+	}
+	out, err := cmdexec.Output(context.TODO(), "git", []string{"-C", h.repoPath, "stash", "list", "--format=%H"}, "", cmdexec.GitLocal)
+	if err != nil {
+		return fmt.Errorf("failed to list stashes: %w", err)
+	}
+	for i, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if strings.TrimSpace(line) != sha {
+			continue
+		}
+		ref := fmt.Sprintf("stash@{%d}", i)
+		if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", h.repoPath, "stash", "pop", ref}, "", cmdexec.GitLocal); err != nil {
+			return fmt.Errorf("failed to pop stash %s: %w\n%s", ref, err, output)
+		}
+		return nil
+	}
+	return fmt.Errorf("stash %.7s not found in stash list", sha)
 }
 
 // CreatePatch creates a patch file from all uncommitted changes (staged and unstaged).
