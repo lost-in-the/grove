@@ -142,7 +142,7 @@ line the wrapper parses would never be emitted.
 |----------|-------------|
 | `GROVE_SHELL` | Set to `1` by the wrapper. The binary uses this to enable directive output. Without it, commands print human-readable output only. |
 | `GROVE_SHELL_VERSION` | Shell integration version number. The binary checks this and warns when the shell integration is outdated. |
-| `GROVE_CD_FILE` | Path to a temp file where the TUI writes a directory to switch to. Set by the wrapper for bare `grove` invocations. |
+| `GROVE_CD_FILE` | Path to a temp file where the TUI and the issue/PR browsers write a directory to switch to. Set by the wrapper for bare `grove`, `grove issues`, and `grove prs` invocations; explicitly cleared in the capture branch. |
 | `GROVE_TUI` | Set to `0` to disable the TUI. When disabled, bare `grove` prints usage instead of launching the dashboard. |
 | `GROVE_HIGH_CONTRAST` | Set to `1` to enable high-contrast mode in the TUI's form elements. |
 | `GROVE_LOG` | Set to `1` to enable debug logging to `~/.grove/grove.log`. Set to a path to log to a custom file. |

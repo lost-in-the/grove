@@ -85,7 +85,9 @@ Controls behavior when switching to a worktree that has uncommitted changes in t
 [switch]
 # How to handle a dirty working tree on switch.
 # "prompt"     — ask the user what to do (default)
-# "auto-stash" — automatically stash changes before switching, unstash on return
+# "auto-stash" — stash changes before switching (restored automatically only if
+#                the switch aborts; after a completed switch, run `git stash pop`
+#                in that worktree to take the changes back up)
 # "refuse"     — abort the switch if changes are present
 dirty_handling = "prompt"          # string: prompt | auto-stash | refuse
 

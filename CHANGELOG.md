@@ -36,10 +36,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Docker auto-start after worktree creation is one explicit knob shared by every surface: `plugins.docker.auto_up = true` opts in for `grove new` **and** the dashboard create flow (which previously never auto-started, #141), and agent stacks no longer flip it on implicitly — set `auto_up = true` to keep that behavior.
-- The shell wrapper's capture path explicitly clears an inherited `GROVE_CD_FILE` (`ShellVersion` 8 → 9), and the binary now requires that file to already exist before writing (the wrapper `mktemp`s it), so a stale value leaked into a tmux pane from an `issues`/`prs` session no longer resurrects a dead temp file — directory switching falls through to the stdout `cd:` line instead of silently breaking.
+- The shell wrapper's capture path explicitly clears an inherited `GROVE_CD_FILE` (`ShellVersion` 7 → 9), and the binary — including the dashboard's switch handoff — now requires that file to already exist before writing (the wrapper `mktemp`s it), so a stale value leaked into a tmux pane from an `issues`/`prs` session no longer resurrects a dead temp file — directory switching falls through to the stdout `cd:` line instead of silently breaking.
 - `git rev-parse --git-common-dir` is memoized per process, collapsing the duplicate resolutions each command previously spawned.
 - Release workflow hardened (`set -euo pipefail`, verified downloads, non-empty tarball checks) and the Homebrew formula license corrected to **Apache-2.0** (template and published formula — companion tap PR).
-- The audit trail for all of the above lives in [`AUDIT.md`](AUDIT.md) (findings `B1`–`B38`, `P*`, `D*`, review items `R1`–`R24`).
+- The audit trail for all of the above lives in [`AUDIT.md`](AUDIT.md) (findings `B1`–`B38`, `P*`, `D*`, review items `R1`–`R24`, and the third-pass review `R25`–`R40`).
+
+### Fixed (third review pass)
+- The `"main"`→`"root"` state rekey (and the timestamp backfill) now actually **persists**: `save()` migrates the on-disk state before rebasing tracked mutations onto it, so upgraded repos no longer silently revert to the legacy key on the first write (which froze the root's access time and made every later root lookup miss); a half-applied rekey from an affected build (duplicate `"main"` + `"root"` root entries) is cleaned up on load.
+- An aborted switch pops exactly the auto-stash it created (targeted by SHA) instead of whatever sits at `stash@{0}`, so a hook that pushes its own stash can no longer swap its stash for yours; and the commit point moved after the tmux client switch, so a failed `switch-client` also rolls back — stash restored, `last_worktree`/access time untouched.
+- Self-switch (`grove to <current>`) still cd's back to the worktree root from a subdirectory and creates/attaches the tmux session when run outside tmux — the no-op shortcut no longer drops the epilogue.
+- Hook interpolation: `<<` inside double quotes is no longer treated as a heredoc, a subshell/case `)` inside `$( )` no longer desyncs the quoting context (both previously degraded values with spaces to word-splitting — never injection), `\{{.var}}` substitutes instead of emitting the token literally, and `$'…'` ANSI-C strings keep their escape semantics across a spliced value.
+- The locked-worktree guard works on Git 2.30–2.35 too: lock state is read from the worktree's on-disk `locked` marker, not just the porcelain attribute git only emits since 2.36.
+- Dashboard fork surfaces bootstrap failures (warning toast) instead of an unconditional success; dashboard create skips docker auto-up and the tmux session after a failed bootstrap, matching the CLI; dashboard delete removes the branch before `post_remove` hooks (CLI order) and aborts before any hook when the worktree can't be resolved; the TUI's output capture is panic-safe and bounded, so a backgrounded child can't hang an operation.
+- Atomic-write temp files (`.grove/*.tmp-*`) are covered by the managed exclude block, so a crash-leaked temp can't make the main worktree read dirty again.
+- The "wasn't created by grove" drift notice no longer misfires from a worktree subdirectory; the numeric worktree chooser rejects trailing-garbage input (`2abc`); the release tarball download retries transient failures; the bash wrapper gained real behavioral test coverage (previously zsh-only).
 
 ## [0.9.0] - 2026-07-16
 

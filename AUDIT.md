@@ -97,6 +97,39 @@ where reproducible, an end-to-end re-check):
 | **DRY** | flock consolidated (4 files → `internal/fsutil`); default-branch detection shared between init and cleanup; `state.save` uses `AtomicWriteFile` |
 | **Docs** | D1 (`GROVE_NONINTERACTIVE` — now wired), D3 (`copy_dirs`), D5 (state README), D2/D4 (docker README flags/naming), D6 (examples), plus `repair`/hook-event/spec corrections |
 
+### Third pass (adversarial review of the audit branch itself)
+
+A five-angle review of the finished branch (hooks/injection, worktree/state
+core, CLI switch flow, TUI parity, shell/release/docs) — every finding fixed
+here, each with a regression test; the top three were reproduced end-to-end
+before fixing.
+
+| ID | Fix |
+|----|-----|
+| **R25** | `main`→`root` state rekey **persists**: `save()` migrates the disk state before rebasing tracked mutations (the load-only migration was reverted by the first save, silently voiding the upgrade path); half-applied duplicate root entries cleaned on load |
+| **R26** | Switch rollback pops its exact auto-stash by SHA (`PopStashRef`) — a hook pushing its own stash no longer gets popped in grove's place |
+| **R27** | Switch commit point moved after `tmux switch-client` — a failed client switch rolls back (stash restored, no `last_worktree`/access-time write) |
+| **R28** | Self-switch keeps the epilogue: cd back to the worktree root from a subdirectory; create/attach the session when outside tmux |
+| **R29** | `InterpolateShell`: `<<` inside double quotes is literal, not a heredoc introducer (phantom heredoc dropped later tokens' quoting) |
+| **R30** | `InterpolateShell`: per-frame paren depth — a subshell/case `)` inside `$( )` no longer pops the substitution frame (wrong-context emission) |
+| **R31** | `InterpolateShell`: `\{{.var}}` substitutes (was emitted literally); `$'…'` ANSI-C context modeled (splice re-opens with `$'`) |
+| **R32** | Locked-worktree guard on Git 2.30–2.35: lock state read from the on-disk `worktrees/<id>/locked` marker, not only the 2.36+ porcelain attribute |
+| **R33** | `captureStdio` panic-safe (deferred restore/unlock) and drain bounded — a lingering grandchild holding the pipe can't hang the dashboard op |
+| **R34** | Dashboard fork surfaces bootstrap errors (was an unconditional success toast); create skips docker auto-up + tmux session after a failed bootstrap (CLI parity) |
+| **R35** | Dashboard delete: branch removed before `post_remove` hooks (CLI order); unresolvable worktree aborts before any hook runs; executor construction moved under the capture mutex |
+| **R36** | Dashboard cd handoff routes through `cli.CdDirective` (no `O_CREATE` resurrection of a stale `GROVE_CD_FILE`; write failure degrades to the stdout `cd:` line) |
+| **R37** | Atomic-write temp names (`.grove/*.tmp-*`) added to the managed exclude block (a crash-leaked temp re-created the B4 dirty symptoms) |
+| **R38** | Drift notice normalizes to the worktree top level (no more "worktree (deep) wasn't created by grove" from subdirectories); `ChooseIndex` uses `strconv.Atoi` (B33's remaining sibling) |
+| **R39** | `FindRoot`'s upward walk bounded to the repository (containment check, not just an equality that could miss on symlink divergence) |
+| **R40** | Docs/CI: auto-stash semantics documented truthfully (restored only on abort), `grove last` no-op exit code corrected to 0, self-switch spec row updated, `GROVE_CD_FILE` env table completed, ShellVersion upgrade wording fixed (7 → 9), release tarball curl retries, bash wrapper behavioral tests (were zsh-only) |
+
+Known asymmetry, documented rather than changed: a *nested* `.grove`
+subdirectory (a committed sub-project that is not its own repo) is honored when
+the cwd is under it in the **main** worktree, but the same subtree inside a
+*linked* worktree anchors to the outer project's root — linked worktrees always
+resolve to the main `.grove` (B1). Genuinely nested repositories resolve
+correctly from everywhere. Nested non-repo projects remain unsupported.
+
 ### Deferred (intentionally)
 
 - **P3** (config parsed ~3× per command): threading `ctx.Config` into

@@ -640,7 +640,7 @@ Please be more specific.
 
 | Scenario | Behavior |
 |----------|----------|
-| Already in target worktree | Message: "Already in 'testing'" (exit 0) |
+| Already in target worktree | Message: "Already in 'testing'" (exit 0). Skips the dirty gate, hooks, and state recording, but still cd's back to the worktree root from a subdirectory and — outside tmux — creates/attaches the session like a real switch |
 | Worktree directory missing | Error: "Worktree directory missing. Run: grove repair testing" |
 | Tmux not running | Start tmux server, create session, attach |
 | Partial name matches one | Switch to it (e.g., `grove to test` → `testing` if unambiguous) |
@@ -1149,8 +1149,8 @@ With `--json`:
 - Creating a new worktree and auto-switching updates "last"
 
 **Exit Codes:**
-- 0: Success
-- 1: No previous worktree or it no longer exists
+- 0: Success — including the graceful "no previous worktree yet" no-op (behavior note 4 above; the JSON form carries an empty `switch_to`)
+- 1: The recorded previous worktree no longer exists
 
 ---
 
