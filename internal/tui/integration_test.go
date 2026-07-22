@@ -3,6 +3,7 @@
 package tui
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/state"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
@@ -741,5 +743,183 @@ func TestUpdate_BulkDeleteDoneMsg(t *testing.T) {
 	}
 	if m.toast.Message() == "" {
 		t.Error("expected non-empty status message after bulk delete")
+	}
+}
+
+// --- review-finding regressions: ghost delete, delete ordering, bootstrap failures ---
+
+// TestDeleteWorktreeCmd_GhostAbortsBeforeHooks pins the ghost-worktree fix: a
+// delete whose worktree can't be resolved must abort with an error before any
+// pre-remove hook runs — previously it plowed ahead with wt == nil and ran the
+// hooks anchored to the process cwd. `grove rm` exits before hooks in the same
+// situation.
+func TestDeleteWorktreeCmd_GhostAbortsBeforeHooks(t *testing.T) {
+	repo := setupRailsFixture(t)
+	mgr, stateMgr := newTestManagers(t, repo)
+
+	hooksToml := `[hooks]
+[[hooks.pre_remove]]
+type = "command"
+command = "touch pre-remove-ran"
+working_dir = "main"
+`
+	if err := os.WriteFile(filepath.Join(repo, ".grove", "hooks.toml"), []byte(hooksToml), 0o644); err != nil {
+		t.Fatalf("write hooks.toml: %v", err)
+	}
+
+	cmd := deleteWorktreeCmd(mgr, stateMgr, nil, repo, "ghost", false)
+	msg := cmd()
+
+	deleted, ok := msg.(worktreeDeletedMsg)
+	if !ok {
+		t.Fatalf("expected worktreeDeletedMsg, got %T", msg)
+	}
+	if deleted.err == nil {
+		t.Fatal("expected an error for a ghost worktree delete")
+	}
+	if _, err := os.Stat(filepath.Join(repo, "pre-remove-ran")); !os.IsNotExist(err) {
+		t.Error("pre-remove hook ran for a ghost worktree delete")
+	}
+}
+
+// TestDeleteWorktreeCmd_BranchDeletedBeforePostRemoveHooks pins the TUI delete
+// ordering to the CLI's: `grove rm` deletes the branch BEFORE the post-remove
+// hooks fire, so a post_remove hook must observe the branch already gone.
+func TestDeleteWorktreeCmd_BranchDeletedBeforePostRemoveHooks(t *testing.T) {
+	repo := setupRailsFixtureWithWorktrees(t, "ordered")
+	mgr, stateMgr := newTestManagers(t, repo)
+
+	hooksToml := `[hooks]
+[[hooks.post_remove]]
+type = "command"
+command = "git branch --list ordered > post-remove-branches"
+working_dir = "main"
+`
+	if err := os.WriteFile(filepath.Join(repo, ".grove", "hooks.toml"), []byte(hooksToml), 0o644); err != nil {
+		t.Fatalf("write hooks.toml: %v", err)
+	}
+
+	cmd := deleteWorktreeCmd(mgr, stateMgr, nil, repo, "ordered", true)
+	msg := cmd()
+
+	deleted, ok := msg.(worktreeDeletedMsg)
+	if !ok {
+		t.Fatalf("expected worktreeDeletedMsg, got %T", msg)
+	}
+	if deleted.err != nil {
+		t.Fatalf("delete failed: %v", deleted.err)
+	}
+	if deleted.branchErr != nil {
+		t.Fatalf("branch deletion failed: %v", deleted.branchErr)
+	}
+
+	content, err := os.ReadFile(filepath.Join(repo, "post-remove-branches"))
+	if err != nil {
+		t.Fatalf("post_remove hook did not run: %v", err)
+	}
+	if got := strings.TrimSpace(string(content)); got != "" {
+		t.Errorf("branch %q still existed when the post_remove hook ran (want deleted first): %q", "ordered", got)
+	}
+}
+
+// TestForkWorktreeCmd_BootstrapFailureSurfaced pins the dashboard fork error
+// path: a required post_create hook failing during bootstrap must be threaded
+// into forkCompleteMsg (with name set, since the worktree exists) so the
+// dashboard shows a warning toast instead of a success one.
+func TestForkWorktreeCmd_BootstrapFailureSurfaced(t *testing.T) {
+	repo := setupRailsFixtureWithWorktrees(t, "src")
+	mgr, stateMgr := newTestManagers(t, repo)
+
+	hooksToml := `[hooks]
+[[hooks.post_create]]
+type = "command"
+command = "exit 1"
+on_failure = "fail"
+working_dir = "main"
+`
+	if err := os.WriteFile(filepath.Join(repo, ".grove", "hooks.toml"), []byte(hooksToml), 0o644); err != nil {
+		t.Fatalf("write hooks.toml: %v", err)
+	}
+
+	srcPath := filepath.Join(filepath.Dir(repo), "rails-app-src")
+	forkState := &ForkState{
+		Source: WorktreeItem{ShortName: "src", Branch: "src", Path: srcPath},
+		Name:   "forked",
+	}
+	msg := forkWorktreeCmd(mgr, stateMgr, nil, repo, forkState)()
+	done, ok := msg.(forkCompleteMsg)
+	if !ok {
+		t.Fatalf("expected forkCompleteMsg, got %T", msg)
+	}
+	if done.err == nil {
+		t.Fatal("expected bootstrap failure to be surfaced, got success")
+	}
+	if !errors.Is(done.err, worktree.ErrRequiredHookFailed) {
+		t.Errorf("err = %v, want wrapped worktree.ErrRequiredHookFailed", done.err)
+	}
+	if done.name != "forked" {
+		t.Errorf("name = %q, want %q (worktree exists, so the failure surfaces as a warning toast)", done.name, "forked")
+	}
+	// The worktree itself was created and is kept for inspection.
+	if _, err := os.Stat(filepath.Join(filepath.Dir(repo), "rails-app-forked")); err != nil {
+		t.Errorf("forked worktree missing: %v", err)
+	}
+}
+
+// TestRunPostCreateStreaming_BootstrapFailureSkipsDocker pins CLI parity for
+// the TUI create epilogue: when bootstrap fails (required post_create hook),
+// docker auto-up must be skipped — setupCreatedWorktree returns before
+// autoStartDocker on the CLI path — and the error threaded out as hookErr so
+// the dashboard shows the warning toast.
+func TestRunPostCreateStreaming_BootstrapFailureSkipsDocker(t *testing.T) {
+	repo := setupRailsFixtureWithWorktrees(t, "halfway")
+	mgr, stateMgr := newTestManagers(t, repo)
+
+	hooksToml := `[hooks]
+[[hooks.post_create]]
+type = "command"
+command = "exit 1"
+on_failure = "fail"
+working_dir = "main"
+`
+	if err := os.WriteFile(filepath.Join(repo, ".grove", "hooks.toml"), []byte(hooksToml), 0o644); err != nil {
+		t.Fatalf("write hooks.toml: %v", err)
+	}
+
+	dockerCalled := false
+	restore := stubDockerAutoUp(t, func(cfg *config.Config, wtPath string) (bool, error) {
+		dockerCalled = true
+		return true, nil
+	})
+	defer restore()
+
+	autoUp := true
+	cfg := &config.Config{}
+	cfg.Plugins.Docker.AutoUp = &autoUp
+
+	wt, err := mgr.Find("halfway")
+	if err != nil || wt == nil {
+		t.Fatalf("Find(halfway): wt=%v err=%v", wt, err)
+	}
+
+	ch := make(chan creationEvent, 100)
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		for range ch {
+		}
+	}()
+	result := runPostCreateStreaming(ch, mgr, stateMgr, cfg, repo, "halfway", wt)
+	close(ch)
+	<-drained
+
+	if result.hookErr == nil {
+		t.Fatal("expected hookErr for a failing required post_create hook")
+	}
+	if !errors.Is(result.hookErr, worktree.ErrRequiredHookFailed) {
+		t.Errorf("hookErr = %v, want wrapped worktree.ErrRequiredHookFailed", result.hookErr)
+	}
+	if dockerCalled {
+		t.Error("docker auto-up ran despite bootstrap failure (CLI skips it)")
 	}
 }

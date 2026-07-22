@@ -15,6 +15,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	lipgloss "charm.land/lipgloss/v2"
 
+	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/git"
 	"github.com/lost-in-the/grove/internal/plugins"
@@ -2507,19 +2508,21 @@ func runModel(model Model) (string, bool, error) {
 		tmuxSwitched := m.handleTmuxSwitch(switchPath)
 
 		if !tmuxSwitched {
-			if cdFile := os.Getenv("GROVE_CD_FILE"); cdFile != "" {
-				tuilog.Printf("runModel: writing switchTo=%q to GROVE_CD_FILE=%q", switchPath, cdFile)
-				if err := os.WriteFile(cdFile, []byte(switchPath), 0600); err != nil {
-					return "", false, fmt.Errorf("failed to write cd file: %w", err)
-				}
-			} else if os.Getenv("GROVE_SHELL") == "1" {
-				tuilog.Printf("runModel: printing cd directive for switchTo=%q", switchPath)
-				// Leading newline ensures cd: directive is on its own line,
-				// separated from any bubbletea alt-screen exit escape codes
-				// that may precede it on stdout.
-				fmt.Printf("\ncd:%s\n", switchPath)
+			// Route through cli.CdDirective: it prefers a pre-existing
+			// GROVE_CD_FILE (never recreating a stale one — B27 hardening) and
+			// falls back to a cd: line on stdout under GROVE_SHELL; a cd-file
+			// write failure degrades to that fallback instead of failing
+			// runModel. When the stdout fallback is the channel in play, print
+			// a leading newline first so the directive lands on its own line,
+			// separated from any bubbletea alt-screen exit escape codes that
+			// may precede it on stdout.
+			if os.Getenv("GROVE_CD_FILE") == "" && cli.IsShellIntegration() {
+				fmt.Println()
+			}
+			if cli.CdDirective(switchPath) {
+				tuilog.Printf("runModel: emitted cd directive for switchTo=%q", switchPath)
 			} else {
-				tuilog.Printf("runModel: switchTo=%q but no GROVE_CD_FILE or GROVE_SHELL set — cannot switch", switchPath)
+				tuilog.Printf("runModel: switchTo=%q but no usable GROVE_CD_FILE or GROVE_SHELL — cannot switch", switchPath)
 			}
 		}
 	}

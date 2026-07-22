@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -30,8 +31,35 @@ var dockerAutoUp = docker.AutoUp
 var errWorktreeNotFound = errors.New("worktree created but not found")
 
 // stdioMu serializes captureStdio's process-global os.Stdout/os.Stderr swap so
-// concurrent tea.Cmds (e.g. a bulk delete) can't race on it.
+// concurrent tea.Cmds (e.g. a bulk delete) can't race on it. Any read of
+// os.Stdout/os.Stderr on a capture path (e.g. hooks.NewExecutor's default
+// Output) must also happen while holding it — in practice, inside a
+// captureStdio-wrapped fn.
 var stdioMu sync.Mutex
+
+// captureDrainTimeout bounds how long captureStdio waits for the pipe drain
+// after fn returns and the write end is closed. Package var so tests can
+// shorten it.
+var captureDrainTimeout = 3 * time.Second
+
+// syncBuffer is a mutex-guarded bytes.Buffer so captureStdio can read a
+// partial capture while the drain goroutine may still be appending.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
 
 // captureStdio runs fn with os.Stdout and os.Stderr redirected to an in-memory
 // pipe, returning everything written to them. The bubbletea renderer captured
@@ -52,21 +80,57 @@ func captureStdio(fn func() error) (string, error) {
 	origOut, origErr := os.Stdout, os.Stderr
 	os.Stdout, os.Stderr = w, w
 
-	done := make(chan string, 1)
+	buf := &syncBuffer{}
+	done := make(chan struct{})
 	go func() {
-		var buf bytes.Buffer
-		_, _ = io.Copy(&buf, r)
-		done <- buf.String()
+		defer close(done)
+		_, _ = io.Copy(buf, r)
 	}()
 
-	fnErr := fn()
+	// Restore the globals, release the lock, and close our write end via defer
+	// so they also run if fn panics — otherwise the globals would stay swapped,
+	// stdioMu would stay locked (deadlocking every later capture), and
+	// bubbletea's panic recovery would print its diagnostics into the abandoned
+	// pipe. The normal path calls restore explicitly before draining.
+	restored := false
+	restore := func() {
+		if restored {
+			return
+		}
+		restored = true
+		os.Stdout, os.Stderr = origOut, origErr
+		stdioMu.Unlock()
+		_ = w.Close()
+	}
+	defer restore()
 
-	os.Stdout, os.Stderr = origOut, origErr
-	stdioMu.Unlock()
-	_ = w.Close()
-	captured := <-done
-	_ = r.Close()
-	return captured, fnErr
+	fnErr := fn()
+	restore()
+
+	// io.Copy reaches EOF only once every copy of the write end is closed.
+	// Ours is, but a subprocess may have inherited the pipe and backgrounded a
+	// grandchild (`sh -c 'x &'` from a hook or docker) that keeps its copy open
+	// indefinitely — don't let that hang this tea.Cmd forever. On timeout,
+	// return what has been captured so far; the drain goroutine (and the read
+	// end) linger until the straggler finally closes its copy. That lone
+	// blocked goroutine is deliberate and harmless — it does not grow per call
+	// unless stragglers accumulate.
+	select {
+	case <-done:
+		_ = r.Close()
+	case <-time.After(captureDrainTimeout):
+	}
+	return buf.String(), fnErr
+}
+
+// joinCaptured concatenates two captured output chunks, inserting a newline
+// when the first doesn't end with one so its last (unterminated) line can't
+// fuse with the first line of the second chunk.
+func joinCaptured(a, b string) string {
+	if a != "" && b != "" && !strings.HasSuffix(a, "\n") {
+		return a + "\n" + b
+	}
+	return a + b
 }
 
 func (m Model) fetchWorktrees() tea.Msg {
@@ -95,14 +159,18 @@ func deleteWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *conf
 	return func() tea.Msg {
 		projectName := mgr.GetProjectName()
 
+		// Abort when the worktree can't be resolved — `grove rm` exits before
+		// any hooks in the same situation. Continuing with wt == nil used to
+		// run pre-remove hooks anchored to the process cwd against a worktree
+		// that doesn't exist (ghost delete).
 		wt, findErr := mgr.Find(name)
 		if findErr != nil {
-			tuilog.Printf("warning: failed to find worktree %q for branch capture: %v", name, findErr)
+			return worktreeDeletedMsg{name: name, deleteBranch: deleteBranch, err: fmt.Errorf("failed to find worktree %q: %w", name, findErr)}
 		}
-		var wtPath string
-		if wt != nil {
-			wtPath = wt.Path
+		if wt == nil {
+			return worktreeDeletedMsg{name: name, deleteBranch: deleteBranch, err: fmt.Errorf("worktree %q not found", name)}
 		}
+		wtPath := wt.Path
 
 		// Fire the config-file (hooks.toml) and plugin pre-remove hooks. The
 		// plugin hook (docker agent-slot teardown + env cleanup) was skipped by
@@ -140,6 +208,11 @@ func deleteWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *conf
 			tuilog.Printf("warning: failed to remove %q from state: %v", name, err)
 		}
 
+		// Delete the branch before the post-remove hooks — same order as
+		// `grove rm` (handleBranchDeletion, then firePostRemoveHooks) so hooks
+		// observe the same repository state on both surfaces.
+		branchErr := deleteBranchIfRequested(deleteBranch, wt, projectRoot)
+
 		// hooks.toml post_remove actions (e.g. per-worktree cache cleanup) —
 		// the CLI runs these via firePostRemoveHooks, but the dashboard used to
 		// skip them, silently leaving that cleanup undone (B28 on the TUI path).
@@ -151,7 +224,6 @@ func deleteWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *conf
 			tuilog.Printf("plugin post-remove output for %q: %s", name, out)
 		}
 
-		branchErr := deleteBranchIfRequested(deleteBranch, wt, projectRoot)
 		return worktreeDeletedMsg{name: name, deleteBranch: deleteBranch, err: nil, branchErr: branchErr}
 	}
 }
@@ -181,38 +253,46 @@ func killTmuxSessionForWorktree(projectName, name string) {
 // Execute warns internally for everything else — and the caller must abort
 // the removal on it (B7 parity with `grove rm`).
 func runPreRemoveHooks(projectRoot, projectName, name string, wt *worktree.Worktree) error {
-	hookExecutor, err := hooks.NewExecutor(filepath.Join(projectRoot, ".grove"))
-	if err != nil {
-		// A broken hooks config shouldn't brick dashboard deletes — same
-		// soft-fail as the CLI path.
-		tuilog.Printf("warning: failed to load hooks config: %v", err)
-		return nil
-	}
-	if !hookExecutor.HasHooksForEvent(hooks.EventPreRemove) {
-		return nil
-	}
 	// Hook output can't go to the terminal (it would corrupt the TUI); keep the
 	// executor's own progress in a buffer, and capture any docker subprocess
-	// streaming (which writes to os.Stderr) via captureStdio. MainPath is set so
-	// working_dir = "main" resolves to the project root and {{.main_path}} is
-	// non-empty — without it a `rm -rf {{.main_path}}/...` cleanup would run from
-	// the dashboard's cwd against a root-anchored path.
+	// streaming (which writes to os.Stderr) via captureStdio. The executor is
+	// constructed INSIDE the capture window because NewExecutor reads os.Stdout
+	// for its default Output — done outside, that read races with another
+	// goroutine's captureStdio swap. MainPath is set so working_dir = "main"
+	// resolves to the project root and {{.main_path}} is non-empty — without it
+	// a `rm -rf {{.main_path}}/...` cleanup would run from the dashboard's cwd
+	// against a root-anchored path.
 	var out bytes.Buffer
-	hookExecutor.Output = &out
-	hookCtx := &hooks.ExecutionContext{
-		Event:    hooks.EventPreRemove,
-		Worktree: name,
-		Project:  projectName,
-		MainPath: projectRoot,
-	}
-	if wt != nil {
-		hookCtx.Branch = wt.Branch
-		hookCtx.NewPath = wt.Path
-		hookCtx.WorktreeFull = filepath.Base(wt.Path)
-	}
+	var loadErr error
 	captured, execErr := captureStdio(func() error {
+		hookExecutor, err := hooks.NewExecutor(filepath.Join(projectRoot, ".grove"))
+		if err != nil {
+			loadErr = err
+			return nil
+		}
+		if !hookExecutor.HasHooksForEvent(hooks.EventPreRemove) {
+			return nil
+		}
+		hookExecutor.Output = &out
+		hookCtx := &hooks.ExecutionContext{
+			Event:    hooks.EventPreRemove,
+			Worktree: name,
+			Project:  projectName,
+			MainPath: projectRoot,
+		}
+		if wt != nil {
+			hookCtx.Branch = wt.Branch
+			hookCtx.NewPath = wt.Path
+			hookCtx.WorktreeFull = filepath.Base(wt.Path)
+		}
 		return hookExecutor.Execute(hooks.EventPreRemove, hookCtx)
 	})
+	if loadErr != nil {
+		// A broken hooks config shouldn't brick dashboard deletes — same
+		// soft-fail as the CLI path.
+		tuilog.Printf("warning: failed to load hooks config: %v", loadErr)
+		return nil
+	}
 	if execErr != nil {
 		tuilog.Printf("pre-remove hook aborted delete of %q: %v (output: %s%s)", name, execErr, out.String(), captured)
 		return execErr
@@ -226,30 +306,36 @@ func runPreRemoveHooks(projectRoot, projectName, name string, wt *worktree.Workt
 // .grove dir is pinned to the project root so hooks resolve identically
 // wherever the dashboard was launched from.
 func runPostRemoveHooks(projectRoot, projectName, name string, wt *worktree.Worktree) {
-	hookExecutor, err := hooks.NewExecutor(filepath.Join(projectRoot, ".grove"))
-	if err != nil {
-		tuilog.Printf("warning: failed to load hooks config for post-remove: %v", err)
-		return
-	}
-	if !hookExecutor.HasHooksForEvent(hooks.EventPostRemove) {
-		return
-	}
+	// Executor constructed inside the capture window — see runPreRemoveHooks.
 	var out bytes.Buffer
-	hookExecutor.Output = &out
-	hookCtx := &hooks.ExecutionContext{
-		Event:    hooks.EventPostRemove,
-		Worktree: name,
-		Project:  projectName,
-		MainPath: projectRoot,
-	}
-	if wt != nil {
-		hookCtx.Branch = wt.Branch
-		hookCtx.NewPath = wt.Path
-		hookCtx.WorktreeFull = filepath.Base(wt.Path)
-	}
+	var loadErr error
 	captured, execErr := captureStdio(func() error {
+		hookExecutor, err := hooks.NewExecutor(filepath.Join(projectRoot, ".grove"))
+		if err != nil {
+			loadErr = err
+			return nil
+		}
+		if !hookExecutor.HasHooksForEvent(hooks.EventPostRemove) {
+			return nil
+		}
+		hookExecutor.Output = &out
+		hookCtx := &hooks.ExecutionContext{
+			Event:    hooks.EventPostRemove,
+			Worktree: name,
+			Project:  projectName,
+			MainPath: projectRoot,
+		}
+		if wt != nil {
+			hookCtx.Branch = wt.Branch
+			hookCtx.NewPath = wt.Path
+			hookCtx.WorktreeFull = filepath.Base(wt.Path)
+		}
 		return hookExecutor.Execute(hooks.EventPostRemove, hookCtx)
 	})
+	if loadErr != nil {
+		tuilog.Printf("warning: failed to load hooks config for post-remove: %v", loadErr)
+		return
+	}
 	if execErr != nil {
 		tuilog.Printf("warning: post-remove hook had errors for %q: %v (output: %s%s)", name, execErr, out.String(), captured)
 	}
@@ -261,28 +347,34 @@ func runPostRemoveHooks(projectRoot, projectName, name string, wt *worktree.Work
 // worktree (B7); the worktree doesn't exist yet, so actions default to the main
 // worktree. Output is captured so it never reaches the alt screen.
 func runPreCreateHooks(projectRoot, projectName, name, branch, futurePath string) error {
-	hookExecutor, err := hooks.NewExecutor(filepath.Join(projectRoot, ".grove"))
-	if err != nil {
-		tuilog.Printf("warning: failed to load hooks config for pre-create: %v", err)
-		return nil
-	}
-	if !hookExecutor.HasHooksForEvent(hooks.EventPreCreate) {
-		return nil
-	}
+	// Executor constructed inside the capture window — see runPreRemoveHooks.
 	var out bytes.Buffer
-	hookExecutor.Output = &out
-	hookCtx := &hooks.ExecutionContext{
-		Event:        hooks.EventPreCreate,
-		Worktree:     name,
-		Project:      projectName,
-		Branch:       branch,
-		NewPath:      futurePath,
-		WorktreeFull: filepath.Base(futurePath),
-		MainPath:     projectRoot,
-	}
+	var loadErr error
 	captured, execErr := captureStdio(func() error {
+		hookExecutor, err := hooks.NewExecutor(filepath.Join(projectRoot, ".grove"))
+		if err != nil {
+			loadErr = err
+			return nil
+		}
+		if !hookExecutor.HasHooksForEvent(hooks.EventPreCreate) {
+			return nil
+		}
+		hookExecutor.Output = &out
+		hookCtx := &hooks.ExecutionContext{
+			Event:        hooks.EventPreCreate,
+			Worktree:     name,
+			Project:      projectName,
+			Branch:       branch,
+			NewPath:      futurePath,
+			WorktreeFull: filepath.Base(futurePath),
+			MainPath:     projectRoot,
+		}
 		return hookExecutor.Execute(hooks.EventPreCreate, hookCtx)
 	})
+	if loadErr != nil {
+		tuilog.Printf("warning: failed to load hooks config for pre-create: %v", loadErr)
+		return nil
+	}
 	if execErr != nil {
 		tuilog.Printf("pre-create hook aborted create of %q: %v (output: %s%s)", name, execErr, out.String(), captured)
 		return execErr
@@ -329,24 +421,29 @@ func runPostCreateStreaming(ch chan<- creationEvent, mgr *worktree.Manager, stat
 	// os.Stdout/os.Stderr, so wrap the whole call in captureStdio too — either
 	// stream would corrupt the alt screen. Both are surfaced as log lines below.
 	var bootBuf bytes.Buffer
-	var bootErr error
-	pluginOut, _ := captureStdio(func() error {
-		bootErr = worktree.BootstrapWorktree(stateMgr, cfg, worktree.BootstrapOpts{
+	pluginOut, bootErr := captureStdio(func() error {
+		return worktree.BootstrapWorktree(stateMgr, cfg, worktree.BootstrapOpts{
 			Name:         name,
 			Branch:       wt.Branch,
 			WorktreePath: wt.Path,
 			MainPath:     projectRoot,
 			ProjectName:  projectName,
 		}, cli.NewWriter(&bootBuf, false))
-		return bootErr
 	})
-	if bootErr != nil {
-		tuilog.Printf("bootstrap failed for %q: %v", name, bootErr)
-	}
-	for _, line := range strings.Split(strings.TrimRight(bootBuf.String()+pluginOut, "\n"), "\n") {
+	for _, line := range strings.Split(strings.TrimRight(joinCaptured(bootBuf.String(), pluginOut), "\n"), "\n") {
 		if line != "" {
 			ch <- creationEvent{line: line}
 		}
+	}
+	if bootErr != nil {
+		// Match the CLI: setupCreatedWorktree returns before autoStartDocker
+		// when bootstrap fails (required-hook failure included), and `grove
+		// new` never reaches its tmux epilogue on that error — skip both
+		// instead of provisioning a half-bootstrapped worktree. The error is
+		// still surfaced as a warning toast via hookErr (handleCreationDone).
+		tuilog.Printf("bootstrap failed for %q: %v", name, bootErr)
+		ch <- creationEvent{line: fmt.Sprintf("Bootstrap failed: %v", bootErr)}
+		return postCreateResult{hookOutput: bootBuf.String(), hookErr: bootErr}
 	}
 
 	// Auto-start the docker stack when auto_up opts in — the same epilogue

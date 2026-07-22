@@ -116,7 +116,7 @@ func forkWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *config
 		// no post_create recipes). ParentWorktree records the fork source in
 		// state. Bootstrap output is captured off the alt screen.
 		var bootBuf bytes.Buffer
-		pluginOut, _ := captureStdio(func() error {
+		pluginOut, bootErr := captureStdio(func() error {
 			return worktree.BootstrapWorktree(stateMgr, cfg, worktree.BootstrapOpts{
 				Name:           name,
 				Branch:         newBranchName,
@@ -126,8 +126,18 @@ func forkWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *config
 				ParentWorktree: source.ShortName,
 			}, cli.NewWriter(&bootBuf, false))
 		})
-		if trimmed := strings.TrimSpace(bootBuf.String() + pluginOut); trimmed != "" {
+		if trimmed := strings.TrimSpace(joinCaptured(bootBuf.String(), pluginOut)); trimmed != "" {
 			tuilog.Printf("fork bootstrap output for %q: %s", name, trimmed)
+		}
+		if bootErr != nil {
+			// The worktree exists but bootstrap (e.g. a required post_create
+			// hook) failed — surface it as a warning, not silent success.
+			// Setting name marks it worktree-created-but-provisioning-failed,
+			// which handleForkComplete shows as a warning toast, mirroring how
+			// dashboard create threads hookErr. Skip the tmux session like the
+			// create path does on bootstrap failure.
+			tuilog.Printf("fork bootstrap failed for %q: %v", name, bootErr)
+			return forkCompleteMsg{name: name, path: newTree.Path, err: fmt.Errorf("bootstrap failed: %w", bootErr)}
 		}
 
 		forkCreateTmuxSession(mgr, name, newTree.Path)
