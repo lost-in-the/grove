@@ -20,8 +20,22 @@ Sections:
 - **§3** Acceptance criteria — testable, per decision, with verification method
 - **§4** Phased implementation plan — mapped to files, each phase ships alone
 - **§5** Visual verification & testing strategy — the state × size grid
-- **§6** Open questions — each with a recommended answer
+- **§6** Decisions & open items — recommendations locked; one question with the design agent
 - **§7** Appendices — colour-token map, key-rebind map, delta reconciliation, doc gaps
+
+### 0.1 · Required inputs for a context-free agent
+
+**This plan is the engineering execution guide, not the whole spec.** A fresh agent must load these companion inputs — all now co-located in this `docs/redesign/` directory so the branch is a self-contained handoff:
+
+1. **`Grove-TUI-Delivery-Doc.html`** — the **normative visual spec**. This plan deliberately does *not* reproduce the terminal mockups (Fig 1, Fig 2, Fig A1–A4, Fig B1–B3); they are the pixel/glyph/layout source of truth. Read its source directly (don't render it — everything is in the HTML/CSS, per the handoff README). Every "→ [golden …]" criterion in §3 is validated against these figures.
+2. **`Grove-TUI-UX-Research-Review.html`** — rationale for R1–R9 (goto layer, `-` last-worktree, filterable help, h/l aliases, naming pass). Explains *why* the keymap looks the way it does.
+3. **`Grove-TUI-Wireframes.html`** — the exploration record (frame ids 1a…7a referenced throughout the delivery doc). Reference, not normative.
+4. **The grove repo checkout itself** — every `file:line` reference in this plan resolves against `internal/tui/`, `plugins/tracker/`, `internal/theme/`, `internal/state/`. A fresh agent should re-read the cited functions before editing them; line numbers drift.
+5. **`docs/WIZARD_UX_RESEARCH.md`** (already in-repo) — the D7 wizard decisions derive from it.
+
+### 0.2 · Self-sufficiency verdict (honest)
+
+**Sufficient to execute, once paired with input #1 and #4 above.** This document alone gives an agent the current-state map, the delta per decision, testable acceptance criteria, a file-mapped phase plan, the tooling decisions, and the test strategy — enough to *sequence and land* the work without re-deriving any of the investigation. What it intentionally does **not** carry, and where an agent must go to the companions: the exact visual mockups (delivery doc), and live line numbers / full data-struct shapes (the repo). It is **not** a stand-alone replacement for the delivery doc — treat the two as a pair. With both loaded, a context-free agent has everything needed to build phase by phase.
 
 ---
 
@@ -287,27 +301,27 @@ grove's harness gives three tools with a clear division of labour. The redesign 
 
 ---
 
-## 6 · Open questions (each with a recommended answer)
+## 6 · Decisions & open items
 
-These are the points where the code forces a decision the design left implicit. Each carries a recommendation so build can proceed on the default if you don't override — a few may be worth bouncing back to the design agent (flagged **↩design**).
+**As of this revision, every item below is LOCKED to its recommended answer and build may rely on it — EXCEPT Q5, which is open with the design agent** (`docs/redesign/QUESTIONS_FOR_DESIGN.md`). Q8 is a delivery-logistics note, not a build decision. If the design agent overrides Q5, only the upgrade-key binding in Appendix B changes.
 
-1. **Sort "age" vs current "recent".** The doc's §3 sort cycle is `name → age → dirty`, but grove currently cycles `name → recent(last-accessed) → dirty`, and `CommitAge` is a pre-formatted string, not a timestamp. **Recommend:** interpret "age" as last-commit age (matches the visible age column), replacing `recent`; it needs a raw commit timestamp added to `WorktreeItem` (today only the formatted string exists). If last-accessed sorting is still wanted, keep it as a 4th mode. *(Small data-layer add.)*
+1. **[LOCKED] Sort "age" vs current "recent".** The doc's §3 sort cycle is `name → age → dirty`, but grove currently cycles `name → recent(last-accessed) → dirty`, and `CommitAge` is a pre-formatted string, not a timestamp. **Recommend:** interpret "age" as last-commit age (matches the visible age column), replacing `recent`; it needs a raw commit timestamp added to `WorktreeItem` (today only the formatted string exists). If last-accessed sorting is still wanted, keep it as a 4th mode. *(Small data-layer add.)*
 
-2. **`g d` worktree-diff base.** `g d` opens the review view scoped to a worktree (not a PR), which needs a *local* git diff, not `gh`. Against what base? **Recommend:** merge-base with the configured default branch ("what this branch actually changes") — matches the wireframe's `b`-cycle default. Base-cycling (HEAD / merge-base / cross-worktree) is deferred to stretch, as the doc already puts it.
+2. **[LOCKED] `g d` worktree-diff base.** `g d` opens the review view scoped to a worktree (not a PR), which needs a *local* git diff, not `gh`. Against what base? **Recommend:** merge-base with the configured default branch ("what this branch actually changes") — matches the wireframe's `b`-cycle default. Base-cycling (HEAD / merge-base / cross-worktree) is deferred to stretch, as the doc already puts it.
 
-3. **`list_secondary` — runtime toggle or config-only?** The freed `v` key previously toggled row density. **Recommend:** config-only (`branch|dir|off`), no runtime key — the doc frames it as a config and reuses `v` for PR "viewed." If a runtime cycle is wanted later, add it under the `g`/view layer, not a hot key.
+3. **[LOCKED] `list_secondary` — runtime toggle or config-only?** The freed `v` key previously toggled row density. **Recommend:** config-only (`branch|dir|off`), no runtime key — the doc frames it as a config and reuses `v` for PR "viewed." If a runtime cycle is wanted later, add it under the `g`/view layer, not a hot key.
 
-4. **Prefix-equality rule for the `⎇` chip.** "Prefix-duplicates count as equal" needs a precise definition. **Recommend:** reuse the existing `WorktreeNameFromBranch: last_segment` derivation — chip shows only when `name != lastSegment(branch)`. One rule, already in the config vocabulary, consistent with how names are derived.
+4. **[LOCKED] Prefix-equality rule for the `⎇` chip.** "Prefix-duplicates count as equal" needs a precise definition. **Recommend:** reuse the existing `WorktreeNameFromBranch: last_segment` derivation — chip shows only when `name != lastSegment(branch)`. One rule, already in the config vocabulary, consistent with how names are derived.
 
-5. **Upgrade `u` vs `U` adjacency (R8).** `U` currently = switch-and-force-containers; `u` = upgrade. Keeping both risks a fat-finger force-start. **Recommend:** move upgrade off `u` into the `g` goto layer or a `?`-surfaced action, freeing the top-level letter; keep `U` as-is. **↩design** — low-stakes but worth a nod since it changes a documented key.
+5. **[OPEN — WITH DESIGN AGENT] Upgrade `u` vs `U` adjacency (R8).** `U` currently = switch-and-force-containers; `u` = upgrade. Keeping both risks a fat-finger force-start. **Recommend:** move upgrade off `u` into the `g` goto layer or a `?`-surfaced action, freeing the top-level letter; keep `U` as-is. See `docs/redesign/QUESTIONS_FOR_DESIGN.md` — sent to the design agent; this is the only item not locked.
 
-6. **`docs/grove-tui-context.md` is missing.** The delivery doc cites it as the colour/token source, but it doesn't exist in the repo. **Recommend:** don't block — grove's theme is already Catppuccin Mocha and the doc's hex map 1:1 onto `ColorScheme` (Appendix A). Optionally author the context doc from Appendix A during Phase 1 so future handoffs resolve.
+6. **[LOCKED] `docs/grove-tui-context.md` is missing.** The delivery doc cites it as the colour/token source, but it doesn't exist in the repo. **Recommend:** don't block — grove's theme is already Catppuccin Mocha and the doc's hex map 1:1 onto `ColorScheme` (Appendix A). Optionally author the context doc from Appendix A during Phase 1 so future handoffs resolve.
 
-7. **Which-key strip: instant vs ~300 ms reveal.** The doc locked "zero debounce, strip renders immediately." **Recommend:** honour it — instant reveal, input never gated (`b s` fires regardless). No timeout auto-cancel; the layer clears on the next key (mapped→execute, unmapped→dismiss). This is the only model that satisfies "instant" in Bubble Tea's one-key-per-update loop.
+7. **[LOCKED] Which-key strip: instant vs ~300 ms reveal.** The doc locked "zero debounce, strip renders immediately." **Recommend:** honour it — instant reveal, input never gated (`b s` fires regardless). No timeout auto-cancel; the layer clears on the next key (mapped→execute, unmapped→dismiss). This is the only model that satisfies "instant" in Bubble Tea's one-key-per-update loop.
 
-8. **Delivery push access.** This environment is **read-only** on `lost-in-the/grove` (push → 403). **Recommend:** I've committed this plan to a local `design/tui-redesign-plan` branch and will hand you the branch + a patch/bundle; you (or a session with write scope) push it. Flagged so "into grove on a branch" isn't silently blocked.
+8. **[NOTE — LOGISTICS] Delivery push access.** This environment is **read-only** on `lost-in-the/grove` (push → 403). **Recommend:** I've committed this plan to a local `design/tui-redesign-plan` branch and will hand you the branch + a patch/bundle; you (or a session with write scope) push it. Flagged so "into grove on a branch" isn't silently blocked.
 
-9. **PR review offline/degraded UX (R-open).** `gh` is a hard dependency (no API fallback). **Recommend:** reuse the existing `IsGHInstalled` gate; per-tab failure isolation (checks can fail while diff succeeds); a single "gh required" panel when absent. Specced as AC-10.6/AC-G.2 rather than left to convention.
+9. **[LOCKED] PR review offline/degraded UX.** `gh` is a hard dependency (no API fallback). **Recommend:** reuse the existing `IsGHInstalled` gate; per-tab failure isolation (checks can fail while diff succeeds); a single "gh required" panel when absent. Specced as AC-10.6/AC-G.2 rather than left to convention.
 
 ---
 

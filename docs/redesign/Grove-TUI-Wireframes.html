@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/codepigeon-design-system-4d00b4f0-aa9f-4518-b880-6e59ca4ff259/colors_and_type.css">
+<script src="_ds/codepigeon-design-system-4d00b4f0-aa9f-4518-b880-6e59ca4ff259/_ds_bundle.js"></script>
+<style>
+body{margin:0;background:#0b0b12;font-family:"Fira Mono",ui-monospace,monospace;color:#CDD6F4}
+a{color:#38BDF8;text-decoration:none}a:hover{color:#A78BFA}
+[id]:target [data-oid]{background:#E66747;color:#FFFFFF}
+</style>
+</helmet>
+<section id="t7" data-screen-label="Turn 7" style="padding:40px 44px 32px;border-bottom:1px solid #313244">
+<div style="display:flex;align-items:baseline;gap:12px;margin:0 0 6px">
+<a href="#t7" style="font:700 11px 'Fira Code',monospace;padding:3px 8px;background:#E66747;color:#FFFFFF;border-radius:4px">7</a>
+<span style="font:700 15px 'Fira Mono',monospace;color:#FCFCFD">PR tab strip — active state, three treatments</span>
+<span style="font:400 11px 'Fira Mono',monospace;color:#7F849C">1f's settings-tab anatomy ported over · pick one, it propagates to 6a–6c</span>
+</div>
+<div style="font:400 11.5px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:960px;margin:0 0 22px">Same anatomy as <a href="#1f">1f</a>: bracketed [key], label, count as a plain trailing digit — no parens, the brackets already mark what's pressable. The three options differ only in how "active" is drawn. My pick: <a href="#7a">7a</a> (quietest, zero extra rows); <a href="#7c">7c</a> composes with either if you want the breadcrumb to carry state.</div>
+<div style="display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start">
+<div id="7a" data-screen-label="7a raised block" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#7a" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">7a</a><span style="color:#FCFCFD;font-weight:700">Raised block — 1f verbatim</span><span style="color:#34D399;font-weight:700">✓ chosen — propagated to 6a–6c</span></div>
+<div style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span>~/code/<span style="color:#E66747">admin</span> — grove</span><span style="color:#7F849C">78ch</span></div>
+<div style="width:78ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;padding:0 0 4px">
+<div style="background:#181825;padding:1px 1ch;display:flex;justify-content:space-between;white-space:pre"><span><span style="color:#9399B2">‹ PRs · </span><span style="color:#FFFFFF;font-weight:700">#13964</span></span><span style="color:#7F849C">esc returns</span></div>
+<div style="white-space:pre;padding:0 1ch"><span style="color:#FFFFFF;font-weight:700">[GAL-1837] fix(orders): guard ShipmentUpdate against a phantom shippo_id</span></div>
+<div style="white-space:pre;padding:0 1ch"><span style="color:#34D399">● Open</span><span style="color:#9399B2"> · LeahArmstrong · 5 commits · main ← gal-1837-…-shippo-id</span></div>
+<div style="display:flex;justify-content:space-between;white-space:pre;padding:1px 1ch"><span><span style="color:#9399B2">[1] conversation 1   [2] commits 5   [3] checks </span><span style="color:#FBBF24">1/2</span><span style="color:#9399B2">   </span><span style="background:#313244;color:#FFFFFF;font-weight:700"> [4] files <span style="color:#9399B2;font-weight:400">4</span> </span></span><span><span style="color:#34D399">+248</span> <span style="color:#F87171">−23</span></span></div>
+<div style="white-space:pre;color:#7F849C;padding:0 1ch;border-top:1px solid #45475A">▾ app/ · <span style="color:#FBBF24">M</span> …/shipment/update.rb <span style="color:#34D399">+6</span> <span style="color:#F87171">−9</span></div>
+</div>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:78ch">Exactly 1f: active tab lifts on a #313244 block, white bold; its count stays dim inside the block. Inactive tabs are uniformly quiet. One line, no new rows, unmistakable at a glance.</div>
+</div>
+<div id="7b" data-screen-label="7b underline rail" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#7b" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">7b</a><span style="color:#FCFCFD;font-weight:700">Underline rail</span></div>
+<div style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span>~/code/<span style="color:#E66747">admin</span> — grove</span><span style="color:#7F849C">78ch</span></div>
+<div style="width:78ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;padding:0 0 4px">
+<div style="background:#181825;padding:1px 1ch;display:flex;justify-content:space-between;white-space:pre"><span><span style="color:#9399B2">‹ PRs · </span><span style="color:#FFFFFF;font-weight:700">#13964</span></span><span style="color:#7F849C">esc returns</span></div>
+<div style="white-space:pre;padding:0 1ch"><span style="color:#FFFFFF;font-weight:700">[GAL-1837] fix(orders): guard ShipmentUpdate against a phantom shippo_id</span></div>
+<div style="display:flex;justify-content:space-between;white-space:pre;padding:1px 1ch 0"><span><span style="color:#9399B2">[1] conversation 1   [2] commits 5   [3] checks </span><span style="color:#FBBF24">1/2</span><span style="color:#9399B2">   [4] </span><span style="color:#FFFFFF;font-weight:700">files</span><span style="color:#9399B2"> 4</span></span><span><span style="color:#34D399">+248</span> <span style="color:#F87171">−23</span></span></div>
+<div style="white-space:pre;padding:0 1ch"><span style="visibility:hidden">[1] conversation 1   [2] commits 5   [3] checks 1/2   </span><span style="color:#A78BFA">━━━━━━━━━━━</span></div>
+<div style="white-space:pre;color:#7F849C;padding:0 1ch;border-top:1px solid #45475A">▾ app/ · <span style="color:#FBBF24">M</span> …/shipment/update.rb <span style="color:#34D399">+6</span> <span style="color:#F87171">−9</span></div>
+</div>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:78ch">No block: the active label goes white-bold and takes a purple rail beneath. Highest contrast from across the room, but permanently costs one row — at 80×24 that's a list line.</div>
+</div>
+<div id="7c" data-screen-label="7c breadcrumb state" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#7c" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">7c</a><span style="color:#FCFCFD;font-weight:700">Breadcrumb carries the state</span></div>
+<div style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span>~/code/<span style="color:#E66747">admin</span> — grove</span><span style="color:#7F849C">78ch</span></div>
+<div style="width:78ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;padding:0 0 4px">
+<div style="background:#181825;padding:1px 1ch;display:flex;justify-content:space-between;white-space:pre"><span><span style="color:#9399B2">‹ PRs · </span><span style="color:#FFFFFF;font-weight:700">#13964</span><span style="color:#7F849C"> ▸ </span><span style="color:#A78BFA;font-weight:700">files</span></span><span style="color:#7F849C">esc returns</span></div>
+<div style="white-space:pre;padding:0 1ch"><span style="color:#FFFFFF;font-weight:700">[GAL-1837] fix(orders): guard ShipmentUpdate against a phantom shippo_id</span></div>
+<div style="display:flex;justify-content:space-between;white-space:pre;padding:1px 1ch"><span style="color:#9399B2">[1] conversation 1   [2] commits 5   [3] checks <span style="color:#FBBF24">1/2</span>   [4] files 4</span><span><span style="color:#34D399">+248</span> <span style="color:#F87171">−23</span></span></div>
+<div style="white-space:pre;color:#7F849C;padding:0 1ch;border-top:1px solid #45475A">▾ app/ · <span style="color:#FBBF24">M</span> …/shipment/update.rb <span style="color:#34D399">+6</span> <span style="color:#F87171">−9</span></div>
+</div>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:78ch">1f's codepigeon ▸ settings, literally: #13964 ▸ files in the breadcrumb is the state; the strip is a pure menu and never highlights. Purest read of D1's view stack — composes with 7a or 7b if a second cue is wanted.</div>
+</div>
+</div>
+</section>
+<section id="t6" data-screen-label="Turn 6" style="padding:40px 44px 32px;border-bottom:1px solid #313244">
+<div style="display:flex;align-items:baseline;gap:12px;margin:0 0 6px">
+<a href="#t6" style="font:700 11px 'Fira Code',monospace;padding:3px 8px;background:#E66747;color:#FFFFFF;border-radius:4px">6</a>
+<span style="font:700 15px 'Fira Mono',monospace;color:#FCFCFD">PR review view — GitHub parity in the terminal</span>
+<span style="font:400 11px 'Fira Mono',monospace;color:#7F849C">D10 in scope · Conversation / Commits / Files as tabs · data from real PR #13964</span>
+</div>
+<div style="font:400 11.5px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:960px;margin:0 0 22px">⏎ on a PR (or D on a worktree) pushes this view onto the stack. It mirrors GitHub's PR page shape: numbered tabs (<a href="#6a">6a</a>–<a href="#6c">6c</a>), files organized into folders with the <a href="#4d">4d</a> rollup component, and a file list you toggle with t. Digits are free for tab-jumping because D5 removed dashboard quick-switch. Build order in <a href="#6d">6d</a>.</div>
+<div style="display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start">
+<div id="6a" data-screen-label="6a files changed" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#6a" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">6a</a><span style="color:#FCFCFD;font-weight:700">Files changed — tree rail + hunks</span><span>t hides the rail, hunks take the full width</span></div>
+<div style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span>~/code/<span style="color:#E66747">admin</span> — grove</span><span style="color:#7F849C">120×30</span></div>
+<div style="width:120ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;padding:0 0 4px">
+<div style="background:#181825;padding:1px 1ch;display:flex;justify-content:space-between;white-space:pre"><span><span style="color:#9399B2">‹ PRs · </span><span style="color:#FFFFFF;font-weight:700">#13964</span></span><span style="color:#7F849C">esc returns to PRs</span></div>
+<div style="white-space:pre;padding:0 1ch"><span style="color:#FFFFFF;font-weight:700">[GAL-1837] fix(orders): guard ShipmentUpdate against a phantom shippo_id</span></div>
+<div style="white-space:pre;padding:0 1ch"><span style="color:#34D399">● Open</span><span style="color:#9399B2"> · LeahArmstrong · 5 commits into </span><span style="color:#CDD6F4">main</span><span style="color:#9399B2"> from </span><span style="color:#7F849C">gal-1837-guard-…-shippo-id</span></div>
+<div style="white-space:pre;padding:1px 1ch;border-bottom:1px solid #45475A"><span style="color:#9399B2"> [1] conversation 1   [2] commits 5   [3] checks </span><span style="color:#FBBF24">1/2</span><span style="color:#9399B2">   </span><span style="background:#313244;color:#FFFFFF;font-weight:700"> [4] files <span style="color:#9399B2;font-weight:400">4</span> </span><span style="color:#9399B2">      </span><span style="color:#34D399">+248</span> <span style="color:#F87171">−23</span><span style="color:#7F849C"> · 0/4 viewed</span></div>
+<div style="display:flex">
+<div style="width:32ch;flex:none;padding:2px 0 0;border-right:1px solid #45475A">
+<div style="white-space:pre;color:#9399B2;padding:0 1ch">▾ app/</div>
+<div style="white-space:pre;color:#9399B2;padding:0 1ch">  ▾ graphql/…/shipment/</div>
+<div style="white-space:pre;color:#CDD6F4;background:#313244;padding:0 1ch">      <span style="color:#FBBF24">M</span> <span style="color:#FFFFFF;font-weight:700">update.rb</span></div>
+<div style="white-space:pre;color:#9399B2;padding:0 1ch">  ▾ models/order/</div>
+<div style="white-space:pre;color:#CDD6F4;padding:0 1ch">      <span style="color:#FBBF24">M</span> shipment_update.rb</div>
+<div style="white-space:pre;color:#9399B2;padding:0 1ch">▾ spec/</div>
+<div style="white-space:pre;color:#9399B2;padding:0 1ch">  ▾ graphql/…/shipment/</div>
+<div style="white-space:pre;color:#7F849C;padding:0 1ch">      <span style="color:#FBBF24">M</span> update_spec.rb <span style="color:#34D399">✓</span></div>
+<div style="white-space:pre;color:#9399B2;padding:0 1ch">  ▾ models/order/</div>
+<div style="white-space:pre;color:#CDD6F4;padding:0 1ch">      <span style="color:#FBBF24">M</span> shipment_update_…rb</div>
+</div>
+<div style="flex:1;min-width:0;padding:2px 0 0">
+<div style="white-space:pre;padding:0 1ch"><span style="color:#FFFFFF;font-weight:700">app/graphql/resolvers/order/shipment/update.rb</span><span style="color:#9399B2">  </span><span style="color:#34D399">+6</span> <span style="color:#F87171">−9</span><span style="color:#9399B2"> · </span><span style="color:#7F849C">v mark viewed</span></div>
+<div style="white-space:pre;color:#38BDF8;background:#181825;padding:0 1ch">@@ -19,15 +19,12 @@ def call</div>
+<div style="white-space:pre;color:#9399B2;padding:0 1ch"> 20 20    attr_reader :shipment_attrs</div>
+<div style="white-space:pre;color:#34D399;background:#16281F;padding:0 1ch">    22  + # Forward only the keys the client actually sent —</div>
+<div style="white-space:pre;color:#34D399;background:#16281F;padding:0 1ch">    23  + # slicing preserves the partial-update signal (GAL-1837).</div>
+<div style="white-space:pre;color:#9399B2;padding:0 1ch"> 22 27    def update_params</div>
+<div style="white-space:pre;color:#F87171;background:#2D1A1D;padding:0 1ch"> 23     −   {</div>
+<div style="white-space:pre;color:#F87171;background:#2D1A1D;padding:0 1ch"> 24     −     carrier: shipment_attrs[:carrier],</div>
+<div style="white-space:pre;color:#F87171;background:#2D1A1D;padding:0 1ch"> 25     −     tracking_number: shipment_attrs[:tracking_number],</div>
+<div style="white-space:pre;color:#7F849C;background:#2D1A1D;padding:0 1ch">  ⋮     − 6 more removed lines <span style="color:#F87171">(z folds)</span></div>
+<div style="white-space:pre;color:#34D399;background:#16281F;padding:0 1ch">    28  + shipment_attrs.slice(:carrier, :tracking_number, :tracking_url,…</div>
+<div style="white-space:pre;color:#9399B2;padding:0 1ch"> 32 29    end</div>
+</div>
+</div>
+<div style="border-top:1px solid #45475A;margin-top:2px;padding:2px 1ch 0;white-space:pre;color:#9399B2"> <span style="color:#A78BFA;font-weight:700">1-4</span> tabs · <span style="color:#A78BFA;font-weight:700">j/k</span> scroll · <span style="color:#A78BFA;font-weight:700">J/K</span> file · <span style="color:#A78BFA;font-weight:700">t</span> file list · <span style="color:#A78BFA;font-weight:700">v</span> viewed · <span style="color:#A78BFA;font-weight:700">⏎</span> open in $EDITOR · <span style="color:#A78BFA;font-weight:700">esc</span> back</div>
+</div>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:120ch">The rail is the <a href="#4d">4d</a> rollup with D6 path compression (graphql/…/shipment/); viewed files dim with ✓ and the tab strip counts 0/4 — state persists per PR in grove's cache. t collapses the rail (GitHub's sidebar toggle); J/K jump files either way. Below 100 cols the rail starts hidden.</div>
+</div>
+<div id="6b" data-screen-label="6b conversation" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#6b" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">6b</a><span style="color:#FCFCFD;font-weight:700">Conversation — read-only timeline first</span></div>
+<div style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span>#13964 · tab 1</span><span style="color:#7F849C">80ch</span></div>
+<div style="width:80ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;padding:2px 0 4px">
+<div style="white-space:pre;padding:1px 1ch;border-bottom:1px solid #45475A"><span style="background:#313244;color:#FFFFFF;font-weight:700"> [1] conversation <span style="color:#9399B2;font-weight:400">1</span> </span><span style="color:#9399B2">   [2] commits 5   [3] checks </span><span style="color:#FBBF24">1/2</span><span style="color:#9399B2">   [4] files 4</span></div>
+<div style="white-space:pre;color:#CDD6F4;padding:0 1ch"><span style="color:#34D399">●</span> <span style="color:#FFFFFF;font-weight:700">LeahArmstrong</span> <span style="color:#7F849C">opened · 2h</span></div>
+<div style="white-space:pre;color:#9399B2;padding:0 1ch">   Guards ShipmentUpdate against a phantom shippo_id when the</div>
+<div style="white-space:pre;color:#9399B2;padding:0 1ch">   client sends a partial payload. Repro + fix notes inline.</div>
+<div style="white-space:pre;color:#CDD6F4;padding:0 1ch"><span style="color:#F87171">◆</span> <span style="color:#FFFFFF;font-weight:700">benreyn</span> <span style="color:#F87171">requested changes</span> <span style="color:#7F849C">· 1h · on update.rb:28</span></div>
+<div style="white-space:pre;color:#7F849C;padding:0 1ch">   │ shipment_attrs.slice(:carrier, :tracking_number,…</div>
+<div style="white-space:pre;color:#9399B2;padding:0 1ch">   Do we still need the reload after save with the slice?</div>
+<div style="white-space:pre;color:#CDD6F4;padding:0 1ch"><span style="color:#FBBF24">◌</span> <span style="color:#9399B2">checks · </span><span style="color:#34D399">✓ ci/rspec</span><span style="color:#9399B2"> · </span><span style="color:#FBBF24">◌ ci/lint running</span></div>
+<div style="border-top:1px solid #45475A;margin-top:2px;padding:2px 1ch 0;white-space:pre;color:#9399B2"> <span style="color:#A78BFA;font-weight:700">j/k</span> scroll · <span style="color:#A78BFA;font-weight:700">⏎</span> jump to thread's file:line · <span style="color:#A78BFA;font-weight:700">B</span> browser · <span style="color:#A78BFA;font-weight:700">esc</span> back</div>
+</div>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:80ch">Read-only in this iteration — ⏎ on a review thread jumps to its file:line in tab 4; replying stays one B away in the browser. Comment authoring is the stretch line in <a href="#6d">6d</a>, not a blocker.</div>
+</div>
+<div id="6c" data-screen-label="6c commits" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#6c" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">6c</a><span style="color:#FCFCFD;font-weight:700">Commits — ⏎ scopes the diff</span></div>
+<div style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span>#13964 · tab 2</span><span style="color:#7F849C">80ch</span></div>
+<div style="width:80ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;padding:2px 0 4px">
+<div style="white-space:pre;padding:1px 1ch;border-bottom:1px solid #45475A"><span style="color:#9399B2"> [1] conversation 1   </span><span style="background:#313244;color:#FFFFFF;font-weight:700"> [2] commits <span style="color:#9399B2;font-weight:400">5</span> </span><span style="color:#9399B2">   [3] checks </span><span style="color:#FBBF24">1/2</span><span style="color:#9399B2">   [4] files 4</span></div>
+<div style="white-space:pre;color:#CDD6F4;background:#313244;padding:0 1ch"><span style="color:#A78BFA;font-weight:700">❯</span> <span style="color:#FBBF24">2656341</span> fix(orders): slice update params to sent keys      <span style="color:#34D399">+82</span> <span style="color:#F87171">−9</span></div>
+<div style="white-space:pre;color:#CDD6F4;padding:0 1ch">  <span style="color:#FBBF24">a3f9c81</span> fix(orders): lock + reload before status guard     <span style="color:#34D399">+41</span> <span style="color:#F87171">−8</span></div>
+<div style="white-space:pre;color:#CDD6F4;padding:0 1ch">  <span style="color:#FBBF24">e379afd</span> test(orders): phantom shippo_id characterization   <span style="color:#34D399">+98</span> <span style="color:#F87171">−2</span></div>
+<div style="white-space:pre;color:#7F849C;padding:0 1ch">  ⋮ 2 more</div>
+<div style="border-top:1px solid #45475A;margin-top:2px;padding:2px 1ch 0;white-space:pre;color:#9399B2"> <span style="color:#A78BFA;font-weight:700">⏎</span> scope files tab to commit · <span style="color:#A78BFA;font-weight:700">a</span> all commits · <span style="color:#A78BFA;font-weight:700">esc</span> back</div>
+</div>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:80ch">GitHub's "All commits ▾" dropdown becomes a list: ⏎ scopes tab 4 to that commit (header shows the sha), a resets. Same mechanic later serves <a href="#2a">2a</a>'s base-cycling for worktree diffs.</div>
+</div>
+<div id="6d" data-screen-label="6d build order" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#6d" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">6d</a><span style="color:#FCFCFD;font-weight:700">Iteration plan — build order</span></div>
+<div style="width:560px;background:#1E1E2E;border:1px solid #45475A;border-radius:8px;padding:16px 20px">
+<div style="display:grid;grid-template-columns:28px 1fr;gap:7px 12px;font:400 11.5px/1.5 'Fira Code',monospace;color:#CDD6F4">
+<div style="color:#34D399;font-weight:700">1</div><div>Data: gh pr view --json + gh pr diff, cached per PR; no new auth surface</div>
+<div style="color:#34D399;font-weight:700">2</div><div>View + tabs on the D1 stack; esc pops to PRs; 1-4 jump</div>
+<div style="color:#34D399;font-weight:700">3</div><div>Files tab: <a href="#4d">4d</a> tree + hunk pane, t toggle, v viewed (persisted), ⏎ $EDITOR at file:line</div>
+<div style="color:#34D399;font-weight:700">4</div><div>Commits tab + diff scoping (<a href="#6c">6c</a>)</div>
+<div style="color:#34D399;font-weight:700">5</div><div>Conversation + checks, read-only; ⏎ thread → file:line</div>
+<div style="color:#FBBF24;font-weight:700">S</div><div>Stretch: reply/approve from tab 1 · <a href="#2a">2a</a> worktree-diff base-cycling behind the same view</div>
+</div>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:560px">Each step ships alone — punting after 3 still delivers the review surface people live in.</div>
+</div>
+</div>
+</section>
+<section id="t5" data-screen-label="Turn 5" style="padding:40px 44px 32px;border-bottom:1px solid #313244">
+<div style="display:flex;align-items:baseline;gap:12px;margin:0 0 6px">
+<a href="#t5" style="font:700 11px 'Fira Code',monospace;padding:3px 8px;background:#E66747;color:#FFFFFF;border-radius:4px">5</a>
+<span style="font:700 15px 'Fira Mono',monospace;color:#FCFCFD">Decision record + layered commands</span>
+<span style="font:400 11px 'Fira Mono',monospace;color:#7F849C">direction locked for final mockups · which-key proposal</span>
+</div>
+<div style="font:400 11.5px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:960px;margin:0 0 22px"><a href="#5a">5a</a> is the source of truth going into final mockups — <a href="#1a">1a</a> architecture, <a href="#4b">4b</a> rows, <a href="#1g">1g</a> compositor, <a href="#1f">1f</a> config. <a href="#5b">5b</a> pitches the one new mechanic: prefix-key layers with a which-key strip, which cuts top-level bindings to ~9 hot keys and resolves the b conflict.</div>
+<div style="display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start">
+<div id="5a" data-screen-label="5a decisions" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#5a" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">5a</a><span style="color:#FCFCFD;font-weight:700">Decision record</span><span>locked 2026-07-17</span></div>
+<div style="width:900px;background:#1E1E2E;border:1px solid #45475A;border-radius:8px;padding:16px 20px">
+<div style="display:grid;grid-template-columns:44px 170px 1fr;gap:7px 16px;font:400 11.5px/1.5 'Fira Code',monospace;color:#CDD6F4">
+<div style="color:#34D399;font-weight:700">D1</div><div style="color:#FCFCFD;font-weight:700">architecture</div><div><a href="#1a">1a</a> list-first. ≥110 cols: docked pane (<a href="#3a">3a</a>), tab focuses it in place — full detail interaction incl. D → diff. &lt;110: strip + tab-sheet. List never pays for width.</div>
+<div style="color:#34D399;font-weight:700">D2</div><div style="color:#FCFCFD;font-weight:700">compositor</div><div>Single overlay layer, uniform dim (<a href="#1g">1g</a>). Help, wizard, confirm all render through it. Config is NOT an overlay (see D8).</div>
+<div style="color:#34D399;font-weight:700">D3</div><div style="color:#FCFCFD;font-weight:700">row spec</div><div><a href="#4b">4b</a>: worktree name is the identity column; 11ch counts, 3ch age, glyph tail.</div>
+<div style="color:#34D399;font-weight:700">D4</div><div style="color:#FCFCFD;font-weight:700">secondary column</div><div>Config <span style="color:#FBBF24">list_secondary = branch · dir · off</span> (default branch, shown only when ≠ name — prefix-only dupes count as equal). Directory always printed in detail → Git.</div>
+<div style="color:#34D399;font-weight:700">D5</div><div style="color:#FCFCFD;font-weight:700">navigation</div><div>Vim: j/k · ctrl+d / ctrl+u half-page · g/G. Number gutter and 1-9 quick-switch REMOVED. Position n/52 lives in the header.</div>
+<div style="color:#34D399;font-weight:700">D6</div><div style="color:#FCFCFD;font-weight:700">truncation</div><div>Middle-trunc everywhere; ticket-id prefix ([abc]-1234) and last segment always survive. Name floor 16ch — the ⎇ chip sheds entirely before the name drops below 24ch.</div>
+<div style="color:#34D399;font-weight:700">D7</div><div style="color:#FCFCFD;font-weight:700">wizard keys</div><div>⏎ next · shift+tab back · esc cancel from any step, returning to the origin view (<a href="#1e">1e</a>).</div>
+<div style="color:#34D399;font-weight:700">D8</div><div style="color:#FCFCFD;font-weight:700">config</div><div>Full-screen editor (<a href="#1f">1f</a>) replaces the centered modal. Dirty-field tracking, save/discard prompt on esc.</div>
+<div style="color:#34D399;font-weight:700">D9</div><div style="color:#FCFCFD;font-weight:700">upgrade</div><div>Header badge ⭡0.9.0; u opens a confirm overlay (never fires blind); also listed in the help panel footer.</div>
+<div style="color:#34D399;font-weight:700">D10</div><div style="color:#FCFCFD;font-weight:700">PR review view</div><div>In this iteration as the PR review view (<a href="#6a">6a</a>): GitHub-parity tabs, folder tree, toggleable file list. Worktree-diff base-cycling (<a href="#2a">2a</a>) lives behind the same view; all its keys are view-local — conflict dissolved by D11. Build order in <a href="#6d">6d</a>.</div>
+<div style="color:#34D399;font-weight:700">D11</div><div style="color:#FCFCFD;font-weight:700">command layers</div><div>Prefix keys + which-key strip (<a href="#5b">5b</a>) — locked. Strip DOCKS above the footer (viewport shrinks, selection stays in view), never floats over rows. Input is never gated on it: b s executes instantly. : palette deferred.</div>
+</div>
+</div>
+</div>
+<div id="5b" data-screen-label="5b which-key" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#5b" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">5b</a><span style="color:#FCFCFD;font-weight:700">Layered commands — b pressed, which-key strip open</span></div>
+<div style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span>~/code/<span style="color:#E66747">admin</span> — grove</span><span style="color:#7F849C">80×24</span></div>
+<div style="width:80ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;padding:0 0 4px">
+<div style="background:#181825;padding:1px 1ch;display:flex;justify-content:space-between;white-space:pre"><span><span style="color:#FFFFFF;font-weight:700">admin</span><span style="color:#9399B2"> · 52 worktrees · on main · </span><span style="color:#CDD6F4">⬍ name</span></span><span><span style="color:#FBBF24">⭡ 0.9.0</span><span style="color:#9399B2"> · </span><span style="color:#34D399">●</span><span style="color:#CDD6F4"> root</span><span style="color:#7F849C"> · 1/52</span></span></div>
+<div style="white-space:pre;color:#CDD6F4;background:#313244;padding:0 1ch"> <span style="color:#A78BFA;font-weight:700">❯</span> <span style="display:inline-block;width:25ch;color:#FFFFFF;font-weight:700">root</span><span style="display:inline-block;width:25ch;color:#7F849C">⎇ main</span><span style="display:inline-block;width:11ch;text-align:right"><span style="color:#F87171">↓11</span> <span style="color:#FBBF24">~13</span></span><span style="display:inline-block;width:5ch;text-align:right;color:#7F849C">2d</span>  <span style="color:#7F849C">⬡</span> <span style="color:#34D399">◆</span></div>
+<div style="white-space:pre;color:#CDD6F4;padding:0 1ch"> <span style="color:#FBBF24">●</span> <span style="display:inline-block;width:25ch;color:#FFFFFF;font-weight:700">agent-browser-qa-flows</span><span style="display:inline-block;width:25ch;color:#7F849C">⎇ main-agent-…-qa-flows</span><span style="display:inline-block;width:11ch;text-align:right"><span style="color:#FBBF24">~14</span></span><span style="display:inline-block;width:5ch;text-align:right;color:#7F849C">5w</span></div>
+<div style="white-space:pre;color:#CDD6F4;padding:0 1ch"> <span style="color:#FBBF24">●</span> <span style="display:inline-block;width:25ch;color:#FFFFFF;font-weight:700">checkout-audit</span><span style="display:inline-block;width:25ch;color:#7F849C"></span><span style="display:inline-block;width:11ch;text-align:right"><span style="color:#FBBF24">~6</span></span><span style="display:inline-block;width:5ch;text-align:right;color:#7F849C">5w</span>  <span style="color:#7F849C">⬡</span></div>
+<div style="white-space:pre;color:#CDD6F4;padding:0 1ch"> <span style="color:#FBBF24">●</span> <span style="display:inline-block;width:25ch;color:#FFFFFF;font-weight:700">docs-system</span><span style="display:inline-block;width:25ch;color:#7F849C">⎇ feat/docs-system</span><span style="display:inline-block;width:11ch;text-align:right"><span style="color:#38BDF8">↑1</span> <span style="color:#F87171">↓222</span> <span style="color:#FBBF24">~2</span></span><span style="display:inline-block;width:5ch;text-align:right;color:#7F849C">5w</span>  <span style="color:#7F849C">⬡</span></div>
+<div style="white-space:pre;color:#7F849C;padding:0 1ch">   ⋮ 48 more</div>
+<div style="margin:4px 1ch 0;border:1px solid #A78BFA;border-radius:4px;padding:2px 1ch;background:#181825">
+<div style="white-space:pre"><span style="color:#A78BFA;font-weight:700">b</span><span style="color:#FCFCFD;font-weight:700"> branch</span><span style="color:#7F849C"> — on root (main)</span></div>
+<div style="white-space:pre;color:#CDD6F4"> <span style="color:#A78BFA;font-weight:700">s</span> switch in-place   <span style="color:#A78BFA;font-weight:700">n</span> new from HEAD…   <span style="color:#A78BFA;font-weight:700">u</span> set upstream…</div>
+<div style="white-space:pre;color:#CDD6F4"> <span style="color:#A78BFA;font-weight:700">y</span> sync from worktree…   <span style="color:#A78BFA;font-weight:700">esc</span><span style="color:#7F849C"> close</span></div>
+</div>
+<div style="border-top:1px solid #45475A;margin-top:4px;padding:2px 1ch 0;white-space:pre;color:#9399B2"> <span style="color:#A78BFA;font-weight:700">j/k</span> nav · <span style="color:#A78BFA;font-weight:700">ctrl+d/u</span> page · <span style="color:#A78BFA;font-weight:700">⏎</span> switch · <span style="color:#A78BFA;font-weight:700">tab</span> detail · <span style="color:#A78BFA;font-weight:700">/</span> filter · <span style="color:#A78BFA;font-weight:700">o</span> sort · <span style="color:#A78BFA;font-weight:700">?</span> help</div>
+</div>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:80ch">Hot keys stay single-press: j/k, ⏎, tab, /, n, d, o, ?. Grouped domains live behind prefixes — <span style="color:#CDD6F4">b</span> branch (shown), <span style="color:#CDD6F4">w</span> worktree (R rename · f fork · a bulk-delete), <span style="color:#CDD6F4">g</span> go (p PRs · i issues · c config · d diff). The strip appears instantly on the prefix, chains read like vim (b s = switch branch), esc backs out one layer. The strip is docked chrome, not an overlay — it swaps in above the footer, the list gives up 3–4 rows, and chains execute without waiting for it. o cycles sort name → age → dirty (header ⬍ shows current, O reverses).</div>
+</div>
+</div>
+</section>
+<section id="t4" data-screen-label="Turn 4" style="padding:40px 44px 32px;border-bottom:1px solid #313244">
+<div style="display:flex;align-items:baseline;gap:12px;margin:0 0 6px">
+<a href="#t4" style="font:700 11px 'Fira Code',monospace;padding:3px 8px;background:#E66747;color:#FFFFFF;border-radius:4px">4</a>
+<span style="font:700 15px 'Fira Mono',monospace;color:#FCFCFD">Real-data audit — 0.8.0 production captures vs the wireframes</span>
+<span style="font:400 11px 'Fira Mono',monospace;color:#7F849C">9 screenshots · 52 worktrees · 30 PRs · what breaks at real content widths</span>
+</div>
+<div style="font:400 11.5px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:960px;margin:0 0 22px">The live window validates the shed-order rule but falsifies four width assumptions (<a href="#4a">4a</a>). Patches: identity-column dedupe + middle truncation (<a href="#4b">4b</a>), PR rows where the title owns line 1 (<a href="#4c">4c</a>), dir rollups for deep change trees (<a href="#4d">4d</a>). The captures also settle #19: help dims the background, wizard/config don't — and the config shot shows the detail pane <em>reflowing under</em> the modal, exactly <a href="#1g">1g</a>'s clip-not-overlay bug. One compositor, one dim rule.</div>
+<div style="display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start">
+<div id="4a" data-screen-label="4a audit" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#4a" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">4a</a><span style="color:#FCFCFD;font-weight:700">Assumption audit</span><span>wireframe data vs the live window</span></div>
+<div style="width:1010px;background:#1E1E2E;border:1px solid #45475A;border-radius:8px;padding:16px 20px">
+<div style="display:grid;grid-template-columns:120px 1fr 1.15fr 1.15fr;gap:7px 16px;font:400 11.5px/1.5 'Fira Code',monospace;color:#CDD6F4">
+<div style="font:700 10.5px 'Fira Code',monospace;color:#A78BFA;letter-spacing:.12em;text-transform:uppercase">Field</div><div style="font:700 10.5px 'Fira Code',monospace;color:#A78BFA;letter-spacing:.12em;text-transform:uppercase">Wireframes assumed</div><div style="font:700 10.5px 'Fira Code',monospace;color:#A78BFA;letter-spacing:.12em;text-transform:uppercase">Live data says</div><div style="font:700 10.5px 'Fira Code',monospace;color:#A78BFA;letter-spacing:.12em;text-transform:uppercase">Patch</div>
+<div style="color:#FCFCFD;font-weight:700">name × branch</div><div style="color:#7F849C">two columns, 13ch + 21ch, always both</div><div><span style="color:#F87171">✗</span> equal or prefix-dupes in 10/15 rows (checkout-audit│checkout-audit)</div><div><span style="color:#34D399">→</span> one identity column; dim ⎇ chip only when branch ≠ name</div>
+<div style="color:#FCFCFD;font-weight:700">truncation</div><div style="color:#7F849C">end-truncate with …</div><div><span style="color:#F87171">✗</span> slugs hit 45ch; ticket id at head, meaning at tail</div><div><span style="color:#34D399">→</span> truncate MIDDLE: gal-1349-migrate-…-read</div>
+<div style="color:#FCFCFD;font-weight:700">sync counts</div><div style="color:#7F849C">7ch (↑n ↓nn)</div><div><span style="color:#F87171">✗</span> ↑1 ↓222 ~13 = 11ch · stash hits 42</div><div><span style="color:#34D399">→</span> reserve 11ch right-aligned; shed ~n first, arrows last</div>
+<div style="color:#FCFCFD;font-weight:700">age</div><div style="color:#7F849C">5ch</div><div><span style="color:#FBBF24">△</span> "11d ago" = 7ch</div><div><span style="color:#34D399">→</span> drop "ago" everywhere; 3ch right-aligned</div>
+<div style="color:#FCFCFD;font-weight:700">scale</div><div style="color:#7F849C">6 demo rows, all visible</div><div><span style="color:#F87171">✗</span> 52 trees, ~15 visible; four faint dots are the only scroll cue</div><div><span style="color:#34D399">→</span> n/52 position in header; 1-9 renumber with the filtered view</div>
+<div style="color:#FCFCFD;font-weight:700">PR diffstat</div><div style="color:#7F849C">+24 −34</div><div><span style="color:#FBBF24">△</span> +4,048 −0 (comma thousands)</div><div><span style="color:#34D399">→</span> 6ch per side, right-aligned</div>
+<div style="color:#FCFCFD;font-weight:700">PR list row</div><div style="color:#7F849C">only the title truncates</div><div><span style="color:#F87171">✗</span> title AND branch truncate on line 1 — #14041's title renders as literally "…"</div><div><span style="color:#34D399">→</span> title owns line 1; branch → line 2, middle-trunc (<a href="#4c">4c</a>)</div>
+<div style="color:#FCFCFD;font-weight:700">changes tree</div><div style="color:#7F849C">4 flat files</div><div><span style="color:#F87171">✗</span> 13 dirty files = 24 rendered lines, dirs 5 deep</div><div><span style="color:#34D399">→</span> root files verbatim, dir rollups + expand (<a href="#4d">4d</a>)</div>
+<div style="color:#FCFCFD;font-weight:700">footer</div><div style="color:#7F849C">key hints only</div><div><span style="color:#F87171">✗</span> "↑ 0.8.0 → 0.9.0 press u" adds 24ch; u (upgrade) sits beside U (switch+up) — case-slip risk</div><div><span style="color:#34D399">→</span> upgrade → header badge; u prompts a confirm, never fires blind</div>
+</div>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:1010px">Everything else held: two-line comfortable rows, right-aligned age, glyph vocabulary, esc-to-return breadcrumb (the live header already prints it), wizard's live name preview (→ admin-…) is worth keeping verbatim.</div>
+</div>
+<div id="4b" data-screen-label="4b dashboard patched" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#4b" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">4b</a><span style="color:#FCFCFD;font-weight:700">3b re-run with production names — patched budget @ 80 cols</span></div>
+<div style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span>~/code/<span style="color:#E66747">admin</span> — grove</span><span style="color:#7F849C">80×24</span></div>
+<div style="width:80ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;padding:0 0 4px">
+<div style="background:#181825;padding:1px 1ch;display:flex;justify-content:space-between;white-space:pre"><span><span style="color:#FFFFFF;font-weight:700">admin</span><span style="color:#9399B2"> · 52 worktrees · on main</span></span><span><span style="color:#FBBF24">⭡ 0.9.0 u</span><span style="color:#9399B2"> · </span><span style="color:#34D399">●</span><span style="color:#CDD6F4"> root</span><span style="color:#7F849C"> · 1/52</span></span></div>
+<div style="white-space:pre;color:#CDD6F4;background:#313244;padding:0 1ch"> 1 <span style="color:#A78BFA;font-weight:700">❯</span> <span style="display:inline-block;width:24ch;color:#FFFFFF;font-weight:700">root</span><span style="display:inline-block;width:24ch;color:#7F849C">⎇ main</span><span style="display:inline-block;width:11ch;text-align:right"><span style="color:#F87171">↓11</span> <span style="color:#FBBF24">~13</span></span><span style="display:inline-block;width:5ch;text-align:right;color:#7F849C">2d</span>  <span style="color:#7F849C">⬡</span> <span style="color:#34D399">◆</span></div>
+<div style="white-space:pre;color:#CDD6F4;padding:0 1ch"> 2 <span style="color:#FBBF24">●</span> <span style="display:inline-block;width:24ch;color:#FFFFFF;font-weight:700">agent-browser-qa-flows</span><span style="display:inline-block;width:24ch;color:#7F849C">⎇ main-agent-…-qa-flows</span><span style="display:inline-block;width:11ch;text-align:right"><span style="color:#FBBF24">~14</span></span><span style="display:inline-block;width:5ch;text-align:right;color:#7F849C">5w</span></div>
+<div style="white-space:pre;color:#CDD6F4;padding:0 1ch"> 3 <span style="color:#FBBF24">●</span> <span style="display:inline-block;width:24ch;color:#FFFFFF;font-weight:700">checkout-audit</span><span style="display:inline-block;width:24ch;color:#7F849C"></span><span style="display:inline-block;width:11ch;text-align:right"><span style="color:#FBBF24">~6</span></span><span style="display:inline-block;width:5ch;text-align:right;color:#7F849C">5w</span>  <span style="color:#7F849C">⬡</span></div>
+<div style="white-space:pre;color:#CDD6F4;padding:0 1ch"> 4 <span style="color:#FBBF24">●</span> <span style="display:inline-block;width:24ch;color:#FFFFFF;font-weight:700">docs-system</span><span style="display:inline-block;width:24ch;color:#7F849C">⎇ feat/docs-system</span><span style="display:inline-block;width:11ch;text-align:right"><span style="color:#38BDF8">↑1</span> <span style="color:#F87171">↓222</span> <span style="color:#FBBF24">~2</span></span><span style="display:inline-block;width:5ch;text-align:right;color:#7F849C">5w</span>  <span style="color:#7F849C">⬡</span></div>
+<div style="white-space:pre;color:#CDD6F4;padding:0 1ch"> 5 <span style="color:#FBBF24">●</span> <span style="display:inline-block;width:24ch;color:#FFFFFF;font-weight:700">gal-1349</span><span style="display:inline-block;width:24ch;color:#7F849C">⎇ gal-1349-migrate-…-read</span><span style="display:inline-block;width:11ch;text-align:right"><span style="color:#FBBF24">~2</span></span><span style="display:inline-block;width:5ch;text-align:right;color:#7F849C">12d</span>  <span style="color:#7F849C">⬡</span></div>
+<div style="white-space:pre;color:#CDD6F4;padding:0 1ch"> 6 <span style="color:#FBBF24">●</span> <span style="display:inline-block;width:24ch;color:#FFFFFF;font-weight:700">GAL-1656</span><span style="display:inline-block;width:24ch;color:#7F849C">⎇ gal-1656-add-…-constraint</span><span style="display:inline-block;width:11ch;text-align:right"><span style="color:#FBBF24">~7</span></span><span style="display:inline-block;width:5ch;text-align:right;color:#7F849C">5w</span></div>
+<div style="white-space:pre;color:#CDD6F4;padding:0 1ch"> 7 <span style="color:#7F849C">○</span> <span style="display:inline-block;width:24ch;color:#FFFFFF;font-weight:700">gal-1683</span><span style="display:inline-block;width:24ch;color:#7F849C"></span><span style="display:inline-block;width:11ch;text-align:right"><span style="color:#34D399">✓</span></span><span style="display:inline-block;width:5ch;text-align:right;color:#7F849C">5w</span>  <span style="color:#7F849C">⬡</span></div>
+<div style="white-space:pre;color:#7F849C;padding:0 1ch">   ⋮ 45 more <span style="color:#45475A">──────────────────────────────────────────────</span></div>
+<div style="border-top:1px solid #45475A;margin-top:2px;padding:2px 1ch 0;white-space:pre;color:#9399B2"> <span style="color:#A78BFA;font-weight:700">↑↓</span> nav · <span style="color:#A78BFA;font-weight:700">⏎</span> switch · <span style="color:#A78BFA;font-weight:700">1-9</span> jump · <span style="color:#A78BFA;font-weight:700">/</span> filter · <span style="color:#A78BFA;font-weight:700">tab</span> detail · <span style="color:#A78BFA;font-weight:700">?</span> help</div>
+</div>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:80ch">Identity column is the worktree name (what you switch to); the ⎇ chip appears only when the branch adds information — rows 3/7 get it back as whitespace. Middle truncation keeps ticket prefix AND trailing words. Upgrade notice moves to a header badge (footer stays keys-only); 1/52 replaces the four dots.</div>
+</div>
+<div id="4c" data-screen-label="4c PR rows" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#4c" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">4c</a><span style="color:#FCFCFD;font-weight:700">PR list rows — kill the dual truncation</span></div>
+<div style="display:flex;gap:14px;align-items:flex-start">
+<div style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span style="color:#F87171">0.8.0 live — two columns fight</span><span style="color:#7F849C">66ch pane</span></div>
+<div style="width:66ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;padding:4px 0">
+<div style="white-space:pre;color:#CDD6F4;background:#313244;padding:0 1ch"><span style="color:#A78BFA;font-weight:700">❯</span> <span style="color:#7F849C">#14047</span> <span style="display:inline-block;width:36ch;color:#FFFFFF;font-weight:700">chore(Kiln): Update FeaturedProdu…</span><span style="color:#7F849C">mj-1475-featured-p…</span></div>
+<div style="white-space:pre;color:#9399B2;padding:0 1ch">    @alessandrapereyra · 1 commit · <span style="color:#34D399">+24</span> <span style="color:#F87171">-34</span></div>
+<div style="white-space:pre;color:#CDD6F4;padding:0 1ch">  <span style="color:#7F849C">#14041</span> <span style="display:inline-block;width:36ch"><span style="color:#FBBF24">[DRAFT]</span> <span style="color:#FFFFFF;font-weight:700">feat(next): …</span></span><span style="color:#7F849C">crust-2151-orders-…</span></div>
+<div style="white-space:pre;color:#9399B2;padding:0 1ch">    @benreyn · 1 commit · <span style="color:#34D399">+10</span> <span style="color:#F87171">-3</span></div>
+<div style="white-space:pre;color:#CDD6F4;padding:0 1ch">  <span style="color:#7F849C">#14023</span> <span style="display:inline-block;width:36ch"><span style="color:#FBBF24">[DRAFT]</span> <span style="color:#FFFFFF;font-weight:700">chore(agents…</span></span><span style="color:#7F849C">eng-5466-port-admi…</span></div>
+<div style="white-space:pre;color:#9399B2;padding:0 1ch">    @benreyn · 1 commit · <span style="color:#34D399">+4,048</span> <span style="color:#F87171">-0</span></div>
+</div>
+</div>
+<div style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span style="color:#34D399">patched — title owns line 1</span><span style="color:#7F849C">66ch pane</span></div>
+<div style="width:66ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;padding:4px 0">
+<div style="white-space:pre;color:#CDD6F4;background:#313244;padding:0 1ch"><span style="color:#A78BFA;font-weight:700">❯</span> <span style="color:#7F849C">#14047</span> <span style="color:#FFFFFF;font-weight:700">chore(Kiln): Update FeaturedProductsSection to ad…</span></div>
+<div style="white-space:pre;color:#9399B2;padding:0 1ch">    @alessandrapereyra · 1c · <span style="color:#34D399">+24</span> <span style="color:#F87171">−34</span> · <span style="color:#7F849C">⎇ mj-1475-…-shared-grid</span></div>
+<div style="white-space:pre;color:#CDD6F4;padding:0 1ch">  <span style="color:#7F849C">#14041</span> <span style="color:#FBBF24">[DRAFT]</span> <span style="color:#FFFFFF;font-weight:700">feat(next): orders export empty state</span></div>
+<div style="white-space:pre;color:#9399B2;padding:0 1ch">    @benreyn · 1c · <span style="color:#34D399">+10</span> <span style="color:#F87171">−3</span> · <span style="color:#7F849C">⎇ crust-2151-…-empty-state</span></div>
+<div style="white-space:pre;color:#CDD6F4;padding:0 1ch">  <span style="color:#7F849C">#14023</span> <span style="color:#FBBF24">[DRAFT]</span> <span style="color:#FFFFFF;font-weight:700">chore(agents): port admin-tasks and fix-…</span></div>
+<div style="white-space:pre;color:#9399B2;padding:0 1ch">    @benreyn · 2c · <span style="color:#34D399">+4,048</span> <span style="color:#F87171">−0</span> · <span style="color:#7F849C">⎇ eng-5466-port-admin</span></div>
+</div>
+</div>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:120ch">Live 0.8.0 gives the branch a fixed 20ch column on line 1, so both sides truncate — #14041's title survives as a bare "…" while its branch keeps 19 useless chars. Patch: line 1 = number + [DRAFT] + full-width title; line 2 = author · commits · diffstat · ⎇ branch, middle-truncated last. Nothing sheds until the title has eaten. (Truncated live titles reconstructed for the demo.)</div>
+</div>
+<div id="4d" data-screen-label="4d changes rollup" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#4d" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">4d</a><span style="color:#FCFCFD;font-weight:700">Detail "Changes" — dir rollups cap the tree</span></div>
+<div style="display:flex;gap:14px;align-items:flex-start">
+<div style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span style="color:#F87171">0.8.0 — 13 files ⇒ 24 lines</span><span style="color:#7F849C">46ch pane</span></div>
+<div style="width:46ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;padding:4px 1ch">
+<div style="white-space:pre;color:#A78BFA;font-weight:700;font-size:11px;letter-spacing:.12em">CHANGES</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#34D399">+</span> --full-page</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#34D399">+</span> .env</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#FBBF24">M</span> AGENTS.md</div>
+<div style="white-space:pre;color:#9399B2">.claude/</div>
+<div style="white-space:pre;color:#CDD6F4">  <span style="color:#34D399">+</span> settings.json</div>
+<div style="white-space:pre;color:#9399B2">.claude/rules/</div>
+<div style="white-space:pre;color:#CDD6F4">  <span style="color:#F87171">−</span> context7.md</div>
+<div style="white-space:pre;color:#CDD6F4">  <span style="color:#FBBF24">M</span> docs-lookup.md</div>
+<div style="white-space:pre;color:#CDD6F4">  <span style="color:#F87171">−</span> flaky-test-resolver.md</div>
+<div style="white-space:pre;color:#9399B2">.claude/skills/fetch-markdown/</div>
+<div style="white-space:pre;color:#CDD6F4">  <span style="color:#FBBF24">M</span> SKILL.md</div>
+<div style="white-space:pre;color:#7F849C">⋮ 12 more lines below the fold</div>
+</div>
+</div>
+<div style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span style="color:#34D399">patched — 8 lines, ⏎ expands</span><span style="color:#7F849C">46ch pane</span></div>
+<div style="width:46ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;padding:4px 1ch">
+<div style="white-space:pre;color:#A78BFA;font-weight:700;font-size:11px;letter-spacing:.12em">CHANGES <span style="color:#7F849C;font-weight:400;letter-spacing:0">· 13 files</span></div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#34D399">+</span> --full-page</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#34D399">+</span> .env</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#FBBF24">M</span> AGENTS.md</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#7F849C">▸</span> .claude/ <span style="color:#7F849C">6 ·</span> <span style="color:#34D399">+1</span> <span style="color:#F87171">−2</span> <span style="color:#FBBF24">M3</span></div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#7F849C">▸</span> .grove/ <span style="color:#34D399">+1</span></div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#7F849C">▸</span> .playwright-mcp/ <span style="color:#34D399">+1</span></div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#7F849C">▸</span> docs/spikes/ <span style="color:#34D399">+1</span></div>
+</div>
+</div>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:96ch">Root-level entries stay verbatim; any directory with &gt;1 entry collapses to one rollup line (count + per-kind tally), ⏎/→ expands it in place. Caps the tree at the pane's height instead of pushing Recent commits off-screen — and it's the same rollup the 80-col sheet (<a href="#3b">3b</a>) and diff-view file rail (<a href="#2a">2a</a>) reuse.</div>
+</div>
+</div>
+</section>
+<section id="t3" data-screen-label="Turn 3" style="padding:40px 44px 32px;border-bottom:1px solid #313244">
+<div style="display:flex;align-items:baseline;gap:12px;margin:0 0 6px">
+<a href="#t3" style="font:700 11px 'Fira Code',monospace;padding:3px 8px;background:#E66747;color:#FFFFFF;border-radius:4px">3</a>
+<span style="font:700 15px 'Fira Mono',monospace;color:#FCFCFD">Responsive spike — one layout algorithm, four widths</span>
+<span style="font:400 11px 'Fira Mono',monospace;color:#7F849C">#13 · replaces Wide/Medium/Narrow splits with progressive column shedding</span>
+</div>
+<div style="font:400 11.5px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:960px;margin:0 0 22px">Rule: the worktree list NEVER pays for width — chrome does. Columns shed right-to-left in priority order (branch → age → counts → glyphs), panes fold into overlays, and every width keeps one row = one worktree. No stacked/single-column mode exists (<a href="#3d">3d</a> shows what replaces it).</div>
+<div style="display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start">
+<div id="3a" data-screen-label="3a 120 cols" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#3a" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">3a</a><span style="color:#FCFCFD;font-weight:700">≥110 cols — list + docked detail</span><span>the only width where a pane is free</span></div>
+<div style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span>~/code/<span style="color:#E66747">codepigeon</span> — grove</span><span style="color:#7F849C">120×24</span></div>
+<div style="width:120ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;padding:0 0 4px;display:flex;flex-direction:column;height:30em">
+<div style="background:#181825;padding:1px 1ch;display:flex;justify-content:space-between;white-space:pre"><span><span style="color:#FFFFFF;font-weight:700">codepigeon</span><span style="color:#9399B2"> · 6 worktrees</span></span><span style="color:#9399B2"><span style="color:#34D399">●</span> billing-v2</span></div>
+<div style="display:flex;flex:1;min-height:0">
+<div style="flex:1;padding:4px 0 0;min-width:0">
+<div style="white-space:pre;color:#CDD6F4"> 1 <span style="color:#34D399">●</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">main</span> <span style="display:inline-block;width:21ch;color:#9399B2">main</span> <span style="display:inline-block;width:5ch;color:#7F849C">2d</span> <span style="color:#34D399">✓</span>      <span style="color:#7F849C">⬡ ◆</span></div>
+<div style="white-space:pre;color:#CDD6F4;background:#313244"> 2 <span style="color:#A78BFA;font-weight:700">❯</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">billing-v2</span> <span style="display:inline-block;width:21ch;color:#9399B2">feature/billing-v2</span> <span style="display:inline-block;width:5ch;color:#7F849C">11m</span> <span style="color:#FBBF24">●4</span> <span style="color:#38BDF8">↑3</span>  <span style="color:#A78BFA">⬢</span> <span style="color:#34D399">◆</span></div>
+<div style="white-space:pre;color:#CDD6F4"> 3 <span style="color:#FBBF24">●</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">pr-142</span> <span style="display:inline-block;width:21ch;color:#9399B2">prs/142-rate-limit</span> <span style="display:inline-block;width:5ch;color:#7F849C">3h</span> <span style="color:#FBBF24">●2</span> <span style="color:#FBBF24">↓2</span>  <span style="color:#A78BFA">⬢</span> <span style="color:#34D399">◆</span></div>
+<div style="white-space:pre;color:#CDD6F4"> 4 <span style="color:#7F849C">○</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">hotfix-csv</span> <span style="display:inline-block;width:21ch;color:#9399B2">hotfix/csv-export</span> <span style="display:inline-block;width:5ch;color:#7F849C">1d</span> <span style="color:#34D399">✓</span> <span style="color:#38BDF8">↑1</span>  <span style="color:#7F849C">⬡ ◆</span></div>
+<div style="white-space:pre;color:#CDD6F4"> 5 <span style="color:#7F849C">○</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">agent-jobs</span> <span style="display:inline-block;width:21ch;color:#9399B2">agent/sidekiq-batch</span> <span style="display:inline-block;width:5ch;color:#7F849C">26m</span> <span style="color:#34D399">✓</span>     <span style="color:#7F849C">⬡</span> <span style="color:#34D399">◆2</span></div>
+<div style="white-space:pre;color:#CDD6F4"> 6 <span style="color:#F87171">✗</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">spike-jobs</span> <span style="display:inline-block;width:21ch;color:#9399B2">spike/sidekiq-7</span> <span style="display:inline-block;width:5ch;color:#7F849C">3w</span> <span style="color:#F87171">✗</span> <span style="color:#FBBF24">↓18</span> <span style="color:#7F849C">⬡ ◆</span></div>
+</div>
+<div style="width:56ch;flex:none;padding:4px 1ch 0;border-left:1px solid #45475A">
+<div style="white-space:pre;color:#FFFFFF;font-weight:700">billing-v2 <span style="color:#7F849C;font-weight:400">— detail</span></div>
+<div style="white-space:pre;color:#CDD6F4"><span style="display:inline-block;width:8ch;color:#9399B2">commit</span><span style="color:#FBBF24">a3f9c81</span> add stripe webhook handler</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="display:inline-block;width:8ch;color:#9399B2">sync</span><span style="color:#38BDF8">↑3</span> origin · <span style="color:#FBBF24">● 4 files</span></div>
+<div style="white-space:pre;color:#CDD6F4"><span style="display:inline-block;width:8ch;color:#9399B2">runtime</span><span style="color:#A78BFA">⬢</span> tmux · <span style="color:#34D399">◆</span> web :3000 sidekiq pg redis</div>
+<div style="white-space:pre;color:#A78BFA;font-weight:700;font-size:11px;letter-spacing:.12em;margin-top:.5em">CHANGES (4)</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#FBBF24">M</span> app/controllers/webhooks_controller.rb</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#FBBF24">M</span> app/services/stripe/webhook_dispatcher.rb</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#34D399">+</span> app/services/stripe/event_translator.rb</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#F87171">−</span> config/initializers/legacy_billing.rb</div>
+</div>
+</div>
+<div style="border-top:1px solid #45475A;padding-top:2px;white-space:pre;color:#9399B2"> <span style="color:#A78BFA;font-weight:700">↑↓</span> nav · <span style="color:#A78BFA;font-weight:700">⏎</span> switch · <span style="color:#A78BFA;font-weight:700">tab</span> focus detail · <span style="color:#A78BFA;font-weight:700">D</span> diff · <span style="color:#A78BFA;font-weight:700">n</span> new · <span style="color:#A78BFA;font-weight:700">?</span> help</div>
+</div>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:120ch">Docked pane earns its keep only here: list keeps ALL columns at full width, detail gets ≥48ch. tab focuses the pane in place (border brightens) — no overlay needed.</div>
+</div>
+<div id="3b" data-screen-label="3b 80 cols" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#3b" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">3b</a><span style="color:#FCFCFD;font-weight:700">80–109 cols — pane folds to strip</span><span>the 1a recipe, restated as the breakpoint's job</span></div>
+<div style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span>~/code/<span style="color:#E66747">codepigeon</span> — grove</span><span style="color:#7F849C">80×24</span></div>
+<div style="width:80ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;padding:0 0 4px;display:flex;flex-direction:column;height:30em">
+<div style="background:#181825;padding:1px 1ch;display:flex;justify-content:space-between;white-space:pre"><span><span style="color:#FFFFFF;font-weight:700">codepigeon</span><span style="color:#9399B2"> · 6 worktrees</span></span><span style="color:#9399B2"><span style="color:#34D399">●</span> billing-v2</span></div>
+<div style="flex:1;padding:4px 0 0">
+<div style="white-space:pre;color:#CDD6F4"> 1 <span style="color:#34D399">●</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">main</span> <span style="display:inline-block;width:21ch;color:#9399B2">main</span> <span style="display:inline-block;width:5ch;color:#7F849C">2d</span> <span style="color:#34D399">✓</span>      <span style="color:#7F849C">⬡ ◆</span></div>
+<div style="white-space:pre;color:#CDD6F4;background:#313244"> 2 <span style="color:#A78BFA;font-weight:700">❯</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">billing-v2</span> <span style="display:inline-block;width:21ch;color:#9399B2">feature/billing-v2</span> <span style="display:inline-block;width:5ch;color:#7F849C">11m</span> <span style="color:#FBBF24">●4</span> <span style="color:#38BDF8">↑3</span>  <span style="color:#A78BFA">⬢</span> <span style="color:#34D399">◆</span></div>
+<div style="white-space:pre;color:#CDD6F4"> 3 <span style="color:#FBBF24">●</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">pr-142</span> <span style="display:inline-block;width:21ch;color:#9399B2">prs/142-rate-limit</span> <span style="display:inline-block;width:5ch;color:#7F849C">3h</span> <span style="color:#FBBF24">●2</span> <span style="color:#FBBF24">↓2</span>  <span style="color:#A78BFA">⬢</span> <span style="color:#34D399">◆</span></div>
+<div style="white-space:pre;color:#CDD6F4"> 4 <span style="color:#7F849C">○</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">hotfix-csv</span> <span style="display:inline-block;width:21ch;color:#9399B2">hotfix/csv-export</span> <span style="display:inline-block;width:5ch;color:#7F849C">1d</span> <span style="color:#34D399">✓</span> <span style="color:#38BDF8">↑1</span>  <span style="color:#7F849C">⬡ ◆</span></div>
+<div style="white-space:pre;color:#CDD6F4"> 5 <span style="color:#7F849C">○</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">agent-jobs</span> <span style="display:inline-block;width:21ch;color:#9399B2">agent/sidekiq-batch</span> <span style="display:inline-block;width:5ch;color:#7F849C">26m</span> <span style="color:#34D399">✓</span>     <span style="color:#7F849C">⬡</span> <span style="color:#34D399">◆2</span></div>
+<div style="white-space:pre;color:#CDD6F4"> 6 <span style="color:#F87171">✗</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">spike-jobs</span> <span style="display:inline-block;width:21ch;color:#9399B2">spike/sidekiq-7</span> <span style="display:inline-block;width:5ch;color:#7F849C">3w</span> <span style="color:#F87171">✗</span> <span style="color:#FBBF24">↓18</span> <span style="color:#7F849C">⬡ ◆</span></div>
+</div>
+<div style="border-top:1px solid #45475A;padding-top:2px;white-space:pre;color:#CDD6F4"> <span style="color:#FFFFFF;font-weight:700">billing-v2</span> <span style="color:#7F849C">·</span> <span style="color:#FBBF24">a3f9c81</span> add stripe webhook · <span style="color:#FBBF24">●4</span> <span style="color:#38BDF8">↑3</span> <span style="color:#A78BFA">⬢</span> <span style="color:#34D399">◆4</span></div>
+<div style="border-top:1px solid #45475A;margin-top:2px;padding-top:2px;white-space:pre;color:#9399B2"> <span style="color:#A78BFA;font-weight:700">↑↓</span> nav · <span style="color:#A78BFA;font-weight:700">⏎</span> switch · <span style="color:#A78BFA;font-weight:700">tab</span> detail sheet · <span style="color:#A78BFA;font-weight:700">D</span> diff · <span style="color:#A78BFA;font-weight:700">n</span> new · <span style="color:#A78BFA;font-weight:700">?</span> help</div>
+</div>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:80ch">Same list, same columns — the docked pane becomes the 1-line strip + tab-sheet (<a href="#1a">1a</a>). Nothing about the LIST changed between 3a and here; only detail's container did.</div>
+</div>
+<div id="3c" data-screen-label="3c 60 cols" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#3c" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">3c</a><span style="color:#FCFCFD;font-weight:700">60–79 cols — columns shed, rows hold</span></div>
+<div style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span>grove</span><span style="color:#7F849C">60×24</span></div>
+<div style="width:60ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;padding:0 0 4px;display:flex;flex-direction:column;height:30em">
+<div style="background:#181825;padding:1px 1ch;display:flex;justify-content:space-between;white-space:pre"><span><span style="color:#FFFFFF;font-weight:700">codepigeon</span><span style="color:#9399B2"> · 6</span></span><span style="color:#9399B2"><span style="color:#34D399">●</span> billing-v2</span></div>
+<div style="flex:1;padding:4px 0 0">
+<div style="white-space:pre;color:#CDD6F4"> 1 <span style="color:#34D399">●</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">main</span> <span style="display:inline-block;width:12ch;color:#9399B2">main</span> <span style="color:#34D399">✓</span>      <span style="color:#7F849C">⬡ ◆</span></div>
+<div style="white-space:pre;color:#CDD6F4;background:#313244"> 2 <span style="color:#A78BFA;font-weight:700">❯</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">billing-v2</span> <span style="display:inline-block;width:12ch;color:#9399B2">feature/bil…</span> <span style="color:#FBBF24">●4</span> <span style="color:#38BDF8">↑3</span>  <span style="color:#A78BFA">⬢</span> <span style="color:#34D399">◆</span></div>
+<div style="white-space:pre;color:#CDD6F4"> 3 <span style="color:#FBBF24">●</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">pr-142</span> <span style="display:inline-block;width:12ch;color:#9399B2">prs/142-rat…</span> <span style="color:#FBBF24">●2</span> <span style="color:#FBBF24">↓2</span>  <span style="color:#A78BFA">⬢</span> <span style="color:#34D399">◆</span></div>
+<div style="white-space:pre;color:#CDD6F4"> 4 <span style="color:#7F849C">○</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">hotfix-csv</span> <span style="display:inline-block;width:12ch;color:#9399B2">hotfix/csv-…</span> <span style="color:#34D399">✓</span> <span style="color:#38BDF8">↑1</span>  <span style="color:#7F849C">⬡ ◆</span></div>
+<div style="white-space:pre;color:#CDD6F4"> 5 <span style="color:#7F849C">○</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">agent-jobs</span> <span style="display:inline-block;width:12ch;color:#9399B2">agent/sidek…</span> <span style="color:#34D399">✓</span>     <span style="color:#7F849C">⬡</span> <span style="color:#34D399">◆2</span></div>
+<div style="white-space:pre;color:#CDD6F4"> 6 <span style="color:#F87171">✗</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">spike-jobs</span> <span style="display:inline-block;width:12ch;color:#9399B2">spike/side…</span> <span style="color:#F87171">✗</span> <span style="color:#FBBF24">↓18</span> <span style="color:#7F849C">⬡ ◆</span></div>
+</div>
+<div style="border-top:1px solid #45475A;padding-top:2px;white-space:pre;color:#CDD6F4"> <span style="color:#FFFFFF;font-weight:700">billing-v2</span> <span style="color:#FBBF24">●4</span> <span style="color:#38BDF8">↑3</span> <span style="color:#A78BFA">⬢</span> <span style="color:#34D399">◆4</span></div>
+<div style="border-top:1px solid #45475A;margin-top:2px;padding-top:2px;white-space:pre;color:#9399B2"> <span style="color:#A78BFA;font-weight:700">↑↓</span>·<span style="color:#A78BFA;font-weight:700">⏎</span>·<span style="color:#A78BFA;font-weight:700">tab</span>·<span style="color:#A78BFA;font-weight:700">D</span>·<span style="color:#A78BFA;font-weight:700">n</span>·<span style="color:#A78BFA;font-weight:700">?</span></div>
+</div>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:60ch">Age drops first, branch truncates with … — name + status glyphs are untouchable. Footer keys compress to glyph-only. Still one row per worktree, still 6 of 6 visible.</div>
+</div>
+<div id="3d" data-screen-label="3d 44 cols" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#3d" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">3d</a><span style="color:#FCFCFD;font-weight:700">&lt;60 cols — the floor</span><span>replaces today's stacked mode</span></div>
+<div style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span>grove</span><span style="color:#7F849C">44×24</span></div>
+<div style="width:44ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;padding:0 0 4px;display:flex;flex-direction:column;height:30em">
+<div style="background:#181825;padding:1px 1ch;white-space:pre"><span style="color:#FFFFFF;font-weight:700">codepigeon</span><span style="color:#9399B2"> · 6</span></div>
+<div style="flex:1;padding:4px 0 0">
+<div style="white-space:pre;color:#CDD6F4"> <span style="color:#34D399">●</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">main</span> <span style="color:#34D399">✓</span>      <span style="color:#7F849C">⬡ ◆</span></div>
+<div style="white-space:pre;color:#CDD6F4;background:#313244"> <span style="color:#A78BFA;font-weight:700">❯</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">billing-v2</span> <span style="color:#FBBF24">●4</span> <span style="color:#38BDF8">↑3</span>  <span style="color:#A78BFA">⬢</span> <span style="color:#34D399">◆</span></div>
+<div style="white-space:pre;color:#CDD6F4"> <span style="color:#FBBF24">●</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">pr-142</span> <span style="color:#FBBF24">●2</span> <span style="color:#FBBF24">↓2</span>  <span style="color:#A78BFA">⬢</span> <span style="color:#34D399">◆</span></div>
+<div style="white-space:pre;color:#CDD6F4"> <span style="color:#7F849C">○</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">hotfix-csv</span> <span style="color:#34D399">✓</span> <span style="color:#38BDF8">↑1</span>  <span style="color:#7F849C">⬡ ◆</span></div>
+<div style="white-space:pre;color:#CDD6F4"> <span style="color:#7F849C">○</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">agent-jobs</span> <span style="color:#34D399">✓</span>     <span style="color:#7F849C">⬡</span> <span style="color:#34D399">◆2</span></div>
+<div style="white-space:pre;color:#CDD6F4"> <span style="color:#F87171">✗</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">spike-jobs</span> <span style="color:#F87171">✗</span> <span style="color:#FBBF24">↓18</span> <span style="color:#7F849C">⬡ ◆</span></div>
+</div>
+<div style="border-top:1px solid #45475A;padding-top:2px;white-space:pre;color:#9399B2"> <span style="color:#A78BFA;font-weight:700">↑↓</span>·<span style="color:#A78BFA;font-weight:700">⏎</span>·<span style="color:#A78BFA;font-weight:700">tab</span>·<span style="color:#A78BFA;font-weight:700">?</span></div>
+</div>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:44ch">Branch column gone (it's in the tab-sheet), row numbers gone, strip gone. Name + glyphs survive to the last column. This kills the "atrocious" stacked view — there is no width where a worktree costs two rows.</div>
+</div>
+</div>
+<div style="width:940px;background:#1E1E2E;border:1px solid #45475A;border-radius:8px;padding:16px 20px;margin:26px 0 0">
+<div style="font:700 11px 'Fira Code',monospace;color:#A78BFA;letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px">Shed order — replaces responsive.go breakpoint enums</div>
+<div style="display:grid;grid-template-columns:110px 1fr 1fr;gap:6px 14px;font:400 11.5px/1.5 'Fira Code',monospace;color:#CDD6F4">
+<span style="color:#7F849C">width</span><span style="color:#7F849C">list keeps</span><span style="color:#7F849C">detail lives in</span>
+<span style="color:#FFFFFF">≥110</span><span style="color:#9399B2">all columns, wide branch</span><span style="color:#9399B2">docked pane (tab = focus it)</span>
+<span style="color:#FFFFFF">80–109</span><span style="color:#9399B2">all columns</span><span style="color:#9399B2">1-line strip + tab sheet (<a href="#1a">1a</a>)</span>
+<span style="color:#FFFFFF">60–79</span><span style="color:#9399B2">−age, branch truncates</span><span style="color:#9399B2">1-line strip + tab sheet</span>
+<span style="color:#FFFFFF">&lt;60</span><span style="color:#9399B2">−branch, −row №; name+glyphs never shed</span><span style="color:#9399B2">tab sheet only</span>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;margin-top:10px">One render path, four column budgets — width picks a budget, not a layout. Overlays (wizard, sheet, diff) clamp to min(width−4, their natural size) and are immune to breakpoints. Golden tests: 44, 60, 80, 120.</div>
+</div>
+</section>
+<section id="t2" data-screen-label="Turn 2" style="padding:40px 44px 32px;border-bottom:1px solid #313244">
+<div style="display:flex;align-items:baseline;gap:12px;margin:0 0 6px">
+<a href="#t2" style="font:700 11px 'Fira Code',monospace;padding:3px 8px;background:#E66747;color:#FFFFFF;border-radius:4px">2</a>
+<span style="font:700 15px 'Fira Mono',monospace;color:#FCFCFD">Diff review — from "4 files changed" to the actual hunks</span>
+<span style="font:400 11px 'Fira Mono',monospace;color:#7F849C">new capability · complements <a href="#1a">1a</a>/<a href="#1c">1c</a> detail</span>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start">
+<div id="2a" data-screen-label="2a diff view" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#2a" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">2a</a><span style="color:#FCFCFD;font-weight:700">Worktree diff view</span><span>D on any row · ⏎ on a file in detail CHANGES · esc pops home</span></div>
+<div style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span>~/code/<span style="color:#E66747">codepigeon</span> — grove</span><span style="color:#7F849C">80×24 · diff</span></div>
+<div style="width:80ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;padding:0 0 4px;display:flex;flex-direction:column;height:36em">
+<div style="background:#181825;padding:1px 1ch;display:flex;justify-content:space-between;white-space:pre"><span><span style="color:#9399B2">codepigeon</span><span style="color:#7F849C"> ▸ </span><span style="color:#9399B2">billing-v2</span><span style="color:#7F849C"> ▸ </span><span style="color:#A78BFA;font-weight:700">diff</span><span style="color:#9399B2"> vs </span><span style="color:#38BDF8">HEAD</span></span><span style="color:#9399B2"><span style="color:#34D399">+104</span> <span style="color:#F87171">−49</span> · 4 files</span></div>
+<div style="display:flex;flex:1;min-height:0">
+<div style="width:24ch;flex:none;padding:4px 0 0 1ch;border-right:1px solid #45475A">
+<div style="white-space:pre;color:#7F849C;font-size:11px">FILES</div>
+<div style="white-space:pre;background:#313244;color:#CDD6F4"><span style="color:#A78BFA;font-weight:700">❯</span> <span style="color:#FBBF24">M</span> webhooks_ctrl  <span style="color:#34D399">+18</span></div>
+<div style="white-space:pre;color:#CDD6F4">  <span style="color:#FBBF24">M</span> dispatcher    <span style="color:#34D399">+34</span></div>
+<div style="white-space:pre;color:#CDD6F4">  <span style="color:#34D399">+</span> translator    <span style="color:#34D399">+52</span></div>
+<div style="white-space:pre;color:#CDD6F4">  <span style="color:#F87171">−</span> legacy_bill   <span style="color:#F87171">−41</span></div>
+<div style="white-space:pre;color:#7F849C;font-size:11px;margin-top:.8em">1 of 4 · unstaged</div>
+</div>
+<div style="flex:1;padding:4px 0 0 1ch;min-width:0">
+<div style="white-space:pre;color:#9399B2">app/controllers/<span style="color:#FFFFFF;font-weight:700">webhooks_controller.rb</span></div>
+<div style="white-space:pre;color:#38BDF8">@@ -24,7 +24,13 @@ class WebhooksController</div>
+<div style="white-space:pre;color:#7F849C"> 24 24 │   def stripe</div>
+<div style="white-space:pre;color:#F87171;background:rgba(248,113,113,.08)"> 25    │ −    head :ok</div>
+<div style="white-space:pre;color:#34D399;background:rgba(52,211,153,.08)">    25 │ +    event = Stripe::Webhook</div>
+<div style="white-space:pre;color:#34D399;background:rgba(52,211,153,.08)">    26 │ +      .construct_event(body,</div>
+<div style="white-space:pre;color:#34D399;background:rgba(52,211,153,.08)">    27 │ +       sig_header, secret)</div>
+<div style="white-space:pre;color:#34D399;background:rgba(52,211,153,.08)">    28 │ +    WebhookDispatcher.call(event)</div>
+<div style="white-space:pre;color:#34D399;background:rgba(52,211,153,.08)">    29 │ +    head :ok</div>
+<div style="white-space:pre;color:#7F849C"> 26 30 │   end</div>
+<div style="white-space:pre;color:#7F849C"> 27 31 │</div>
+<div style="white-space:pre;color:#7F849C"> 28 32 │   private</div>
+<div style="white-space:pre;color:#38BDF8">@@ -41,3 +45,7 @@</div>
+<div style="white-space:pre;color:#7F849C"> 41 45 │   def signing_secret</div>
+<div style="white-space:pre;color:#7F849C"> 42 46 │     credentials.stripe[:secret]</div>
+<div style="white-space:pre;color:#34D399;background:rgba(52,211,153,.08)">    47 │ +  rescue KeyError</div>
+<div style="white-space:pre;color:#34D399;background:rgba(52,211,153,.08)">    48 │ +    raise MissingSecret</div>
+<div style="white-space:pre;color:#7F849C"> 43 49 │   end</div>
+</div>
+</div>
+<div style="border-top:1px solid #45475A;padding-top:2px;white-space:pre;color:#9399B2"> <span style="color:#A78BFA;font-weight:700">j/k</span> scroll · <span style="color:#A78BFA;font-weight:700">]/[</span> file · <span style="color:#A78BFA;font-weight:700">tab</span> files · <span style="color:#A78BFA;font-weight:700">b</span> base · <span style="color:#A78BFA;font-weight:700">v</span> split · <span style="color:#A78BFA;font-weight:700">⏎</span> editor · <span style="color:#A78BFA;font-weight:700">esc</span> ↩ detail</div>
+</div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;max-width:80ch">
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #A78BFA;border-radius:3px;color:#A78BFA">preserves C2 C3</span>
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #45475A;border-radius:3px;color:#9399B2">Δ medium — read-only view over git diff -p / --numstat</span>
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #45475A;border-radius:3px;color:#9399B2">new — no ticket yet</span>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:80ch">Entry from anywhere the selection exists: <span style="color:#CDD6F4">D</span> on a dashboard row opens the worktree's full diff; <span style="color:#CDD6F4">⏎</span> on a file inside detail CHANGES opens scoped to that file. esc pops to wherever you came from (C3); the file-rail cursor is C2 and survives ]/[ paging. <span style="color:#CDD6F4">b</span> cycles the base — <span style="color:#38BDF8">HEAD</span> (working tree) → <span style="color:#38BDF8">main…</span> (merge-base: "what does this branch actually change") → <span style="color:#38BDF8">another worktree</span> (cross-tree compare, e.g. billing-v2 ↔ agent-jobs when an agent touched the same files). Read-only by design — grove reviews, your editor edits, so ⏎ hands the file+line to $EDITOR. Below 80 cols the rail folds into the header count and ]/[ still pages files.</div>
+</div>
+</div>
+</section>
+<section id="t1" data-screen-label="Turn 1" style="padding:40px 44px 32px">
+<div style="display:flex;align-items:baseline;gap:12px;margin:0 0 6px">
+<a href="#t1" style="font:700 11px 'Fira Code',monospace;padding:3px 8px;background:#E66747;color:#FFFFFF;border-radius:4px">1</a>
+<span style="font:700 15px 'Fira Mono',monospace;color:#FCFCFD">grove TUI — context-preserving redesign @ 80×24</span>
+<span style="font:400 11px 'Fira Mono',monospace;color:#7F849C">issues 12 · 13 · 14 · 18 · 19 · inline render · keyboard-only</span>
+</div>
+<div style="font:400 11.5px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:960px;margin:0 0 22px">Three divergent dashboard directions (<a href="#1a">1a</a>–<a href="#1c">1c</a>), one direction each for PRs/issues (<a href="#1d">1d</a>), the create wizard (<a href="#1e">1e</a>), config (<a href="#1f">1f</a>), and overlay compositing (<a href="#1g">1g</a>). Every card declares which contexts it preserves.</div>
+<div data-screen-label="Context model" style="width:940px;background:#1E1E2E;border:1px solid #45475A;border-radius:8px;padding:16px 20px;margin:0 0 26px">
+<div style="font:700 11px 'Fira Code',monospace;color:#A78BFA;letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px">The six contexts — what a developer must never silently lose</div>
+<div style="display:grid;grid-template-columns:34px 150px 1fr 1fr 110px;gap:6px 14px;font:400 11.5px/1.5 'Fira Code',monospace;color:#CDD6F4">
+<span style="color:#7F849C;font-weight:700"></span><span style="color:#7F849C">context</span><span style="color:#7F849C">definition</span><span style="color:#7F849C">where it's lost today</span><span style="color:#7F849C">addressed in</span>
+<span style="color:#A78BFA;font-weight:700">C1</span><span style="color:#FFFFFF">inventory</span><span style="color:#9399B2">what worktrees exist + their status, always visible</span><span style="color:#9399B2">p/i replace the whole screen (#12); narrow stacking buries the list (#13)</span><span><a href="#1a">1a</a> <a href="#1b">1b</a> <a href="#1d">1d</a></span>
+<span style="color:#A78BFA;font-weight:700">C2</span><span style="color:#FFFFFF">selection</span><span style="color:#9399B2">cursor position survives view/panel changes</span><span style="color:#9399B2">tab-focus + overlays reset scroll/selection (#13)</span><span><a href="#1a">1a</a> <a href="#1b">1b</a> <a href="#1c">1c</a></span>
+<span style="color:#A78BFA;font-weight:700">C3</span><span style="color:#FFFFFF">origin</span><span style="color:#9399B2">esc returns where you came from, never "the dashboard"</span><span style="color:#9399B2">wizard cancel hardcodes ViewDashboard (#12, #14)</span><span><a href="#1c">1c</a> <a href="#1d">1d</a> <a href="#1e">1e</a></span>
+<span style="color:#A78BFA;font-weight:700">C4</span><span style="color:#FFFFFF">input</span><span style="color:#9399B2">typed text (filters, names) survives back-nav + step changes</span><span style="color:#9399B2">wizard resets inputs on back (#14); config forces sequential completion (#18)</span><span><a href="#1e">1e</a> <a href="#1f">1f</a></span>
+<span style="color:#A78BFA;font-weight:700">C5</span><span style="color:#FFFFFF">runtime</span><span style="color:#9399B2">tmux / docker / agent slots readable at a glance</span><span style="color:#9399B2">badge colors asymmetric; docker detail buried in sidebar</span><span><a href="#1a">1a</a> <a href="#1b">1b</a> <a href="#1c">1c</a></span>
+<span style="color:#A78BFA;font-weight:700">C6</span><span style="color:#FFFFFF">ground truth</span><span style="color:#9399B2">the dimmed background never lies about state</span><span style="color:#9399B2">centerOverlay() clips background lines (#19)</span><span><a href="#1g">1g</a></span>
+</div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start">
+<div id="1a" data-screen-label="1a list-first" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#1a" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">1a</a><span style="color:#FCFCFD;font-weight:700">List-first + context strip</span><span>sidebar dies; a 2-line glance strip replaces it · tab = detail sheet</span></div>
+<div style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span>~/code/<span style="color:#E66747">codepigeon</span> — grove</span><span style="color:#7F849C">80×24 · dashboard</span></div>
+<div style="width:80ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;padding:0 0 4px;display:flex;flex-direction:column;height:36em">
+<div style="background:#181825;padding:1px 1ch;display:flex;justify-content:space-between;white-space:pre"><span><span style="color:#FFFFFF;font-weight:700">codepigeon</span><span style="color:#9399B2"> · 6 worktrees · sort </span><span style="color:#A78BFA">name</span></span><span style="color:#9399B2"><span style="color:#34D399">●</span> billing-v2</span></div>
+<div style="height:.5em"></div>
+<div style="white-space:pre;color:#CDD6F4"><span style="display:inline-block;width:3ch;text-align:right;color:#7F849C">1</span> <span style="color:#34D399">●</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">main</span> <span style="display:inline-block;width:21ch;color:#9399B2">main</span> <span style="display:inline-block;width:5ch;color:#7F849C">2d</span> <span style="color:#34D399">✓</span> <span style="display:inline-block;width:4ch"></span> <span style="color:#7F849C">⬡</span> <span style="color:#7F849C">◆</span></div>
+<div style="white-space:pre;color:#7F849C">      chore: release 0.7.0</div>
+<div style="background:#313244">
+<div style="white-space:pre;color:#CDD6F4"><span style="display:inline-block;width:3ch;text-align:right;color:#7F849C">2</span> <span style="color:#A78BFA;font-weight:700">❯</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">billing-v2</span> <span style="display:inline-block;width:21ch;color:#9399B2">feature/billing-v2</span> <span style="display:inline-block;width:5ch;color:#7F849C">11m</span> <span style="color:#FBBF24">●</span> <span style="display:inline-block;width:4ch;color:#38BDF8">↑3</span> <span style="color:#A78BFA">⬢</span> <span style="color:#34D399">◆</span></div>
+<div style="white-space:pre;color:#9399B2">      add stripe webhook handler</div>
+</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="display:inline-block;width:3ch;text-align:right;color:#7F849C">3</span> <span style="color:#FBBF24">●</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">pr-142</span> <span style="display:inline-block;width:21ch;color:#9399B2">prs/142-rate-limit</span> <span style="display:inline-block;width:5ch;color:#7F849C">3h</span> <span style="color:#FBBF24">●</span> <span style="display:inline-block;width:4ch;color:#FBBF24">↓2</span> <span style="color:#A78BFA">⬢</span> <span style="color:#34D399">◆</span></div>
+<div style="white-space:pre;color:#7F849C">      fix: retry budget on 429s</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="display:inline-block;width:3ch;text-align:right;color:#7F849C">4</span> <span style="color:#7F849C">○</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">hotfix-csv</span> <span style="display:inline-block;width:21ch;color:#9399B2">hotfix/csv-export</span> <span style="display:inline-block;width:5ch;color:#7F849C">1d</span> <span style="color:#34D399">✓</span> <span style="display:inline-block;width:4ch;color:#38BDF8">↑1</span> <span style="color:#7F849C">⬡</span> <span style="color:#7F849C">◆</span></div>
+<div style="white-space:pre;color:#7F849C">      csv export hardening</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="display:inline-block;width:3ch;text-align:right;color:#7F849C">5</span> <span style="color:#7F849C">○</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">agent-jobs</span> <span style="display:inline-block;width:21ch;color:#9399B2">agent/sidekiq-batch</span> <span style="display:inline-block;width:5ch;color:#7F849C">26m</span> <span style="color:#34D399">✓</span> <span style="display:inline-block;width:4ch"></span> <span style="color:#7F849C">⬡</span> <span style="color:#34D399">◆2</span></div>
+<div style="white-space:pre;color:#7F849C">      wip: batch retry spec · isolated slot 2</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="display:inline-block;width:3ch;text-align:right;color:#7F849C">6</span> <span style="color:#F87171">✗</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">spike-jobs</span> <span style="display:inline-block;width:21ch;color:#9399B2">spike/sidekiq-7</span> <span style="display:inline-block;width:5ch;color:#7F849C">3w</span> <span style="color:#F87171">✗</span> <span style="display:inline-block;width:4ch;color:#FBBF24">↓18</span> <span style="color:#7F849C">⬡</span> <span style="color:#7F849C">◆</span></div>
+<div style="white-space:pre;color:#7F849C">      spike: sidekiq 7 upgrade</div>
+<div style="margin-top:auto"></div>
+<div style="border-top:1px solid #45475A;padding-top:2px;white-space:pre;color:#CDD6F4"> <span style="color:#FFFFFF;font-weight:700">billing-v2</span> <span style="color:#7F849C">·</span> <span style="color:#FBBF24">a3f9c81</span> add stripe webhook handler</div>
+<div style="white-space:pre;color:#9399B2"> <span style="color:#FBBF24">● 4 files</span> · <span style="color:#38BDF8">↑3 origin</span> · <span style="color:#A78BFA">⬢ attached</span> · <span style="color:#34D399">◆ 4 up</span> web :3000 sidekiq pg redis</div>
+<div style="border-top:1px solid #45475A;margin-top:2px;padding-top:2px;white-space:pre;color:#9399B2"> <span style="color:#A78BFA;font-weight:700">↑↓</span> nav · <span style="color:#A78BFA;font-weight:700">⏎</span> switch · <span style="color:#A78BFA;font-weight:700">U</span> up · <span style="color:#A78BFA;font-weight:700">n</span> new · <span style="color:#A78BFA;font-weight:700">d</span> del · <span style="color:#A78BFA;font-weight:700">f</span> fork · <span style="color:#A78BFA;font-weight:700">b</span> branch · <span style="color:#A78BFA;font-weight:700">s</span> sync</div>
+<div style="white-space:pre;color:#9399B2"> <span style="color:#A78BFA;font-weight:700">tab</span> detail · <span style="color:#A78BFA;font-weight:700">p</span> PRs · <span style="color:#A78BFA;font-weight:700">i</span> issues · <span style="color:#A78BFA;font-weight:700">/</span> filter · <span style="color:#A78BFA;font-weight:700">o</span> sort · <span style="color:#A78BFA;font-weight:700">c</span> config · <span style="color:#A78BFA;font-weight:700">?</span> help · <span style="color:#A78BFA;font-weight:700">q</span> quit</div>
+</div>
+</div>
+<div style="font:400 11px 'Fira Code',monospace;color:#7F849C;text-align:center">tab ⇄ esc — detail becomes a sheet, not a permanent pane</div>
+<div data-screen-label="1a detail sheet" style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span>~/code/<span style="color:#E66747">codepigeon</span> — grove</span><span style="color:#7F849C">80×24 · detail sheet</span></div>
+<div style="width:80ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;position:relative;height:36em">
+<div style="opacity:.3;padding:0 1ch;height:100%;display:flex;flex-direction:column">
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#FFFFFF;font-weight:700">codepigeon</span><span style="color:#9399B2"> · 6 worktrees · sort name</span></div>
+<div style="white-space:pre;color:#CDD6F4">1 <span style="color:#34D399">●</span> main          main                 2d</div>
+<div style="white-space:pre;color:#CDD6F4;background:#313244">2 <span style="color:#A78BFA">❯</span> billing-v2    feature/billing-v2   11m</div>
+<div style="margin-top:auto;white-space:pre;color:#9399B2">6 ✗ spike-jobs   spike/sidekiq-7</div>
+<div style="white-space:pre;color:#9399B2"> tab detail · ? help · q quit</div>
+</div>
+<div style="position:absolute;left:3ch;right:3ch;top:2.2em;bottom:2.2em;background:#1E1E2E;border:1px solid #A78BFA;border-radius:6px;padding:.5em 2ch;display:flex;flex-direction:column">
+<div style="white-space:pre;color:#FFFFFF;font-weight:700">billing-v2 <span style="color:#7F849C;font-weight:400">— detail</span></div>
+<div style="height:.5em"></div>
+<div style="white-space:pre;color:#A78BFA;font-weight:700;font-size:11px;letter-spacing:.12em">GIT</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="display:inline-block;width:9ch;color:#9399B2">branch</span><span style="color:#38BDF8">feature/billing-v2</span></div>
+<div style="white-space:pre;color:#CDD6F4"><span style="display:inline-block;width:9ch;color:#9399B2">commit</span><span style="color:#FBBF24">a3f9c81</span> add stripe webhook handler</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="display:inline-block;width:9ch;color:#9399B2">author</span>leah · 11 minutes ago</div>
+<div style="height:.5em"></div>
+<div style="white-space:pre;color:#A78BFA;font-weight:700;font-size:11px;letter-spacing:.12em">STATUS</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="display:inline-block;width:9ch;color:#9399B2">tree</span><span style="color:#FBBF24">● dirty (4 files)</span></div>
+<div style="white-space:pre;color:#CDD6F4"><span style="display:inline-block;width:9ch;color:#9399B2">sync</span><span style="color:#38BDF8">↑3 ahead</span> origin/feature/billing-v2</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="display:inline-block;width:9ch;color:#9399B2">tmux</span><span style="color:#A78BFA">⬢ active</span> codepigeon-billing-v2</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="display:inline-block;width:9ch;color:#9399B2">docker</span><span style="color:#34D399">◆ up</span> web :3000 · sidekiq · postgres :5432 · redis</div>
+<div style="height:.5em"></div>
+<div style="white-space:pre;color:#A78BFA;font-weight:700;font-size:11px;letter-spacing:.12em">CHANGES (4)</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#FBBF24">M</span> app/controllers/webhooks_controller.rb</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#FBBF24">M</span> app/services/stripe/webhook_dispatcher.rb</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#34D399">+</span> app/services/stripe/event_translator.rb</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#F87171">−</span> config/initializers/legacy_billing.rb</div>
+<div style="margin-top:auto;border-top:1px solid #45475A;padding-top:2px;white-space:pre;color:#9399B2"><span style="color:#A78BFA;font-weight:700">[j/k]</span> scroll · <span style="color:#A78BFA;font-weight:700">[g/G]</span> top/bot · <span style="color:#A78BFA;font-weight:700">[B]</span> open PR · <span style="color:#A78BFA;font-weight:700">[tab/esc]</span> close ↩ list</div>
+</div>
+</div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;max-width:80ch">
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #A78BFA;border-radius:3px;color:#A78BFA">preserves C1 C2 C5</span>
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #45475A;border-radius:3px;color:#9399B2">Δ small — responsive.go, model.go, detail_v2.go</span>
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #45475A;border-radius:3px;color:#9399B2">fixes #13</span>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:80ch">List owns the full width at every breakpoint — the sidebar is gone, not squeezed. The strip (SelectionRow + DetailValue tokens) gives C5 runtime glance for the selected row. <span style="color:#CDD6F4">tab</span> opens detail as a near-full sheet over the dimmed list (edges stay visible = you never left), <span style="color:#CDD6F4">esc/tab</span> returns with selection intact. Same recipe at 120 cols — wide mode just widens columns.</div>
+</div>
+<div id="1b" data-screen-label="1b glance board" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#1b" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">1b</a><span style="color:#FCFCFD;font-weight:700">Glance board</span><span>ledger density + accordion — the selected row expands in place</span></div>
+<div style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span>~/code/<span style="color:#E66747">codepigeon</span> — grove</span><span style="color:#7F849C">80×24 · dashboard</span></div>
+<div style="width:80ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;padding:0 0 4px;display:flex;flex-direction:column;height:36em">
+<div style="background:#181825;padding:1px 1ch;display:flex;justify-content:space-between;white-space:pre"><span><span style="color:#FFFFFF;font-weight:700">codepigeon</span><span style="color:#9399B2"> · 6 worktrees · sort </span><span style="color:#A78BFA">name</span></span><span style="color:#9399B2"><span style="color:#34D399">●</span> billing-v2</span></div>
+<div style="height:.5em"></div>
+<div style="white-space:pre;color:#7F849C;font-size:11px"> #   NAME          BRANCH                AGE   ±    ↕     TMUX  CTN</div>
+<div style="white-space:pre;color:#CDD6F4"> 1 <span style="color:#34D399">●</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">main</span> <span style="display:inline-block;width:21ch;color:#9399B2">main</span> <span style="display:inline-block;width:5ch;color:#7F849C">2d</span> <span style="display:inline-block;width:4ch;color:#34D399">✓</span> <span style="display:inline-block;width:5ch"></span> <span style="display:inline-block;width:5ch;color:#7F849C">⬡</span> <span style="color:#7F849C">◆</span></div>
+<div style="background:#313244">
+<div style="white-space:pre;color:#CDD6F4"> 2 <span style="color:#A78BFA;font-weight:700">❯</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">billing-v2</span> <span style="display:inline-block;width:21ch;color:#9399B2">feature/billing-v2</span> <span style="display:inline-block;width:5ch;color:#7F849C">11m</span> <span style="display:inline-block;width:4ch;color:#FBBF24">●4</span> <span style="display:inline-block;width:5ch;color:#38BDF8">↑3</span> <span style="display:inline-block;width:5ch;color:#A78BFA">⬢</span> <span style="color:#34D399">◆4</span></div>
+<div style="white-space:pre;color:#9399B2">   ├ <span style="color:#FBBF24">a3f9c81</span> add stripe webhook handler <span style="color:#7F849C">· leah · 11m</span></div>
+<div style="white-space:pre;color:#9399B2">   ├ <span style="color:#FBBF24">M</span> webhooks_controller.rb · <span style="color:#FBBF24">M</span> webhook_dispatcher.rb · <span style="color:#34D399">+</span><span style="color:#F87171">−</span> 2 more</div>
+<div style="white-space:pre;color:#9399B2">   └ <span style="color:#A78BFA">⬢</span> codepigeon-billing-v2 · <span style="color:#34D399">◆</span> web :3000 sidekiq pg redis</div>
+</div>
+<div style="white-space:pre;color:#CDD6F4"> 3 <span style="color:#FBBF24">●</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">pr-142</span> <span style="display:inline-block;width:21ch;color:#9399B2">prs/142-rate-limit</span> <span style="display:inline-block;width:5ch;color:#7F849C">3h</span> <span style="display:inline-block;width:4ch;color:#FBBF24">●2</span> <span style="display:inline-block;width:5ch;color:#FBBF24">↓2</span> <span style="display:inline-block;width:5ch;color:#A78BFA">⬢</span> <span style="color:#34D399">◆</span></div>
+<div style="white-space:pre;color:#CDD6F4"> 4 <span style="color:#7F849C">○</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">hotfix-csv</span> <span style="display:inline-block;width:21ch;color:#9399B2">hotfix/csv-export</span> <span style="display:inline-block;width:5ch;color:#7F849C">1d</span> <span style="display:inline-block;width:4ch;color:#34D399">✓</span> <span style="display:inline-block;width:5ch;color:#38BDF8">↑1</span> <span style="display:inline-block;width:5ch;color:#7F849C">⬡</span> <span style="color:#7F849C">◆</span></div>
+<div style="white-space:pre;color:#CDD6F4"> 5 <span style="color:#7F849C">○</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">agent-jobs</span> <span style="display:inline-block;width:21ch;color:#9399B2">agent/sidekiq-batch</span> <span style="display:inline-block;width:5ch;color:#7F849C">26m</span> <span style="display:inline-block;width:4ch;color:#34D399">✓</span> <span style="display:inline-block;width:5ch"></span> <span style="display:inline-block;width:5ch;color:#7F849C">⬡</span> <span style="color:#34D399">◆2</span></div>
+<div style="white-space:pre;color:#CDD6F4"> 6 <span style="color:#F87171">✗</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">spike-jobs</span> <span style="display:inline-block;width:21ch;color:#9399B2">spike/sidekiq-7</span> <span style="display:inline-block;width:5ch;color:#7F849C">3w</span> <span style="display:inline-block;width:4ch;color:#F87171">✗</span> <span style="display:inline-block;width:5ch;color:#FBBF24">↓18</span> <span style="display:inline-block;width:5ch;color:#7F849C">⬡</span> <span style="color:#7F849C">◆</span></div>
+<div style="margin-top:auto"></div>
+<div style="border-top:1px solid #45475A;padding-top:2px;white-space:pre;color:#9399B2"> fleet: <span style="color:#FBBF24">2 dirty</span> · <span style="color:#F87171">1 stale</span> · <span style="color:#A78BFA">2 tmux</span> · <span style="color:#34D399">◆ 2 stacks</span> <span style="color:#7F849C">(slot 2 = agent)</span></div>
+<div style="border-top:1px solid #45475A;margin-top:2px;padding-top:2px;white-space:pre;color:#9399B2"> <span style="color:#A78BFA;font-weight:700">↑↓</span> nav · <span style="color:#A78BFA;font-weight:700">⏎</span> switch · <span style="color:#A78BFA;font-weight:700">n</span> new · <span style="color:#A78BFA;font-weight:700">x</span> expand · <span style="color:#A78BFA;font-weight:700">tab</span> detail · <span style="color:#A78BFA;font-weight:700">/</span> filter · <span style="color:#A78BFA;font-weight:700">?</span> help · <span style="color:#A78BFA;font-weight:700">q</span> quit</div>
+</div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;max-width:80ch">
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #A78BFA;border-radius:3px;color:#A78BFA">preserves C1 C2 C5</span>
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #45475A;border-radius:3px;color:#9399B2">Δ medium — new delegate (list_v3), detail folds into list</span>
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #45475A;border-radius:3px;color:#9399B2">fixes #13</span>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:80ch">Built for juggling 3–5 trees: one line per worktree, all status columns aligned (dirty shows its file count, ◆ shows its slot). The cursor row unfolds a 3-line accordion — commit, changes, runtime — so 90% of sidebar visits never happen. A fleet-summary line aggregates C5 across worktrees: the parallel-agent answer at a glance. tab still opens the <a href="#1a">1a</a> sheet for long content.</div>
+</div>
+<div id="1c" data-screen-label="1c zoom stack" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#1c" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">1c</a><span style="color:#FCFCFD;font-weight:700">Zoom stack</span><span>one context per screen · breadcrumb = the stack · esc always pops</span></div>
+<div style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span>~/code/<span style="color:#E66747">codepigeon</span> — grove</span><span style="color:#7F849C">80×24 · worktrees</span></div>
+<div style="width:80ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;padding:0 0 4px;display:flex;flex-direction:column;height:36em">
+<div style="background:#181825;padding:1px 1ch;display:flex;justify-content:space-between;white-space:pre"><span><span style="color:#FFFFFF;font-weight:700">codepigeon</span><span style="color:#7F849C"> ▸ </span><span style="color:#A78BFA;font-weight:700">worktrees</span><span style="color:#9399B2"> (6)</span></span><span style="color:#9399B2"><span style="color:#34D399">●</span> billing-v2</span></div>
+<div style="height:.5em"></div>
+<div style="white-space:pre;color:#CDD6F4"> 1 <span style="color:#34D399">●</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">main</span> <span style="display:inline-block;width:21ch;color:#9399B2">main</span> <span style="display:inline-block;width:5ch;color:#7F849C">2d</span> <span style="color:#34D399">✓</span>       <span style="color:#7F849C">⬡ ◆</span></div>
+<div style="white-space:pre;color:#CDD6F4;background:#313244"> 2 <span style="color:#A78BFA;font-weight:700">❯</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">billing-v2</span> <span style="display:inline-block;width:21ch;color:#9399B2">feature/billing-v2</span> <span style="display:inline-block;width:5ch;color:#7F849C">11m</span> <span style="color:#FBBF24">●</span> <span style="color:#38BDF8">↑3</span>    <span style="color:#A78BFA">⬢</span> <span style="color:#34D399">◆</span></div>
+<div style="white-space:pre;color:#CDD6F4"> 3 <span style="color:#FBBF24">●</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">pr-142</span> <span style="display:inline-block;width:21ch;color:#9399B2">prs/142-rate-limit</span> <span style="display:inline-block;width:5ch;color:#7F849C">3h</span> <span style="color:#FBBF24">●</span> <span style="color:#FBBF24">↓2</span>    <span style="color:#A78BFA">⬢</span> <span style="color:#34D399">◆</span></div>
+<div style="white-space:pre;color:#CDD6F4"> 4 <span style="color:#7F849C">○</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">hotfix-csv</span> <span style="display:inline-block;width:21ch;color:#9399B2">hotfix/csv-export</span> <span style="display:inline-block;width:5ch;color:#7F849C">1d</span> <span style="color:#34D399">✓</span> <span style="color:#38BDF8">↑1</span>    <span style="color:#7F849C">⬡ ◆</span></div>
+<div style="white-space:pre;color:#CDD6F4"> 5 <span style="color:#7F849C">○</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">agent-jobs</span> <span style="display:inline-block;width:21ch;color:#9399B2">agent/sidekiq-batch</span> <span style="display:inline-block;width:5ch;color:#7F849C">26m</span> <span style="color:#34D399">✓</span>       <span style="color:#7F849C">⬡</span> <span style="color:#34D399">◆2</span></div>
+<div style="white-space:pre;color:#CDD6F4"> 6 <span style="color:#F87171">✗</span> <span style="display:inline-block;width:13ch;color:#FFFFFF;font-weight:700">spike-jobs</span> <span style="display:inline-block;width:21ch;color:#9399B2">spike/sidekiq-7</span> <span style="display:inline-block;width:5ch;color:#7F849C">3w</span> <span style="color:#F87171">✗</span> <span style="color:#FBBF24">↓18</span>   <span style="color:#7F849C">⬡ ◆</span></div>
+<div style="margin-top:auto"></div>
+<div style="border-top:1px solid #45475A;padding-top:2px;white-space:pre;color:#9399B2"> <span style="color:#A78BFA;font-weight:700">tab</span> detail ▸ · <span style="color:#A78BFA;font-weight:700">p</span> PRs ▸ · <span style="color:#A78BFA;font-weight:700">i</span> issues ▸ · <span style="color:#A78BFA;font-weight:700">n</span> new ▸ · <span style="color:#A78BFA;font-weight:700">⏎</span> switch · <span style="color:#A78BFA;font-weight:700">q</span> quit</div>
+</div>
+</div>
+<div style="font:400 11px 'Fira Code',monospace;color:#7F849C;text-align:center">tab pushes ▸ detail — esc pops ↩ (cursor restored)</div>
+<div data-screen-label="1c detail view" style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span>~/code/<span style="color:#E66747">codepigeon</span> — grove</span><span style="color:#7F849C">80×24 · detail (pushed)</span></div>
+<div style="width:80ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;padding:0 0 4px;display:flex;flex-direction:column;height:36em">
+<div style="background:#181825;padding:1px 1ch;white-space:pre"><span style="color:#9399B2">codepigeon</span><span style="color:#7F849C"> ▸ </span><span style="color:#9399B2">worktrees</span><span style="color:#7F849C"> ▸ </span><span style="color:#A78BFA;font-weight:700">billing-v2</span><span style="color:#7F849C">   2 of 6</span></div>
+<div style="height:.5em"></div>
+<div style="white-space:pre;color:#A78BFA;font-weight:700;font-size:11px;letter-spacing:.12em"> GIT</div>
+<div style="white-space:pre;color:#CDD6F4">   <span style="display:inline-block;width:9ch;color:#9399B2">branch</span><span style="color:#38BDF8">feature/billing-v2</span> · <span style="color:#38BDF8">↑3</span> origin</div>
+<div style="white-space:pre;color:#CDD6F4">   <span style="display:inline-block;width:9ch;color:#9399B2">commit</span><span style="color:#FBBF24">a3f9c81</span> add stripe webhook handler · leah · 11m</div>
+<div style="height:.5em"></div>
+<div style="white-space:pre;color:#A78BFA;font-weight:700;font-size:11px;letter-spacing:.12em"> RUNTIME</div>
+<div style="white-space:pre;color:#CDD6F4">   <span style="display:inline-block;width:9ch;color:#9399B2">tmux</span><span style="color:#A78BFA">⬢ attached</span> codepigeon-billing-v2 · 3 windows</div>
+<div style="white-space:pre;color:#CDD6F4">   <span style="display:inline-block;width:9ch;color:#9399B2">docker</span><span style="color:#34D399">◆ up 22m</span> · slot 1</div>
+<div style="white-space:pre;color:#CDD6F4">   <span style="display:inline-block;width:9ch"></span><span style="color:#34D399">✓</span> web <span style="color:#38BDF8">:3000</span> · <span style="color:#34D399">✓</span> sidekiq · <span style="color:#34D399">✓</span> postgres <span style="color:#38BDF8">:5432</span> · <span style="color:#34D399">✓</span> redis</div>
+<div style="height:.5em"></div>
+<div style="white-space:pre;color:#A78BFA;font-weight:700;font-size:11px;letter-spacing:.12em"> CHANGES (4)</div>
+<div style="white-space:pre;color:#CDD6F4">   <span style="color:#FBBF24">M</span> app/controllers/webhooks_controller.rb</div>
+<div style="white-space:pre;color:#CDD6F4">   <span style="color:#FBBF24">M</span> app/services/stripe/webhook_dispatcher.rb</div>
+<div style="white-space:pre;color:#CDD6F4">   <span style="color:#34D399">+</span> app/services/stripe/event_translator.rb</div>
+<div style="white-space:pre;color:#CDD6F4">   <span style="color:#F87171">−</span> config/initializers/legacy_billing.rb</div>
+<div style="margin-top:auto"></div>
+<div style="border-top:1px solid #45475A;padding-top:2px;white-space:pre;color:#9399B2"> <span style="color:#A78BFA;font-weight:700">esc</span> ↩ worktrees · <span style="color:#A78BFA;font-weight:700">j/k</span> prev/next worktree · <span style="color:#A78BFA;font-weight:700">⏎</span> switch · <span style="color:#A78BFA;font-weight:700">B</span> open PR</div>
+</div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;max-width:80ch">
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #A78BFA;border-radius:3px;color:#A78BFA">preserves C2 C3 C5</span>
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #F87171;border-radius:3px;color:#F87171">Δ large — ActiveView enum → view stack</span>
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #45475A;border-radius:3px;color:#9399B2">fixes #13 · unlocks #12 #14</span>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:80ch">The lazygit answer: no panes at all. Every screen is one full-width context; the breadcrumb IS the stack, so "where am I / where does esc go" is always written down (C3 becomes architecture, not a per-handler fix). j/k inside detail pages through worktrees without popping — fast triage. Costliest option, but it's the foundation <a href="#1d">1d</a> and <a href="#1e">1e</a> get for free; breadcrumb renders via HeaderBar + Primary tokens.</div>
+</div>
+<div id="1d" data-screen-label="1d PR browser" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#1d" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">1d</a><span style="color:#FCFCFD;font-weight:700">Harbor split — PRs/issues beside your fleet</span><span>#12 · worktree rail stays · wizard overlays the origin, esc returns to it</span></div>
+<div style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span>~/code/<span style="color:#E66747">codepigeon</span> — grove</span><span style="color:#7F849C">80×24 · press p</span></div>
+<div style="width:80ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;padding:0 0 4px;display:flex;flex-direction:column;height:36em">
+<div style="background:#181825;padding:1px 1ch;display:flex;justify-content:space-between;white-space:pre"><span><span style="color:#9399B2">codepigeon</span><span style="color:#7F849C"> ▸ </span><span style="color:#A78BFA;font-weight:700">pull requests</span><span style="color:#9399B2"> (4 open)</span></span><span style="color:#9399B2"><span style="color:#34D399">●</span> billing-v2</span></div>
+<div style="display:flex;flex:1;min-height:0">
+<div style="width:21ch;flex:none;padding:4px 0 0 1ch;border-right:1px solid #45475A">
+<div style="white-space:pre;color:#7F849C;font-size:11px">WORKTREES</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#34D399">●</span> <span style="display:inline-block;width:12ch">main</span><span style="color:#7F849C">⬡ ◆</span></div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#FBBF24">●</span> <span style="display:inline-block;width:12ch">billing-v2</span><span style="color:#A78BFA">⬢</span> <span style="color:#34D399">◆</span></div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#FBBF24">●</span> <span style="display:inline-block;width:12ch">pr-142</span><span style="color:#A78BFA">⬢</span> <span style="color:#34D399">◆</span></div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#7F849C">○</span> <span style="display:inline-block;width:12ch">hotfix-csv</span><span style="color:#7F849C">⬡ ◆</span></div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#7F849C">○</span> <span style="display:inline-block;width:12ch">agent-jobs</span><span style="color:#7F849C">⬡</span> <span style="color:#34D399">◆2</span></div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#F87171">✗</span> <span style="display:inline-block;width:12ch">spike-jobs</span><span style="color:#7F849C">⬡ ◆</span></div>
+<div style="white-space:pre;color:#7F849C;font-size:11px;margin-top:.8em">6 trees · 2 dirty</div>
+</div>
+<div style="flex:1;padding:4px 1ch 0;min-width:0">
+<div style="white-space:pre;color:#9399B2">▸ filter: <span style="color:#CDD6F4">rate</span><span style="background:#CDD6F4;color:#1E1E2E">▁</span></div>
+<div style="height:.4em"></div>
+<div style="white-space:pre;background:#313244;color:#CDD6F4"><span style="color:#A78BFA;font-weight:700">❯</span> <span style="color:#38BDF8">#152</span> <span style="color:#FFFFFF;font-weight:700">fix: rate-limit retries</span></div>
+<div style="white-space:pre;background:#313244;color:#9399B2">   leah · <span style="color:#34D399">+214</span> <span style="color:#F87171">−38</span> · <span style="color:#34D399">✓ CI</span> · feature/rate-limit-retries</div>
+<div style="white-space:pre;color:#CDD6F4">  <span style="color:#38BDF8">#142</span> rate-limit budget on 429s <span style="color:#34D399">⇒ pr-142</span></div>
+<div style="white-space:pre;color:#7F849C">   ben · <span style="color:#34D399">+96</span> <span style="color:#F87171">−12</span> · <span style="color:#FBBF24">● CI</span> · prs/142-rate-limit</div>
+<div style="white-space:pre;color:#CDD6F4">  <span style="color:#38BDF8">#149</span> feat: csv export v2</div>
+<div style="white-space:pre;color:#7F849C">   leah · <span style="color:#34D399">+310</span> <span style="color:#F87171">−41</span> · <span style="color:#34D399">✓ CI</span> · feat/csv-v2</div>
+<div style="white-space:pre;color:#CDD6F4">  <span style="color:#38BDF8">#131</span> chore: bump rails 7.2</div>
+<div style="white-space:pre;color:#7F849C">   dependabot · <span style="color:#34D399">+8</span> <span style="color:#F87171">−8</span> · <span style="color:#34D399">✓ CI</span> · deps/rails-72</div>
+</div>
+</div>
+<div style="border-top:1px solid #45475A;padding-top:2px;white-space:pre;color:#9399B2"> <span style="color:#A78BFA;font-weight:700">⏎</span> new worktree · <span style="color:#A78BFA;font-weight:700">tab</span> PR body · <span style="color:#A78BFA;font-weight:700">B</span> browser · <span style="color:#A78BFA;font-weight:700">type</span> filter · <span style="color:#A78BFA;font-weight:700">esc</span> ↩ worktrees</div>
+</div>
+</div>
+<div style="font:400 11px 'Fira Code',monospace;color:#7F849C;text-align:center">⏎ on #152 — wizard opens OVER the PR view, prefilled (never re-routed to dashboard)</div>
+<div data-screen-label="1d wizard over PRs" style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span>~/code/<span style="color:#E66747">codepigeon</span> — grove</span><span style="color:#7F849C">80×24 · create from PR</span></div>
+<div style="width:80ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;position:relative;height:36em">
+<div style="opacity:.3;padding:0;height:100%;display:flex;flex-direction:column">
+<div style="background:#181825;padding:1px 1ch;white-space:pre"><span style="color:#9399B2">codepigeon</span><span style="color:#7F849C"> ▸ </span><span style="color:#A78BFA;font-weight:700">pull requests</span><span style="color:#9399B2"> (4 open)</span></div>
+<div style="display:flex;flex:1">
+<div style="width:21ch;flex:none;padding:4px 0 0 1ch;border-right:1px solid #45475A">
+<div style="white-space:pre;color:#7F849C;font-size:11px">WORKTREES</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#34D399">●</span> main</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#FBBF24">●</span> billing-v2</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#FBBF24">●</span> pr-142</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#7F849C">○</span> hotfix-csv</div>
+</div>
+<div style="flex:1;padding:4px 1ch 0">
+<div style="white-space:pre;background:#313244;color:#CDD6F4"><span style="color:#A78BFA">❯</span> <span style="color:#38BDF8">#152</span> fix: rate-limit retries</div>
+<div style="white-space:pre;color:#9399B2">   leah · +214 −38 · ✓ CI</div>
+<div style="white-space:pre;color:#CDD6F4">  <span style="color:#38BDF8">#142</span> rate-limit budget ⇒ pr-142</div>
+</div>
+</div>
+<div style="border-top:1px solid #45475A;white-space:pre;color:#9399B2"> ⏎ new worktree · esc ↩ worktrees</div>
+</div>
+<div style="position:absolute;left:11ch;right:11ch;top:4em;background:#1E1E2E;border:1px solid #A78BFA;border-radius:6px;padding:.5em 2ch;display:flex;flex-direction:column">
+<div style="display:flex;justify-content:space-between;white-space:pre"><span style="color:#FFFFFF;font-weight:700">New Worktree <span style="color:#7F849C;font-weight:400">· from </span><span style="color:#38BDF8">PR #152</span></span><span style="color:#7F849C;font-size:11px">esc ↩ pull requests</span></div>
+<div style="white-space:pre;color:#7F849C;text-align:center;margin-top:.4em"><span style="color:#34D399">●</span><span style="color:#34D399">━━━━━━━━━━━</span><span style="color:#A78BFA">●</span><span style="color:#7F849C">━━━━━━━━━━━○</span></div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;font-size:11px;color:#7F849C;text-align:center;margin-bottom:.6em"><span style="color:#34D399">Branch ✓</span><span style="color:#A78BFA;font-weight:700">Name</span><span>Confirm</span></div>
+<div style="white-space:pre;color:#CDD6F4"><span style="display:inline-block;width:8ch;color:#9399B2">branch</span><span style="color:#38BDF8">feature/rate-limit-retries</span> <span style="color:#34D399">✓ fetched origin</span></div>
+<div style="white-space:pre;color:#CDD6F4;margin-top:.4em"><span style="display:inline-block;width:8ch;color:#9399B2">name</span></div>
+<div style="border:1px solid #45475A;border-radius:3px;background:#181825;padding:1px 1ch;white-space:pre;color:#CDD6F4">pr-152<span style="background:#CDD6F4;color:#1E1E2E">▁</span></div>
+<div style="white-space:pre;color:#7F849C;margin-top:.2em"><span style="display:inline-block;width:8ch"></span>→ codepigeon-pr-152 · no conflicts</div>
+<div style="border-top:1px solid #45475A;margin-top:.6em;padding-top:.3em;white-space:pre;color:#9399B2"><span style="color:#A78BFA;font-weight:700">[⏎]</span> next · <span style="color:#A78BFA;font-weight:700">[shift+tab]</span> back · <span style="color:#A78BFA;font-weight:700">[esc]</span> cancel <span style="color:#7F849C">↩ PRs</span></div>
+</div>
+</div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;max-width:80ch">
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #A78BFA;border-radius:3px;color:#A78BFA">preserves C1 C3 C4</span>
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #45475A;border-radius:3px;color:#9399B2">Δ medium — ReturnView + overlay-on-source + rail render</span>
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #45475A;border-radius:3px;color:#9399B2">fixes #12 · WIZARD_UX P4 (B+C)</span>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:80ch">The deciding question "should I even fetch this?" needs your fleet in view: the 21ch rail keeps C1 alive (names + ⬢/◆ only), and <span style="color:#34D399">⇒ pr-142</span> badges mark PRs already checked out before you press anything. The wizard renders over the PR view (dimmed, still legible), branch prefilled + fetched, and both the title bar and footer say out loud where esc lands. After create: toast + return HERE with the new ⇒ badge. Same layout for issues (i). At &lt;80 cols the rail drops first — its badges move into PR rows.</div>
+</div>
+<div id="1e" data-screen-label="1e create wizard" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#1e" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">1e</a><span style="color:#FCFCFD;font-weight:700">Grounded wizard — branch step</span><span>#14 · in-use badges · shift+tab back · inputs survive</span></div>
+<div style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span>~/code/<span style="color:#E66747">codepigeon</span> — grove</span><span style="color:#7F849C">80×24 · press n</span></div>
+<div style="width:80ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;position:relative;height:36em">
+<div style="opacity:.3;padding:0 1ch;height:100%;display:flex;flex-direction:column">
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#FFFFFF;font-weight:700">codepigeon</span><span style="color:#9399B2"> · 6 worktrees · sort name</span></div>
+<div style="white-space:pre;color:#CDD6F4">1 <span style="color:#34D399">●</span> main          main                 2d</div>
+<div style="white-space:pre;color:#CDD6F4;background:#313244">2 <span style="color:#A78BFA">❯</span> billing-v2    feature/billing-v2   11m</div>
+<div style="white-space:pre;color:#CDD6F4">3 <span style="color:#FBBF24">●</span> pr-142        prs/142-rate-limit   3h</div>
+<div style="margin-top:auto;white-space:pre;color:#9399B2"> ↑↓ nav · ⏎ switch · n new · q quit</div>
+</div>
+<div style="position:absolute;left:9ch;right:9ch;top:3em;background:#1E1E2E;border:1px solid #A78BFA;border-radius:6px;padding:.5em 2ch;display:flex;flex-direction:column">
+<div style="display:flex;justify-content:space-between;white-space:pre"><span style="color:#FFFFFF;font-weight:700">New Worktree</span><span style="color:#7F849C;font-size:11px">esc ↩ worktrees</span></div>
+<div style="white-space:pre;color:#7F849C;text-align:center;margin-top:.4em"><span style="color:#A78BFA">●</span><span style="color:#7F849C">━━━━━━━━━━━○━━━━━━━━━━━○</span></div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;font-size:11px;color:#7F849C;text-align:center;margin-bottom:.5em"><span style="color:#A78BFA;font-weight:700">Branch</span><span>Name</span><span>Confirm</span></div>
+<div style="white-space:pre;color:#9399B2">⎇ select a branch, or type to filter / create</div>
+<div style="border:1px solid #45475A;border-radius:3px;background:#181825;padding:1px 1ch;white-space:pre;color:#CDD6F4;margin:.3em 0">fea<span style="background:#CDD6F4;color:#1E1E2E">▁</span></div>
+<div style="white-space:pre;background:#313244;color:#FFFFFF"><span style="color:#A78BFA;font-weight:700">❯</span> feature/rate-limit-retries</div>
+<div style="white-space:pre;color:#7F849C">  feature/billing-v2 <span style="color:#FBBF24">● in use → billing-v2</span></div>
+<div style="white-space:pre;color:#CDD6F4">  feature/voice-bubble</div>
+<div style="white-space:pre;color:#CDD6F4">  feature/csv-v2 <span style="color:#7F849C">(origin only — will fetch)</span></div>
+<div style="white-space:pre;color:#7F849C">  + create "fea" as new branch</div>
+<div style="white-space:pre;color:#FBBF24;margin-top:.3em">⚠ in use at billing-v2 — ⏎ jumps there · f forks</div>
+<div style="border-top:1px solid #45475A;margin-top:.4em;padding-top:.3em;white-space:pre;color:#9399B2"><span style="color:#A78BFA;font-weight:700">[⏎]</span> select · <span style="color:#A78BFA;font-weight:700">[shift+tab]</span> back · <span style="color:#A78BFA;font-weight:700">[esc]</span> cancel</div>
+</div>
+</div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;max-width:80ch">
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #A78BFA;border-radius:3px;color:#A78BFA">preserves C3 C4</span>
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #45475A;border-radius:3px;color:#9399B2">Δ small — WIZARD_UX P4+P5+P6 as researched</span>
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #45475A;border-radius:3px;color:#9399B2">fixes #14</span>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:80ch">Ships the research verbatim, plus three copy decisions: the esc destination is printed in the title bar (C3 made visible, not just implemented); in-use branches stay selectable but dim with a <span style="color:#FBBF24">● in use → name</span> badge, and ⏎ on one offers jump-or-fork instead of an error; one filter box does filter-or-create (the "+ create" row appears when nothing matches — kills the Select/Create fork step for the common case). shift+tab always goes back and never fights backspace; typed text survives the round trip (C4).</div>
+</div>
+<div id="1f" data-screen-label="1f config editor" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#1f" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">1f</a><span style="color:#FCFCFD;font-weight:700">Settings, DOS-grade</span><span>#18 · full-screen · j/k + h/l · edit-in-place · dirty tracking</span></div>
+<div style="background:#1E1E2E;border:1px solid #45475A;border-radius:8px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+<div style="display:flex;justify-content:space-between;background:#181825;border-bottom:1px solid #45475A;padding:5px 12px;font:400 11px 'Fira Code',monospace;color:#9399B2"><span>~/code/<span style="color:#E66747">codepigeon</span> — grove</span><span style="color:#7F849C">80×24 · press c</span></div>
+<div style="width:80ch;font-family:'Fira Code',monospace;font-size:13px;line-height:1.5;padding:0 0 4px;display:flex;flex-direction:column;height:36em">
+<div style="background:#181825;padding:1px 1ch;display:flex;justify-content:space-between;white-space:pre"><span><span style="color:#9399B2">codepigeon</span><span style="color:#7F849C"> ▸ </span><span style="color:#A78BFA;font-weight:700">settings</span></span><span style="color:#FBBF24">● 2 unsaved</span></div>
+<div style="white-space:pre;color:#9399B2;padding:2px 1ch 0"> <span style="color:#7F849C">[1]</span> general   <span style="background:#313244;color:#FFFFFF;font-weight:700"> [2] behavior </span>  <span style="color:#7F849C">[3]</span> plugins   <span style="color:#7F849C">[4]</span> protection</div>
+<div style="white-space:pre;color:#45475A"> ────────────────────────────────────────────────────────────────────────────</div>
+<div style="height:.4em"></div>
+<div style="white-space:pre;color:#CDD6F4">   <span style="display:inline-block;width:24ch;color:#9399B2">dirty_handling</span><span style="color:#FFFFFF">‹ auto-stash ›</span>      <span style="color:#FBBF24">● was: prompt</span></div>
+<div style="white-space:pre;color:#CDD6F4">   <span style="display:inline-block;width:24ch;color:#9399B2">tmux_mode</span><span style="color:#FFFFFF">‹ auto ›</span></div>
+<div style="white-space:pre;background:#313244;color:#CDD6F4"> <span style="color:#A78BFA;font-weight:700">❯</span> <span style="display:inline-block;width:24ch;color:#FFFFFF;font-weight:700">naming_pattern</span><span style="border-bottom:1px solid #A78BFA;color:#FFFFFF">{project}-{name}<span style="background:#CDD6F4;color:#1E1E2E">▁</span></span>  <span style="color:#7F849C">editing — ⏎ apply · esc revert</span></div>
+<div style="white-space:pre;color:#CDD6F4">   <span style="display:inline-block;width:24ch;color:#9399B2">skip_branch_notice</span><span style="color:#FFFFFF">‹ on ›</span>              <span style="color:#FBBF24">● was: off</span></div>
+<div style="white-space:pre;color:#CDD6F4">   <span style="display:inline-block;width:24ch;color:#9399B2">default_branch_action</span><span style="color:#FFFFFF">‹ ask ›</span></div>
+<div style="height:.6em"></div>
+<div style="white-space:pre;color:#7F849C">   ‹ › enum + bool fields cycle with h/l — no dropdown overlay, no page turn</div>
+<div style="white-space:pre;color:#7F849C">   text fields edit inline on ⏎ — value reverts on esc, applies on ⏎</div>
+<div style="margin-top:auto"></div>
+<div style="background:rgba(251,191,36,.12);border-top:1px solid #FBBF24;padding:1px 1ch;white-space:pre;color:#FBBF24">● save 2 changes? — <span style="font-weight:700">[⏎]</span> save · <span style="font-weight:700">[d]</span> discard · <span style="font-weight:700">[esc]</span> keep editing</div>
+<div style="border-top:1px solid #45475A;padding-top:2px;white-space:pre;color:#9399B2"> <span style="color:#A78BFA;font-weight:700">j/k</span> field · <span style="color:#A78BFA;font-weight:700">h/l</span> value · <span style="color:#A78BFA;font-weight:700">⏎</span> edit · <span style="color:#A78BFA;font-weight:700">1-4/tab</span> section · <span style="color:#A78BFA;font-weight:700">s</span> save · <span style="color:#A78BFA;font-weight:700">esc</span> close</div>
+</div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;max-width:80ch">
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #A78BFA;border-radius:3px;color:#A78BFA">preserves C2 C4</span>
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #45475A;border-radius:3px;color:#9399B2">Δ medium — drop Huh form, hand-rolled field list</span>
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #45475A;border-radius:3px;color:#9399B2">fixes #18</span>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:80ch">Full-screen view (per the ticket's DOS instinct), not an overlay — settings replace the dashboard and esc returns to it. One flat field list per section: <span style="color:#CDD6F4">j/k</span> moves, <span style="color:#CDD6F4">h/l</span> cycles ‹ › values in place, <span style="color:#CDD6F4">⏎</span> opens inline text edit, <span style="color:#CDD6F4">1–4</span> jumps sections directly — change one value and leave, zero sequential pages. Dirty fields carry <span style="color:#FBBF24">● was: old-value</span> (so "changed to what?" is answered in place), the header counts them, and the amber bar is the esc-with-unsaved prompt — it names the fields it will save. Height is fixed at 24 rows for every section; short sections just leave air. Field grid: label 24ch / value / annotation — nothing drifts between tabs.</div>
+</div>
+<div id="1g" data-screen-label="1g compositing" style="flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 'Fira Mono',monospace;color:#9399B2"><a href="#1g" data-oid style="font:700 10.5px 'Fira Code',monospace;padding:3px 7px;background:#313244;color:#CDD6F4;border-radius:5px">1g</a><span style="color:#FCFCFD;font-weight:700">True cell compositing</span><span>#19 · the dimmed background must never lie</span></div>
+<div style="display:flex;gap:14px;align-items:flex-start">
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="font:700 10.5px 'Fira Code',monospace;color:#F87171;letter-spacing:.1em">BEFORE — bug</div>
+<div style="background:#1E1E2E;border:1px solid #F87171;border-radius:8px;overflow:hidden">
+<div style="width:44ch;font-family:'Fira Code',monospace;font-size:12px;line-height:1.5;position:relative;height:26em;padding:4px 0">
+<div style="opacity:.35;padding:0 1ch">
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#FFFFFF;font-weight:700">codepigeon</span> · 6 worktrees</div>
+<div style="white-space:pre;color:#CDD6F4">1 <span style="color:#34D399">●</span> main        2d</div>
+<div style="white-space:pre;color:#CDD6F4;background:#313244">2 <span style="color:#A78BFA">❯</span> billing-v2  11m</div>
+</div>
+<div style="padding:0 1ch;white-space:pre;color:#45475A;font-size:11px;line-height:1.6">
+<div>?? rows 4-9 replaced by overlay lines ??</div>
+<div>?? worktrees 3-6 gone, not dimmed  ??</div>
+</div>
+<div style="position:absolute;left:6ch;right:6ch;top:5em;background:#1E1E2E;border:1px solid #A78BFA;border-radius:6px;padding:.4em 1.5ch">
+<div style="white-space:pre;color:#FFFFFF;font-weight:700">Help — dashboard</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#A78BFA">↑↓</span> navigate  <span style="color:#A78BFA">⏎</span> switch</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#A78BFA">n</span> new  <span style="color:#A78BFA">d</span> delete  <span style="color:#A78BFA">f</span> fork</div>
+<div style="white-space:pre;color:#7F849C">esc close</div>
+</div>
+<div style="position:absolute;left:1ch;bottom:.5em;white-space:pre;color:#45475A;font-size:11px">footer shifted ↑ two rows</div>
+</div>
+</div>
+<div style="font:400 10.5px/1.5 'Fira Code',monospace;color:#9399B2;max-width:44ch">centerOverlay() overwrites whole background LINES with overlay lines — content beside/below the box is dropped, rows collapse, the list "shrinks" to 2 items.</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="font:700 10.5px 'Fira Code',monospace;color:#34D399;letter-spacing:.1em">AFTER — expected</div>
+<div style="background:#1E1E2E;border:1px solid #34D399;border-radius:8px;overflow:hidden">
+<div style="width:44ch;font-family:'Fira Code',monospace;font-size:12px;line-height:1.5;position:relative;height:26em;padding:4px 0">
+<div style="opacity:.35;padding:0 1ch;height:100%;display:flex;flex-direction:column">
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#FFFFFF;font-weight:700">codepigeon</span> · 6 worktrees</div>
+<div style="white-space:pre;color:#CDD6F4">1 <span style="color:#34D399">●</span> main        main       2d</div>
+<div style="white-space:pre;color:#CDD6F4;background:#313244">2 <span style="color:#A78BFA">❯</span> billing-v2  feature/…  11m</div>
+<div style="white-space:pre;color:#CDD6F4">3 <span style="color:#FBBF24">●</span> pr-142      prs/142-…  3h</div>
+<div style="white-space:pre;color:#CDD6F4">4 <span style="color:#7F849C">○</span> hotfix-csv  hotfix/…   1d</div>
+<div style="white-space:pre;color:#CDD6F4">5 <span style="color:#7F849C">○</span> agent-jobs  agent/…    26m</div>
+<div style="white-space:pre;color:#CDD6F4">6 <span style="color:#F87171">✗</span> spike-jobs  spike/…    3w</div>
+<div style="white-space:pre;color:#9399B2"> billing-v2 · a3f9c81 · ● 4 files</div>
+<div style="margin-top:auto;white-space:pre;color:#9399B2"> ↑↓ nav · ⏎ switch · ? help · q quit</div>
+</div>
+<div style="position:absolute;left:6ch;right:6ch;top:5em;background:#1E1E2E;border:1px solid #A78BFA;border-radius:6px;padding:.4em 1.5ch">
+<div style="white-space:pre;color:#FFFFFF;font-weight:700">Help — dashboard</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#A78BFA">↑↓</span> navigate  <span style="color:#A78BFA">⏎</span> switch</div>
+<div style="white-space:pre;color:#CDD6F4"><span style="color:#A78BFA">n</span> new  <span style="color:#A78BFA">d</span> delete  <span style="color:#A78BFA">f</span> fork</div>
+<div style="white-space:pre;color:#7F849C">esc close</div>
+</div>
+</div>
+</div>
+<div style="font:400 10.5px/1.5 'Fira Code',monospace;color:#9399B2;max-width:44ch">Splice per-cell: for each overlay row, keep bg left of the box, insert box cells, keep bg right — measured with lipgloss.Width(), never len(). All 6 rows + footer stay put, dimmed.</div>
+</div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;max-width:92ch">
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #A78BFA;border-radius:3px;color:#A78BFA">preserves C6</span>
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #45475A;border-radius:3px;color:#9399B2">Δ small, isolated — model.go centerOverlay() only</span>
+<span style="font:400 10.5px 'Fira Code',monospace;padding:2px 7px;border:1px solid #45475A;border-radius:3px;color:#9399B2">fixes #19 · prerequisite for every overlay above</span>
+</div>
+<div style="font:400 11px/1.6 'Fira Mono',monospace;color:#9399B2;max-width:92ch">Not cosmetic: <a href="#1a">1a</a>'s sheet, <a href="#1d">1d</a>'s wizard-over-source, and <a href="#1e">1e</a>'s overlay all argue "the dim background keeps you oriented" — that argument only holds if the background is actually rendered. Fix this first; golden tests at 60×24 and 80×24 pin the behavior.</div>
+</div>
+</div>
+<p style="margin:24px 0 0;font:12px/1.5 'Fira Mono',monospace;color:#7F849C">Try next: "riff on <a href="#1a">1a</a> with the strip expanded to 3 lines" · "show <a href="#1d">1d</a> at 120 cols" · "merge <a href="#1b">1b</a> density into <a href="#1a">1a</a>" · "new directions for config"</p>
+</section>
+</x-dc>
+</body>
+</html>

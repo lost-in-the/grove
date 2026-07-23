@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/codepigeon-design-system-4d00b4f0-aa9f-4518-b880-6e59ca4ff259/colors_and_type.css">
+<script src="_ds/codepigeon-design-system-4d00b4f0-aa9f-4518-b880-6e59ca4ff259/_ds_bundle.js"></script>
+<style>
+body{margin:0;font-family:"Fira Mono",ui-monospace,monospace}
+a{color:#4D597A;text-decoration:none}a:hover{color:#E66747}
+</style>
+</helmet>
+<x-import component-from-global-scope="doc-page" from="./doc-page.js" size="letter" orientation="portrait" margin="0.75in" hint-size="100%,100%">
+<div slot="footer" style="display:flex;justify-content:space-between;font:400 9.5pt 'Fira Mono',monospace;color:#6E7987;border-top:1px solid #E5E8EB;padding-top:4pt"><span>grove — TUI UX research review</span><span>lost-in-the · 2026-07-23</span></div>
+<div style="color:#222126">
+<div style="font:700 22pt/1.15 'Fira Mono',monospace;margin:0 0 6pt">grove — TUI UX research review</div>
+<div style="font:400 11pt/1.5 'Fira Mono',monospace;color:#6E7987;margin:0 0 14pt">addendum to the delivery doc · benchmarked against lazygit, helix, ranger/yazi, Charm guidance, keyboard-ergonomics literature, and word-finding (anomic-aphasia) review criteria</div>
+<div style="border-top:1px solid #E66747;padding-top:9pt">
+<div style="font:700 13pt 'Fira Mono',monospace;margin:0 0 7pt">1 · What the redesign already gets right</div>
+<div style="font:400 11.5pt/1.6 'Fira Mono',monospace">
+<div><span style="color:#436961">✓</span> <strong>Which-key layers (D11)</strong> — matches helix's minor-mode pattern and solves the discoverability gap lazygit users file issues about. Recognition over recall, no memorization tax.</div>
+<div><span style="color:#436961">✓</span> <strong>Detail on demand (D1)</strong> — lazygit's core praise is "shows the data you need when you need it without overwhelming"; list-first + tab-to-detail is that shape.</div>
+<div><span style="color:#436961">✓</span> <strong>One compositor, uniform dim (D2)</strong> — overlays that never reflow background are the established modal pattern; fixes #19 the right way.</div>
+<div><span style="color:#436961">✓</span> <strong>Defined minimum width (44-col floor)</strong> — TUI guidance: pick a floor, degrade predictably, never crash on resize.</div>
+<div><span style="color:#436961">✓</span> <strong>Keyboard-complete</strong> — the repo's no-mouse constraint is honored in every flow.</div>
+</div>
+</div>
+<div style="border-top:1px solid #E66747;padding-top:9pt;margin-top:14pt">
+<div style="font:700 13pt 'Fira Mono',monospace;margin:0 0 7pt">2 · Adopt — R1–R6</div>
+<div style="display:grid;grid-template-columns:26pt 1fr;gap:6pt 10pt;font:400 11pt/1.5 'Fira Mono',monospace">
+<div style="font-weight:700;color:#E64D47">R1</div><div><strong>g is double-booked — spec conflict.</strong> D5 binds g/G to top/bottom; §5 also defines a "g go" prefix layer. Both can't hold. Fix per helix's goto minor mode: <strong>g opens the layer, g g = top</strong>, G stays global bottom. Muscle memory (gg) survives; the strip renders after the first g. Figure below.</div>
+<div style="font-weight:700;color:#436961">R2</div><div><strong>`-` switches to the previous worktree.</strong> Grove's own pitch is the interrupt ("a high-priority PR lands") — but the return leg of that journey has no key. `git switch -`, tmux last-window, and vim ctrl-^ all reserve one keystroke for "back to what I was doing". Cheapest high-value key in this review.</div>
+<div style="font-weight:700;color:#436961">R3</div><div><strong>Filterable help.</strong> ? opens help; typing filters by key, name, or description (same / muscle as the list). This is lazygit's most-requested discoverability fix, and it is the anomic-aphasia mitigation: retrieval by any remembered word, not the exact term. Help descriptions carry synonyms — "fork (copy, duplicate)".</div>
+<div style="font-weight:700;color:#436961">R4</div><div><strong>h/l spatial aliases.</strong> l opens detail (deeper), h closes/backs out — the ranger/yazi/lf grammar vim hands already know. Puts the #2 action (peek detail) on home row; h/l are unbound today, so zero cost. tab/esc remain.</div>
+<div style="font-weight:700;color:#436961">R5</div><div><strong>Naming pass for word-finding</strong> — table in §3. Rule set: layer key = first letter of its visible label; strip label = verb + object; help adds a plain-language synonym.</div>
+<div style="font-weight:700;color:#436961">R6</div><div><strong>PR/issue browser keys are unspecified.</strong> §5 covers the review view, not the g p browser itself. Fig 3 implies n (new worktree from PR); ⏎ opens review. Add the row to §5 and one acceptance criterion.</div>
+</div>
+<div style="break-inside:avoid;margin:10pt 0 4pt">
+<div style="background:#1E1E2E;border-radius:4pt;padding:4px 0;font-family:'Fira Code',monospace;font-size:11px;line-height:1.5;width:fit-content">
+<div style="white-space:pre;color:#CDD6F4;background:#313244;padding:0 1ch;width:78ch"> <span style="color:#A78BFA;font-weight:700">❯</span> <span style="display:inline-block;width:25ch;color:#FFFFFF;font-weight:700">root</span><span style="display:inline-block;width:25ch;color:#7F849C">⎇ main</span><span style="display:inline-block;width:11ch;text-align:right"><span style="color:#F87171">↓11</span> <span style="color:#FBBF24">~13</span></span><span style="display:inline-block;width:5ch;text-align:right;color:#7F849C">2d</span>  <span style="color:#7F849C">⬡</span> <span style="color:#34D399">◆</span></div>
+<div style="white-space:pre;color:#7F849C;padding:0 1ch">   ⋮ 51 more</div>
+<div style="margin:4px 1ch 0;border:1px solid #A78BFA;border-radius:4px;padding:2px 1ch;background:#181825;width:74ch">
+<div style="white-space:pre"><span style="color:#A78BFA;font-weight:700">g</span><span style="color:#FCFCFD;font-weight:700"> goto</span></div>
+<div style="white-space:pre;color:#CDD6F4"> <span style="color:#A78BFA;font-weight:700">g</span> top of list   <span style="color:#A78BFA;font-weight:700">p</span> pull requests   <span style="color:#A78BFA;font-weight:700">i</span> issues   <span style="color:#A78BFA;font-weight:700">c</span> config</div>
+<div style="white-space:pre;color:#CDD6F4"> <span style="color:#A78BFA;font-weight:700">d</span> diff (this worktree)   <span style="color:#A78BFA;font-weight:700">esc</span><span style="color:#7F849C"> close</span></div>
+</div>
+<div style="border-top:1px solid #45475A;margin-top:4px;padding:2px 1ch 0;white-space:pre;color:#9399B2"> <span style="color:#A78BFA;font-weight:700">j/k</span> nav · <span style="color:#A78BFA;font-weight:700">ctrl+d/u</span> page · <span style="color:#A78BFA;font-weight:700">⏎</span> switch · <span style="color:#A78BFA;font-weight:700">tab</span> detail · <span style="color:#A78BFA;font-weight:700">/</span> filter · <span style="color:#A78BFA;font-weight:700">o</span> sort · <span style="color:#A78BFA;font-weight:700">?</span> help</div>
+</div>
+<div style="font:400 10pt 'Fira Mono',monospace;color:#6E7987;margin-top:4pt">Fig R1 · g resolved as a goto layer — g g reaches top (helix pattern), G stays global. Layer chains stay instant per D11.</div>
+</div>
+</div>
+<div style="border-top:1px solid #E66747;padding-top:9pt;margin-top:14pt;break-inside:avoid">
+<div style="font:700 13pt 'Fira Mono',monospace;margin:0 0 7pt">3 · Naming pass (R5)</div>
+<p style="font:400 11pt/1.5 'Fira Mono',monospace;color:#6E7987;margin:0 0 6pt">Criteria: recognition over recall · inline synonym for jargon · verb states the direction · key = first letter of label.</p>
+<div style="display:grid;grid-template-columns:44pt 150pt 190pt 1fr;gap:4pt 10pt;font:400 10.5pt/1.45 'Fira Mono',monospace">
+<div style="font-weight:700;color:#6E7987">key</div><div style="font-weight:700;color:#6E7987">now</div><div style="font-weight:700;color:#6E7987">proposed</div><div style="font-weight:700;color:#6E7987">why</div>
+<div style="font-weight:700">b s</div><div>switch in-place</div><div>switch branch here</div><div>"switch" alone collides with worktree switch (⏎); name the object</div>
+<div style="font-weight:700">b y</div><div>sync from worktree…</div><div><strong>b p</strong> · pull from worktree…</div><div>"sync" hides direction; "pull" states it; key = first letter</div>
+<div style="font-weight:700">w f</div><div>fork</div><div>fork (copy)…</div><div>bare jargon fails word-finding; inline synonym keeps the f mnemonic</div>
+<div style="font-weight:700">w a</div><div>bulk-delete</div><div><strong>w d</strong> · delete multiple…</div><div>a↛"bulk"; layered d is free (global d untouched); first-letter rule</div>
+<div style="font-weight:700">b u</div><div>set upstream…</div><div>set upstream… <span style="color:#6E7987">(help: "tracking remote")</span></div><div>keep the git term; synonym lives in filterable help</div>
+</div>
+</div>
+<div style="border-top:1px solid #E66747;padding-top:9pt;margin-top:14pt;break-inside:avoid">
+<div style="font:700 13pt 'Fira Mono',monospace;margin:0 0 7pt">4 · Consider / verify — R7–R9</div>
+<div style="display:grid;grid-template-columns:26pt 1fr;gap:6pt 10pt;font:400 11pt/1.5 'Fira Mono',monospace">
+<div style="font-weight:700;color:#E0A030">R7</div><div><strong>Stale-first cleanup.</strong> The cleanup journey is find-then-delete; sort cycles name → age → dirty but stale (✗) has no fast path. Option: add stale to the o cycle, or a /is:stale filter token. Small, not urgent.</div>
+<div style="font-weight:700;color:#E0A030">R8</div><div><strong>u on a prime key for a rare action.</strong> Ergonomics literature maps frequency to reachability; upgrade is rare and u is prime home-adjacent real estate (and vim-undo muscle memory). D9's confirm makes it safe as-is; parking it in the goto layer later costs nothing.</div>
+<div style="font-weight:700;color:#4D597A">R9</div><div><strong>Terminal-protocol check.</strong> lazygit documents that bindings beyond plain letters and ctrl+letter are unreliable in Terminal.app and MinTTY, and tmux strips extended keys unless configured — grove users live inside tmux. shift+tab (backtab, CSI Z) is old and broadly safe, but add a golden/manual matrix row: shift+tab and ctrl+d/u under tmux, Terminal.app, MinTTY.</div>
+</div>
+</div>
+<div style="border-top:1px solid #E66747;padding-top:9pt;margin-top:14pt;break-inside:avoid">
+<div style="font:700 13pt 'Fira Mono',monospace;margin:0 0 7pt">5 · Journey coverage</div>
+<div style="display:grid;grid-template-columns:1fr 170pt 60pt;gap:4pt 10pt;font:400 10.5pt/1.45 'Fira Mono',monospace">
+<div style="font-weight:700;color:#6E7987">journey</div><div style="font-weight:700;color:#6E7987">path</div><div style="font-weight:700;color:#6E7987">status</div>
+<div>find a worktree &amp; switch</div><div>/ · j/k · ⏎</div><div style="color:#436961">✓</div>
+<div>handle interrupt, then return</div><div>g p · n · … · <strong>-</strong></div><div style="color:#E64D47">R2</div>
+<div>grab PR #n as a worktree</div><div>g p · n (wizard)</div><div style="color:#E0A030">R6</div>
+<div>review a teammate's PR</div><div>g p · ⏎ · 1-4 tabs</div><div style="color:#436961">✓</div>
+<div>clean up stale worktrees</div><div>o (sort) · w d</div><div style="color:#E0A030">R7</div>
+<div>start new work</div><div>n · wizard</div><div style="color:#436961">✓</div>
+<div>adjust settings</div><div>g c · [1-4] · ⏎</div><div style="color:#436961">✓</div>
+<div>upgrade grove</div><div>badge · u · confirm</div><div style="color:#436961">✓</div>
+<div>re-learn a forgotten key</div><div>? · type to filter</div><div style="color:#E64D47">R3</div>
+</div>
+<p style="font:400 11pt/1.5 'Fira Mono',monospace;color:#6E7987;margin:8pt 0 0">If adopted: R1, R5, R6 amend delivery doc §5 + D5; R2–R4 add three lines to the global table; R3 adds one acceptance criterion (help filters as you type). No architecture changes — everything rides the existing layer/compositor design.</p>
+</div>
+</div>
+</x-import>
+</x-dc>
+</body>
+</html>
