@@ -939,7 +939,7 @@ machine-local sentinel so it shows at most once per clone:
 
 ```
 grove: .grove/config.toml is now a committable project file — commit it to share config with your team
-grove: existing worktrees may carry a legacy .grove/config.toml symlink (shows as untracked) — run 'grove doctor' for cleanup steps
+grove: existing worktrees may carry a legacy .grove/config.toml symlink (shows as untracked) — run 'grove doctor --fix' to remove them (the 'Config symlinks' check)
 ```
 
 Agents: this notice (and every grove notice) goes to **stderr**, so `--json`

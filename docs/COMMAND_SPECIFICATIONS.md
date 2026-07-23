@@ -2277,6 +2277,22 @@ When a worktree was created with `git worktree add` directly (bypassing `grove n
   ✗ Worktree registration: 1 drifted worktree(s): grove-feature — run 'grove adopt' from each
 ```
 
+**Failure summary:** every failed *required* check is repeated at the end of the run as a numbered action list, so the follow-ups sit together instead of being scattered through the report. Informational failures (tmux, GitHub CLI, Docker) show inline only.
+
+```
+  ⚠ 2 checks failed — action required:
+    1. Config symlinks — legacy config symlinks in: proj-wt1 — … run `grove doctor --fix` to remove them …
+    2. Docker network 'dev' — network not found (is the main stack running?)
+```
+
+**`--fix` semantics:** for checks with an auto-fixer (legacy config symlinks, host-install hook rewriting), the run prints the pre-fix failure, the fix action, and then **re-evaluates the check** — the verdict and the closing summary reflect the post-fix state:
+
+```
+  ✗ Config symlinks: legacy config symlinks in: proj-wt1 — …
+  ✓ Removed 1 legacy config symlink(s)
+  ✓ Config symlinks (2 worktrees checked)
+```
+
 ---
 
 ## Exit Codes

@@ -164,7 +164,7 @@ func migrateGroveExcludes(groveDir string) {
 // repeat. Kept in one place so init and the command context share wording.
 func emitExcludesMigrationNotice() {
 	fmt.Fprintln(os.Stderr, "grove: .grove/config.toml is now a committable project file — commit it to share config with your team")
-	fmt.Fprintln(os.Stderr, "grove: existing worktrees may carry a legacy .grove/config.toml symlink (shows as untracked) — run 'grove doctor' for cleanup steps")
+	fmt.Fprintln(os.Stderr, "grove: existing worktrees may carry a legacy .grove/config.toml symlink (shows as untracked) — run 'grove doctor --fix' to remove them (the 'Config symlinks' check)")
 }
 
 // warnOutdatedShellIntegration prints a one-line stderr nudge when the sourced

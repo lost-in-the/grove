@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- `grove doctor` ends a failing run with a numbered **"action required"** list that repeats every failed required check in one place, instead of a bare "some checks failed — see above" pointing back into the scroll. Informational checks (tmux, GitHub CLI, Docker availability) stay inline-only.
+- `grove doctor --fix` re-evaluates each check it fixed, so the report and the closing summary reflect the **post-fix** state — a run that repaired everything now ends green instead of counting the just-fixed findings as failures.
+- The one-time config-layout upgrade notice now points directly at `grove doctor --fix` and names the doctor check it corresponds to ("Config symlinks"), so the notice and the doctor report are recognizably about the same thing.
+
 ## [0.10.0] - 2026-07-22
 
 > **Upgrading:** Shell integration is now **version 9** — re-source your shell (`grove setup` / `eval "$(grove install zsh)"`) or `grove doctor` will nag. Two behavior changes to know about. **First:** `.grove/config.toml` is committable now (and should be committed — it's the shared project config). Older grove git-ignored it; the first command you run in an existing repo migrates the exclude file automatically and prints a one-time notice. Worktrees no longer receive per-worktree config symlinks — config always resolves from the main worktree — and `grove doctor` lists any legacy symlinks with exact cleanup commands. **Second:** hooks.toml actions marked `required` / `on_failure = "fail"` now genuinely abort the operation (create, switch, remove — CLI and dashboard alike). Everything else is drop-in.

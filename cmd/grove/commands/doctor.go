@@ -70,6 +70,7 @@ Examples:
 
 		cli.Header(w, "grove doctor")
 
+		doctorActions = nil
 		allPassed := true
 
 		// ── Tier 1: System checks (always run) ──────────────────────
@@ -107,7 +108,7 @@ Examples:
 		}) && allPassed
 
 		// Check: tmux available
-		runCheck(w, "Tmux", func() (string, error) {
+		runOptionalCheck(w, "Tmux", func() (string, error) {
 			out, err := cmdexec.Output(context.TODO(), "tmux", []string{"-V"}, "", cmdexec.Tmux)
 			if err != nil {
 				return "", fmt.Errorf("tmux not found in PATH (optional, needed for session management)")
@@ -117,7 +118,7 @@ Examples:
 
 		// Check: aggressive-resize warning for iTerm2 control mode
 		if tmux.IsControlModeTerminal() {
-			runCheck(w, "Tmux control mode", func() (string, error) {
+			runOptionalCheck(w, "Tmux control mode", func() (string, error) {
 				out, err := cmdexec.Output(context.TODO(), "tmux", []string{"show-option", "-gv", "aggressive-resize"}, "", cmdexec.Tmux)
 				if err == nil && strings.TrimSpace(string(out)) == "on" {
 					return "", fmt.Errorf("aggressive-resize is on — may cause display issues with tmux -CC in iTerm2. Run: tmux set-option -g aggressive-resize off")
@@ -127,7 +128,7 @@ Examples:
 		}
 
 		// Check: gh CLI available
-		runCheck(w, "GitHub CLI", func() (string, error) {
+		runOptionalCheck(w, "GitHub CLI", func() (string, error) {
 			if _, err := exec.LookPath("gh"); err != nil {
 				return "", fmt.Errorf("gh not found in PATH (optional, needed for grove fetch)")
 			}
@@ -135,7 +136,7 @@ Examples:
 		})
 
 		// Check: Docker available (informational in Tier 1 — project checks validate Docker usage)
-		runCheck(w, "Docker available", func() (string, error) {
+		runOptionalCheck(w, "Docker available", func() (string, error) {
 			if _, err := exec.LookPath("docker"); err != nil {
 				return "", fmt.Errorf("docker not found in PATH (optional, needed for grove new/to)")
 			}
@@ -143,7 +144,7 @@ Examples:
 		})
 
 		// Check: Docker daemon running
-		runCheck(w, "Docker running", func() (string, error) {
+		runOptionalCheck(w, "Docker running", func() (string, error) {
 			out, err := cmdexec.Output(context.TODO(), "docker", []string{"info", "--format", "{{.ServerVersion}}"}, "", cmdexec.Docker)
 			if err != nil {
 				return "", fmt.Errorf("docker daemon not responding (optional, needed for grove new/to)")
@@ -174,19 +175,17 @@ Examples:
 				}) && allPassed
 			}
 
-			// Check: config symlinks across worktrees
-			allPassed = runCheck(w, "Config symlinks", func() (string, error) {
+			// Check: config symlinks across worktrees (auto-removed under --fix,
+			// with the check re-evaluated so the verdict reflects the cleanup).
+			allPassed = runFixableCheck(w, "Config symlinks", func() (string, error) {
 				return checkConfigSymlinks(groveDir)
-			}) && allPassed
-
-			// Auto-remove legacy config symlinks when --fix is set.
-			if doctorFix {
-				if removed, err := fixConfigSymlinks(groveDir); err != nil {
-					cli.Warning(w, "config-symlink cleanup failed: %v", err)
-				} else if removed > 0 {
-					cli.Success(w, "Removed %d legacy config symlink(s)", removed)
+			}, doctorFix, func() (string, error) {
+				removed, err := fixConfigSymlinks(groveDir)
+				if err != nil || removed == 0 {
+					return "", err
 				}
-			}
+				return fmt.Sprintf("Removed %d legacy config symlink(s)", removed), nil
+			}) && allPassed
 
 			// Check: all git worktrees are registered in state.json
 			allPassed = runCheck(w, "Worktree registration", func() (string, error) {
@@ -196,20 +195,18 @@ Examples:
 			// Existing Tier 2 checks (external compose, agent stacks, env files)
 			runExternalModeChecks(w, cfg, filepath.Dir(groveDir), &allPassed)
 
-			// Detect host install hooks in a Docker project (issue #28).
+			// Detect host install hooks in a Docker project (issue #28);
+			// rewritten under --fix, then re-checked.
 			projectRoot := filepath.Dir(groveDir)
-			allPassed = runCheck(w, "Hooks Docker-routing", func() (string, error) {
+			allPassed = runFixableCheck(w, "Hooks Docker-routing", func() (string, error) {
 				return checkHooksDockerRouting(projectRoot, groveDir)
-			}) && allPassed
-
-			// Auto-fix host installs when --fix is set.
-			if doctorFix {
-				if changed, err := fixHostInstallsInDockerProject(projectRoot, groveDir); err != nil {
-					cli.Warning(w, "auto-fix failed: %v", err)
-				} else if changed > 0 {
-					cli.Success(w, "Rewrote %d host install hook(s) to docker:compose", changed)
+			}, doctorFix, func() (string, error) {
+				changed, err := fixHostInstallsInDockerProject(projectRoot, groveDir)
+				if err != nil || changed == 0 {
+					return "", err
 				}
-			}
+				return fmt.Sprintf("Rewrote %d host install hook(s) to docker:compose", changed), nil
+			}) && allPassed
 
 			// Warn on stray .grove-backup directories (issue #28).
 			allPassed = runCheck(w, "Backup directory", func() (string, error) {
@@ -217,12 +214,7 @@ Examples:
 			}) && allPassed
 		}
 
-		_, _ = fmt.Fprintln(w)
-		if allPassed {
-			cli.Success(w, "All checks passed")
-		} else {
-			cli.Warning(w, "Some checks failed — see above for details")
-		}
+		printDoctorSummary(w, allPassed)
 
 		return nil
 	},
@@ -572,7 +564,39 @@ func checkAgentNetwork(w *cli.Writer, network string, allPassed *bool) {
 	}) && *allPassed
 }
 
+// actionItem is a failed required check, collected during the run so the
+// closing summary can list every outstanding user action in one place —
+// inline ✗ lines are easy to lose in a long report.
+type actionItem struct {
+	name   string
+	detail string
+}
+
+// doctorActions accumulates the current run's failed required checks.
+// Reset at the top of each doctor invocation.
+var doctorActions []actionItem
+
+// runCheck evaluates a required check: its failure is counted against the
+// run and recorded for the closing "Action required" list.
 func runCheck(w *cli.Writer, name string, check func() (string, error)) bool {
+	detail, err := check()
+	if err != nil {
+		cli.Error(w, "%s: %v", name, err)
+		doctorActions = append(doctorActions, actionItem{name: name, detail: err.Error()})
+		return false
+	}
+	if detail != "" {
+		cli.Success(w, "%s (%s)", name, detail)
+	} else {
+		cli.Success(w, "%s", name)
+	}
+	return true
+}
+
+// runOptionalCheck evaluates an advisory check (missing tmux, gh, docker):
+// the ✗ line still shows, but the failure neither fails the run nor lands
+// in the closing action list.
+func runOptionalCheck(w *cli.Writer, name string, check func() (string, error)) bool {
 	detail, err := check()
 	if err != nil {
 		cli.Error(w, "%s: %v", name, err)
@@ -584,6 +608,68 @@ func runCheck(w *cli.Writer, name string, check func() (string, error)) bool {
 		cli.Success(w, "%s", name)
 	}
 	return true
+}
+
+// runFixableCheck evaluates a required check that has an auto-fixer. The
+// pre-fix failure and the fix outcome are both printed so the run documents
+// what was wrong and what was done — but when fixing is enabled the check is
+// re-evaluated afterwards, and the run's verdict (and the action list)
+// reflect the post-fix state, not the one the fixer just repaired. The fixer
+// returns a human line to print ("" for nothing done).
+func runFixableCheck(w *cli.Writer, name string, check func() (string, error), fixEnabled bool, fix func() (string, error)) bool {
+	detail, err := check()
+	if err == nil {
+		if detail != "" {
+			cli.Success(w, "%s (%s)", name, detail)
+		} else {
+			cli.Success(w, "%s", name)
+		}
+		return true
+	}
+	cli.Error(w, "%s: %v", name, err)
+	if !fixEnabled {
+		doctorActions = append(doctorActions, actionItem{name: name, detail: err.Error()})
+		return false
+	}
+	if msg, fixErr := fix(); fixErr != nil {
+		cli.Warning(w, "%s auto-fix failed: %v", name, fixErr)
+		doctorActions = append(doctorActions, actionItem{name: name, detail: err.Error()})
+		return false
+	} else if msg != "" {
+		cli.Success(w, "%s", msg)
+	}
+	detail, err = check()
+	if err != nil {
+		cli.Error(w, "%s (after fix): %v", name, err)
+		doctorActions = append(doctorActions, actionItem{name: name, detail: err.Error()})
+		return false
+	}
+	if detail != "" {
+		cli.Success(w, "%s (%s)", name, detail)
+	} else {
+		cli.Success(w, "%s", name)
+	}
+	return true
+}
+
+// printDoctorSummary closes the report: a clean run gets the success line;
+// a failed run repeats every outstanding failure as a numbered action list,
+// so the required follow-ups sit together at the end of the block instead
+// of scattered through it.
+func printDoctorSummary(w *cli.Writer, allPassed bool) {
+	_, _ = fmt.Fprintln(w)
+	if allPassed {
+		cli.Success(w, "All checks passed")
+		return
+	}
+	if len(doctorActions) == 0 {
+		cli.Warning(w, "Some checks failed — see above for details")
+		return
+	}
+	cli.Warning(w, "%d %s failed — action required:", len(doctorActions), pluralize(len(doctorActions), "check", "checks"))
+	for i, a := range doctorActions {
+		_, _ = fmt.Fprintf(w, "  %d. %s — %s\n", i+1, a.name, a.detail)
+	}
 }
 
 func runInfo(w *cli.Writer, name string, detail string) {
