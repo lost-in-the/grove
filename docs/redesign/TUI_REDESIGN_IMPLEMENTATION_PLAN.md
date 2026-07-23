@@ -90,7 +90,7 @@ This is the correction to the delivery doc's implied scope. Effort is relative w
 
 | # | Decision | Status today | Effort | Primary files |
 |---|---|---|---|---|
-| D1 | View stack | **Greenfield** — flat `ActiveView` enum, ~12 hardcoded `esc→Dashboard`, no cursor/scroll snapshot | **XL** | `model.go` |
+| D1 | View stack | **Greenfield** — flat `ActiveView` enum, ~44 hardcoded `esc→Dashboard` sites across 8 files (20 in `model.go`, rest in overlay/view files), no cursor/scroll snapshot | **XL** | `model.go`, `overlay_*.go`, `view_*.go` |
 | D2 | Single compositor, uniform dim, no reflow (#19) | **Greenfield mechanism** but *now easy* via lipgloss `Compositor` | **M** | `model.go` `centerOverlay`/`overlayOnDashboard`/`compositeActiveOverlay` |
 | D3 | One-line row spec | **Inverse today** — default V2 delegate is two-line, branch-primary/dir-secondary | **L** | `list_v2.go`, `model.go` layout math |
 | D4 | `list_secondary` + `⎇` chip | **Greenfield** — no config, no chip, no prefix-equality rule; dir not in detail | **M** | `config.go`, `list_v2.go`, `detail_v2.go` |
@@ -148,10 +148,11 @@ Format: **AC-x.y** — *criterion* → **[verify: method]**. Verification method
 - **AC-5.3** `h`/`l` close/open the detail; `-` toggles to the last-active worktree and a second `-` returns; its target row carries a dim `↩`. → [teatest + golden of the marker]
 - **AC-5.4** The header shows cursor position `n/total`, tracking the filtered set. → [golden with filter active]
 - **AC-5.5** Arrow keys remain silent aliases for j/k. → [teatest]
+- **AC-5.6** `o` cycles sort `name → age → dirty`; `O` reverses the current sort direction; the header `⬍` indicator reflects the active mode. *(Specced in delivery doc §3/§5; previously missing here.)* → [teatest + header golden]
 
 ### D6 — Truncation
 - **AC-6.1** Names middle-truncate, always preserving the ticket-id prefix and the last segment (`gal-1349-migrate-…-read`, `mj-1475-…-shared-grid`). → [unit test on the helper]
-- **AC-6.2** Columns shed right-to-left as width narrows: `⎇` chip → age → `~n` → `↑↓` pair → name middle-truncates to a 16-col floor; the chip sheds entirely before the name drops below 24 cols. → [golden grid @120/110/80/60/44]
+- **AC-6.2** Columns shed right-to-left as width narrows: `⎇` chip → age → `~n` → `↑↓` pair → name middle-truncates to a 16-col floor; the chip sheds entirely before the name drops below 24 cols. At the 44-col tier the count block collapses to a **single strongest count**, priority `↓ behind > ~ dirty > ↑ ahead` (matches Fig A4 data; §6 item 12). → [golden grid @120/110/80/60/44]
 
 ### D7 — Wizard (reconcile)
 - **AC-7.1** `⏎` advances, `shift+tab` steps back on every step, `esc` cancels from any step and returns to the origin view with cursor restored. → [teatest] *(already passing — add coverage)*
@@ -166,7 +167,7 @@ Format: **AC-x.y** — *criterion* → **[verify: method]**. Verification method
 - **AC-8.4** Panel height is stable across sections. → [golden compare across tabs]
 
 ### D9 — Upgrade
-- **AC-9.1** When an update is cached, the header shows a `⭡x.y.z` badge (primary affordance); **`g u`** opens the confirm overlay, never fires blind, and reports "up to date" when already current; top-level `u` is unbound/reserved; `g u` is always present in the goto strip and listed in `?` help. → [golden of header + goto strip + help]
+- **AC-9.1** When an update is cached, the header shows a `⭡x.y.z` badge (primary affordance); **`g u`** opens the confirm overlay, never fires blind, and reports "up to date" when already current; top-level `u` is unbound/reserved; `g u` is always present in the goto strip and listed in `?` help. The overlay is **informational** — it presents the platform-appropriate install command via the existing `updatecheck` rendering and never executes an upgrade itself (§6 item 10). → [golden of header + goto strip + help]
 
 ### D10 — PR review view
 - **AC-10.1** `⏎` on a PR row and `g d` on a worktree push a review view onto the stack; `n` on a PR row opens the New Worktree wizard for that PR. → [teatest]
@@ -175,6 +176,7 @@ Format: **AC-x.y** — *criterion* → **[verify: method]**. Verification method
 - **AC-10.4** Commits tab: `⏎` scopes the files tab to one commit (header shows sha); `a` resets to all. → [teatest]
 - **AC-10.5** Conversation tab: read-only timeline; `⏎` on a thread jumps to its file:line in the files tab; `B` opens the browser. → [teatest]
 - **AC-10.6** When `gh` is missing/unauthenticated, the view degrades gracefully with a clear message; a per-tab load failure doesn't blank the whole view. → [teatest with stubbed gh]
+- **AC-10.7** In the files tab, `J`/`K` jump to the next/previous file (footer-advertised, per delivery doc §5 and Fig 5). → [teatest]
 
 ### D11 — Layers / which-key
 - **AC-11.1** Pressing a prefix (`b`/`w`/`g`) opens a docked which-key strip above the footer; the list viewport shrinks and the selection stays visible; the strip is never an overlay. → [golden]
@@ -190,7 +192,7 @@ Format: **AC-x.y** — *criterion* → **[verify: method]**. Verification method
 - **AC-13.2** No single-key action is silently lost in the migration — every former binding is reachable under its new layer or global key. → [help golden diff review]
 
 ### D14 — Focus
-- **AC-14.1** At ≥110 cols, `tab`/`l` focuses the detail pane: its border tints Primary, the list cursor dims, `j/k` scroll the pane, `h`/`esc` return with the list cursor unchanged; the footer swaps to pane-scoped keys. → [themed golden + teatest]
+- **AC-14.1** At ≥110 cols, `tab`/`l` focuses the detail pane: its border tints Primary, the list cursor dims, `j/k` scroll the pane, `h`/`esc` return with the list cursor unchanged; the footer swaps to pane-scoped keys. Pane-scoped **`d`** opens the diff/review view scoped to the selected worktree (same target as `g d`; lowercase — Fig A1's caption `D` was an erratum, §6 item 11). → [themed golden + teatest]
 - **AC-14.2** Below 110 cols, `tab` pushes the detail sheet instead of focusing in place. → [teatest @80]
 
 ### D15 — Floor guard
@@ -219,13 +221,13 @@ Rewrite `centerOverlay` (`model.go:2296-2343`) on lipgloss `Compositor`/`Layer`:
 Delivers: D2. Tests: themed golden of a composited frame per overlay type; teatest asserting dimmed base still present. **High-value, visible bug fix, shippable alone.**
 
 ### Phase 2 — View stack *(XL · the deep refactor)*
-Introduce a `viewStack []viewFrame` where a frame captures `{view, listIndex, listScroll, overlay state ptr}`. Replace the flat `activeView` field and the ~12 `m.activeView = ViewDashboard` sites with `push`/`pop`. Map the existing `CreateState.ReturnView` one-level semantics onto the stack. Make `esc` a generic pop; special-case dashboard-root esc (filter-clear → quit) as today. Snapshot/restore `m.list.Index()` + viewport offset on push/pop (there is no restore home today — this creates it).
+Introduce a `viewStack []viewFrame` where a frame captures `{view, listIndex, listScroll, overlay state ptr}`. Replace the flat `activeView` field and the ~44 `m.activeView = ViewDashboard` sites (20 in `model.go`; the rest across `overlay_checkout.go`, `overlay_config.go`, `overlay_fork.go`, `overlay_sync.go`, `view_prs.go`, `view_issues.go`, `helpers.go`) with `push`/`pop`. Map the existing `CreateState.ReturnView` one-level semantics onto the stack. Make `esc` a generic pop; special-case dashboard-root esc (filter-clear → quit) as today. Snapshot/restore `m.list.Index()` + viewport offset on push/pop (there is no restore home today — this creates it).
 Delivers: D1, AC-1.x. Tests: teatest push/pop per view; a `stackDepth()` getter for unit invariants; regenerate `activeView`-asserting tests to the stack API.
 Risk: highest-touch. Land behind the compositor so overlays are already clean. Keep the `helpOverlay`/`updateOverlay` bool-flag system folded into the stack in the same phase (don't leave a second nav system).
 
 ### Phase 3 — Dashboard: row spec, responsive, nav, focus, guard *(L)*
 - **D3/D6:** rewrite `WorktreeDelegateV2.Render` to one line (`Height 2→1`), NAME-primary, fixed 11-col right-aligned counts + 3-col age + glyph tail; split the status-dot and cursor columns; new `truncateMiddleKeepEnds` helper; a single ordered width-budget/shed pass replacing the per-column caps in `ComputeDelegateWidthsV2`. Add a `compactCommitAge` that drops "ago" and floors to 3 cols. Remove the two-line `renderDelegateLine2` and the `v` compact toggle.
-- **D5:** delete the `numPrefix` blocks and `handleQuickSwitch` (`model.go:1197`); wire header `n/total` from `m.list.Index()`; add `-` (last-worktree) state + dim `↩` marker; add `h`/`l`. (The `g` goto layer lands in Phase 4 with the layer engine.)
+- **D5:** delete the `numPrefix` blocks and `handleQuickSwitch` (`model.go:1197`); wire header `n/total` from `m.list.Index()`; add `-` (last-worktree) state + dim `↩` marker; add `h`/`l`; add `O` reverse-sort and the direction-aware header `⬍` indicator (AC-5.6 — the sort-mode label already exists on `Header.SortLabel`). (The `g` goto layer lands in Phase 4 with the layer engine.)
 - **D4:** add `list_secondary` to `TUIConfig` + merge/default; the prefix-equality predicate (reuse the `last_segment` derivation for consistency); render the `⎇` chip; add a Directory row to `renderGitSection`.
 - **D14:** gate `tab`/`l` focus on `isWideLayout` (≥110); add `DetailBorderFocus` to `StyleSet`; wire `detailFocused` into the delegate so the cursor uses the (currently empty) `ListCursorDim`.
 - **D15:** width guard at the top of `viewContent` + an early-return in `updateLayout` below 44 cols.
@@ -298,6 +300,7 @@ grove's harness gives three tools with a clear division of labour. The redesign 
 - Determinism rules already documented in `docs/VISUAL_TESTING.md`: never tick the spinner; use far-future durations. Keep them.
 - Update `docs/VISUAL_TESTING.md` alongside: new size presets, the preset-location note (they're in `golden_test.go`, not `golden_helpers_test.go`), and the `RequireEqualEscape` drift.
 - Consider a CI failure-artifact upload of rendered output to speed golden-diff review (none today) — nice-to-have, not required.
+- **R9 manual matrix (not CI-automatable):** before release, verify `shift+tab` (backtab/CSI Z) and `ctrl+d`/`ctrl+u` under **tmux, Terminal.app, and MinTTY** — tmux strips extended keys unless configured, and grove users live inside tmux. Record the results in the release PR. (From the UX review R9; previously unaddressed here.)
 
 ---
 
@@ -322,6 +325,14 @@ grove's harness gives three tools with a clear division of labour. The redesign 
 8. **[NOTE — LOGISTICS] Delivery push access.** This environment is **read-only** on `lost-in-the/grove` (push → 403). **Recommend:** I've committed this plan to a local `design/tui-redesign-plan` branch and will hand you the branch + a patch/bundle; you (or a session with write scope) push it. Flagged so "into grove on a branch" isn't silently blocked.
 
 9. **[LOCKED] PR review offline/degraded UX.** `gh` is a hard dependency (no API fallback). **Recommend:** reuse the existing `IsGHInstalled` gate; per-tab failure isolation (checks can fail while diff succeeds); a single "gh required" panel when absent. Specced as AC-10.6/AC-G.2 rather than left to convention.
+
+10. **[LOCKED — errata pass 2026-07-23] `g u` stays informational.** grove has **no self-update command** — the current upgrade modal renders the platform-appropriate install command (`internal/updatecheck`, e.g. `brew upgrade lost-in-the/tap/grove`) and executes nothing. D9's "confirm overlay" keeps exactly those semantics at the new `g u` binding: it shows the available version + install command, or "up to date". Confirming never executes an upgrade; no self-update capability is in scope. (Reflected in AC-9.1.)
+
+11. **[LOCKED — errata pass] Pane-focused diff key is lowercase `d`.** Fig B2's footer (`d open diff`) governs; Fig A1's caption (`D from there opens…`) was a typo, corrected in the co-located HTML. The key is pane-scoped (active only while the detail pane is focused, where the footer swaps), so it doesn't collide with global `d` delete. (Reflected in AC-14.1.)
+
+12. **[LOCKED — errata pass] 44-col count collapse rule.** Fig A4's "counts collapse to the strongest signal" is the terminal state of the AC-6.2 shed cascade, defined as: render a **single count**, priority `↓ behind > ~ dirty > ↑ ahead` (matches every row of Fig A4's data). (Reflected in AC-6.2.)
+
+13. **[NOTE — errata pass] Stale figures corrected; R7 punted.** Patch 0003 (Q5 → `g u`) updated the delivery doc's decision text and key tables but left the figures stale: all four header mockups showed a top-level `⭡x.y.z u` hint and Fig B1's help listed `u upgrade grove…`. Corrected in the co-located HTML (`g u` in both) — if figures and D-text ever disagree again, the decision text governs. R7 (stale-first sort/filter) is explicitly **punted to the post-redesign backlog**; the delivery doc's §10 open-items list is annotated accordingly.
 
 ---
 
@@ -368,6 +379,7 @@ The `⎇`, `⬢⬡◆◇`, `↑↓`, `↩` glyphs are East-Asian-ambiguous width
 | — | last worktree | `-` |
 | — | close/open detail | `h` / `l` |
 | `u` | upgrade | `g u` (goto layer); top-level `u` unbound & reserved — never reassign (Q5) |
+| — | reverse sort | `O` (new; AC-5.6) |
 
 `w` and `g` are unbound today — free to claim. `b` is the only real collision.
 
