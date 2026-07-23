@@ -1479,3 +1479,154 @@ func testWrite(t *testing.T, path, content string) {
 		t.Fatal(err)
 	}
 }
+
+func resetDoctorActions() { doctorActions = nil }
+
+func TestRunFixableCheck(t *testing.T) {
+	t.Run("fix repairs a failing check and the run reflects the post-fix state", func(t *testing.T) {
+		resetDoctorActions()
+		var buf bytes.Buffer
+		w := newTestWriter(&buf)
+		healthy := false
+		ok := runFixableCheck(w, "Config symlinks",
+			func() (string, error) {
+				if healthy {
+					return "3 worktrees checked", nil
+				}
+				return "", fmt.Errorf("legacy config symlinks in: a, b")
+			},
+			true,
+			func() (string, error) {
+				healthy = true
+				return "Removed 2 legacy config symlink(s)", nil
+			})
+		if !ok {
+			t.Error("expected fixed check to count as passed")
+		}
+		out := buf.String()
+		for _, want := range []string{"legacy config symlinks in: a, b", "Removed 2 legacy config symlink(s)", "3 worktrees checked"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("missing %q in output:\n%s", want, out)
+			}
+		}
+		if len(doctorActions) != 0 {
+			t.Errorf("fixed check must not leave an action item, got %v", doctorActions)
+		}
+	})
+
+	t.Run("without --fix the failure is recorded as an action item", func(t *testing.T) {
+		resetDoctorActions()
+		var buf bytes.Buffer
+		w := newTestWriter(&buf)
+		ok := runFixableCheck(w, "Config symlinks",
+			func() (string, error) { return "", fmt.Errorf("legacy config symlinks in: a") },
+			false,
+			func() (string, error) { t.Fatal("fixer must not run without --fix"); return "", nil })
+		if ok {
+			t.Error("expected failing check to return false")
+		}
+		if len(doctorActions) != 1 || doctorActions[0].name != "Config symlinks" {
+			t.Errorf("expected one recorded action, got %v", doctorActions)
+		}
+	})
+
+	t.Run("failing fixer records the action and warns", func(t *testing.T) {
+		resetDoctorActions()
+		var buf bytes.Buffer
+		w := newTestWriter(&buf)
+		ok := runFixableCheck(w, "Hooks Docker-routing",
+			func() (string, error) { return "", fmt.Errorf("host installs detected") },
+			true,
+			func() (string, error) { return "", fmt.Errorf("rewrite failed") })
+		if ok {
+			t.Error("expected check to stay failed when the fixer errors")
+		}
+		if !strings.Contains(buf.String(), "rewrite failed") {
+			t.Errorf("expected fixer error in output:\n%s", buf.String())
+		}
+		if len(doctorActions) != 1 {
+			t.Errorf("expected one recorded action, got %v", doctorActions)
+		}
+	})
+
+	t.Run("fixer that does not resolve the check keeps it failed", func(t *testing.T) {
+		resetDoctorActions()
+		var buf bytes.Buffer
+		w := newTestWriter(&buf)
+		ok := runFixableCheck(w, "Stubborn",
+			func() (string, error) { return "", fmt.Errorf("still broken") },
+			true,
+			func() (string, error) { return "tried something", nil })
+		if ok {
+			t.Error("expected check to stay failed after ineffective fix")
+		}
+		if len(doctorActions) != 1 {
+			t.Errorf("expected one recorded action, got %v", doctorActions)
+		}
+	})
+
+	t.Run("passing check never invokes the fixer", func(t *testing.T) {
+		resetDoctorActions()
+		var buf bytes.Buffer
+		w := newTestWriter(&buf)
+		ok := runFixableCheck(w, "Fine",
+			func() (string, error) { return "all good", nil },
+			true,
+			func() (string, error) { t.Fatal("fixer must not run for a passing check"); return "", nil })
+		if !ok {
+			t.Error("expected passing check to return true")
+		}
+	})
+}
+
+func TestDoctorActionSummary(t *testing.T) {
+	t.Run("failures render a numbered action list at the end", func(t *testing.T) {
+		resetDoctorActions()
+		var buf bytes.Buffer
+		w := newTestWriter(&buf)
+		runCheck(w, "Docker network 'x'", func() (string, error) {
+			return "", fmt.Errorf("network not found (is the main stack running?)")
+		})
+		runCheck(w, "Config symlinks", func() (string, error) {
+			return "", fmt.Errorf("legacy config symlinks in: a — run `grove doctor --fix` to remove them")
+		})
+		buf.Reset()
+		printDoctorSummary(w, false)
+		out := buf.String()
+		for _, want := range []string{
+			"2 checks failed — action required:",
+			"1. Docker network 'x' — network not found (is the main stack running?)",
+			"2. Config symlinks — legacy config symlinks in: a — run `grove doctor --fix` to remove them",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("missing %q in summary:\n%s", want, out)
+			}
+		}
+	})
+
+	t.Run("all passed prints the success line and no action list", func(t *testing.T) {
+		resetDoctorActions()
+		var buf bytes.Buffer
+		w := newTestWriter(&buf)
+		printDoctorSummary(w, true)
+		out := buf.String()
+		if !strings.Contains(out, "All checks passed") {
+			t.Errorf("expected success line, got:\n%s", out)
+		}
+		if strings.Contains(out, "Action required") {
+			t.Errorf("unexpected action list on a clean run:\n%s", out)
+		}
+	})
+
+	t.Run("optional checks do not record action items", func(t *testing.T) {
+		resetDoctorActions()
+		var buf bytes.Buffer
+		w := newTestWriter(&buf)
+		runOptionalCheck(w, "Tmux", func() (string, error) {
+			return "", fmt.Errorf("tmux not found in PATH (optional)")
+		})
+		if len(doctorActions) != 0 {
+			t.Errorf("optional check must not record an action, got %v", doctorActions)
+		}
+	})
+}
