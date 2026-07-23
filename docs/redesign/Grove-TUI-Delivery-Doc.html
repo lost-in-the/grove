@@ -38,7 +38,7 @@ a{color:#4D597A;text-decoration:none}a:hover{color:#E66747}
 <div style="font-weight:700;color:#436961">D6</div><div style="font-weight:700">truncation</div><div>Middle-truncate; ticket-id prefix and last segment always survive. Name floor 16ch; the ⎇ chip sheds entirely before the name drops below 24ch.</div>
 <div style="font-weight:700;color:#436961">D7</div><div style="font-weight:700">wizard</div><div>⏎ next · shift+tab back · esc cancels from any step and returns to the origin view with cursor restored (1e).</div>
 <div style="font-weight:700;color:#436961">D8</div><div style="font-weight:700">config</div><div>Full-screen editor, not a modal (1f). Edit-in-place, dirty-field tracking, save/discard prompt on esc.</div>
-<div style="font-weight:700;color:#436961">D9</div><div style="font-weight:700">upgrade</div><div>Header badge ⭡x.y.z (the available version); u opens a confirm overlay, never fires blind; listed in help.</div>
+<div style="font-weight:700;color:#436961">D9</div><div style="font-weight:700">upgrade</div><div>Header badge ⭡x.y.z (the available version) is the primary affordance; g u opens the confirm overlay (never fires blind; reports "up to date" when already current). Always present in the goto strip. Top-level u is unbound and reserved — never reassign it (avoids the U adjacency hazard in reverse). U stays switch+start. (Q5 resolved, R8)</div>
 <div style="font-weight:700;color:#436961">D10</div><div style="font-weight:700">PR review</div><div>GitHub-parity tabs in this iteration (6a–6d). All keys view-local.</div>
 <div style="font-weight:700;color:#436961">D11</div><div style="font-weight:700">layers</div><div>Prefix keys + which-key strip (5b). Strip is docked chrome above the footer — viewport shrinks, selection stays visible, input is never gated: b s executes instantly. Within g, g = top — gg stays an instant chain (R1).</div>
 <div style="font-weight:700;color:#436961">D12</div><div style="font-weight:700">help</div><div>? overlay filters as you type across key, label, description with matched substrings highlighted; entries carry plain synonyms — fork (copy) (R3). Fig B1.</div>
@@ -74,10 +74,10 @@ a{color:#4D597A;text-decoration:none}a:hover{color:#E66747}
 <div style="border-top:1px solid #E66747;padding-top:9pt;margin-top:14pt;break-inside:avoid">
 <div style="font:700 13pt 'Fira Mono',monospace;margin:0 0 7pt">5 · Keys &amp; layers</div>
 <div style="display:grid;grid-template-columns:96pt 1fr;gap:4pt 10pt;font:400 11pt/1.45 'Fira Mono',monospace">
-<div style="font-weight:700">global</div><div>j/k · ctrl+d/u · g g / G · - last worktree · ⏎ switch · tab / l detail (h closes) · / filter · n new · d delete · o/O sort · ? help (filters) · q quit</div>
+<div style="font-weight:700">global</div><div>j/k · ctrl+d/u · g g / G · - last worktree · ⏎ switch · U switch+start · tab / l detail (h closes) · / filter · n new · d delete · o/O sort · ? help (filters) · q quit</div>
 <div style="font-weight:700">b branch</div><div>s switch branch here · n new from HEAD… · u set upstream… · p pull from worktree…</div>
 <div style="font-weight:700">w worktree</div><div>R rename · f fork (copy)… · d delete multiple…</div>
-<div style="font-weight:700">g goto</div><div>g top of list · p pull requests · i issues · c config · d diff (PR view scoped to worktree)</div>
+<div style="font-weight:700">g goto</div><div>g top of list · p pull requests · i issues · c config · d diff (PR view scoped to worktree) · u upgrade grove…</div>
 <div style="font-weight:700">PR browser</div><div>j/k · ⏎ open review · n new worktree from PR… · esc back (R6)</div>
 <div style="font-weight:700">PR view</div><div>1-4 tabs · J/K file · t file list · v viewed · z fold hunk · ⏎ context action (editor / scope / jump) · B browser · a all commits · esc pop</div>
 <div style="font-weight:700">wizard</div><div>⏎ next · shift+tab back · esc cancel → origin</div>

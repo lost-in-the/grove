@@ -1,5 +1,7 @@
 # Questions for the design agent (claude.ai/design)
 
+> **STATUS: RESOLVED 2026-07-23.** The design agent chose option (a) `g u`. See "Resolution" below. Kept for the decision record.
+
 Relay these to the Grove TUI design conversation. Each is self-contained (the design
 agent has no grove-code context) and carries a recommended answer, per the handoff brief.
 
@@ -25,3 +27,15 @@ Because they share a key, a fat-fingered `U` when reaching for `u` (or vice-vers
 `U` (switch + force-start) stays as-is.
 
 **Decision needed.** Agree with relocating upgrade off `u`? If so, (a) `g u` or (b) badge/help only? Or keep `u` top-level and accept the adjacency? This changes a documented key, so we're confirming before locking it into the plan (currently tracked as open item Q5 in §6 of the implementation plan).
+
+---
+
+## Resolution (from the design agent, 2026-07-23)
+
+**Yes — relocate upgrade off top-level `u`, option (a) `g u`.** Conditions:
+
+- Top-level `u` becomes **unbound and reserved** — never reassign it, or the `U` adjacency hazard returns in reverse.
+- The `g u` entry is **always present** in the goto strip (stable layers preserve spatial memory); when already current, the confirm overlay reports **"up to date."**
+- Header badge `⭡x.y.z` remains the primary affordance; `U` stays as-is.
+
+Design updated their doc (D9 rewritten, `g u` added to the goto layer, `U` added to the global key table, R8 closed). Mirrored into the implementation plan (AC-9.1, §4 Phase 5, §6 Q5, Appendix B) and the co-located `Grove-TUI-Delivery-Doc.html`.

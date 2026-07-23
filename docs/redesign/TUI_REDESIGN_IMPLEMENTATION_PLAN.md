@@ -166,7 +166,7 @@ Format: **AC-x.y** — *criterion* → **[verify: method]**. Verification method
 - **AC-8.4** Panel height is stable across sections. → [golden compare across tabs]
 
 ### D9 — Upgrade
-- **AC-9.1** When an update is cached, the header shows a `⭡x.y.z` badge; `u` opens a confirm overlay and never fires blind; the binding is listed in `?` help. → [golden of header + help]
+- **AC-9.1** When an update is cached, the header shows a `⭡x.y.z` badge (primary affordance); **`g u`** opens the confirm overlay, never fires blind, and reports "up to date" when already current; top-level `u` is unbound/reserved; `g u` is always present in the goto strip and listed in `?` help. → [golden of header + goto strip + help]
 
 ### D10 — PR review view
 - **AC-10.1** `⏎` on a PR row and `g d` on a worktree push a review view onto the stack; `n` on a PR row opens the New Worktree wizard for that PR. → [teatest]
@@ -235,13 +235,13 @@ Delivers: D3, D4, D5 (minus goto), D6, D14, D15. Tests: the golden size grid (§
 ### Phase 4 — Command layers, help filter, rebinds *(L)*
 - **D11:** add `pendingPrefix` model state + a docked which-key strip that reserves height (reuse the `HelpFooter`/`CompactHeight` height-reserving pattern). Resolve the next key: match → execute; unmapped → dismiss; **never** enter a key-swallowing modal (that's what "input never gated" requires in a one-key-per-update loop).
 - **D13:** rebind under layers — `b`(branch: `s/n/u/p`), `w`(worktree: `R/f/d`), `g`(goto: `g/p/i/c/d`). Resolve the real `b` collision (currently switch-branch). `s`(sync)→`b p`, `a`(bulk-delete)→`w d`.
-- **D5 goto:** `g g`/`G` top/bottom via the goto layer.
+- **D5 goto:** `g g`/`G` top/bottom via the goto layer; goto entries `g/p/i/c/d/u` (the `g u` upgrade entry per Q5).
 - **D12:** add a query input + `synonyms []string` to `helpEntry`; filter+highlight across key/label/description/synonyms; bypass the per-view render cache when a query is present.
 Delivers: D11, D12, D13, D5-goto. Tests: teatest chord timing (`b s` in one batch); help-filter golden + matcher unit tests.
 
 ### Phase 5 — Config, upgrade, wizard reconcile *(L)*
 - **D8:** replace the huh form with a custom full-screen editor built on `bubbles/v2` `textinput`/`textarea`, reviving the dormant `ConfigField`/`EditBuffer` scaffolding already in `overlay_config.go`. `[1-4]` tab jumps, `j/k` field nav, `⏎` edit-in-place, description lines, `●` per-field + `● n unsaved` header. Keep the existing dirty→save/discard-on-esc prompt.
-- **D9:** add a version field to `Header`; move/restyle the badge footer→header as `⭡x.y.z`; add `u` to the help sections.
+- **D9:** add a version field to `Header`; move/restyle the badge footer→header as `⭡x.y.z`; relocate the upgrade action to **`g u`** in the goto layer (always-present entry; "up to date" when current); leave top-level `u` unbound/reserved; add `g u` to the help sections. (Q5)
 - **D7:** reconcile the 6-internal-steps vs 3-dot-labels display; fix the shift+tab-from-Name quirk (AC-7.4). Mostly test-backfill.
 Delivers: D7, D8, D9. Tests: config golden across tabs + dirty state; header/help goldens.
 
@@ -303,7 +303,7 @@ grove's harness gives three tools with a clear division of labour. The redesign 
 
 ## 6 · Decisions & open items
 
-**As of this revision, every item below is LOCKED to its recommended answer and build may rely on it — EXCEPT Q5, which is open with the design agent** (`docs/redesign/QUESTIONS_FOR_DESIGN.md`). Q8 is a delivery-logistics note, not a build decision. If the design agent overrides Q5, only the upgrade-key binding in Appendix B changes.
+**As of this revision every item below is LOCKED and build may rely on it.** Q5 (upgrade key) was resolved by the design agent — `g u`, with `u` reserved (see below). Q8 is a delivery-logistics note, not a build decision.
 
 1. **[LOCKED] Sort "age" vs current "recent".** The doc's §3 sort cycle is `name → age → dirty`, but grove currently cycles `name → recent(last-accessed) → dirty`, and `CommitAge` is a pre-formatted string, not a timestamp. **Recommend:** interpret "age" as last-commit age (matches the visible age column), replacing `recent`; it needs a raw commit timestamp added to `WorktreeItem` (today only the formatted string exists). If last-accessed sorting is still wanted, keep it as a 4th mode. *(Small data-layer add.)*
 
@@ -313,7 +313,7 @@ grove's harness gives three tools with a clear division of labour. The redesign 
 
 4. **[LOCKED] Prefix-equality rule for the `⎇` chip.** "Prefix-duplicates count as equal" needs a precise definition. **Recommend:** reuse the existing `WorktreeNameFromBranch: last_segment` derivation — chip shows only when `name != lastSegment(branch)`. One rule, already in the config vocabulary, consistent with how names are derived.
 
-5. **[OPEN — WITH DESIGN AGENT] Upgrade `u` vs `U` adjacency (R8).** `U` currently = switch-and-force-containers; `u` = upgrade. Keeping both risks a fat-finger force-start. **Recommend:** move upgrade off `u` into the `g` goto layer or a `?`-surfaced action, freeing the top-level letter; keep `U` as-is. See `docs/redesign/QUESTIONS_FOR_DESIGN.md` — sent to the design agent; this is the only item not locked.
+5. **[RESOLVED by design agent] Upgrade `u` vs `U` adjacency (R8).** `U` = switch-and-force-containers; `u` = upgrade, adjacent — fat-finger hazard. **Resolution:** relocate upgrade to **`g u`** in the goto layer. Conditions locked by design: (1) top-level `u` becomes **unbound and reserved — never reassign it**, or the adjacency hazard returns in reverse; (2) the `g u` entry is **always present** in the goto strip (stable layers preserve spatial memory), and when already current the confirm overlay reports **"up to date"**; (3) the header `⭡x.y.z` badge stays the primary affordance and `U` is unchanged. Reflected in AC-9.1, the goto layer (§4/AC-13.1), Appendix B, and the co-located delivery doc (D9 rewritten). Design closed R8.
 
 6. **[LOCKED] `docs/grove-tui-context.md` is missing.** The delivery doc cites it as the colour/token source, but it doesn't exist in the repo. **Recommend:** don't block — grove's theme is already Catppuccin Mocha and the doc's hex map 1:1 onto `ColorScheme` (Appendix A). Optionally author the context doc from Appendix A during Phase 1 so future handoffs resolve.
 
@@ -367,7 +367,7 @@ The `⎇`, `⬢⬡◆◇`, `↑↓`, `↩` glyphs are East-Asian-ambiguous width
 | `g`/`G` | (detail-focus only) | goto layer: `g g` top / `G` bottom |
 | — | last worktree | `-` |
 | — | close/open detail | `h` / `l` |
-| `u` | upgrade | see Q5 (recommend relocate) |
+| `u` | upgrade | `g u` (goto layer); top-level `u` unbound & reserved — never reassign (Q5) |
 
 `w` and `g` are unbound today — free to claim. `b` is the only real collision.
 
