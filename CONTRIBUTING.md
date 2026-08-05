@@ -420,3 +420,17 @@ Contributors will be:
 - Added to CONTRIBUTORS.md (if we create one)
 
 Thank you for contributing to Grove! 🌳
+
+## Testing the herdr backend
+
+Grove's session layer has two backends (see
+[docs/HERDR_INTEGRATION.md](docs/HERDR_INTEGRATION.md)). `make test` covers both
+at the unit level; the herdr backend's real behavior needs a live server:
+
+```bash
+herdr server &
+scripts/validate-herdr.sh
+```
+
+It runs entirely in a throwaway repo under `$TMPDIR` and stops the herdr server
+as its final check.

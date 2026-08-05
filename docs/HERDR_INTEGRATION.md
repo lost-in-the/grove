@@ -490,6 +490,17 @@ Run against herdr 0.8.0 (protocol 19) with `herdr server` headless, driving a
 real grove project with two worktrees. Everything below was executed, not
 reasoned about.
 
+These checks are automated in [`scripts/validate-herdr.sh`](../scripts/validate-herdr.sh):
+
+```bash
+herdr server &                 # or attach a client with `herdr`
+scripts/validate-herdr.sh      # --keep leaves the scratch project behind
+```
+
+It builds grove from the checkout, works entirely in a throwaway repo under
+`$TMPDIR`, and exits non-zero on any failure. Its last check stops the herdr
+server, so don't point it at one you're using.
+
 | Flow | Result |
 |---|---|
 | `grove new` | creates the checkout, adopts it as a workspace, labels it `demo-feature-a` |
