@@ -528,4 +528,7 @@ The listing is fetched once per command and shared through `mux.Index`.
 - **Real agent states.** `blocked`/`working`/`done` were exercised through unit
   tests and a stub, not by running a coding agent inside a pane, so the golden
   files for the TUI badge are still uncaptured.
-- **macOS.** All of the above ran on Linux.
+- **macOS.** CI runs the full unit and integration suites on macOS and they pass,
+  but the live herdr flows above were exercised only on Linux — CI runners have
+  no herdr installed, so they cover the tmux backend and the herdr backend's
+  unit-level contract, not a real server.
