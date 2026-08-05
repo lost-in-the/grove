@@ -202,7 +202,7 @@ func deleteWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *conf
 			return worktreeDeletedMsg{name: name, deleteBranch: deleteBranch, err: err}
 		}
 
-		killTmuxSessionForWorktree(projectName, name)
+		killTmuxSessionForWorktree(cfg, projectName, name)
 
 		if err := stateMgr.RemoveWorktree(name); err != nil {
 			tuilog.Printf("warning: failed to remove %q from state: %v", name, err)
@@ -228,8 +228,8 @@ func deleteWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *conf
 	}
 }
 
-func killTmuxSessionForWorktree(projectName, name string) {
-	m := muxFor(nil)
+func killTmuxSessionForWorktree(cfg *config.Config, projectName, name string) {
+	m := muxFor(cfg)
 	if !m.Available() {
 		return
 	}

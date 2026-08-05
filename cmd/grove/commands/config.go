@@ -131,31 +131,7 @@ Examples:
 		cli.Label(w, "  Config file:", configPath)
 		_, _ = fmt.Fprintln(w)
 
-		cli.Bold(w, "General:")
-		if cfg.ProjectName != "" {
-			cli.Label(w, "  project_name:", cfg.ProjectName)
-		}
-		cli.Label(w, "  projects_dir:", cfg.ProjectsDir)
-		cli.Label(w, "  default_base_branch:", cfg.DefaultBranch)
-
-		_, _ = fmt.Fprintln(w)
-		cli.Bold(w, "[switch]:")
-		cli.Label(w, "  dirty_handling:", cfg.Switch.DirtyHandling)
-
-		_, _ = fmt.Fprintln(w)
-		cli.Bold(w, "[naming]:")
-		cli.Label(w, "  pattern:", cfg.Naming.Pattern)
-
-		_, _ = fmt.Fprintln(w)
-		cli.Bold(w, "[tmux]:")
-		cli.Label(w, "  mode:", cfg.Tmux.Mode)
-		cli.Label(w, "  prefix:", cfg.Tmux.Prefix)
-
-		_, _ = fmt.Fprintln(w)
-		cli.Bold(w, "[plugins.docker]:")
-		cli.Label(w, "  enabled:", formatBoolPtr(cfg.Plugins.Docker.Enabled, "true"))
-		cli.Label(w, "  auto_start:", formatBoolPtr(cfg.Plugins.Docker.AutoStart, "true"))
-		cli.Label(w, "  auto_stop:", formatBoolPtr(cfg.Plugins.Docker.AutoStop, "false"))
+		renderConfigSummary(w, cfg)
 
 		return nil
 	},
@@ -205,4 +181,45 @@ func init() {
 	configCmd.Flags().BoolVarP(&configGlobal, "global", "g", false, "Use global config (~/.config/grove/config.toml)")
 	configCmd.Flags().BoolVar(&configHooks, "hooks", false, "Work with hooks config instead of main config")
 	rootCmd.AddCommand(configCmd)
+}
+
+// renderConfigSummary writes the human-readable section listing for
+// `grove config`. Split out from the command so the sections can be asserted
+// without building a grove project.
+func renderConfigSummary(w *cli.Writer, cfg *config.Config) {
+	cli.Bold(w, "General:")
+	if cfg.ProjectName != "" {
+		cli.Label(w, "  project_name:", cfg.ProjectName)
+	}
+	cli.Label(w, "  projects_dir:", cfg.ProjectsDir)
+	cli.Label(w, "  default_base_branch:", cfg.DefaultBranch)
+
+	_, _ = fmt.Fprintln(w)
+	cli.Bold(w, "[switch]:")
+	cli.Label(w, "  dirty_handling:", cfg.Switch.DirtyHandling)
+
+	_, _ = fmt.Fprintln(w)
+	cli.Bold(w, "[naming]:")
+	cli.Label(w, "  pattern:", cfg.Naming.Pattern)
+
+	_, _ = fmt.Fprintln(w)
+	cli.Bold(w, "[mux]:")
+	cli.Label(w, "  backend:", cfg.Mux.Backend)
+	// The effective value differs when legacy tmux.mode = "off" overrides the
+	// backend, which is worth showing rather than leaving the reader to work
+	// out why nothing is being driven.
+	if effective := cfg.EffectiveMuxBackend(); effective != cfg.Mux.Backend {
+		cli.Label(w, "  (effective):", effective)
+	}
+
+	_, _ = fmt.Fprintln(w)
+	cli.Bold(w, "[tmux]:")
+	cli.Label(w, "  mode:", cfg.Tmux.Mode)
+	cli.Label(w, "  prefix:", cfg.Tmux.Prefix)
+
+	_, _ = fmt.Fprintln(w)
+	cli.Bold(w, "[plugins.docker]:")
+	cli.Label(w, "  enabled:", formatBoolPtr(cfg.Plugins.Docker.Enabled, "true"))
+	cli.Label(w, "  auto_start:", formatBoolPtr(cfg.Plugins.Docker.AutoStart, "true"))
+	cli.Label(w, "  auto_stop:", formatBoolPtr(cfg.Plugins.Docker.AutoStop, "false"))
 }

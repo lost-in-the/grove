@@ -132,9 +132,7 @@ Examples:
 		// Check: herdr server reachable. Only meaningful once herdr is the
 		// resolved backend — grove's session calls need a live server, and a
 		// stopped one turns every `grove to` into a fallback path.
-		// System checks run outside a project, so resolve from the environment
-		// rather than project config.
-		if m := mux.New(mux.BackendAuto); m.Backend() == mux.BackendHerdr {
+		if m := doctorMux(); m.Backend() == mux.BackendHerdr {
 			runOptionalCheck(w, "Herdr server", func() (string, error) {
 				if _, err := m.List(); err != nil {
 					if mux.ErrServerNotRunning(err) {
@@ -1057,4 +1055,27 @@ func checkStrayBackup(groveDir string) (string, error) {
 		)
 	}
 	return "no stray backup directory", nil
+}
+
+// doctorMux resolves the multiplexer for the "Herdr server" check.
+//
+// The system tier runs anywhere, including outside a grove project, so it
+// falls back to environment detection. But when a project *is* discoverable its
+// config decides: a project pinned to herdr must still get the server check
+// even when grove is running outside a herdr pane, which plain auto-detection
+// would skip.
+func doctorMux() mux.Multiplexer {
+	groveDir, err := grove.IsGroveProject()
+	if err != nil || groveDir == "" {
+		return mux.New(mux.BackendAuto)
+	}
+	cfg, err := config.LoadFromGroveDir(groveDir)
+	if err != nil {
+		return mux.New(mux.BackendAuto)
+	}
+	pref, err := mux.ParseBackend(cfg.EffectiveMuxBackend())
+	if err != nil {
+		return mux.New(mux.BackendAuto)
+	}
+	return mux.New(pref)
 }

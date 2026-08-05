@@ -113,14 +113,20 @@ The `workspace create` fallback grove keeps for `worktree_not_found` /
 `not_git_worktree` is therefore a safety net for non-worktree directories, not
 the main-checkout path.
 
-**Caveat: herdr's worktree provenance does not follow a rename.** herdr captures
-`worktree.checkout_path` when the workspace opens; after `grove rename` moves the
-directory, that field still names the old path. Grove's own lookups self-heal —
-`mux.Index` falls back to the session name, and the label was just updated to
-match — but anything consuming herdr's context directly has to tolerate it, which
-is why the plugin resolves the first directory that still exists rather than
-trusting `checkout_path`. The stale pane cwd is the same situation tmux has after
-a rename, and `[tmux] on_switch = "reset"` handles both.
+**Caveat: herdr's workspace paths do not follow a rename.** herdr captures a
+workspace's paths when it opens and never updates them, so `grove rename` leaves
+*all three* stale at once — `worktree.checkout_path`, the workspace cwd, and the
+pane's cwd all name the pre-rename directory. Verified live.
+
+Grove's own lookups self-heal: `mux.Index` falls back to the session name, and
+`grove rename` has just relabelled the workspace to match, so `grove ls` and
+`grove to` keep resolving the worktree correctly.
+
+The plugin cannot self-heal the same way — it only has herdr's context, and
+every path in it is dead. It says so plainly rather than reporting the dead path
+as "not a grove project"; the fix is to close or reopen the workspace. The stale
+pane cwd is the same situation tmux has after a rename, which
+`[tmux] on_switch = "reset"` already handles.
 
 Canonicalize before comparing — herdr uses `canonical_or_original`, so grove
 should `filepath.EvalSymlinks` on both sides.

@@ -58,12 +58,6 @@ const (
 	AgentUnknown AgentStatus = "unknown"
 )
 
-// NeedsAttention reports whether the agent state is one a user should look at:
-// blocked on input, or finished with unseen output.
-func (a AgentStatus) NeedsAttention() bool {
-	return a == AgentBlocked || a == AgentDone
-}
-
 // Observed reports whether the backend actually saw a coding agent.
 //
 // AgentUnknown does not count. herdr rolls a workspace up to "unknown"

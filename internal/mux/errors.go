@@ -13,11 +13,5 @@ var (
 	errNoRepoRoot = errors.New("target has no repository root")
 )
 
-// ErrNoRepoRoot reports whether err means "Target.Repo was required but unset".
-func ErrNoRepoRoot(err error) bool { return errors.Is(err, errNoRepoRoot) }
-
-// ErrNotInside reports whether err means "grove is not inside a session".
-func ErrNotInside(err error) bool { return errors.Is(err, errNotInside) }
-
 // ErrNoSession reports whether err means "the target has no live session".
 func ErrNoSession(err error) bool { return errors.Is(err, errNoSession) }

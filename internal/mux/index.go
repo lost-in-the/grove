@@ -83,14 +83,6 @@ func (ix *Index) AgentFor(t Target) AgentStatus {
 	return s.Agent
 }
 
-// Len reports how many sessions the index holds.
-func (ix *Index) Len() int {
-	if ix == nil {
-		return 0
-	}
-	return len(ix.byName)
-}
-
 // pathKeys returns the forms a path may be matched under: cleaned, and
 // symlink-resolved when that differs and the path exists. Order matters —
 // callers try them in sequence.

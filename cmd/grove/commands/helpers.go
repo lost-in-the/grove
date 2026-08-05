@@ -102,11 +102,16 @@ func manualAttachHint(m mux.Multiplexer, sessionName string) string {
 	return m.AttachHint(mux.Target{Name: sessionName})
 }
 
-// muxUseControlMode reports whether the backend should attach using a terminal
-// control protocol (tmux -CC under iTerm2). Backends without one say no.
-func muxUseControlMode(m mux.Multiplexer, cfg *bool) bool {
+// controlModeFor returns the backend's control-mode support when it both
+// implements the capability and decides it applies right now (tmux -CC under
+// iTerm2). Returning the interface alongside the decision keeps the caller from
+// re-asserting the type to use it.
+func controlModeFor(m mux.Multiplexer, cfg *bool) (mux.ControlModer, bool) {
 	cm, ok := m.(mux.ControlModer)
-	return ok && cm.UseControlMode(cfg)
+	if !ok || !cm.UseControlMode(cfg) {
+		return nil, false
+	}
+	return cm, true
 }
 
 // attachToSession lands the user in a target's session.
@@ -116,7 +121,7 @@ func muxUseControlMode(m mux.Multiplexer, cfg *bool) bool {
 // Backends without a directive (herdr) attach in-process instead, which works
 // the same way from the user's side.
 func attachToSession(m mux.Multiplexer, t mux.Target, controlModeCfg *bool, hasShellIntegration bool) error {
-	useCC := muxUseControlMode(m, controlModeCfg)
+	cm, useCC := controlModeFor(m, controlModeCfg)
 
 	if hasShellIntegration {
 		if d, ok := m.(mux.AttachDirectiver); ok && d.AttachDirective(t, useCC) {
@@ -125,7 +130,7 @@ func attachToSession(m mux.Multiplexer, t mux.Target, controlModeCfg *bool, hasS
 	}
 
 	if useCC {
-		return m.(mux.ControlModer).AttachControlMode(t)
+		return cm.AttachControlMode(t)
 	}
 	return m.Attach(t)
 }

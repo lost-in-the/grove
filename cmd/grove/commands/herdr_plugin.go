@@ -48,15 +48,17 @@ func (c *herdrContext) CheckoutPath() string {
 	return c.WorkspaceCwd
 }
 
-// ResolveDir returns the first directory in the context that still exists.
+// ResolveDir returns the first directory in the context that still exists, or
+// "" when every path herdr reported is gone.
 //
-// herdr's worktree provenance is captured when a workspace is opened and does
-// not follow the checkout afterwards, so a `grove rename` leaves
-// worktree.checkout_path pointing at a directory that is no longer there. The
-// workspace cwd and the focused pane's cwd are the live fallbacks.
+// herdr captures a workspace's paths when it opens and does not update them
+// afterwards, so `grove rename` leaves all three stale at once: the checkout
+// path, the workspace cwd, and the pane's cwd all name the pre-rename
+// directory. Checking each in turn covers the cases where only some drifted;
+// returning "" lets the caller say what actually happened instead of
+// reporting a bare path as "not a grove project".
 func (c *herdrContext) ResolveDir() string {
-	candidates := []string{c.CheckoutPath(), c.WorkspaceCwd, c.FocusedPaneCwd}
-	for _, dir := range candidates {
+	for _, dir := range []string{c.CheckoutPath(), c.WorkspaceCwd, c.FocusedPaneCwd} {
 		if dir == "" {
 			continue
 		}
@@ -64,18 +66,7 @@ func (c *herdrContext) ResolveDir() string {
 			return dir
 		}
 	}
-	// Nothing resolved; return the nominal path so the error names something
-	// recognizable rather than being empty.
-	return c.CheckoutPath()
-}
-
-// RepoRoot returns the main checkout of the workspace's repository, or empty
-// when herdr reported no git provenance.
-func (c *herdrContext) RepoRoot() string {
-	if c.Worktree == nil {
-		return ""
-	}
-	return c.Worktree.RepoRoot
+	return ""
 }
 
 func parseHerdrContext(raw string) (*herdrContext, error) {
@@ -294,6 +285,15 @@ Actions:
 
 		path := hctx.ResolveDir()
 		if path == "" {
+			// Every path herdr knows for this workspace is gone — almost
+			// always a worktree that grove renamed or removed underneath it.
+			// Naming that is more useful than reporting the dead path as "not
+			// a grove project".
+			if stale := hctx.CheckoutPath(); stale != "" {
+				cli.Warning(w, "this herdr workspace points at %s, which no longer exists", stale)
+				cli.Faint(w, "The worktree was renamed or removed. Close the workspace, or reopen it to refresh.")
+				return nil
+			}
 			return fmt.Errorf("herdr workspace has no directory to act on")
 		}
 

@@ -121,19 +121,3 @@ func TestIndexAgentFor(t *testing.T) {
 		t.Errorf("AgentFor(no agent) = %q, want %q", got, AgentUnreported)
 	}
 }
-
-func TestAgentStatusNeedsAttention(t *testing.T) {
-	attention := map[AgentStatus]bool{
-		AgentBlocked:    true,
-		AgentDone:       true,
-		AgentWorking:    false,
-		AgentIdle:       false,
-		AgentUnknown:    false,
-		AgentUnreported: false,
-	}
-	for status, want := range attention {
-		if got := status.NeedsAttention(); got != want {
-			t.Errorf("%q.NeedsAttention() = %v, want %v", status, got, want)
-		}
-	}
-}

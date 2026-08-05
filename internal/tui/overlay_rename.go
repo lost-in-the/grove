@@ -67,7 +67,7 @@ func renameWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, oldName, 
 		// Step 4: Rename the multiplexer session if it exists. The directory has
 		// already moved, so both targets carry the new path — herdr resolves the
 		// workspace by it, tmux by the old session name.
-		if m := muxFor(nil); m.Available() {
+		if m := muxForRepo(mgr.GetRepoRoot()); m.Available() {
 			newPath := mgr.PathForName(newName)
 			oldTarget := muxTargetFor(projectName, mgr.GetRepoRoot(), oldName, newPath)
 			newTarget := muxTargetFor(projectName, mgr.GetRepoRoot(), newName, newPath)

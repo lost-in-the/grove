@@ -376,8 +376,8 @@ func TestHerdrCurrentOutsideHerdrErrors(t *testing.T) {
 	b := f0().backend()
 	b.env = func(string) string { return "" }
 
-	if _, err := b.Current(); !ErrNotInside(err) {
-		t.Errorf("Current() outside herdr: ErrNotInside = false (err=%v)", err)
+	if _, err := b.Current(); err == nil {
+		t.Error("Current() outside herdr should error")
 	}
 }
 

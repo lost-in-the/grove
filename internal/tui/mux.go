@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"path/filepath"
+
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/mux"
+	"github.com/lost-in-the/grove/internal/tuilog"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
 
@@ -29,4 +32,19 @@ func muxFor(cfg *config.Config) mux.Multiplexer {
 		}
 	}
 	return mux.New(pref)
+}
+
+// muxForRepo resolves the multiplexer for a project whose config is not
+// already loaded, reading it from the repo's .grove.
+//
+// Passing a nil config instead would silently fall back to auto-detection and
+// ignore [mux] backend, so a project pinned to herdr would get tmux driven
+// underneath it whenever grove happened to run outside a herdr pane.
+func muxForRepo(repoRoot string) mux.Multiplexer {
+	cfg, err := config.LoadFromGroveDir(filepath.Join(repoRoot, ".grove"))
+	if err != nil {
+		tuilog.Printf("warning: failed to load config for multiplexer resolution: %v", err)
+		cfg = nil
+	}
+	return muxFor(cfg)
 }

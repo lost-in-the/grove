@@ -20,9 +20,6 @@ func TestParseHerdrContext(t *testing.T) {
 	if got.CheckoutPath() != "/repos/grove-testing" {
 		t.Errorf("CheckoutPath() = %q, want the worktree checkout", got.CheckoutPath())
 	}
-	if got.RepoRoot() != "/repos/grove" {
-		t.Errorf("RepoRoot() = %q, want /repos/grove", got.RepoRoot())
-	}
 }
 
 func TestParseHerdrContextFallsBackToWorkspaceCwd(t *testing.T) {
@@ -36,9 +33,6 @@ func TestParseHerdrContextFallsBackToWorkspaceCwd(t *testing.T) {
 	}
 	if got.CheckoutPath() != "/tmp/scratch" {
 		t.Errorf("CheckoutPath() = %q, want the workspace cwd", got.CheckoutPath())
-	}
-	if got.RepoRoot() != "" {
-		t.Errorf("RepoRoot() = %q, want empty without git provenance", got.RepoRoot())
 	}
 }
 
@@ -148,6 +142,26 @@ func TestHerdrContextResolveDirPrefersCheckout(t *testing.T) {
 
 	if got := c.ResolveDir(); got != live {
 		t.Errorf("ResolveDir() = %q, want the checkout path %q", got, live)
+	}
+}
+
+func TestHerdrContextResolveDirReturnsEmptyWhenAllPathsGone(t *testing.T) {
+	// After `grove rename`, herdr's checkout path, workspace cwd, and pane cwd
+	// are all the pre-rename directory. Reporting "" lets the caller explain
+	// that rather than blaming the dead path for not being a grove project.
+	gone := filepath.Join(t.TempDir(), "gone")
+	c := &herdrContext{
+		WorkspaceCwd:   gone,
+		FocusedPaneCwd: gone,
+		Worktree: &struct {
+			RepoName     string `json:"repo_name"`
+			RepoRoot     string `json:"repo_root"`
+			CheckoutPath string `json:"checkout_path"`
+		}{CheckoutPath: gone},
+	}
+
+	if got := c.ResolveDir(); got != "" {
+		t.Errorf("ResolveDir() = %q, want empty when nothing exists", got)
 	}
 }
 

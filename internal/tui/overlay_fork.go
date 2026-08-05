@@ -206,7 +206,7 @@ func forkApplyWIP(forkState *ForkState, newPath string, wipPatch []byte) error {
 // forkCreateTmuxSession creates the tmux session for a freshly forked worktree.
 // State registration now happens inside BootstrapWorktree.
 func forkCreateTmuxSession(mgr *worktree.Manager, name, path string) {
-	m := muxFor(nil)
+	m := muxForRepo(mgr.GetRepoRoot())
 	if !m.Available() {
 		return
 	}
