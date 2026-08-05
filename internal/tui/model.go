@@ -2433,10 +2433,7 @@ func (m *Model) handleTmuxSwitch(switchPath string) bool {
 		return false
 	}
 
-	target := mux.Target{
-		Name: worktree.TmuxSessionName(m.projectName, m.switchToDisplayName),
-		Path: switchPath,
-	}
+	target := muxTargetFor(m.projectName, m.projectRoot, m.switchToDisplayName, switchPath)
 	tuilog.Printf("handleTmuxSwitch: session=%q displayName=%q", target.Name, m.switchToDisplayName)
 
 	// Store current session as last before switching

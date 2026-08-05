@@ -158,13 +158,19 @@ func TestHerdrEnsureAdoptsExistingCheckout(t *testing.T) {
 	f := newFakeHerdr()
 	f.responses["worktree open"] = `{"id":"x","result":{"type":"worktree_opened","workspace":{"workspace_id":"w2","number":2,"label":"grove-testing","focused":false,"pane_count":1,"tab_count":1,"active_tab_id":"w2:t1","agent_status":"idle"},"already_open":false}}`
 
-	err := f.backend().Ensure(Target{Name: "grove-testing", Path: "/repos/grove-testing"})
+	err := f.backend().Ensure(Target{Name: "grove-testing", Path: "/repos/grove-testing", Repo: "/repos/grove"})
 	if err != nil {
 		t.Fatalf("Ensure() error = %v", err)
 	}
 
 	if !f.called("worktree", "open", "--path", "/repos/grove-testing", "--label", "grove-testing") {
 		t.Errorf("Ensure did not adopt via worktree open; calls: %v", f.calls)
+	}
+	// herdr resolves the *source repo* from --cwd and rejects a linked
+	// worktree there ("New and open worktree actions start from the repo
+	// parent workspace"), so this must be the main checkout, not the target.
+	if !f.called("--cwd", "/repos/grove") {
+		t.Errorf("Ensure did not pass the repo root as --cwd; calls: %v", f.calls)
 	}
 	if !f.called("--no-focus") {
 		t.Error("Ensure must not steal focus")
@@ -179,7 +185,7 @@ func TestHerdrEnsureIsIdempotent(t *testing.T) {
 	f := newFakeHerdr()
 	f.responses["worktree open"] = `{"id":"x","result":{"type":"worktree_opened","workspace":{"workspace_id":"w2","number":2,"label":"grove-testing","focused":false,"pane_count":1,"tab_count":1,"active_tab_id":"w2:t1","agent_status":"idle"},"already_open":true}}`
 
-	if err := f.backend().Ensure(Target{Name: "grove-testing", Path: "/repos/grove-testing"}); err != nil {
+	if err := f.backend().Ensure(Target{Name: "grove-testing", Path: "/repos/grove-testing", Repo: "/repos/grove"}); err != nil {
 		t.Fatalf("Ensure() on an already-open workspace error = %v", err)
 	}
 }
@@ -192,7 +198,7 @@ func TestHerdrEnsureFallsBackToWorkspaceCreate(t *testing.T) {
 	f.errs["worktree open"] = errors.New("exit status 1")
 	f.responses["workspace create"] = `{"id":"x","result":{"type":"workspace_created","workspace":{"workspace_id":"w9","number":9,"label":"grove","focused":false,"pane_count":1,"tab_count":1,"active_tab_id":"w9:t1","agent_status":"idle"}}}`
 
-	if err := f.backend().Ensure(Target{Name: "grove", Path: "/repos/grove"}); err != nil {
+	if err := f.backend().Ensure(Target{Name: "grove", Path: "/repos/grove", Repo: "/repos/grove"}); err != nil {
 		t.Fatalf("Ensure() error = %v", err)
 	}
 	if !f.called("workspace", "create", "--cwd", "/repos/grove", "--label", "grove") {
@@ -205,7 +211,7 @@ func TestHerdrEnsureDoesNotFallBackOnUnrelatedErrors(t *testing.T) {
 	f.responses["worktree open"] = `{"id":"x","error":{"code":"server_not_running","message":"nope"}}`
 	f.errs["worktree open"] = errors.New("exit status 1")
 
-	if err := f.backend().Ensure(Target{Name: "grove", Path: "/repos/grove"}); err == nil {
+	if err := f.backend().Ensure(Target{Name: "grove", Path: "/repos/grove", Repo: "/repos/grove"}); err == nil {
 		t.Fatal("Ensure() expected the server error to propagate")
 	}
 	if f.called("workspace", "create") {
@@ -449,7 +455,7 @@ func TestHerdrEnsureOmitsLabelWhenUnset(t *testing.T) {
 	f := newFakeHerdr()
 	f.responses["worktree open"] = `{"id":"x","result":{"type":"worktree_opened","already_open":false}}`
 
-	if err := f.backend().Ensure(Target{Path: "/repos/grove"}); err != nil {
+	if err := f.backend().Ensure(Target{Path: "/repos/grove", Repo: "/repos/grove"}); err != nil {
 		t.Fatalf("Ensure() error = %v", err)
 	}
 	if f.called("--label") {
@@ -506,5 +512,34 @@ func TestHerdrPaneInfoPrefersForegroundCwd(t *testing.T) {
 	}
 	if info.CurrentPath != "/live" {
 		t.Errorf("CurrentPath = %q, want the foreground cwd", info.CurrentPath)
+	}
+}
+
+func TestHerdrEnsureRequiresRepoRoot(t *testing.T) {
+	// Without a source repo, herdr can only infer one from the focused
+	// workspace — which does not exist when grove runs outside a herdr client.
+	// Rather than emit a call that fails at runtime, say so up front.
+	f := newFakeHerdr()
+
+	err := f.backend().Ensure(Target{Name: "grove-testing", Path: "/repos/grove-testing"})
+	if err == nil {
+		t.Fatal("Ensure() without a repo root should error")
+	}
+	if f.called("worktree", "open") {
+		t.Error("Ensure issued a worktree open it knew would fail")
+	}
+}
+
+func TestHerdrEnsureUsesRepoRootNotCheckoutForSource(t *testing.T) {
+	f := newFakeHerdr()
+	f.responses["worktree open"] = `{"id":"x","result":{"type":"worktree_opened","already_open":false}}`
+
+	if err := f.backend().Ensure(Target{Name: "grove", Path: "/repos/grove", Repo: "/repos/grove"}); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
+	// The main checkout is its own repo root; herdr reuses the parent
+	// workspace and reports already_open rather than erroring.
+	if !f.called("--cwd", "/repos/grove", "--path", "/repos/grove") {
+		t.Errorf("calls: %v", f.calls)
 	}
 }

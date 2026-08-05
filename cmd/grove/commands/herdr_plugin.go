@@ -29,6 +29,7 @@ type herdrContext struct {
 	WorkspaceLabel string `json:"workspace_label"`
 	WorkspaceCwd   string `json:"workspace_cwd"`
 	FocusedPaneID  string `json:"focused_pane_id"`
+	FocusedPaneCwd string `json:"focused_pane_cwd"`
 	Worktree       *struct {
 		RepoName     string `json:"repo_name"`
 		RepoRoot     string `json:"repo_root"`
@@ -38,11 +39,34 @@ type herdrContext struct {
 
 // CheckoutPath returns the directory the invocation refers to: the workspace's
 // git checkout, or its plain cwd when the workspace has no git provenance.
+//
+// It does not check the filesystem — use ResolveDir for that.
 func (c *herdrContext) CheckoutPath() string {
 	if c.Worktree != nil && c.Worktree.CheckoutPath != "" {
 		return c.Worktree.CheckoutPath
 	}
 	return c.WorkspaceCwd
+}
+
+// ResolveDir returns the first directory in the context that still exists.
+//
+// herdr's worktree provenance is captured when a workspace is opened and does
+// not follow the checkout afterwards, so a `grove rename` leaves
+// worktree.checkout_path pointing at a directory that is no longer there. The
+// workspace cwd and the focused pane's cwd are the live fallbacks.
+func (c *herdrContext) ResolveDir() string {
+	candidates := []string{c.CheckoutPath(), c.WorkspaceCwd, c.FocusedPaneCwd}
+	for _, dir := range candidates {
+		if dir == "" {
+			continue
+		}
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			return dir
+		}
+	}
+	// Nothing resolved; return the nominal path so the error names something
+	// recognizable rather than being empty.
+	return c.CheckoutPath()
 }
 
 // RepoRoot returns the main checkout of the workspace's repository, or empty
@@ -268,7 +292,7 @@ Actions:
 			return err
 		}
 
-		path := hctx.CheckoutPath()
+		path := hctx.ResolveDir()
 		if path == "" {
 			return fmt.Errorf("herdr workspace has no directory to act on")
 		}

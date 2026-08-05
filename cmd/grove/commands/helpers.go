@@ -61,10 +61,19 @@ func detectMainBranch(dir string) string {
 	return "main"
 }
 
-// muxTarget builds the multiplexer target for a worktree. Both identifiers are
-// always supplied: tmux keys on the canonical session name, herdr on the
-// checkout path.
-func muxTarget(projectName, worktreeName, path string) mux.Target {
+// muxTarget builds the full multiplexer target for a worktree, including the
+// repository root herdr needs to resolve the source repo when adopting a
+// checkout. Use this for anything that may create a session.
+func muxTarget(mgr *worktree.Manager, worktreeName, path string) mux.Target {
+	t := muxLookupTarget(mgr.GetProjectName(), worktreeName, path)
+	t.Repo = mgr.GetRepoRoot()
+	return t
+}
+
+// muxLookupTarget builds the identifiers needed to *find* a session: the
+// canonical session name tmux keys on, and the checkout path herdr keys on.
+// It omits the repository root, which only session creation needs.
+func muxLookupTarget(projectName, worktreeName, path string) mux.Target {
 	return mux.Target{
 		Name: worktree.TmuxSessionName(projectName, worktreeName),
 		Path: path,
@@ -151,6 +160,9 @@ func emitCdOrExplain(stderr *cli.Writer, path string) {
 // suppressTmux must be true when the client must not be relocated (agent
 // mode, --no-tmux, tmux mode "off") — compute it via effectiveTmuxMode.
 func switchToWorktree(ctx *GroveContext, stderr *cli.Writer, prevName, targetName, sessionName, targetPath string, suppressTmux bool) bool {
+	// ProjectRoot is the main checkout, which is what herdr needs as the
+	// source repo when it has to create the session here.
+	repoRoot := ctx.ProjectRoot
 	var tmuxSwitched bool
 	batchErr := ctx.State.Batch(func() error {
 		if prevName != "" {
@@ -173,7 +185,7 @@ func switchToWorktree(ctx *GroveContext, stderr *cli.Writer, prevName, targetNam
 		// by hand, or the worktree was entered with --no-tmux). Failures
 		// degrade to the cd-directive fallback instead of aborting.
 		if !suppressTmux && m.Available() && m.Inside() {
-			target := mux.Target{Name: sessionName, Path: targetPath}
+			target := mux.Target{Name: sessionName, Path: targetPath, Repo: repoRoot}
 			if err := m.Ensure(target); err != nil {
 				cli.Warning(stderr, "Failed to create session: %v", err)
 			}
@@ -270,7 +282,7 @@ func removeWorktreeWithHooks(ctx *GroveContext, mgr *worktree.Manager, w *cli.Wr
 	// Kill the multiplexer session after the worktree is confirmed gone. This
 	// closes session state only — the checkout is already removed above.
 	if m := ctx.Mux(); m.Available() {
-		target := muxTarget(projectName, name, wtPath)
+		target := muxTarget(mgr, name, wtPath)
 		if exists, err := m.Exists(target); err == nil && exists {
 			if err := m.Kill(target); err != nil {
 				cli.Warning(w, "Failed to kill session: %v", err)

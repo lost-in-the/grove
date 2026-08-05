@@ -85,8 +85,7 @@ This is a tmux-only command — it does not emit cd: directives.`,
 			}
 		}
 
-		projectName := mgr.GetProjectName()
-		target := muxTarget(projectName, targetTree.DisplayName(), targetTree.Path)
+		target := muxTarget(mgr, targetTree.DisplayName(), targetTree.Path)
 		sessionName := target.Name
 
 		created := false

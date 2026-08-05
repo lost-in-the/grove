@@ -137,12 +137,11 @@ Examples:
 
 		// Step 4: Rename the multiplexer session if it exists.
 		if m := ctx.Mux(); m.Available() {
-			projectName := mgr.GetProjectName()
 			// The directory has already moved, so both targets carry the new
 			// path: herdr resolves the workspace by it, tmux by the old name.
 			newPath := mgr.PathForName(newName)
-			oldTarget := muxTarget(projectName, resolvedOld, newPath)
-			newTarget := muxTarget(projectName, newName, newPath)
+			oldTarget := muxTarget(mgr, resolvedOld, newPath)
+			newTarget := muxTarget(mgr, newName, newPath)
 
 			exists, err := m.Exists(oldTarget)
 			if err == nil && exists {

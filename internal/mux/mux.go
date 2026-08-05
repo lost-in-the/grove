@@ -11,12 +11,18 @@ package mux
 //
 // Name is the canonical tmux session name / herdr workspace label — always the
 // {project}-{name} form from worktree.TmuxSessionName, regardless of the
-// directory naming pattern. Path is the worktree checkout path.
+// directory naming pattern. Path is the worktree checkout path. Repo is the
+// repository's main checkout.
 //
-// Both fields must be populated: tmux keys on Name, herdr keys on Path.
+// Name and Path must always be populated: tmux keys on Name, herdr keys on
+// Path. Repo is required by herdr when creating or adopting a session, because
+// herdr resolves the *source repository* separately from the worktree being
+// opened, and rejects a linked worktree in that role. Operations on a session
+// that already exists (kill, focus, rename) do not need it.
 type Target struct {
 	Name string
 	Path string
+	Repo string
 }
 
 // Status is the attachment state of a session.
@@ -56,6 +62,20 @@ const (
 // blocked on input, or finished with unseen output.
 func (a AgentStatus) NeedsAttention() bool {
 	return a == AgentBlocked || a == AgentDone
+}
+
+// Observed reports whether the backend actually saw a coding agent.
+//
+// AgentUnknown does not count. herdr rolls a workspace up to "unknown"
+// whenever nothing identifiable is running — a plain shell pane reports it —
+// so treating it as a sighting would put a meaningless word on every row.
+func (a AgentStatus) Observed() bool {
+	switch a {
+	case AgentIdle, AgentWorking, AgentBlocked, AgentDone:
+		return true
+	default:
+		return false
+	}
 }
 
 // Session is a live multiplexer session belonging to a worktree.

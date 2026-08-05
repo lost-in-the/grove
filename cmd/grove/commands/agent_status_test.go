@@ -72,6 +72,15 @@ func TestAgentStatusDisplay(t *testing.T) {
 	if got := agentStatusDisplay(mux.AgentUnreported); got != "" {
 		t.Errorf("agentStatusDisplay(unreported) = %q, want empty", got)
 	}
+	// herdr rolls a workspace up to "unknown" when nothing identifiable is
+	// running, so a plain shell reports it. Printing the word on every row
+	// would be noise, not information.
+	if got := agentStatusDisplay(mux.AgentUnknown); got != "" {
+		t.Errorf("agentStatusDisplay(unknown) = %q, want empty", got)
+	}
+	if got := agentStatusDisplay(mux.AgentIdle); got != "idle" {
+		t.Errorf("agentStatusDisplay(idle) = %q, want %q", got, "idle")
+	}
 	if got := agentStatusDisplay(mux.AgentBlocked); got != "blocked" {
 		t.Errorf("agentStatusDisplay(blocked) = %q, want %q", got, "blocked")
 	}
@@ -97,5 +106,15 @@ func TestAnyAgentReported(t *testing.T) {
 	})
 	if !anyAgentReported(trees, "grove", some) {
 		t.Error("anyAgentReported() = false when a session reports an agent")
+	}
+
+	// A workspace whose panes are all plain shells rolls up to "unknown".
+	// That must not be enough to add a column of "unknown" to every row.
+	onlyUnknown := mux.NewIndex([]mux.Session{
+		{Name: "grove-a", Path: "/repos/grove-a", Agent: mux.AgentUnknown},
+		{Name: "grove-b", Path: "/repos/grove-b", Agent: mux.AgentUnknown},
+	})
+	if anyAgentReported(trees, "grove", onlyUnknown) {
+		t.Error("anyAgentReported() = true when every session is merely unknown")
 	}
 }

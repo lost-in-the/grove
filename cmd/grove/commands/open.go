@@ -78,8 +78,6 @@ Examples:
 			return err
 		}
 
-		projectName := mgr.GetProjectName()
-
 		// Step 1: Ensure worktree exists
 		wt, err := mgr.Find(name)
 		if err != nil {
@@ -152,7 +150,7 @@ Examples:
 			return nil
 		}
 
-		target := muxTarget(projectName, displayName, wt.Path)
+		target := muxTarget(mgr, displayName, wt.Path)
 		sessionName := target.Name
 		sessionExists, err := m.Exists(target)
 		if err != nil {

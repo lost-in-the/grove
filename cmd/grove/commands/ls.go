@@ -302,7 +302,7 @@ func containersSummary(entries []plugins.StatusEntry) string {
 // tmuxStatusFor returns "attached", "detached", or "none" for a worktree.
 // sessions may be nil (when no multiplexer is available).
 func tmuxStatusFor(tree *worktree.Worktree, projectName string, sessions *mux.Index) string {
-	if s, ok := sessions.Lookup(muxTarget(projectName, tree.DisplayName(), tree.Path)); ok {
+	if s, ok := sessions.Lookup(muxLookupTarget(projectName, tree.DisplayName(), tree.Path)); ok {
 		return string(s.Status)
 	}
 	// Fall back to a session named after the worktree directory, which is how
@@ -316,16 +316,17 @@ func tmuxStatusFor(tree *worktree.Worktree, projectName string, sessions *mux.In
 // agentStatusFor returns the coding-agent state a backend reports for a
 // worktree's session, or mux.AgentUnreported when it cannot observe one.
 func agentStatusFor(tree *worktree.Worktree, projectName string, sessions *mux.Index) mux.AgentStatus {
-	if s, ok := sessions.Lookup(muxTarget(projectName, tree.DisplayName(), tree.Path)); ok {
+	if s, ok := sessions.Lookup(muxLookupTarget(projectName, tree.DisplayName(), tree.Path)); ok {
 		return s.Agent
 	}
 	return mux.AgentUnreported
 }
 
-// agentStatusDisplay renders an agent state for a table cell. An unreported
-// agent is blank rather than a word — under tmux that is every row.
+// agentStatusDisplay renders an agent state for a table cell. States where no
+// agent was actually observed render blank rather than as a word — under tmux
+// that is every row, and under herdr every worktree sitting at a shell prompt.
 func agentStatusDisplay(a mux.AgentStatus) string {
-	if a == mux.AgentUnreported {
+	if !a.Observed() {
 		return ""
 	}
 	return string(a)
@@ -351,7 +352,7 @@ func agentStatusLevel(a mux.AgentStatus) cli.StatusLevel {
 // is what decides if the AGENT column is worth its width.
 func anyAgentReported(trees []*worktree.Worktree, projectName string, sessions *mux.Index) bool {
 	for _, tree := range trees {
-		if agentStatusFor(tree, projectName, sessions) != mux.AgentUnreported {
+		if agentStatusFor(tree, projectName, sessions).Observed() {
 			return true
 		}
 	}

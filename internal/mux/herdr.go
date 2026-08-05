@@ -63,12 +63,12 @@ func (b *HerdrBackend) Inside() bool { return b.env("HERDR_ENV") == "1" }
 // It never creates a checkout: grove owns worktree lifecycle, and herdr's own
 // `worktree create` would impose its own naming and placement.
 func (b *HerdrBackend) Ensure(t Target) error {
-	args := []string{"worktree", "open", "--path", t.Path, "--no-focus"}
-	if t.Name != "" {
-		args = append(args, "--label", t.Name)
+	args, err := b.openArgs(t)
+	if err != nil {
+		return err
 	}
 
-	_, err := b.call(args)
+	_, err = b.call(args)
 	if err == nil {
 		return nil
 	}
@@ -90,9 +90,9 @@ func (b *HerdrBackend) EnsureWithCommand(t Target, command string) error {
 		return b.Ensure(t)
 	}
 
-	args := []string{"worktree", "open", "--path", t.Path, "--no-focus"}
-	if t.Name != "" {
-		args = append(args, "--label", t.Name)
+	args, err := b.openArgs(t)
+	if err != nil {
+		return err
 	}
 
 	var opened struct {
@@ -278,6 +278,30 @@ func (b *HerdrBackend) SendCommand(t Target, command string) error {
 }
 
 // --- internals ---
+
+// openArgs builds the `worktree open` invocation.
+//
+// herdr resolves two different things here: --cwd names the *source
+// repository* whose worktree list is searched, and --path names the checkout
+// to open. They are not interchangeable — passing the linked worktree as --cwd
+// fails with linked_worktree_source ("New and open worktree actions start from
+// the repo parent workspace"), and omitting --cwd entirely falls back to the
+// focused workspace, which does not exist when grove runs outside a client.
+func (b *HerdrBackend) openArgs(t Target) ([]string, error) {
+	if t.Repo == "" {
+		return nil, fmt.Errorf("herdr needs the repository root to open %s: %w", t.Path, errNoRepoRoot)
+	}
+	args := []string{
+		"worktree", "open",
+		"--cwd", t.Repo,
+		"--path", t.Path,
+		"--no-focus",
+	}
+	if t.Name != "" {
+		args = append(args, "--label", t.Name)
+	}
+	return args, nil
+}
 
 func (b *HerdrBackend) createWorkspace(t Target) error {
 	args := []string{"workspace", "create", "--cwd", t.Path, "--no-focus"}

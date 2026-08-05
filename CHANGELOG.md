@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A **herdr plugin** in [`integrations/herdr/`](integrations/herdr/README.md): the grove dashboard as a popup overlay, a workspace status action, and a `worktree.opened` hook that points at `grove adopt` when a worktree was created through herdr's UI rather than grove's. Install with `herdr plugin install lost-in-the/grove/integrations/herdr`.
 - `grove doctor` reports herdr availability, and — when herdr is the active backend — whether its server is reachable.
 
+Verified end to end against herdr 0.8.0: create, list, switch, rename, and remove all round-trip correctly, and `grove ls` stays at ~52ms with the herdr backend active.
+
 ### Changed
 - Session handling moved behind a backend-neutral `internal/mux` abstraction. No behavior change under tmux; `[tmux] mode`, `on_switch`, and `control_mode` keep working (`control_mode` is tmux-only and ignored by herdr).
 - Under herdr, `grove open` with `[session] popup = true` falls back to a full-window switch unless the herdr plugin is installed — popup placement is only reachable through herdr's plugin pane surface.

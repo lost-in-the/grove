@@ -174,7 +174,7 @@ Examples:
 				}
 			}
 			if m := ctx.Mux(); m.Available() {
-				target := muxTarget(mgr.GetProjectName(), resolvedName, wt.Path)
+				target := muxTarget(mgr, resolvedName, wt.Path)
 				if exists, _ := m.Exists(target); exists {
 					cli.Faint(w, "  Would kill %s session: %s", m.Backend(), target.Name)
 				}

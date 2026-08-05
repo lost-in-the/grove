@@ -460,10 +460,7 @@ func runPostCreateStreaming(ch chan<- creationEvent, mgr *worktree.Manager, stat
 	// order (setupCreatedWorktree, then switch/tmux).
 	if m := muxFor(cfg); m.Available() {
 		ch <- creationEvent{line: "Creating session..."}
-		target := mux.Target{
-			Name: worktree.TmuxSessionName(projectName, name),
-			Path: wt.Path,
-		}
+		target := muxTargetFor(projectName, projectRoot, name, wt.Path)
 		if err := m.Ensure(target); err != nil {
 			tuilog.Printf("warning: failed to create session %q: %v", target.Name, err)
 		}

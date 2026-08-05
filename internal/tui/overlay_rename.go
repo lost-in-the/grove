@@ -7,7 +7,6 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/state"
 	"github.com/lost-in-the/grove/internal/tuilog"
 	"github.com/lost-in-the/grove/internal/worktree"
@@ -70,8 +69,8 @@ func renameWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, oldName, 
 		// workspace by it, tmux by the old session name.
 		if m := muxFor(nil); m.Available() {
 			newPath := mgr.PathForName(newName)
-			oldTarget := mux.Target{Name: worktree.TmuxSessionName(projectName, oldName), Path: newPath}
-			newTarget := mux.Target{Name: worktree.TmuxSessionName(projectName, newName), Path: newPath}
+			oldTarget := muxTargetFor(projectName, mgr.GetRepoRoot(), oldName, newPath)
+			newTarget := muxTargetFor(projectName, mgr.GetRepoRoot(), newName, newPath)
 
 			if exists, err := m.Exists(oldTarget); err == nil && exists {
 				if err := m.Rename(oldTarget, newTarget); err != nil {

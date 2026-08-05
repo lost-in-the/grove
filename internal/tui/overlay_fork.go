@@ -13,7 +13,6 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/config"
-	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/state"
 	"github.com/lost-in-the/grove/internal/tuilog"
 	"github.com/lost-in-the/grove/internal/worktree"
@@ -211,10 +210,7 @@ func forkCreateTmuxSession(mgr *worktree.Manager, name, path string) {
 	if !m.Available() {
 		return
 	}
-	target := mux.Target{
-		Name: worktree.TmuxSessionName(mgr.GetProjectName(), name),
-		Path: path,
-	}
+	target := muxTargetFor(mgr.GetProjectName(), mgr.GetRepoRoot(), name, path)
 	if err := m.Ensure(target); err != nil {
 		tuilog.Printf("warning: failed to create session %q: %v", target.Name, err)
 	}

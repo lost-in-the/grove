@@ -261,7 +261,6 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 		}
 	}
 
-	projectName := mgr.GetProjectName()
 	cfg := ctx.Config
 	tmuxMode := resolveTmuxMode(cfg, noTmux, peek)
 
@@ -270,7 +269,7 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 	var sessionName string
 	var tmuxSwitched bool
 	if tmuxMode != tmuxModeOff && m.Available() {
-		target = muxTarget(projectName, targetTree.DisplayName(), targetTree.Path)
+		target = muxTarget(mgr, targetTree.DisplayName(), targetTree.Path)
 		sessionName = target.Name
 		exists, err := m.Exists(target)
 		if err != nil {
@@ -396,7 +395,7 @@ func selfSwitchTmuxEpilogue(ctx *GroveContext, mgr *worktree.Manager, targetTree
 		return nil
 	}
 
-	target := muxTarget(mgr.GetProjectName(), targetTree.DisplayName(), targetTree.Path)
+	target := muxTarget(mgr, targetTree.DisplayName(), targetTree.Path)
 	exists, err := m.Exists(target)
 	if err != nil {
 		return fmt.Errorf("failed to check session: %w", err)

@@ -11,7 +11,6 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/log"
-	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/worktree"
 	"github.com/lost-in-the/grove/plugins/tracker"
 )
@@ -71,9 +70,9 @@ func setupFetchedWorktree(ctx *GroveContext, mgr *worktree.Manager, w *cli.Write
 	}
 
 	if m := ctx.Mux(); m.Available() {
-		projectName := mgr.GetProjectName()
-		sessionName := worktree.TmuxSessionName(projectName, worktreeName)
-		if err := m.Ensure(mux.Target{Name: sessionName, Path: wt.Path}); err != nil {
+		target := muxTarget(mgr, worktreeName, wt.Path)
+		sessionName := target.Name
+		if err := m.Ensure(target); err != nil {
 			cli.Warning(w, "Failed to create session: %v", err)
 		} else {
 			cli.Success(w, "Created %s session '%s'", m.Backend(), sessionName)

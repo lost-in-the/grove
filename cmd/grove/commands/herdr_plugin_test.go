@@ -1,6 +1,9 @@
 package commands
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 func TestParseHerdrContext(t *testing.T) {
 	raw := `{"workspace_id":"w2","workspace_label":"grove-testing","workspace_cwd":"/repos/grove-testing",
@@ -109,5 +112,53 @@ func TestParseHerdrEventAcceptsDottedForm(t *testing.T) {
 	}
 	if got.Event != "worktree.opened" {
 		t.Errorf("Event = %q, want worktree.opened", got.Event)
+	}
+}
+
+func TestHerdrContextResolveDirSkipsStalePath(t *testing.T) {
+	// herdr captures worktree provenance when a workspace opens and does not
+	// follow the checkout afterwards, so `grove rename` leaves checkout_path
+	// dangling. The live workspace cwd must win over the dead path.
+	live := t.TempDir()
+	c := &herdrContext{
+		WorkspaceCwd: live,
+		Worktree: &struct {
+			RepoName     string `json:"repo_name"`
+			RepoRoot     string `json:"repo_root"`
+			CheckoutPath string `json:"checkout_path"`
+		}{CheckoutPath: filepath.Join(live, "does-not-exist")},
+	}
+
+	if got := c.ResolveDir(); got != live {
+		t.Errorf("ResolveDir() = %q, want the live workspace cwd %q", got, live)
+	}
+}
+
+func TestHerdrContextResolveDirPrefersCheckout(t *testing.T) {
+	live := t.TempDir()
+	other := t.TempDir()
+	c := &herdrContext{
+		WorkspaceCwd: other,
+		Worktree: &struct {
+			RepoName     string `json:"repo_name"`
+			RepoRoot     string `json:"repo_root"`
+			CheckoutPath string `json:"checkout_path"`
+		}{CheckoutPath: live},
+	}
+
+	if got := c.ResolveDir(); got != live {
+		t.Errorf("ResolveDir() = %q, want the checkout path %q", got, live)
+	}
+}
+
+func TestHerdrContextResolveDirFallsBackToPaneCwd(t *testing.T) {
+	live := t.TempDir()
+	c := &herdrContext{
+		WorkspaceCwd:   filepath.Join(live, "gone"),
+		FocusedPaneCwd: live,
+	}
+
+	if got := c.ResolveDir(); got != live {
+		t.Errorf("ResolveDir() = %q, want the pane cwd %q", got, live)
 	}
 }

@@ -12,7 +12,6 @@ import (
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/exitcode"
 	"github.com/lost-in-the/grove/internal/hooks"
-	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/output"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
@@ -253,8 +252,9 @@ Examples:
 		// agent mode intentionally still creates the detached session — see
 		// AGENTS.md)
 		if m := ctx.Mux(); !newNoTmux && m.Available() {
-			sessionName := worktree.TmuxSessionName(projectName, name)
-			if err := m.Ensure(mux.Target{Name: sessionName, Path: wt.Path}); err != nil {
+			target := muxTarget(mgr, name, wt.Path)
+			sessionName := target.Name
+			if err := m.Ensure(target); err != nil {
 				if !newJSON {
 					cli.Warning(w, "Failed to create session: %v", err)
 				}
