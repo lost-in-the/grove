@@ -9,7 +9,8 @@ This document provides exhaustive specifications for each grove command. Every b
 ## Table of Contents
 
 1. [Global Behaviors](#global-behaviors)
-2. [Naming Conventions](#naming-conventions)
+2. [Multiplexer Backends](#multiplexer-backends)
+3. [Naming Conventions](#naming-conventions)
 3. [Core Commands](#core-commands)
    - [grove ls](#grove-ls)
    - [grove new](#grove-new)
@@ -156,6 +157,29 @@ grove-testing: 1 windows
 grove-feature-auth: 1 windows
 my-app-main: 1 windows
 ```
+
+---
+
+## Multiplexer Backends
+
+Every command below that "creates a tmux session", "switches sessions", or
+"kills a session" acts on whichever multiplexer `[mux] backend` resolved to —
+tmux (default) or [herdr](https://herdr.dev). The command contracts are
+identical across backends; the specs say "tmux" for historical reasons.
+
+Three behaviors differ by backend:
+
+| Behavior | tmux | herdr |
+|---|---|---|
+| Session identity | session name | checkout path (label is cosmetic) |
+| `grove open --popup` | `display-popup` overlay | full-window switch, unless the [herdr plugin](../integrations/herdr/README.md) is installed |
+| `control_mode` (iTerm2 `tmux -CC`) | honored | ignored |
+| Agent status in `grove ls` / dashboard | not reported | `idle` / `working` / `blocked` / `done` |
+
+Session naming is unchanged: tmux session names and herdr workspace labels both
+use the canonical `{project}-{name}` form regardless of the directory pattern.
+
+See [HERDR_INTEGRATION.md](HERDR_INTEGRATION.md) for the full design.
 
 ---
 

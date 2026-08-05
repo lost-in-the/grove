@@ -4,7 +4,9 @@
 > invoke it. If you are developing grove itself, see [`CONTRIBUTING.md`](CONTRIBUTING.md)
 > and [`CLAUDE.md`](CLAUDE.md) for codebase rules.
 
-Grove is a Go CLI that manages git worktrees with tmux + Docker integration. Every
+Grove is a Go CLI that manages git worktrees with terminal-multiplexer + Docker
+integration. tmux is the default; [herdr](https://herdr.dev) is supported via
+`[mux] backend`. Every
 command completes in <500ms. Always prefer `--json` flags — all status output is
 machine-parseable.
 
@@ -33,7 +35,16 @@ export GROVE_TUI=0               # disable dashboard; bare `grove` prints usage
 > creation in `grove new` — and it also forces the isolated Docker strategy. For
 > per-invocation tmux suppression without the Docker coupling, pass `--no-tmux` to
 > `grove to` / `grove new` (on `new` it also skips session creation). To fully
-> disable tmux, set `[tmux] mode = "off"` in `.grove/config.toml`.
+> disable session management entirely, set `[tmux] mode = "off"` (or
+> `[mux] backend = "off"`) in `.grove/config.toml`.
+
+> [!WARNING]
+> **Never run `herdr worktree create` or `herdr worktree remove` on grove's
+> behalf.** Grove owns worktree lifecycle. `worktree create` imposes herdr's own
+> naming and placement, breaking grove's `{project}-{name}` rule; `worktree
+> remove` shells out to `git worktree remove`, bypassing grove's `[protection]`
+> rules. Grove adopts checkouts with `herdr worktree open --path` and cleans up
+> with `herdr workspace close`, which drops panes and leaves the checkout alone.
 
 ---
 
@@ -153,7 +164,7 @@ Worktree directories follow the project's `[naming] pattern` (in `.grove/config.
 default `{project}-{name}` — e.g., `myapp-auth`, `myapp-pr-42`. The pattern must contain
 `{project}` and `{name}` exactly once each. The project name comes from project config,
 then the git remote URL, then the directory name. `grove ls` shows the **short** name
-(`auth`); tmux session names always use the canonical `{project}-{name}` form
+(`auth`); tmux session names and herdr workspace labels always use the canonical `{project}-{name}` form
 (`myapp-auth`) regardless of the directory pattern.
 
 ## Drift + Adopt

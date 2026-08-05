@@ -126,16 +126,56 @@ don't match the current pattern are displayed as-is (full directory name).
 
 ---
 
+### [mux]
+
+Selects which terminal multiplexer grove drives.
+
+```toml
+[mux]
+# Which multiplexer manages worktree sessions.
+# "auto"  — prefer the multiplexer grove is already running inside; otherwise
+#           use whichever binary is installed, tmux winning ties (default)
+# "tmux"  — always drive tmux
+# "herdr" — always drive herdr (https://herdr.dev)
+# "off"   — disable session management entirely
+backend = "auto"                   # string: auto | tmux | herdr | off
+```
+
+Under `auto`, grove checks `HERDR_ENV` then `TMUX` to see where it is running,
+because relocating a client in a multiplexer the user is not looking at does
+nothing useful. Outside both, tmux wins ties so existing installs keep their
+behavior when herdr merely happens to be present.
+
+An explicit backend is honored even when its binary is missing — grove reports
+that rather than silently driving a different multiplexer than you asked for.
+
+**herdr differences.** herdr has no `tmux -CC` control mode, so `control_mode`
+below is ignored. Popup placement is reachable only through herdr's plugin pane
+surface, so `[session] popup` falls back to a full-window switch unless you
+install the plugin in [integrations/herdr](../integrations/herdr/README.md).
+In exchange, herdr reports each worktree's coding-agent state
+(`idle`/`working`/`blocked`/`done`), which `grove ls` shows in an AGENT column
+and the dashboard shows as a badge. tmux cannot report this, so the column is
+hidden under tmux.
+
+Grove keeps ownership of worktree lifecycle under both backends: it creates the
+checkout itself and asks herdr only to adopt it, and it never invokes herdr's
+own `worktree create` / `worktree remove`.
+
+---
+
 ### [tmux]
 
-Controls tmux session management. Requires tmux to be installed.
+Controls session behavior. `mode` and `on_switch` apply to whichever backend
+`[mux] backend` selected; `control_mode` is tmux-only. The section name
+predates herdr support.
 
 ```toml
 [tmux]
-# When to attach/create tmux sessions.
-# "auto"   — create and attach sessions automatically when tmux is running (default)
+# When to attach/create sessions.
+# "auto"   — create and attach sessions automatically (default)
 # "manual" — never auto-attach; use `grove attach` explicitly
-# "off"    — disable tmux integration entirely
+# "off"    — disable session management entirely (also forces [mux] backend off)
 mode = "auto"                      # string: auto | manual | off
 
 # DEPRECATED/INERT: parsed and shown by `grove config`, but never applied.
@@ -143,7 +183,7 @@ mode = "auto"                      # string: auto | manual | off
 # regardless of this value (see the [naming] section above).
 prefix = ""                        # string (no effect)
 
-# How grove handles directory drift when switching tmux sessions.
+# How grove handles directory drift when switching sessions.
 # "reset"  — cd the session to the worktree root on switch (default)
 # "warn"   — warn if the session is not in the expected directory
 # "ignore" — do nothing; leave the session wherever it is
@@ -152,6 +192,7 @@ on_switch = "reset"                # string: reset | warn | ignore
 # Enable tmux -CC (control mode) for iTerm2 native window integration.
 # When true (default) and TERM_PROGRAM=iTerm2, grove uses `tmux -CC attach`
 # instead of `tmux attach`. Set to false to always use standard tmux attach.
+# Ignored by the herdr backend, which has no control protocol.
 # Default: true
 control_mode = true                # bool
 ```

@@ -1,0 +1,36 @@
+id = "lost-in-the.grove"
+name = "Grove"
+version = "0.1.0"
+min_herdr_version = "0.7.0"
+description = "Worktree flow manager — dashboard, worktree status, and adoption prompts"
+platforms = ["linux", "macos"]
+
+# The grove dashboard as a popup overlay.
+#
+# This is the reason the plugin exists. Herdr has no `display-popup` CLI verb;
+# popup placement is reachable only through a plugin's declared pane. Without
+# this, `grove open --popup` degrades to a full-window switch under herdr.
+[[panes]]
+id = "dashboard"
+title = "Grove dashboard"
+description = "Browse, create, and switch worktrees"
+placement = "popup"
+width = "80%"
+height = "80%"
+command = ["grove", "tui"]
+
+# Report grove's view of the clicked workspace's worktree.
+[[actions]]
+id = "status"
+title = "Grove: worktree status"
+description = "Show whether grove tracks this worktree"
+contexts = ["workspace"]
+command = ["grove", "herdr-action", "status"]
+
+# Close the loop when a worktree is created through herdr's own UI rather than
+# through grove: the hook notices a checkout grove has no state for and points
+# at `grove adopt`. It only reports — adopting runs post-create hooks, which
+# the user should opt into rather than have fired by a background event.
+[[events]]
+on = "worktree.opened"
+command = ["grove", "herdr-event"]

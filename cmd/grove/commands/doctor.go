@@ -17,6 +17,7 @@ import (
 	"github.com/lost-in-the/grove/internal/detect"
 	"github.com/lost-in-the/grove/internal/grove"
 	"github.com/lost-in-the/grove/internal/hooks"
+	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/shell"
 	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/plugins/docker"
@@ -115,6 +116,35 @@ Examples:
 			}
 			return strings.TrimSpace(string(out)), nil
 		})
+
+		// Check: herdr available
+		runOptionalCheck(w, "Herdr", func() (string, error) {
+			if _, err := exec.LookPath("herdr"); err != nil {
+				return "", fmt.Errorf("herdr not found in PATH (optional, alternative to tmux for session management)")
+			}
+			out, err := cmdexec.Output(context.TODO(), "herdr", []string{"--version"}, "", cmdexec.Herdr)
+			if err != nil {
+				return "", fmt.Errorf("herdr found but `herdr --version` failed: %v", err)
+			}
+			return strings.TrimSpace(string(out)), nil
+		})
+
+		// Check: herdr server reachable. Only meaningful once herdr is the
+		// resolved backend — grove's session calls need a live server, and a
+		// stopped one turns every `grove to` into a fallback path.
+		// System checks run outside a project, so resolve from the environment
+		// rather than project config.
+		if m := mux.New(mux.BackendAuto); m.Backend() == mux.BackendHerdr {
+			runOptionalCheck(w, "Herdr server", func() (string, error) {
+				if _, err := m.List(); err != nil {
+					if mux.ErrServerNotRunning(err) {
+						return "", fmt.Errorf("no herdr server running — start one with `herdr`, or grove will fall back to plain directory switching")
+					}
+					return "", fmt.Errorf("herdr server unreachable: %v", err)
+				}
+				return "reachable", nil
+			})
+		}
 
 		// Check: aggressive-resize warning for iTerm2 control mode
 		if tmux.IsControlModeTerminal() {

@@ -1,6 +1,10 @@
 # Herdr Integration — Design & Implementation Plan
 
-**Status:** Proposal. Nothing here is implemented.
+**Status:** Implemented. `[mux] backend = "herdr"` selects it; `auto` picks it
+when grove is running inside a herdr pane.
+
+The design below describes what shipped. The one part still outstanding is
+Phase 0 — verifying the flows against a real herdr binary. See Open Questions.
 
 [Herdr](https://herdr.dev) is a terminal multiplexer built for coding agents: a
 background server owns real terminals, clients attach to render them, and panes
@@ -352,38 +356,55 @@ with its own README per the existing plugin convention.
 
 ---
 
-## Phasing
+## What shipped
 
-Each phase is independently shippable.
+**`internal/mux`** — the interface above, plus `mux.Index`, the last-session
+store (moved out of `internal/tmux`, which is now purely the low-level tmux
+wrapper), and three backends: `TmuxBackend`, `HerdrBackend`, `OffBackend`.
+`OffBackend` means callers hold a non-nil multiplexer unconditionally and never
+branch on "is there one".
 
-**Phase 0 — spike (blocking).** Install herdr, confirm the flows this document
-could not exercise without the binary. See Open Questions.
+**Call sites** — all 19 former `internal/tmux` importers now go through
+`ctx.Mux()` (commands) or `muxFor(cfg)` (TUI, which has no `GroveContext`).
 
-**Phase 1 — extract `internal/mux`, tmux only.** No behavior change. Move
-`internal/tmux` behind the interface, update the 19 importers, keep the existing
-tests green as the regression proof. Largest diff, lowest risk.
+**Config** — `[mux] backend`, validated, merged, defaulted to `auto`.
+`Config.EffectiveMuxBackend()` folds in legacy `tmux.mode = "off"`.
 
-**Phase 2 — herdr backend.** `Ensure` / `List` / `Exists` / `Attach` / `Switch` /
-`Kill` / `Rename` behind `[mux] backend`. Add the `Herdr` `cmdexec` category.
-Ship as opt-in.
+**Agent status** — `mux.AgentStatus` flows into `grove ls` (an AGENT column and
+a JSON `agent` field, both appearing only when a backend reports one) and the
+TUI (a row badge and a detail row).
 
-**Phase 3 — agent status.** Surface `AgentStatus` in `grove ls` and the TUI. New
-user-visible capability; needs a `theme` decision and golden-file updates
-(see [VISUAL_TESTING.md](VISUAL_TESTING.md)).
+**Plugin** — `integrations/herdr/` with the popup dashboard pane, a workspace
+status action, and a `worktree.opened` hook, backed by the hidden
+`grove herdr-action` / `grove herdr-event` subcommands.
 
-**Phase 4 — herdr plugin.** `integrations/herdr/`, the `grove herdr-action` /
-`grove herdr-event` subcommands, popup restoration.
+**Doctor** — optional `herdr` binary check, plus a server-reachability check
+that runs only when herdr is the resolved backend.
 
-**Phase 5 — doctor and docs.** `grove doctor` checks for `herdr`, server
-liveness, and version floor, alongside the existing tmux checks.
+### Still to do
+
+- **Phase 0, now the tail rather than the head.** The flows in Open Questions
+  need a machine with herdr installed. The backend is opt-in, so shipping it
+  unverified costs nothing to tmux users.
+- **Golden files.** The TUI agent badge has unit tests but no VHS/golden
+  coverage (see [VISUAL_TESTING.md](VISUAL_TESTING.md)); capturing those needs
+  a herdr server to produce non-empty agent state.
 
 ### Testing
 
-The herdr backend is exec + JSON, so it mocks exactly like the tmux one does
-today. Add a `muxtest.Fake` implementing `Multiplexer` for command-level tests,
-plus table tests decoding captured real `herdr … ` JSON fixtures into
-`Session`. Three integration tests currently shell out to tmux
-(`tests/integration/`) and need backend parameterization.
+The herdr backend takes an injectable runner, so its whole command contract is
+tested against canned JSON without a herdr server: envelope decoding (including
+noise on the stream and unknown fields), path-keyed resolution, the
+`worktree open` → `workspace create` fallback, and the two negative assertions
+that matter most — `Ensure` never calls `worktree create`, `Kill` never calls
+`worktree remove`.
+
+Fixtures are shaped from the real schema: compact single-line JSON, the
+internally-tagged `"type"` field, and `agent_status` in snake_case.
+
+Not yet covered: the three integration tests that shell out to tmux
+(`tests/integration/`) are still tmux-only and would need backend
+parameterization to exercise herdr end to end.
 
 ### Docs
 
