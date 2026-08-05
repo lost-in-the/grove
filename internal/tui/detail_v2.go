@@ -13,6 +13,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/plugins"
 )
 
@@ -121,6 +122,10 @@ func renderStatusSection(item *WorktreeItem, width int) []string {
 
 	if item.TmuxStatus != "none" && item.TmuxStatus != "" {
 		rows = append(rows, metadataLabel("Tmux")+renderTmuxValue(item))
+	}
+
+	if agent := renderAgentValue(item); agent != "" {
+		rows = append(rows, metadataLabel("Agent")+agent)
 	}
 
 	for _, s := range item.PluginStatuses {
@@ -259,6 +264,26 @@ func renderTmuxValue(item *WorktreeItem) string {
 		return Styles.TmuxBadgeActive.Render("⬢ active session")
 	case tmuxStatusDetached:
 		return Styles.TmuxBadge.Render("⬡ detached session")
+	default:
+		return ""
+	}
+}
+
+// renderAgentValue returns the styled coding-agent state for a worktree, or
+// empty when the backend cannot observe one (every tmux session).
+//
+// Colors rank by how much the state wants the user's attention: blocked is
+// waiting on them, done finished while they were away, working is in flight.
+func renderAgentValue(item *WorktreeItem) string {
+	switch item.AgentStatus {
+	case mux.AgentBlocked:
+		return Styles.StatusDanger.Render("◆ blocked")
+	case mux.AgentDone:
+		return Styles.StatusSuccess.Render("◆ done")
+	case mux.AgentWorking:
+		return Styles.StatusWarning.Render("◆ working")
+	case mux.AgentIdle:
+		return Styles.TextMuted.Render("◇ idle")
 	default:
 		return ""
 	}

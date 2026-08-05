@@ -7,8 +7,8 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/state"
-	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/tuilog"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
@@ -65,14 +65,17 @@ func renameWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, oldName, 
 			}
 		}
 
-		// Step 4: Rename tmux session if it exists
-		if tmux.IsTmuxAvailable() {
-			oldSessionName := worktree.TmuxSessionName(projectName, oldName)
-			newSessionName := worktree.TmuxSessionName(projectName, newName)
+		// Step 4: Rename the multiplexer session if it exists. The directory has
+		// already moved, so both targets carry the new path — herdr resolves the
+		// workspace by it, tmux by the old session name.
+		if m := muxFor(nil); m.Available() {
+			newPath := mgr.PathForName(newName)
+			oldTarget := mux.Target{Name: worktree.TmuxSessionName(projectName, oldName), Path: newPath}
+			newTarget := mux.Target{Name: worktree.TmuxSessionName(projectName, newName), Path: newPath}
 
-			if exists, err := tmux.SessionExists(oldSessionName); err == nil && exists {
-				if err := tmux.RenameSession(oldSessionName, newSessionName); err != nil {
-					tuilog.Printf("warning: failed to rename tmux session %q to %q: %v", oldSessionName, newSessionName, err)
+			if exists, err := m.Exists(oldTarget); err == nil && exists {
+				if err := m.Rename(oldTarget, newTarget); err != nil {
+					tuilog.Printf("warning: failed to rename session %q to %q: %v", oldTarget.Name, newTarget.Name, err)
 				}
 			}
 		}

@@ -42,6 +42,7 @@ type Config struct {
 	DefaultBranch string           `toml:"default_base_branch"`
 	Switch        SwitchConfig     `toml:"switch"`
 	Naming        NamingConfig     `toml:"naming"`
+	Mux           MuxConfig        `toml:"mux"`
 	Tmux          TmuxConfig       `toml:"tmux"`
 	Plugins       PluginsConfig    `toml:"plugins"`
 	Protection    ProtectionConfig `toml:"protection"`
@@ -86,7 +87,20 @@ type NamingConfig struct {
 	Pattern string `toml:"pattern"`
 }
 
-// TmuxConfig controls tmux session behavior
+// MuxConfig selects which terminal multiplexer grove drives.
+type MuxConfig struct {
+	// Backend is one of auto, tmux, herdr, off. Empty means auto, which
+	// prefers the multiplexer grove is already running inside and otherwise
+	// falls back to whichever binary is installed (tmux winning ties).
+	Backend string `toml:"backend"`
+}
+
+// TmuxConfig controls session behavior.
+//
+// The section name predates herdr support. Mode and OnSwitch are backend-
+// neutral behavior knobs that apply to whichever multiplexer is active;
+// ControlMode is tmux-only and is ignored by backends without a control
+// protocol.
 type TmuxConfig struct {
 	Mode        string `toml:"mode"`         // auto, manual, off
 	Prefix      string `toml:"prefix"`       // Prefix for tmux session names
@@ -321,6 +335,7 @@ func mergeConfigs(base, override *Config) *Config {
 
 	mergeTopLevel(&result, override)
 	mergeSwitchConfig(&result.Switch, &override.Switch)
+	mergeMuxConfig(&result.Mux, &override.Mux)
 	mergeTmuxConfig(&result.Tmux, &override.Tmux)
 	mergeDockerConfig(&result.Plugins.Docker, &override.Plugins.Docker)
 	mergeTUIConfig(&result.TUI, &override.TUI)
@@ -352,6 +367,12 @@ func mergeSwitchConfig(result, override *SwitchConfig) {
 	}
 	if override.ContainerSwitch != "" {
 		result.ContainerSwitch = override.ContainerSwitch
+	}
+}
+
+func mergeMuxConfig(result, override *MuxConfig) {
+	if override.Backend != "" {
+		result.Backend = override.Backend
 	}
 }
 

@@ -15,6 +15,10 @@ const (
 	Tmux      = 5 * time.Second
 	GHCLI     = 15 * time.Second
 	Docker    = 15 * time.Second
+	// Herdr matches Tmux: every herdr CLI call is a thin client over a local
+	// socket, and a dead server fails fast with server_not_running rather than
+	// hanging, so grove's sub-500ms budget survives a stopped herdr.
+	Herdr = 5 * time.Second
 )
 
 // Output runs a command with timeout and returns its stdout.

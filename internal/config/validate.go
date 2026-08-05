@@ -38,6 +38,18 @@ func Validate(cfg *Config) error {
 		return fmt.Errorf("switch.container_switch must be one of: auto, prompt, off (got %q)", cfg.Switch.ContainerSwitch)
 	}
 
+	// Validate multiplexer backend
+	validMuxBackend := map[string]bool{
+		"":      true,
+		"auto":  true,
+		"tmux":  true,
+		"herdr": true,
+		"off":   true,
+	}
+	if !validMuxBackend[cfg.Mux.Backend] {
+		return fmt.Errorf("mux.backend must be one of: auto, tmux, herdr, off (got %q)", cfg.Mux.Backend)
+	}
+
 	// Validate tmux mode
 	validTmuxMode := map[string]bool{
 		"auto":   true,

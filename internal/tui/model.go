@@ -18,9 +18,9 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/git"
+	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/plugins"
 	"github.com/lost-in-the/grove/internal/state"
-	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/tuilog"
 	"github.com/lost-in-the/grove/internal/updatecheck"
 	"github.com/lost-in-the/grove/internal/version"
@@ -2420,63 +2420,67 @@ func maybeRefreshUpdateCache() {
 	updatecheck.RefreshAsync()
 }
 
-// handleTmuxSwitch creates/switches to the tmux session for the target worktree.
-// Returns true if a tmux session switch happened (caller should skip cd).
+// handleTmuxSwitch creates/switches to the multiplexer session for the target
+// worktree. Returns true if a session switch happened (caller should skip cd).
 func (m *Model) handleTmuxSwitch(switchPath string) bool {
 	tmuxMode := "auto"
 	if m.cfg != nil && m.cfg.Tmux.Mode != "" {
 		tmuxMode = m.cfg.Tmux.Mode
 	}
 
-	if tmuxMode == "off" || !tmux.IsTmuxAvailable() || m.switchToDisplayName == "" {
+	mx := muxFor(m.cfg)
+	if tmuxMode == "off" || !mx.Available() || m.switchToDisplayName == "" {
 		return false
 	}
 
-	sessionName := worktree.TmuxSessionName(m.projectName, m.switchToDisplayName)
-	tuilog.Printf("handleTmuxSwitch: session=%q displayName=%q", sessionName, m.switchToDisplayName)
+	target := mux.Target{
+		Name: worktree.TmuxSessionName(m.projectName, m.switchToDisplayName),
+		Path: switchPath,
+	}
+	tuilog.Printf("handleTmuxSwitch: session=%q displayName=%q", target.Name, m.switchToDisplayName)
 
 	// Store current session as last before switching
-	if tmux.IsInsideTmux() {
-		if currentSession, err := tmux.GetCurrentSession(); err == nil {
-			_ = tmux.StoreLastSession(currentSession)
+	if mx.Inside() {
+		if currentSession, err := mx.Current(); err == nil {
+			_ = mux.StoreLastSession(currentSession)
 		}
 	}
 
 	// Create session if it doesn't exist
-	exists, err := tmux.SessionExists(sessionName)
+	exists, err := mx.Exists(target)
 	if err != nil {
-		tuilog.Printf("warning: failed to check tmux session %q: %v", sessionName, err)
+		tuilog.Printf("warning: failed to check session %q: %v", target.Name, err)
 		return false
 	}
 	if !exists {
-		if err := tmux.CreateSession(sessionName, switchPath); err != nil {
-			tuilog.Printf("warning: failed to create tmux session %q: %v", sessionName, err)
+		if err := mx.Ensure(target); err != nil {
+			tuilog.Printf("warning: failed to create session %q: %v", target.Name, err)
 			return false
 		}
 	}
 
 	// Switch or attach
-	if tmux.IsInsideTmux() {
-		if err := tmux.SwitchSession(sessionName); err != nil {
-			tuilog.Printf("warning: failed to switch tmux session: %v", err)
+	if mx.Inside() {
+		if err := mx.Switch(target); err != nil {
+			tuilog.Printf("warning: failed to switch session: %v", err)
 			return false
 		}
 		return true
 	}
 
-	useCC := tmux.ShouldUseControlMode(nil)
+	var controlMode *bool
 	if m.cfg != nil {
-		useCC = tmux.ShouldUseControlMode(m.cfg.Tmux.ControlMode)
+		controlMode = m.cfg.Tmux.ControlMode
 	}
-
-	var attachErr error
-	if useCC {
-		attachErr = tmux.AttachSessionControlMode(sessionName)
-	} else {
-		attachErr = tmux.AttachSession(sessionName)
+	if cm, ok := mx.(mux.ControlModer); ok && cm.UseControlMode(controlMode) {
+		if err := cm.AttachControlMode(target); err != nil {
+			tuilog.Printf("warning: failed to attach session: %v", err)
+			return false
+		}
+		return true
 	}
-	if attachErr != nil {
-		tuilog.Printf("warning: failed to attach tmux session: %v", attachErr)
+	if err := mx.Attach(target); err != nil {
+		tuilog.Printf("warning: failed to attach session: %v", err)
 		return false
 	}
 	return true

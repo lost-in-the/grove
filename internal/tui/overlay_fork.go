@@ -13,8 +13,8 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/state"
-	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/tuilog"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
@@ -207,12 +207,16 @@ func forkApplyWIP(forkState *ForkState, newPath string, wipPatch []byte) error {
 // forkCreateTmuxSession creates the tmux session for a freshly forked worktree.
 // State registration now happens inside BootstrapWorktree.
 func forkCreateTmuxSession(mgr *worktree.Manager, name, path string) {
-	if !tmux.IsTmuxAvailable() {
+	m := muxFor(nil)
+	if !m.Available() {
 		return
 	}
-	sessionName := worktree.TmuxSessionName(mgr.GetProjectName(), name)
-	if err := tmux.CreateSession(sessionName, path); err != nil {
-		tuilog.Printf("warning: failed to create tmux session %q: %v", sessionName, err)
+	target := mux.Target{
+		Name: worktree.TmuxSessionName(mgr.GetProjectName(), name),
+		Path: path,
+	}
+	if err := m.Ensure(target); err != nil {
+		tuilog.Printf("warning: failed to create session %q: %v", target.Name, err)
 	}
 }
 

@@ -17,8 +17,8 @@ import (
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/git"
 	"github.com/lost-in-the/grove/internal/hooks"
+	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/state"
-	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/tuilog"
 	"github.com/lost-in-the/grove/internal/worktree"
 	"github.com/lost-in-the/grove/plugins/docker"
@@ -229,20 +229,23 @@ func deleteWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *conf
 }
 
 func killTmuxSessionForWorktree(projectName, name string) {
-	if !tmux.IsTmuxAvailable() {
+	m := muxFor(nil)
+	if !m.Available() {
 		return
 	}
-	sessionName := worktree.TmuxSessionName(projectName, name)
-	exists, err := tmux.SessionExists(sessionName)
+	// The checkout is already gone by the time this runs, so the session can
+	// only be resolved by name.
+	target := mux.Target{Name: worktree.TmuxSessionName(projectName, name)}
+	exists, err := m.Exists(target)
 	if err != nil {
-		tuilog.Printf("warning: failed to check tmux session %q: %v", sessionName, err)
+		tuilog.Printf("warning: failed to check session %q: %v", target.Name, err)
 		return
 	}
 	if !exists {
 		return
 	}
-	if err := tmux.KillSession(sessionName); err != nil {
-		tuilog.Printf("warning: failed to kill tmux session %q: %v", sessionName, err)
+	if err := m.Kill(target); err != nil {
+		tuilog.Printf("warning: failed to kill session %q: %v", target.Name, err)
 	}
 }
 
@@ -455,11 +458,14 @@ func runPostCreateStreaming(ch chan<- creationEvent, mgr *worktree.Manager, stat
 	// Create tmux session after bootstrap so hooks (docker Up, bundle
 	// install) have run by the time the user attaches — mirrors the CLI
 	// order (setupCreatedWorktree, then switch/tmux).
-	if tmux.IsTmuxAvailable() {
-		ch <- creationEvent{line: "Creating tmux session..."}
-		sessionName := worktree.TmuxSessionName(projectName, name)
-		if err := tmux.CreateSession(sessionName, wt.Path); err != nil {
-			tuilog.Printf("warning: failed to create tmux session %q: %v", sessionName, err)
+	if m := muxFor(cfg); m.Available() {
+		ch <- creationEvent{line: "Creating session..."}
+		target := mux.Target{
+			Name: worktree.TmuxSessionName(projectName, name),
+			Path: wt.Path,
+		}
+		if err := m.Ensure(target); err != nil {
+			tuilog.Printf("warning: failed to create session %q: %v", target.Name, err)
 		}
 	}
 

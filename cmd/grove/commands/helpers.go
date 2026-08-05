@@ -14,7 +14,7 @@ import (
 	"github.com/lost-in-the/grove/internal/git"
 	"github.com/lost-in-the/grove/internal/hooks"
 	"github.com/lost-in-the/grove/internal/log"
-	"github.com/lost-in-the/grove/internal/tmux"
+	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/worktree"
 	"github.com/lost-in-the/grove/plugins/docker"
 )
@@ -61,22 +61,64 @@ func detectMainBranch(dir string) string {
 	return "main"
 }
 
-// loadTmuxSessions returns the running tmux sessions keyed by name, or nil
-// when tmux is unavailable or listing fails — tmuxStatusFor treats a nil map
-// as "no session". Shared by `grove ls` and `grove here`.
-func loadTmuxSessions() map[string]*tmux.Session {
-	if !tmux.IsTmuxAvailable() {
+// muxTarget builds the multiplexer target for a worktree. Both identifiers are
+// always supplied: tmux keys on the canonical session name, herdr on the
+// checkout path.
+func muxTarget(projectName, worktreeName, path string) mux.Target {
+	return mux.Target{
+		Name: worktree.TmuxSessionName(projectName, worktreeName),
+		Path: path,
+	}
+}
+
+// loadSessionIndex returns a lookup over every live multiplexer session, or
+// nil when the backend is unavailable or listing fails — a nil *mux.Index
+// reports "no session" for every target. One call serves a whole listing.
+// Shared by `grove ls` and `grove here`.
+func loadSessionIndex(ctx *GroveContext) *mux.Index {
+	m := ctx.Mux()
+	if !m.Available() {
 		return nil
 	}
-	sessionList, err := tmux.ListSessions()
+	sessions, err := m.List()
 	if err != nil {
 		return nil
 	}
-	sessions := make(map[string]*tmux.Session, len(sessionList))
-	for _, s := range sessionList {
-		sessions[s.Name] = s
+	return mux.NewIndex(sessions)
+}
+
+// manualAttachHint returns the command to show in manual mode, where grove
+// creates the session but leaves attaching to the user.
+func manualAttachHint(m mux.Multiplexer, sessionName string) string {
+	return m.AttachHint(mux.Target{Name: sessionName})
+}
+
+// muxUseControlMode reports whether the backend should attach using a terminal
+// control protocol (tmux -CC under iTerm2). Backends without one say no.
+func muxUseControlMode(m mux.Multiplexer, cfg *bool) bool {
+	cm, ok := m.(mux.ControlModer)
+	return ok && cm.UseControlMode(cfg)
+}
+
+// attachToSession lands the user in a target's session.
+//
+// With shell integration active, backends that can express attachment as a
+// wrapper directive do so, letting grove exit before the client starts.
+// Backends without a directive (herdr) attach in-process instead, which works
+// the same way from the user's side.
+func attachToSession(m mux.Multiplexer, t mux.Target, controlModeCfg *bool, hasShellIntegration bool) error {
+	useCC := muxUseControlMode(m, controlModeCfg)
+
+	if hasShellIntegration {
+		if d, ok := m.(mux.AttachDirectiver); ok && d.AttachDirective(t, useCC) {
+			return nil
+		}
 	}
-	return sessions
+
+	if useCC {
+		return m.(mux.ControlModer).AttachControlMode(t)
+	}
+	return m.Attach(t)
 }
 
 // emitCdOrExplain emits the cd: directive for the shell wrapper when shell
@@ -117,25 +159,25 @@ func switchToWorktree(ctx *GroveContext, stderr *cli.Writer, prevName, targetNam
 			}
 		}
 
-		// Store current session as last if inside tmux
-		if tmux.IsInsideTmux() {
-			if currentSession, err := tmux.GetCurrentSession(); err == nil {
-				if err := tmux.StoreLastSession(currentSession); err != nil {
+		// Store current session as last if inside a multiplexer
+		m := ctx.Mux()
+		if m.Inside() {
+			if currentSession, err := m.Current(); err == nil {
+				if err := mux.StoreLastSession(currentSession); err != nil {
 					log.Printf("failed to store last session %q: %v", currentSession, err)
 				}
 			}
 		}
 
-		// Switch tmux session, creating it first when missing (e.g. killed
+		// Switch the session, creating it first when missing (e.g. killed
 		// by hand, or the worktree was entered with --no-tmux). Failures
 		// degrade to the cd-directive fallback instead of aborting.
-		if !suppressTmux && tmux.IsTmuxAvailable() && tmux.IsInsideTmux() {
-			if exists, err := tmux.SessionExists(sessionName); err == nil && !exists {
-				if createErr := tmux.CreateSession(sessionName, targetPath); createErr != nil {
-					cli.Warning(stderr, "Failed to create tmux session: %v", createErr)
-				}
+		if !suppressTmux && m.Available() && m.Inside() {
+			target := mux.Target{Name: sessionName, Path: targetPath}
+			if err := m.Ensure(target); err != nil {
+				cli.Warning(stderr, "Failed to create session: %v", err)
 			}
-			if err := tmux.SwitchSession(sessionName); err != nil {
+			if err := m.Switch(target); err != nil {
 				cli.Warning(stderr, "Failed to switch session: %v", err)
 			} else {
 				tmuxSwitched = true
@@ -225,14 +267,15 @@ func removeWorktreeWithHooks(ctx *GroveContext, mgr *worktree.Manager, w *cli.Wr
 
 	cli.Success(w, "Removed worktree '%s'", name)
 
-	// Kill tmux session after worktree is confirmed gone
-	if tmux.IsTmuxAvailable() {
-		sessionName := worktree.TmuxSessionName(projectName, name)
-		if exists, err := tmux.SessionExists(sessionName); err == nil && exists {
-			if err := tmux.KillSession(sessionName); err != nil {
-				cli.Warning(w, "Failed to kill tmux session: %v", err)
+	// Kill the multiplexer session after the worktree is confirmed gone. This
+	// closes session state only — the checkout is already removed above.
+	if m := ctx.Mux(); m.Available() {
+		target := muxTarget(projectName, name, wtPath)
+		if exists, err := m.Exists(target); err == nil && exists {
+			if err := m.Kill(target); err != nil {
+				cli.Warning(w, "Failed to kill session: %v", err)
 			} else {
-				cli.Success(w, "Killed tmux session '%s'", sessionName)
+				cli.Success(w, "Killed session '%s'", target.Name)
 			}
 		}
 	}

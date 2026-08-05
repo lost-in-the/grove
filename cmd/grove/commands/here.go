@@ -118,7 +118,7 @@ var hereCmd = &cobra.Command{
 		// two GetSessionStatus calls that each shell out (P4). The reported name
 		// stays canonical — the old basename fallback named a session grove
 		// never creates under a custom [naming] pattern.
-		tmuxStatus := tmuxStatusFor(tree, projectName, loadTmuxSessions())
+		tmuxStatus := tmuxStatusFor(tree, projectName, loadSessionIndex(ctx))
 
 		// Get environment info from state
 		isEnv, _ := ctx.State.IsEnvironment(displayName)

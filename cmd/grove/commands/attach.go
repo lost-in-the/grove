@@ -8,8 +8,8 @@ import (
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/log"
+	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/output"
-	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
 
@@ -65,42 +65,43 @@ This is a tmux-only command — it does not emit cd: directives.`,
 		if tmuxMode == "" {
 			tmuxMode = tmuxModeAuto
 		}
-		useCC := tmux.ShouldUseControlMode(cfg.Tmux.ControlMode)
+		m := ctx.Mux()
 
-		if tmuxMode == tmuxModeOff {
-			return fmt.Errorf("tmux is disabled in grove configuration (mode: off)")
+		if tmuxMode == tmuxModeOff || m.Backend() == mux.BackendOff {
+			return fmt.Errorf("session management is disabled in grove configuration")
 		}
 
-		if !tmux.IsTmuxAvailable() {
-			return fmt.Errorf("tmux is not available")
+		if !m.Available() {
+			return fmt.Errorf("%s is not available", m.Backend())
 		}
 
-		// Store current session as last if inside tmux
-		if tmux.IsInsideTmux() {
-			currentSession, err := tmux.GetCurrentSession()
+		// Store current session as last if inside a multiplexer
+		if m.Inside() {
+			currentSession, err := m.Current()
 			if err == nil {
-				if err := tmux.StoreLastSession(currentSession); err != nil {
+				if err := mux.StoreLastSession(currentSession); err != nil {
 					log.Printf("failed to store last session %q: %v", currentSession, err)
 				}
 			}
 		}
 
 		projectName := mgr.GetProjectName()
-		sessionName := worktree.TmuxSessionName(projectName, targetTree.DisplayName())
+		target := muxTarget(projectName, targetTree.DisplayName(), targetTree.Path)
+		sessionName := target.Name
 
 		created := false
-		exists, err := tmux.SessionExists(sessionName)
+		exists, err := m.Exists(target)
 		if err != nil {
 			return fmt.Errorf("failed to check session: %w", err)
 		}
 
 		if !exists {
-			if err := tmux.CreateSession(sessionName, targetTree.Path); err != nil {
+			if err := m.Ensure(target); err != nil {
 				return fmt.Errorf("failed to create session: %w", err)
 			}
 			created = true
 			if !attachJSON {
-				cli.Success(stderr, "Created tmux session '%s'", sessionName)
+				cli.Success(stderr, "Created %s session '%s'", m.Backend(), sessionName)
 			}
 		}
 
@@ -120,27 +121,17 @@ This is a tmux-only command — it does not emit cd: directives.`,
 			return output.PrintJSON(result)
 		}
 
-		if tmux.IsInsideTmux() {
-			// Inside tmux: switch-client
-			if err := tmux.SwitchSession(sessionName); err != nil {
+		if m.Inside() {
+			// Already inside: relocate the existing client
+			if err := m.Switch(target); err != nil {
 				return fmt.Errorf("failed to switch session: %w", err)
 			}
 		} else {
+			// With shell integration this hands off to the wrapper; otherwise
+			// it attaches directly and takes over the terminal.
 			hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
-			if hasShellIntegration {
-				// Emit tmux-attach directive for shell wrapper
-				cli.TmuxAttachDirective(sessionName, useCC)
-			} else {
-				// No shell integration: attach directly (blocks, takes over terminal)
-				var attachErr error
-				if useCC {
-					attachErr = tmux.AttachSessionControlMode(sessionName)
-				} else {
-					attachErr = tmux.AttachSession(sessionName)
-				}
-				if attachErr != nil {
-					return fmt.Errorf("failed to attach session: %w", attachErr)
-				}
+			if err := attachToSession(m, target, cfg.Tmux.ControlMode, hasShellIntegration); err != nil {
+				return fmt.Errorf("failed to attach session: %w", err)
 			}
 		}
 

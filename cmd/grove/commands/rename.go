@@ -8,7 +8,6 @@ import (
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/exitcode"
-	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
 
@@ -136,18 +135,21 @@ Examples:
 
 		cli.Success(w, "Renamed worktree '%s' to '%s'", resolvedOld, newName)
 
-		// Step 4: Rename tmux session if it exists
-		if tmux.IsTmuxAvailable() {
+		// Step 4: Rename the multiplexer session if it exists.
+		if m := ctx.Mux(); m.Available() {
 			projectName := mgr.GetProjectName()
-			oldSessionName := worktree.TmuxSessionName(projectName, resolvedOld)
-			newSessionName := worktree.TmuxSessionName(projectName, newName)
+			// The directory has already moved, so both targets carry the new
+			// path: herdr resolves the workspace by it, tmux by the old name.
+			newPath := mgr.PathForName(newName)
+			oldTarget := muxTarget(projectName, resolvedOld, newPath)
+			newTarget := muxTarget(projectName, newName, newPath)
 
-			exists, err := tmux.SessionExists(oldSessionName)
+			exists, err := m.Exists(oldTarget)
 			if err == nil && exists {
-				if err := tmux.RenameSession(oldSessionName, newSessionName); err != nil {
-					cli.Warning(w, "Failed to rename tmux session: %v", err)
+				if err := m.Rename(oldTarget, newTarget); err != nil {
+					cli.Warning(w, "Failed to rename session: %v", err)
 				} else {
-					cli.Success(w, "Renamed tmux session '%s' to '%s'", oldSessionName, newSessionName)
+					cli.Success(w, "Renamed session '%s' to '%s'", oldTarget.Name, newTarget.Name)
 				}
 			}
 		}

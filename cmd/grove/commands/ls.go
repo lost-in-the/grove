@@ -7,9 +7,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/lost-in-the/grove/internal/cli"
+	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/output"
 	"github.com/lost-in-the/grove/internal/plugins"
-	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
 
@@ -27,6 +27,7 @@ type lsWorktreeOutput struct {
 	Path        string            `json:"path"`
 	Status      string            `json:"status"`
 	Tmux        string            `json:"tmux"`
+	Agent       string            `json:"agent,omitempty"`
 	Containers  string            `json:"containers,omitempty"`
 	Current     bool              `json:"current"`
 	Environment bool              `json:"environment,omitempty"`
@@ -112,9 +113,9 @@ var lsCmd = &cobra.Command{
 			}
 		}
 
-		// Get tmux sessions for status
-		tmuxAvailable := tmux.IsTmuxAvailable()
-		sessions := loadTmuxSessions()
+		// One multiplexer listing serves every row's status.
+		tmuxAvailable := ctx.Mux().Available()
+		sessions := loadSessionIndex(ctx)
 
 		// Collect plugin statuses
 		var pluginStatuses map[string][]plugins.StatusEntry
@@ -162,6 +163,7 @@ var lsCmd = &cobra.Command{
 					Path:        tree.Path,
 					Status:      status,
 					Tmux:        tmuxStatus,
+					Agent:       agentStatusDisplay(agentStatusFor(tree, projectName, sessions)),
 					Current:     isCurrent,
 					Environment: isEnv,
 				}
@@ -218,12 +220,22 @@ var lsCmd = &cobra.Command{
 			return value
 		}
 
+		// Only backends that observe coding agents (herdr) fill this in, so the
+		// column appears only when there is something to show.
+		hasAgents := anyAgentReported(trees, projectName, sessions)
+		agentColorFn := func(value string) string {
+			return cli.StatusText(w, agentStatusLevel(mux.AgentStatus(value)), value)
+		}
+
 		columns := []cli.Column{
 			{Title: "", MinWidth: 2, MaxWidth: 2, ColorFn: indicatorColorFn},
 			{Title: "NAME", MaxWidth: 30},
 			{Title: "BRANCH", MaxWidth: 25},
 			{Title: "STATUS", MinWidth: 10, ColorFn: statusColorFn},
 			{Title: "TMUX", MinWidth: 12, ColorFn: tmuxColorFn},
+		}
+		if hasAgents {
+			columns = append(columns, cli.Column{Title: "AGENT", MinWidth: 8, ColorFn: agentColorFn})
 		}
 		if hasContainers {
 			columns = append(columns, cli.Column{Title: "CONTAINERS"})
@@ -257,11 +269,15 @@ var lsCmd = &cobra.Command{
 				pathStr += " (env)"
 			}
 
-			if hasContainers {
-				tbl.AddRow(indicator, tree.DisplayName(), tree.Branch, status, tmuxStatus, containers, pathStr)
-			} else {
-				tbl.AddRow(indicator, tree.DisplayName(), tree.Branch, status, tmuxStatus, pathStr)
+			row := []string{indicator, tree.DisplayName(), tree.Branch, status, tmuxStatus}
+			if hasAgents {
+				row = append(row, agentStatusDisplay(agentStatusFor(tree, projectName, sessions)))
 			}
+			if hasContainers {
+				row = append(row, containers)
+			}
+			row = append(row, pathStr)
+			tbl.AddRow(row...)
 		}
 
 		tbl.Render()
@@ -284,21 +300,62 @@ func containersSummary(entries []plugins.StatusEntry) string {
 }
 
 // tmuxStatusFor returns "attached", "detached", or "none" for a worktree.
-// sessions may be nil (when tmux is not available).
-func tmuxStatusFor(tree *worktree.Worktree, projectName string, sessions map[string]*tmux.Session) string {
-	if sessions == nil {
-		return tmuxStatusNone
+// sessions may be nil (when no multiplexer is available).
+func tmuxStatusFor(tree *worktree.Worktree, projectName string, sessions *mux.Index) string {
+	if s, ok := sessions.Lookup(muxTarget(projectName, tree.DisplayName(), tree.Path)); ok {
+		return string(s.Status)
 	}
-	sessionName := worktree.TmuxSessionName(projectName, tree.DisplayName())
-	for _, key := range []string{sessionName, tree.Name} {
-		if session, ok := sessions[key]; ok {
-			if session.Attached {
-				return tmuxStatusAttached
-			}
-			return tmuxStatusDetached
-		}
+	// Fall back to a session named after the worktree directory, which is how
+	// sessions created outside grove (or under an older naming pattern) look.
+	if s, ok := sessions.Lookup(mux.Target{Name: tree.Name}); ok {
+		return string(s.Status)
 	}
 	return tmuxStatusNone
+}
+
+// agentStatusFor returns the coding-agent state a backend reports for a
+// worktree's session, or mux.AgentUnreported when it cannot observe one.
+func agentStatusFor(tree *worktree.Worktree, projectName string, sessions *mux.Index) mux.AgentStatus {
+	if s, ok := sessions.Lookup(muxTarget(projectName, tree.DisplayName(), tree.Path)); ok {
+		return s.Agent
+	}
+	return mux.AgentUnreported
+}
+
+// agentStatusDisplay renders an agent state for a table cell. An unreported
+// agent is blank rather than a word — under tmux that is every row.
+func agentStatusDisplay(a mux.AgentStatus) string {
+	if a == mux.AgentUnreported {
+		return ""
+	}
+	return string(a)
+}
+
+// agentStatusLevel maps an agent state onto grove's semantic colors, ranked by
+// how much the user needs to look at it: blocked is waiting on them, done
+// finished unseen, working is in flight, and the rest are quiet.
+func agentStatusLevel(a mux.AgentStatus) cli.StatusLevel {
+	switch a {
+	case mux.AgentBlocked:
+		return cli.StatusError
+	case mux.AgentDone:
+		return cli.StatusOK
+	case mux.AgentWorking:
+		return cli.StatusWarning
+	default:
+		return cli.StatusNone
+	}
+}
+
+// anyAgentReported reports whether any worktree has an observable agent, which
+// is what decides if the AGENT column is worth its width.
+func anyAgentReported(trees []*worktree.Worktree, projectName string, sessions *mux.Index) bool {
+	for _, tree := range trees {
+		if agentStatusFor(tree, projectName, sessions) != mux.AgentUnreported {
+			return true
+		}
+	}
+	return false
 }
 
 func statusLevelString(level plugins.StatusLevel) string {

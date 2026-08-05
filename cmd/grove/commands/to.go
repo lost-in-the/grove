@@ -11,8 +11,8 @@ import (
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/hooks"
 	"github.com/lost-in-the/grove/internal/log"
+	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/output"
-	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
 
@@ -112,11 +112,11 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 		}
 		// Skipping the dirty gate, hooks, and state recording (B18) doesn't
 		// mean skipping the epilogue: from a subdirectory the shell should
-		// still return to the worktree root, and outside tmux the session
-		// should be created/attached exactly as a real switch would (spec:
-		// "Tmux not running → start server, create session, attach"). Inside
-		// tmux there is nothing to do — the client is already in the session.
-		if !tmux.IsInsideTmux() {
+		// still return to the worktree root, and outside the multiplexer the
+		// session should be created/attached exactly as a real switch would
+		// (spec: "Tmux not running → start server, create session, attach").
+		// Inside it there is nothing to do — the client is already there.
+		if !ctx.Mux().Inside() {
 			emitCdOrExplain(stderr, targetTree.Path)
 			return selfSwitchTmuxEpilogue(ctx, mgr, targetTree, stderr, noTmux, peek)
 		}
@@ -250,11 +250,12 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 		}
 	}
 
-	// Store current session as last if inside tmux
-	if tmux.IsInsideTmux() {
-		currentSession, err := tmux.GetCurrentSession()
+	// Store current session as last if inside a multiplexer
+	m := ctx.Mux()
+	if m.Inside() {
+		currentSession, err := m.Current()
 		if err == nil {
-			if err := tmux.StoreLastSession(currentSession); err != nil {
+			if err := mux.StoreLastSession(currentSession); err != nil {
 				log.Printf("failed to store last session %q: %v", currentSession, err)
 			}
 		}
@@ -262,38 +263,40 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 
 	projectName := mgr.GetProjectName()
 	cfg := ctx.Config
-	useCC := tmux.ShouldUseControlMode(cfg.Tmux.ControlMode)
 	tmuxMode := resolveTmuxMode(cfg, noTmux, peek)
 
-	// Handle tmux session (unless mode is "off")
+	// Handle the multiplexer session (unless mode is "off")
+	var target mux.Target
 	var sessionName string
 	var tmuxSwitched bool
-	if tmuxMode != tmuxModeOff && tmux.IsTmuxAvailable() {
-		sessionName = worktree.TmuxSessionName(projectName, targetTree.DisplayName())
-		exists, err := tmux.SessionExists(sessionName)
+	if tmuxMode != tmuxModeOff && m.Available() {
+		target = muxTarget(projectName, targetTree.DisplayName(), targetTree.Path)
+		sessionName = target.Name
+		exists, err := m.Exists(target)
 		if err != nil {
 			return fmt.Errorf("failed to check session: %w", err)
 		}
 
 		if !exists {
-			if err := tmux.CreateSession(sessionName, targetTree.Path); err != nil {
+			if err := m.Ensure(target); err != nil {
 				return fmt.Errorf("failed to create session: %w", err)
 			}
 			if !jsonOut {
-				cli.Success(stderr, "Created tmux session '%s'", sessionName)
+				cli.Success(stderr, "Created %s session '%s'", m.Backend(), sessionName)
 			}
 		}
 
-		if tmux.IsInsideTmux() {
+		if m.Inside() {
 			// Detect and correct directory drift before switching
 			if exists {
-				handleDirectoryDrift(sessionName, targetTree.Path, cfg.Tmux.OnSwitch, stderr)
+				handleDirectoryDrift(m, target, targetTree.Path, cfg.Tmux.OnSwitch, stderr)
 			}
 		} else if tmuxMode == "manual" && !jsonOut {
-			cli.Success(stderr, "Tmux session '%s' ready", sessionName)
-			cli.Faint(stderr, "Run: tmux attach -t %s", sessionName)
+			cli.Success(stderr, "Session '%s' ready", sessionName)
+			cli.Faint(stderr, "Run: %s", manualAttachHint(m, sessionName))
 		}
-		// auto mode outside tmux: handled below via shell directive or direct attach
+		// auto mode outside the multiplexer: handled below via shell directive
+		// or direct attach
 	}
 
 	// Fire post-switch hooks (Docker start, etc.) BEFORE the tmux switch
@@ -357,8 +360,8 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 	// fail, so the switch is only committed after it succeeds — a failed
 	// client switch leaves the user exactly where they were, and the rollback
 	// restores the auto-stash.
-	if tmuxMode != tmuxModeOff && sessionName != "" && tmux.IsInsideTmux() {
-		if err := tmux.SwitchSession(sessionName); err != nil {
+	if tmuxMode != tmuxModeOff && sessionName != "" && m.Inside() {
+		if err := m.Switch(target); err != nil {
 			return err
 		}
 		tmuxSwitched = true
@@ -373,18 +376,8 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 		// In auto mode outside tmux: emit the tmux-attach directive for
 		// the shell wrapper, or attach directly without it.
 		if tmuxMode == tmuxModeAuto && sessionName != "" {
-			if hasShellIntegration {
-				cli.TmuxAttachDirective(sessionName, useCC)
-			} else {
-				var attachErr error
-				if useCC {
-					attachErr = tmux.AttachSessionControlMode(sessionName)
-				} else {
-					attachErr = tmux.AttachSession(sessionName)
-				}
-				if attachErr != nil {
-					return fmt.Errorf("failed to attach session: %w", attachErr)
-				}
+			if err := attachToSession(m, target, cfg.Tmux.ControlMode, hasShellIntegration); err != nil {
+				return fmt.Errorf("failed to attach session: %w", err)
 			}
 		}
 	}
@@ -398,41 +391,31 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 // self-switch deliberately skips, B18).
 func selfSwitchTmuxEpilogue(ctx *GroveContext, mgr *worktree.Manager, targetTree *worktree.Worktree, stderr *cli.Writer, noTmux, peek bool) error {
 	tmuxMode := resolveTmuxMode(ctx.Config, noTmux, peek)
-	if tmuxMode == tmuxModeOff || !tmux.IsTmuxAvailable() {
+	m := ctx.Mux()
+	if tmuxMode == tmuxModeOff || !m.Available() {
 		return nil
 	}
 
-	sessionName := worktree.TmuxSessionName(mgr.GetProjectName(), targetTree.DisplayName())
-	exists, err := tmux.SessionExists(sessionName)
+	target := muxTarget(mgr.GetProjectName(), targetTree.DisplayName(), targetTree.Path)
+	exists, err := m.Exists(target)
 	if err != nil {
 		return fmt.Errorf("failed to check session: %w", err)
 	}
 	if !exists {
-		if err := tmux.CreateSession(sessionName, targetTree.Path); err != nil {
+		if err := m.Ensure(target); err != nil {
 			return fmt.Errorf("failed to create session: %w", err)
 		}
-		cli.Success(stderr, "Created tmux session '%s'", sessionName)
+		cli.Success(stderr, "Created %s session '%s'", m.Backend(), target.Name)
 	}
 
 	if tmuxMode != tmuxModeAuto {
-		cli.Success(stderr, "Tmux session '%s' ready", sessionName)
-		cli.Faint(stderr, "Run: tmux attach -t %s", sessionName)
+		cli.Success(stderr, "Session '%s' ready", target.Name)
+		cli.Faint(stderr, "Run: %s", manualAttachHint(m, target.Name))
 		return nil
 	}
 
-	useCC := tmux.ShouldUseControlMode(ctx.Config.Tmux.ControlMode)
-	if os.Getenv("GROVE_SHELL") == "1" {
-		cli.TmuxAttachDirective(sessionName, useCC)
-		return nil
-	}
-	var attachErr error
-	if useCC {
-		attachErr = tmux.AttachSessionControlMode(sessionName)
-	} else {
-		attachErr = tmux.AttachSession(sessionName)
-	}
-	if attachErr != nil {
-		return fmt.Errorf("failed to attach session: %w", attachErr)
+	if err := attachToSession(m, target, ctx.Config.Tmux.ControlMode, os.Getenv("GROVE_SHELL") == "1"); err != nil {
+		return fmt.Errorf("failed to attach session: %w", err)
 	}
 	return nil
 }
@@ -460,12 +443,12 @@ func resolveTmuxMode(cfg *config.Config, noTmux, peek bool) string {
 	return effectiveTmuxMode(mode, cfg.AgentMode, noTmux, peek)
 }
 
-// handleDirectoryDrift detects if a tmux session's active pane has drifted
-// from the worktree root and corrects it based on the configured on_switch mode.
-func handleDirectoryDrift(sessionName, worktreePath, onSwitch string, stderr *cli.Writer) {
-	pane, err := tmux.GetPaneInfo(sessionName)
+// handleDirectoryDrift detects if a session's active pane has drifted from the
+// worktree root and corrects it based on the configured on_switch mode.
+func handleDirectoryDrift(m mux.Multiplexer, target mux.Target, worktreePath, onSwitch string, stderr *cli.Writer) {
+	pane, err := m.PaneInfo(target)
 	if err != nil {
-		log.Printf("failed to get pane info for drift check on %q: %v", sessionName, err)
+		log.Printf("failed to get pane info for drift check on %q: %v", target.Name, err)
 		return
 	}
 
@@ -487,8 +470,8 @@ func handleDirectoryDrift(sessionName, worktreePath, onSwitch string, stderr *cl
 		// parent directory plus the naming pattern (and externally created
 		// worktrees can live anywhere), so it may legally contain single
 		// quotes — escape them with the standard '\'' idiom.
-		if err := tmux.SendKeys(sessionName, "cd "+shellSingleQuote(worktreePath)); err != nil {
-			log.Printf("failed to reset directory in session %q: %v", sessionName, err)
+		if err := m.SendCommand(target, "cd "+shellSingleQuote(worktreePath)); err != nil {
+			log.Printf("failed to reset directory in session %q: %v", target.Name, err)
 		}
 	}
 }

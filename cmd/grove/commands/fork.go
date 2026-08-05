@@ -11,8 +11,8 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/exitcode"
+	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/output"
-	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
 
@@ -261,13 +261,13 @@ Examples:
 
 		projectName := mgr.GetProjectName()
 
-		// Create tmux session
-		if tmux.IsTmuxAvailable() {
+		// Create the multiplexer session
+		if m := ctx.Mux(); m.Available() {
 			sessionName := worktree.TmuxSessionName(projectName, name)
-			if err := tmux.CreateSession(sessionName, newTree.Path); err != nil {
-				cli.Warning(stderr, "Failed to create tmux session: %v", err)
+			if err := m.Ensure(mux.Target{Name: sessionName, Path: newTree.Path}); err != nil {
+				cli.Warning(stderr, "Failed to create session: %v", err)
 			} else if !forkJSON {
-				cli.Success(w, "Created tmux session '%s'", sessionName)
+				cli.Success(w, "Created %s session '%s'", m.Backend(), sessionName)
 			}
 		}
 

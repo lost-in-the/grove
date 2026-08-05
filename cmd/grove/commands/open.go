@@ -8,8 +8,8 @@ import (
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/log"
+	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/output"
-	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
 
@@ -138,12 +138,13 @@ Examples:
 		// to prevent).
 		tmuxMode := resolveTmuxMode(ctx.Config, false, false)
 
-		if tmuxMode == tmuxModeOff || !tmux.IsTmuxAvailable() {
+		m := ctx.Mux()
+		if tmuxMode == tmuxModeOff || !m.Available() {
 			if openJSON {
 				return printOpenJSON(wt, displayName, created)
 			}
-			if !tmux.IsTmuxAvailable() {
-				cli.Faint(stderr, "tmux not available, skipping session management")
+			if !m.Available() {
+				cli.Faint(stderr, "no terminal multiplexer available, skipping session management")
 			}
 			// Only emit the raw cd: protocol line when the shell wrapper is
 			// listening; otherwise explain how to switch manually.
@@ -151,8 +152,9 @@ Examples:
 			return nil
 		}
 
-		sessionName := worktree.TmuxSessionName(projectName, displayName)
-		sessionExists, err := tmux.SessionExists(sessionName)
+		target := muxTarget(projectName, displayName, wt.Path)
+		sessionName := target.Name
+		sessionExists, err := m.Exists(target)
 		if err != nil {
 			return fmt.Errorf("failed to check session: %w", err)
 		}
@@ -165,7 +167,7 @@ Examples:
 
 		if !sessionExists {
 			// Create session with command if configured
-			if err := tmux.CreateSessionWithCommand(sessionName, wt.Path, sessionCmd); err != nil {
+			if err := m.EnsureWithCommand(target, sessionCmd); err != nil {
 				return fmt.Errorf("failed to create session: %w", err)
 			}
 			if !openJSON {
@@ -177,9 +179,9 @@ Examples:
 			}
 		} else if sessionCmd != "" {
 			// Session exists — check if command is already running
-			pane, pErr := tmux.GetPaneInfo(sessionName)
+			pane, pErr := m.PaneInfo(target)
 			if pErr == nil && pane.IsShell() && pane.CurrentCommand != sessionCmd {
-				if err := tmux.SendKeys(sessionName, sessionCmd); err != nil {
+				if err := m.SendCommand(target, sessionCmd); err != nil {
 					if !openJSON {
 						cli.Warning(w, "Session exists but failed to launch '%s': %v", sessionCmd, err)
 					}
@@ -195,33 +197,29 @@ Examples:
 		}
 
 		// Step 3: Attach — popup or switch/attach
-		useCC := tmux.ShouldUseControlMode(ctx.Config.Tmux.ControlMode)
 		usePopup := ctx.Config.Session.Popup != nil && *ctx.Config.Session.Popup && !openNoPopup
 
-		if usePopup && tmux.IsInsideTmux() {
-			width := ctx.Config.Session.PopupWidth
-			height := ctx.Config.Session.PopupHeight
-			return tmux.DisplayPopup(sessionName, width, height)
+		if usePopup && m.Inside() {
+			// Popup placement is a tmux capability; herdr exposes overlays only
+			// through its plugin pane surface. Backends without it fall through
+			// to a plain switch rather than silently doing nothing.
+			if p, ok := m.(mux.Popuper); ok {
+				return p.Popup(target, ctx.Config.Session.PopupWidth, ctx.Config.Session.PopupHeight)
+			}
 		}
 
-		// Standard tmux attach/switch
-		if tmux.IsInsideTmux() {
-			return tmux.SwitchSession(sessionName)
+		// Standard attach/switch
+		if m.Inside() {
+			return m.Switch(target)
 		}
 
-		// Outside tmux
+		// Outside the multiplexer: land the shell in the worktree too, so a
+		// detach leaves the user in the right directory.
 		hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
 		if hasShellIntegration {
 			cli.Directive("cd", wt.Path)
-			cli.TmuxAttachDirective(sessionName, useCC)
-		} else {
-			if useCC {
-				return tmux.AttachSessionControlMode(sessionName)
-			}
-			return tmux.AttachSession(sessionName)
 		}
-
-		return nil
+		return attachToSession(m, target, ctx.Config.Tmux.ControlMode, hasShellIntegration)
 	}),
 }
 

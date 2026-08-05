@@ -26,6 +26,9 @@ func LoadDefaults() *Config {
 		Naming: NamingConfig{
 			Pattern: "{project}-{name}",
 		},
+		Mux: MuxConfig{
+			Backend: "auto",
+		},
 		Tmux: TmuxConfig{
 			Mode:        "auto",
 			ControlMode: &trueVal,

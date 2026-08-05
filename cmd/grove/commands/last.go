@@ -8,8 +8,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/lost-in-the/grove/internal/cli"
+	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/output"
-	"github.com/lost-in-the/grove/internal/tmux"
 )
 
 var lastJSON bool
@@ -34,7 +34,7 @@ var lastCmd = &cobra.Command{
 			// Fallback to tmux session tracking (legacy approach). This file is
 			// global (cross-project), so whatever it yields is only a hint and
 			// must be validated against this project's worktrees below.
-			lastSession, serr := tmux.GetLastSession()
+			lastSession, serr := mux.GetLastSession()
 			if serr != nil || lastSession == "" {
 				return noPreviousWorktree(stderr, lastJSON)
 			}

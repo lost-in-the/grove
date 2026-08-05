@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/plugins"
 )
 
@@ -149,6 +150,17 @@ func renderBadgesV2Bg(item WorktreeItem, selected bool) string {
 		default:
 			parts = append(parts, withBg(Styles.TextMuted).Render("◇ "+s.Short))
 		}
+	}
+
+	// Agent badge before tmux: when an agent needs input it is the most
+	// actionable thing on the row.
+	switch item.AgentStatus {
+	case mux.AgentBlocked:
+		parts = append(parts, withBg(Styles.StatusDanger).Render("◆ blocked"))
+	case mux.AgentDone:
+		parts = append(parts, withBg(Styles.StatusSuccess).Render("◆ done"))
+	case mux.AgentWorking:
+		parts = append(parts, withBg(Styles.StatusWarning).Render("◆ working"))
 	}
 
 	// Tmux badge last (fixed-width text, most frequently present)

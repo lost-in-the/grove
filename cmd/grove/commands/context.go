@@ -14,6 +14,7 @@ import (
 	"github.com/lost-in-the/grove/internal/grove"
 	"github.com/lost-in-the/grove/internal/hooks"
 	"github.com/lost-in-the/grove/internal/log"
+	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/plugins"
 	"github.com/lost-in-the/grove/internal/shell"
 	"github.com/lost-in-the/grove/internal/state"
@@ -30,6 +31,29 @@ type GroveContext struct {
 	PluginManager *plugins.Manager // Plugin manager for status queries
 
 	wtMgr *worktree.Manager // Memoized worktree manager (via WorktreeManager)
+	muxer mux.Multiplexer   // Memoized multiplexer (via Mux)
+}
+
+// Mux returns the terminal multiplexer backend for this invocation, resolved
+// once from config plus the environment and memoized.
+//
+// It never returns nil — a disabled or unavailable multiplexer yields a
+// no-op backend — so callers can drive it unconditionally and use Available()
+// only to decide what to tell the user.
+func (c *GroveContext) Mux() mux.Multiplexer {
+	if c.muxer != nil {
+		return c.muxer
+	}
+	pref := mux.BackendAuto
+	if c.Config != nil {
+		// Validation already rejected unknown backends; a parse failure here
+		// can only come from a hand-edited struct, so fall back to auto.
+		if parsed, err := mux.ParseBackend(c.Config.EffectiveMuxBackend()); err == nil {
+			pref = parsed
+		}
+	}
+	c.muxer = mux.New(pref)
+	return c.muxer
 }
 
 // WorktreeManager returns a lazily constructed, memoized worktree.Manager

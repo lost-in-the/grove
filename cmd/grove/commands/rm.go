@@ -10,8 +10,6 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/exitcode"
 	"github.com/lost-in-the/grove/internal/git"
-	"github.com/lost-in-the/grove/internal/tmux"
-	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 var (
@@ -175,11 +173,10 @@ Examples:
 					cli.Faint(w, "  Would prompt for branch deletion")
 				}
 			}
-			if tmux.IsTmuxAvailable() {
-				sessionName := worktree.TmuxSessionName(mgr.GetProjectName(), resolvedName)
-				exists, _ := tmux.SessionExists(sessionName)
-				if exists {
-					cli.Faint(w, "  Would kill tmux session: %s", sessionName)
+			if m := ctx.Mux(); m.Available() {
+				target := muxTarget(mgr.GetProjectName(), resolvedName, wt.Path)
+				if exists, _ := m.Exists(target); exists {
+					cli.Faint(w, "  Would kill %s session: %s", m.Backend(), target.Name)
 				}
 			}
 			return nil

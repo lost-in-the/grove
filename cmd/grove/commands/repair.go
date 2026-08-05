@@ -11,8 +11,8 @@ import (
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/exitcode"
+	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/state"
-	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
 
@@ -100,9 +100,9 @@ Examples:
 			}
 		}
 
-		// 4. Check for orphaned tmux sessions
-		if tmux.IsTmuxAvailable() {
-			sessions, err := tmux.ListSessions()
+		// 4. Check for orphaned multiplexer sessions
+		if m := ctx.Mux(); m.Available() {
+			sessions, err := m.List()
 			if err == nil {
 				prefix := projectName + "-"
 				for _, session := range sessions {
@@ -148,7 +148,7 @@ Examples:
 
 		// State repairs (orphan_state/missing_state) are confirmed together — they're
 		// derived from this project's own git worktree list, so low-risk. orphan_tmux
-		// is confirmed per-session below instead: tmux.ListSessions() returns every
+		// is confirmed per-session below instead: the backend listing returns every
 		// session on the server, and the "starts with {project}-" prefix match can't
 		// tell this project's sessions apart from a sibling project whose name shares
 		// the prefix (e.g. "grove" vs "grove-web-checkout"). A single blanket "yes"
@@ -236,7 +236,7 @@ Examples:
 					skipped++
 					continue
 				}
-				if err := tmux.KillSession(sessionName); err != nil {
+				if err := ctx.Mux().Kill(mux.Target{Name: sessionName}); err != nil {
 					fmt.Fprintf(os.Stderr, "  Failed to kill session '%s': %v\n", sessionName, err)
 					failed++
 				} else {

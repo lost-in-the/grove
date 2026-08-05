@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -239,49 +238,6 @@ func GetCurrentSession() (string, error) {
 	}
 
 	return strings.TrimSpace(string(output)), nil
-}
-
-// StoreLastSession stores the name of the last session
-func StoreLastSession(name string) error {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-
-	configDir := filepath.Join(homeDir, ".config", "grove")
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return err
-	}
-
-	lastSessionFile := filepath.Join(configDir, "last_session")
-	tmpFile := lastSessionFile + ".tmp"
-	if err := os.WriteFile(tmpFile, []byte(name), 0644); err != nil {
-		return fmt.Errorf("write last session: %w", err)
-	}
-	if err := os.Rename(tmpFile, lastSessionFile); err != nil {
-		_ = os.Remove(tmpFile)
-		return fmt.Errorf("save last session: %w", err)
-	}
-	return nil
-}
-
-// GetLastSession retrieves the name of the last session
-func GetLastSession() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-
-	lastSessionFile := filepath.Join(homeDir, ".config", "grove", "last_session")
-	data, err := os.ReadFile(lastSessionFile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", fmt.Errorf("no last session stored")
-		}
-		return "", err
-	}
-
-	return strings.TrimSpace(string(data)), nil
 }
 
 // GetSessionStatus returns the status of a tmux session

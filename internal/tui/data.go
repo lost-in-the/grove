@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/plugins"
 	"github.com/lost-in-the/grove/internal/state"
-	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/tuilog"
 	"github.com/lost-in-the/grove/internal/worktree"
 	"github.com/lost-in-the/grove/internal/worktreeinfo"
@@ -40,6 +40,7 @@ type WorktreeItem struct {
 	IsProtected    bool
 	IsPrunable     bool
 	TmuxStatus     string                      // "attached", "detached", "none"
+	AgentStatus    mux.AgentStatus             // coding-agent state; empty unless the backend reports one
 	HasRemote      bool                        // true if branch has upstream tracking
 	TrackingBranch string                      // e.g., "origin/feat/ux-polish" (empty if no upstream)
 	AheadCount     int                         // commits ahead of upstream
@@ -102,7 +103,7 @@ type fetchContext struct {
 	projectName   string
 	defaultBranch string
 	currentPath   string
-	sessions      map[string]*tmux.Session
+	sessions      *mux.Index
 	cfg           *config.Config
 	stateMgr      *state.Manager
 	mgr           *worktree.Manager
@@ -145,38 +146,34 @@ func loadFetchContext(mgr *worktree.Manager, stateMgr *state.Manager) fetchConte
 	}
 	fc.currentPath = currentPath
 
-	if tmux.IsTmuxAvailable() {
-		sessionList, err := tmux.ListSessions()
+	if m := muxFor(cfg); m.Available() {
+		sessions, err := m.List()
 		if err != nil {
-			tuilog.Printf("warning: failed to list tmux sessions: %v", err)
+			tuilog.Printf("warning: failed to list %s sessions: %v", m.Backend(), err)
 		} else {
-			fc.sessions = make(map[string]*tmux.Session, len(sessionList))
-			for _, s := range sessionList {
-				fc.sessions[s.Name] = s
-			}
+			fc.sessions = mux.NewIndex(sessions)
 		}
 	}
 
 	return fc
 }
 
-func tmuxStatusForSession(s *tmux.Session) string {
-	if s.Attached {
-		return "attached"
-	}
-	return "detached"
-}
-
 func (fc *fetchContext) setTmuxStatus(item *WorktreeItem, tree worktree.Worktree) {
-	if fc.sessions == nil {
+	target := mux.Target{
+		Name: worktree.TmuxSessionName(fc.projectName, tree.ShortName),
+		Path: tree.Path,
+	}
+	s, ok := fc.sessions.Lookup(target)
+	if !ok {
+		// Fall back to a session named after the worktree directory, which is
+		// how sessions created outside grove look.
+		s, ok = fc.sessions.Lookup(mux.Target{Name: tree.Name})
+	}
+	if !ok {
 		return
 	}
-	sessionName := worktree.TmuxSessionName(fc.projectName, tree.ShortName)
-	if s, ok := fc.sessions[sessionName]; ok {
-		item.TmuxStatus = tmuxStatusForSession(s)
-	} else if s, ok := fc.sessions[tree.Name]; ok {
-		item.TmuxStatus = tmuxStatusForSession(s)
-	}
+	item.TmuxStatus = string(s.Status)
+	item.AgentStatus = s.Agent
 }
 
 func (fc *fetchContext) setStateInfo(item *WorktreeItem, shortName string) {
