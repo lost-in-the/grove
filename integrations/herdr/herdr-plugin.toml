@@ -2,22 +2,17 @@ id = "lost-in-the.grove"
 name = "Grove"
 version = "0.1.0"
 min_herdr_version = "0.7.0"
-description = "Worktree flow manager — dashboard, worktree status, and adoption prompts"
+description = "Keeps grove's state in sync with worktrees created through herdr"
 platforms = ["linux", "macos"]
 
-# The grove dashboard as a popup overlay.
+# This plugin exists for one job: notice worktrees that appear through herdr's
+# own UI rather than through grove, so they do not silently skip grove's
+# bootstrap. Everything else grove does is better reached from the shell.
 #
-# This is the reason the plugin exists. Herdr has no `display-popup` CLI verb;
-# popup placement is reachable only through a plugin's declared pane. Without
-# this, `grove open --popup` degrades to a full-window switch under herdr.
-[[panes]]
-id = "dashboard"
-title = "Grove dashboard"
-description = "Browse, create, and switch worktrees"
-placement = "popup"
-width = "80%"
-height = "80%"
-command = ["grove", "tui"]
+# There is deliberately no dashboard pane. herdr's sidebar already lists every
+# worktree as a workspace, so a grove picker inside herdr duplicates the primary
+# UI — and it cannot switch cleanly from a pane, because grove's TUI exits as
+# part of switching and takes its own pane with it. Use `grove` in a shell.
 
 # Report grove's view of the clicked workspace's worktree.
 [[actions]]
@@ -31,6 +26,23 @@ command = ["grove", "herdr-action", "status"]
 # through grove: the hook notices a checkout grove has no state for and points
 # at `grove adopt`. It only reports — adopting runs post-create hooks, which
 # the user should opt into rather than have fired by a background event.
+#
+# Both events are needed and they are not interchangeable. Verified against
+# herdr 0.8.0 with a probe plugin subscribed to all four candidates:
+#
+#   herdr worktree create -> worktree.created  (+ workspace.created x2)
+#   herdr worktree open   -> worktree.opened   (+ workspace.created)
+#
+# Subscribing only to worktree.opened therefore misses every worktree made
+# through herdr's create path — the exact case this hook exists for.
+#
+# workspace.focused is deliberately NOT subscribed: it fires on every single
+# workspace switch, and its payload is only {"workspace_id"} with no worktree or
+# path data, so it could not answer the question anyway.
+[[events]]
+on = "worktree.created"
+command = ["grove", "herdr-event"]
+
 [[events]]
 on = "worktree.opened"
 command = ["grove", "herdr-event"]

@@ -344,34 +344,27 @@ min_herdr_version = "0.7.0"
 description = "Worktree flow manager"
 platforms = ["linux", "macos"]
 
-# Popup placement — the reason this plugin exists.
-[[panes]]
-id = "dashboard"
-title = "Grove dashboard"
-placement = "popup"
-width = "80%"
-height = "80%"
-command = ["grove", "tui"]
+# NOTE: this section described the manifest as originally planned. The shipped
+# manifest is integrations/herdr/herdr-plugin.toml, which no longer declares a
+# dashboard pane — see "The dashboard pane was removed" below. The rest of this
+# section's discussion of popup placement is retained as the record of why the
+# pane was attempted.
 
 [[actions]]
-id = "new"
-title = "Grove: new worktree"
+id = "status"
+title = "Grove: worktree status"
 contexts = ["workspace"]
-command = ["grove", "herdr-action", "new"]
+command = ["grove", "herdr-action", "status"]
 
-[[actions]]
-id = "switch"
-title = "Grove: switch worktree"
-contexts = ["workspace", "global"]
-command = ["grove", "herdr-action", "switch"]
-
-# Close the loop when the user drives worktrees from herdr's own UI.
+# Close the loop when the user drives worktrees from herdr's own UI. Both events
+# are required: `herdr worktree create` fires only worktree.created, and
+# `herdr worktree open` fires only worktree.opened (verified on herdr 0.8.0).
 [[events]]
-on = "worktree.opened"
+on = "worktree.created"
 command = ["grove", "herdr-event"]
 
 [[events]]
-on = "workspace.closed"
+on = "worktree.opened"
 command = ["grove", "herdr-event"]
 ```
 
@@ -508,12 +501,12 @@ server, so don't point it at one you're using.
 | `grove rm` | git removes the checkout, `workspace close` drops the session; checkout deleted by grove, not herdr |
 | `grove rename` | relabels the workspace; later lookups self-heal via the name fallback |
 | `grove to` (inside herdr) | focuses the right workspace, does not attach |
-| Plugin manifest | `herdr plugin link` accepts it; actions, events, and panes all parse |
+| Plugin manifest | `herdr plugin link` accepts it; actions, events, and panes all parse. Parsing is not execution — `TestHerdrPluginManifestCommandsResolve` additionally asserts every declared `grove` argv names a real subcommand |
 | Plugin action | `Grove: worktree status` runs and reports correctly |
 | Event hook | fires on a worktree grove doesn't track; stays silent on one it does |
 | Dead server | `server_not_running`; `grove ls` degrades to "no session", no hang |
 
-Three bugs surfaced that no amount of source reading had caught:
+Five bugs surfaced that no amount of source reading had caught:
 
 1. **`worktree open` needs `--cwd <repo root>`.** Every session creation failed
    with `invalid_request` until `Target.Repo` was threaded through. This was the
@@ -523,23 +516,87 @@ Three bugs surfaced that no amount of source reading had caught:
 3. **herdr's checkout provenance goes stale after a rename**, so the plugin's
    context pointed at a deleted directory. Fixed by resolving to the first
    directory that still exists.
+4. **The dashboard pane ran `grove tui`, which is not a command.** The TUI is
+   reached through bare `grove`; `grove tui` exits with `unknown command "tui"`,
+   so the plugin's headline feature could never have worked. The manifest parses
+   either way, which is why linking it looked like verification. Pinned by a
+   test that resolves every declared argv against the real command set. The pane
+   itself has since been removed — see below.
+5. **The adoption hook was subscribed to the wrong event.** It listened only for
+   `worktree.opened`, but `herdr worktree create` — herdr's own "make me a
+   worktree" path, and the exact case the hook exists to catch — fires
+   `worktree.created` instead. Verified on herdr 0.8.0 with a probe plugin
+   subscribed to all four candidate events. The plugin's one job silently did
+   nothing in its primary case. Fixed by subscribing to both.
+
+### The dashboard pane was removed
+
+Making the pane *reachable* revealed that it should not exist.
+
+- **It duplicates herdr's own sidebar**, which already lists every worktree as a
+  workspace, grouped by project, with agent status.
+- **It cannot switch.** Grove's TUI switch is deferred: it records a target,
+  quits the event loop, and acts afterwards. Inside a herdr pane that means the
+  grove process exits and takes its own pane with it, so the dashboard destroys
+  itself on every use.
+- **It ran against the wrong repo.** herdr runs plugin commands with the *plugin
+  directory* as cwd, so grove resolved whatever project contains the plugin
+  checkout, not the user's workspace. `herdr plugin pane open --cwd` fixes this,
+  but only for a launcher that a pane declaration cannot express on its own.
+- **The TUI switch path fires no pre/post-switch hooks** (unlike `grove to`), so
+  docker start/stop would not run on a switch made from the dashboard.
+
+Grove is a shell tool. Inside herdr you reach it the same way you always do —
+`grove` in a pane — and the herdr *backend* makes that operate on herdr
+workspaces. The plugin is left with the one job the CLI cannot do: notice
+worktrees that appear without grove's involvement.
 
 **Latency.** `herdr workspace list` averages **3ms** against a warm server;
 `grove ls` end to end averages **52ms**, comfortably inside the 500ms budget.
 The listing is fetched once per command and shared through `mux.Index`.
 
+### Verified on macOS
+
+A second pass ran herdr 0.8.0 on macOS (Darwin 25.5.0, arm64) against a live
+server, covering what the Linux pass could not:
+
+- **`Attach` (focus-then-exec).** From a real TTY outside herdr, with focus
+  parked elsewhere, `grove to` lands *in the target workspace*. The ordering
+  holds.
+- **Real agent states.** A live `claude` in a pane drove `blocked` (a trust
+  prompt), `idle`, and `working`. The `ls` column, the JSON field, the TUI row
+  badge (`◆ working`) and the detail row (`Agent ◇ idle`) all tracked herdr.
+  `unknown` renders blank and the column stays hidden. herdr detected the agent
+  with no integration hook installed.
+- **Path canonicalization.** A project under `/tmp` (the macOS
+  `/tmp` → `/private/tmp` symlink) resolves to `detached`, not `none`, and
+  re-adopting via the canonical path creates no duplicate. Note
+  `validate-herdr.sh` works under `$TMPDIR`, which on macOS is `/var/folders/…`,
+  so the suite does *not* cover this — it was tested separately.
+- **`control_mode`.** Still yields `tmux -CC` under `backend = "tmux"`, honours
+  `false`, and is correctly ignored under `backend = "herdr"`.
+- **Popup fallback.** With `[session] popup = true` and no plugin, `grove open`
+  falls through to a workspace switch rather than no-op'ing.
+- **tmux regression.** new / ls / to / rename / rm behave as on `main`, and
+  legacy `[tmux] mode = "off"` still suppresses session management (`grove
+  config` reports `(effective): off`).
+
 ### Still unverified
 
-- **`Attach` (focus-then-exec).** `Switch` is verified; the full attach path
-  needs a TTY, which a headless server cannot provide. The ordering it depends
-  on — focus before attach — is verified as a socket call.
-- **Named sessions.** `HERDR_SESSION` scoping is untested; grove currently talks
-  to whichever session the environment selects, which may need explicit scoping
-  if a user runs several.
-- **Real agent states.** `blocked`/`working`/`done` were exercised through unit
-  tests and a stub, not by running a coding agent inside a pane, so the golden
-  files for the TUI badge are still uncaptured.
-- **macOS.** CI runs the full unit and integration suites on macOS and they pass,
-  but the live herdr flows above were exercised only on Linux — CI runners have
-  no herdr installed, so they cover the tmux backend and the herdr backend's
-  unit-level contract, not a real server.
+- **Whether the adoption prompt is visible in practice.** The hook fires and
+  grove writes its warning to stderr, which herdr captures into `herdr plugin
+  log list` — and nowhere else. `[ui.toast]` covers agent state changes, not
+  plugin output, and defaults to `delivery = "off"`. So the prompt currently
+  lands somewhere no one looks. `herdr notification show <title> --body <text>`
+  exists and returns `shown: true` against an attached client; routing the
+  warning through it is the obvious next step and is not yet done.
+- **Named sessions.** grove follows ambient `HERDR_SESSION` with no explicit
+  scoping. Confirmed: no cross-session leakage in `grove ls`, but `grove to`
+  under a second session creates a *duplicate* workspace for the same checkout,
+  and a later `grove rm` then leaves an orphaned workspace in the other session
+  pointing at a deleted directory. `grove new` is safe — it refuses at the git
+  level. A known limitation, not yet a design.
+- **`done` agent state.** `blocked`/`idle`/`working` were driven with a real
+  agent; `done` still comes only from unit tests.
+- **CI.** Runners have no herdr installed, so they cover the tmux backend and
+  the herdr backend's unit-level contract, not a real server.

@@ -140,10 +140,10 @@ var herdrEventCmd = &cobra.Command{
 herdr passes the event in HERDR_PLUGIN_EVENT_JSON. This command is registered
 by the plugin in integrations/herdr and is not meant to be run by hand.
 
-On worktree.opened it reports whether grove already tracks the checkout, so a
-worktree created through herdr's own UI does not silently bypass grove's
-bootstrap. It never modifies anything — adopting is left to 'grove adopt', which
-runs post-create hooks the user should opt into.`,
+On worktree.created and worktree.opened it reports whether grove already tracks
+the checkout, so a worktree made through herdr's own UI does not silently bypass
+grove's bootstrap. It never modifies anything — adopting is left to 'grove
+adopt', which runs post-create hooks the user should opt into.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		w := cli.NewStderr()
 
@@ -159,11 +159,18 @@ runs post-create hooks the user should opt into.`,
 			name = normalizeHerdrEventName(fromEnv)
 		}
 
-		if name != "worktree.opened" {
+		// worktree.created fires when herdr creates the checkout itself;
+		// worktree.opened when it adopts an existing one into a workspace.
+		// Both hand us a worktree grove may know nothing about, and herdr emits
+		// exactly one of them per worktree — subscribing to only one silently
+		// skips half the cases this hook exists for.
+		if name != "worktree.opened" && name != "worktree.created" {
 			return nil
 		}
-		// Focusing an already-open workspace re-fires the event. Staying quiet
-		// keeps this from nagging every time the user clicks a workspace.
+		// Focusing an already-open workspace re-fires worktree.opened. Staying
+		// quiet keeps this from nagging every time the user clicks a workspace.
+		// worktree.created carries no already_open field, so this is a no-op
+		// there.
 		if event.AlreadyOpen {
 			return nil
 		}
