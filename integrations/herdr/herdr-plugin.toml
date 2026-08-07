@@ -10,6 +10,10 @@ platforms = ["linux", "macos"]
 # This is the reason the plugin exists. Herdr has no `display-popup` CLI verb;
 # popup placement is reachable only through a plugin's declared pane. Without
 # this, `grove open --popup` degrades to a full-window switch under herdr.
+#
+# The dashboard is bare `grove` — there is no `tui` subcommand. The root command
+# launches the TUI when stdin and stdout are both TTYs, which they are in a herdr
+# pane. TestHerdrPluginManifestCommandsResolve keeps this honest.
 [[panes]]
 id = "dashboard"
 title = "Grove dashboard"
@@ -17,7 +21,7 @@ description = "Browse, create, and switch worktrees"
 placement = "popup"
 width = "80%"
 height = "80%"
-command = ["grove", "tui"]
+command = ["grove"]
 
 # Report grove's view of the clicked workspace's worktree.
 [[actions]]

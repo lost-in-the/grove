@@ -9,8 +9,8 @@ is the thing being invoked.
 
 ## What it provides
 
-**Dashboard popup.** `prefix`-menu → Grove dashboard opens `grove tui` as an
-80% overlay. This is the plugin's main reason to exist: herdr has no
+**Dashboard popup.** `prefix`-menu → Grove dashboard opens the grove TUI (bare
+`grove`) as an 80% overlay. This is the plugin's main reason to exist: herdr has no
 `display-popup` equivalent on the CLI, and popup placement is only reachable
 through a plugin's declared pane. Without the plugin installed, `grove open`
 with `[session] popup = true` falls back to a full-window switch under herdr.
@@ -38,6 +38,12 @@ herdr plugin link /path/to/grove/integrations/herdr
 
 Verify with `herdr plugin list`. `grove` must be on `PATH` — herdr runs plugin
 commands as plain argv without shell expansion.
+
+That means the shell function installed by `grove install zsh|bash` is not
+enough: it exists only inside an interactive shell, and herdr's server never
+sees it. The plugin needs the grove **binary** resolvable on the `PATH` the
+herdr server inherited, or its panes and actions fail with "No such file or
+directory".
 
 ## How grove and herdr divide the work
 
