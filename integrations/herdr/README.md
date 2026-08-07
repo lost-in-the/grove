@@ -1,28 +1,48 @@
 # Grove plugin for herdr
 
-A [herdr](https://herdr.dev) plugin that surfaces grove inside herdr's
-mouse-first UI.
+A [herdr](https://herdr.dev) plugin that keeps grove's state in sync with
+worktrees created through herdr.
 
 Note the direction: `plugins/` in this repo holds plugins that extend *grove*
 (docker, tracker). This one runs the other way — it extends *herdr*, and grove
 is the thing being invoked.
 
+## Scope: deliberately small
+
+**This plugin is not how you use grove inside herdr.** You use grove from a
+shell, exactly as you would without herdr — `grove` to pick a worktree, `grove
+new` to make one. The herdr *backend* (`[mux] backend = "herdr"`) is what makes
+those work against herdr workspaces, and it needs no plugin at all.
+
+The plugin exists for the one thing the CLI cannot do: **react to something
+herdr did.** If you create a worktree through herdr's own UI, grove never runs,
+so its bootstrap never runs either — no state, no excludes, no post-create
+hooks, no docker. Nothing in grove can notice that on its own.
+
+There is deliberately **no dashboard pane**. herdr's sidebar already lists every
+worktree as a workspace, so a grove picker inside herdr duplicates the primary
+UI. It also cannot switch cleanly from a pane: grove's TUI exits as part of
+switching, which kills the pane it is running in.
+
 ## What it provides
 
-**Dashboard popup.** `prefix`-menu → Grove dashboard opens the grove TUI (bare
-`grove`) as an 80% overlay. This is the plugin's main reason to exist: herdr has no
-`display-popup` equivalent on the CLI, and popup placement is only reachable
-through a plugin's declared pane. Without the plugin installed, `grove open`
-with `[session] popup = true` falls back to a full-window switch under herdr.
+**Adoption prompt.** When a worktree appears in herdr that grove has no state
+for, the `worktree.created` / `worktree.opened` hooks point at `grove adopt`.
+It only reports. Adopting runs post-create hooks and docker auto-start, which
+should be a deliberate choice rather than something a background event fires.
+
+Both events are subscribed because they are not interchangeable — verified
+against herdr 0.8.0:
+
+| herdr action | event fired |
+|---|---|
+| `herdr worktree create` | `worktree.created` |
+| `herdr worktree open` | `worktree.opened` |
+
+Subscribing to only one silently misses half the cases.
 
 **Worktree status action.** Right-click a workspace → "Grove: worktree status"
 reports whether grove tracks that checkout.
-
-**Adoption prompt.** When a worktree is opened in herdr that grove has no state
-for — typically one created through herdr's own `worktree create` rather than
-`grove new` — the `worktree.opened` hook points at `grove adopt`. It only
-reports. Adopting runs post-create hooks and docker auto-start, which should be
-a deliberate choice rather than something a background event triggers.
 
 ## Install
 
@@ -42,8 +62,25 @@ commands as plain argv without shell expansion.
 That means the shell function installed by `grove install zsh|bash` is not
 enough: it exists only inside an interactive shell, and herdr's server never
 sees it. The plugin needs the grove **binary** resolvable on the `PATH` the
-herdr server inherited, or its panes and actions fail with "No such file or
+herdr server inherited, or its actions and hooks fail with "No such file or
 directory".
+
+### Binding a key to the status action
+
+herdr does **not** read `[[keys.command]]` from a plugin manifest — only
+`build`, `startup`, `actions`, `events`, `panes`, and `link_handlers` are
+parsed, so a binding declared here is silently ignored. Put it in your own
+`~/.config/herdr/config.toml` instead, referencing the globally-qualified id:
+
+```toml
+[[keys.command]]
+key = "prefix+shift+s"
+type = "plugin_action"
+command = "lost-in-the.grove.status"
+description = "Grove: worktree status"
+```
+
+Then `herdr server reload-config`.
 
 ## How grove and herdr divide the work
 

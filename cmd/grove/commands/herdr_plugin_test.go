@@ -184,11 +184,16 @@ func TestHerdrContextResolveDirFallsBackToPaneCwd(t *testing.T) {
 // drift in grove's own command set.
 //
 // herdr runs plugin commands as plain argv, so a manifest naming a subcommand
-// grove does not have fails only at runtime, in a popup, on the user's machine.
-// The manifest shipped `["grove", "tui"]` for the dashboard pane while the TUI
-// is reached through bare `grove` — `grove tui` exits with
-// `unknown command "tui"`, so the plugin's headline feature never worked.
-// Parsing the manifest proves it is well-formed, not that it is callable.
+// grove does not have fails only at runtime, on the user's machine, with the
+// error buried in herdr's plugin log. Parsing the manifest proves it is
+// well-formed, not that it is callable — `herdr plugin link` accepted the
+// broken version happily.
+//
+// This is not hypothetical: the manifest shipped `["grove", "tui"]` for a
+// dashboard pane while the TUI is reached through bare `grove`, so `grove tui`
+// exited with `unknown command "tui"` and the pane died instantly. That pane
+// has since been removed, but the same failure mode applies to every action and
+// event command left in the manifest, and to anything added later.
 func TestHerdrPluginManifestCommandsResolve(t *testing.T) {
 	manifestPath := filepath.Join("..", "..", "..", "integrations", "herdr", "herdr-plugin.toml")
 

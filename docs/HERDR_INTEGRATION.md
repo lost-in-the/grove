@@ -344,35 +344,27 @@ min_herdr_version = "0.7.0"
 description = "Worktree flow manager"
 platforms = ["linux", "macos"]
 
-# Popup placement — the reason this plugin exists.
-# Bare `grove` is the TUI entrypoint; there is no `tui` subcommand.
-[[panes]]
-id = "dashboard"
-title = "Grove dashboard"
-placement = "popup"
-width = "80%"
-height = "80%"
-command = ["grove"]
+# NOTE: this section described the manifest as originally planned. The shipped
+# manifest is integrations/herdr/herdr-plugin.toml, which no longer declares a
+# dashboard pane — see "The dashboard pane was removed" below. The rest of this
+# section's discussion of popup placement is retained as the record of why the
+# pane was attempted.
 
 [[actions]]
-id = "new"
-title = "Grove: new worktree"
+id = "status"
+title = "Grove: worktree status"
 contexts = ["workspace"]
-command = ["grove", "herdr-action", "new"]
+command = ["grove", "herdr-action", "status"]
 
-[[actions]]
-id = "switch"
-title = "Grove: switch worktree"
-contexts = ["workspace", "global"]
-command = ["grove", "herdr-action", "switch"]
-
-# Close the loop when the user drives worktrees from herdr's own UI.
+# Close the loop when the user drives worktrees from herdr's own UI. Both events
+# are required: `herdr worktree create` fires only worktree.created, and
+# `herdr worktree open` fires only worktree.opened (verified on herdr 0.8.0).
 [[events]]
-on = "worktree.opened"
+on = "worktree.created"
 command = ["grove", "herdr-event"]
 
 [[events]]
-on = "workspace.closed"
+on = "worktree.opened"
 command = ["grove", "herdr-event"]
 ```
 
@@ -514,7 +506,7 @@ server, so don't point it at one you're using.
 | Event hook | fires on a worktree grove doesn't track; stays silent on one it does |
 | Dead server | `server_not_running`; `grove ls` degrades to "no session", no hang |
 
-Four bugs surfaced that no amount of source reading had caught:
+Five bugs surfaced that no amount of source reading had caught:
 
 1. **`worktree open` needs `--cwd <repo root>`.** Every session creation failed
    with `invalid_request` until `Target.Repo` was threaded through. This was the
@@ -527,9 +519,37 @@ Four bugs surfaced that no amount of source reading had caught:
 4. **The dashboard pane ran `grove tui`, which is not a command.** The TUI is
    reached through bare `grove`; `grove tui` exits with `unknown command "tui"`,
    so the plugin's headline feature could never have worked. The manifest parses
-   either way, which is why linking it looked like verification. Fixed to
-   `["grove"]` and pinned by a test that resolves every declared argv against
-   the real command set.
+   either way, which is why linking it looked like verification. Pinned by a
+   test that resolves every declared argv against the real command set. The pane
+   itself has since been removed — see below.
+5. **The adoption hook was subscribed to the wrong event.** It listened only for
+   `worktree.opened`, but `herdr worktree create` — herdr's own "make me a
+   worktree" path, and the exact case the hook exists to catch — fires
+   `worktree.created` instead. Verified on herdr 0.8.0 with a probe plugin
+   subscribed to all four candidate events. The plugin's one job silently did
+   nothing in its primary case. Fixed by subscribing to both.
+
+### The dashboard pane was removed
+
+Making the pane *reachable* revealed that it should not exist.
+
+- **It duplicates herdr's own sidebar**, which already lists every worktree as a
+  workspace, grouped by project, with agent status.
+- **It cannot switch.** Grove's TUI switch is deferred: it records a target,
+  quits the event loop, and acts afterwards. Inside a herdr pane that means the
+  grove process exits and takes its own pane with it, so the dashboard destroys
+  itself on every use.
+- **It ran against the wrong repo.** herdr runs plugin commands with the *plugin
+  directory* as cwd, so grove resolved whatever project contains the plugin
+  checkout, not the user's workspace. `herdr plugin pane open --cwd` fixes this,
+  but only for a launcher that a pane declaration cannot express on its own.
+- **The TUI switch path fires no pre/post-switch hooks** (unlike `grove to`), so
+  docker start/stop would not run on a switch made from the dashboard.
+
+Grove is a shell tool. Inside herdr you reach it the same way you always do —
+`grove` in a pane — and the herdr *backend* makes that operate on herdr
+workspaces. The plugin is left with the one job the CLI cannot do: notice
+worktrees that appear without grove's involvement.
 
 **Latency.** `herdr workspace list` averages **3ms** against a warm server;
 `grove ls` end to end averages **52ms**, comfortably inside the 500ms budget.
@@ -563,12 +583,13 @@ server, covering what the Linux pass could not:
 
 ### Still unverified
 
-- **The dashboard popup itself.** The manifest's argv is now pinned by a test
-  and bare `grove` renders the TUI on a pty, but the popup has never been
-  *opened*. herdr's CLI refuses to: `plugin pane open` rejects popup placements
-  with "overlay and popup plugin panes target the active pane", leaving the
-  mouse-driven prefix menu as the only route. That untestable-from-here gap is
-  exactly what hid bug 4 — worth a manual click before relying on it.
+- **Whether the adoption prompt is visible in practice.** The hook fires and
+  grove writes its warning to stderr, which herdr captures into `herdr plugin
+  log list` — and nowhere else. `[ui.toast]` covers agent state changes, not
+  plugin output, and defaults to `delivery = "off"`. So the prompt currently
+  lands somewhere no one looks. `herdr notification show <title> --body <text>`
+  exists and returns `shown: true` against an attached client; routing the
+  warning through it is the obvious next step and is not yet done.
 - **Named sessions.** grove follows ambient `HERDR_SESSION` with no explicit
   scoping. Confirmed: no cross-session leakage in `grove ls`, but `grove to`
   under a second session creates a *duplicate* workspace for the same checkout,
