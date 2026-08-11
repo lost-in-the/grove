@@ -1,8 +1,16 @@
 package mux
 
 import (
+	"os"
 	"path/filepath"
 )
+
+// isExistingDir reports whether path is a directory that exists right now.
+// One stat per session per listing, against grove's 500ms command budget.
+func isExistingDir(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
 
 // Index is a lookup over a single List() result, so a command that needs the
 // status of every worktree pays for one backend call instead of one per tree.
@@ -31,7 +39,16 @@ func NewIndex(sessions []Session) *Index {
 				ix.byName[s.Name] = s
 			}
 		}
-		if s.Path == "" {
+		// A path the backend reports but that no longer exists cannot identify
+		// any live worktree, and indexing it is actively harmful: herdr records
+		// a workspace's checkout when it opens and never updates it, so after
+		// `grove rename` the workspace still names the pre-rename directory.
+		// Since Lookup prefers paths, that dead entry would shadow the real
+		// workspace of whatever worktree later occupies the same path, and the
+		// name fallback — the thing that makes rename self-heal — would never
+		// run. Dropping it leaves such a workspace reachable by name only,
+		// which is exactly right.
+		if s.Path == "" || !isExistingDir(s.Path) {
 			continue
 		}
 		// Index under both the cleaned and the symlink-resolved path so a

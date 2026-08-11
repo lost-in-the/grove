@@ -2,6 +2,8 @@ package mux
 
 import (
 	"errors"
+	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -190,19 +192,53 @@ func TestHerdrEnsureIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestHerdrEnsureFallsBackToWorkspaceCreate(t *testing.T) {
-	// The main checkout is not a linked worktree, so `worktree open` reports
-	// worktree_not_found and grove must fall back to a plain workspace.
-	f := newFakeHerdr()
+// mainCheckoutRefusal is the error herdr returns for `worktree open` against a
+// repository's own checkout: it is not a linked worktree, so there is nothing
+// to open.
+func mainCheckoutRefusal(f *fakeHerdr) {
 	f.responses["worktree open"] = `{"id":"x","error":{"code":"worktree_not_found","message":"worktree cannot be opened"}}`
 	f.errs["worktree open"] = errors.New("exit status 1")
-	f.responses["workspace create"] = `{"id":"x","result":{"type":"workspace_created","workspace":{"workspace_id":"w9","number":9,"label":"grove","focused":false,"pane_count":1,"tab_count":1,"active_tab_id":"w9:t1","agent_status":"idle"}}}`
+}
 
-	if err := f.backend().Ensure(Target{Name: "grove", Path: "/repos/grove", Repo: "/repos/grove"}); err != nil {
-		t.Fatalf("Ensure() error = %v", err)
+func TestHerdrNeverCreatesAWorkspace(t *testing.T) {
+	// grove owns worktree lifecycle, not herdr's workspace inventory. The
+	// repository's own workspace is herdr's to create — it is the thing herdr's
+	// sidebar groups a project's worktrees under, and grove imposing one
+	// reaches past the boundary the integration is built on. Ensure must report
+	// the target unmanaged instead, and the caller falls through to a plain
+	// directory switch.
+	f := newFakeHerdr()
+	mainCheckoutRefusal(f)
+	f.responses["workspace list"] = `{"id":"x","result":{"type":"workspace_list","workspaces":[]}}`
+
+	err := f.backend().Ensure(Target{Name: "grove", Path: "/repos/grove", Repo: "/repos/grove"})
+	if !ErrUnmanaged(err) {
+		t.Fatalf("Ensure() error = %v, want an unmanaged-target error", err)
 	}
-	if !f.called("workspace", "create", "--cwd", "/repos/grove", "--label", "grove") {
-		t.Errorf("Ensure did not fall back to workspace create; calls: %v", f.calls)
+	if f.called("workspace", "create") {
+		t.Errorf("Ensure created a workspace for the repository checkout; calls: %v", f.calls)
+	}
+}
+
+func TestHerdrEnsureAdoptsAnExistingRepositoryWorkspace(t *testing.T) {
+	// herdr materializes the repository's workspace itself when it opens any
+	// linked worktree. When that workspace is already there, `grove to root`
+	// should land in it rather than report the target unmanaged.
+	checkout := t.TempDir()
+	f := newFakeHerdr()
+	mainCheckoutRefusal(f)
+	f.responses["workspace list"] = fmt.Sprintf(
+		`{"id":"x","result":{"type":"workspace_list","workspaces":[`+
+			`{"workspace_id":"w1","number":1,"label":"grove","focused":false,`+
+			`"pane_count":1,"tab_count":1,"active_tab_id":"w1:t1","agent_status":"idle",`+
+			`"worktree":{"repo_key":"k","repo_name":"grove","repo_root":%q,`+
+			`"checkout_path":%q,"is_linked_worktree":false}}]}}`, checkout, checkout)
+
+	if err := f.backend().Ensure(Target{Name: "grove", Path: checkout, Repo: checkout}); err != nil {
+		t.Fatalf("Ensure() error = %v, want nil for an already-present repository workspace", err)
+	}
+	if f.called("workspace", "create") {
+		t.Errorf("Ensure created a workspace instead of adopting; calls: %v", f.calls)
 	}
 }
 
@@ -220,12 +256,20 @@ func TestHerdrEnsureDoesNotFallBackOnUnrelatedErrors(t *testing.T) {
 }
 
 func TestHerdrExistsKeysOnPath(t *testing.T) {
+	// Exists resolves through Index, which ignores checkout paths that are not
+	// on disk — so this fixture needs a checkout that really exists.
+	checkout := t.TempDir()
 	f := newFakeHerdr()
-	f.responses["workspace list"] = workspaceListJSON
+	f.responses["workspace list"] = fmt.Sprintf(
+		`{"id":"x","result":{"type":"workspace_list","workspaces":[`+
+			`{"workspace_id":"w2","number":2,"label":"grove-testing","focused":false,`+
+			`"pane_count":1,"tab_count":1,"active_tab_id":"w2:t1","agent_status":"blocked",`+
+			`"worktree":{"repo_key":"k","repo_name":"grove","repo_root":"/repos/grove",`+
+			`"checkout_path":%q,"is_linked_worktree":true}}]}}`, checkout)
 	b := f.backend()
 
 	// The label here deliberately disagrees with herdr's, proving path keying.
-	ok, err := b.Exists(Target{Name: "totally-different", Path: "/repos/grove-testing"})
+	ok, err := b.Exists(Target{Name: "totally-different", Path: checkout})
 	if err != nil {
 		t.Fatalf("Exists() error = %v", err)
 	}
@@ -233,7 +277,7 @@ func TestHerdrExistsKeysOnPath(t *testing.T) {
 		t.Error("Exists() = false, want true for a known checkout path")
 	}
 
-	ok, err = b.Exists(Target{Name: "grove-nope", Path: "/repos/grove-nope"})
+	ok, err = b.Exists(Target{Name: "grove-nope", Path: filepath.Join(t.TempDir(), "nope")})
 	if err != nil {
 		t.Fatalf("Exists() error = %v", err)
 	}
@@ -541,5 +585,52 @@ func TestHerdrEnsureUsesRepoRootNotCheckoutForSource(t *testing.T) {
 	// workspace and reports already_open rather than erroring.
 	if !f.called("--cwd", "/repos/grove", "--path", "/repos/grove") {
 		t.Errorf("calls: %v", f.calls)
+	}
+}
+
+func TestHerdrEnsureNamesTheTab(t *testing.T) {
+	// herdr labels a new tab with its number, so nothing ever titles the
+	// window and the terminal falls back to naming it after the launching
+	// process. Ensure must set the worktree's name on it.
+	f := newFakeHerdr()
+	f.responses["worktree open"] = `{"id":"x","result":{"type":"worktree_opened","already_open":false,` +
+		`"root_pane":{"pane_id":"w1:p1","tab_id":"w1:t1","workspace_id":"w1"},` +
+		`"tab":{"tab_id":"w1:t1","label":"1","number":1,"workspace_id":"w1"}}}`
+
+	target := Target{Name: "grove-testing", Short: "testing", Path: "/repos/grove-testing", Repo: "/repos/grove"}
+	if err := f.backend().Ensure(target); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
+	if !f.called("tab", "rename", "w1:t1", "testing") {
+		t.Errorf("Ensure did not name the tab after the worktree; calls: %v", f.calls)
+	}
+}
+
+func TestHerdrEnsureKeepsAUserChosenTabLabel(t *testing.T) {
+	// A label that is not herdr's generated number was chosen by someone.
+	// Overwriting it on every switch would make the tab unusable as a manual
+	// marker.
+	f := newFakeHerdr()
+	f.responses["worktree open"] = `{"id":"x","result":{"type":"worktree_opened","already_open":true,` +
+		`"root_pane":{"pane_id":"w1:p1","tab_id":"w1:t1","workspace_id":"w1"},` +
+		`"tab":{"tab_id":"w1:t1","label":"my notes","number":1,"workspace_id":"w1"}}}`
+
+	target := Target{Name: "grove-testing", Short: "testing", Path: "/repos/grove-testing", Repo: "/repos/grove"}
+	if err := f.backend().Ensure(target); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
+	if f.called("tab", "rename") {
+		t.Errorf("Ensure overwrote a user-chosen tab label; calls: %v", f.calls)
+	}
+}
+
+func TestTargetDisplayNameFallsBackToSessionName(t *testing.T) {
+	// Not every call site knows the short name; the canonical session name is
+	// still a better window title than the launching process.
+	if got := (Target{Name: "grove-testing"}).DisplayName(); got != "grove-testing" {
+		t.Errorf("DisplayName() = %q, want the session name", got)
+	}
+	if got := (Target{Name: "grove-testing", Short: "testing"}).DisplayName(); got != "testing" {
+		t.Errorf("DisplayName() = %q, want the short name", got)
 	}
 }
