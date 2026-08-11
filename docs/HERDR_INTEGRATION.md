@@ -107,20 +107,40 @@ Grove already knows the checkout path of every worktree. So:
 idempotent `CreateSession`. Confirmed live — a second open of the same checkout
 returns `already_open: true` with the same workspace id.
 
-The **main checkout** works through the same call: `worktree open --cwd R
---path R` reuses the repo's parent workspace and reports `already_open: true`.
-The `workspace create` fallback grove keeps for `worktree_not_found` /
-`not_git_worktree` is therefore a safety net for non-worktree directories, not
-the main-checkout path.
+### The repository workspace is herdr's, not grove's
+
+**Grove never calls `herdr workspace create`.** When `worktree open` reports
+`worktree_not_found` / `not_git_worktree` — which is what a repository's own
+checkout gets, since it is not a linked worktree — grove does *not* invent a
+workspace for it. It adopts the repository workspace if herdr already has one,
+and otherwise returns `mux.ErrUnmanaged` and the command falls through to a
+plain `cd`.
+
+That boundary matters because herdr's sidebar groups a project's worktrees
+under the repository's workspace, keyed on the `repo_root` / `repo_key`
+provenance it records. That grouping is herdr's to manage, and it appears on its
+own: opening any linked worktree with `--cwd R` materializes the repository
+workspace as a side effect. Grove creating and owning one as well would reach
+past worktree lifecycle — the boundary this whole integration is built on — into
+inventory that herdr and the user's agents already handle.
+
+Practical consequence: `grove to root` in a project whose repository workspace
+has not been opened yet changes directory and says nothing about sessions. That
+is the intended outcome, not a degraded one.
 
 **Caveat: herdr's workspace paths do not follow a rename.** herdr captures a
 workspace's paths when it opens and never updates them, so `grove rename` leaves
 *all three* stale at once — `worktree.checkout_path`, the workspace cwd, and the
 pane's cwd all name the pre-rename directory. Verified live.
 
-Grove's own lookups self-heal: `mux.Index` falls back to the session name, and
-`grove rename` has just relabelled the workspace to match, so `grove ls` and
-`grove to` keep resolving the worktree correctly.
+Grove's own lookups self-heal, and the mechanism is load-bearing: **`mux.Index`
+refuses to index a checkout path that is not on disk.** Without that rule the
+name fallback would never run, because `Lookup` prefers paths — a workspace
+still claiming `…/proj-beta` after its worktree was renamed to `…/proj-gamma`
+would shadow the real workspace of whatever worktree later occupied
+`…/proj-beta`, and every operation on the one would land on the other. Dropping
+vanished paths leaves such a workspace reachable by name only, which is exactly
+right: `grove rename` has just relabelled it to match.
 
 The plugin cannot self-heal the same way — it only has herdr's context, and
 every path in it is dead. It says so plainly rather than reporting the dead path
@@ -130,6 +150,28 @@ pane cwd is the same situation tmux has after a rename, which
 
 Canonicalize before comparing — herdr uses `canonical_or_original`, so grove
 should `filepath.EvalSymlinks` on both sides.
+
+### Naming the window a worktree occupies
+
+Neither backend used to name anything below the session, so nothing ever set a
+real window title and the terminal fell back to titling the window after
+whatever process was running — showing `grove`, or the whole `grove to <name>`
+command line, in ghostty and cmux where the worktree name belongs.
+
+Both backends now name it, from the same `Target.DisplayName()` so they cannot
+drift:
+
+- **herdr** — `tab rename <tab_id> <short>`. The tab id comes back in the
+  `worktree open` response, so this costs no extra lookup. A label that is not
+  herdr's generated one (the tab's own number) was chosen by a person and is
+  never overwritten; `Rename` carries a grove-set label across.
+- **tmux** — `new-session -n <short>`. Passing `-n` also turns
+  `automatic-rename` off for that window, so the name sticks instead of
+  following the foreground process, and tmux feeds it to the outer terminal
+  through `set-titles-string`.
+
+Both are best-effort: a working session with a dull title is not a reason to
+fail the command that created it.
 
 `workspace report-metadata --token NAME=VALUE` exists and would let grove stamp
 its own identity tokens (surfaced as `WorkspaceInfo.tokens`). It is **not needed**
@@ -285,7 +327,7 @@ herdr releases don't break grove.
 |---|---|
 | `Available` | `exec.LookPath("herdr")`, cached like `IsTmuxAvailable` |
 | `Inside` | `HERDR_ENV=1` |
-| `Ensure` | `worktree open --path P --label N --no-focus`; fall back to `workspace create --cwd P --label N --no-focus` when P is not a registered worktree (e.g. the main checkout) |
+| `Ensure` | `worktree open --cwd R --path P --label N --no-focus`, then `tab rename` to the worktree's short name. When P is not a linked worktree (the repository checkout): adopt an existing workspace, else `mux.ErrUnmanaged` — never `workspace create` |
 | `List` | `workspace list` → map `worktree.checkout_path` → `Session` |
 | `Exists` | lookup in `List` by canonical path |
 | `Current` | `$HERDR_WORKSPACE_ID` → `workspace get` |
@@ -434,10 +476,10 @@ that runs only when herdr is the resolved backend.
 
 The herdr backend takes an injectable runner, so its whole command contract is
 tested against canned JSON without a herdr server: envelope decoding (including
-noise on the stream and unknown fields), path-keyed resolution, the
-`worktree open` → `workspace create` fallback, and the two negative assertions
-that matter most — `Ensure` never calls `worktree create`, `Kill` never calls
-`worktree remove`.
+noise on the stream and unknown fields), path-keyed resolution, tab labelling,
+and the three negative assertions that matter most — `Ensure` never calls
+`worktree create`, `Ensure` never calls `workspace create`, and `Kill` never
+calls `worktree remove`.
 
 Fixtures are shaped from the real schema: compact single-line JSON, the
 internally-tagged `"type"` field, and `agent_status` in snake_case.
@@ -491,8 +533,16 @@ scripts/validate-herdr.sh      # --keep leaves the scratch project behind
 ```
 
 It builds grove from the checkout, works entirely in a throwaway repo under
-`$TMPDIR`, and exits non-zero on any failure. Its last check stops the herdr
-server, so don't point it at one you're using.
+`$TMPDIR`, and exits non-zero on any failure.
+
+**It is safe against a live server, and that is a property to preserve.** A
+herdr server is shared: the user's own workspaces, their running agents, and
+possibly the pane the script is executing in all appear in `herdr workspace
+list`. The script therefore closes only workspaces whose checkout resolves
+inside its own scratch directory (`lab_workspace_ids`) — never a bare sweep of
+that listing. The two degradation checks are the exception, since they stop the
+server and kill every pane it hosts; they are opt-in behind `--stop-server` and
+skipped by default.
 
 | Flow | Result |
 |---|---|

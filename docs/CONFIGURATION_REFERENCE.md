@@ -246,6 +246,14 @@ Configures `grove open` command behavior (opening a shell session in a worktree)
 # Default: $SHELL
 command = "/bin/zsh"               # string
 
+# Where a worktree lands when you switch to it.
+#   "new"     — give it a session of its own and move there. Under tmux that
+#               is its tmux session; under herdr its workspace.
+#   "current" — keep the shell you are already in and just change directory.
+#               No session is created, nothing is switched.
+# Default: "new"
+open_in = "new"                    # "new" | "current"
+
 # Whether to open the session in a tmux popup instead of a new window.
 # Default: false
 popup = false                      # bool
@@ -258,6 +266,19 @@ popup_width = "80%"                # string
 # Default: "80%"
 popup_height = "80%"               # string
 ```
+
+**`open_in` vs `[tmux] mode` vs `--peek`.** They answer different questions and
+compose rather than compete:
+
+| | Question it answers |
+|---|---|
+| `[tmux] mode` | *Whether* grove manages sessions at all (`auto` / `manual` / `off`) |
+| `[session] open_in` | *Where the worktree lands* when it does — a new session, or the shell you are in |
+| `--peek` | The one-shot form of `open_in = "current"`, and additionally skips hooks |
+
+`open_in = "current"` still fires pre/post-switch hooks and still runs Docker
+side effects; only the session placement changes. `--peek` is the flag to reach
+for when you want neither.
 
 ---
 

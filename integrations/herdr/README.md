@@ -94,6 +94,11 @@ remove` (that runs `git worktree remove`, bypassing grove's `[protection]`
 rules). Closing a grove session is `herdr workspace close`, which drops the
 panes and leaves the checkout alone.
 
+Grove also never calls `herdr workspace create`. The repository's own workspace
+— the one herdr's sidebar groups a project's worktrees under — appears on its
+own when herdr opens any linked worktree, and managing it is herdr's job, not
+grove's. Grove adopts it if it is there and otherwise just changes directory.
+
 See [docs/HERDR_INTEGRATION.md](../../docs/HERDR_INTEGRATION.md) for the full
 design.
 

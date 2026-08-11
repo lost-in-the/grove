@@ -275,7 +275,7 @@ Columns:
 - **NAME** — short display name (without project prefix)
 - **BRANCH** — the git branch checked out in that worktree
 - **STATUS** — `clean`, `dirty`, or `stale`
-- **TMUX** — `attached`, `detached`, or `none`
+- **TMUX** — `attached`, `detached`, or `none`. The header follows the active backend: `TMUX`, `HERDR`, or `SESSION` when none is being driven. Match on position, not on the header text.
 - **PATH** — absolute worktree path
 
 **Output modes:**

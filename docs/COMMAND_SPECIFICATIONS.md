@@ -282,7 +282,7 @@ NAME            BRANCH          STATUS     TMUX        PATH
 - `NAME` = short name (without project prefix)
 - `BRANCH` = current branch
 - `STATUS` = git status: `clean`, `dirty` (uncommitted changes), `conflict`, `detached`
-- `TMUX` = session status: `attached` (you're in it), `detached` (exists, not attached), `none` (no session), `frozen`
+- `TMUX` = session status: `attached` (you're in it), `detached` (exists, not attached), `none` (no session), `frozen`. **The header is named after the active backend** — `TMUX` under tmux, `HERDR` under herdr, `SESSION` when none is being driven. The values are the same either way.
 - `PATH` = absolute path
 
 **Output Format (--paths):**
