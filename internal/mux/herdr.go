@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -63,23 +64,83 @@ func (b *HerdrBackend) Inside() bool { return b.env("HERDR_ENV") == "1" }
 // It never creates a checkout: grove owns worktree lifecycle, and herdr's own
 // `worktree create` would impose its own naming and placement.
 func (b *HerdrBackend) Ensure(t Target) error {
-	args, err := b.openArgs(t)
-	if err != nil {
-		return err
-	}
-
-	_, err = b.call(args)
+	opened, err := b.open(t)
 	if err == nil {
+		b.labelTab(opened.Tab, t)
 		return nil
 	}
 
-	// The main checkout is not a linked worktree, so herdr refuses to "open"
-	// it. Fall back to a plain workspace rooted at the same path — grove still
-	// keys on that path, so the two are interchangeable downstream.
 	if errHasCode(err, "worktree_not_found", "not_git_worktree") {
-		return b.createWorkspace(t)
+		return b.mainCheckout(t)
 	}
 	return err
+}
+
+// open runs `worktree open` and decodes the response, which carries the
+// workspace, its tab, and the root pane — everything a caller needs without a
+// follow-up lookup.
+func (b *HerdrBackend) open(t Target) (herdrOpened, error) {
+	var opened herdrOpened
+
+	args, err := b.openArgs(t)
+	if err != nil {
+		return opened, err
+	}
+	raw, err := b.call(args)
+	if err != nil {
+		return opened, err
+	}
+	if err := json.Unmarshal(raw, &opened); err != nil {
+		return opened, fmt.Errorf("decode worktree open response: %w", err)
+	}
+	return opened, nil
+}
+
+// labelTab names the workspace's tab after the worktree.
+//
+// herdr labels a new tab with its own number, so nothing ever sets a real
+// title and the terminal falls back to naming the window after whatever
+// process launched it — which is how ghostty and cmux end up showing "grove",
+// or the entire `grove to <name>` command line, where the worktree name
+// belongs. A label the user (or an earlier grove run) already chose is never
+// overwritten.
+//
+// Best-effort: a working session with a dull tab title is not a reason to fail
+// the command that created it.
+func (b *HerdrBackend) labelTab(tab herdrTab, t Target) {
+	if !tab.hasDefaultLabel() {
+		return
+	}
+	b.renameTab(tab.TabID, t.DisplayName())
+}
+
+// renameTab sets a tab's label, ignoring failures — see labelTab.
+func (b *HerdrBackend) renameTab(tabID, name string) {
+	if tabID == "" || name == "" {
+		return
+	}
+	_, _ = b.call([]string{"tab", "rename", tabID, name})
+}
+
+// mainCheckout handles a target herdr will not "open" because it is not a
+// linked worktree — in practice the repository's own checkout.
+//
+// grove does not create a workspace here. herdr already materializes one for
+// the repository when it opens any linked worktree, and that workspace is what
+// its sidebar groups the worktrees under; creating and owning it from grove
+// would reach past worktree lifecycle into territory herdr and the user's
+// agents manage. So: adopt the repository workspace if it exists, and
+// otherwise report the target as unmanaged so the caller just changes
+// directory.
+func (b *HerdrBackend) mainCheckout(t Target) error {
+	exists, err := b.Exists(t)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	return fmt.Errorf("%w: %s is a repository checkout, not a linked worktree", errUnmanaged, t.Path)
 }
 
 // EnsureWithCommand adopts the checkout, then runs command in its root pane
@@ -90,34 +151,24 @@ func (b *HerdrBackend) EnsureWithCommand(t Target, command string) error {
 		return b.Ensure(t)
 	}
 
-	args, err := b.openArgs(t)
-	if err != nil {
-		return err
-	}
-
-	var opened struct {
-		RootPane    herdrPane `json:"root_pane"`
-		AlreadyOpen bool      `json:"already_open"`
-	}
-	raw, err := b.call(args)
+	opened, err := b.open(t)
 	if err != nil {
 		if !errHasCode(err, "worktree_not_found", "not_git_worktree") {
 			return err
 		}
-		if err := b.createWorkspace(t); err != nil {
+		// Repository checkout: grove does not create a workspace for it. If
+		// herdr already has one, run the command in its pane; otherwise the
+		// target is unmanaged and there is no pane to run anything in.
+		if err := b.mainCheckout(t); err != nil {
 			return err
 		}
-		// The fallback path already reported its root pane; re-resolve so the
-		// command lands in the workspace that now exists.
 		pane, perr := b.rootPane(t)
 		if perr != nil {
 			return perr
 		}
 		return b.runInPane(pane, command)
 	}
-	if err := json.Unmarshal(raw, &opened); err != nil {
-		return fmt.Errorf("decode worktree open response: %w", err)
-	}
+	b.labelTab(opened.Tab, t)
 	if opened.AlreadyOpen {
 		return nil
 	}
@@ -204,8 +255,34 @@ func (b *HerdrBackend) Rename(from, to Target) error {
 	if err != nil {
 		return err
 	}
-	_, err = b.call([]string{"workspace", "rename", id, to.Name})
-	return err
+	if _, err := b.call([]string{"workspace", "rename", id, to.Name}); err != nil {
+		return err
+	}
+	// Keep the tab title in step with the workspace, or the window would go on
+	// advertising the old worktree name. Only touches a tab still carrying a
+	// grove-set or default label — see labelTab.
+	for _, tab := range b.tabs(id) {
+		if tab.Label == from.DisplayName() || tab.hasDefaultLabel() {
+			b.renameTab(tab.TabID, to.DisplayName())
+		}
+	}
+	return nil
+}
+
+// tabs lists a workspace's tabs. Best-effort: it serves cosmetic relabelling,
+// so a failure yields no tabs rather than an error.
+func (b *HerdrBackend) tabs(workspaceID string) []herdrTab {
+	raw, err := b.call([]string{"tab", "list", "--workspace", workspaceID})
+	if err != nil {
+		return nil
+	}
+	var listed struct {
+		Tabs []herdrTab `json:"tabs"`
+	}
+	if err := json.Unmarshal(raw, &listed); err != nil {
+		return nil
+	}
+	return listed.Tabs
 }
 
 // Kill closes the herdr workspace, leaving the checkout on disk.
@@ -303,15 +380,6 @@ func (b *HerdrBackend) openArgs(t Target) ([]string, error) {
 	return args, nil
 }
 
-func (b *HerdrBackend) createWorkspace(t Target) error {
-	args := []string{"workspace", "create", "--cwd", t.Path, "--no-focus"}
-	if t.Name != "" {
-		args = append(args, "--label", t.Name)
-	}
-	_, err := b.call(args)
-	return err
-}
-
 func (b *HerdrBackend) focus(t Target) error {
 	id, err := b.resolve(t)
 	if err != nil {
@@ -380,7 +448,12 @@ func (b *HerdrBackend) foregroundCommand(paneID string) (string, error) {
 	if len(info.ForegroundProcesses) == 0 {
 		return "", nil
 	}
-	// The innermost foreground process is the one actually holding the tty.
+	// These are the pane's foreground process *group* — siblings, not a nesting
+	// chain, so there is no "innermost" entry to pick. The last one is the
+	// newest, which is what names the pane in the cases IsShell cares about:
+	// verified against herdr 0.8.0, a shell sitting at its prompt reports
+	// exactly ["zsh"], and a shell running `sleep 45` reports exactly
+	// ["sleep"].
 	return info.ForegroundProcesses[len(info.ForegroundProcesses)-1].Name, nil
 }
 
@@ -504,6 +577,26 @@ func (w herdrWorkspace) session() Session {
 		s.Path = w.Worktree.CheckoutPath
 	}
 	return s
+}
+
+// herdrOpened is the `worktree open` response. It reports the workspace, its
+// tab, and the root pane in one shot.
+type herdrOpened struct {
+	RootPane    herdrPane `json:"root_pane"`
+	Tab         herdrTab  `json:"tab"`
+	AlreadyOpen bool      `json:"already_open"`
+}
+
+type herdrTab struct {
+	TabID  string `json:"tab_id"`
+	Label  string `json:"label"`
+	Number int    `json:"number"`
+}
+
+// hasDefaultLabel reports whether the tab still carries the label herdr
+// generated for it — its own number — rather than one a user or grove chose.
+func (t herdrTab) hasDefaultLabel() bool {
+	return t.Label == "" || t.Label == strconv.Itoa(t.Number)
 }
 
 type herdrPane struct {

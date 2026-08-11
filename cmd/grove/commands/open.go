@@ -163,17 +163,26 @@ Examples:
 			sessionCmd = openCommand
 		}
 
+		sessionManaged := true
 		if !sessionExists {
 			// Create session with command if configured
-			if err := m.EnsureWithCommand(target, sessionCmd); err != nil {
-				return fmt.Errorf("failed to create session: %w", err)
-			}
-			if !openJSON {
-				if sessionCmd != "" {
-					cli.Success(w, "Created session '%s' running '%s'", sessionName, sessionCmd)
-				} else {
-					cli.Success(w, "Created session '%s'", sessionName)
+			err := m.EnsureWithCommand(target, sessionCmd)
+			switch {
+			case err == nil:
+				if !openJSON {
+					if sessionCmd != "" {
+						cli.Success(w, "Created session '%s' running '%s'", sessionName, sessionCmd)
+					} else {
+						cli.Success(w, "Created session '%s'", sessionName)
+					}
 				}
+			case mux.ErrUnmanaged(err):
+				// The backend declines this target — herdr does, for a
+				// repository's own checkout. There is no pane to launch the
+				// session command into and nothing to attach to.
+				sessionManaged = false
+			default:
+				return fmt.Errorf("failed to create session: %w", err)
 			}
 		} else if sessionCmd != "" {
 			// Session exists — check if command is already running
@@ -192,6 +201,13 @@ Examples:
 		// JSON output mode
 		if openJSON {
 			return printOpenJSON(wt, displayName, created)
+		}
+
+		// No session is being managed for this target: land the shell in the
+		// worktree and stop, exactly as `mode = "off"` would.
+		if !sessionManaged {
+			emitCdOrExplain(stderr, wt.Path)
+			return nil
 		}
 
 		// Step 3: Attach — popup or switch/attach

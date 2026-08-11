@@ -277,15 +277,21 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 		}
 
 		if !exists {
-			if err := m.Ensure(target); err != nil {
+			managed, err := ensureSession(m, target)
+			if err != nil {
 				return fmt.Errorf("failed to create session: %w", err)
 			}
-			if !jsonOut {
+			// Clearing the name is what disables the switch and attach below,
+			// leaving the plain cd: directive as the whole outcome — the right
+			// behavior when the backend declines to manage this target.
+			if !managed {
+				sessionName = ""
+			} else if !jsonOut {
 				cli.Success(stderr, "Created %s session '%s'", m.Backend(), sessionName)
 			}
 		}
 
-		if m.Inside() {
+		if m.Inside() && sessionName != "" {
 			// Detect and correct directory drift before switching
 			if exists {
 				handleDirectoryDrift(m, target, targetTree.Path, cfg.Tmux.OnSwitch, stderr)
@@ -401,8 +407,13 @@ func selfSwitchTmuxEpilogue(ctx *GroveContext, mgr *worktree.Manager, targetTree
 		return fmt.Errorf("failed to check session: %w", err)
 	}
 	if !exists {
-		if err := m.Ensure(target); err != nil {
+		managed, err := ensureSession(m, target)
+		if err != nil {
 			return fmt.Errorf("failed to create session: %w", err)
+		}
+		// Nothing to ready or attach to; the caller already emitted the cd.
+		if !managed {
+			return nil
 		}
 		cli.Success(stderr, "Created %s session '%s'", m.Backend(), target.Name)
 	}
@@ -438,6 +449,13 @@ func resolveTmuxMode(cfg *config.Config, noTmux, peek bool) string {
 	mode := cfg.Tmux.Mode
 	if mode == "" {
 		mode = tmuxModeAuto
+	}
+	// [session] open_in = "current" is the standing form of "don't relocate
+	// me": the worktree lands in the shell already running, so there is no
+	// session to create or switch to. Unlike --peek it does not skip hooks —
+	// those gate on peek directly, not on the mode this returns.
+	if cfg.EffectiveOpenIn() == config.OpenInCurrent {
+		return tmuxModeOff
 	}
 	return effectiveTmuxMode(mode, cfg.AgentMode, noTmux, peek)
 }
