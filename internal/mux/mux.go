@@ -23,6 +23,20 @@ type Target struct {
 	Name string
 	Path string
 	Repo string
+	// Short is the worktree's display name — what the user typed and what
+	// `grove ls` shows. Backends use it to name the window or tab the worktree
+	// occupies, where the project prefix in Name would be noise. Optional;
+	// DisplayName falls back to Name.
+	Short string
+}
+
+// DisplayName returns the name to show a human for this target: the worktree's
+// short name when known, otherwise the canonical session name.
+func (t Target) DisplayName() string {
+	if t.Short != "" {
+		return t.Short
+	}
+	return t.Name
 }
 
 // Status is the attachment state of a session.

@@ -34,13 +34,13 @@ func (b *TmuxBackend) Inside() bool { return tmux.IsInsideTmux() }
 
 // Ensure creates the session when missing. Idempotent.
 func (b *TmuxBackend) Ensure(t Target) error {
-	return tmux.CreateSession(t.Name, t.Path)
+	return tmux.CreateSessionNamed(t.Name, t.Path, "", t.DisplayName())
 }
 
 // EnsureWithCommand creates the session running command. Idempotent: an
 // existing session is left alone and the command is not run.
 func (b *TmuxBackend) EnsureWithCommand(t Target, command string) error {
-	return tmux.CreateSessionWithCommand(t.Name, t.Path, command)
+	return tmux.CreateSessionNamed(t.Name, t.Path, command, t.DisplayName())
 }
 
 // Exists reports whether the session exists.

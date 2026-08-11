@@ -75,8 +75,9 @@ func muxTarget(mgr *worktree.Manager, worktreeName, path string) mux.Target {
 // It omits the repository root, which only session creation needs.
 func muxLookupTarget(projectName, worktreeName, path string) mux.Target {
 	return mux.Target{
-		Name: worktree.TmuxSessionName(projectName, worktreeName),
-		Path: path,
+		Name:  worktree.TmuxSessionName(projectName, worktreeName),
+		Path:  path,
+		Short: worktreeName,
 	}
 }
 
@@ -94,6 +95,49 @@ func loadSessionIndex(ctx *GroveContext) *mux.Index {
 		return nil
 	}
 	return mux.NewIndex(sessions)
+}
+
+// openInCurrent reports whether the project asked for worktrees to land in the
+// shell that is already running rather than in a session of their own.
+func openInCurrent(cfg *config.Config) bool {
+	return cfg != nil && cfg.EffectiveOpenIn() == config.OpenInCurrent
+}
+
+// ensureSession creates or adopts the target's session and reports whether the
+// backend is managing one.
+//
+// A backend that declines the target is not a failure. herdr returns
+// mux.ErrUnmanaged for a repository's own checkout, because grove deliberately
+// does not create workspaces it has no business owning. That means there is no
+// session, and the caller should carry on with the plain directory switch it
+// would perform with session management turned off.
+func ensureSession(m mux.Multiplexer, t mux.Target) (bool, error) {
+	err := m.Ensure(t)
+	switch {
+	case err == nil:
+		return true, nil
+	case mux.ErrUnmanaged(err):
+		return false, nil
+	default:
+		return false, err
+	}
+}
+
+// sessionColumnTitle names the session column after the backend actually being
+// driven.
+//
+// The header used to read "TMUX" unconditionally, which labelled herdr
+// workspace state as tmux state — the one place the multiplexer abstraction
+// leaked into what the user sees.
+func sessionColumnTitle(m mux.Multiplexer) string {
+	switch m.Backend() {
+	case mux.BackendTmux:
+		return "TMUX"
+	case mux.BackendHerdr:
+		return "HERDR"
+	default:
+		return "SESSION"
+	}
 }
 
 // manualAttachHint returns the command to show in manual mode, where grove
@@ -191,13 +235,19 @@ func switchToWorktree(ctx *GroveContext, stderr *cli.Writer, prevName, targetNam
 		// degrade to the cd-directive fallback instead of aborting.
 		if !suppressTmux && m.Available() && m.Inside() {
 			target := mux.Target{Name: sessionName, Path: targetPath, Repo: repoRoot}
-			if err := m.Ensure(target); err != nil {
+			managed, err := ensureSession(m, target)
+			if err != nil {
 				cli.Warning(stderr, "Failed to create session: %v", err)
 			}
-			if err := m.Switch(target); err != nil {
-				cli.Warning(stderr, "Failed to switch session: %v", err)
-			} else {
-				tmuxSwitched = true
+			// A declined target has no session to switch to; the cd-directive
+			// fallback below is the whole switch, and warning about it would
+			// be noise rather than news.
+			if managed {
+				if err := m.Switch(target); err != nil {
+					cli.Warning(stderr, "Failed to switch session: %v", err)
+				} else {
+					tmuxSwitched = true
+				}
 			}
 		}
 

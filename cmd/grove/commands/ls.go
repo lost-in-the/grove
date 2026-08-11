@@ -232,7 +232,7 @@ var lsCmd = &cobra.Command{
 			{Title: "NAME", MaxWidth: 30},
 			{Title: "BRANCH", MaxWidth: 25},
 			{Title: "STATUS", MinWidth: 10, ColorFn: statusColorFn},
-			{Title: "TMUX", MinWidth: 12, ColorFn: tmuxColorFn},
+			{Title: sessionColumnTitle(ctx.Mux()), MinWidth: 12, ColorFn: tmuxColorFn},
 		}
 		if hasAgents {
 			columns = append(columns, cli.Column{Title: "AGENT", MinWidth: 8, ColorFn: agentColorFn})

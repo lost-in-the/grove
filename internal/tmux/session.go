@@ -321,6 +321,19 @@ func parseIntOrZero(s string) int {
 // If command is empty, behaves identically to CreateSession (runs default shell).
 // If the session already exists, this is a no-op (idempotent).
 func CreateSessionWithCommand(name, path, command string) error {
+	return CreateSessionNamed(name, path, command, "")
+}
+
+// CreateSessionNamed is CreateSessionWithCommand with an explicit name for the
+// session's first window.
+//
+// Without one, tmux names the window after whatever is running in it — "zsh",
+// or "grove" while grove itself is still on the pane — and keeps renaming it as
+// the foreground process changes. That name is what tmux feeds the outer
+// terminal's title through set-titles-string, so ghostty and cmux end up
+// labelling the window after a process instead of the worktree. Passing -n also
+// turns automatic-rename off for the window, so the name grove sets sticks.
+func CreateSessionNamed(name, path, command, windowName string) error {
 	if name == "" {
 		return fmt.Errorf("session name cannot be empty")
 	}
@@ -334,6 +347,9 @@ func CreateSessionWithCommand(name, path, command string) error {
 	}
 
 	args := []string{"new-session", "-d", "-s", name, "-c", path}
+	if windowName != "" {
+		args = append(args, "-n", windowName)
+	}
 	if command != "" {
 		args = append(args, command)
 	}
