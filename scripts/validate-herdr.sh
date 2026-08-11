@@ -2,8 +2,9 @@
 # validate-herdr.sh — End-to-end validation of grove's herdr backend against a
 # live herdr server.
 #
-# Usage: scripts/validate-herdr.sh [--keep]
-#   --keep   leave the scratch project and herdr workspaces behind for poking at
+# Usage: scripts/validate-herdr.sh [--keep] [--stop-server]
+#   --keep          leave the scratch project and herdr workspaces behind
+#   --stop-server   also run the degradation checks, which STOP the herdr server
 #
 # Covers what unit tests can't: that grove and herdr actually agree about
 # worktree identity, that the ownership boundary holds (grove owns worktree
@@ -12,9 +13,14 @@
 #
 # Requires: herdr on PATH, git. Builds grove from the current checkout.
 #
-# Safe by construction: every test runs in a throwaway repo under $TMPDIR, and
-# the script never touches worktrees outside it. It does stop the herdr server
-# as its final check, so don't run it against a server you're using.
+# Safe against a live server by default. Every test runs in a throwaway repo
+# under $TMPDIR, and the only workspaces this script ever closes are the ones
+# whose checkout lives inside that directory — see close_lab_workspaces. It
+# never touches workspaces, worktrees, or panes belonging to the user.
+#
+# The two degradation checks are the exception: they stop the herdr server,
+# which kills every pane it is running. They are therefore opt-in behind
+# --stop-server. Do not pass it against a server you are working in.
 
 set -uo pipefail
 
@@ -24,7 +30,14 @@ LAB="${TMPDIR:-/tmp}/grove-herdr-validation"
 DEMO="$LAB/demo"
 GROVE="$LAB/grove"
 KEEP=0
-[ "${1:-}" = "--keep" ] && KEEP=1
+STOP_SERVER=0
+for arg in "$@"; do
+  case "$arg" in
+    --keep)        KEEP=1 ;;
+    --stop-server) STOP_SERVER=1 ;;
+    *) printf 'unknown option: %s\n' "$arg" >&2; exit 2 ;;
+  esac
+done
 
 PASS=0
 FAIL=0
@@ -66,15 +79,41 @@ for w in d.get("result", {}).get("workspaces", []):
 '
 }
 
-close_all_workspaces() {
-  wslist | cut -d'|' -f1 | while read -r id; do
+# Emits the workspace ids this script is responsible for: those whose checkout
+# lives inside $LAB.
+#
+# Never sweep `workspace list` wholesale. A herdr server is shared — the user's
+# own workspaces, their running agents, and the pane this script is executing in
+# all live in that same list, and closing them is not recoverable. Both sides
+# are realpath-resolved because macOS hands out $TMPDIR under /var/folders while
+# herdr reports the /private/var form.
+lab_workspace_ids() {
+  herdr workspace list 2>/dev/null | LAB="$LAB" python3 -c '
+import json, os, sys
+lab = os.path.realpath(os.environ["LAB"])
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+for w in d.get("result", {}).get("workspaces", []):
+    path = (w.get("worktree") or {}).get("checkout_path")
+    if not path:
+        continue
+    real = os.path.realpath(path)
+    if real == lab or real.startswith(lab + os.sep):
+        print(w["workspace_id"])
+'
+}
+
+close_lab_workspaces() {
+  lab_workspace_ids | while read -r id; do
     [ -n "$id" ] && herdr workspace close "$id" >/dev/null 2>&1
   done
 }
 
 # --- scratch project ---------------------------------------------------------
 
-close_all_workspaces
+close_lab_workspaces
 rm -rf "$DEMO" "$LAB"/demo-*
 mkdir -p "$DEMO"
 cd "$DEMO" || die "cannot enter $DEMO"
@@ -165,6 +204,10 @@ AFTER=$(git -C "$DEMO" worktree list | wc -l | tr -d ' ')
 check "adopting a checkout creates no new git worktree" "$BEFORE" "$AFTER"
 
 sect "degradation with the server stopped"
+if [ "$STOP_SERVER" -eq 0 ]; then
+  printf '  \033[33mSKIP\033[0m  2 checks — stopping the server would kill every pane it hosts.\n'
+  printf '        Re-run with --stop-server against a server you are not working in.\n'
+else
 herdr server stop >/dev/null 2>&1
 sleep 1
 DOWN="$LAB/down.txt"
@@ -184,6 +227,7 @@ if printf '%s' "$DOCTOR_OUT" | grep -q "Herdr server"; then
 else
   bad "doctor flags the stopped server" "no 'Herdr server' line in doctor output"
 fi
+fi
 
 # --- summary -----------------------------------------------------------------
 
@@ -192,10 +236,16 @@ printf '\n\033[1mpassed: %d   failed: %d\033[0m\n' "$PASS" "$FAIL"
 if [ "$KEEP" -eq 1 ]; then
   printf 'scratch project kept at %s\n' "$DEMO"
 else
+  # Close the workspaces this run opened before deleting the checkouts they
+  # point at, so the server is left exactly as it was found. Pointless once the
+  # server is down, and lab_workspace_ids would just come back empty.
+  [ "$STOP_SERVER" -eq 0 ] && close_lab_workspaces
   cd "$PROJECT_DIR" || true
   rm -rf "$LAB"
 fi
 
-printf 'note: the herdr server was stopped by the last check — restart it with `herdr server`\n'
+if [ "$STOP_SERVER" -eq 1 ]; then
+  printf 'note: the herdr server was stopped by the last check — restart it with `herdr server`\n'
+fi
 
 [ "$FAIL" -eq 0 ]
