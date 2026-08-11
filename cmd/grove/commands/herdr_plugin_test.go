@@ -90,7 +90,7 @@ func TestParseHerdrEventAlreadyOpen(t *testing.T) {
 	}
 }
 
-func TestNormalizeHerdrEventName(t *testing.T) {
+func TestNormalizeHerdrEventNameResolvesBothForms(t *testing.T) {
 	// Manifests and HERDR_PLUGIN_EVENT use dots; the JSON envelope uses
 	// underscores. Both must resolve to the same event.
 	for _, in := range []string{"worktree.opened", "worktree_opened"} {
@@ -272,5 +272,33 @@ func TestHerdrPluginManifestCommandsResolve(t *testing.T) {
 		if !found {
 			t.Errorf("%s: manifest runs %q, but grove has no such subcommand", ent.what, strings.Join(ent.argv, " "))
 		}
+	}
+}
+
+func TestNormalizeHerdrEventName(t *testing.T) {
+	// Only the first separator is a dot. Verified against herdr 0.8.0: it
+	// accepts "pane.agent_status_changed" and rejects both
+	// "pane.agent.status.changed" and "pane_agent_status_changed" as unknown
+	// events. The old ReplaceAll mangled every multi-word name, in both
+	// directions — the wire form and the already-dotted HERDR_PLUGIN_EVENT.
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "wire form, one word each side", in: "worktree_created", want: "worktree.created"},
+		{name: "wire form, multi-word tail", in: "pane_agent_status_changed", want: "pane.agent_status_changed"},
+		{name: "already dotted is left alone", in: "worktree.opened", want: "worktree.opened"},
+		{name: "already dotted multi-word is not re-mangled", in: "pane.agent_status_changed", want: "pane.agent_status_changed"},
+		{name: "no separator at all", in: "opened", want: "opened"},
+		{name: "empty", in: "", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizeHerdrEventName(tt.in); got != tt.want {
+				t.Errorf("normalizeHerdrEventName(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
 	}
 }

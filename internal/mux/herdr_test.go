@@ -639,8 +639,12 @@ func TestHerdrNotify(t *testing.T) {
 	f := newFakeHerdr()
 	f.responses["notification show"] = `{"id":"x","result":{"type":"notification_show","shown":true,"reason":"shown"}}`
 
-	if err := f.backend().Notify("grove: worktree not tracked", "run grove adopt"); err != nil {
+	reason, err := f.backend().Notify("grove: worktree not tracked", "run grove adopt")
+	if err != nil {
 		t.Fatalf("Notify() error = %v", err)
+	}
+	if reason != "shown" {
+		t.Errorf("reason = %q, want %q", reason, "shown")
 	}
 	if !f.called("notification", "show", "grove: worktree not tracked", "--body", "run grove adopt") {
 		t.Errorf("Notify did not pass title and body; calls: %v", f.calls)
@@ -651,10 +655,27 @@ func TestHerdrNotifyOmitsAnEmptyBody(t *testing.T) {
 	f := newFakeHerdr()
 	f.responses["notification show"] = `{"id":"x","result":{"type":"notification_show","shown":true}}`
 
-	if err := f.backend().Notify("title only", ""); err != nil {
+	if _, err := f.backend().Notify("title only", ""); err != nil {
 		t.Fatalf("Notify() error = %v", err)
 	}
 	if f.called("--body") {
 		t.Errorf("Notify passed an empty --body; calls: %v", f.calls)
+	}
+}
+
+func TestHerdrNotifyReportsSuppression(t *testing.T) {
+	// Delivery is the user's `[ui.toast] delivery` setting and herdr's rate
+	// limiter, neither of which a plugin can override. A suppressed
+	// notification is not an error — but the caller has to be able to tell,
+	// or an adoption prompt that silently never appeared is undebuggable.
+	f := newFakeHerdr()
+	f.responses["notification show"] = `{"id":"x","result":{"type":"notification_show","shown":false,"reason":"disabled"}}`
+
+	reason, err := f.backend().Notify("t", "b")
+	if err != nil {
+		t.Fatalf("Notify() error = %v, want suppression reported as a reason not an error", err)
+	}
+	if reason != "disabled" {
+		t.Errorf("reason = %q, want %q", reason, "disabled")
 	}
 }

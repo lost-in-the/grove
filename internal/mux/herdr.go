@@ -354,25 +354,43 @@ func (b *HerdrBackend) PaneInfo(t Target) (*PaneInfo, error) {
 // Verified against herdr 0.8.0 that a hook may call back into the socket API
 // while the server is still running it — the call returns `shown: true` and
 // does not deadlock against the server that spawned the hook.
-func (b *HerdrBackend) Notify(title, body string) error {
+// It returns how herdr handled the request: "shown" means it reached the user,
+// while "disabled", "rate_limited", "no_foreground_client" and "busy" mean it
+// did not. Those are not errors — delivery is the user's configuration
+// (`[ui.toast] delivery`, which ships commented out as `off`) and herdr's own
+// rate limiter, neither of which a plugin can override. Callers should log the
+// reason rather than report a failure.
+func (b *HerdrBackend) Notify(title, body string) (string, error) {
 	if title == "" {
-		return fmt.Errorf("notification title cannot be empty")
+		return "", fmt.Errorf("notification title cannot be empty")
 	}
 	args := []string{"notification", "show", title}
 	if body != "" {
 		args = append(args, "--body", body)
 	}
-	_, err := b.call(args)
-	return err
+	raw, err := b.call(args)
+	if err != nil {
+		return "", err
+	}
+	var result struct {
+		Shown  bool   `json:"shown"`
+		Reason string `json:"reason"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		// The notification may well have been shown; only the report is
+		// unreadable, and that is not worth failing over.
+		return "", nil
+	}
+	return result.Reason, nil
 }
 
 // Notify raises a herdr notification through the real CLI. Returns an error
 // when herdr is not installed, so callers can stay quiet rather than reporting
 // a failure the user cannot act on.
-func Notify(title, body string) error {
+func Notify(title, body string) (string, error) {
 	b := NewHerdr()
 	if !b.Available() {
-		return fmt.Errorf("herdr is not installed")
+		return "", fmt.Errorf("herdr is not installed")
 	}
 	return b.Notify(title, body)
 }

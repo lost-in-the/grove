@@ -33,10 +33,30 @@ should be a deliberate choice rather than something a background event fires.
 
 The prompt is raised as a **herdr notification**, not just written to the hook's
 stderr. A hook's stdout and stderr go to `herdr plugin log list` and nowhere
-else, so a hook that only writes there has effectively said nothing — the one
-thing this plugin exists to tell you would never reach you. Verified against
-herdr 0.8.0 that a hook may call back into the socket API while the server is
-running it, without deadlocking.
+else — there is no toast, badge, or overlay keyed on plugin output — so a hook
+that only writes there has effectively said nothing. Verified against herdr
+0.8.0 that a hook may call back into the socket API while the server is running
+it, without deadlocking.
+
+> **You may need to turn notifications on.** Delivery is herdr's setting, not
+> grove's, and a plugin cannot override it. herdr ships `[ui.toast] delivery`
+> commented out as `off`, in which case the request comes back
+> `reason: "disabled"` and nothing appears. Set it in `~/.config/herdr/config.toml`:
+>
+> ```toml
+> [ui.toast]
+> delivery = "system"   # or "herdr" / "terminal"
+> ```
+>
+> Grove treats suppression as normal rather than an error, and records the
+> reason in its own log (`GROVE_LOG=1`) so a prompt that never appeared is
+> still explainable.
+
+Only one event per user action raises a notification. That is deliberate:
+herdr's rate limiter drops near-simultaneous notifications (five within ~20ms
+yielded one shown and four `rate_limited`), and `herdr worktree create` alone
+fires five hook invocations in the same millisecond across all event types. Do
+not add a second subscription that notifies.
 
 Both events are subscribed because they are not interchangeable — verified
 against herdr 0.8.0:
@@ -65,6 +85,9 @@ herdr plugin link /path/to/grove/integrations/herdr
 
 Verify with `herdr plugin list`. `grove` must be on `PATH` — herdr runs plugin
 commands as plain argv without shell expansion.
+
+`min_herdr_version` is **required** in the manifest; omitting it fails the link
+outright. Omitting `platforms` links with a warning.
 
 That means the shell function installed by `grove install zsh|bash` is not
 enough: it exists only inside an interactive shell, and herdr's server never

@@ -105,10 +105,24 @@ func (e *herdrEvent) CheckoutPath() string {
 	return e.Data.Worktree.Path
 }
 
-// normalizeHerdrEventName converts herdr's snake_case wire form to the dotted
-// form used in manifests and HERDR_PLUGIN_EVENT, so both resolve alike.
+// normalizeHerdrEventName converts herdr's wire form for an event name to the
+// dotted form used in manifests and HERDR_PLUGIN_EVENT, so both resolve alike.
+//
+// Only the FIRST separator is a dot. The manifest name is
+// `pane.agent_status_changed` and the wire form is
+// `pane_agent_status_changed` — verified against herdr 0.8.0, which accepts the
+// former and rejects both `pane.agent.status.changed` and
+// `pane_agent_status_changed` as unknown events.
+//
+// So replacing every underscore would mangle every multi-word event, and this
+// function is applied to HERDR_PLUGIN_EVENT too, which already arrives dotted —
+// mangling it a second time. A name that already contains a dot is in manifest
+// form and is left alone.
 func normalizeHerdrEventName(name string) string {
-	return strings.ReplaceAll(name, "_", ".")
+	if strings.Contains(name, ".") {
+		return name
+	}
+	return strings.Replace(name, "_", ".", 1)
 }
 
 func parseHerdrEvent(raw string) (*herdrEvent, error) {
@@ -199,11 +213,18 @@ adopt', which runs post-create hooks the user should opt into.`,
 		// never be seen. Raise a notification as well. Best-effort — the log
 		// line is written either way, and a failure here is not the user's
 		// problem to act on.
-		if err := mux.Notify(
+		reason, err := mux.Notify(
 			"grove: worktree not tracked",
 			fmt.Sprintf("%s — run 'grove adopt %s' to bootstrap it", filepath.Base(path), path),
-		); err != nil {
+		)
+		switch {
+		case err != nil:
 			log.Printf("herdr notification failed: %v", err)
+		case reason != "" && reason != "shown":
+			// Suppressed by the user's `[ui.toast] delivery` setting or
+			// herdr's rate limiter. Nothing grove can do about it, but it
+			// explains an adoption prompt that never appeared.
+			log.Printf("herdr suppressed the adoption notification: %s", reason)
 		}
 		return nil
 	},
