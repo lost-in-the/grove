@@ -1,7 +1,7 @@
 # Grove plugin for herdr
 
 A [herdr](https://herdr.dev) plugin that keeps grove's state in sync with
-worktrees created through herdr.
+worktrees created or removed through herdr.
 
 Note the direction: `plugins/` in this repo holds plugins that extend *grove*
 (docker, tracker). This one runs the other way — it extends *herdr*, and grove
@@ -17,7 +17,8 @@ those work against herdr workspaces, and it needs no plugin at all.
 The plugin exists for the one thing the CLI cannot do: **react to something
 herdr did.** If you create a worktree through herdr's own UI, grove never runs,
 so its bootstrap never runs either — no state, no excludes, no post-create
-hooks, no docker. Nothing in grove can notice that on its own.
+hooks, no docker. If you remove one through herdr, grove's record of it goes
+stale the same way. Nothing in grove can notice either on its own.
 
 There is deliberately **no dashboard pane**. herdr's sidebar already lists every
 worktree as a workspace, so a grove picker inside herdr duplicates the primary
@@ -65,8 +66,33 @@ against herdr 0.8.0:
 |---|---|
 | `herdr worktree create` | `worktree.created` |
 | `herdr worktree open` | `worktree.opened` |
+| UI "new worktree" dialog | `worktree.created` (same as the CLI) |
 
 Subscribing to only one silently misses half the cases.
+
+**Removal sync.** When a worktree is removed *through herdr* (UI or `herdr
+worktree remove`), the `worktree.removed` hook drops grove's record of it:
+the `.grove/state.json` entry goes away, `last_worktree` is cleared if it
+pointed there (so `grove last` doesn't error on a checkout that no longer
+exists), and on the tmux backend a session left over the dead directory is
+killed. herdr's removal is already a clean `git worktree remove`, so the hook
+never touches git.
+
+Deliberate non-actions, mirroring the adoption prompt's philosophy:
+
+- **No remove hooks fire** — user or plugin. A background event must not run
+  side effects you didn't opt into. In particular, **a running docker stack is
+  not stopped and its slot record is dropped with the state entry** — stop
+  stacks before removing through herdr, or use `grove rm`, which runs the full
+  teardown. The hook logs the docker project name before dropping the record.
+- **No notification** — nothing is actionable; the cleanup is the whole story.
+  It is logged to `herdr plugin log list` and grove's own log (`GROVE_LOG=1`).
+- **The branch is left alone**, matching herdr's own removal semantics.
+
+This direction has no loop with `grove rm`: `worktree.removed` fires only when
+herdr itself removes a worktree. The grove-rm flow — git removes the checkout,
+then grove closes the herdr workspace — fires only `workspace.closed`, which
+the plugin does not subscribe to (verified on 0.8.0).
 
 **Worktree status action.** Right-click a workspace → "Grove: worktree status"
 reports whether grove tracks that checkout.

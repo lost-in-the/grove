@@ -381,8 +381,8 @@ execution. Install is `herdr plugin install <owner>/<repo>[/<subdir>]` or
 ```toml
 id = "lost-in-the.grove"
 name = "Grove"
-version = "0.1.0"
-min_herdr_version = "0.7.0"
+version = "0.2.0"
+min_herdr_version = "0.8.0"
 description = "Worktree flow manager"
 platforms = ["linux", "macos"]
 
@@ -401,12 +401,20 @@ command = ["grove", "herdr-action", "status"]
 # Close the loop when the user drives worktrees from herdr's own UI. Both events
 # are required: `herdr worktree create` fires only worktree.created, and
 # `herdr worktree open` fires only worktree.opened (verified on herdr 0.8.0).
+# The UI "new worktree" dialog fires the same events as the CLI create path.
 [[events]]
 on = "worktree.created"
 command = ["grove", "herdr-event"]
 
 [[events]]
 on = "worktree.opened"
+command = ["grove", "herdr-event"]
+
+# And in the other direction: reconcile grove's state when herdr removes a
+# worktree. Fires only on herdr's own removal (the grove-rm flow emits only
+# workspace.closed), so there is no loop; see the manifest for the full record.
+[[events]]
+on = "worktree.removed"
 command = ["grove", "herdr-event"]
 ```
 
@@ -430,8 +438,11 @@ Three things the plugin buys:
    matching how herdr users actually work.
 3. **Overlap reconciliation** — if a user creates a worktree through *herdr's*
    UI, the `worktree.opened` hook lets grove notice it, run its own hooks, and
-   keep the docker/tracker plugins in sync. This is what makes the two tools
-   coexist instead of quietly diverging.
+   keep the docker/tracker plugins in sync. And if a user *removes* one through
+   herdr, the `worktree.removed` hook drops grove's state entry (clearing
+   `last_worktree` and reaping an orphaned tmux session) instead of leaving a
+   ghost for `grove repair`. This is what makes the two tools coexist instead
+   of quietly diverging.
 
 **Repo placement:** not `plugins/` — that directory means *grove* plugins
 (docker, tracker) and the direction is inverted here. Use `integrations/herdr/`,

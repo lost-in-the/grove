@@ -88,9 +88,19 @@ type herdrEvent struct {
 	Event string
 	Data  struct {
 		WorkspaceID string `json:"workspace_id"`
-		Worktree    *struct {
-			Path  string `json:"path"`
-			Label string `json:"label"`
+		// Workspace carries the workspace's git provenance. On
+		// worktree.removed its repo_root is the main checkout — the only
+		// path in the payload that still exists by the time the hook runs.
+		Workspace *struct {
+			Worktree *struct {
+				RepoRoot     string `json:"repo_root"`
+				CheckoutPath string `json:"checkout_path"`
+			} `json:"worktree"`
+		} `json:"workspace"`
+		Worktree *struct {
+			Path   string `json:"path"`
+			Branch string `json:"branch"`
+			Label  string `json:"label"`
 		} `json:"worktree"`
 		AlreadyOpen bool `json:"already_open"`
 	}
@@ -99,10 +109,22 @@ type herdrEvent struct {
 
 // CheckoutPath returns the worktree checkout the event refers to.
 func (e *herdrEvent) CheckoutPath() string {
-	if e.Data.Worktree == nil {
+	if e.Data.Worktree != nil && e.Data.Worktree.Path != "" {
+		return e.Data.Worktree.Path
+	}
+	if e.Data.Workspace != nil && e.Data.Workspace.Worktree != nil {
+		return e.Data.Workspace.Worktree.CheckoutPath
+	}
+	return ""
+}
+
+// RepoRoot returns the main checkout of the repository the event's worktree
+// belongs to, or "" when the payload carries no git provenance.
+func (e *herdrEvent) RepoRoot() string {
+	if e.Data.Workspace == nil || e.Data.Workspace.Worktree == nil {
 		return ""
 	}
-	return e.Data.Worktree.Path
+	return e.Data.Workspace.Worktree.RepoRoot
 }
 
 // normalizeHerdrEventName converts herdr's wire form for an event name to the
@@ -158,8 +180,14 @@ by the plugin in integrations/herdr and is not meant to be run by hand.
 
 On worktree.created and worktree.opened it reports whether grove already tracks
 the checkout, so a worktree made through herdr's own UI does not silently bypass
-grove's bootstrap. It never modifies anything — adopting is left to 'grove
-adopt', which runs post-create hooks the user should opt into.`,
+grove's bootstrap. It only reports — adopting is left to 'grove adopt', which
+runs post-create hooks the user should opt into.
+
+On worktree.removed it reconciles grove's state with a removal herdr already
+performed: the tracked entry is dropped (and last_worktree cleared) so 'grove
+last' and 'grove ls' don't point at a checkout that no longer exists. It fires
+no remove hooks and touches neither git nor the branch — the checkout is
+already gone, and herdr's removal deliberately leaves the branch behind.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		w := cli.NewStderr()
 
@@ -173,6 +201,14 @@ adopt', which runs post-create hooks the user should opt into.`,
 		name := event.Event
 		if fromEnv := os.Getenv("HERDR_PLUGIN_EVENT"); fromEnv != "" {
 			name = normalizeHerdrEventName(fromEnv)
+		}
+
+		// worktree.removed fires only when herdr itself removed the worktree
+		// (verified on 0.8.0: the grove-rm flow — git removes the checkout,
+		// then the workspace closes — fires only workspace.closed, so there is
+		// no loop between grove rm's workspace close and this branch).
+		if name == "worktree.removed" {
+			return reconcileRemovedWorktree(event, nil)
 		}
 
 		// worktree.created fires when herdr creates the checkout itself;
@@ -289,6 +325,104 @@ func groveTracksWorktree(path string) (bool, error) {
 	}
 	ws, err := ctx.State.GetWorktree(name)
 	return err == nil && ws != nil, nil
+}
+
+// reconcileRemovedWorktree drops grove's record of a worktree herdr just
+// removed. herdr performs a clean `git worktree remove` (verified on 0.8.0:
+// directory and .git/worktrees registration both gone, branch left behind), so
+// git needs nothing from us — but .grove/state.json still tracks the checkout,
+// `grove last` errors if last_worktree points at it, and on the tmux backend a
+// session may linger over the dead directory. This fixes all three.
+//
+// muxOverride replaces the context's multiplexer in tests; pass nil in
+// production.
+//
+// Deliberate non-actions: no user or plugin remove hooks fire (a background
+// event must not run side effects the user didn't opt into — same stance as
+// the adoption hook), no notification is raised (nothing here is actionable),
+// and neither git nor the branch is touched. A worktree with a running docker
+// stack is NOT stopped; its project name is logged before the record that
+// names it is destroyed.
+//
+// This is a background hook, but it still honors the <500ms budget: one git
+// rev-parse for discovery, one state save, and — tmux only — one has-session
+// and at most one kill-session.
+func reconcileRemovedWorktree(event *herdrEvent, muxOverride mux.Multiplexer) error {
+	removed := event.CheckoutPath()
+	repoRoot := event.RepoRoot()
+	if removed == "" || repoRoot == "" {
+		return nil
+	}
+
+	// Discovery must anchor on the main repo: the removed checkout no longer
+	// exists, so the create/open handler's path-based discovery would fail.
+	ctx, err := groveContextForPath(repoRoot)
+	if err != nil {
+		return nil //nolint:nilerr // a non-grove repo's worktree is not our business
+	}
+
+	// Match by the recorded path. State paths are symlink-resolved when
+	// recorded (adopt/new both canonicalize), and the removed path is
+	// canonicalized through its still-existing parent, so both sides compare
+	// in resolved form. A miss degrades to today's behavior — a stale entry
+	// that `grove repair` flags as orphan_state.
+	canonical := canonicalGonePath(removed)
+	var name string
+	var ws *state.WorktreeState
+	for n, entry := range ctx.State.GetState().Worktrees {
+		if canonicalGonePath(entry.Path) == canonical {
+			name, ws = n, entry
+			break
+		}
+	}
+	if name == "" {
+		return nil
+	}
+
+	// The log line is the only record that survives (it reaches
+	// `herdr plugin log list`), so surface anything the dropped entry knew
+	// that the user might still need.
+	if ws.DockerProject != "" {
+		log.Printf("herdr removed worktree '%s' which had docker project %q — its containers were not stopped", name, ws.DockerProject)
+	}
+
+	// Drops the entry and clears last_worktree if it pointed here.
+	if err := ctx.State.RemoveWorktree(name); err != nil {
+		return fmt.Errorf("herdr removed the worktree at %s but grove state cleanup failed: %w", removed, err)
+	}
+	log.Printf("removed '%s' from grove state after herdr removed its worktree", name)
+
+	// Reap a session left pointing at the dead directory. Skipped on the
+	// herdr backend: the workspace close is herdr's own removal flow, and a
+	// mutation callback into the server mid-event dispatch is unverified
+	// territory (only `notification show` has been proven safe there).
+	m := muxOverride
+	if m == nil {
+		m = ctx.Mux()
+	}
+	if m.Backend() != mux.BackendHerdr && m.Available() {
+		if mgr, err := ctx.WorktreeManager(); err == nil {
+			target := muxTarget(mgr, name, removed)
+			if exists, err := m.Exists(target); err == nil && exists {
+				if err := m.Kill(target); err != nil {
+					log.Printf("failed to kill session for removed worktree '%s': %v", name, err)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// canonicalGonePath canonicalizes a path that may no longer exist: the leaf is
+// gone, but its parent usually survives, so resolving the parent and rejoining
+// the basename yields the same form EvalSymlinks would have produced (modulo a
+// symlinked leaf, which grove never creates for worktrees).
+func canonicalGonePath(p string) string {
+	p = filepath.Clean(p)
+	if resolved, err := filepath.EvalSymlinks(filepath.Dir(p)); err == nil {
+		return filepath.Join(resolved, filepath.Base(p))
+	}
+	return p
 }
 
 // samePath compares two paths with symlinks resolved on both sides.

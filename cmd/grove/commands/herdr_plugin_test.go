@@ -1,11 +1,17 @@
 package commands
 
 import (
+	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/lost-in-the/grove/internal/mux"
+	"github.com/lost-in-the/grove/internal/state"
 )
 
 func TestParseHerdrContext(t *testing.T) {
@@ -298,6 +304,228 @@ func TestNormalizeHerdrEventName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := normalizeHerdrEventName(tt.in); got != tt.want {
 				t.Errorf("normalizeHerdrEventName(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+// removedEventJSON is the worktree.removed payload shape captured live from
+// herdr 0.8.0 (`herdr worktree remove --workspace <id>`), with paths templated.
+// The removed checkout is in data.worktree.path; the surviving main repo is in
+// data.workspace.worktree.repo_root — the only path that still exists when the
+// hook runs.
+func removedEventJSON(repoRoot, checkout string) string {
+	return fmt.Sprintf(`{"event":"worktree_removed","data":{"type":"worktree_removed","workspace_id":"w1G",
+"workspace":{"workspace_id":"w1G","number":11,"label":"probe2","focused":false,"pane_count":1,"tab_count":1,
+"active_tab_id":"w1G:t1","agent_status":"unknown","worktree":{"repo_key":"%s/.git","repo_name":"main-repo",
+"repo_root":"%s","checkout_path":"%s","is_linked_worktree":true}},
+"worktree":{"path":"%s","branch":"probe2","is_bare":false,"is_detached":false,"is_prunable":false,
+"is_linked_worktree":true,"label":"main-repo"},"forced":false}}`,
+		repoRoot, repoRoot, checkout, checkout)
+}
+
+func TestParseHerdrEventWorktreeRemoved(t *testing.T) {
+	got, err := parseHerdrEvent(removedEventJSON("/repos/grove", "/repos/grove-feat"))
+	if err != nil {
+		t.Fatalf("parseHerdrEvent() error = %v", err)
+	}
+	if got.Event != "worktree.removed" {
+		t.Errorf("Event = %q, want worktree.removed", got.Event)
+	}
+	if got.CheckoutPath() != "/repos/grove-feat" {
+		t.Errorf("CheckoutPath() = %q, want the removed checkout", got.CheckoutPath())
+	}
+	if got.RepoRoot() != "/repos/grove" {
+		t.Errorf("RepoRoot() = %q, want the surviving main repo", got.RepoRoot())
+	}
+}
+
+// fakeMux records Kill calls so tests never touch a real tmux/herdr server.
+type fakeMux struct {
+	*mux.OffBackend
+	backend mux.Backend
+	exists  bool
+	killed  []mux.Target
+}
+
+func (f *fakeMux) Backend() mux.Backend            { return f.backend }
+func (f *fakeMux) Available() bool                 { return true }
+func (f *fakeMux) Exists(mux.Target) (bool, error) { return f.exists, nil }
+func (f *fakeMux) Kill(t mux.Target) error         { f.killed = append(f.killed, t); return nil }
+
+// removalFixture builds an on-disk grove project: a real git repo (FindRoot
+// needs one) with a .grove dir, one tracked-but-gone worktree in state, and
+// last_worktree pointing at it. Paths are EvalSymlinks-resolved because
+// FindRoot canonicalizes and macOS temp dirs live behind /private symlinks.
+func removalFixture(t *testing.T) (repoRoot, removedPath string) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	repoRoot, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repoRoot
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	git("init")
+	git("commit", "--allow-empty", "-m", "init")
+
+	groveDir := filepath.Join(repoRoot, ".grove")
+	if err := os.MkdirAll(groveDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mgr, err := state.NewManager(groveDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The checkout herdr removed: a sibling dir that no longer exists —
+	// exactly what the hook sees.
+	removedPath = repoRoot + "-probe2"
+	if err := mgr.AddWorktree("probe2", &state.WorktreeState{
+		Path:          removedPath,
+		Branch:        "probe2",
+		DockerProject: "grove-probe2",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.SetLastWorktree("probe2"); err != nil {
+		t.Fatal(err)
+	}
+	return repoRoot, removedPath
+}
+
+func reloadState(t *testing.T, repoRoot string) *state.Manager {
+	t.Helper()
+	mgr, err := state.NewManager(filepath.Join(repoRoot, ".grove"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return mgr
+}
+
+func TestReconcileRemovedWorktreeDropsStateAndLast(t *testing.T) {
+	repoRoot, removedPath := removalFixture(t)
+	event, err := parseHerdrEvent(removedEventJSON(repoRoot, removedPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fake := &fakeMux{backend: mux.BackendTmux, exists: true}
+	if err := reconcileRemovedWorktree(event, fake); err != nil {
+		t.Fatalf("reconcileRemovedWorktree() error = %v", err)
+	}
+
+	mgr := reloadState(t, repoRoot)
+	if ws, _ := mgr.GetWorktree("probe2"); ws != nil {
+		t.Error("state entry survived — herdr removed the worktree but grove still tracks it")
+	}
+	if last, _ := mgr.GetLastWorktree(); last != "" {
+		t.Errorf("last_worktree = %q, want cleared — `grove last` would error on it", last)
+	}
+	if len(fake.killed) != 1 {
+		t.Errorf("Kill calls = %d, want 1 (orphaned tmux session should be reaped)", len(fake.killed))
+	}
+}
+
+func TestReconcileRemovedWorktreeSkipsMuxOnHerdrBackend(t *testing.T) {
+	// On the herdr backend the workspace close is herdr's own removal flow;
+	// calling back into the server mid-event is unverified territory. State
+	// still gets reconciled — only the session step is skipped.
+	repoRoot, removedPath := removalFixture(t)
+	event, err := parseHerdrEvent(removedEventJSON(repoRoot, removedPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fake := &fakeMux{backend: mux.BackendHerdr, exists: true}
+	if err := reconcileRemovedWorktree(event, fake); err != nil {
+		t.Fatalf("reconcileRemovedWorktree() error = %v", err)
+	}
+
+	if len(fake.killed) != 0 {
+		t.Errorf("Kill calls = %d, want 0 on the herdr backend", len(fake.killed))
+	}
+	mgr := reloadState(t, repoRoot)
+	if ws, _ := mgr.GetWorktree("probe2"); ws != nil {
+		t.Error("state entry survived on the herdr backend — reconciliation must not depend on the mux step")
+	}
+}
+
+func TestReconcileRemovedWorktreeIgnoresUntrackedPath(t *testing.T) {
+	repoRoot, _ := removalFixture(t)
+	event, err := parseHerdrEvent(removedEventJSON(repoRoot, repoRoot+"-never-tracked"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fake := &fakeMux{backend: mux.BackendTmux, exists: true}
+	if err := reconcileRemovedWorktree(event, fake); err != nil {
+		t.Fatalf("reconcileRemovedWorktree() error = %v", err)
+	}
+
+	mgr := reloadState(t, repoRoot)
+	if ws, _ := mgr.GetWorktree("probe2"); ws == nil {
+		t.Error("unrelated state entry was removed")
+	}
+	if last, _ := mgr.GetLastWorktree(); last != "probe2" {
+		t.Errorf("last_worktree = %q, want untouched probe2", last)
+	}
+	if len(fake.killed) != 0 {
+		t.Errorf("Kill calls = %d, want 0 for an untracked path", len(fake.killed))
+	}
+}
+
+func TestReconcileRemovedWorktreeIgnoresNonGroveRepo(t *testing.T) {
+	// A herdr-removed worktree of a repo grove doesn't manage is not an error —
+	// the hook fires for every worktree removal, grove-related or not.
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	repoRoot, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("git", "init")
+	cmd.Dir = repoRoot
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+
+	event, err := parseHerdrEvent(removedEventJSON(repoRoot, repoRoot+"-feat"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reconcileRemovedWorktree(event, &fakeMux{backend: mux.BackendTmux}); err != nil {
+		t.Errorf("reconcileRemovedWorktree() error = %v, want nil for a non-grove repo", err)
+	}
+}
+
+func TestReconcileRemovedWorktreeIgnoresPartialPayload(t *testing.T) {
+	// Defensive: a payload missing the worktree or workspace block must be a
+	// quiet no-op, not a crash inside a background hook.
+	for name, raw := range map[string]string{
+		"no data":         `{"event":"worktree_removed"}`,
+		"no worktree":     `{"event":"worktree_removed","data":{"workspace_id":"w1"}}`,
+		"no workspace":    `{"event":"worktree_removed","data":{"worktree":{"path":"/gone"}}}`,
+		"empty repo_root": `{"event":"worktree_removed","data":{"worktree":{"path":"/gone"},"workspace":{"worktree":{"repo_root":""}}}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			event, err := parseHerdrEvent(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := reconcileRemovedWorktree(event, &fakeMux{backend: mux.BackendTmux}); err != nil {
+				t.Errorf("reconcileRemovedWorktree() error = %v, want nil", err)
 			}
 		})
 	}

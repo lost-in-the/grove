@@ -1,13 +1,17 @@
 id = "lost-in-the.grove"
 name = "Grove"
-version = "0.1.0"
-min_herdr_version = "0.7.0"
-description = "Keeps grove's state in sync with worktrees created through herdr"
+version = "0.2.0"
+# Every event below is verified against herdr 0.8.0, and herdr rejects a
+# manifest naming an event it doesn't know — a lower floor risks taking the
+# whole plugin down on an older herdr for the sake of versions never tested.
+min_herdr_version = "0.8.0"
+description = "Keeps grove's state in sync with worktrees created or removed through herdr"
 platforms = ["linux", "macos"]
 
-# This plugin exists for one job: notice worktrees that appear through herdr's
-# own UI rather than through grove, so they do not silently skip grove's
-# bootstrap. Everything else grove does is better reached from the shell.
+# This plugin keeps grove honest about worktrees that change through herdr's
+# own UI rather than through grove: worktrees that appear must not silently
+# skip grove's bootstrap, and worktrees herdr removes must not linger in
+# grove's state. Everything else grove does is better reached from the shell.
 #
 # There is deliberately no dashboard pane. herdr's sidebar already lists every
 # worktree as a workspace, so a grove picker inside herdr duplicates the primary
@@ -36,6 +40,12 @@ command = ["grove", "herdr-action", "status"]
 # Subscribing only to worktree.opened therefore misses every worktree made
 # through herdr's create path — the exact case this hook exists for.
 #
+# The UI "new worktree" dialog fires the same events as the CLI create path
+# (workspace.created + worktree.created — probed live on 0.8.0, human-driven).
+# An ecosystem plugin's README claims the UI path fires only workspace.focused;
+# that claim is stale on 0.8.0 — do not add a workspace.focused subscription
+# to compensate, it fires on every single workspace switch.
+#
 # workspace.focused is deliberately NOT subscribed: it fires on every single
 # workspace switch, and its payload is only {"workspace_id"} with no worktree or
 # path data, so it could not answer the question anyway.
@@ -45,4 +55,23 @@ command = ["grove", "herdr-event"]
 
 [[events]]
 on = "worktree.opened"
+command = ["grove", "herdr-event"]
+
+# Close the loop in the other direction: when a worktree is removed through
+# herdr, drop grove's record of it so `grove last`/`grove ls` don't point at a
+# checkout that no longer exists. Verified against herdr 0.8.0:
+#
+#   - herdr's removal is a clean `git worktree remove` (directory and
+#     .git/worktrees registration both gone, branch left behind), so the hook
+#     touches only .grove/state.json — never git.
+#   - worktree.removed fires ONLY when herdr itself removes the worktree. The
+#     grove-rm flow (git removes the checkout, then grove closes the herdr
+#     workspace) fires only workspace.closed, so there is no feedback loop.
+#   - The payload's workspace.worktree.repo_root names the main checkout — the
+#     only path in it that still exists when the hook runs.
+#
+# The hook fires no remove hooks (a background event must not run side effects
+# the user didn't opt into) and raises no notification (nothing actionable).
+[[events]]
+on = "worktree.removed"
 command = ["grove", "herdr-event"]
