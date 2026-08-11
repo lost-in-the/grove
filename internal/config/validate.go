@@ -50,6 +50,15 @@ func Validate(cfg *Config) error {
 		return fmt.Errorf("mux.backend must be one of: auto, tmux, herdr, off (got %q)", cfg.Mux.Backend)
 	}
 
+	validOpenIn := map[string]bool{
+		"":            true,
+		OpenInNew:     true,
+		OpenInCurrent: true,
+	}
+	if !validOpenIn[cfg.Session.OpenIn] {
+		return fmt.Errorf("session.open_in must be one of: new, current (got %q)", cfg.Session.OpenIn)
+	}
+
 	// Validate tmux mode
 	validTmuxMode := map[string]bool{
 		"auto":   true,

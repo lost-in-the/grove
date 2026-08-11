@@ -90,3 +90,27 @@ func TestMergeMuxConfig(t *testing.T) {
 		t.Errorf("override backend = %q, want herdr", merged.Mux.Backend)
 	}
 }
+
+func TestMergeCarriesSessionOpenIn(t *testing.T) {
+	// A field the merge forgets is a field the config file cannot set: the
+	// value parses, survives into the override, and is then dropped on the
+	// floor. Only an end-to-end read catches that, so pin it here.
+	base := LoadDefaults()
+	override := &Config{}
+	override.Session.OpenIn = OpenInCurrent
+
+	merged := mergeConfigs(base, override)
+
+	if merged.Session.OpenIn != OpenInCurrent {
+		t.Errorf("Session.OpenIn = %q, want %q", merged.Session.OpenIn, OpenInCurrent)
+	}
+	if got := merged.EffectiveOpenIn(); got != OpenInCurrent {
+		t.Errorf("EffectiveOpenIn() = %q, want %q", got, OpenInCurrent)
+	}
+}
+
+func TestEffectiveOpenInDefaultsToNew(t *testing.T) {
+	if got := (&Config{}).EffectiveOpenIn(); got != OpenInNew {
+		t.Errorf("EffectiveOpenIn() = %q, want %q for an unset value", got, OpenInNew)
+	}
+}

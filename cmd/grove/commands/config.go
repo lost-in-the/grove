@@ -213,6 +213,17 @@ func renderConfigSummary(w *cli.Writer, cfg *config.Config) {
 	}
 
 	_, _ = fmt.Fprintln(w)
+	cli.Bold(w, "[session]:")
+	cli.Label(w, "  command:", cfg.Session.Command)
+	// Unset means "new", and a user comparing this against their config file
+	// should be able to see which placement is actually in force.
+	openIn := cfg.Session.OpenIn
+	if openIn == "" {
+		openIn = cfg.EffectiveOpenIn() + " (default)"
+	}
+	cli.Label(w, "  open_in:", openIn)
+
+	_, _ = fmt.Fprintln(w)
 	cli.Bold(w, "[tmux]:")
 	cli.Label(w, "  mode:", cfg.Tmux.Mode)
 	cli.Label(w, "  prefix:", cfg.Tmux.Prefix)

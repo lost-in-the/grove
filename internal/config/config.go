@@ -29,10 +29,37 @@ func (t TestConfig) IncludeDepsValue() bool {
 
 // SessionConfig controls session command behavior for grove open
 type SessionConfig struct {
-	Command     string `toml:"command"`
+	Command string `toml:"command"`
+	// OpenIn decides where a worktree lands: "new" (default) creates or
+	// adopts its own session and relocates the client to it, "current" reuses
+	// the shell you are standing in and only changes directory.
+	//
+	// It is backend-neutral. Under tmux "new" means the worktree's session;
+	// under herdr it means the worktree's workspace. It is distinct from
+	// [tmux] mode, which decides *whether* grove manages sessions at all —
+	// OpenIn only decides where the worktree lands when it does. --peek is the
+	// one-shot form, and additionally skips hooks.
+	OpenIn      string `toml:"open_in"`
 	Popup       *bool  `toml:"popup"`
 	PopupWidth  string `toml:"popup_width"`
 	PopupHeight string `toml:"popup_height"`
+}
+
+// Session open_in values.
+const (
+	// OpenInNew creates or adopts the worktree's own session.
+	OpenInNew = "new"
+	// OpenInCurrent reuses the calling shell and only changes directory.
+	OpenInCurrent = "current"
+)
+
+// EffectiveOpenIn returns the configured session placement, defaulting to
+// "new" so existing installs keep behaving exactly as they did.
+func (c *Config) EffectiveOpenIn() string {
+	if c.Session.OpenIn == "" {
+		return OpenInNew
+	}
+	return c.Session.OpenIn
 }
 
 // Config represents the complete grove configuration
@@ -559,6 +586,9 @@ func mergeTestConfig(result, override *TestConfig) {
 func mergeSessionConfig(result, override *SessionConfig) {
 	if override.Command != "" {
 		result.Command = override.Command
+	}
+	if override.OpenIn != "" {
+		result.OpenIn = override.OpenIn
 	}
 	if override.Popup != nil {
 		result.Popup = override.Popup

@@ -250,8 +250,14 @@ Examples:
 
 		// Create the session if a multiplexer is available (skip with --no-tmux;
 		// agent mode intentionally still creates the detached session — see
-		// AGENTS.md)
-		if m := ctx.Mux(); !newNoTmux && m.Available() {
+		// AGENTS.md).
+		//
+		// [session] open_in = "current" does suppress it. Agent mode and tmux
+		// mode "off" only say "don't relocate my client", and a detached
+		// session is still useful to them; open_in is a statement about where
+		// the worktree lands, and answering "the shell I'm already in" with a
+		// second one elsewhere is not that.
+		if m := ctx.Mux(); !newNoTmux && m.Available() && !openInCurrent(ctx.Config) {
 			target := muxTarget(mgr, name, wt.Path)
 			sessionName := target.Name
 			if err := m.Ensure(target); err != nil {

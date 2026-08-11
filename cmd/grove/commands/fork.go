@@ -260,8 +260,9 @@ Examples:
 
 		projectName := mgr.GetProjectName()
 
-		// Create the multiplexer session
-		if m := ctx.Mux(); m.Available() {
+		// Create the multiplexer session, unless [session] open_in = "current"
+		// says the worktree belongs in the shell already running.
+		if m := ctx.Mux(); m.Available() && !openInCurrent(ctx.Config) {
 			target := muxTarget(mgr, name, newTree.Path)
 			sessionName := target.Name
 			if err := m.Ensure(target); err != nil {
