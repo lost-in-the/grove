@@ -345,6 +345,38 @@ func (b *HerdrBackend) PaneInfo(t Target) (*PaneInfo, error) {
 	return info, nil
 }
 
+// Notify raises a herdr notification.
+//
+// This is the only way a plugin event hook can reach a person. A hook's stdout
+// and stderr go to `herdr plugin log list` and nowhere else, so a hook that
+// only writes there has effectively said nothing.
+//
+// Verified against herdr 0.8.0 that a hook may call back into the socket API
+// while the server is still running it — the call returns `shown: true` and
+// does not deadlock against the server that spawned the hook.
+func (b *HerdrBackend) Notify(title, body string) error {
+	if title == "" {
+		return fmt.Errorf("notification title cannot be empty")
+	}
+	args := []string{"notification", "show", title}
+	if body != "" {
+		args = append(args, "--body", body)
+	}
+	_, err := b.call(args)
+	return err
+}
+
+// Notify raises a herdr notification through the real CLI. Returns an error
+// when herdr is not installed, so callers can stay quiet rather than reporting
+// a failure the user cannot act on.
+func Notify(title, body string) error {
+	b := NewHerdr()
+	if !b.Available() {
+		return fmt.Errorf("herdr is not installed")
+	}
+	return b.Notify(title, body)
+}
+
 // SendCommand runs a command line in the workspace's focused pane.
 func (b *HerdrBackend) SendCommand(t Target, command string) error {
 	pane, err := b.rootPane(t)

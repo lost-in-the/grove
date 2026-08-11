@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A **herdr plugin** in [`integrations/herdr/`](integrations/herdr/README.md): a workspace status action, plus `worktree.created` and `worktree.opened` hooks that point at `grove adopt` when a worktree appears through herdr's UI rather than grove's. Install with `herdr plugin install lost-in-the/grove/integrations/herdr`. There is deliberately no dashboard pane — herdr's sidebar already lists every worktree.
 - `grove doctor` reports herdr availability, and — when herdr is the active backend — whether its server is reachable.
 - **`[session] open_in`** (`new` | `current`) decides where a worktree lands when you switch to it: a session of its own, or the shell you are already in. Backend-neutral — under tmux that is the tmux session, under herdr the workspace. `--peek` remains the one-shot form, and additionally skips hooks.
+- The herdr plugin's adoption prompt is raised as a **herdr notification**, not only written to the hook's stderr — which goes to `herdr plugin log list` and nowhere a person looks.
 - Sessions now **name the window they create** after the worktree — a herdr tab label, a tmux window name. Previously nothing set one, so ghostty and cmux titled the window after the running process, showing `grove` or the whole `grove to <name>` command line.
 
 Verified end to end against herdr 0.8.0: create, list, switch, rename, and remove all round-trip correctly, and `grove ls` stays at ~52ms with the herdr backend active.

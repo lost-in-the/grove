@@ -12,6 +12,8 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/grove"
+	"github.com/lost-in-the/grove/internal/log"
+	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/state"
 )
 
@@ -191,6 +193,18 @@ adopt', which runs post-create hooks the user should opt into.`,
 
 		cli.Warning(w, "grove does not track the worktree at %s", path)
 		cli.Faint(w, "Run 'grove adopt %s' to bootstrap it (state, excludes, hooks).", path)
+
+		// An event hook's stderr reaches `herdr plugin log list` and nothing
+		// else, so on its own the one thing this hook exists to say would
+		// never be seen. Raise a notification as well. Best-effort — the log
+		// line is written either way, and a failure here is not the user's
+		// problem to act on.
+		if err := mux.Notify(
+			"grove: worktree not tracked",
+			fmt.Sprintf("%s — run 'grove adopt %s' to bootstrap it", filepath.Base(path), path),
+		); err != nil {
+			log.Printf("herdr notification failed: %v", err)
+		}
 		return nil
 	},
 }

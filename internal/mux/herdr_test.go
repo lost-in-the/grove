@@ -634,3 +634,27 @@ func TestTargetDisplayNameFallsBackToSessionName(t *testing.T) {
 		t.Errorf("DisplayName() = %q, want the short name", got)
 	}
 }
+
+func TestHerdrNotify(t *testing.T) {
+	f := newFakeHerdr()
+	f.responses["notification show"] = `{"id":"x","result":{"type":"notification_show","shown":true,"reason":"shown"}}`
+
+	if err := f.backend().Notify("grove: worktree not tracked", "run grove adopt"); err != nil {
+		t.Fatalf("Notify() error = %v", err)
+	}
+	if !f.called("notification", "show", "grove: worktree not tracked", "--body", "run grove adopt") {
+		t.Errorf("Notify did not pass title and body; calls: %v", f.calls)
+	}
+}
+
+func TestHerdrNotifyOmitsAnEmptyBody(t *testing.T) {
+	f := newFakeHerdr()
+	f.responses["notification show"] = `{"id":"x","result":{"type":"notification_show","shown":true}}`
+
+	if err := f.backend().Notify("title only", ""); err != nil {
+		t.Fatalf("Notify() error = %v", err)
+	}
+	if f.called("--body") {
+		t.Errorf("Notify passed an empty --body; calls: %v", f.calls)
+	}
+}

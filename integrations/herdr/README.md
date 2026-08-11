@@ -31,6 +31,13 @@ for, the `worktree.created` / `worktree.opened` hooks point at `grove adopt`.
 It only reports. Adopting runs post-create hooks and docker auto-start, which
 should be a deliberate choice rather than something a background event fires.
 
+The prompt is raised as a **herdr notification**, not just written to the hook's
+stderr. A hook's stdout and stderr go to `herdr plugin log list` and nowhere
+else, so a hook that only writes there has effectively said nothing — the one
+thing this plugin exists to tell you would never reach you. Verified against
+herdr 0.8.0 that a hook may call back into the socket API while the server is
+running it, without deadlocking.
+
 Both events are subscribed because they are not interchangeable — verified
 against herdr 0.8.0:
 
