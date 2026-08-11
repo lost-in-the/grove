@@ -331,7 +331,7 @@ func CreateSessionWithCommand(name, path, command string) error {
 // or "grove" while grove itself is still on the pane — and keeps renaming it as
 // the foreground process changes. That name is what tmux feeds the outer
 // terminal's title through set-titles-string, so ghostty and cmux end up
-// labelling the window after a process instead of the worktree. Passing -n also
+// labeling the window after a process instead of the worktree. Passing -n also
 // turns automatic-rename off for the window, so the name grove sets sticks.
 func CreateSessionNamed(name, path, command, windowName string) error {
 	if name == "" {

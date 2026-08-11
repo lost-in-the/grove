@@ -126,7 +126,7 @@ func ensureSession(m mux.Multiplexer, t mux.Target) (bool, error) {
 // sessionColumnTitle names the session column after the backend actually being
 // driven.
 //
-// The header used to read "TMUX" unconditionally, which labelled herdr
+// The header used to read "TMUX" unconditionally, which labeled herdr
 // workspace state as tmux state — the one place the multiplexer abstraction
 // leaked into what the user sees.
 func sessionColumnTitle(m mux.Multiplexer) string {
