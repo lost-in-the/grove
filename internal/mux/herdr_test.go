@@ -729,3 +729,75 @@ func TestHerdrListWithServerDownSurfacesError(t *testing.T) {
 		t.Fatalf("List() error = %v, want ErrServerNotRunning", err)
 	}
 }
+
+// countCalls returns how many recorded invocations match the given key
+// (command group + subcommand).
+func (f *fakeHerdr) countCalls(key string) int {
+	n := 0
+	for _, call := range f.calls {
+		if f.key(call) == key {
+			n++
+		}
+	}
+	return n
+}
+
+// One grove command used to spawn `workspace list` four times (Exists, then a
+// fresh resolve inside PaneInfo, SendCommand, and focus) and `pane list`
+// twice, against the <500ms budget. Reads are cached for the instance's
+// lifetime.
+func TestHerdrCachesReadsWithinAnInstance(t *testing.T) {
+	f := newFakeHerdr()
+	f.responses["workspace list"] = workspaceListJSON
+	f.responses["workspace focus"] = `{"id":"x","result":{"type":"ok"}}`
+	f.responses["pane list"] = `{"id":"x","result":{"type":"pane_list","panes":[{"pane_id":"w2:p1","terminal_id":"t","workspace_id":"w2","tab_id":"w2:t1","focused":true,"cwd":"/repos/grove-testing","agent_status":"unknown"}]}}`
+	f.responses["pane process-info"] = `{"id":"x","result":{"type":"process_info","foreground_processes":[{"name":"zsh"}]}}`
+	f.responses["pane run"] = `{"id":"x","result":{"type":"ok"}}`
+	b := f.backend()
+	target := Target{Name: "grove-testing", Path: "/repos/grove-testing"}
+
+	// The `grove to` shape: exists check, drift check, drift correction, focus.
+	if exists, err := b.Exists(target); err != nil || !exists {
+		t.Fatalf("Exists() = %v, %v", exists, err)
+	}
+	if _, err := b.PaneInfo(target); err != nil {
+		t.Fatalf("PaneInfo() error = %v", err)
+	}
+	if err := b.SendCommand(target, "cd /repos/grove-testing"); err != nil {
+		t.Fatalf("SendCommand() error = %v", err)
+	}
+	if err := b.Switch(target); err != nil {
+		t.Fatalf("Switch() error = %v", err)
+	}
+
+	if got := f.countCalls("workspace list"); got != 1 {
+		t.Errorf("workspace list spawned %d times, want 1; calls: %v", got, f.calls)
+	}
+	if got := f.countCalls("pane list"); got != 1 {
+		t.Errorf("pane list spawned %d times, want 1; calls: %v", got, f.calls)
+	}
+}
+
+// Mutations must drop the caches: a Kill changes the workspace set, so the
+// next Exists has to refetch rather than answer from the stale snapshot.
+func TestHerdrMutationInvalidatesReadCache(t *testing.T) {
+	f := newFakeHerdr()
+	f.responses["workspace list"] = workspaceListJSON
+	f.responses["workspace close"] = `{"id":"x","result":{"type":"workspace_closed"}}`
+	b := f.backend()
+	target := Target{Name: "grove-testing", Path: "/repos/grove-testing"}
+
+	if _, err := b.Exists(target); err != nil {
+		t.Fatalf("Exists() error = %v", err)
+	}
+	if err := b.Kill(target); err != nil {
+		t.Fatalf("Kill() error = %v", err)
+	}
+	if _, err := b.Exists(target); err != nil {
+		t.Fatalf("Exists() after Kill error = %v", err)
+	}
+
+	if got := f.countCalls("workspace list"); got != 2 {
+		t.Errorf("workspace list spawned %d times, want 2 (cache must drop on close); calls: %v", got, f.calls)
+	}
+}

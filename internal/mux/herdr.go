@@ -34,6 +34,19 @@ type HerdrBackend struct {
 	available func() bool
 	// env reads an environment variable.
 	env func(string) string
+
+	// Read cache. Every herdr call is a subprocess spawn, and one `grove to`
+	// used to spawn ten of them — four identical `workspace list` (Exists,
+	// then a fresh resolve() inside PaneInfo, SendCommand, and focus) and two
+	// identical `pane list` — against the repo's <500ms command budget. A
+	// backend instance lives for a single grove command (the TUI resolves a
+	// fresh one per call site), so caching pure reads for the instance's
+	// lifetime trades no meaningful staleness for six fewer spawns. call()
+	// drops both caches before any invocation that is not a known-pure read.
+	mu           sync.Mutex
+	sessionCache []Session
+	sessionValid bool
+	paneCache    map[string][]herdrPane
 }
 
 // NewHerdr returns the herdr backend wired to the real CLI.
@@ -213,8 +226,18 @@ func (b *HerdrBackend) Exists(t Target) (bool, error) {
 // List returns every herdr workspace, mapped onto grove's session model.
 //
 // One call yields id, label, focus, checkout path and rolled-up agent status,
-// which is everything grove's listing and TUI need.
+// which is everything grove's listing and TUI need. The result is cached for
+// the backend instance's lifetime (callers treat it as read-only) and
+// refetched after any mutating call.
 func (b *HerdrBackend) List() ([]Session, error) {
+	b.mu.Lock()
+	if b.sessionValid {
+		sessions := b.sessionCache
+		b.mu.Unlock()
+		return sessions, nil
+	}
+	b.mu.Unlock()
+
 	raw, err := b.call([]string{"workspace", "list"})
 	if err != nil {
 		return nil, err
@@ -231,6 +254,9 @@ func (b *HerdrBackend) List() ([]Session, error) {
 	for _, ws := range result.Workspaces {
 		sessions = append(sessions, ws.session())
 	}
+	b.mu.Lock()
+	b.sessionCache, b.sessionValid = sessions, true
+	b.mu.Unlock()
 	return sessions, nil
 }
 
@@ -338,17 +364,11 @@ func (b *HerdrBackend) PaneInfo(t Target) (*PaneInfo, error) {
 		return nil, err
 	}
 
-	raw, err := b.call([]string{"pane", "list", "--workspace", id})
+	panes, err := b.paneList(id)
 	if err != nil {
 		return nil, err
 	}
-	var listed struct {
-		Panes []herdrPane `json:"panes"`
-	}
-	if err := json.Unmarshal(raw, &listed); err != nil {
-		return nil, fmt.Errorf("decode pane list: %w", err)
-	}
-	pane, ok := focusedPane(listed.Panes)
+	pane, ok := focusedPane(panes)
 	if !ok {
 		return nil, errNoSession
 	}
@@ -482,21 +502,44 @@ func (b *HerdrBackend) rootPane(t Target) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	raw, err := b.call([]string{"pane", "list", "--workspace", id})
+	panes, err := b.paneList(id)
 	if err != nil {
 		return "", err
+	}
+	pane, ok := focusedPane(panes)
+	if !ok {
+		return "", errNoSession
+	}
+	return pane.PaneID, nil
+}
+
+// paneList lists a workspace's panes, cached like List — the drift check and
+// a follow-up SendCommand used to fetch the identical list back to back.
+func (b *HerdrBackend) paneList(workspaceID string) ([]herdrPane, error) {
+	b.mu.Lock()
+	if panes, ok := b.paneCache[workspaceID]; ok {
+		b.mu.Unlock()
+		return panes, nil
+	}
+	b.mu.Unlock()
+
+	raw, err := b.call([]string{"pane", "list", "--workspace", workspaceID})
+	if err != nil {
+		return nil, err
 	}
 	var listed struct {
 		Panes []herdrPane `json:"panes"`
 	}
 	if err := json.Unmarshal(raw, &listed); err != nil {
-		return "", fmt.Errorf("decode pane list: %w", err)
+		return nil, fmt.Errorf("decode pane list: %w", err)
 	}
-	pane, ok := focusedPane(listed.Panes)
-	if !ok {
-		return "", errNoSession
+	b.mu.Lock()
+	if b.paneCache == nil {
+		b.paneCache = map[string][]herdrPane{}
 	}
-	return pane.PaneID, nil
+	b.paneCache[workspaceID] = listed.Panes
+	b.mu.Unlock()
+	return listed.Panes, nil
 }
 
 func (b *HerdrBackend) runInPane(paneID, command string) error {
@@ -534,6 +577,17 @@ func (b *HerdrBackend) foregroundCommand(paneID string) (string, error) {
 
 // call runs a herdr command and returns the decoded `result` object.
 func (b *HerdrBackend) call(args []string) (json.RawMessage, error) {
+	// Anything that may change the state the caches snapshot (open, close,
+	// rename, focus …) drops them before running — unconditionally, since a
+	// failed mutation may still have had effects.
+	if !preservesHerdrReadCaches(args) {
+		b.mu.Lock()
+		b.sessionValid = false
+		b.sessionCache = nil
+		b.paneCache = nil
+		b.mu.Unlock()
+	}
+
 	out, runErr := b.run(args)
 
 	// herdr prints a JSON envelope on both success and failure, and the error
@@ -551,6 +605,25 @@ func (b *HerdrBackend) call(args []string) (json.RawMessage, error) {
 		return nil, fmt.Errorf("herdr %s: %w", strings.Join(args, " "), runErr)
 	}
 	return nil, fmt.Errorf("herdr %s: unexpected output: %s", strings.Join(args, " "), truncate(string(out), 200))
+}
+
+// preservesHerdrReadCaches reports whether a herdr invocation leaves the
+// cached snapshots valid: the pure reads, plus the verbs that touch nothing
+// the caches hold (`pane run` starts a process in an existing pane —
+// SendCommand runs it right after a resolve that just warmed the cache — and
+// `notification show` touches no session state at all). The list is
+// deliberately closed: an unknown verb counts as a mutation, so a new command
+// can at worst waste a refetch, never serve stale data.
+func preservesHerdrReadCaches(args []string) bool {
+	if len(args) < 2 {
+		return false
+	}
+	switch args[0] + " " + args[1] {
+	case "workspace list", "workspace get", "pane list", "pane process-info", "tab list",
+		"pane run", "notification show":
+		return true
+	}
+	return false
 }
 
 type herdrEnvelope struct {
