@@ -488,7 +488,7 @@ network = "shared"                 # string
 
 **Template variable contract.** `template_path` and `template_overlays` are plain
 `docker compose` files — variables inside them (`${FOO}`) are interpolated by `docker
-compose` itself, not by grove. Grove exports exactly two variables to that
+compose` itself, not by grove. Grove exports the following variables to that
 interpolation environment when running `grove up --isolated` and related agent-stack
 commands:
 
@@ -497,12 +497,12 @@ commands:
 - `AGENT_SLOT` — the allocated slot number, only when a slot is in use (not set for
   ephemeral runs with no allocated slot).
 
-A template must not reference any other variable. Referencing one that grove doesn't
-export (e.g. `${AGENT_MYAPP_DIR}`) interpolates to an empty string, which typically
-surfaces as an opaque compose error such as `invalid spec: :/app:delegated: empty
-section between colons`. If starting the stack fails and compose warned about an
-unset variable, grove now names the offending variable(s) and the set of variable
-names it exported, alongside the underlying compose error.
+A template must not reference variables grove does not export. Referencing one that
+grove doesn't export (e.g. `${AGENT_MYAPP_DIR}`) interpolates to an empty string,
+which typically surfaces as an opaque compose error such as `invalid spec:
+:/app:delegated: empty section between colons`. If starting the stack fails and
+compose warned about an unset variable, grove now names the offending variable(s)
+and the set of variable names it exported, alongside the underlying compose error.
 
 ---
 
