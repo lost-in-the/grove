@@ -104,20 +104,19 @@ Examples:
 		if m := ctx.Mux(); m.Available() {
 			sessions, err := m.List()
 			if err == nil {
-				prefix := projectName + "-"
 				for _, session := range sessions {
-					if strings.HasPrefix(session.Name, prefix) {
-						// Extract worktree name from session name
-						wtName := strings.TrimPrefix(session.Name, prefix)
+					wtName, ok := sessionWorktreeName(projectName, session.Name)
+					if !ok {
+						continue
+					}
 
-						// Check if corresponding worktree exists
-						if _, exists := gitWorktreeByName[wtName]; !exists {
-							issues = append(issues, RepairIssue{
-								Type:        "orphan_tmux",
-								Description: fmt.Sprintf("Tmux session '%s' has no corresponding worktree", session.Name),
-								Action:      fmt.Sprintf("Kill tmux session '%s'", session.Name),
-							})
-						}
+					// Check if corresponding worktree exists
+					if _, exists := gitWorktreeByName[wtName]; !exists {
+						issues = append(issues, RepairIssue{
+							Type:        "orphan_tmux",
+							Description: fmt.Sprintf("Tmux session '%s' has no corresponding worktree", session.Name),
+							Action:      fmt.Sprintf("Kill tmux session '%s'", session.Name),
+						})
 					}
 				}
 			}
@@ -263,6 +262,40 @@ Examples:
 
 		return nil
 	}),
+}
+
+// sessionWorktreeName reports whether a server-wide multiplexer session could
+// plausibly belong to this project, and if so, the worktree name it would
+// correspond to.
+//
+// The backend's session list (ctx.Mux().List()) returns every session on the
+// server, not just this project's — a sibling project whose name shares this
+// project's name as a prefix (e.g. "grove" vs "grove-web") produces sessions
+// that also start with "{project}-", and a bare TrimPrefix can't tell them
+// apart from this project's own worktree sessions. Round-tripping the trimmed
+// candidate back through worktree.TmuxSessionName rules out names that could
+// never have been produced for THIS project: most notably a sibling's own
+// root session (e.g. "grove-web"'s root session is literally "grove-web"),
+// where the trimmed remainder happens to be the reserved name "root" —
+// TmuxSessionName treats "root" specially and returns just the project name,
+// never "{project}-root", so a session named that way cannot be this
+// project's.
+//
+// This narrows false positives but does not fully disambiguate: a sibling
+// project's own worktree sessions (e.g. "grove-web-checkout" for project
+// "grove-web") are structurally indistinguishable from a same-named worktree
+// of this project and still pass. That residual ambiguity is why orphan_tmux
+// kills are confirmed individually by the caller rather than resolved here.
+func sessionWorktreeName(projectName, sessionName string) (string, bool) {
+	prefix := projectName + "-"
+	if !strings.HasPrefix(sessionName, prefix) {
+		return "", false
+	}
+	candidate := strings.TrimPrefix(sessionName, prefix)
+	if worktree.TmuxSessionName(projectName, candidate) != sessionName {
+		return "", false
+	}
+	return candidate, true
 }
 
 // extractQuotedName extracts the first single-quoted token from a description string.

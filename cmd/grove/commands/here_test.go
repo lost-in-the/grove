@@ -31,4 +31,14 @@ func TestHereFlags(t *testing.T) {
 	if jsonFlag == nil {
 		t.Error("expected --json flag to exist")
 	}
+
+	checkMountFlag := flags.Lookup("check-mount")
+	if checkMountFlag == nil {
+		t.Error("expected --check-mount flag to exist")
+	}
+
+	requireCurrentFlag := flags.Lookup("require-current")
+	if requireCurrentFlag == nil {
+		t.Error("expected --require-current flag to exist")
+	}
 }
