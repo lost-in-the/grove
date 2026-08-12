@@ -86,7 +86,7 @@ Deliberate non-actions, mirroring the adoption prompt's philosophy:
   stacks before removing through herdr, or use `grove rm`, which runs the full
   teardown. The hook logs the docker project name before dropping the record.
 - **No notification** — nothing is actionable; the cleanup is the whole story.
-  It is logged to `herdr plugin log list` and grove's own log (`GROVE_LOG=1`).
+  It is written to the hook's stderr, which `herdr plugin log list` captures.
 - **The branch is left alone**, matching herdr's own removal semantics.
 
 This direction has no loop with `grove rm`: `worktree.removed` fires only when

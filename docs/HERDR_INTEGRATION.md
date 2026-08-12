@@ -468,9 +468,12 @@ branch on "is there one".
 a JSON `agent` field, both appearing only when a backend reports one) and the
 TUI (a row badge and a detail row).
 
-**Plugin** — `integrations/herdr/` with the popup dashboard pane, a workspace
-status action, and a `worktree.opened` hook, backed by the hidden
-`grove herdr-action` / `grove herdr-event` subcommands.
+**Plugin** — `integrations/herdr/` with a workspace status action and three
+event hooks — `worktree.created` / `worktree.opened` (adoption prompt, raised
+as a herdr notification) and `worktree.removed` (state reconciliation) —
+backed by the hidden `grove herdr-action` / `grove herdr-event` subcommands.
+The dashboard pane it originally shipped with was removed; see "The dashboard
+pane was removed" below.
 
 **Doctor** — optional `herdr` binary check, plus a server-reachability check
 that runs only when herdr is the resolved backend.
@@ -517,8 +520,9 @@ with a `min_herdr_version` floor checked in `doctor`, lenient JSON decoding, and
 keeping the backend opt-in until it settles.
 
 **Two sources of truth for worktrees.** Mitigated by the ownership rule above,
-the `worktree.opened` hook, and never calling herdr's mutating worktree verbs.
-Worth stating loudly in `AGENTS.md` so agents don't "helpfully" reach for
+the worktree event hooks (adoption prompt on create/open, state reconciliation
+on remove), and never calling herdr's mutating worktree verbs. Worth stating
+loudly in `AGENTS.md` so agents don't "helpfully" reach for
 `herdr worktree create`.
 
 **Popup regression.** Between Phase 2 and Phase 4, `grove session` degrades to a
@@ -565,6 +569,7 @@ skipped by default.
 | Plugin manifest | `herdr plugin link` accepts it; actions, events, and panes all parse. Parsing is not execution — `TestHerdrPluginManifestCommandsResolve` additionally asserts every declared `grove` argv names a real subcommand |
 | Plugin action | `Grove: worktree status` runs and reports correctly |
 | Event hook | fires on a worktree grove doesn't track; stays silent on one it does |
+| Removal sync | `herdr worktree remove` on an adopted worktree drops the state entry, clears `last_worktree`, and logs the reconciliation to `herdr plugin log list` (live-verified 2026-08-11 with the linked plugin) |
 | Dead server | `server_not_running`; `grove ls` degrades to "no session", no hang |
 
 Five bugs surfaced that no amount of source reading had caught:
@@ -644,13 +649,12 @@ server, covering what the Linux pass could not:
 
 ### Still unverified
 
-- **Whether the adoption prompt is visible in practice.** The hook fires and
-  grove writes its warning to stderr, which herdr captures into `herdr plugin
-  log list` — and nowhere else. `[ui.toast]` covers agent state changes, not
-  plugin output, and defaults to `delivery = "off"`. So the prompt currently
-  lands somewhere no one looks. `herdr notification show <title> --body <text>`
-  exists and returns `shown: true` against an attached client; routing the
-  warning through it is the obvious next step and is not yet done.
+- ~~Whether the adoption prompt is visible in practice.~~ **Resolved:** the
+  prompt is now also raised via `herdr notification show`, with the returned
+  suppression reason (`disabled` under herdr's default `[ui.toast] delivery`,
+  or `rate_limited`) recorded in grove's log. Delivery remains the *user's*
+  herdr setting — see the [plugin README](../integrations/herdr/README.md) for
+  turning it on.
 - **Named sessions.** grove follows ambient `HERDR_SESSION` with no explicit
   scoping. Confirmed: no cross-session leakage in `grove ls`, but `grove to`
   under a second session creates a *duplicate* workspace for the same checkout,

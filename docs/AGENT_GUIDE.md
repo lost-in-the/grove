@@ -37,6 +37,9 @@ Two things are worth knowing as an agent:
 - **Never call `herdr worktree create` / `herdr worktree remove` on grove's
   behalf.** Grove owns worktree lifecycle; those commands would impose herdr's
   naming and bypass grove's `[protection]` rules. Use `grove new` / `grove rm`.
+  (A user removing a worktree through herdr's own UI is reconciled by the
+  plugin's `worktree.removed` hook — that safety net does not make it a
+  supported path for agents.)
 - Under herdr, `grove ls --json` gains an `agent` field per worktree
   (`idle` / `working` / `blocked` / `done`) — useful for finding which worktree
   has an agent waiting on input. It is absent under tmux.

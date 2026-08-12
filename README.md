@@ -47,7 +47,7 @@ One command. Worktree created. Credentials copied. Dependencies symlinked. Docke
 
 Grove manages **git worktrees** — isolated copies of your repository, each on its own branch, living in separate directories side by side. Think of each worktree as an independent desk: your main work is at one desk, PR review at another, the hotfix at a third. No stashing. No branch switching. No waiting for Docker to restart.
 
-Grove wraps the full worktree lifecycle — create, switch, fork, clean up — and wires in tmux, Docker, and your project's specific setup steps automatically.
+Grove wraps the full worktree lifecycle — create, switch, fork, clean up — and wires in your multiplexer (tmux or [herdr](https://herdr.dev)), Docker, and your project's specific setup steps automatically.
 
 ---
 
@@ -61,6 +61,7 @@ Grove wraps the full worktree lifecycle — create, switch, fork, clean up — a
 | **Lifecycle Hooks** | Auto-copy `.env`, symlink `node_modules`, run `bundle install` on worktree create |
 | **Docker Support** | Start, stop, and tail containers scoped to each worktree — automatically |
 | **Tmux Integration** | Every worktree gets its own tmux session; attach, detach, switch without losing context |
+| **Herdr Support** | Prefer [herdr](https://herdr.dev)? Set `[mux] backend = "herdr"` and every worktree gets a herdr workspace instead — plus a live agent-status column (`idle` / `working` / `blocked`) in `grove ls` and the dashboard |
 | **Shell Integration** | `grove to` actually changes your directory; tab completion included |
 | **Agent-Ready** | `GROVE_AGENT_MODE=1` for headless use in CI, scripts, or AI coding tools |
 
@@ -126,7 +127,7 @@ Edge builds may include breaking changes that haven't been documented yet. Pin t
 
 `grove version` shows the currently installed version. Grove also checks for newer releases automatically on each invocation (at most once per 24h, in a detached background process), surfacing a notification on command exit or in the TUI footer when an update is available. Set `GROVE_NO_UPDATE_NOTIFIER=1` to opt out, or use `grove --check-update` for a manual check. See [`docs/CONFIGURATION_REFERENCE.md`](docs/CONFIGURATION_REFERENCE.md) for the full opt-out matrix. To watch for releases externally, the GitHub repo's [Atom feed](https://github.com/lost-in-the/grove/releases.atom) and Watch → Custom → Releases work too.
 
-**Requirements:** Git 2.30+, tmux 3.0+ (optional), `gh` CLI (optional for GitHub features), zsh or bash.
+**Requirements:** Git 2.30+, a multiplexer if you want sessions — tmux 3.0+ or [herdr](https://herdr.dev) 0.8.0+ (both optional), `gh` CLI (optional for GitHub features), zsh or bash.
 
 ---
 
@@ -334,7 +335,7 @@ Requires `gh` CLI (installed and authenticated to your repo).
 | `grove init` | Initialize Grove in a git repo |
 | `grove setup` | Auto-configure shell integration |
 | `grove install <shell>` | Print shell integration code (use in `eval "$(grove install zsh)"`) |
-| `grove doctor` | Health check: binary, shell integration, git, tmux, Docker |
+| `grove doctor` | Health check: binary, shell integration, git, tmux/herdr, Docker |
 | `grove repair` | Fix state inconsistencies and orphaned tmux sessions |
 | `grove agent-help` | Quick reference for AI agent workflows |
 | `grove version` | Show version information |

@@ -45,6 +45,9 @@ export GROVE_TUI=0               # disable dashboard; bare `grove` prints usage
 > remove` shells out to `git worktree remove`, bypassing grove's `[protection]`
 > rules. Grove adopts checkouts with `herdr worktree open --path` and cleans up
 > with `herdr workspace close`, which drops panes and leaves the checkout alone.
+> (If a *user* removes a worktree through herdr anyway, the grove plugin's
+> `worktree.removed` hook reconciles grove's state automatically — but that is
+> damage control, not a supported removal path. Agents use `grove rm`.)
 
 ---
 
