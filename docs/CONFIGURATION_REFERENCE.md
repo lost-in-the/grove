@@ -489,13 +489,19 @@ network = "shared"                 # string
 **Shared stacks (multiple grove projects, one `external.path`):** if more than one grove
 project points `[plugins.docker.external].path` at the same directory — e.g. the stack repo
 itself and an app repo nested inside it — slot occupancy is resolved against the shared stack,
-not just the calling project's own `.slots.json`. Before handing out a slot, grove checks running
-containers at that path (via the `com.docker.compose.project.working_dir` label) for a numbered
-`*-agent-N` compose project belonging to a *different* project, and skips it. `grove ps` does the
-same check: a slot another project's stack holds is reported as `held by <compose-project>`
-instead of being attributed to a worktree in this project. This check is best-effort — if docker
-can't be queried, grove falls back to file-only allocation, so a strict container-name conflict on
-`docker compose up` can still surface as a daemon error naming the holding compose project.
+not just the calling project's own `.slots.json`. Before handing out a slot, grove checks
+containers at that path (via the `com.docker.compose.project.working_dir` label, `docker ps -a` —
+including stopped containers, not just running ones) for a numbered `*-agent-N` compose project
+belonging to a *different* project, and skips it. Stopped containers still count: a compose
+project's containers keep their pinned `container_name` until removed, so an exited-but-not-removed
+container still causes a docker daemon name conflict on `docker compose up` — the slot isn't free
+until the holder runs `grove down` (or the containers are otherwise removed). `grove ps` does the
+same occupancy check but additionally reports whether the holder is actually running: a slot
+another project's stack holds is reported as `held by <compose-project>`, or `held by
+<compose-project> (stopped)` when that project's containers have all exited. This check is
+best-effort — if docker can't be queried, grove falls back to file-only allocation, so a strict
+container-name conflict on `docker compose up` can still surface as a daemon error naming the
+holding compose project.
 
 ---
 

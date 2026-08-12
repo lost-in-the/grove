@@ -19,6 +19,7 @@ type psSlotOutput struct {
 	Project string `json:"compose_project,omitempty"`
 	URL     string `json:"url,omitempty"`
 	Foreign bool   `json:"foreign,omitempty"`
+	Running bool   `json:"running"`
 }
 
 func init() {
@@ -66,6 +67,7 @@ Examples:
 					Name:    s.Worktree,
 					Project: s.Project,
 					Foreign: s.Foreign,
+					Running: s.Running,
 				}
 				if !s.Foreign {
 					entry.URL = docker.AgentURL(ctx.Config, s.Slot)
@@ -91,7 +93,15 @@ Examples:
 
 		for _, s := range slots {
 			if s.Foreign {
-				cli.Bold(w, "  #%d  held by %s", s.Slot, s.Project)
+				if !s.Running {
+					// Held only by stopped/exited containers — still blocks
+					// this project from using the slot (a pinned
+					// container_name conflicts either way), but it isn't a
+					// live stack, so don't imply otherwise.
+					cli.Bold(w, "  #%d  held by %s (stopped)", s.Slot, s.Project)
+				} else {
+					cli.Bold(w, "  #%d  held by %s", s.Slot, s.Project)
+				}
 				continue
 			}
 			url := docker.AgentURL(ctx.Config, s.Slot)

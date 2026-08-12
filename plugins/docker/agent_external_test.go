@@ -246,7 +246,7 @@ if [ "$1" = "ps" ]; then
     touch "` + stateFile + `"
     exit 0
   fi
-  echo 'otherapp-agent-1|` + composePath + `'
+  echo 'otherapp-agent-1|` + composePath + `|running'
   exit 0
 fi
 if [ "$1" = "compose" ]; then

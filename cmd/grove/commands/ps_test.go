@@ -102,3 +102,26 @@ func TestPsSlotOutput_ForeignOmitsWorktreeIdentity(t *testing.T) {
 		t.Errorf("Marshal() = %s, want no url field for a foreign slot", got)
 	}
 }
+
+// TestPsSlotOutput_StoppedForeignSlotReportsRunningFalse verifies a foreign
+// slot held only by a stopped/exited container serializes with
+// "running":false so machine consumers can distinguish it from a live
+// foreign stack without re-querying docker themselves.
+func TestPsSlotOutput_StoppedForeignSlotReportsRunningFalse(t *testing.T) {
+	s := psSlotOutput{
+		Slot:    3,
+		Project: "otherapp-agent-3",
+		Foreign: true,
+		Running: false,
+	}
+
+	out, err := json.Marshal(s)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	got := string(out)
+
+	if !strings.Contains(got, `"running":false`) {
+		t.Errorf("Marshal() = %s, want running:false for a stopped foreign slot", got)
+	}
+}

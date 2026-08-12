@@ -101,6 +101,9 @@ func (s *agentExternalStrategy) Up(worktreePath string, detach bool) error {
 	// namespace if [plugins.docker.external].path is shared between them
 	// (#147). Best-effort: an unreachable docker daemon degrades to the old
 	// file-only behavior rather than blocking `grove up`.
+	// Excludes foreign slots whether their containers are running or merely
+	// stopped-but-not-removed — a pinned container_name conflicts with a new
+	// `docker compose up` either way (see stackOccupants/foreignOccupants).
 	occupants, _ := stackOccupants(composePath)
 	foreign := foreignOccupants(occupants, s.cfg.ProjectName)
 	excluded := make(map[int]bool, len(foreign))
@@ -320,11 +323,11 @@ func (s *agentExternalStrategy) foreignSlotHolder(composePath string, slot int, 
 	if err != nil {
 		return "", false
 	}
-	holder, ok := occupants[slot]
-	if !ok || holder == ownProjectName {
+	occ, ok := occupants[slot]
+	if !ok || occ.Project == ownProjectName {
 		return "", false
 	}
-	return holder, true
+	return occ.Project, true
 }
 
 // agentComposeProjectName is the shared naming logic used by both the strategy

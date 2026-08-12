@@ -277,6 +277,7 @@ type StackSlotStatus struct {
 	Worktree string // this project's worktree name; empty when the slot isn't attributed to this project
 	Project  string // compose project currently holding the slot (may belong to a different grove project)
 	Foreign  bool   // true when Project belongs to a different grove project than this one
+	Running  bool   // true when Project has at least one running container right now; false means held only by stopped/exited containers (or occupancy couldn't be determined and this is a local-only fallback, which is optimistically reported as running)
 }
 
 // ListStackSlots returns the resolved state of every occupied agent slot for
@@ -319,13 +320,20 @@ func ListStackSlots(cfg *config.Config) ([]StackSlotStatus, error) {
 
 		status := StackSlotStatus{Slot: slot}
 		switch {
-		case seen && occupant != ownProject:
+		case seen && occupant.Project != ownProject:
 			// Ground truth says a different grove project's compose stack
 			// holds this slot — trust it over a possibly-stale local record.
-			status.Project = occupant
+			// It's still reported (Foreign=true) even when Running is false:
+			// a stopped container with a pinned container_name still blocks
+			// this project from using the slot until the holder tears it
+			// down, so callers like `grove ps` should keep showing it as
+			// held, just no longer implying it's live.
+			status.Project = occupant.Project
 			status.Foreign = true
+			status.Running = occupant.Running
 		case seen:
-			status.Project = occupant
+			status.Project = occupant.Project
+			status.Running = occupant.Running
 			if haveLocal {
 				status.Worktree = rec.Worktree
 			}
@@ -334,6 +342,7 @@ func ListStackSlots(cfg *config.Config) ([]StackSlotStatus, error) {
 			// right now) — fall back to the local record, same as before #147.
 			status.Worktree = rec.Worktree
 			status.Project = ownProject
+			status.Running = true
 		default:
 			continue // occupant slot with neither a local record nor a resolvable owner
 		}

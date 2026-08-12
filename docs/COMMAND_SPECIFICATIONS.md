@@ -1420,12 +1420,15 @@ Flags:
 
 1. Read stack state from the local slot manager
 2. Reconcile against ground-truth container occupancy for the shared compose stack (via
-   `com.docker.compose.project.working_dir`) — this project's own `.slots.json` only knows what
-   *it* allocated, so a slot another grove project's stack holds at the same
-   `[plugins.docker.external].path` wouldn't otherwise be visible. Best-effort: if docker can't be
-   queried, falls back to local records alone.
+   `com.docker.compose.project.working_dir`, including stopped containers) — this project's own
+   `.slots.json` only knows what *it* allocated, so a slot another grove project's stack holds at
+   the same `[plugins.docker.external].path` wouldn't otherwise be visible. Best-effort: if docker
+   can't be queried, falls back to local records alone.
 3. Display results with `#N` reference IDs and URLs; slots held by a different grove project are
-   shown as `held by <compose-project>` instead of being attributed to a worktree here.
+   shown as `held by <compose-project>` instead of being attributed to a worktree here. Occupancy
+   includes stopped containers (a pinned `container_name` still conflicts even when exited), so a
+   foreign slot whose containers have all exited is shown as `held by <compose-project> (stopped)`
+   rather than looking like a live stack.
 
 **Output (Default):**
 ```
@@ -1440,6 +1443,13 @@ STACKS (2/5)
 STACKS (1/5)
 
   #1  held by otherapp-agent-1
+```
+
+**Output (slot held by a different grove project, but its containers have all exited):**
+```
+STACKS (1/5)
+
+  #1  held by otherapp-agent-1 (stopped)
 ```
 
 **Output (No active stacks):**
@@ -1466,17 +1476,22 @@ To enable, add to .grove/config.toml:
     "slot": 1,
     "worktree": "feature-x",
     "compose_project": "myapp-agent-1",
-    "url": "http://localhost:3101"
+    "url": "http://localhost:3101",
+    "running": true
   },
   {
     "slot": 2,
     "compose_project": "otherapp-agent-2",
-    "foreign": true
+    "foreign": true,
+    "running": false
   }
 ]
 ```
 `worktree` and `url` are omitted for slots held by a different grove project (`foreign: true`) —
-grove has no worktree to attribute them to.
+grove has no worktree to attribute them to. `running` reflects whether the holding compose project
+has at least one running container right now; `running: false` on a foreign slot means it's held
+only by stopped/exited containers — still occupied (a pinned `container_name` conflicts either
+way) but not a live stack.
 
 **Edge Cases:**
 
@@ -1485,6 +1500,7 @@ grove has no worktree to attribute them to.
 | Stacks not configured | Help text with config example |
 | No active stacks | Info message |
 | Slot held by a different grove project's stack at the same `external.path` | Shown as `held by <compose-project>`, not attributed to a worktree here |
+| Slot held by a different grove project's stack, but its containers have all exited | Shown as `held by <compose-project> (stopped)`; still excluded from allocation |
 
 **Exit Codes:**
 - 0: Success

@@ -115,7 +115,7 @@ func TestListStackSlots_AttributesForeignSlotInsteadOfClaimingIt(t *testing.T) {
 	// records, but a different grove project's compose stack ("otherapp")
 	// already holds it at the same shared compose path — ground truth from
 	// docker should surface that instead of silently reporting nothing (#147).
-	writeFakeDocker(t, "otherapp-agent-1|"+composePath)
+	writeFakeDocker(t, "otherapp-agent-1|"+composePath+"|running")
 
 	slots, err := ListStackSlots(cfg)
 	if err != nil {
@@ -148,7 +148,7 @@ func TestListStackSlots_OwnSlotConfirmedByDockerIsNotForeign(t *testing.T) {
 	}
 
 	// Ground truth agrees: myapp-agent-1 (this project's own naming) holds slot 1.
-	writeFakeDocker(t, "myapp-agent-1|"+composePath)
+	writeFakeDocker(t, "myapp-agent-1|"+composePath+"|running")
 
 	slots, err := ListStackSlots(cfg)
 	if err != nil {
@@ -163,5 +163,61 @@ func TestListStackSlots_OwnSlotConfirmedByDockerIsNotForeign(t *testing.T) {
 	}
 	if got.Worktree != "myapp-feature-x" {
 		t.Errorf("ListStackSlots()[0].Worktree = %q, want %q", got.Worktree, "myapp-feature-x")
+	}
+	if !got.Running {
+		t.Errorf("ListStackSlots()[0].Running = false, want true — docker confirms a running container")
+	}
+}
+
+// TestListStackSlots_StoppedForeignSlotReportsNotRunning confirms a foreign
+// slot held only by exited containers is still surfaced (it still blocks
+// this project from allocating the slot) but marked Running=false so `grove
+// ps` can render it as stopped rather than implying a live stack.
+func TestListStackSlots_StoppedForeignSlotReportsNotRunning(t *testing.T) {
+	composePath := t.TempDir()
+	cfg := newTestAgentConfigWithSlots(t, "myapp", composePath)
+
+	writeFakeDocker(t, "otherapp-agent-1|"+composePath+"|exited")
+
+	slots, err := ListStackSlots(cfg)
+	if err != nil {
+		t.Fatalf("ListStackSlots() error = %v", err)
+	}
+	if len(slots) != 1 {
+		t.Fatalf("ListStackSlots() = %v, want 1 entry", slots)
+	}
+	got := slots[0]
+	if !got.Foreign {
+		t.Errorf("ListStackSlots()[0].Foreign = false, want true")
+	}
+	if got.Running {
+		t.Errorf("ListStackSlots()[0].Running = true, want false — container is exited")
+	}
+	if got.Project != "otherapp-agent-1" {
+		t.Errorf("ListStackSlots()[0].Project = %q, want %q", got.Project, "otherapp-agent-1")
+	}
+}
+
+// TestListStackSlots_MixedRunningAndExitedForeignSlotReportsRunning confirms
+// a foreign compose project with one running and one exited container is
+// still reported Running=true — any live container in the project is enough.
+func TestListStackSlots_MixedRunningAndExitedForeignSlotReportsRunning(t *testing.T) {
+	composePath := t.TempDir()
+	cfg := newTestAgentConfigWithSlots(t, "myapp", composePath)
+
+	writeFakeDocker(t,
+		"otherapp-agent-1|"+composePath+"|exited",
+		"otherapp-agent-1|"+composePath+"|running",
+	)
+
+	slots, err := ListStackSlots(cfg)
+	if err != nil {
+		t.Fatalf("ListStackSlots() error = %v", err)
+	}
+	if len(slots) != 1 {
+		t.Fatalf("ListStackSlots() = %v, want 1 entry", slots)
+	}
+	if got := slots[0]; !got.Running {
+		t.Errorf("ListStackSlots()[0].Running = false, want true — one container in the project is still running")
 	}
 }
