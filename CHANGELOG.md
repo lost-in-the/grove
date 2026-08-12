@@ -29,6 +29,9 @@ Verified end to end against herdr 0.8.0: create, list, switch, rename, and remov
 - `grove doctor --fix` re-evaluates each check it fixed, so the report and the closing summary reflect the **post-fix** state — a run that repaired everything now ends green instead of counting the just-fixed findings as failures.
 - The one-time config-layout upgrade notice now points directly at `grove doctor --fix` and names the doctor check it corresponds to ("Config symlinks"), so the notice and the doctor report are recognizably about the same thing.
 
+### Fixed
+- Agent-stack template failures name the actual problem instead of an opaque compose error. `docs/CONFIGURATION_REFERENCE.md` now documents exactly which variables an agent compose template may interpolate (`<env_var>` and, when a slot is in use, `AGENT_SLOT` — nothing else), and when `grove up --isolated` fails after compose warns a template variable is unset, the error now names the unset variable(s) plus the variable names grove exported, rather than leaving the user to trace `invalid spec: :/app:delegated: empty section between colons` back to a template typo.
+
 ## [0.10.0] - 2026-07-22
 
 > **Upgrading:** Shell integration is now **version 9** — re-source your shell (`grove setup` / `eval "$(grove install zsh)"`) or `grove doctor` will nag. Two behavior changes to know about. **First:** `.grove/config.toml` is committable now (and should be committed — it's the shared project config). Older grove git-ignored it; the first command you run in an existing repo migrates the exclude file automatically and prints a one-time notice. Worktrees no longer receive per-worktree config symlinks — config always resolves from the main worktree — and `grove doctor` lists any legacy symlinks with exact cleanup commands. **Second:** hooks.toml actions marked `required` / `on_failure = "fail"` now genuinely abort the operation (create, switch, remove — CLI and dashboard alike). Everything else is drop-in.
