@@ -268,6 +268,46 @@ func TestUnsetVarScanWriter_DedupAndCap(t *testing.T) {
 	}
 }
 
+func TestUnsetVarScanWriter_CarriageReturnTerminatedLines(t *testing.T) {
+	var inner bytes.Buffer
+	w := newUnsetVarScanWriter(&inner)
+
+	// docker's progress rendering rewrites lines with bare \r (no \n). A
+	// warning terminated by \r must still complete a scannable line.
+	if _, err := w.Write([]byte("warning: The \"AGENT_MYAPP_DIR\" variable is not set. Defaulting to a blank string.\rPulling app ... \rPulling app ... done\n")); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	got := w.UnsetVars()
+	if len(got) != 1 || got[0] != "AGENT_MYAPP_DIR" {
+		t.Errorf("UnsetVars() = %v, want [AGENT_MYAPP_DIR] from a \\r-terminated line", got)
+	}
+}
+
+func TestUnsetVarScanWriter_PartialBufferBounded(t *testing.T) {
+	var inner bytes.Buffer
+	w := newUnsetVarScanWriter(&inner)
+
+	// A pathological stream with no line terminator at all must not buffer
+	// without bound — the old teeBuffer capped memory at stderrBufferLimit,
+	// and the scanner must not regress that by accumulating the whole stream
+	// while waiting for a newline.
+	chunk := []byte(strings.Repeat("x", 4096))
+	for i := 0; i < 64; i++ { // 256KB, no \n or \r anywhere
+		if _, err := w.Write(chunk); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+	}
+
+	if len(w.partial) > maxPartialLine {
+		t.Errorf("partial buffer grew to %d bytes, want <= %d", len(w.partial), maxPartialLine)
+	}
+	// The full stream must still have been teed through untouched.
+	if inner.Len() != 64*4096 {
+		t.Errorf("inner writer received %d bytes, want %d", inner.Len(), 64*4096)
+	}
+}
+
 func TestUnsetVarScanWriter_NoWarning(t *testing.T) {
 	var inner bytes.Buffer
 	w := newUnsetVarScanWriter(&inner)

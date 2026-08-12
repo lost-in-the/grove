@@ -110,6 +110,14 @@ func newUnsetVarScanWriter(w io.Writer) *unsetVarScanWriter {
 	}
 }
 
+// maxPartialLine bounds the partial-line buffer. docker's progress rendering
+// can rewrite lines with bare \r (handled below as a terminator), but a
+// stream with no line terminator at all must not make the scanner buffer the
+// whole stream while waiting for one — the teeBuffer this replaced capped
+// memory at stderrBufferLimit, and a real unset-variable warning line is far
+// shorter than this, so dropping an over-long line loses nothing we scan for.
+const maxPartialLine = 8 * 1024
+
 // Write implements io.Writer. It always tees the full input to the inner
 // writer and reports len(p) written, regardless of how much of the line
 // buffer was scanned.
@@ -121,12 +129,20 @@ func (u *unsetVarScanWriter) Write(p []byte) (int, error) {
 
 	u.partial = append(u.partial, p...)
 	for {
-		idx := bytes.IndexByte(u.partial, '\n')
+		// \r counts as a terminator too: docker progress output rewrites
+		// lines with bare carriage returns and may never emit \n.
+		idx := bytes.IndexAny(u.partial, "\r\n")
 		if idx < 0 {
 			break
 		}
 		u.scanLine(u.partial[:idx])
 		u.partial = u.partial[idx+1:]
+	}
+	if len(u.partial) > maxPartialLine {
+		// Over-long unterminated line: cannot be a warning we scan for.
+		// Drop it rather than grow without bound; the tee above already
+		// forwarded every byte to the inner writer.
+		u.partial = nil
 	}
 	return n, nil
 }
