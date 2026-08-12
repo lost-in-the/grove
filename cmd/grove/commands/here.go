@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/lost-in-the/grove/internal/cli"
+	"github.com/lost-in-the/grove/internal/exitcode"
 	"github.com/lost-in-the/grove/internal/output"
 	"github.com/lost-in-the/grove/internal/worktree"
 	"github.com/lost-in-the/grove/plugins/docker"
@@ -28,9 +29,10 @@ const (
 )
 
 var (
-	hereQuiet      bool
-	hereJSON       bool
-	hereCheckMount bool
+	hereQuiet          bool
+	hereJSON           bool
+	hereCheckMount     bool
+	hereRequireCurrent bool
 )
 
 // hereOutput represents the JSON output structure for grove here
@@ -71,6 +73,11 @@ var hereCmd = &cobra.Command{
 	Short:   "Show current worktree information",
 	Long:    `Display information about the current worktree including name, branch, and status.`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
+		if hereRequireCurrent && !hereCheckMount {
+			PrintError("--require-current requires --check-mount")
+			ExitWithCode(exitcode.InvalidInput)
+		}
+
 		mgr, err := ctx.WorktreeManager()
 		if err != nil {
 			return err
@@ -94,7 +101,7 @@ var hereCmd = &cobra.Command{
 			// intended for scripting / pre-test guards: "did I forget to
 			// grove up after switching?" The exit code is the signal.
 			if hereCheckMount {
-				return runMountDriftCheck(ctx, displayName)
+				return runMountDriftCheck(ctx, displayName, hereRequireCurrent)
 			}
 
 			fmt.Println(displayName)
@@ -256,5 +263,6 @@ func init() {
 	hereCmd.Flags().BoolVarP(&hereQuiet, "quiet", "q", false, "Just print the worktree name")
 	hereCmd.Flags().BoolVarP(&hereJSON, "json", "j", false, "Output as JSON")
 	hereCmd.Flags().BoolVar(&hereCheckMount, "check-mount", false, "Compare env-configured worktree against running container's bind-mount source; exits non-zero on drift")
+	hereCmd.Flags().BoolVar(&hereRequireCurrent, "require-current", false, "With --check-mount, also exit non-zero if the current worktree isn't the one the stack is configured for")
 	rootCmd.AddCommand(hereCmd)
 }

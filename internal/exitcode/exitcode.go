@@ -40,4 +40,12 @@ const (
 	// bind-mount source. Used to gate scripts ("did I forget to grove up
 	// after switching?").
 	MountDrift = 12
+
+	// MountCheckMismatch indicates `grove here --check-mount --require-current`
+	// found that the current worktree (cwd) is not the one the stack's env
+	// file is configured for. Distinct from MountDrift on purpose: this is a
+	// cwd-vs-configured comparison, not the env-vs-container comparison
+	// MountDrift reports, so a script can tell "wrong worktree" apart from
+	// "containers weren't restarted."
+	MountCheckMismatch = 13
 )
