@@ -492,7 +492,9 @@ network = "shared"                 # string
 # per-directory rather than per-slot, and a linked worktree's .git file points
 # outside the container's mount. GROVE_SLOT_GIT_BRANCH is empty on a detached
 # HEAD; a failed git lookup logs a warning and leaves both empty rather than
-# failing stack start. Opt-in — it's an extra `git` call on every slot start.
+# failing stack start. Opt-in — the two git lookups run on every agent-stack
+# compose command for the slot (up, down, run, exec), not just start, since
+# compose re-interpolates the template on each invocation.
 # Default: false
 export_git_metadata = false        # bool
 ```
