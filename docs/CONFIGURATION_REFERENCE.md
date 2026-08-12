@@ -484,6 +484,17 @@ url_pattern = "http://localhost:{slot}"  # string
 # The network must already exist before grove can create agent stacks.
 # Default: "" (empty — the network-existence check is skipped)
 network = "shared"                 # string
+
+# Export GROVE_SLOT_GIT_SHA and GROVE_SLOT_GIT_BRANCH — the slot's worktree
+# HEAD SHA and branch, resolved host-side with `git -C <slot-worktree-path>`
+# and passed into the compose environment alongside the other agent env vars.
+# Solves what neither mise nor an in-container `git` can: mise evaluates
+# per-directory rather than per-slot, and a linked worktree's .git file points
+# outside the container's mount. GROVE_SLOT_GIT_BRANCH is empty on a detached
+# HEAD; a failed git lookup logs a warning and leaves both empty rather than
+# failing stack start. Opt-in — it's an extra `git` call on every slot start.
+# Default: false
+export_git_metadata = false        # bool
 ```
 
 ---

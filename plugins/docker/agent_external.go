@@ -329,7 +329,41 @@ func (s *agentExternalStrategy) agentEnv(worktreePath string, slot int) []string
 	if slot > 0 {
 		env = append(env, fmt.Sprintf("AGENT_SLOT=%d", slot))
 	}
+	if s.agent.ExportGitMetadata != nil && *s.agent.ExportGitMetadata {
+		sha, branch := slotGitMetadata(worktreePath)
+		env = append(env, "GROVE_SLOT_GIT_SHA="+sha, "GROVE_SLOT_GIT_BRANCH="+branch)
+	}
 	return env
+}
+
+// slotGitMetadata resolves the host-side git SHA and branch for a slot's
+// worktree path. Grove is the only component in the agent-stack pipeline that
+// both knows the slot's worktree path and runs on the host: mise evaluates
+// per-directory rather than per-slot, and an in-container `git` invocation
+// fails because a linked worktree's .git file points outside the container's
+// mount. This is advisory metadata for the container's environment, so a
+// resolution failure is logged and degrades to an empty string rather than
+// failing stack start.
+//
+// branch is empty on a detached HEAD (`git rev-parse --abbrev-ref HEAD`
+// reports the literal string "HEAD" in that case, which isn't a real branch
+// name) — sha is still populated so the commit is identifiable either way.
+func slotGitMetadata(worktreePath string) (sha, branch string) {
+	shaOut, err := cmdexec.Output(context.TODO(), "git", []string{"-C", worktreePath, "rev-parse", "HEAD"}, "", cmdexec.GitLocal)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not resolve slot git SHA for %s: %v\n", worktreePath, err)
+	} else {
+		sha = strings.TrimSpace(string(shaOut))
+	}
+
+	branchOut, err := cmdexec.Output(context.TODO(), "git", []string{"-C", worktreePath, "rev-parse", "--abbrev-ref", "HEAD"}, "", cmdexec.GitLocal)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not resolve slot git branch for %s: %v\n", worktreePath, err)
+	} else if b := strings.TrimSpace(string(branchOut)); b != "HEAD" {
+		branch = b
+	}
+
+	return sha, branch
 }
 
 // resolveComposePath resolves ~ in a compose directory path. Configs loaded

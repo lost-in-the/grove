@@ -28,6 +28,7 @@ Verified end to end against herdr 0.8.0: create, list, switch, rename, and remov
 - `grove doctor` ends a failing run with a numbered **"action required"** list that repeats every failed required check in one place, instead of a bare "some checks failed — see above" pointing back into the scroll. Informational checks (tmux, GitHub CLI, Docker availability) stay inline-only.
 - `grove doctor --fix` re-evaluates each check it fixed, so the report and the closing summary reflect the **post-fix** state — a run that repaired everything now ends green instead of counting the just-fixed findings as failures.
 - The one-time config-layout upgrade notice now points directly at `grove doctor --fix` and names the doctor check it corresponds to ("Config symlinks"), so the notice and the doctor report are recognizably about the same thing.
+- **`[plugins.docker.external.agent] export_git_metadata`** opts an agent stack slot into `GROVE_SLOT_GIT_SHA` / `GROVE_SLOT_GIT_BRANCH` exports, resolved host-side from the slot's worktree path — the consumer can't compute this itself, since mise evaluates per-directory rather than per-slot and a linked worktree's `.git` file points outside the container's mount. Off by default (extra `git` call per slot start); a resolution failure warns and degrades to empty rather than failing stack start.
 
 ## [0.10.0] - 2026-07-22
 
