@@ -458,7 +458,10 @@ func runPostCreateStreaming(ch chan<- creationEvent, mgr *worktree.Manager, stat
 	// Create tmux session after bootstrap so hooks (docker Up, bundle
 	// install) have run by the time the user attaches — mirrors the CLI
 	// order (setupCreatedWorktree, then switch/tmux).
-	if m := muxFor(cfg); m.Available() {
+	// [session] open_in = "current" suppresses creation, matching `grove new`:
+	// the worktree lands in the shell the user is already in, and answering
+	// that with a session elsewhere is not what they asked for.
+	if m := muxFor(cfg); m.Available() && !sessionsSuppressed(cfg) {
 		ch <- creationEvent{line: "Creating session..."}
 		target := muxTargetFor(projectName, projectRoot, name, wt.Path)
 		if err := m.Ensure(target); err != nil {

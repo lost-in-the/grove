@@ -2429,7 +2429,7 @@ func (m *Model) handleTmuxSwitch(switchPath string) bool {
 	}
 
 	mx := muxFor(m.cfg)
-	if tmuxMode == "off" || !mx.Available() || m.switchToDisplayName == "" {
+	if tmuxMode == "off" || sessionsSuppressed(m.cfg) || !mx.Available() || m.switchToDisplayName == "" {
 		return false
 	}
 

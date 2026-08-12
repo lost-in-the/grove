@@ -20,6 +20,15 @@ func muxTargetFor(projectName, repoRoot, worktreeName, path string) mux.Target {
 	}
 }
 
+// sessionsSuppressed reports whether [session] open_in = "current" opted this
+// project out of session management: the worktree lands in the shell already
+// running, so the dashboard must neither create sessions nor relocate the
+// client — mirroring the CLI's resolveTmuxMode / `grove new` gates, which
+// honor the same setting.
+func sessionsSuppressed(cfg *config.Config) bool {
+	return cfg != nil && cfg.EffectiveOpenIn() == config.OpenInCurrent
+}
+
 // muxFor resolves the multiplexer backend from a dashboard config.
 //
 // The TUI has no GroveContext, so it resolves per call site rather than
@@ -35,17 +44,24 @@ func muxFor(cfg *config.Config) mux.Multiplexer {
 	return mux.New(pref)
 }
 
-// muxForRepo resolves the multiplexer for a project whose config is not
-// already loaded, reading it from the repo's .grove.
+// configForRepo loads a project's config from its .grove for call sites that
+// don't already hold one. Returns nil (logged) when loading fails.
 //
-// Passing a nil config instead would silently fall back to auto-detection and
-// ignore [mux] backend, so a project pinned to herdr would get tmux driven
-// underneath it whenever grove happened to run outside a herdr pane.
-func muxForRepo(repoRoot string) mux.Multiplexer {
+// Resolving the multiplexer from a nil config would silently fall back to
+// auto-detection and ignore [mux] backend, so a project pinned to herdr would
+// get tmux driven underneath it whenever grove happened to run outside a
+// herdr pane — which is why muxForRepo routes through this.
+func configForRepo(repoRoot string) *config.Config {
 	cfg, err := config.LoadFromGroveDir(filepath.Join(repoRoot, ".grove"))
 	if err != nil {
 		tuilog.Printf("warning: failed to load config for multiplexer resolution: %v", err)
-		cfg = nil
+		return nil
 	}
-	return muxFor(cfg)
+	return cfg
+}
+
+// muxForRepo resolves the multiplexer for a project whose config is not
+// already loaded, reading it from the repo's .grove.
+func muxForRepo(repoRoot string) mux.Multiplexer {
+	return muxFor(configForRepo(repoRoot))
 }
