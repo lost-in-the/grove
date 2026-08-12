@@ -73,7 +73,21 @@ func (b *HerdrBackend) Ensure(t Target) error {
 	if errHasCode(err, "worktree_not_found", "not_git_worktree") {
 		return b.mainCheckout(t)
 	}
+	if ErrServerNotRunning(err) {
+		return noServerUnmanaged(err)
+	}
 	return err
+}
+
+// noServerUnmanaged maps a dead-server failure onto errUnmanaged: with no
+// herdr server there is no session to manage, and callers already know how to
+// degrade an unmanaged target to a plain directory switch. Surfacing it as a
+// hard error instead would make every `grove to` fail outright — the exact
+// opposite of what `grove doctor` promises ("grove will fall back to plain
+// directory switching"). The tmux backend behaves the same way: a dead tmux
+// server reads as "no sessions", never as a fatal switch error.
+func noServerUnmanaged(err error) error {
+	return fmt.Errorf("%w: no herdr server is running (%v)", errUnmanaged, err)
 }
 
 // open runs `worktree open` and decodes the response, which carries the
@@ -153,6 +167,9 @@ func (b *HerdrBackend) EnsureWithCommand(t Target, command string) error {
 
 	opened, err := b.open(t)
 	if err != nil {
+		if ErrServerNotRunning(err) {
+			return noServerUnmanaged(err)
+		}
 		if !errHasCode(err, "worktree_not_found", "not_git_worktree") {
 			return err
 		}
@@ -176,9 +193,17 @@ func (b *HerdrBackend) EnsureWithCommand(t Target, command string) error {
 }
 
 // Exists reports whether a herdr workspace already covers the checkout.
+//
+// A dead server means no workspace exists, not that the question failed:
+// callers treat an Exists error as fatal (it aborts `grove to` before the cd
+// directive), while "false" routes them through Ensure, which reports the
+// target unmanaged and lets the plain directory switch proceed.
 func (b *HerdrBackend) Exists(t Target) (bool, error) {
 	sessions, err := b.List()
 	if err != nil {
+		if ErrServerNotRunning(err) {
+			return false, nil
+		}
 		return false, err
 	}
 	_, ok := NewIndex(sessions).Lookup(t)

@@ -679,3 +679,53 @@ func TestHerdrNotifyReportsSuppression(t *testing.T) {
 		t.Errorf("reason = %q, want %q", reason, "disabled")
 	}
 }
+
+// A herdr binary with no live server must degrade, not fail: doctor promises
+// "grove will fall back to plain directory switching", and treating a dead
+// server as a fatal Exists/Ensure error made every `grove to` abort before
+// the cd directive. Exists answers "no session"; Ensure reports the target
+// unmanaged, the same shape callers already degrade on.
+func TestHerdrExistsWithServerDownReportsNoSession(t *testing.T) {
+	f := newFakeHerdr()
+	f.responses["workspace list"] = `{"id":"x","error":{"code":"server_not_running","message":"no herdr server is running"}}`
+
+	exists, err := f.backend().Exists(Target{Name: "grove-x", Path: "/repos/grove-x"})
+	if err != nil {
+		t.Fatalf("Exists() error = %v, want nil for a dead server", err)
+	}
+	if exists {
+		t.Error("Exists() = true, want false for a dead server")
+	}
+}
+
+func TestHerdrEnsureWithServerDownIsUnmanaged(t *testing.T) {
+	f := newFakeHerdr()
+	f.responses["worktree open"] = `{"id":"x","error":{"code":"server_not_running","message":"no herdr server is running"}}`
+
+	err := f.backend().Ensure(Target{Name: "grove-x", Path: "/repos/grove-x", Repo: "/repos/grove"})
+	if !ErrUnmanaged(err) {
+		t.Fatalf("Ensure() error = %v, want ErrUnmanaged for a dead server", err)
+	}
+}
+
+func TestHerdrEnsureWithCommandWithServerDownIsUnmanaged(t *testing.T) {
+	f := newFakeHerdr()
+	f.responses["worktree open"] = `{"id":"x","error":{"code":"server_not_running","message":"no herdr server is running"}}`
+
+	err := f.backend().EnsureWithCommand(Target{Name: "grove-x", Path: "/repos/grove-x", Repo: "/repos/grove"}, "npm run dev")
+	if !ErrUnmanaged(err) {
+		t.Fatalf("EnsureWithCommand() error = %v, want ErrUnmanaged for a dead server", err)
+	}
+}
+
+// List must keep surfacing the raw server_not_running error — doctor's server
+// check depends on recognizing it.
+func TestHerdrListWithServerDownSurfacesError(t *testing.T) {
+	f := newFakeHerdr()
+	f.responses["workspace list"] = `{"id":"x","error":{"code":"server_not_running","message":"no herdr server is running"}}`
+
+	_, err := f.backend().List()
+	if !ErrServerNotRunning(err) {
+		t.Fatalf("List() error = %v, want ErrServerNotRunning", err)
+	}
+}
