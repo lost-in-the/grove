@@ -1418,8 +1418,14 @@ Flags:
 
 **Behavior:**
 
-1. Read stack state from slot manager
-2. Display results with `#N` reference IDs and URLs
+1. Read stack state from the local slot manager
+2. Reconcile against ground-truth container occupancy for the shared compose stack (via
+   `com.docker.compose.project.working_dir`) — this project's own `.slots.json` only knows what
+   *it* allocated, so a slot another grove project's stack holds at the same
+   `[plugins.docker.external].path` wouldn't otherwise be visible. Best-effort: if docker can't be
+   queried, falls back to local records alone.
+3. Display results with `#N` reference IDs and URLs; slots held by a different grove project are
+   shown as `held by <compose-project>` instead of being attributed to a worktree here.
 
 **Output (Default):**
 ```
@@ -1427,6 +1433,13 @@ STACKS (2/5)
 
   #1  feature-x      http://localhost:3101
   #2  bugfix-y       http://localhost:3102
+```
+
+**Output (slot held by a different grove project sharing the same stack):**
+```
+STACKS (1/5)
+
+  #1  held by otherapp-agent-1
 ```
 
 **Output (No active stacks):**
@@ -1454,9 +1467,16 @@ To enable, add to .grove/config.toml:
     "worktree": "feature-x",
     "compose_project": "myapp-agent-1",
     "url": "http://localhost:3101"
+  },
+  {
+    "slot": 2,
+    "compose_project": "otherapp-agent-2",
+    "foreign": true
   }
 ]
 ```
+`worktree` and `url` are omitted for slots held by a different grove project (`foreign: true`) —
+grove has no worktree to attribute them to.
 
 **Edge Cases:**
 
@@ -1464,6 +1484,7 @@ To enable, add to .grove/config.toml:
 |----------|----------|
 | Stacks not configured | Help text with config example |
 | No active stacks | Info message |
+| Slot held by a different grove project's stack at the same `external.path` | Shown as `held by <compose-project>`, not attributed to a worktree here |
 
 **Exit Codes:**
 - 0: Success

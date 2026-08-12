@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -254,13 +255,93 @@ func FindWorktreeSlot(cfg *config.Config, worktreePath string) int {
 	return slot
 }
 
-// ListActiveSlots returns all currently allocated agent slots.
+// ListActiveSlots returns all currently allocated agent slots, as recorded in
+// this grove project's own .slots.json. When [plugins.docker.external].path
+// is shared with another grove project, this file only ever reflects slots
+// THIS project allocated — it cannot see the other project's occupancy. Use
+// ListStackSlots for a view that also confirms/corrects attribution against
+// running containers (#147).
 func ListActiveSlots(cfg *config.Config) ([]SlotInfo, error) {
 	sm := buildSlotManager(cfg)
 	if sm == nil {
 		return nil, fmt.Errorf("agent stack not configured")
 	}
 	return sm.ListActive()
+}
+
+// StackSlotStatus is one resolved agent slot for `grove ps`, reconciling
+// this grove project's own slot records with ground-truth container
+// occupancy discovered across the shared external compose stack (#147).
+type StackSlotStatus struct {
+	Slot     int
+	Worktree string // this project's worktree name; empty when the slot isn't attributed to this project
+	Project  string // compose project currently holding the slot (may belong to a different grove project)
+	Foreign  bool   // true when Project belongs to a different grove project than this one
+}
+
+// ListStackSlots returns the resolved state of every occupied agent slot for
+// the shared compose stack, merging this project's local .slots.json against
+// docker container occupancy so callers (`grove ps`) don't misattribute a
+// slot another grove project's namespace actually holds. Docker occupancy is
+// queried best-effort: if it can't be determined (docker unreachable), slots
+// fall back to local records alone, matching pre-#147 behavior.
+func ListStackSlots(cfg *config.Config) ([]StackSlotStatus, error) {
+	sm := buildSlotManager(cfg)
+	if sm == nil {
+		return nil, fmt.Errorf("agent stack not configured")
+	}
+	local, err := sm.ListActive()
+	if err != nil {
+		return nil, err
+	}
+
+	localBySlot := make(map[int]SlotInfo, len(local))
+	for _, s := range local {
+		localBySlot[s.Slot] = s
+	}
+
+	composePath := resolveComposePath(cfg.Plugins.Docker.External.Path)
+	occupants, _ := stackOccupants(composePath) // best-effort
+
+	slotNums := make(map[int]struct{}, len(local)+len(occupants))
+	for _, s := range local {
+		slotNums[s.Slot] = struct{}{}
+	}
+	for slot := range occupants {
+		slotNums[slot] = struct{}{}
+	}
+
+	result := make([]StackSlotStatus, 0, len(slotNums))
+	for slot := range slotNums {
+		ownProject := AgentComposeProjectName(cfg, slot)
+		occupant, seen := occupants[slot]
+		rec, haveLocal := localBySlot[slot]
+
+		status := StackSlotStatus{Slot: slot}
+		switch {
+		case seen && occupant != ownProject:
+			// Ground truth says a different grove project's compose stack
+			// holds this slot — trust it over a possibly-stale local record.
+			status.Project = occupant
+			status.Foreign = true
+		case seen:
+			status.Project = occupant
+			if haveLocal {
+				status.Worktree = rec.Worktree
+			}
+		case haveLocal:
+			// No docker ground truth (query failed, or containers aren't up
+			// right now) — fall back to the local record, same as before #147.
+			status.Worktree = rec.Worktree
+			status.Project = ownProject
+		default:
+			continue // occupant slot with neither a local record nor a resolvable owner
+		}
+		result = append(result, status)
+	}
+
+	sort.Slice(result, func(i, j int) bool { return result[i].Slot < result[j].Slot })
+	return result, nil
 }
 
 // AgentURL derives the agent URL for a given slot from the config's URLPattern.

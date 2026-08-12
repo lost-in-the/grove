@@ -93,8 +93,22 @@ func (s *agentExternalStrategy) OnPostCreate(_ *hooks.Context) error {
 // Up starts a persistent agent stack for the worktree (full stack mode).
 func (s *agentExternalStrategy) Up(worktreePath string, detach bool) error {
 	wtName := filepath.Base(worktreePath)
+	composePath := s.composePath()
 
-	slot, err := s.slots.Allocate(wtName)
+	// Ground-truth occupancy across the whole shared stack, not just this
+	// grove project's own .slots.json — a slot this project has never heard
+	// of can already be running under a different grove project's compose
+	// namespace if [plugins.docker.external].path is shared between them
+	// (#147). Best-effort: an unreachable docker daemon degrades to the old
+	// file-only behavior rather than blocking `grove up`.
+	occupants, _ := stackOccupants(composePath)
+	foreign := foreignOccupants(occupants, s.cfg.ProjectName)
+	excluded := make(map[int]bool, len(foreign))
+	for slot := range foreign {
+		excluded[slot] = true
+	}
+
+	slot, err := s.slots.AllocateExcluding(wtName, excluded)
 	if err != nil {
 		return fmt.Errorf("failed to allocate agent slot: %w", err)
 	}
@@ -105,7 +119,6 @@ func (s *agentExternalStrategy) Up(worktreePath string, detach bool) error {
 		cli.EnvDirective(s.ext.EnvVar, worktreePath)
 	}
 	templatePaths := s.resolveTemplatePaths()
-	composePath := s.composePath()
 
 	// Check that the required external Docker network exists (if configured)
 	if s.agent.Network != "" {
@@ -138,6 +151,17 @@ func (s *agentExternalStrategy) Up(worktreePath string, detach bool) error {
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
+		if holder, ok := s.foreignSlotHolder(composePath, slot, projectName); ok {
+			// The pre-allocation occupancy check missed this — most likely a
+			// race where the other grove project started its stack in the
+			// gap between our check and `docker compose up`. Release so a
+			// retry picks a different slot instead of failing the same way
+			// forever (#147).
+			_ = s.slots.Release(wtName)
+			return fmt.Errorf("slot %d is already in use by compose project %q — "+
+				"another grove project mounting this shared stack holds it; "+
+				"run 'grove up' again to retry with a different slot: %w", slot, holder, err)
+		}
 		return fmt.Errorf("failed to start agent stack: %w", err)
 	}
 
@@ -282,6 +306,25 @@ func (s *agentExternalStrategy) Restart(worktreePath string, service string) err
 // composeProjectName returns the compose project name for a given slot.
 func (s *agentExternalStrategy) composeProjectName(slot int) string {
 	return agentComposeProjectName(s.cfg.ProjectName, slot)
+}
+
+// foreignSlotHolder re-queries stack occupancy after a `docker compose up`
+// failure to find out whether the failure was actually a cross-project slot
+// conflict (#147) — a container-name collision reports as an opaque docker
+// daemon error otherwise. Returns the holding compose project name and
+// ok=true only when the slot is confirmed held by a project other than
+// ownProjectName; ok=false covers both "not a conflict" and "occupancy
+// couldn't be determined" so callers fall back to the original error.
+func (s *agentExternalStrategy) foreignSlotHolder(composePath string, slot int, ownProjectName string) (string, bool) {
+	occupants, err := stackOccupants(composePath)
+	if err != nil {
+		return "", false
+	}
+	holder, ok := occupants[slot]
+	if !ok || holder == ownProjectName {
+		return "", false
+	}
+	return holder, true
 }
 
 // agentComposeProjectName is the shared naming logic used by both the strategy

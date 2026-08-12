@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -69,5 +71,34 @@ func TestPsSlotOutput_JSONTags(t *testing.T) {
 	}
 	if s.URL != "http://localhost:3001" {
 		t.Error("URL field not set correctly")
+	}
+}
+
+// TestPsSlotOutput_ForeignOmitsWorktreeIdentity verifies that a slot held by
+// a different grove project's compose stack (#147) serializes with the
+// "foreign" flag set and doesn't imply worktree/url ownership it can't back
+// up — an empty Name/URL is omitted from the JSON entirely rather than
+// printed as "".
+func TestPsSlotOutput_ForeignOmitsWorktreeIdentity(t *testing.T) {
+	s := psSlotOutput{
+		Slot:    2,
+		Project: "otherapp-agent-2",
+		Foreign: true,
+	}
+
+	out, err := json.Marshal(s)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	got := string(out)
+
+	if !strings.Contains(got, `"foreign":true`) {
+		t.Errorf("Marshal() = %s, want foreign:true", got)
+	}
+	if strings.Contains(got, `"worktree"`) {
+		t.Errorf("Marshal() = %s, want no worktree field for a foreign slot", got)
+	}
+	if strings.Contains(got, `"url"`) {
+		t.Errorf("Marshal() = %s, want no url field for a foreign slot", got)
 	}
 }

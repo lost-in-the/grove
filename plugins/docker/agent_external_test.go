@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -214,6 +215,72 @@ func TestAgentExternalStrategy_Up_EmitsEnvDirective(t *testing.T) {
 	}
 	if !strings.Contains(out, "env:APP_DIR=/tmp/myapp-up-test") {
 		t.Errorf("Up() stdout = %q, want env:APP_DIR=<worktreePath> line", out)
+	}
+}
+
+// TestAgentExternalStrategy_Up_ReportsForeignSlotConflict simulates the race
+// where another grove project's compose stack claims a slot in the gap
+// between grove's pre-allocation occupancy check and the actual
+// `docker compose up` call (#147). The fake `docker` binary reports no
+// occupants on the first `ps` query (the pre-check), fails the `compose up`
+// invocation (simulating a container-name conflict), then reports the
+// conflicting project on the second `ps` query (the post-failure re-check).
+// Up() should surface the holder's compose project name instead of the raw
+// daemon error, and release the now-stale local slot record.
+func TestAgentExternalStrategy_Up_ReportsForeignSlotConflict(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("sh not available")
+	}
+
+	cfg := newTestAgentConfig(t)
+	s := newAgentExternalStrategy(cfg)
+	_ = os.MkdirAll(filepath.Dir(s.slots.slotsFile), 0755)
+
+	composePath := s.composePath()
+	stateFile := filepath.Join(t.TempDir(), "ps-calls")
+
+	fakeDockerDir := t.TempDir()
+	fakeDockerScript := `#!/bin/sh
+if [ "$1" = "ps" ]; then
+  if [ ! -f "` + stateFile + `" ]; then
+    touch "` + stateFile + `"
+    exit 0
+  fi
+  echo 'otherapp-agent-1|` + composePath + `'
+  exit 0
+fi
+if [ "$1" = "compose" ]; then
+  echo "docker: container name already in use" >&2
+  exit 1
+fi
+exit 0
+`
+	fakeDockerPath := fakeDockerDir + "/docker"
+	if err := os.WriteFile(fakeDockerPath, []byte(fakeDockerScript), 0755); err != nil {
+		t.Fatalf("write fake docker: %v", err)
+	}
+	origPath := os.Getenv("PATH")
+	t.Setenv("PATH", fakeDockerDir+":"+origPath)
+	t.Setenv("GROVE_SHELL", "1")
+
+	worktreePath := "/tmp/myapp-conflict-test"
+	err := s.Up(worktreePath, true)
+	if err == nil {
+		t.Fatal("Up() expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "otherapp-agent-1") {
+		t.Errorf("Up() error = %v, want it to name the holding compose project", err)
+	}
+	if !strings.Contains(err.Error(), "slot 1") {
+		t.Errorf("Up() error = %v, want it to name the slot number", err)
+	}
+
+	slot, findErr := s.slots.FindSlot(filepath.Base(worktreePath))
+	if findErr != nil {
+		t.Fatalf("FindSlot() error = %v", findErr)
+	}
+	if slot != 0 {
+		t.Errorf("FindSlot() after conflict = %d, want 0 (stale allocation released)", slot)
 	}
 }
 

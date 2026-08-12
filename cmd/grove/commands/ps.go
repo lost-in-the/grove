@@ -15,9 +15,10 @@ var psJSON bool
 
 type psSlotOutput struct {
 	Slot    int    `json:"slot"`
-	Name    string `json:"worktree"`
-	Project string `json:"compose_project"`
+	Name    string `json:"worktree,omitempty"`
+	Project string `json:"compose_project,omitempty"`
 	URL     string `json:"url,omitempty"`
+	Foreign bool   `json:"foreign,omitempty"`
 }
 
 func init() {
@@ -40,7 +41,7 @@ Examples:
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		w := cli.NewStdout()
 
-		slots, err := docker.ListActiveSlots(ctx.Config)
+		slots, err := docker.ListStackSlots(ctx.Config)
 		if err != nil {
 			if psJSON {
 				output.PrintJSONError(exitcode.ExternalCommandFailed, fmt.Sprintf("failed to list stacks: %v", err))
@@ -60,12 +61,16 @@ Examples:
 		if psJSON {
 			out := make([]psSlotOutput, 0, len(slots))
 			for _, s := range slots {
-				out = append(out, psSlotOutput{
+				entry := psSlotOutput{
 					Slot:    s.Slot,
 					Name:    s.Worktree,
-					Project: docker.AgentComposeProjectName(ctx.Config, s.Slot),
-					URL:     docker.AgentURL(ctx.Config, s.Slot),
-				})
+					Project: s.Project,
+					Foreign: s.Foreign,
+				}
+				if !s.Foreign {
+					entry.URL = docker.AgentURL(ctx.Config, s.Slot)
+				}
+				out = append(out, entry)
 			}
 			return output.PrintJSON(out)
 		}
@@ -85,6 +90,10 @@ Examples:
 		cli.Header(w, "STACKS (%d/%d)", len(slots), maxSlots)
 
 		for _, s := range slots {
+			if s.Foreign {
+				cli.Bold(w, "  #%d  held by %s", s.Slot, s.Project)
+				continue
+			}
 			url := docker.AgentURL(ctx.Config, s.Slot)
 			if url != "" {
 				cli.Bold(w, "  #%d  %-16s %s", s.Slot, s.Worktree, url)

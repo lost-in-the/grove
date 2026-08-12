@@ -32,6 +32,22 @@ func NewSlotManager(slotsFile string, maxSlots int) *SlotManager {
 // Returns the slot number (1-based) or error if no slots available.
 // Idempotent: if the worktree already has a slot, returns that slot.
 func (sm *SlotManager) Allocate(worktreeName string) (int, error) {
+	return sm.AllocateExcluding(worktreeName, nil)
+}
+
+// AllocateExcluding behaves like Allocate but never hands out a slot number
+// present in excluded. Used to skip slots that ground-truth container
+// inspection shows are already held by a DIFFERENT grove project's compose
+// stack at the same shared external path (#147) — this file's own records
+// only know about slots this grove project itself allocated, so they can't
+// see that on their own.
+//
+// If worktreeName already holds a slot in this file, that allocation is
+// normally returned as-is (idempotent). The one exception: if that recorded
+// slot is itself in excluded, the record is treated as stale (the slot was
+// reclaimed by another project since this worktree last ran `grove up`) and
+// a fresh, non-excluded slot is allocated in its place.
+func (sm *SlotManager) AllocateExcluding(worktreeName string, excluded map[int]bool) (int, error) {
 	f, err := sm.openLocked()
 	if err != nil {
 		return 0, err
@@ -43,11 +59,22 @@ func (sm *SlotManager) Allocate(worktreeName string) (int, error) {
 		return 0, err
 	}
 
-	// Idempotency: return existing slot if already allocated
+	// Idempotency: return existing slot if already allocated and not stale
+	// (i.e. not now known to be held by a different project's stack).
+	kept := make([]SlotInfo, 0, len(slots))
+	stale := false
 	for _, s := range slots {
 		if s.Worktree == worktreeName {
-			return s.Slot, nil
+			if !excluded[s.Slot] {
+				return s.Slot, nil
+			}
+			stale = true
+			continue
 		}
+		kept = append(kept, s)
+	}
+	if stale {
+		slots = kept
 	}
 
 	// Find lowest available slot number
@@ -58,7 +85,7 @@ func (sm *SlotManager) Allocate(worktreeName string) (int, error) {
 
 	slot := 0
 	for i := 1; i <= sm.maxSlots; i++ {
-		if !used[i] {
+		if !used[i] && !excluded[i] {
 			slot = i
 			break
 		}
