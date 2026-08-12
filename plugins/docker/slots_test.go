@@ -211,6 +211,84 @@ func TestSlotManager_HandlesEmptySlotsFile(t *testing.T) {
 	}
 }
 
+func TestSlotManager_AllocateExcludingSkipsForeignOccupiedSlots(t *testing.T) {
+	sm, _ := newTestSlotManager(t, 3)
+
+	excluded := map[int]bool{1: true}
+	slot, err := sm.AllocateExcluding("myapp-feature-a", excluded)
+	if err != nil {
+		t.Fatalf("AllocateExcluding() error = %v", err)
+	}
+	if slot != 2 {
+		t.Errorf("AllocateExcluding() = %d, want 2 (slot 1 excluded)", slot)
+	}
+}
+
+func TestSlotManager_AllocateExcludingErrorsWhenAllRemainingExcluded(t *testing.T) {
+	sm, _ := newTestSlotManager(t, 2)
+
+	excluded := map[int]bool{1: true, 2: true}
+	_, err := sm.AllocateExcluding("myapp-feature-a", excluded)
+	if err == nil {
+		t.Error("AllocateExcluding() expected error when all slots excluded, got nil")
+	}
+}
+
+func TestSlotManager_AllocateExcludingStillIdempotentForNonExcludedSlot(t *testing.T) {
+	sm, _ := newTestSlotManager(t, 3)
+
+	first, err := sm.Allocate("myapp-feature-a") // slot 1
+	if err != nil {
+		t.Fatalf("Allocate() error = %v", err)
+	}
+
+	// A different slot is excluded, but this worktree's own existing slot
+	// isn't — the idempotent record should still win.
+	second, err := sm.AllocateExcluding("myapp-feature-a", map[int]bool{2: true})
+	if err != nil {
+		t.Fatalf("AllocateExcluding() error = %v", err)
+	}
+	if second != first {
+		t.Errorf("AllocateExcluding() = %d, want idempotent %d", second, first)
+	}
+}
+
+func TestSlotManager_AllocateExcludingTreatsOwnExcludedSlotAsStale(t *testing.T) {
+	sm, _ := newTestSlotManager(t, 3)
+
+	first, err := sm.Allocate("myapp-feature-a") // slot 1
+	if err != nil {
+		t.Fatalf("Allocate() error = %v", err)
+	}
+	if first != 1 {
+		t.Fatalf("Allocate() = %d, want 1", first)
+	}
+
+	// Slot 1 is now (ground-truth) held by a different grove project's
+	// stack — the local record for myapp-feature-a is stale and should be
+	// replaced with a fresh, non-excluded slot rather than trusted as-is.
+	second, err := sm.AllocateExcluding("myapp-feature-a", map[int]bool{1: true})
+	if err != nil {
+		t.Fatalf("AllocateExcluding() error = %v", err)
+	}
+	if second == 1 {
+		t.Errorf("AllocateExcluding() returned stale excluded slot 1")
+	}
+	if second != 2 {
+		t.Errorf("AllocateExcluding() = %d, want 2 (lowest non-excluded)", second)
+	}
+
+	// The stale record should actually have been replaced on disk, not just
+	// masked in the return value.
+	found, err := sm.FindSlot("myapp-feature-a")
+	if err != nil {
+		t.Fatalf("FindSlot() error = %v", err)
+	}
+	if found != second {
+		t.Errorf("FindSlot() after reallocation = %d, want %d", found, second)
+	}
+}
+
 func TestSlotManager_ConcurrentAccess(t *testing.T) {
 	sm, _ := newTestSlotManager(t, 10)
 
