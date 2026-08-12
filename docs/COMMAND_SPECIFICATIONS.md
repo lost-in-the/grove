@@ -920,6 +920,16 @@ note: you are in 'feature-b'; the stack is configured for 'feature-a'
 
 This note is informational only by default — it does not change the exit code, since env-vs-container parity is the documented contract for `--check-mount`'s exit code. Pass `--require-current` to gate on it too (see below).
 
+**Unresolvable configured worktree**
+
+The comparison above needs to know which worktree the env file is configured for. That can fail — the env var is unset (nothing has run `grove up` for this stack yet), or the worktree manager itself errored. Without `--require-current` this is silent, same as today: nothing to compare against, so nothing is reported. With `--require-current`, silence would mean the guard can't tell whether you're in the right worktree and passes anyway — so instead it fails closed:
+
+```
+could not determine the configured worktree — failing --require-current
+```
+
+and exits `13` (`MountCheckMismatch`), the same code as an actual cwd-vs-configured mismatch.
+
 **Exit codes:**
 
 | Code | Meaning |
@@ -927,13 +937,13 @@ This note is informational only by default — it does not change the exit code,
 | `0` | All services mounted from the configured worktree (or no external mode configured / no services running) |
 | `6` (`ExternalCommandFailed`) | docker invocation itself failed (daemon down, command not found, etc.) |
 | `12` (`MountDrift`) | At least one running service has a bind-mount source different from the configured worktree |
-| `13` (`MountCheckMismatch`) | Only with `--require-current`: the current worktree is not the one the env file is configured for. Takes priority over `MountDrift` if both conditions hold. |
+| `13` (`MountCheckMismatch`) | Only with `--require-current`: the current worktree is not the one the env file is configured for, **or** the configured worktree couldn't be resolved at all (env var unset, or the worktree manager errored) — the guard fails closed rather than passing on an unknown state. Takes priority over `MountDrift` if both conditions hold. |
 
 When drift is detected, the output names each affected service and points at `grove up` as the remediation. Services whose container isn't running are reported as `container not running` (informational, not drift).
 
 **`--require-current`**
 
-Pre-test-guard use case: "am I in the worktree the stack actually serves?" Requires `--check-mount`; passing it alone is an error (exit `4`, `InvalidInput`). When the cwd-vs-configured note above would print, `--require-current` turns that into exit `13` (`MountCheckMismatch`) instead of leaving the process at exit `0`.
+Pre-test-guard use case: "am I in the worktree the stack actually serves?" Requires `--check-mount`; passing it alone is an error (exit `4`, `InvalidInput`). When the cwd-vs-configured note above would print, `--require-current` turns that into exit `13` (`MountCheckMismatch`) instead of leaving the process at exit `0`. It fails closed the same way when the configured worktree can't be resolved at all — see "Unresolvable configured worktree" above.
 
 **Output (Default):**
 ```

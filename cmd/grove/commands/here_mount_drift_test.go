@@ -65,10 +65,19 @@ func TestMountCheckMismatchNote(t *testing.T) {
 // with a distinct exit code, independent of env-vs-container drift, and
 // takes priority over it — if you're not even standing in the configured
 // worktree, the drift verdict beneath it isn't the actionable signal.
+//
+// Also covers the code-review follow-up on #148: when the configured
+// worktree couldn't be resolved at all (env var unset, or
+// ctx.WorktreeManager() errored), `unresolved` is true and `mismatch` is
+// false — mountCheckMismatchNote has nothing to compare against, so it
+// can't report a mismatch. A guard must fail closed in that state too:
+// --require-current can't verify "am I in the right worktree" if it never
+// learned which worktree that is.
 func TestMountCheckExitCode(t *testing.T) {
 	tests := []struct {
 		name           string
 		mismatch       bool
+		unresolved     bool
 		requireCurrent bool
 		anyDrift       bool
 		wantCode       int
@@ -115,20 +124,82 @@ func TestMountCheckExitCode(t *testing.T) {
 			wantCode:       exitcode.MountCheckMismatch,
 			wantExit:       true,
 		},
+		{
+			name:           "require-current + unresolvable configured worktree: fails closed",
+			unresolved:     true,
+			requireCurrent: true,
+			wantCode:       exitcode.MountCheckMismatch,
+			wantExit:       true,
+		},
+		{
+			name:       "unresolvable without require-current does not gate",
+			unresolved: true,
+			wantCode:   0,
+			wantExit:   false,
+		},
+		{
+			name:           "unresolvable + drift + require-current: unresolved code wins",
+			unresolved:     true,
+			requireCurrent: true,
+			anyDrift:       true,
+			wantCode:       exitcode.MountCheckMismatch,
+			wantExit:       true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotCode, gotExit := mountCheckExitCode(tt.mismatch, tt.requireCurrent, tt.anyDrift)
+			gotCode, gotExit := mountCheckExitCode(tt.mismatch, tt.unresolved, tt.requireCurrent, tt.anyDrift)
 			if gotCode != tt.wantCode || gotExit != tt.wantExit {
-				t.Errorf("mountCheckExitCode(%v, %v, %v) = (%d, %v), want (%d, %v)",
-					tt.mismatch, tt.requireCurrent, tt.anyDrift, gotCode, gotExit, tt.wantCode, tt.wantExit)
+				t.Errorf("mountCheckExitCode(%v, %v, %v, %v) = (%d, %v), want (%d, %v)",
+					tt.mismatch, tt.unresolved, tt.requireCurrent, tt.anyDrift, gotCode, gotExit, tt.wantCode, tt.wantExit)
 			}
 		})
 	}
 
 	if exitcode.MountCheckMismatch == exitcode.MountDrift {
 		t.Fatal("MountCheckMismatch must be distinct from MountDrift (issue #148)")
+	}
+}
+
+// Code-review follow-up on #148: mountCheckUnresolvedNote is the pure helper
+// backing the fail-closed warning. It only fires when --require-current is
+// set — without it, an unresolvable configured worktree stays silent (the
+// pre-existing informational-only behavior for env-unset stacks).
+func TestMountCheckUnresolvedNote(t *testing.T) {
+	tests := []struct {
+		name           string
+		requireCurrent bool
+		configuredName string
+		want           string
+	}{
+		{
+			name:           "resolved configured name: no warning",
+			requireCurrent: true,
+			configuredName: "feature-a",
+			want:           "",
+		},
+		{
+			name:           "unresolved without require-current: no warning",
+			requireCurrent: false,
+			configuredName: "",
+			want:           "",
+		},
+		{
+			name:           "unresolved with require-current: fail-closed warning",
+			requireCurrent: true,
+			configuredName: "",
+			want:           "could not determine the configured worktree — failing --require-current",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mountCheckUnresolvedNote(tt.requireCurrent, tt.configuredName)
+			if got != tt.want {
+				t.Errorf("mountCheckUnresolvedNote(%v, %q) = %q, want %q", tt.requireCurrent, tt.configuredName, got, tt.want)
+			}
+		})
 	}
 }
 

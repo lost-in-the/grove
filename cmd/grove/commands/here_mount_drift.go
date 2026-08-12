@@ -69,6 +69,11 @@ func runMountDriftCheck(ctx *GroveContext, displayName string, requireCurrent bo
 		cli.Warning(w, "%s", note)
 		_, _ = fmt.Fprintln(w)
 	}
+	unresolvedNote := mountCheckUnresolvedNote(requireCurrent, configuredName)
+	if unresolvedNote != "" {
+		cli.Warning(w, "%s", unresolvedNote)
+		_, _ = fmt.Fprintln(w)
+	}
 
 	anyDrift := false
 	for _, r := range reports {
@@ -84,7 +89,7 @@ func runMountDriftCheck(ctx *GroveContext, displayName string, requireCurrent bo
 	}
 
 	_, _ = fmt.Fprintln(w)
-	if code, exit := mountCheckExitCode(note != "", requireCurrent, anyDrift); exit {
+	if code, exit := mountCheckExitCode(note != "", configuredName == "", requireCurrent, anyDrift); exit {
 		if anyDrift {
 			cli.Warning(w, "Restart needed — run `grove up` to apply.")
 		}
@@ -109,15 +114,33 @@ func mountCheckMismatchNote(currentName, configuredName string) string {
 	return fmt.Sprintf("note: you are in '%s'; the stack is configured for '%s'", currentName, configuredName)
 }
 
+// mountCheckUnresolvedNote flags when --require-current can't do its job
+// because the configured worktree couldn't be resolved at all — the env var
+// is unset, or ctx.WorktreeManager() errored. mountCheckMismatchNote stays
+// silent in that state (there's nothing to compare currentName against), but
+// a guard that can't establish which worktree the stack serves must not
+// silently pass; it must fail closed. Without --require-current this stays
+// informational-only and prints nothing, matching the pre-existing
+// env-unset behavior.
+func mountCheckUnresolvedNote(requireCurrent bool, configuredName string) string {
+	if configuredName != "" || !requireCurrent {
+		return ""
+	}
+	return "could not determine the configured worktree — failing --require-current"
+}
+
 // mountCheckExitCode decides the process exit code for `grove here
-// --check-mount`, given the cwd-vs-configured mismatch verdict, whether
-// --require-current was passed, and the env-vs-container drift verdict. A
-// requireCurrent mismatch takes priority over drift: if the user isn't even
-// standing in the configured worktree, the per-service drift verdict beneath
-// it isn't the actionable signal — the wrong-worktree guard is. exit=false
+// --check-mount`, given the cwd-vs-configured mismatch verdict, whether the
+// configured worktree could be resolved at all, whether --require-current
+// was passed, and the env-vs-container drift verdict. A requireCurrent
+// mismatch — or an unresolved configured worktree, which --require-current
+// treats the same way since it can't verify anything without it — takes
+// priority over drift: if the user isn't even standing in the configured
+// worktree (or grove can't tell), the per-service drift verdict beneath it
+// isn't the actionable signal — the wrong-worktree guard is. exit=false
 // tells the caller to fall through to the normal exit-0 success path.
-func mountCheckExitCode(mismatch, requireCurrent, anyDrift bool) (code int, exit bool) {
-	if requireCurrent && mismatch {
+func mountCheckExitCode(mismatch, unresolved, requireCurrent, anyDrift bool) (code int, exit bool) {
+	if requireCurrent && (mismatch || unresolved) {
 		return exitcode.MountCheckMismatch, true
 	}
 	if anyDrift {
