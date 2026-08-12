@@ -24,9 +24,9 @@ func TestSessionWorktreeName(t *testing.T) {
 			wantMatched: false,
 		},
 		{
-			name:        "sibling project's own root session",
-			project:     "grove",
-			session:     "grove-web",
+			name:    "sibling project's own root session",
+			project: "grove",
+			session: "grove-web",
 			// "web" round-trips to "grove-web" via TmuxSessionName, so this
 			// still can't be distinguished from a same-named worktree of
 			// this project — the residual ambiguity the per-session
