@@ -484,7 +484,40 @@ url_pattern = "http://localhost:{slot}"  # string
 # The network must already exist before grove can create agent stacks.
 # Default: "" (empty — the network-existence check is skipped)
 network = "shared"                 # string
+
+# Export GROVE_SLOT_GIT_SHA and GROVE_SLOT_GIT_BRANCH — the slot's worktree
+# HEAD SHA and branch, resolved host-side with `git -C <slot-worktree-path>`
+# and passed into the compose environment alongside the other agent env vars.
+# Solves what neither mise nor an in-container `git` can: mise evaluates
+# per-directory rather than per-slot, and a linked worktree's .git file points
+# outside the container's mount. GROVE_SLOT_GIT_BRANCH is empty on a detached
+# HEAD; a failed git lookup logs a warning and leaves both empty rather than
+# failing stack start. Opt-in — the two git lookups run on every agent-stack
+# compose command for the slot (up, down, run, exec), not just start, since
+# compose re-interpolates the template on each invocation.
+# Default: false
+export_git_metadata = false        # bool
 ```
+
+**Template variable contract.** `template_path` and `template_overlays` are plain
+`docker compose` files — variables inside them (`${FOO}`) are interpolated by `docker
+compose` itself, not by grove. Grove exports the following variables to that
+interpolation environment when running `grove up --isolated` and related agent-stack
+commands:
+
+- `<env_var>` — whatever name is configured for `[plugins.docker.external] env_var`
+  (see above), set to the worktree's absolute path.
+- `AGENT_SLOT` — the allocated slot number, only when a slot is in use (not set for
+  ephemeral runs with no allocated slot).
+- `GROVE_SLOT_GIT_SHA` / `GROVE_SLOT_GIT_BRANCH` — only when
+  `[plugins.docker.external.agent] export_git_metadata` is enabled (see below).
+
+A template must not reference variables grove does not export. Referencing one that
+grove doesn't export (e.g. `${AGENT_MYAPP_DIR}`) interpolates to an empty string,
+which typically surfaces as an opaque compose error such as `invalid spec:
+:/app:delegated: empty section between colons`. If starting the stack fails and
+compose warned about an unset variable, grove now names the offending variable(s)
+and the set of variable names it exported, alongside the underlying compose error.
 
 **Shared stacks (multiple grove projects, one `external.path`):** if more than one grove
 project points `[plugins.docker.external].path` at the same directory — e.g. the stack repo

@@ -209,6 +209,9 @@ func (m *Manager) Move(oldName, newName string) error {
 	if newName == "" {
 		return fmt.Errorf("new worktree name cannot be empty")
 	}
+	if errMsg := ValidateWorktreeName(newName); errMsg != "" {
+		return fmt.Errorf("invalid new name %q: %s", newName, errMsg)
+	}
 
 	// Look up the actual worktree path instead of constructing it.
 	// Worktrees may live in non-standard locations (e.g. .claude/worktrees/).

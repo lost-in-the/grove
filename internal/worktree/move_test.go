@@ -111,4 +111,13 @@ func TestMove(t *testing.T) {
 			t.Error("Move(..., \"\") should return error")
 		}
 	})
+
+	t.Run("move with invalid new name returns error without invoking git", func(t *testing.T) {
+		for _, newName := range []string{"a/b", "-foo", "foo bar"} {
+			err := mgr.Move("old", newName)
+			if err == nil {
+				t.Errorf("Move(..., %q) should return error", newName)
+			}
+		}
+	})
 }

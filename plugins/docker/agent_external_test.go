@@ -408,6 +408,155 @@ func TestAgentExternalStrategy_AgentEnv(t *testing.T) {
 	}
 }
 
+// initSlotGitRepo creates a small git repo with a commit on the given branch
+// and returns its path, following the convention in internal/git/branch_test.go.
+func initSlotGitRepo(t *testing.T, branchName string) string {
+	t.Helper()
+	dir := t.TempDir()
+
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"GIT_CONFIG_GLOBAL=/dev/null",
+			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test",
+			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test",
+		)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("command %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	run("git", "init", "-b", branchName)
+	run("git", "commit", "--allow-empty", "-m", "init")
+
+	return dir
+}
+
+func TestAgentExternalStrategy_AgentEnv_GitMetadata_Disabled(t *testing.T) {
+	cfg := newTestAgentConfig(t)
+	s := newAgentExternalStrategy(cfg)
+
+	repoPath := initSlotGitRepo(t, "main")
+
+	env := s.agentEnv(repoPath, 1)
+	for _, e := range env {
+		if strings.HasPrefix(e, "GROVE_SLOT_GIT_SHA=") || strings.HasPrefix(e, "GROVE_SLOT_GIT_BRANCH=") {
+			t.Errorf("agentEnv() included %q, want no git metadata when export_git_metadata is unset", e)
+		}
+	}
+}
+
+func TestAgentExternalStrategy_AgentEnv_GitMetadata_Enabled(t *testing.T) {
+	cfg := newTestAgentConfig(t)
+	enabled := true
+	cfg.Plugins.Docker.External.Agent.ExportGitMetadata = &enabled
+	s := newAgentExternalStrategy(cfg)
+
+	repoPath := initSlotGitRepo(t, "feature-branch")
+
+	shaOut, err := exec.Command("git", "-C", repoPath, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("failed to resolve test repo HEAD: %v", err)
+	}
+	wantSHA := strings.TrimSpace(string(shaOut))
+
+	env := s.agentEnv(repoPath, 1)
+
+	var gotSHA, gotBranch string
+	var sawSHA, sawBranch bool
+	for _, e := range env {
+		if v, ok := strings.CutPrefix(e, "GROVE_SLOT_GIT_SHA="); ok {
+			gotSHA, sawSHA = v, true
+		}
+		if v, ok := strings.CutPrefix(e, "GROVE_SLOT_GIT_BRANCH="); ok {
+			gotBranch, sawBranch = v, true
+		}
+	}
+
+	if !sawSHA {
+		t.Fatal("agentEnv() missing GROVE_SLOT_GIT_SHA")
+	}
+	if gotSHA != wantSHA {
+		t.Errorf("GROVE_SLOT_GIT_SHA = %q, want %q", gotSHA, wantSHA)
+	}
+	if !sawBranch {
+		t.Fatal("agentEnv() missing GROVE_SLOT_GIT_BRANCH")
+	}
+	if gotBranch != "feature-branch" {
+		t.Errorf("GROVE_SLOT_GIT_BRANCH = %q, want %q", gotBranch, "feature-branch")
+	}
+}
+
+func TestAgentExternalStrategy_AgentEnv_GitMetadata_DetachedHEAD(t *testing.T) {
+	cfg := newTestAgentConfig(t)
+	enabled := true
+	cfg.Plugins.Docker.External.Agent.ExportGitMetadata = &enabled
+	s := newAgentExternalStrategy(cfg)
+
+	repoPath := initSlotGitRepo(t, "main")
+	if out, err := exec.Command("git", "-C", repoPath, "checkout", "--detach", "HEAD").CombinedOutput(); err != nil {
+		t.Fatalf("failed to detach HEAD: %v\n%s", err, out)
+	}
+
+	env := s.agentEnv(repoPath, 1)
+
+	var sawSHA bool
+	var gotBranch string
+	var sawBranch bool
+	for _, e := range env {
+		if strings.HasPrefix(e, "GROVE_SLOT_GIT_SHA=") {
+			sawSHA = true
+		}
+		if v, ok := strings.CutPrefix(e, "GROVE_SLOT_GIT_BRANCH="); ok {
+			gotBranch, sawBranch = v, true
+		}
+	}
+
+	if !sawSHA {
+		t.Error("agentEnv() missing GROVE_SLOT_GIT_SHA on detached HEAD")
+	}
+	if !sawBranch {
+		t.Error("agentEnv() missing GROVE_SLOT_GIT_BRANCH key on detached HEAD")
+	}
+	if gotBranch != "" {
+		t.Errorf("GROVE_SLOT_GIT_BRANCH = %q on detached HEAD, want empty", gotBranch)
+	}
+}
+
+func TestAgentExternalStrategy_AgentEnv_GitMetadata_NonGitPath(t *testing.T) {
+	cfg := newTestAgentConfig(t)
+	enabled := true
+	cfg.Plugins.Docker.External.Agent.ExportGitMetadata = &enabled
+	s := newAgentExternalStrategy(cfg)
+
+	// Not a git repo at all — must degrade gracefully, not error/panic.
+	nonRepo := t.TempDir()
+
+	env := s.agentEnv(nonRepo, 1)
+
+	var sawSHA, sawBranch bool
+	for _, e := range env {
+		if v, ok := strings.CutPrefix(e, "GROVE_SLOT_GIT_SHA="); ok {
+			sawSHA = true
+			if v != "" {
+				t.Errorf("GROVE_SLOT_GIT_SHA = %q for non-git path, want empty", v)
+			}
+		}
+		if v, ok := strings.CutPrefix(e, "GROVE_SLOT_GIT_BRANCH="); ok {
+			sawBranch = true
+			if v != "" {
+				t.Errorf("GROVE_SLOT_GIT_BRANCH = %q for non-git path, want empty", v)
+			}
+		}
+	}
+	if !sawSHA || !sawBranch {
+		t.Error("agentEnv() should still emit GROVE_SLOT_GIT_SHA/BRANCH keys (empty) for a non-git path")
+	}
+}
+
 func TestAgentComposeCommand(t *testing.T) {
 	cmd := agentComposeCommand("/tmp/compose", []string{"/tmp/compose/template.yml"}, "myapp-agent-1", []string{"APP_DIR=/app"}, "up", "-d", "app")
 
