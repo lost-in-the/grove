@@ -38,6 +38,7 @@ Verified end to end against herdr 0.8.0: create, list, switch, rename, and remov
 - `state.json` — and every atomic file write — respects the process umask again: an explicit chmod in the write path made grove's state world-readable `0644` on hosts running `umask 077`.
 
 ### Fixed
+- `Manager.Move` now validates the new worktree name's characters (not just non-emptiness), so any future caller — not just `grove rename` — rejects names like `a/b`, `-foo`, or `foo bar` before touching git.
 - State no longer fragments per worktree: `.grove` (state *and* config) resolves via git's common dir from any worktree or subdirectory, so `grove new`/`rm`/`last` run inside a worktree stopped reading and writing a phantom `state.json`. Config **writes** anchor there too — `grove config set` and the TUI settings editor from a linked worktree previously materialized a private, silently diverging config copy.
 - `grove rm`/`to`/`rename` can no longer hit the wrong worktree: resolution uses precedence tiers (name → directory → branch) so a branch name can't shadow the worktree you actually named; plain `grove rm` never escalates to `os.RemoveAll` (that now requires `--force`), and a git-locked worktree is never force-deleted.
 - Worktrees are born clean on fresh clones too: grove's machine-local files are recorded in `$GIT_COMMON_DIR/info/exclude` during worktree bootstrap, not just `grove init`.
