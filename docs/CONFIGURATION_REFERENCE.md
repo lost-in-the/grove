@@ -484,6 +484,19 @@ url_pattern = "http://localhost:{slot}"  # string
 # The network must already exist before grove can create agent stacks.
 # Default: "" (empty — the network-existence check is skipped)
 network = "shared"                 # string
+
+# Export GROVE_SLOT_GIT_SHA and GROVE_SLOT_GIT_BRANCH — the slot's worktree
+# HEAD SHA and branch, resolved host-side with `git -C <slot-worktree-path>`
+# and passed into the compose environment alongside the other agent env vars.
+# Solves what neither mise nor an in-container `git` can: mise evaluates
+# per-directory rather than per-slot, and a linked worktree's .git file points
+# outside the container's mount. GROVE_SLOT_GIT_BRANCH is empty on a detached
+# HEAD; a failed git lookup logs a warning and leaves both empty rather than
+# failing stack start. Opt-in — the two git lookups run on every agent-stack
+# compose command for the slot (up, down, run, exec), not just start, since
+# compose re-interpolates the template on each invocation.
+# Default: false
+export_git_metadata = false        # bool
 ```
 
 **Template variable contract.** `template_path` and `template_overlays` are plain
@@ -496,6 +509,8 @@ commands:
   (see above), set to the worktree's absolute path.
 - `AGENT_SLOT` — the allocated slot number, only when a slot is in use (not set for
   ephemeral runs with no allocated slot).
+- `GROVE_SLOT_GIT_SHA` / `GROVE_SLOT_GIT_BRANCH` — only when
+  `[plugins.docker.external.agent] export_git_metadata` is enabled (see below).
 
 A template must not reference variables grove does not export. Referencing one that
 grove doesn't export (e.g. `${AGENT_MYAPP_DIR}`) interpolates to an empty string,

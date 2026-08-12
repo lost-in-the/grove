@@ -952,6 +952,85 @@ template_path = "/tmp/agent-template"
 	}
 }
 
+func TestLoadAgentStackConfig_ExportGitMetadata(t *testing.T) {
+	tmpDir := t.TempDir()
+	composePath := filepath.Join(tmpDir, "shared-infra")
+	if err := os.MkdirAll(composePath, 0755); err != nil {
+		t.Fatalf("Failed to create compose dir: %v", err)
+	}
+
+	configData := `
+[plugins.docker]
+enabled = true
+mode = "external"
+
+[plugins.docker.external]
+path = "` + composePath + `"
+env_var = "APP_DIR"
+services = ["app"]
+
+[plugins.docker.external.agent]
+enabled = true
+max_slots = 3
+services = ["agent"]
+template_path = "/tmp/agent-template"
+export_git_metadata = true
+`
+	configPath := filepath.Join(tmpDir, "config.toml")
+	if err := os.WriteFile(configPath, []byte(configData), 0644); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
+
+	cfg, err := LoadConfigFromPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfigFromPath() error = %v", err)
+	}
+
+	agent := cfg.Plugins.Docker.External.Agent
+	if agent.ExportGitMetadata == nil || !*agent.ExportGitMetadata {
+		t.Error("Expected export_git_metadata to be true")
+	}
+}
+
+func TestLoadAgentStackConfig_ExportGitMetadataDefaultsFalse(t *testing.T) {
+	tmpDir := t.TempDir()
+	composePath := filepath.Join(tmpDir, "shared-infra")
+	if err := os.MkdirAll(composePath, 0755); err != nil {
+		t.Fatalf("Failed to create compose dir: %v", err)
+	}
+
+	configData := `
+[plugins.docker]
+enabled = true
+mode = "external"
+
+[plugins.docker.external]
+path = "` + composePath + `"
+env_var = "APP_DIR"
+services = ["app"]
+
+[plugins.docker.external.agent]
+enabled = true
+max_slots = 3
+services = ["agent"]
+template_path = "/tmp/agent-template"
+`
+	configPath := filepath.Join(tmpDir, "config.toml")
+	if err := os.WriteFile(configPath, []byte(configData), 0644); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
+
+	cfg, err := LoadConfigFromPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfigFromPath() error = %v", err)
+	}
+
+	agent := cfg.Plugins.Docker.External.Agent
+	if agent.ExportGitMetadata != nil && *agent.ExportGitMetadata {
+		t.Error("Expected export_git_metadata to default to unset/false")
+	}
+}
+
 func TestValidateAgentConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -1125,6 +1204,26 @@ func TestMergeConfigsPreservesAgent(t *testing.T) {
 	}
 	if len(agent.Services) != 1 || agent.Services[0] != "agent" {
 		t.Errorf("Expected agent services [agent], got %v", agent.Services)
+	}
+}
+
+func TestMergeAgentStackConfig_ExportGitMetadata(t *testing.T) {
+	boolTrue := true
+
+	base := &AgentStackConfig{
+		MaxSlots:     3,
+		TemplatePath: "/tmp/base.yml",
+	}
+	override := &AgentStackConfig{
+		ExportGitMetadata: &boolTrue,
+	}
+
+	merged := mergeAgentStackConfig(base, override)
+	if merged.ExportGitMetadata == nil || !*merged.ExportGitMetadata {
+		t.Error("Expected export_git_metadata override to be true")
+	}
+	if merged.MaxSlots != 3 {
+		t.Errorf("Expected base max_slots 3 to be preserved, got %d", merged.MaxSlots)
 	}
 }
 

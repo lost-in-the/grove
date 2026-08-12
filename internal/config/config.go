@@ -197,6 +197,11 @@ type AgentStackConfig struct {
 	TemplateOverlays []string `toml:"template_overlays"`
 	URLPattern       string   `toml:"url_pattern"`
 	Network          string   `toml:"network"` // External Docker network that must exist for agent stacks
+	// ExportGitMetadata opts a slot into GROVE_SLOT_GIT_SHA/GROVE_SLOT_GIT_BRANCH
+	// exports, computed host-side from the slot's worktree path (see
+	// plugins/docker/agent_external.go). Off by default — it's an extra `git`
+	// invocation per slot start that not every project wants.
+	ExportGitMetadata *bool `toml:"export_git_metadata"`
 }
 
 // GetConfigPaths returns the paths to check for config files
@@ -500,6 +505,10 @@ func mergeExternalComposeConfig(result **ExternalComposeConfig, override *Extern
 			enabled := *agent.Enabled
 			agent.Enabled = &enabled
 		}
+		if agent.ExportGitMetadata != nil {
+			exportGitMetadata := *agent.ExportGitMetadata
+			agent.ExportGitMetadata = &exportGitMetadata
+		}
 		merged.Agent = &agent
 	}
 
@@ -540,6 +549,9 @@ func mergeAgentStackConfig(base, override *AgentStackConfig) *AgentStackConfig {
 	}
 	if override.Network != "" {
 		merged.Network = override.Network
+	}
+	if override.ExportGitMetadata != nil {
+		merged.ExportGitMetadata = override.ExportGitMetadata
 	}
 	return &merged
 }
