@@ -1,10 +1,23 @@
 package commands
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/lost-in-the/grove/internal/cli"
+	"github.com/lost-in-the/grove/internal/config"
 )
+
+// captureConfigOutput renders the `grove config` summary into a string.
+func captureConfigOutput(t *testing.T, cfg *config.Config) string {
+	t.Helper()
+	var buf bytes.Buffer
+	renderConfigSummary(cli.NewWriter(&buf, false), cfg)
+	return buf.String()
+}
 
 func TestLoadGlobalOnlyConfig_ReadsOnlyGlobalFile(t *testing.T) {
 	dir := t.TempDir()
@@ -41,5 +54,33 @@ func TestLoadGlobalOnlyConfig_CorruptFileErrors(t *testing.T) {
 	}
 	if _, err := loadGlobalOnlyConfig(globalPath); err == nil {
 		t.Error("expected error for corrupt global config")
+	}
+}
+
+func TestConfigShowsMuxBackend(t *testing.T) {
+	// The [mux] section was added after `grove config` was written; without an
+	// explicit row a user can set a backend the command never shows back.
+	cfg := config.LoadDefaults()
+	cfg.Mux.Backend = "herdr"
+
+	out := captureConfigOutput(t, cfg)
+	if !strings.Contains(out, "[mux]") {
+		t.Errorf("config output has no [mux] section:\n%s", out)
+	}
+	if !strings.Contains(out, "herdr") {
+		t.Errorf("config output does not show the backend:\n%s", out)
+	}
+}
+
+func TestConfigShowsEffectiveBackendWhenOverridden(t *testing.T) {
+	// tmux.mode = "off" silently overrides the backend, so the effective value
+	// has to be visible or the config reads as a contradiction.
+	cfg := config.LoadDefaults()
+	cfg.Mux.Backend = "herdr"
+	cfg.Tmux.Mode = "off"
+
+	out := captureConfigOutput(t, cfg)
+	if !strings.Contains(out, "(effective)") {
+		t.Errorf("config output does not flag the override:\n%s", out)
 	}
 }

@@ -7,7 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **[herdr](https://herdr.dev) support.** Grove can now drive herdr — a terminal multiplexer built for coding agents — instead of tmux, selected with `[mux] backend` (`auto` | `tmux` | `herdr` | `off`). `auto` prefers whichever multiplexer grove is already running inside, and falls back to whatever is installed with tmux winning ties, so existing installs are unaffected. `[tmux] mode = "off"` still disables session management outright.
+- `grove ls` and the dashboard show each worktree's **coding-agent state** (`idle` / `working` / `blocked` / `done`) when the backend can report one — so a worktree whose agent is blocked waiting for input is visible at a glance. herdr reports this; tmux cannot, so the AGENT column and badge only appear under herdr.
+- A **herdr plugin** in [`integrations/herdr/`](integrations/herdr/README.md): a workspace status action, plus `worktree.created` and `worktree.opened` hooks that point at `grove adopt` when a worktree appears through herdr's UI rather than grove's. Install with `herdr plugin install lost-in-the/grove/integrations/herdr`. There is deliberately no dashboard pane — herdr's sidebar already lists every worktree.
+- The plugin also subscribes to **`worktree.removed`**: when a worktree is removed through herdr (UI or CLI), grove drops its state entry, clears `last_worktree` if it pointed there (so `grove last` doesn't error on a checkout that no longer exists), and — on the tmux backend — kills a session left over the dead directory. No remove hooks fire and git is never touched; herdr's removal is already a clean `git worktree remove`. A running docker stack is *not* stopped — stop stacks first, or remove with `grove rm`.
+- `grove doctor` reports herdr availability, and — when herdr is the active backend — whether its server is reachable.
+- **`[session] open_in`** (`new` | `current`) decides where a worktree lands when you switch to it: a session of its own, or the shell you are already in. Backend-neutral — under tmux that is the tmux session, under herdr the workspace. `--peek` remains the one-shot form, and additionally skips hooks.
+- The herdr plugin's adoption prompt is raised as a **herdr notification**, not only written to the hook's stderr — which goes to `herdr plugin log list` and nowhere a person looks.
+- Sessions now **name the window they create** after the worktree — a herdr tab label, a tmux window name. Previously nothing set one, so ghostty and cmux titled the window after the running process, showing `grove` or the whole `grove to <name>` command line.
+
+Verified end to end against herdr 0.8.0: create, list, switch, rename, and remove all round-trip correctly, and `grove ls` stays at ~52ms with the herdr backend active.
+
 ### Changed
+- Session handling moved behind a backend-neutral `internal/mux` abstraction. No behavior change under tmux; `[tmux] mode`, `on_switch`, and `control_mode` keep working (`control_mode` is tmux-only and ignored by herdr).
+- Under herdr, `grove open` with `[session] popup = true` falls back to a full-window switch unless the herdr plugin is installed — popup placement is only reachable through herdr's plugin pane surface.
+- The `grove ls` session column is **named after the active backend** (`TMUX`, `HERDR`, or `SESSION`) instead of always reading `TMUX`. Values are unchanged; the `--json` field stays `tmux`.
+- **Grove never creates a herdr workspace.** The repository's own workspace — the one herdr's sidebar groups a project's worktrees under — is herdr's to manage. Grove adopts it when it exists and otherwise falls through to a plain directory change, rather than creating one it has no business owning.
+- `mux.Index` ignores checkout paths that no longer exist on disk. herdr never updates a workspace's recorded checkout, so after `grove rename` a stale path could shadow the workspace of whatever worktree later occupied it.
 - `grove doctor` ends a failing run with a numbered **"action required"** list that repeats every failed required check in one place, instead of a bare "some checks failed — see above" pointing back into the scroll. Informational checks (tmux, GitHub CLI, Docker availability) stay inline-only.
 - `grove doctor --fix` re-evaluates each check it fixed, so the report and the closing summary reflect the **post-fix** state — a run that repaired everything now ends green instead of counting the just-fixed findings as failures.
 - The one-time config-layout upgrade notice now points directly at `grove doctor --fix` and names the doctor check it corresponds to ("Config symlinks"), so the notice and the doctor report are recognizably about the same thing.

@@ -13,7 +13,6 @@ import (
 	"github.com/lost-in-the/grove/internal/exitcode"
 	"github.com/lost-in-the/grove/internal/hooks"
 	"github.com/lost-in-the/grove/internal/output"
-	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
 
@@ -249,16 +248,24 @@ Examples:
 
 		projectName := mgr.GetProjectName()
 
-		// Create tmux session if tmux is available (skip with --no-tmux; agent
-		// mode intentionally still creates the detached session — see AGENTS.md)
-		if !newNoTmux && tmux.IsTmuxAvailable() {
-			sessionName := worktree.TmuxSessionName(projectName, name)
-			if err := tmux.CreateSession(sessionName, wt.Path); err != nil {
+		// Create the session if a multiplexer is available (skip with --no-tmux;
+		// agent mode intentionally still creates the detached session — see
+		// AGENTS.md).
+		//
+		// [session] open_in = "current" does suppress it. Agent mode and tmux
+		// mode "off" only say "don't relocate my client", and a detached
+		// session is still useful to them; open_in is a statement about where
+		// the worktree lands, and answering "the shell I'm already in" with a
+		// second one elsewhere is not that.
+		if m := ctx.Mux(); !newNoTmux && m.Available() && !openInCurrent(ctx.Config) {
+			target := muxTarget(mgr, name, wt.Path)
+			sessionName := target.Name
+			if err := m.Ensure(target); err != nil {
 				if !newJSON {
-					cli.Warning(w, "Failed to create tmux session: %v", err)
+					cli.Warning(w, "Failed to create session: %v", err)
 				}
 			} else if !newJSON {
-				cli.Success(w, "Created tmux session '%s'", sessionName)
+				cli.Success(w, "Created %s session '%s'", m.Backend(), sessionName)
 			}
 		}
 

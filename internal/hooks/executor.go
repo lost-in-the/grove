@@ -302,11 +302,14 @@ func (v *Variables) shellVarBindings() []shellVarBinding {
 // substituted directly — correct (a ${...} reference would never expand) and
 // still injection-safe (nothing in the body is re-parsed).
 //
-// Two more constructs the flat model got wrong: bare parens are counted per
-// frame so a subshell or case-pattern `)` inside `$( )` doesn't close the
-// substitution frame early, and `$'…'` (ANSI-C quoting, honored by the bash
-// sinks such as docker's `bash -cil`) is tracked so a token splice reopens
-// with `$'` and the remainder keeps its escape semantics.
+// Two more constructs the flat model got wrong: `)` inside `$( )` must not
+// close the substitution frame early when it belongs to something else — bare
+// parens (subshell, group, `(y)` case patterns) are counted per frame, and
+// `case … esac` is tracked per frame so the unparenthesized `y)` pattern
+// spelling, which has no matching `(`, is copied as literal text. And `$'…'`
+// (ANSI-C quoting, honored by the bash sinks such as docker's `bash -cil`) is
+// tracked so a token splice reopens with `$'` and the remainder keeps its
+// escape semantics.
 //
 // Interpolate (literal substitution) remains correct for filesystem paths and
 // template bodies, which Go handles directly and which never reach a shell.
@@ -325,15 +328,19 @@ func (v *Variables) InterpolateShell(s string) string {
 	// A stack of nested shell contexts. `$( )` and backticks push a fresh frame
 	// (quoting restarts inside them); `$(( ))` pushes an arithmetic frame that
 	// carries no quoting. The innermost frame decides how a token is emitted.
-	// parenDepth counts bare `(` (subshell, group, case pattern, arithmetic
-	// grouping) opened in the frame, so their `)` isn't mistaken for the
-	// frame's own closer.
+	// parenDepth counts bare `(` (subshell, group, `(y)` case pattern,
+	// arithmetic grouping) opened in the frame, so their `)` isn't mistaken
+	// for the frame's own closer. caseDepth counts open `case … esac`
+	// statements in the frame: an unparenthesized case pattern (`y)`) has a
+	// `)` with no matching `(`, which must read as literal text rather than
+	// the frame's closer.
 	type frame struct {
 		arith              bool
 		backtick           bool
 		inSingle, inDouble bool
 		ansi               bool // inside $'...' (ANSI-C quoting)
 		parenDepth         int
+		caseDepth          int
 	}
 	stack := []frame{{}}
 	top := func() *frame { return &stack[len(stack)-1] }
@@ -446,10 +453,27 @@ func (v *Variables) InterpolateShell(s string) string {
 				}
 				i += 2
 				continue
-			case s[i] == ')' && !t.arith && !t.backtick && !t.inDouble && len(stack) > 1:
+			case s[i] == ')' && !t.arith && !t.backtick && !t.inDouble && t.caseDepth == 0 && len(stack) > 1:
 				out.WriteByte(')')
 				stack = stack[:len(stack)-1]
 				i++
+				continue
+			case !t.inDouble && !t.arith && isShellKeywordAt(s, i, "case") &&
+				atCommandPosition(s, i) &&
+				i+4 < len(s) && (s[i+4] == ' ' || s[i+4] == '\t' || s[i+4] == '\n'):
+				// Only the keyword opens a case: it must sit in command
+				// position (`$(echo case x)` is a plain word, and counting it
+				// would swallow the frame's real closer) and be followed by a
+				// word, so "case;" is not it either.
+				t.caseDepth++
+				out.WriteString("case")
+				i += 4
+				continue
+			case !t.inDouble && !t.arith && t.caseDepth > 0 && isShellKeywordAt(s, i, "esac") &&
+				(i+4 == len(s) || isShellWordSep(s[i+4])):
+				t.caseDepth--
+				out.WriteString("esac")
+				i += 4
 				continue
 			case s[i] == '`':
 				out.WriteByte('`')
@@ -503,6 +527,54 @@ func (v *Variables) InterpolateShell(s string) string {
 		}
 	}
 	return out.String()
+}
+
+// isShellWordSep reports whether b separates shell words for the purpose of
+// recognizing the `case`/`esac` keywords — whitespace and the operators that
+// can precede or follow a keyword.
+func isShellWordSep(b byte) bool {
+	switch b {
+	case ' ', '\t', '\n', ';', '(', ')', '&', '|', '`':
+		return true
+	}
+	return false
+}
+
+// isShellKeywordAt reports whether s[i:] begins the given keyword on a word
+// boundary (start of input or preceded by a separator). The caller checks the
+// trailing boundary, which differs per keyword.
+func isShellKeywordAt(s string, i int, kw string) bool {
+	return strings.HasPrefix(s[i:], kw) && (i == 0 || isShellWordSep(s[i-1]))
+}
+
+// atCommandPosition reports whether index i sits where the shell would parse a
+// command word — the only position where `case` is a keyword. A miss here just
+// leaves a literal `case` untracked (the pre-existing behavior); a false
+// positive would swallow a frame's real `)` closer, so the check errs
+// conservative: after skipping blanks, the previous character must be a
+// command separator, or the previous word one of the keywords that introduce a
+// command.
+func atCommandPosition(s string, i int) bool {
+	j := i
+	for j > 0 && (s[j-1] == ' ' || s[j-1] == '\t') {
+		j--
+	}
+	if j == 0 {
+		return true
+	}
+	switch s[j-1] {
+	case ';', '\n', '&', '|', '(', '`', '{':
+		return true
+	}
+	for _, kw := range []string{"then", "else", "elif", "do", "!"} {
+		if strings.HasSuffix(s[:j], kw) {
+			start := j - len(kw)
+			if start == 0 || isShellWordSep(s[start-1]) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // heredocSpec describes a heredoc opened by a `<<[-]DELIM` introducer.

@@ -17,12 +17,13 @@ If you're an agent helping a user *use* grove (install, configure, run commands)
 - **[Visual Testing](docs/VISUAL_TESTING.md)** — golden files, tmux capture, VHS tapes
 - **[Agent Guide](docs/AGENT_GUIDE.md)** — installation, workflows, and strategies for AI agents
 - **[Configuration Reference](docs/CONFIGURATION_REFERENCE.md)** — complete config.toml and hooks.toml reference
+- **[Herdr Integration](docs/HERDR_INTEGRATION.md)** — multiplexer backends, the `internal/mux` abstraction, and the herdr plugin
 
 ## Critical Rules
 
 ### Worktree Naming
 Worktree directories follow the project's `[naming] pattern` (default `{project}-{name}`: `grove-testing` not `testing`). Patterns must contain `{project}` and `{name}` exactly once each; literals limited to `[A-Za-z0-9._-]`.
-Tmux session names ALWAYS use canonical `{project}-{name}`, regardless of the directory pattern.
+Tmux session names and herdr workspace labels ALWAYS use canonical `{project}-{name}`, regardless of the directory pattern.
 Project name derived from: config > git remote > directory name.
 
 ### Shell Integration Protocol

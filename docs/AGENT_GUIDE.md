@@ -11,6 +11,7 @@ Reference for AI agents helping users install, configure, or use Grove. Develope
 
 ---
 
+
 ## Table of Contents
 
 1. [What Grove Replaces](#1-what-grove-replaces)
@@ -21,6 +22,27 @@ Reference for AI agents helping users install, configure, or use Grove. Develope
 6. [Environment Variables](#6-environment-variables)
 7. [Agent Strategy Guide](#7-agent-strategy-guide)
 8. [Troubleshooting](#8-troubleshooting)
+
+---
+
+
+## Multiplexer backends
+
+Grove drives tmux by default and [herdr](https://herdr.dev) when
+`[mux] backend = "herdr"` (or under `auto`, when grove is running inside a herdr
+pane — `HERDR_ENV=1`). Everything in this guide works the same either way.
+
+Two things are worth knowing as an agent:
+
+- **Never call `herdr worktree create` / `herdr worktree remove` on grove's
+  behalf.** Grove owns worktree lifecycle; those commands would impose herdr's
+  naming and bypass grove's `[protection]` rules. Use `grove new` / `grove rm`.
+  (A user removing a worktree through herdr's own UI is reconciled by the
+  plugin's `worktree.removed` hook — that safety net does not make it a
+  supported path for agents.)
+- Under herdr, `grove ls --json` gains an `agent` field per worktree
+  (`idle` / `working` / `blocked` / `done`) — useful for finding which worktree
+  has an agent waiting on input. It is absent under tmux.
 
 ---
 
@@ -256,7 +278,7 @@ Columns:
 - **NAME** — short display name (without project prefix)
 - **BRANCH** — the git branch checked out in that worktree
 - **STATUS** — `clean`, `dirty`, or `stale`
-- **TMUX** — `attached`, `detached`, or `none`
+- **TMUX** — `attached`, `detached`, or `none`. The header follows the active backend: `TMUX`, `HERDR`, or `SESSION` when none is being driven. Match on position, not on the header text.
 - **PATH** — absolute worktree path
 
 **Output modes:**

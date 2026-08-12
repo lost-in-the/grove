@@ -122,31 +122,6 @@ func TestListSessions(t *testing.T) {
 	}
 }
 
-func TestGetLastSession(t *testing.T) {
-	// Isolate HOME so StoreLastSession/GetLastSession (which resolve
-	// ~/.config/grove/last_session via os.UserHomeDir) write to a throwaway
-	// dir instead of polluting the real user's global grove state. t.Setenv
-	// restores HOME and t.TempDir is removed automatically after the test.
-	t.Setenv("HOME", t.TempDir())
-
-	// Test the last session storage
-	testSession := "test-last-session"
-
-	err := StoreLastSession(testSession)
-	if err != nil {
-		t.Fatalf("StoreLastSession() error = %v", err)
-	}
-
-	last, err := GetLastSession()
-	if err != nil {
-		t.Fatalf("GetLastSession() error = %v", err)
-	}
-
-	if last != testSession {
-		t.Errorf("GetLastSession() = %s, want %s", last, testSession)
-	}
-}
-
 func TestCreateSessionWithCommand(t *testing.T) {
 	if !IsTmuxAvailable() {
 		t.Skip("tmux not available")

@@ -457,3 +457,14 @@ Set FontSize 14
 | Key sequence verification | tmux capture | `make tui-capture-keys KEYS="..."` |
 | Demo / documentation GIF | VHS | `make demo` |
 | Publication screenshots | Freeze | (manual) |
+
+## Herdr backend
+
+Session behavior under the herdr backend is covered by
+[`scripts/validate-herdr.sh`](../scripts/validate-herdr.sh) rather than golden
+files — it drives a live herdr server and asserts on real workspace state. See
+[HERDR_INTEGRATION.md](HERDR_INTEGRATION.md).
+
+The TUI's agent badge (`blocked` / `working` / `done`) has no golden coverage
+yet: producing a non-`unknown` state needs a real coding agent running in a
+herdr pane.

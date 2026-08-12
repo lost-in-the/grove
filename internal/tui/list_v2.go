@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/plugins"
 )
 
@@ -151,12 +152,25 @@ func renderBadgesV2Bg(item WorktreeItem, selected bool) string {
 		}
 	}
 
-	// Tmux badge last (fixed-width text, most frequently present)
+	// Agent badge before tmux: when an agent needs input it is the most
+	// actionable thing on the row.
+	switch item.AgentStatus {
+	case mux.AgentBlocked:
+		parts = append(parts, withBg(Styles.StatusDanger).Render("◆ blocked"))
+	case mux.AgentDone:
+		parts = append(parts, withBg(Styles.StatusSuccess).Render("◆ done"))
+	case mux.AgentWorking:
+		parts = append(parts, withBg(Styles.StatusWarning).Render("◆ working"))
+	}
+
+	// Session badge last (fixed-width text, most frequently present), named
+	// after the backend actually driven — "tmux" over a herdr workspace was
+	// the abstraction leaking into the dashboard.
 	switch item.TmuxStatus {
 	case tmuxStatusAttached:
-		parts = append(parts, withBg(Styles.TmuxBadgeActive).Render("⬢ tmux"))
+		parts = append(parts, withBg(Styles.TmuxBadgeActive).Render("⬢ "+sessionBadgeWord(&item)))
 	case tmuxStatusDetached:
-		parts = append(parts, withBg(Styles.TmuxBadge).Render("⬡ tmux"))
+		parts = append(parts, withBg(Styles.TmuxBadge).Render("⬡ "+sessionBadgeWord(&item)))
 	}
 
 	if selected && len(parts) > 1 {

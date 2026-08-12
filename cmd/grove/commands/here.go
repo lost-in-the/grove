@@ -35,19 +35,22 @@ var (
 
 // hereOutput represents the JSON output structure for grove here
 type hereOutput struct {
-	Name        string     `json:"name"`
-	FullName    string     `json:"full_name"`
-	Project     string     `json:"project"`
-	Branch      string     `json:"branch"`
-	Path        string     `json:"path"`
-	Commit      commitInfo `json:"commit"`
-	Status      string     `json:"status"`
-	Changes     []string   `json:"changes,omitempty"`
-	Tmux        tmuxInfo   `json:"tmux"`
-	Environment bool       `json:"environment,omitempty"`
-	Mirror      string     `json:"mirror,omitempty"`
-	AgentSlot   int        `json:"agent_slot,omitempty"`
-	AgentURL    string     `json:"agent_url,omitempty"`
+	Name     string     `json:"name"`
+	FullName string     `json:"full_name"`
+	Project  string     `json:"project"`
+	Branch   string     `json:"branch"`
+	Path     string     `json:"path"`
+	Commit   commitInfo `json:"commit"`
+	Status   string     `json:"status"`
+	Changes  []string   `json:"changes,omitempty"`
+	// Session is backend-neutral on purpose: the key used to be "tmux",
+	// which labeled herdr workspace state as tmux state for machine
+	// consumers.
+	Session     sessionInfo `json:"session"`
+	Environment bool        `json:"environment,omitempty"`
+	Mirror      string      `json:"mirror,omitempty"`
+	AgentSlot   int         `json:"agent_slot,omitempty"`
+	AgentURL    string      `json:"agent_url,omitempty"`
 }
 
 type commitInfo struct {
@@ -57,7 +60,7 @@ type commitInfo struct {
 	Age       string `json:"age"`
 }
 
-type tmuxInfo struct {
+type sessionInfo struct {
 	Session string `json:"session"`
 	Status  string `json:"status"`
 }
@@ -118,7 +121,7 @@ var hereCmd = &cobra.Command{
 		// two GetSessionStatus calls that each shell out (P4). The reported name
 		// stays canonical — the old basename fallback named a session grove
 		// never creates under a custom [naming] pattern.
-		tmuxStatus := tmuxStatusFor(tree, projectName, loadTmuxSessions())
+		tmuxStatus := tmuxStatusFor(tree, projectName, loadSessionIndex(ctx))
 
 		// Get environment info from state
 		isEnv, _ := ctx.State.IsEnvironment(displayName)
@@ -169,7 +172,7 @@ var hereCmd = &cobra.Command{
 				},
 				Status:  status,
 				Changes: changes,
-				Tmux: tmuxInfo{
+				Session: sessionInfo{
 					Session: tmuxSessionName,
 					Status:  tmuxStatus,
 				},
@@ -237,12 +240,13 @@ var hereCmd = &cobra.Command{
 			}
 		}
 
-		// Show tmux status
+		// Show session status, labeled after the backend actually being
+		// driven — "tmux:" over a herdr workspace was the abstraction leaking.
 		tmuxValue := tmuxSessionName
 		if tmuxStatus != tmuxStatusNone {
 			tmuxValue = fmt.Sprintf("%s (%s)", tmuxSessionName, tmuxStatus)
 		}
-		cli.Label(w, "tmux:   ", tmuxValue)
+		cli.Label(w, fmt.Sprintf("%-8s", strings.ToLower(sessionColumnTitle(ctx.Mux()))+":"), tmuxValue)
 
 		return nil
 	}),

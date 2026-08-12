@@ -19,9 +19,9 @@ import (
 
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/grove"
+	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/plugins"
 	"github.com/lost-in-the/grove/internal/state"
-	"github.com/lost-in-the/grove/internal/tmux"
 	"github.com/lost-in-the/grove/internal/tui"
 	"github.com/lost-in-the/grove/internal/worktree"
 	docker "github.com/lost-in-the/grove/plugins/docker"
@@ -90,12 +90,13 @@ func main() {
 	step(t6, "mgr.GetCurrent()")
 
 	t7 := time.Now()
-	_ = tmux.IsTmuxAvailable()
-	step(t7, "tmux.IsTmuxAvailable")
+	m := mux.New(mux.BackendAuto)
+	_ = m.Available()
+	step(t7, "mux.Available")
 
 	t8 := time.Now()
-	sessions, _ := tmux.ListSessions()
-	step(t8, fmt.Sprintf("tmux.ListSessions -> %d sessions", len(sessions)))
+	sessions, _ := m.List()
+	step(t8, fmt.Sprintf("mux.List -> %d sessions", len(sessions)))
 
 	t9 := time.Now()
 	paths := make([]string, len(trees))

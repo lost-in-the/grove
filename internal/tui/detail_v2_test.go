@@ -93,13 +93,23 @@ func TestRenderDetailV2_MetadataGrid(t *testing.T) {
 			wantLabels: []string{"Status"},
 		},
 		{
-			name: "shows tmux indicator when active",
+			name: "shows session indicator when active, labeled by backend",
+			item: WorktreeItem{
+				ShortName:      "test",
+				Branch:         "main",
+				TmuxStatus:     "attached",
+				SessionBackend: "herdr",
+			},
+			wantLabels: []string{"Herdr"},
+		},
+		{
+			name: "session indicator falls back to a neutral label",
 			item: WorktreeItem{
 				ShortName:  "test",
 				Branch:     "main",
 				TmuxStatus: "attached",
 			},
-			wantLabels: []string{"Tmux"},
+			wantLabels: []string{"Session"},
 		},
 		{
 			name: "no tmux row when no session",
@@ -133,7 +143,7 @@ func TestRenderDetailV2_TmuxIndicator(t *testing.T) {
 	}{
 		{"attached session", "attached", "active", ""},
 		{"detached session", "detached", "detached", ""},
-		{"no session", "none", "", "Tmux"},
+		{"no session", "none", "", "Session"},
 	}
 
 	for _, tt := range tests {

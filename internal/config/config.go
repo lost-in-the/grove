@@ -29,10 +29,37 @@ func (t TestConfig) IncludeDepsValue() bool {
 
 // SessionConfig controls session command behavior for grove open
 type SessionConfig struct {
-	Command     string `toml:"command"`
+	Command string `toml:"command"`
+	// OpenIn decides where a worktree lands: "new" (default) creates or
+	// adopts its own session and relocates the client to it, "current" reuses
+	// the shell you are standing in and only changes directory.
+	//
+	// It is backend-neutral. Under tmux "new" means the worktree's session;
+	// under herdr it means the worktree's workspace. It is distinct from
+	// [tmux] mode, which decides *whether* grove manages sessions at all —
+	// OpenIn only decides where the worktree lands when it does. --peek is the
+	// one-shot form, and additionally skips hooks.
+	OpenIn      string `toml:"open_in"`
 	Popup       *bool  `toml:"popup"`
 	PopupWidth  string `toml:"popup_width"`
 	PopupHeight string `toml:"popup_height"`
+}
+
+// Session open_in values.
+const (
+	// OpenInNew creates or adopts the worktree's own session.
+	OpenInNew = "new"
+	// OpenInCurrent reuses the calling shell and only changes directory.
+	OpenInCurrent = "current"
+)
+
+// EffectiveOpenIn returns the configured session placement, defaulting to
+// "new" so existing installs keep behaving exactly as they did.
+func (c *Config) EffectiveOpenIn() string {
+	if c.Session.OpenIn == "" {
+		return OpenInNew
+	}
+	return c.Session.OpenIn
 }
 
 // Config represents the complete grove configuration
@@ -42,6 +69,7 @@ type Config struct {
 	DefaultBranch string           `toml:"default_base_branch"`
 	Switch        SwitchConfig     `toml:"switch"`
 	Naming        NamingConfig     `toml:"naming"`
+	Mux           MuxConfig        `toml:"mux"`
 	Tmux          TmuxConfig       `toml:"tmux"`
 	Plugins       PluginsConfig    `toml:"plugins"`
 	Protection    ProtectionConfig `toml:"protection"`
@@ -86,7 +114,20 @@ type NamingConfig struct {
 	Pattern string `toml:"pattern"`
 }
 
-// TmuxConfig controls tmux session behavior
+// MuxConfig selects which terminal multiplexer grove drives.
+type MuxConfig struct {
+	// Backend is one of auto, tmux, herdr, off. Empty means auto, which
+	// prefers the multiplexer grove is already running inside and otherwise
+	// falls back to whichever binary is installed (tmux winning ties).
+	Backend string `toml:"backend"`
+}
+
+// TmuxConfig controls session behavior.
+//
+// The section name predates herdr support. Mode and OnSwitch are backend-
+// neutral behavior knobs that apply to whichever multiplexer is active;
+// ControlMode is tmux-only and is ignored by backends without a control
+// protocol.
 type TmuxConfig struct {
 	Mode        string `toml:"mode"`         // auto, manual, off
 	Prefix      string `toml:"prefix"`       // Prefix for tmux session names
@@ -321,6 +362,7 @@ func mergeConfigs(base, override *Config) *Config {
 
 	mergeTopLevel(&result, override)
 	mergeSwitchConfig(&result.Switch, &override.Switch)
+	mergeMuxConfig(&result.Mux, &override.Mux)
 	mergeTmuxConfig(&result.Tmux, &override.Tmux)
 	mergeDockerConfig(&result.Plugins.Docker, &override.Plugins.Docker)
 	mergeTUIConfig(&result.TUI, &override.TUI)
@@ -352,6 +394,12 @@ func mergeSwitchConfig(result, override *SwitchConfig) {
 	}
 	if override.ContainerSwitch != "" {
 		result.ContainerSwitch = override.ContainerSwitch
+	}
+}
+
+func mergeMuxConfig(result, override *MuxConfig) {
+	if override.Backend != "" {
+		result.Backend = override.Backend
 	}
 }
 
@@ -538,6 +586,9 @@ func mergeTestConfig(result, override *TestConfig) {
 func mergeSessionConfig(result, override *SessionConfig) {
 	if override.Command != "" {
 		result.Command = override.Command
+	}
+	if override.OpenIn != "" {
+		result.OpenIn = override.OpenIn
 	}
 	if override.Popup != nil {
 		result.Popup = override.Popup

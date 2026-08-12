@@ -1176,3 +1176,58 @@ func TestRunCommand(t *testing.T) {
 		}
 	})
 }
+
+// TestInterpolateShellBareCasePattern pins the unparenthesized case-pattern
+// spelling (`y)` instead of `(y)`) inside `$( )`: its `)` has no matching `(`,
+// and the scanner used to pop the substitution frame there, emitting later
+// tokens with the outer frame's quoting (word-splitting/globbing on dash and
+// zsh sinks). macOS /bin/sh is bash 3.2, which cannot parse this construct at
+// all, so the runtime leg picks the first installed shell that can and skips
+// when none does; the rewrite assertion runs everywhere.
+func TestInterpolateShellBareCasePattern(t *testing.T) {
+	v := &Variables{Worktree: "feat x"}
+	tmpl := `printf '%s' "$(case y in y) printf '[%s]' '{{.worktree}}';; esac)"`
+
+	cmd := v.InterpolateShell(tmpl)
+	// The substitution frame must still be open at the token, so the
+	// reference is spliced single-quote-style — not emitted bare for the
+	// outer double-quote context.
+	if want := `'"${GROVE_HOOK_worktree}"'`; !strings.Contains(cmd, want) {
+		t.Fatalf("InterpolateShell(%q) = %q, missing %q", tmpl, cmd, want)
+	}
+
+	probe := `printf '%s' "$(case y in y) printf ok;; esac)"`
+	var shell string
+	for _, cand := range []string{"dash", "zsh", "bash"} {
+		path, lookErr := exec.LookPath(cand)
+		if lookErr != nil {
+			continue
+		}
+		if out, probeErr := exec.Command(path, "-c", probe).CombinedOutput(); probeErr == nil && string(out) == "ok" {
+			shell = path
+			break
+		}
+	}
+	if shell == "" {
+		t.Skip("no installed shell parses the bare case-pattern spelling")
+	}
+	c := exec.Command(shell, "-c", cmd)
+	c.Env = append(os.Environ(), v.ShellEnv()...)
+	out, err := c.CombinedOutput()
+	if err != nil {
+		t.Fatalf("%s -c error = %v (cmd=%q, out=%q)", shell, err, cmd, out)
+	}
+	if got, want := string(out), "[feat x]"; got != want {
+		t.Errorf("output = %q, want %q", got, want)
+	}
+}
+
+// A literal word "case" (argument position) must not open case tracking —
+// that would swallow the substitution frame's real `)` closer.
+func TestInterpolateShellCaseWordIsNotAKeyword(t *testing.T) {
+	v := &Variables{Branch: "a b"}
+	got := runShellHook(t, v, `printf '%s' "$(printf '%s %s' case {{.branch}})"`)
+	if want := "case a b"; got != want {
+		t.Errorf("output = %q, want %q", got, want)
+	}
+}
