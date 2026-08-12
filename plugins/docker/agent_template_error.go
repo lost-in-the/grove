@@ -1,7 +1,9 @@
 package docker
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 )
@@ -59,17 +61,108 @@ func exportedEnvNames(env []string) []string {
 //	invalid spec: :/app:delegated: empty section between colons
 //
 // while the compose warning naming the actual unset variable scrolls past in
-// the preceding output. When stderr contains no unset-variable warning, the
-// original wrapping is preserved unchanged.
-func enrichAgentStackStartError(stderr string, env []string, original error) error {
-	unset := parseUnsetTemplateVars(stderr)
-	if len(unset) == 0 {
+// the preceding output. When unsetVars is empty, the original wrapping is
+// preserved unchanged.
+//
+// unsetVars is expected to come from an unsetVarScanWriter that scanned
+// compose's stderr as it streamed, rather than from a fixed-size trailing
+// buffer — a stack that emits a lot of stderr after the warning would
+// otherwise evict it before this function ever sees it.
+func enrichAgentStackStartError(unsetVars []string, env []string, original error) error {
+	if len(unsetVars) == 0 {
 		return fmt.Errorf("failed to start agent stack: %w", original)
 	}
 	return fmt.Errorf(
 		"failed to start agent stack: template referenced variable(s) grove did not export: %s\n"+
 			"grove exports: %s\n"+
 			"underlying error: %w",
-		strings.Join(unset, ", "), strings.Join(exportedEnvNames(env), ", "), original,
+		strings.Join(unsetVars, ", "), strings.Join(exportedEnvNames(env), ", "), original,
 	)
+}
+
+// maxUnsetVars caps the number of distinct unset-variable names an
+// unsetVarScanWriter collects, so a pathological or adversarial stream can't
+// grow the set without bound.
+const maxUnsetVars = 16
+
+// unsetVarScanWriter tees writes to an inner writer (typically os.Stderr, so
+// the user still sees live output) while incrementally scanning each
+// complete line for compose's "variable is not set" warning. Detection is
+// independent of how much stderr the stack produces after the warning: a
+// stack that emits many kilobytes of pull/build noise after an early
+// interpolation warning would evict that warning from a fixed-size trailing
+// buffer (see stderrBufferLimit in run_error.go) and silently degrade to the
+// opaque compose error. Scanning line-by-line as writes arrive avoids that.
+//
+// unsetVarScanWriter is not safe for concurrent use.
+type unsetVarScanWriter struct {
+	w       io.Writer
+	partial []byte
+	names   []string
+	seen    map[string]bool
+}
+
+// newUnsetVarScanWriter returns a scanner that tees all writes to w.
+func newUnsetVarScanWriter(w io.Writer) *unsetVarScanWriter {
+	return &unsetVarScanWriter{
+		w:    w,
+		seen: make(map[string]bool),
+	}
+}
+
+// Write implements io.Writer. It always tees the full input to the inner
+// writer and reports len(p) written, regardless of how much of the line
+// buffer was scanned.
+func (u *unsetVarScanWriter) Write(p []byte) (int, error) {
+	n := len(p)
+	if u.w != nil {
+		_, _ = u.w.Write(p)
+	}
+
+	u.partial = append(u.partial, p...)
+	for {
+		idx := bytes.IndexByte(u.partial, '\n')
+		if idx < 0 {
+			break
+		}
+		u.scanLine(u.partial[:idx])
+		u.partial = u.partial[idx+1:]
+	}
+	return n, nil
+}
+
+// Flush scans any remaining partial line that never received a trailing
+// newline (e.g. the process exited mid-line) and clears the buffer. Safe to
+// call more than once; a second call is a no-op.
+func (u *unsetVarScanWriter) Flush() {
+	if len(u.partial) == 0 {
+		return
+	}
+	u.scanLine(u.partial)
+	u.partial = nil
+}
+
+// UnsetVars returns the collected unset-variable names seen so far, in
+// first-seen order, deduplicated, capped at maxUnsetVars. Call Flush first
+// to include a trailing partial line.
+func (u *unsetVarScanWriter) UnsetVars() []string {
+	return u.names
+}
+
+// scanLine applies the unset-variable warning pattern to a single completed
+// line and merges any matches into the deduplicated, capped result set.
+func (u *unsetVarScanWriter) scanLine(line []byte) {
+	if len(u.names) >= maxUnsetVars {
+		return
+	}
+	for _, name := range parseUnsetTemplateVars(string(line)) {
+		if len(u.names) >= maxUnsetVars {
+			return
+		}
+		if u.seen[name] {
+			continue
+		}
+		u.seen[name] = true
+		u.names = append(u.names, name)
+	}
 }

@@ -134,12 +134,13 @@ func (s *agentExternalStrategy) Up(worktreePath string, detach bool) error {
 	}
 	args = append(args, s.agent.Services...)
 
-	stderrCapture := &teeBuffer{w: os.Stderr}
+	stderrScan := newUnsetVarScanWriter(os.Stderr)
 	cmd := agentComposeCommand(composePath, templatePaths, projectName, env, args...)
 	cmd.Stdout = os.Stderr
-	cmd.Stderr = stderrCapture
+	cmd.Stderr = stderrScan
 	if err := cmd.Run(); err != nil {
-		return enrichAgentStackStartError(stderrCapture.String(), env, err)
+		stderrScan.Flush()
+		return enrichAgentStackStartError(stderrScan.UnsetVars(), env, err)
 	}
 
 	fmt.Fprintf(os.Stderr, "Agent stack started (slot %d)\n", slot)

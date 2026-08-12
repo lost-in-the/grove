@@ -1,7 +1,9 @@
 package docker
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -90,12 +92,11 @@ func TestExportedEnvNames_NeverIncludesValues(t *testing.T) {
 }
 
 func TestEnrichAgentStackStartError_UnsetVariable_NamesBoth(t *testing.T) {
-	stderr := `warning: The "AGENT_MYAPP_DIR" variable is not set. Defaulting to a blank string.
-Error response from daemon: invalid spec: :/app:delegated: empty section between colons`
+	unsetVars := []string{"AGENT_MYAPP_DIR"}
 	env := []string{"APP_DIR=/tmp/wt", "AGENT_SLOT=2"}
 	original := errors.New("exit status 1")
 
-	got := enrichAgentStackStartError(stderr, env, original)
+	got := enrichAgentStackStartError(unsetVars, env, original)
 
 	if got == nil {
 		t.Fatal("expected enriched error, got nil")
@@ -116,11 +117,10 @@ Error response from daemon: invalid spec: :/app:delegated: empty section between
 }
 
 func TestEnrichAgentStackStartError_NoWarning_PreservesOriginalWrapping(t *testing.T) {
-	stderr := "Error response from daemon: pull access denied"
 	env := []string{"APP_DIR=/tmp/wt"}
 	original := errors.New("exit status 1")
 
-	got := enrichAgentStackStartError(stderr, env, original)
+	got := enrichAgentStackStartError(nil, env, original)
 
 	if got.Error() != "failed to start agent stack: exit status 1" {
 		t.Errorf("got %q, want unchanged 'failed to start agent stack: exit status 1' wrapping", got.Error())
@@ -130,12 +130,154 @@ func TestEnrichAgentStackStartError_NoWarning_PreservesOriginalWrapping(t *testi
 	}
 }
 
-func TestEnrichAgentStackStartError_EmptyStderr_PreservesOriginalWrapping(t *testing.T) {
+func TestEnrichAgentStackStartError_NilUnsetVars_PreservesOriginalWrapping(t *testing.T) {
 	original := errors.New("exit status 1")
 
-	got := enrichAgentStackStartError("", []string{"APP_DIR=/tmp/wt"}, original)
+	got := enrichAgentStackStartError(nil, []string{"APP_DIR=/tmp/wt"}, original)
 
 	if got.Error() != "failed to start agent stack: exit status 1" {
 		t.Errorf("got %q, want unchanged 'failed to start agent stack: exit status 1' wrapping", got.Error())
+	}
+}
+
+func TestUnsetVarScanWriter_SingleWarning(t *testing.T) {
+	var inner bytes.Buffer
+	w := newUnsetVarScanWriter(&inner)
+
+	_, err := w.Write([]byte("warning: The \"AGENT_MYAPP_DIR\" variable is not set. Defaulting to a blank string.\n"))
+	if err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	got := w.UnsetVars()
+	if len(got) != 1 || got[0] != "AGENT_MYAPP_DIR" {
+		t.Errorf("UnsetVars() = %v, want [AGENT_MYAPP_DIR]", got)
+	}
+	if inner.String() != "warning: The \"AGENT_MYAPP_DIR\" variable is not set. Defaulting to a blank string.\n" {
+		t.Errorf("inner writer did not receive the full tee: %q", inner.String())
+	}
+}
+
+func TestUnsetVarScanWriter_SplitAcrossWrites(t *testing.T) {
+	var inner bytes.Buffer
+	w := newUnsetVarScanWriter(&inner)
+
+	full := "warning: The \"AGENT_MYAPP_DIR\" variable is not set. Defaulting to a blank string.\n"
+	mid := len(full) / 2
+
+	if _, err := w.Write([]byte(full[:mid])); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	// Before the newline arrives, nothing should have been detected yet.
+	if got := w.UnsetVars(); len(got) != 0 {
+		t.Errorf("UnsetVars() before line completion = %v, want none", got)
+	}
+	if _, err := w.Write([]byte(full[mid:])); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	got := w.UnsetVars()
+	if len(got) != 1 || got[0] != "AGENT_MYAPP_DIR" {
+		t.Errorf("UnsetVars() = %v, want [AGENT_MYAPP_DIR]", got)
+	}
+	if inner.String() != full {
+		t.Errorf("inner writer did not receive the full tee across split writes: %q", inner.String())
+	}
+}
+
+func TestUnsetVarScanWriter_WarningThenLargeNoise_StillDetected(t *testing.T) {
+	var inner bytes.Buffer
+	w := newUnsetVarScanWriter(&inner)
+
+	warning := "warning: The \"AGENT_MYAPP_DIR\" variable is not set. Defaulting to a blank string.\n"
+	if _, err := w.Write([]byte(warning)); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	// Simulate a stack that emits well over stderrBufferLimit (8KB) of noise
+	// after the warning — the old fixed trailing-window buffer would evict
+	// the warning here, but a streaming scan must not.
+	noise := strings.Repeat("some unrelated pull/build output line\n", 1000)
+	if len(noise) <= stderrBufferLimit {
+		t.Fatalf("test setup: noise (%d bytes) must exceed stderrBufferLimit (%d bytes)", len(noise), stderrBufferLimit)
+	}
+	if _, err := w.Write([]byte(noise)); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	got := w.UnsetVars()
+	if len(got) != 1 || got[0] != "AGENT_MYAPP_DIR" {
+		t.Errorf("UnsetVars() = %v, want [AGENT_MYAPP_DIR] even after >8KB of trailing noise", got)
+	}
+}
+
+func TestUnsetVarScanWriter_NoTrailingNewline_RequiresFlush(t *testing.T) {
+	var inner bytes.Buffer
+	w := newUnsetVarScanWriter(&inner)
+
+	// Process died mid-line: no trailing newline ever arrives.
+	partial := "warning: The \"AGENT_MYAPP_DIR\" variable is not set. Defaulting to a blank string."
+	if _, err := w.Write([]byte(partial)); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	if got := w.UnsetVars(); len(got) != 0 {
+		t.Errorf("UnsetVars() before Flush = %v, want none", got)
+	}
+
+	w.Flush()
+
+	got := w.UnsetVars()
+	if len(got) != 1 || got[0] != "AGENT_MYAPP_DIR" {
+		t.Errorf("UnsetVars() after Flush = %v, want [AGENT_MYAPP_DIR]", got)
+	}
+
+	// Flush must be idempotent.
+	w.Flush()
+	got = w.UnsetVars()
+	if len(got) != 1 || got[0] != "AGENT_MYAPP_DIR" {
+		t.Errorf("UnsetVars() after second Flush = %v, want [AGENT_MYAPP_DIR] (no duplication)", got)
+	}
+}
+
+func TestUnsetVarScanWriter_DedupAndCap(t *testing.T) {
+	var inner bytes.Buffer
+	w := newUnsetVarScanWriter(&inner)
+
+	for i := 0; i < maxUnsetVars+5; i++ {
+		line := fmt.Sprintf("warning: The \"AGENT_VAR_%d\" variable is not set. Defaulting to a blank string.\n", i)
+		if _, err := w.Write([]byte(line)); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+		// Duplicate each warning to confirm dedup as well as the cap.
+		if _, err := w.Write([]byte(line)); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+	}
+
+	got := w.UnsetVars()
+	if len(got) != maxUnsetVars {
+		t.Fatalf("UnsetVars() len = %d, want %d (cap)", len(got), maxUnsetVars)
+	}
+	seen := make(map[string]bool, len(got))
+	for _, name := range got {
+		if seen[name] {
+			t.Errorf("UnsetVars() contains duplicate: %s", name)
+		}
+		seen[name] = true
+	}
+}
+
+func TestUnsetVarScanWriter_NoWarning(t *testing.T) {
+	var inner bytes.Buffer
+	w := newUnsetVarScanWriter(&inner)
+
+	if _, err := w.Write([]byte("Error response from daemon: pull access denied\n")); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	w.Flush()
+
+	if got := w.UnsetVars(); got != nil {
+		t.Errorf("UnsetVars() = %v, want nil", got)
 	}
 }
