@@ -102,8 +102,10 @@ func TestRenderBadgesV2(t *testing.T) {
 		want string
 	}{
 		{"No badges", WorktreeItem{TmuxStatus: "none"}, ""},
-		{"Attached tmux", WorktreeItem{TmuxStatus: "attached"}, "tmux"},
-		{"Detached tmux", WorktreeItem{TmuxStatus: "detached"}, "tmux"},
+		{"Attached tmux", WorktreeItem{TmuxStatus: "attached", SessionBackend: "tmux"}, "tmux"},
+		{"Detached tmux", WorktreeItem{TmuxStatus: "detached", SessionBackend: "tmux"}, "tmux"},
+		{"Attached herdr", WorktreeItem{TmuxStatus: "attached", SessionBackend: "herdr"}, "herdr"},
+		{"Backend unrecorded", WorktreeItem{TmuxStatus: "attached"}, "session"},
 	}
 
 	for _, tt := range tests {

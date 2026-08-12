@@ -166,6 +166,9 @@ Every command below that "creates a tmux session", "switches sessions", or
 "kills a session" acts on whichever multiplexer `[mux] backend` resolved to —
 tmux (default) or [herdr](https://herdr.dev). The command contracts are
 identical across backends; the specs say "tmux" for historical reasons.
+User-facing surfaces name the resolved backend (the `grove ls` column, TUI
+badges, `grove here`'s label), and machine output uses the neutral `"session"`
+JSON key in `grove ls --json` and `grove here --json`.
 
 Three behaviors differ by backend:
 
@@ -304,7 +307,7 @@ NAME            BRANCH          STATUS     TMUX        PATH
       "branch": "main",
       "path": "~/projects/grove",
       "status": "clean",
-      "tmux": "attached",
+      "session": "attached",
       "frozen": false,
       "current": true
     }
@@ -961,7 +964,7 @@ testing
   },
   "status": "dirty",
   "changes": ["M  src/auth.go", "?? src/new_file.go"],
-  "tmux": {
+  "session": {
     "session": "grove-testing",
     "status": "attached"
   },

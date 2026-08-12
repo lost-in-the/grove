@@ -43,7 +43,10 @@ type hereOutput struct {
 	Commit      commitInfo `json:"commit"`
 	Status      string     `json:"status"`
 	Changes     []string   `json:"changes,omitempty"`
-	Tmux        tmuxInfo   `json:"tmux"`
+	// Session is backend-neutral on purpose: the key used to be "tmux",
+	// which labeled herdr workspace state as tmux state for machine
+	// consumers.
+	Session     sessionInfo `json:"session"`
 	Environment bool       `json:"environment,omitempty"`
 	Mirror      string     `json:"mirror,omitempty"`
 	AgentSlot   int        `json:"agent_slot,omitempty"`
@@ -57,7 +60,7 @@ type commitInfo struct {
 	Age       string `json:"age"`
 }
 
-type tmuxInfo struct {
+type sessionInfo struct {
 	Session string `json:"session"`
 	Status  string `json:"status"`
 }
@@ -169,7 +172,7 @@ var hereCmd = &cobra.Command{
 				},
 				Status:  status,
 				Changes: changes,
-				Tmux: tmuxInfo{
+				Session: sessionInfo{
 					Session: tmuxSessionName,
 					Status:  tmuxStatus,
 				},
@@ -237,12 +240,13 @@ var hereCmd = &cobra.Command{
 			}
 		}
 
-		// Show tmux status
+		// Show session status, labeled after the backend actually being
+		// driven — "tmux:" over a herdr workspace was the abstraction leaking.
 		tmuxValue := tmuxSessionName
 		if tmuxStatus != tmuxStatusNone {
 			tmuxValue = fmt.Sprintf("%s (%s)", tmuxSessionName, tmuxStatus)
 		}
-		cli.Label(w, "tmux:   ", tmuxValue)
+		cli.Label(w, fmt.Sprintf("%-8s", strings.ToLower(sessionColumnTitle(ctx.Mux()))+":"), tmuxValue)
 
 		return nil
 	}),

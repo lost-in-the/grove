@@ -121,7 +121,8 @@ func renderStatusSection(item *WorktreeItem, width int) []string {
 	}
 
 	if item.TmuxStatus != "none" && item.TmuxStatus != "" {
-		rows = append(rows, metadataLabel("Tmux")+renderTmuxValue(item))
+		word := sessionBadgeWord(item)
+		rows = append(rows, metadataLabel(strings.ToUpper(word[:1])+word[1:])+renderTmuxValue(item))
 	}
 
 	if agent := renderAgentValue(item); agent != "" {

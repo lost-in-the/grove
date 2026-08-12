@@ -40,6 +40,7 @@ type WorktreeItem struct {
 	IsProtected    bool
 	IsPrunable     bool
 	TmuxStatus     string                      // "attached", "detached", "none"
+	SessionBackend string                      // backend word for badges/labels: "tmux", "herdr"
 	AgentStatus    mux.AgentStatus             // coding-agent state; empty unless the backend reports one
 	HasRemote      bool                        // true if branch has upstream tracking
 	TrackingBranch string                      // e.g., "origin/feat/ux-polish" (empty if no upstream)
@@ -51,6 +52,15 @@ type WorktreeItem struct {
 	AssociatedPR   *PRInfo                     // PR linked to this branch (nil if none)
 	LastAccessed   time.Time
 	PluginStatuses []plugins.StatusEntry // status entries from plugins
+}
+
+// sessionBadgeWord names the multiplexer behind an item's session badge and
+// detail row. Falls back to a neutral word when no backend was recorded.
+func sessionBadgeWord(item *WorktreeItem) string {
+	if item.SessionBackend != "" {
+		return item.SessionBackend
+	}
+	return "session"
 }
 
 // list.Item interface implementation for bubbles/list.
@@ -104,6 +114,7 @@ type fetchContext struct {
 	defaultBranch string
 	currentPath   string
 	sessions      *mux.Index
+	backend       string // resolved multiplexer backend name ("tmux", "herdr")
 	cfg           *config.Config
 	stateMgr      *state.Manager
 	mgr           *worktree.Manager
@@ -147,6 +158,7 @@ func loadFetchContext(mgr *worktree.Manager, stateMgr *state.Manager) fetchConte
 	fc.currentPath = currentPath
 
 	if m := muxFor(cfg); m.Available() {
+		fc.backend = string(m.Backend())
 		sessions, err := m.List()
 		if err != nil {
 			tuilog.Printf("warning: failed to list %s sessions: %v", m.Backend(), err)
@@ -173,6 +185,7 @@ func (fc *fetchContext) setTmuxStatus(item *WorktreeItem, tree worktree.Worktree
 		return
 	}
 	item.TmuxStatus = string(s.Status)
+	item.SessionBackend = fc.backend
 	item.AgentStatus = s.Agent
 }
 

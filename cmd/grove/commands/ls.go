@@ -26,7 +26,10 @@ type lsWorktreeOutput struct {
 	Branch      string            `json:"branch"`
 	Path        string            `json:"path"`
 	Status      string            `json:"status"`
-	Tmux        string            `json:"tmux"`
+	// Session is backend-neutral on purpose: the key used to be "tmux",
+	// which labeled herdr workspace state as tmux state for machine
+	// consumers.
+	Session     string            `json:"session"`
 	Agent       string            `json:"agent,omitempty"`
 	Containers  string            `json:"containers,omitempty"`
 	Current     bool              `json:"current"`
@@ -162,7 +165,7 @@ var lsCmd = &cobra.Command{
 					Branch:      tree.Branch,
 					Path:        tree.Path,
 					Status:      status,
-					Tmux:        tmuxStatus,
+					Session:     tmuxStatus,
 					Agent:       agentStatusDisplay(agentStatusFor(tree, projectName, sessions)),
 					Current:     isCurrent,
 					Environment: isEnv,
