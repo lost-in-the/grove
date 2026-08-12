@@ -487,13 +487,28 @@ func (m *Manager) Remove(name string, force bool) error {
 		return fmt.Errorf("worktree '%s' is locked; run 'git worktree unlock %s' first", name, targetTree.Path)
 	}
 
-	// Plain removal — the only path taken without force. Git refuses a dirty or
-	// otherwise-risky tree here; surface that instead of escalating.
+	// Plain removal first. Git refuses a dirty or otherwise-risky tree here;
+	// surface that instead of escalating.
 	output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"worktree", "remove", targetTree.Path}, m.repoRoot, cmdexec.GitLocal)
 	if err == nil {
 		return nil
 	}
 	if !force {
+		// Git's refusal set is wider than "has uncommitted changes": a clean
+		// worktree containing a populated submodule is refused unconditionally
+		// ("working trees containing submodules cannot be moved or removed").
+		// When `git status --porcelain` shows nothing there is nothing
+		// uncommitted to lose (a dirty submodule would show as ` M sub`), so
+		// git's own --force is safe — without this, such worktrees are
+		// permanently unremovable through `grove clean`, which has no --force
+		// flag and would re-fire pre-remove hooks on every failed run.
+		if dirty, derr := m.GetDirtyFiles(targetTree.Path); derr == nil && dirty == "" {
+			forceOutput, forceErr := cmdexec.CombinedOutput(context.TODO(), "git", []string{"worktree", "remove", "--force", targetTree.Path}, m.repoRoot, cmdexec.GitLocal)
+			if forceErr == nil {
+				return nil
+			}
+			output, err = forceOutput, forceErr
+		}
 		return fmt.Errorf("failed to remove worktree (retry with --force): %s: %w", strings.TrimSpace(string(output)), err)
 	}
 

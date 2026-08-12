@@ -1226,6 +1226,61 @@ func TestRemoveNonForceSurfacesGitRefusal(t *testing.T) {
 	}
 }
 
+// A clean worktree containing a populated submodule is refused by plain
+// `git worktree remove` unconditionally ("working trees containing submodules
+// cannot be moved or removed") — a wider refusal set than grove's own dirty
+// gate. With nothing uncommitted to lose, Remove must escalate to git's
+// --force on its own: `grove clean` has no --force flag, so without this such
+// worktrees are permanently unremovable there (re-firing pre-remove hooks on
+// every failed run).
+func TestRemoveNonForceCleanSubmoduleWorktree(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	tmpDir, _ := setupTestRepo(t)
+	m := &Manager{repoRoot: tmpDir}
+
+	// A sibling repo to serve as the submodule source.
+	subDir := filepath.Join(filepath.Dir(tmpDir), filepath.Base(tmpDir)+"-subsrc")
+	for _, args := range [][]string{
+		{"init", subDir},
+		{"-C", subDir, "config", "--local", "user.name", "Test User"},
+		{"-C", subDir, "config", "--local", "user.email", "test@example.com"},
+		{"-C", subDir, "config", "--local", "commit.gpgsign", "false"},
+		{"-C", subDir, "commit", "--allow-empty", "-m", "init"},
+		// protocol.file.allow: modern git blocks local-path submodules by
+		// default (CVE-2022-39253); the test opts back in.
+		{"-C", tmpDir, "-c", "protocol.file.allow=always", "submodule", "add", subDir, "sub"},
+		{"-C", tmpDir, "commit", "-m", "add submodule"},
+	} {
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	if err := m.Create("sub-wt", "sub-branch"); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	fullName := m.GetProjectName() + "-sub-wt"
+	wt, err := m.Find(fullName)
+	if err != nil || wt == nil {
+		t.Fatalf("Find() expected worktree, got error=%v, wt=%v", err, wt)
+	}
+	if out, err := exec.Command("git", "-C", wt.Path, "-c", "protocol.file.allow=always", "submodule", "update", "--init").CombinedOutput(); err != nil {
+		t.Fatalf("submodule update --init: %v\n%s", err, out)
+	}
+	if dirty, err := m.GetDirtyFiles(wt.Path); err != nil || dirty != "" {
+		t.Fatalf("worktree not clean before removal: dirty=%q err=%v", dirty, err)
+	}
+
+	if err := m.Remove(fullName, false); err != nil {
+		t.Fatalf("Remove(non-force) on a clean submodule worktree = %v, want success via git --force escalation", err)
+	}
+	if _, statErr := os.Stat(wt.Path); !os.IsNotExist(statErr) {
+		t.Errorf("worktree still exists after Remove: %s", wt.Path)
+	}
+}
+
 func TestGetCommitInfo(t *testing.T) {
 	tmpDir, _ := setupTestRepo(t)
 
