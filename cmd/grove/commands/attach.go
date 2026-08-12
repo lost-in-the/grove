@@ -145,7 +145,7 @@ This is a tmux-only command — it does not emit cd: directives.`,
 			// With shell integration this hands off to the wrapper; otherwise
 			// it attaches directly and takes over the terminal.
 			hasShellIntegration := os.Getenv("GROVE_SHELL") == "1"
-			if err := attachToSession(m, target, cfg.Tmux.ControlMode, hasShellIntegration); err != nil {
+			if err := attachToSession(m, target, cfg.Tmux.ControlMode, hasShellIntegration, stderr); err != nil {
 				return fmt.Errorf("failed to attach session: %w", err)
 			}
 		}

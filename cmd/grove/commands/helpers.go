@@ -162,15 +162,22 @@ func controlModeFor(m mux.Multiplexer, cfg *bool) (mux.ControlModer, bool) {
 //
 // With shell integration active, backends that can express attachment as a
 // wrapper directive do so, letting grove exit before the client starts.
-// Backends without a directive (herdr) attach in-process instead, which works
-// the same way from the user's side.
-func attachToSession(m mux.Multiplexer, t mux.Target, controlModeCfg *bool, hasShellIntegration bool) error {
+// Backends without a directive (herdr) can only attach by running their
+// interactive client in-process — which must never happen under shell
+// integration, where grove's stdout is the wrapper's command-substitution
+// pipe: the client would draw its UI into the pipe (the terminal appears
+// hung), and on exit the wrapper would parse the captured escape bytes as
+// directives. The caller has already emitted the cd directive, so the switch
+// still lands; grove just leaves attaching to the user and says how.
+func attachToSession(m mux.Multiplexer, t mux.Target, controlModeCfg *bool, hasShellIntegration bool, stderr *cli.Writer) error {
 	cm, useCC := controlModeFor(m, controlModeCfg)
 
 	if hasShellIntegration {
 		if d, ok := m.(mux.AttachDirectiver); ok && d.AttachDirective(t, useCC) {
 			return nil
 		}
+		cli.Faint(stderr, "Run: %s", m.AttachHint(t))
+		return nil
 	}
 
 	if useCC {
@@ -234,7 +241,11 @@ func switchToWorktree(ctx *GroveContext, stderr *cli.Writer, prevName, targetNam
 		// by hand, or the worktree was entered with --no-tmux). Failures
 		// degrade to the cd-directive fallback instead of aborting.
 		if !suppressTmux && m.Available() && m.Inside() {
-			target := mux.Target{Name: sessionName, Path: targetPath, Repo: repoRoot}
+			// Short carries the display name so a session created here labels
+			// its tab "feature", not "project-feature" — the same target shape
+			// muxTarget builds for `grove to` (and the one `grove rename`'s
+			// tab-relabel guard matches against).
+			target := mux.Target{Name: sessionName, Path: targetPath, Repo: repoRoot, Short: targetName}
 			managed, err := ensureSession(m, target)
 			if err != nil {
 				cli.Warning(stderr, "Failed to create session: %v", err)

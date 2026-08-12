@@ -296,7 +296,10 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 			if exists {
 				handleDirectoryDrift(m, target, targetTree.Path, cfg.Tmux.OnSwitch, stderr)
 			}
-		} else if tmuxMode == "manual" && !jsonOut {
+		} else if tmuxMode == "manual" && sessionName != "" && !jsonOut {
+			// sessionName is cleared when the backend declines the target —
+			// there is no session to report ready or attach to, so say nothing
+			// (selfSwitchTmuxEpilogue returns early in the same situation).
 			cli.Success(stderr, "Session '%s' ready", sessionName)
 			cli.Faint(stderr, "Run: %s", manualAttachHint(m, sessionName))
 		}
@@ -381,7 +384,7 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 		// In auto mode outside tmux: emit the tmux-attach directive for
 		// the shell wrapper, or attach directly without it.
 		if tmuxMode == tmuxModeAuto && sessionName != "" {
-			if err := attachToSession(m, target, cfg.Tmux.ControlMode, hasShellIntegration); err != nil {
+			if err := attachToSession(m, target, cfg.Tmux.ControlMode, hasShellIntegration, stderr); err != nil {
 				return fmt.Errorf("failed to attach session: %w", err)
 			}
 		}
@@ -424,7 +427,7 @@ func selfSwitchTmuxEpilogue(ctx *GroveContext, mgr *worktree.Manager, targetTree
 		return nil
 	}
 
-	if err := attachToSession(m, target, ctx.Config.Tmux.ControlMode, os.Getenv("GROVE_SHELL") == "1"); err != nil {
+	if err := attachToSession(m, target, ctx.Config.Tmux.ControlMode, os.Getenv("GROVE_SHELL") == "1", stderr); err != nil {
 		return fmt.Errorf("failed to attach session: %w", err)
 	}
 	return nil

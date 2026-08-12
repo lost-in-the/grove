@@ -233,7 +233,7 @@ Examples:
 		if hasShellIntegration {
 			cli.Directive("cd", wt.Path)
 		}
-		return attachToSession(m, target, ctx.Config.Tmux.ControlMode, hasShellIntegration)
+		return attachToSession(m, target, ctx.Config.Tmux.ControlMode, hasShellIntegration, stderr)
 	}),
 }
 

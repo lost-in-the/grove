@@ -219,6 +219,14 @@ Nested launches are blocked by design — `should_block_nested`
 `workspace focus` alone. That is a clean analogue of the existing
 `SwitchSession` path.
 
+The blocking attach also must never run under shell integration: there,
+grove's stdout is the wrapper's command-substitution pipe, so the client would
+draw its UI into the pipe (the terminal appears hung) and the wrapper would
+then parse the captured escape bytes as directives. herdr has no wrapper
+directive the way tmux does (`tmux-attach:`), so with `GROVE_SHELL=1` grove
+performs the directory switch and prints `Run: herdr` instead of attaching
+in-process (`attachToSession` in `cmd/grove/commands/helpers.go`).
+
 ---
 
 ## What grove gains
@@ -570,7 +578,7 @@ skipped by default.
 | Plugin action | `Grove: worktree status` runs and reports correctly |
 | Event hook | fires on a worktree grove doesn't track; stays silent on one it does |
 | Removal sync | `herdr worktree remove` on an adopted worktree drops the state entry, clears `last_worktree`, and logs the reconciliation to `herdr plugin log list` (live-verified 2026-08-11 with the linked plugin) |
-| Dead server | `server_not_running`; `grove ls` degrades to "no session", no hang |
+| Dead server | `server_not_running`; `grove ls` degrades to "no session", no hang. `Exists` answers false and `Ensure` reports the target unmanaged, so `grove to`/`open`/`attach` fall back to a plain directory switch — the behavior `grove doctor` promises. `List` still surfaces the raw error for doctor's server check |
 
 Five bugs surfaced that no amount of source reading had caught:
 
