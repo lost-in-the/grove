@@ -379,18 +379,20 @@ func reconcileRemovedWorktree(event *herdrEvent, muxOverride mux.Multiplexer) er
 		return nil
 	}
 
-	// The log line is the only record that survives (it reaches
-	// `herdr plugin log list`), so surface anything the dropped entry knew
-	// that the user might still need.
+	// These lines are the only record that survives the removal. They must go
+	// to stderr — that is what `herdr plugin log list` captures; log.Printf is
+	// GROVE_LOG-gated file logging that herdr never enables — and anything the
+	// dropped entry knew that the user might still need belongs here.
+	w := cli.NewStderr()
 	if ws.DockerProject != "" {
-		log.Printf("herdr removed worktree '%s' which had docker project %q — its containers were not stopped", name, ws.DockerProject)
+		cli.Warning(w, "worktree '%s' had docker project %q — its containers were not stopped", name, ws.DockerProject)
 	}
 
 	// Drops the entry and clears last_worktree if it pointed here.
 	if err := ctx.State.RemoveWorktree(name); err != nil {
 		return fmt.Errorf("herdr removed the worktree at %s but grove state cleanup failed: %w", removed, err)
 	}
-	log.Printf("removed '%s' from grove state after herdr removed its worktree", name)
+	cli.Success(w, "removed '%s' from grove state after herdr removed its worktree", name)
 
 	// Reap a session left pointing at the dead directory. Skipped on the
 	// herdr backend: the workspace close is herdr's own removal flow, and a
@@ -405,7 +407,7 @@ func reconcileRemovedWorktree(event *herdrEvent, muxOverride mux.Multiplexer) er
 			target := muxTarget(mgr, name, removed)
 			if exists, err := m.Exists(target); err == nil && exists {
 				if err := m.Kill(target); err != nil {
-					log.Printf("failed to kill session for removed worktree '%s': %v", name, err)
+					cli.Warning(w, "failed to kill session for removed worktree '%s': %v", name, err)
 				}
 			}
 		}
