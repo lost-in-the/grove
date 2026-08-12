@@ -28,6 +28,11 @@ Verified end to end against herdr 0.8.0: create, list, switch, rename, and remov
 - `grove doctor` ends a failing run with a numbered **"action required"** list that repeats every failed required check in one place, instead of a bare "some checks failed — see above" pointing back into the scroll. Informational checks (tmux, GitHub CLI, Docker availability) stay inline-only.
 - `grove doctor --fix` re-evaluates each check it fixed, so the report and the closing summary reflect the **post-fix** state — a run that repaired everything now ends green instead of counting the just-fixed findings as failures.
 - The one-time config-layout upgrade notice now points directly at `grove doctor --fix` and names the doctor check it corresponds to ("Config symlinks"), so the notice and the doctor report are recognizably about the same thing.
+- `grove here --check-mount --require-current` exits with a distinct code (`13`, `MountCheckMismatch`) when the current worktree isn't the one the stack's env file is configured for — a pre-test guard for "am I even in the worktree this stack serves?", separate from the env-vs-container `MountDrift` (`12`) check.
+
+### Fixed
+- `grove here --check-mount`'s header no longer reads as a verdict before any comparison has run. It printed `Mount drift — '<worktree>'` unconditionally, so standing in a worktree the stack wasn't configured for showed "Mount drift" followed several lines later by a clean report — it now reads `Mount check — '<worktree>'`.
+- `grove here --check-mount` now notes when the worktree you're standing in differs from the one the stack's env file is configured for (`note: you are in 'X'; the stack is configured for 'Y'`), instead of silently reporting a clean bill of health about a worktree you aren't in. Exit code is unaffected unless `--require-current` is also passed.
 
 ## [0.10.0] - 2026-07-22
 
