@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/lost-in-the/grove/internal/fsutil"
 )
 
 // lastSessionFile is grove's own record of the session the user came from, so
@@ -24,18 +26,11 @@ func StoreLastSession(name string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return err
-	}
-
-	// Write-then-rename so a crash mid-write can't leave a truncated name
-	// that would send `grove last` somewhere unexpected.
-	tmpFile := path + ".tmp"
-	if err := os.WriteFile(tmpFile, []byte(name), 0644); err != nil {
-		return fmt.Errorf("write last session: %w", err)
-	}
-	if err := os.Rename(tmpFile, path); err != nil {
-		_ = os.Remove(tmpFile)
+	// Atomic write-then-rename so a crash mid-write can't leave a truncated
+	// name. AtomicWriteFile's unique temp names also keep concurrent grove
+	// processes (agents drive several at once) from sharing one temp file and
+	// renaming each other's partial content into place.
+	if err := fsutil.AtomicWriteFile(path, []byte(name), 0o644); err != nil {
 		return fmt.Errorf("save last session: %w", err)
 	}
 	return nil
