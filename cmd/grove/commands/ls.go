@@ -21,11 +21,11 @@ var (
 
 // lsWorktreeOutput represents a worktree in JSON output
 type lsWorktreeOutput struct {
-	Name        string            `json:"name"`
-	FullName    string            `json:"full_name"`
-	Branch      string            `json:"branch"`
-	Path        string            `json:"path"`
-	Status      string            `json:"status"`
+	Name     string `json:"name"`
+	FullName string `json:"full_name"`
+	Branch   string `json:"branch"`
+	Path     string `json:"path"`
+	Status   string `json:"status"`
 	// Session is backend-neutral on purpose: the key used to be "tmux",
 	// which labeled herdr workspace state as tmux state for machine
 	// consumers.

@@ -35,22 +35,22 @@ var (
 
 // hereOutput represents the JSON output structure for grove here
 type hereOutput struct {
-	Name        string     `json:"name"`
-	FullName    string     `json:"full_name"`
-	Project     string     `json:"project"`
-	Branch      string     `json:"branch"`
-	Path        string     `json:"path"`
-	Commit      commitInfo `json:"commit"`
-	Status      string     `json:"status"`
-	Changes     []string   `json:"changes,omitempty"`
+	Name     string     `json:"name"`
+	FullName string     `json:"full_name"`
+	Project  string     `json:"project"`
+	Branch   string     `json:"branch"`
+	Path     string     `json:"path"`
+	Commit   commitInfo `json:"commit"`
+	Status   string     `json:"status"`
+	Changes  []string   `json:"changes,omitempty"`
 	// Session is backend-neutral on purpose: the key used to be "tmux",
 	// which labeled herdr workspace state as tmux state for machine
 	// consumers.
 	Session     sessionInfo `json:"session"`
-	Environment bool       `json:"environment,omitempty"`
-	Mirror      string     `json:"mirror,omitempty"`
-	AgentSlot   int        `json:"agent_slot,omitempty"`
-	AgentURL    string     `json:"agent_url,omitempty"`
+	Environment bool        `json:"environment,omitempty"`
+	Mirror      string      `json:"mirror,omitempty"`
+	AgentSlot   int         `json:"agent_slot,omitempty"`
+	AgentURL    string      `json:"agent_url,omitempty"`
 }
 
 type commitInfo struct {
