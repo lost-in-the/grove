@@ -65,17 +65,32 @@ mkdir -p "$LAB"
 (cd "$PROJECT_DIR" && go build -o "$GROVE" ./cmd/grove) || die "go build failed"
 printf 'herdr:  %s\n' "$(herdr --version 2>&1)"
 
-# Emits "id|label|checkout_path|focused" per workspace.
+# Emits "id|label|checkout_path|focused" — ONLY for workspaces whose checkout
+# resolves inside $LAB. Assertions must never match by label across the whole
+# server: a live server carries the user's own workspaces, including debris
+# from older runs (e.g. a dead "demo-alpha" with no checkout at all), and a
+# bare `grep demo-` counts those too. The same lab-scoping rule the cleanup
+# path follows applies to every count and every id this script derives.
+#
+# A workspace whose recorded checkout went stale still matches as long as the
+# dead path is under $LAB — which is exactly the case after `grove rename`,
+# where herdr keeps the pre-rename path.
 wslist() {
-  herdr workspace list 2>/dev/null | python3 -c '
-import json, sys
+  herdr workspace list 2>/dev/null | LAB="$LAB" python3 -c '
+import json, os, sys
+lab = os.path.realpath(os.environ["LAB"])
 try:
     d = json.load(sys.stdin)
 except Exception:
     sys.exit(0)
 for w in d.get("result", {}).get("workspaces", []):
-    wt = w.get("worktree") or {}
-    print(w["workspace_id"], w["label"], wt.get("checkout_path", "-"), w["focused"], sep="|")
+    path = (w.get("worktree") or {}).get("checkout_path")
+    if not path:
+        continue
+    real = os.path.realpath(path)
+    if real != lab and not real.startswith(lab + os.sep):
+        continue
+    print(w["workspace_id"], w["label"], path, w["focused"], sep="|")
 '
 }
 
@@ -149,11 +164,18 @@ check "both worktrees have workspaces" "$(wslist | grep -c 'demo-')" "2"
 
 sect "identity is the checkout path, not the label"
 # herdr labels are cosmetic and user-renameable; grove keys on the checkout
-# path, so relabelling behind grove's back must not desync it.
-WS=$(wslist | grep '|demo-alpha|' | cut -d'|' -f1)
+# path, so relabelling behind grove's back must not desync it. "Not desynced"
+# means the worktree still resolves to a live session — attached or detached
+# is the client's business (a live GUI focuses freshly opened workspaces; the
+# headless server this script was first verified against focuses nothing), so
+# asserting a specific one of the two makes the check flap with focus.
+WS=$(wslist | grep '|demo-alpha|' | cut -d'|' -f1 | head -n1)
 herdr workspace rename "$WS" "renamed-by-the-user" >/dev/null 2>&1
-check "relabelling a workspace does not desync grove" \
-  "$("$GROVE" ls | awk '$1=="alpha"{print $4}')" "detached"
+S=$("$GROVE" ls | awk '$1=="alpha"{print $4}')
+case "$S" in
+  attached|detached) ok "relabelling a workspace does not desync grove" ;;
+  *) bad "relabelling a workspace does not desync grove" "got [$S] want [attached|detached]" ;;
+esac
 herdr workspace rename "$WS" "demo-alpha" >/dev/null 2>&1
 
 sect "idempotency"
@@ -169,9 +191,14 @@ else
   bad "grove rename relabels the workspace" "$(wslist)"
 fi
 # herdr's checkout provenance goes stale here; grove resolves via the name
-# fallback instead. That self-healing is the thing being asserted.
-check "renamed worktree still resolves" \
-  "$("$GROVE" ls | awk '$1=="renamed"{print $4}')" "detached"
+# fallback instead. That self-healing is the thing being asserted — any live
+# status proves it; attached-vs-detached only reflects where the client's
+# focus happens to sit (see the relabelling check above).
+S=$("$GROVE" ls | awk '$1=="renamed"{print $4}')
+case "$S" in
+  attached|detached) ok "renamed worktree still resolves" ;;
+  *) bad "renamed worktree still resolves" "got [$S] want [attached|detached]" ;;
+esac
 
 sect "switch"
 HERDR_ENV=1 timeout 20 "$GROVE" to renamed >/dev/null 2>&1
