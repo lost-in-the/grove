@@ -1,12 +1,9 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
-  "branchPrefix": "renovate/",
-  "labels": ["dependencies"],
-  "prConcurrentLimit": 5,
+  "extends": ["github>lost-in-the/.github"],
   "packageRules": [
     {
-      "description": "testdata/fixtures/** are integration-test INPUTS, not dependencies. They are copied into temp dirs to exercise grove's project-type detection, so their versions are what the tests assert against, not what grove ships. config:recommended skips test/ and tests/ but not testdata/, which is why Renovate proposed bumping the fixture ruby tag. Worse, the same 'FROM ruby:3.3-slim' string is hardcoded in internal/testhelper/helpers.go, which Renovate cannot see: bumping only the fixture would silently diverge the two. Update fixtures by hand, alongside the helper.",
+      "description": "testdata/fixtures/** are integration-test INPUTS, not dependencies. They are copied into temp dirs to exercise grove's project-type detection, so their versions are what the tests assert against, not what grove ships. config:recommended skips test/ and tests/ but not testdata/, which is why Renovate proposed bumping the fixture ruby tag. Worse, the same 'FROM ruby:3.3-slim' string is also hardcoded in internal/testhelper/helpers.go, which Renovate cannot see: bumping only the fixture would silently diverge the two. Update fixtures by hand, alongside the helper.",
       "matchFileNames": ["testdata/**"],
       "enabled": false
     }
