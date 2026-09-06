@@ -14,7 +14,7 @@ require (
 	charm.land/bubbletea/v2 v2.0.2
 	charm.land/huh/v2 v2.0.3
 	charm.land/lipgloss/v2 v2.0.1
-	github.com/charmbracelet/x/exp/golden v0.0.0-20260311145557-c83711a11ffa
+	github.com/charmbracelet/x/exp/golden v0.0.0-20260906004030-3986e9119cf9
 )
 
 require (
