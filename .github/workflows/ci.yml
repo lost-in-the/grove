@@ -191,6 +191,11 @@ jobs:
       - name: Build
         run: make build
 
+      # The release job's Homebrew step only runs on a tag push; this is the
+      # only place its logic runs before a release.
+      - name: Test release tooling
+        run: make test-release-tools
+
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:

@@ -328,7 +328,14 @@ All three use Go 1.25 with module cache keyed by `go.sum`. All three must pass f
 
 **Distribution**:
 - GitHub Releases — binary archives with LICENSE, README, CHANGELOG, and CONTRIBUTING (shell integration is generated at runtime via `grove setup` / `grove install`)
-- Homebrew tap — `lost-in-the/homebrew-tap` (`brew install lost-in-the/tap/grove`)
+- Homebrew tap — `lost-in-the/homebrew-tap` (`brew install lost-in-the/tap/grove`). The tap's
+  `main` only accepts pull requests, so the release job's `scripts/update-homebrew-tap.sh`
+  renders the formula from `.github/formula.rb.tmpl`, opens a `grove <version>` pull request on
+  the tap, and merges it (auto-merge if the tap allows it, else a direct merge). If it can't
+  merge — say the tap starts requiring a review — the job warns with the pull request to merge
+  by hand; the release itself is already published by then. `TAP_GITHUB_TOKEN` needs Contents
+  and Pull requests write on the tap. `make test-release-tools` runs the script against a fake
+  GitHub API; CI runs it on every PR, since the real job only fires on a tag push.
 
 **Test-only dependencies** (`teatest`, `golden`, etc.) are safe in `go.mod`. Go only compiles `_test.go` imports into test binaries, never into release builds. No action needed to exclude them.
 
