@@ -43,13 +43,32 @@ func (t Target) DisplayName() string {
 type Status string
 
 const (
-	// StatusAttached means a client is currently viewing the session.
+	// StatusAttached means a client is currently viewing the session (tmux).
 	StatusAttached Status = "attached"
-	// StatusDetached means the session exists but no client is viewing it.
+	// StatusDetached means the session exists but no client is viewing it
+	// (tmux).
 	StatusDetached Status = "detached"
+	// StatusActive means the workspace is the server's focused one (herdr).
+	//
+	// herdr cannot say whether anyone is looking: `focused` is a single
+	// server-wide "current workspace" that stays set with no client attached
+	// at all, and several clients may each view a different workspace. So
+	// herdr reports active/open rather than borrowing tmux's attached/detached,
+	// which would claim a viewer that may not exist.
+	StatusActive Status = "active"
+	// StatusOpen means the workspace exists but is not the focused one (herdr).
+	StatusOpen Status = "open"
 	// StatusNone means no session exists for the target.
 	StatusNone Status = "none"
 )
+
+// Foreground reports whether the status marks the session in front: attached
+// under tmux, active under herdr.
+func (s Status) Foreground() bool { return s == StatusAttached || s == StatusActive }
+
+// Background reports whether the session exists but is not in front:
+// detached under tmux, open under herdr.
+func (s Status) Background() bool { return s == StatusDetached || s == StatusOpen }
 
 // AgentStatus is the coding-agent lifecycle state a backend reports for a
 // session. Only herdr can report these; the tmux backend always returns
@@ -93,6 +112,9 @@ type Session struct {
 	// Path is the session's checkout path. Empty when the backend cannot
 	// report it — the tmux backend leaves this unset.
 	Path string
+	// Repo is the repository's main checkout, when the backend reports it
+	// (herdr's worktree provenance). The tmux backend leaves this unset.
+	Repo string
 	// ID is the backend's own handle, used for follow-up calls. For tmux this
 	// equals Name; for herdr it is the opaque workspace id (e.g. "w1").
 	ID string
@@ -186,6 +208,49 @@ type ControlModer interface {
 	UseControlMode(cfg *bool) bool
 	// AttachControlMode attaches using the control protocol. Blocks.
 	AttachControlMode(t Target) error
+}
+
+// SessionLocator is implemented by backends that run several independent
+// servers side by side — herdr's named sessions, each with its own workspaces
+// and no awareness of the others — so a target's session may live somewhere
+// other than the server grove is talking to.
+//
+// Ensure on such a backend adopts a target's existing session from another
+// server instead of opening a duplicate, and Kill closes the target's session
+// in every running server. Callers therefore must not gate Kill on Exists,
+// which only answers for the server grove is talking to.
+type SessionLocator interface {
+	// LocatedIn names the other server whose session Ensure adopted for t, or
+	// "" when t's session is (or would be) in the one grove is talking to.
+	LocatedIn(t Target) string
+	// KillEverywhere is Kill, also reporting which other servers it closed
+	// t's session in and which it could not check.
+	KillEverywhere(t Target) (KillReport, error)
+}
+
+// KillReport is what KillEverywhere did beyond the server grove talks to.
+type KillReport struct {
+	// ClosedIn names the other servers t's session was closed in.
+	ClosedIn []string
+	// Unchecked names running servers that did not answer in time; a copy of
+	// t's session may remain in them.
+	Unchecked []string
+}
+
+// AttachPreparer is implemented by backends whose attach command cannot name
+// its target — herdr's client starts on whichever workspace its server has
+// focused. PrepareAttach readies the target so that a user who runs AttachHint
+// by hand lands on it.
+type AttachPreparer interface {
+	PrepareAttach(t Target) error
+}
+
+// Adopter is implemented by backends that keep their own record of whether
+// grove tracks a worktree — herdr's sidebar marker, set by grove's herdr
+// plugin on worktrees created outside grove. Adopted is called after grove
+// adopts such a worktree, to bring its session in line.
+type Adopter interface {
+	Adopted(t Target) error
 }
 
 // AttachDirectiver is implemented by backends that can hand attachment off to

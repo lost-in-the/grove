@@ -71,11 +71,10 @@ func setupFetchedWorktree(ctx *GroveContext, mgr *worktree.Manager, w *cli.Write
 
 	if m := ctx.Mux(); m.Available() {
 		target := muxTarget(mgr, worktreeName, wt.Path)
-		sessionName := target.Name
-		if err := m.Ensure(target); err != nil {
+		if managed, err := ensureSession(m, target, w); err != nil {
 			cli.Warning(w, "Failed to create session: %v", err)
-		} else {
-			cli.Success(w, "Created %s session '%s'", m.Backend(), sessionName)
+		} else if managed {
+			reportEnsured(w, m, target)
 		}
 	}
 

@@ -1,360 +1,389 @@
-# Herdr Integration — Design & Implementation Plan
+# Herdr Integration
 
-**Status:** Implemented and verified against herdr **0.8.0** (protocol 19)
-running headless. `[mux] backend = "herdr"` selects it; `auto` picks it when
-grove is running inside a herdr pane.
+**Status:** Shipped (unreleased). Verified against herdr **0.8.0** (protocol 19)
+and **0.9.1** (protocol 22), and against herdr's source at `21d0ce60` (main,
+after 0.9.1). CI runs the live validation suite against a pinned headless
+herdr. `[mux] backend = "herdr"` selects it; `auto` picks it when grove is
+running inside a herdr pane.
 
 [Herdr](https://herdr.dev) is a terminal multiplexer built for coding agents: a
 background server owns real terminals, clients attach to render them, and panes
 survive detach. Same shape as tmux, but mouse-first and agent-aware — it detects
 coding agents in panes and tracks `working` / `blocked` / `done` / `idle` state.
 
-This document plans herdr support as a second multiplexer backend alongside tmux.
-
-Findings below were verified against herdr's source
-([herdrdev/herdr](https://github.com/herdrdev/herdr) @ `2863b71`), not just its
-docs. Source references use that revision.
+Source references below are to [herdrdev/herdr](https://github.com/herdrdev/herdr).
+Findings were verified against its source and against live servers, not just
+its docs.
 
 ---
 
-## The strategic question: herdr already does worktrees
+## Two pieces, two directions
 
-Herdr ships `herdr worktree list|create|open|remove`. Worktrees are "normal Herdr
-workspaces with Git checkout provenance." `worktree create` makes the checkout,
-opens it as a workspace, and groups it under the parent repo — and without
-`--path` it places checkouts at `<worktrees.directory>/<repo>/<branch-slug>`.
+| Piece | Direction | Where | Needed? |
+|---|---|---|---|
+| **Backend** | grove → herdr | `internal/mux/herdr.go` | Yes, to use grove inside herdr. It is the herdr counterpart of the tmux integration. |
+| **Plugin** | herdr → grove | `integrations/herdr/` | Optional. It only matters if worktrees are also created or removed through herdr's own UI. |
 
-That overlaps grove's core purpose, so the boundary has to be explicit:
+```
+             grove (owns the worktrees)                      herdr (owns the terminals)
+ grove new ─► git worktree add + bootstrap ───────────► herdr worktree open --path <checkout>
+ grove to  ─► ─────────────────────────────────────────► herdr workspace focus <id>
+ grove ls  ◄─ ◄──────────────────────────────────────── herdr workspace list (status, agent state)
+ grove rm  ─► git worktree remove (protection rules) ──► herdr workspace close <id>
+
+ herdr UI "new/remove worktree" ─► plugin hook ─► grove herdr-event (prompt, marker, state sync)
+```
+
+Without the backend, grove inside herdr would either nest tmux sessions inside
+a herdr pane, or run with `backend = "off"` and only `cd` the current pane —
+no workspace per worktree, no sync on `rm`/`rename`, no agent column. herdr's
+own worktree support does not replace grove: its only worktree setting is
+`[worktrees] directory` (checkouts land at `<dir>/<repo>/<branch-slug>`), with
+no naming templates, no post-create hooks, no protection rules, no bootstrap —
+unchanged from 0.8.0 through 0.9.1.
+
+---
+
+## The ownership boundary
+
+herdr ships `herdr worktree list|create|open|remove`: worktrees are "normal
+Herdr workspaces with Git checkout provenance." That overlaps grove's core
+purpose, so the boundary is explicit:
 
 > **Grove owns worktree lifecycle. Herdr is only a session/display backend.**
 
-Grove creates the checkout using its own `[naming] pattern` and `projects_dir`,
-then calls `herdr worktree open` to *adopt* it.
+- **Grove never calls `herdr worktree create`.** It would hand naming and
+  placement to herdr, breaking the canonical `{project}-{name}` rule.
+- **Grove never calls `herdr worktree remove`.** It shells out to
+  `git worktree remove`, bypassing grove's `[protection]` rules. Grove's
+  removal path stays grove's; the herdr-side cleanup is `workspace close`,
+  which closes herdr state and panes and leaves the checkout alone.
+- **Grove never calls `herdr workspace create`.** Every session goes through
+  `herdr worktree open`, which only *adopts* a checkout git already lists
+  (`handle_worktree_open` resolves the path against the repo's worktree list
+  and returns `worktree_not_found` otherwise). It is idempotent: a second open
+  of the same checkout reuses the workspace, re-applies `--label`, and reports
+  `already_open: true`.
 
-Verified: `handle_worktree_open` (`src/app/api/worktrees.rs:75`) resolves the path
-against the repo's **existing** git worktree list and returns `worktree_not_found`
-if it isn't registered. It never creates a checkout. Adoption is safe.
-
-**`worktree open` takes two different directories, and they are not
-interchangeable.** `--cwd` (or `--workspace`) names the *source repository*
-whose worktree list is searched; `--path` names the checkout to open. Passing
-the linked worktree as `--cwd` fails:
-
-```
-{"error":{"code":"linked_worktree_source",
-  "message":"New and open worktree actions start from the repo parent workspace."}}
-```
-
-and omitting `--cwd` entirely falls back to the focused workspace, which does
-not exist when grove runs outside a client:
-
-```
-{"error":{"code":"invalid_request",
-  "message":"workspace_id or cwd is required when no workspace is active"}}
-```
-
-So `mux.Target` carries `Repo` — the repository's main checkout — alongside
+**`worktree open` takes two directories, and they are not interchangeable.**
+`--cwd` names the *source repository* whose worktree list is searched; `--path`
+names the checkout to open. Passing the linked worktree as `--cwd` fails with
+`linked_worktree_source`, and omitting `--cwd` falls back to the focused
+workspace, which does not exist outside a client (`invalid_request`). So
+`mux.Target` carries `Repo` — the repository's main checkout — alongside
 `Path`. Sessions that already exist (kill, focus, rename) resolve without it.
 
-**Grove must never call `herdr worktree create` or `herdr worktree remove`.**
-`worktree create` would hand naming and placement to herdr, breaking the
-canonical `{project}-{name}` rule. `worktree remove` shells out to
-`git worktree remove`, bypassing grove's protection rules
-(`[protection] protected` / `immutable`). Grove's removal path stays grove's;
-the herdr-side cleanup is `workspace close`, which closes herdr state and panes
-only and leaves the checkout on disk.
+### The repository workspace
+
+herdr's sidebar groups a project's worktrees under the repository's own
+*parent workspace*, keyed on the `repo_root` / `repo_key` provenance it
+records. herdr materializes that workspace as a side effect of opening any
+linked worktree, and `worktree open --path <repo root>` opens (or creates) it
+directly (verified on 0.8.0 and 0.9.1). `grove to root` therefore reaches it
+through the same call as every worktree. That is herdr's own bookkeeping —
+grove still never `workspace create`s.
+
+A path herdr refuses to open — `worktree_not_found` or `not_git_worktree` — is
+adopted if some workspace already covers it, and otherwise reported unmanaged
+(`mux.ErrUnmanaged`), so the command falls through to a plain `cd`.
+
+Since herdr 0.9.0, closing a parent workspace while worktree workspaces are
+open under it fails with `workspace_group_close_required` unless `--group` is
+passed — which would close every one of them. Grove never passes `--group`;
+it closes each worktree's workspace on its own, and names the refusal if it
+ever meets it.
 
 ---
 
-## Key finding: identity is the checkout path, not the name
+## Identity: the checkout path, not the name
 
-Grove's tmux model is name-keyed throughout: `CreateSession(name, path)` is
-idempotent, `SessionExists(name)`, `KillSession(name)`. Herdr workspaces have
-opaque IDs (`w1`) plus a **non-unique** label, and there is no lookup-by-label —
-which initially looks like a serious impedance mismatch.
+Grove's tmux model is name-keyed. herdr workspaces have opaque ids (`w1`) plus
+a **non-unique** label, and no lookup by label — but `workspace list` reports
+each workspace's checkout path (`WorkspaceInfo.worktree.checkout_path`), its
+focus, and its rolled-up agent status in one call. Grove already knows the
+checkout path of every worktree, so:
 
-It isn't, because herdr exposes the checkout path directly:
+- **Identity key = the checkout path**, compared canonicalized
+  (`filepath.EvalSymlinks` on both sides; herdr uses `canonical_or_original`).
+- **One call replaces `tmux list-sessions`** and feeds `grove ls`, the TUI,
+  and every existence check. It is fetched once per command and shared through
+  `mux.Index`; `herdr workspace list` averages ~3ms against a warm server.
+- **The label is cosmetic.** It carries the canonical `{project}-{name}` for
+  display, and a user renaming a workspace cannot desync grove.
 
-```rust
-// src/api/schema/workspaces.rs:52
-pub struct WorkspaceInfo {
-    pub workspace_id: String,
-    pub label: String,
-    pub focused: bool,
-    pub agent_status: AgentStatus,
-    pub tokens: HashMap<String, String>,
-    pub worktree: Option<WorkspaceWorktreeInfo>,  // .checkout_path
-}
-```
-
-`workspace_info` (`src/app/creation.rs:492`) populates `worktree` from
-`ws.worktree_space()` for any workspace whose cwd is a git checkout. So a single
-`herdr workspace list` returns, for every workspace: id, label, focus, **checkout
-path**, and **agent status**.
-
-Grove already knows the checkout path of every worktree. So:
-
-- **Identity key = canonicalized checkout path.** No label matching, no
-  reconciliation table, no metadata tokens needed.
-- **One call replaces `tmux list-sessions`** and feeds `grove ls`, the TUI, and
-  every `SessionExists` check.
-- `label` becomes purely cosmetic — it carries the canonical `{project}-{name}`
-  for display, and a user renaming a workspace cannot desync grove.
-
-`herdr worktree open` is also **idempotent**: it checks
-`open_workspace_idx_for_checkout` first, reuses the existing workspace, re-applies
-`--label`, and reports `already_open: true`. That maps exactly onto grove's
-idempotent `CreateSession`. Confirmed live — a second open of the same checkout
-returns `already_open: true` with the same workspace id.
-
-### The repository workspace is herdr's, not grove's
-
-**Grove never calls `herdr workspace create`.** When `worktree open` reports
-`worktree_not_found` / `not_git_worktree` — which is what a repository's own
-checkout gets, since it is not a linked worktree — grove does *not* invent a
-workspace for it. It adopts the repository workspace if herdr already has one,
-and otherwise returns `mux.ErrUnmanaged` and the command falls through to a
-plain `cd`.
-
-That boundary matters because herdr's sidebar groups a project's worktrees
-under the repository's workspace, keyed on the `repo_root` / `repo_key`
-provenance it records. That grouping is herdr's to manage, and it appears on its
-own: opening any linked worktree with `--cwd R` materializes the repository
-workspace as a side effect. Grove creating and owning one as well would reach
-past worktree lifecycle — the boundary this whole integration is built on — into
-inventory that herdr and the user's agents already handle.
-
-Practical consequence: `grove to root` in a project whose repository workspace
-has not been opened yet changes directory and says nothing about sessions. That
-is the intended outcome, not a degraded one.
-
-**Caveat: herdr's workspace paths do not follow a rename.** herdr captures a
-workspace's paths when it opens and never updates them, so `grove rename` leaves
-*all three* stale at once — `worktree.checkout_path`, the workspace cwd, and the
-pane's cwd all name the pre-rename directory. Verified live.
-
-Grove's own lookups self-heal, and the mechanism is load-bearing: **`mux.Index`
-refuses to index a checkout path that is not on disk.** Without that rule the
-name fallback would never run, because `Lookup` prefers paths — a workspace
-still claiming `…/proj-beta` after its worktree was renamed to `…/proj-gamma`
-would shadow the real workspace of whatever worktree later occupied
-`…/proj-beta`, and every operation on the one would land on the other. Dropping
-vanished paths leaves such a workspace reachable by name only, which is exactly
-right: `grove rename` has just relabelled it to match.
-
-The plugin cannot self-heal the same way — it only has herdr's context, and
-every path in it is dead. It says so plainly rather than reporting the dead path
-as "not a grove project"; the fix is to close or reopen the workspace. The stale
-pane cwd is the same situation tmux has after a rename, which
-`[tmux] on_switch = "reset"` already handles.
-
-Canonicalize before comparing — herdr uses `canonical_or_original`, so grove
-should `filepath.EvalSymlinks` on both sides.
-
-### Naming the window a worktree occupies
-
-Neither backend used to name anything below the session, so nothing ever set a
-real window title and the terminal fell back to titling the window after
-whatever process was running — showing `grove`, or the whole `grove to <name>`
-command line, in ghostty and cmux where the worktree name belongs.
-
-Both backends now name it, from the same `Target.DisplayName()` so they cannot
-drift:
-
-- **herdr** — `tab rename <tab_id> <short>`. The tab id comes back in the
-  `worktree open` response, so this costs no extra lookup. A label that is not
-  herdr's generated one (the tab's own number) was chosen by a person and is
-  never overwritten; `Rename` carries a grove-set label across.
-- **tmux** — `new-session -n <short>`. Passing `-n` also turns
-  `automatic-rename` off for that window, so the name sticks instead of
-  following the foreground process, and tmux feeds it to the outer terminal
-  through `set-titles-string`.
-
-Both are best-effort: a working session with a dull title is not a reason to
-fail the command that created it.
-
-`workspace report-metadata --token NAME=VALUE` exists and would let grove stamp
-its own identity tokens (surfaced as `WorkspaceInfo.tokens`). It is **not needed**
-given path keying; noted only as an escape hatch if path keying ever proves
-insufficient.
+**Caveat: herdr's paths do not follow a rename.** herdr captures a workspace's
+paths when it opens and never updates them, so `grove rename` leaves
+`worktree.checkout_path`, the workspace cwd, and the pane cwd all naming the
+pre-rename directory. Grove self-heals, and the mechanism is load-bearing:
+**`mux.Index` refuses to index a checkout path that is not on disk.** Without
+that, a workspace still claiming `…/proj-beta` after its worktree became
+`…/proj-gamma` would shadow the real workspace of whatever worktree later
+occupied `…/proj-beta`. Dropping vanished paths leaves such a workspace
+reachable by name only — exactly right, since `grove rename` relabels it.
+(herdr's unreleased `6c62707a` stops a shell `cd` from moving a workspace's
+recorded checkout; rename staleness is unaffected.) The plugin cannot
+self-heal the same way — it only has herdr's context — and says so plainly.
 
 ---
 
-## Capability gaps
+## Session status: `active` / `open`
 
-### Popup requires the plugin surface
+tmux reports `attached` / `detached`. herdr's `focused` flag is not that: it is
+a single server-wide "current workspace" (`state.active`) that moves with any
+CLI focus call or the most recently active client's view, stays set with **no
+client attached at all**, and marks only one workspace when several clients
+view different ones (0.9.0 per-client views). No public API lists attached
+clients.
 
-Grove's `session` command uses `tmux display-popup`. Herdr has no equivalent CLI
-verb — but it does have popup placement, reachable **only** by registering a
-plugin with a declared pane:
-
-```rust
-// src/api/schema/plugins.rs:445
-pub enum PluginPanePlacement { Overlay, Popup, Split, Tab, Zoomed }
-```
-
-This is why the herdr plugin below is load-bearing rather than a nice-to-have:
-it is the only route to popup/overlay placement, and therefore the only way
-`grove session` and the grove TUI keep working as overlays under herdr.
-
-### No control mode
-
-`ShouldUseControlMode` / `AttachSessionControlMode` (iTerm2 `tmux -CC`) is
-tmux-specific. The herdr backend simply won't implement it.
-
-### Attach is two steps
-
-`herdr`'s launch flags are `--session`, `--remote`, `--no-session`,
-`--default-config`, `--skill` (`src/main.rs:712`). There is **no**
-`--workspace` / `--cwd` targeting flag, so attaching to a specific worktree is:
-
-```
-herdr workspace focus <id>   # socket call, works before attaching
-herdr                        # blocking attach
-```
-
-Nested launches are blocked by design — `should_block_nested`
-(`src/main.rs:442`) refuses when `HERDR_ENV=1` unless
-`experimental.allow_nested` is set. So from inside a pane, grove must use
-`workspace focus` alone. That is a clean analogue of the existing
-`SwitchSession` path.
-
-The blocking attach also must never run under shell integration: there,
-grove's stdout is the wrapper's command-substitution pipe, so the client would
-draw its UI into the pipe (the terminal appears hung) and the wrapper would
-then parse the captured escape bytes as directives. herdr has no wrapper
-directive the way tmux does (`tmux-attach:`), so with `GROVE_SHELL=1` grove
-performs the directory switch and prints `Run: herdr` instead of attaching
-in-process (`attachToSession` in `cmd/grove/commands/helpers.go`).
+So herdr sessions report **`active`** (the server's focused workspace) and
+**`open`** (exists, not focused). `grove ls`, `grove here`, their `--json`
+`session` field, and the dashboard show those words; `mux.Status` has
+`Foreground()` / `Background()` so the dashboard styles both vocabularies
+alike.
 
 ---
 
-## What grove gains
+## Named sessions
 
-Not just parity. `WorkspaceInfo.agent_status` is a rollup over the workspace's
-panes, with values `Idle | Working | Blocked | Done | Unknown`
-(`src/api/schema/common.rs:151`).
+A herdr **session** is an independent server with its own socket, state, and
+workspaces (`<config>/sessions/<name>/`), and no awareness of the others —
+`worktree open` checks only its own server for an existing workspace. So the
+same checkout opened under two sessions gets two workspaces, and closing one
+leaves the other pointing at whatever grove later deletes. (Reproduced on
+0.9.1 before grove handled it.)
 
-That means `grove ls` and the TUI dashboard can show **which worktree has an
-agent waiting on input** — the single most useful piece of state in a
-multi-worktree agent workflow, and something tmux cannot provide at any price.
-It arrives free in the same `workspace list` call grove already needs.
+**Which session grove talks to** follows herdr's own precedence: the global
+`--session NAME` flag, then `HERDR_SOCKET_PATH` (set in every pane to its own
+server), then `HERDR_SESSION`, then the default session. Grove uses the
+ambient one, and addresses another with `--session`, which outranks
+`HERDR_SOCKET_PATH` — so it works from inside a pane, where `HERDR_SESSION`
+would not.
 
-One thing the schema does not tell you: **`unknown` is the no-agent default**,
-not a rare "present but unclassified" case. A workspace whose panes are all
-sitting at a shell prompt rolls up to `unknown`. So grove treats only
-`idle`/`working`/`blocked`/`done` as an actual sighting
-(`AgentStatus.Observed()`); otherwise the AGENT column would render the word
-"unknown" on every row of every listing.
+Grove looks across sessions only on the two paths where duplicates are made or
+orphaned:
+
+- **Opening, when the ambient session has no workspace for the checkout.**
+  One `herdr session list --json` (bare JSON, no envelope; it probes each
+  socket without a request) plus `herdr --session NAME workspace list` per
+  other *running* session, matched on checkout path only — a label in a
+  session grove never touched is not proof of identity — and never a
+  workspace that now serves another worktree (see "Renamed worktrees" below).
+  - Found, **outside herdr**: adopt it. `Attach` focuses it in its session and
+    runs `herdr --session NAME`; the attach hint names the session; the
+    command reports "Using '…' from herdr session '…'".
+  - Found, **inside a herdr pane**: the CLI cannot move a client across
+    sessions (a nested attach is refused by design) and a duplicate is the
+    bug, so Ensure reports the target unmanaged with a hint naming the
+    session, and the command just changes directory.
+- **Removal.** `Kill` closes the checkout's workspace in the ambient session
+  and in every other running one, even with the ambient server down. Since the
+  checkout is usually already deleted, other sessions are matched on the
+  recorded path (canonicalized through its surviving parent), never by label.
+  `grove rm` and the dashboard delete no longer gate `Kill` on the ambient-only
+  `Exists` — `mux.SessionLocator` marks backends where that would miss copies.
+
+**Bounded cost.** herdr reports a session as running whenever its socket
+accepts connections, so a wedged server (e.g. SIGSTOPped) still looks alive
+and would hold each call for herdr's full 5s timeout — review of this feature
+measured a frozen session stalling `grove to` and `grove rm` by 5s. Calls to
+other sessions therefore run under a separate 250ms budget
+(`cmdexec.HerdrPeer`; a healthy server answers in single-digit milliseconds),
+and the sessions are listed concurrently, so the whole sweep costs one budget
+however many there are. A session that misses it is skipped when opening, and
+named in a warning on removal, since its copy may remain. Nothing is paid on
+the common path; measured on 0.9.1, `grove to` takes 36–39ms and `grove rm`
+35ms with a second healthy session.
+
+Not handled: a **stopped** session cannot be reached (herdr drops such a
+workspace's worktree link itself when it next starts, showing placeholder
+panes), and `grove rename` relabels only the ambient session's workspace.
+
+### Renamed worktrees
+
+herdr's record of a workspace's checkout never follows a rename, so after
+`grove rename a b` the workspace for `b` still claims `a`'s path. When a new
+worktree later takes that path, everything that matches on the recorded path
+would treat `b`'s workspace as the new `a`'s: herdr's own `worktree open`
+would hand it over and re-label it, `grove to a` would `cd` its shell, and
+`grove rm a` would close it.
+
+The workspace's panes give it away — a process's working directory follows a
+directory rename, so they sit in `b`. `movedOn` treats a workspace with a pane
+inside **another live worktree of the same repository** as belonging to that
+worktree: `Exists` does not count it, `Ensure` declines the target with a hint
+rather than letting herdr take it over (herdr cannot open a second workspace
+for the same path, so freeing it means closing that workspace), and `Kill` and
+the cross-session lookups leave it alone. A pane that merely wandered off
+(`cd /tmp`, or into the main checkout) is not evidence, so an ordinary
+workspace is never mistaken for a moved one. It costs a `pane list` for the
+candidate, plus one `git worktree list` only when a pane sits outside the
+target.
+
+---
+
+## Naming the tab
+
+Neither backend used to name anything below the session, so the terminal
+titled the window after the running process — `grove`, or the whole
+`grove to <name>` command line, in ghostty and cmux. Both backends now name it
+from `Target.DisplayName()`:
+
+- **herdr** — `tab rename <tab_id> <short>`; the tab id comes back in the
+  `worktree open` response. A label that is not herdr's generated one was
+  chosen by a person and is never overwritten. herdr's generated label is the
+  tab's *position* plus one, while `TabInfo.number` is a stable counter that
+  never renumbers, so grove treats any all-digit label as generated.
+- **tmux** — `new-session -n <short>`, which also turns `automatic-rename` off.
+
+Since herdr 0.8.2, `ui.window_title` also titles the outer terminal window
+from the workspace label itself; the tab rename still names herdr's tab strip.
+Both are best-effort.
+
+---
+
+## Attaching and switching
+
+herdr's launch flags carry no workspace selector (no `--workspace` / `--cwd`;
+`--no-session` was removed in 0.9.0), so attaching to a worktree is two steps:
+
+```
+herdr workspace focus <id>   # socket call, works with no client attached
+herdr                        # blocking attach — starts on the focused workspace
+```
+
+Verified on 0.9.1 with real clients: a client that attaches after a focus call
+starts on the focused workspace, and `workspace focus` from inside a pane moves
+the attached client. It moves **every** attached client — herdr's CLI carries
+no client identity, and only in-UI actions move a single client — so with
+several clients viewing different workspaces, `grove to` moves them all.
+
+Nested launches are refused (`should_block_nested`, `HERDR_ENV=1`), so from
+inside a pane grove uses `workspace focus` alone — the analogue of tmux
+`switch-client`.
+
+The blocking attach must never run under shell integration: there grove's
+stdout is the wrapper's command-substitution pipe, so the client would draw
+into the pipe and the wrapper would parse its escape bytes as directives. herdr
+has no wrapper directive the way tmux does (`tmux-attach:`), so with
+`GROVE_SHELL=1` grove performs the directory switch, focuses the target
+(`PrepareAttach`), and prints `Run: herdr` (or `herdr --session NAME`) instead
+(`attachToSession`) — so running the hint lands on the target.
+
+---
+
+## When the server can't help
+
+| Situation | herdr says | grove does |
+|---|---|---|
+| No server running | `server_not_running` | `Exists` → false, `Ensure` → unmanaged; commands fall back to a plain `cd`, silently. `grove ls` shows `none`. |
+| Server and CLI protocols differ (every call after an upgrade, until the old server restarts) | `protocol_mismatch` | Same fallback, plus a one-line warning carrying herdr's message. |
+| Worktree discovery slots full (herdr main, unreleased) | `worktree_busy` | One retry after 150ms, then the error. |
+| Parent workspace with open worktrees | `workspace_group_close_required` | Never passes `--group`; explains the refusal. |
+
+`grove doctor` checks the server with `herdr status server --json` (answers
+without an envelope and exits 0 either way, on 0.8.0 and 0.9.1), which is the
+one probe that tells "stopped" apart from "running, but needs a restart": it
+reports `running`, `compatible`, and `restart_needed`.
+
+---
+
+## What herdr can't do
+
+- **Popup.** herdr's popup placement (`PluginPanePlacement::Popup`) is reachable
+  only by a plugin declaring a pane. Grove's plugin no longer declares one (see
+  "The dashboard pane was removed" below), so under herdr `grove open` with
+  `[session] popup = true` does a full-window workspace switch. The backend does
+  not implement `mux.Popuper`, so the fallback is explicit, not a silent no-op.
+- **Control mode.** `tmux -CC` has no herdr equivalent; `control_mode` is
+  ignored.
+
+---
+
+## What grove gains: agent status
+
+`WorkspaceInfo.agent_status` is a rollup over the workspace's panes: `idle`,
+`working`, `blocked`, `done`, or `unknown`. `grove ls` (an AGENT column and a
+JSON `agent` field) and the dashboard (a row badge and a detail row) show which
+worktree has an agent waiting on input — something tmux cannot provide — at no
+extra cost.
+
+**`unknown` is the no-agent default**, not a rare "present but unclassified"
+case: a workspace whose panes all sit at a shell prompt rolls up to `unknown`.
+So grove treats only `idle`/`working`/`blocked`/`done` as a sighting
+(`AgentStatus.Observed()`), and the column stays hidden when nothing was seen.
 
 ---
 
 ## Architecture
 
-Grove has no multiplexer abstraction today; `internal/tmux` is imported directly
-by 19 files. The package is small (436 LOC, 20 exported functions) and real usage
-concentrates in `cmd/grove/commands/to.go`, `helpers.go`, and
-`internal/tui/model.go`, so extraction is mechanical.
-
 ### `internal/mux`
 
-```go
-// Target identifies a worktree session in backend-neutral terms.
-// Name is the canonical {project}-{name}; Path is the checkout path.
-// tmux keys on Name, herdr keys on Path — both are always supplied.
-type Target struct {
-    Name string
-    Path string
-}
+`mux.Multiplexer` (`internal/mux/mux.go`) is the session surface every command
+drives — `Ensure`, `EnsureWithCommand`, `Exists`, `List`, `Current`,
+`AttachHint`, `Attach`, `Switch`, `Rename`, `Kill`, `PaneInfo`,
+`SendCommand`. `mux.Target` carries `Name` (canonical, tmux's key), `Path`
+(herdr's key), `Repo` (herdr's source repository), and `Short` (display name).
 
-type Status string // "attached", "detached", "none"
+Optional capabilities are separate interfaces, checked at the call site, so a
+gap stays explicit:
 
-type AgentStatus string // "idle", "working", "blocked", "done", "unknown", ""
+| Interface | Implemented by | Purpose |
+|---|---|---|
+| `Popuper` | tmux | `display-popup` overlay |
+| `ControlModer` | tmux | iTerm2 `tmux -CC` |
+| `AttachDirectiver` | tmux | hand attach to the shell wrapper |
+| `SessionLocator` | herdr | sessions may live in another server; `Kill` / `KillEverywhere` close them everywhere |
+| `AttachPreparer` | herdr | focus the target before printing an attach hint, since `herdr` cannot name one |
+| `Adopter` | herdr | bring a newly adopted worktree's session in line |
 
-type Session struct {
-    Name    string
-    Path    string
-    Status  Status
-    Agent   AgentStatus // "" when the backend cannot report it
-    Windows int
-}
+Three backends: `TmuxBackend`, `HerdrBackend`, `OffBackend` (callers hold a
+non-nil multiplexer unconditionally). Commands reach it through `ctx.Mux()`;
+the TUI, which has no `GroveContext`, through `muxFor(cfg)`.
 
-type Multiplexer interface {
-    Name() string                                  // "tmux" | "herdr"
-    Available() bool                               // binary present
-    Inside() bool                                  // running inside this mux
+### The herdr backend
 
-    Ensure(Target) error                           // idempotent create/adopt
-    Exists(Target) (bool, error)
-    List() ([]Session, error)
-    Current() (string, error)
-
-    Attach(Target) error                           // blocking
-    Switch(Target) error                           // from inside
-    Rename(old, new Target) error
-    Kill(Target) error
-
-    PaneInfo(Target) (*PaneInfo, error)
-    SendCommand(Target, string) error
-}
-```
-
-Optional capabilities are separate interfaces, checked at the call site — this is
-how the popup gap stays explicit rather than becoming a silent no-op:
-
-```go
-type Popuper interface{ Popup(t Target, width, height string) error }
-type ControlModer interface{ AttachControlMode(t Target) error }
-```
-
-```go
-if p, ok := m.(mux.Popuper); ok {
-    return p.Popup(target, w, h)
-}
-// otherwise fall back to a full-window attach and say so
-```
-
-### Backends
-
-`internal/mux/tmux` wraps today's `internal/tmux` unchanged and implements
-`Popuper` + `ControlModer`.
-
-`internal/mux/herdr` shells out to `herdr` through `cmdexec` with a new `Herdr`
-timeout category. Responses are single-line JSON:
-
-```json
-{"id":"cli:workspace:list","result":{"workspaces":[…]}}
-{"id":"cli:workspace:list","error":{"code":"server_not_running","message":"…"}}
-```
-
-Errors go to stderr with exit 1; CLI syntax errors exit 2
-(`src/api/schema/response.rs:25`). Decode leniently — ignore unknown fields so
-herdr releases don't break grove.
+Every call shells out to the herdr CLI through `cmdexec` (timeout category
+`Herdr`), running `$HERDR_BIN_PATH` when herdr exports it — its documented way
+for panes and plugins to call back in, and protocol-compatible with the server
+after a client-only update — and `herdr` from `PATH` otherwise.
 
 | `Multiplexer` method | herdr implementation |
 |---|---|
-| `Available` | `exec.LookPath("herdr")`, cached like `IsTmuxAvailable` |
+| `Available` | `exec.LookPath`, cached |
 | `Inside` | `HERDR_ENV=1` |
-| `Ensure` | `worktree open --cwd R --path P --label N --no-focus`, then `tab rename` to the worktree's short name. When P is not a linked worktree (the repository checkout): adopt an existing workspace, else `mux.ErrUnmanaged` — never `workspace create` |
-| `List` | `workspace list` → map `worktree.checkout_path` → `Session` |
-| `Exists` | lookup in `List` by canonical path |
+| `Ensure` | another session's existing workspace if the ambient one has none (see Named sessions); else `worktree open --cwd R --path P --label N --no-focus`, then `tab rename` to the short name. A path herdr won't open: adopt a covering workspace, else `ErrUnmanaged` |
+| `List` | `workspace list` → `Session{ID, Name, Path, Status, Agent}` |
+| `Exists` | lookup in `List` via `mux.Index` (path, then label) |
 | `Current` | `$HERDR_WORKSPACE_ID` → `workspace get` |
-| `Attach` | `workspace focus <id>`, then exec `herdr` (blocking) |
+| `Attach` | `workspace focus <id>`, then exec `herdr` (with `--session` when adopted from another session) |
+| `PrepareAttach` (`AttachPreparer`) | `workspace focus <id>` before an attach *hint* is printed (shell integration, manual mode), so the client the user starts lands on the target |
 | `Switch` | `workspace focus <id>` |
-| `Rename` | `workspace rename <id> <label>` |
-| `Kill` | `workspace close <id>` — **never** `worktree remove` |
-| `PaneInfo` | `pane list --workspace <id>` |
-| `SendCommand` | `pane run <root-pane-id> "<cmd>"` |
+| `Rename` | `workspace rename <id> <label>`, plus the tab when it carries a generated or grove-set label |
+| `Kill` | `workspace close <id>` in every running session — **never** `worktree remove` |
+| `PaneInfo` | `pane list --workspace <id>` + `pane process-info --pane <id>` |
+| `SendCommand` | `pane run <pane> "<cmd>"` |
 
-`List` is called once per grove invocation and cached, mirroring
-`loadTmuxSessions()`. A dead socket fails fast with `server_not_running`
-(`src/cli/server_not_running.rs`) rather than hanging, so the <500ms budget holds.
+**The CLI contract.** Responses are single-line JSON envelopes —
+`{"id":…,"result":…}` on stdout, `{"id":…,"error":{"code","message"}}` on
+stderr with exit 1 (usage errors are plain text, exit 2). Grove reads both
+streams together, scans for the line that parses as an envelope (an update
+notice may share the stream), and decodes leniently so new fields never break
+it. Details that cost real bugs:
 
-**Cold start.** `workspace focus` needs a live server. `herdr server` (bare) runs
-headless, so grove can spawn it detached and poll for the socket. Simpler first
-cut: if no server is running, print the actionable error herdr already provides
-and let the user run `herdr`. Start there; add auto-spawn only if it proves
-annoying.
+- **Acknowledgement-only verbs print nothing on success** — `pane run` and
+  `workspace report-metadata` exit 0 with empty output. Only their failures
+  carry an envelope.
+- **`pane process-info` nests its list** under `result.process_info`.
+- `session list --json` and `status server --json` answer with bare JSON, no
+  envelope.
+- Every API command sends a protocol ping first, and the CLI sets no request
+  timeout of its own — `cmdexec`'s budget is what bounds a wedged server.
+
+**Caching.** A backend instance lives for one command, so pure reads
+(`workspace list`, `pane list`, …) are cached for its lifetime and every other
+verb drops the caches before running — one `grove to` used to spawn ten herdr
+processes. The allow-list of cache-preserving verbs is closed: an unknown verb
+counts as a mutation.
 
 ### Config
 
@@ -363,313 +392,195 @@ annoying.
 backend = "auto"   # auto | tmux | herdr | off
 ```
 
-`auto` resolves: `HERDR_ENV=1` → herdr; `TMUX` → tmux; else first available
-binary, tmux winning ties for backward compatibility.
-
-The existing `[tmux]` block (`mode`, `prefix`, `on_switch`, `control_mode`) stays
-as a deprecated alias — `mergeTmuxConfig` already provides the machinery, and
-`tmux.mode = "off"` must keep mapping to `mux.backend = "off"`.
-
-Naming rule extension for CLAUDE.md: *tmux session names and herdr workspace
-labels both always use the canonical `{project}-{name}`, regardless of the
-directory pattern.*
+`auto` resolves: `HERDR_ENV=1` → herdr; `TMUX` → tmux; else the first
+available binary, tmux winning ties. The `[tmux]` block keeps working;
+`tmux.mode = "off"` still maps to `backend = "off"`
+(`Config.EffectiveMuxBackend()`).
 
 ---
 
 ## The herdr plugin
 
-**Viable and worth doing** — and not optional, since it is the only route to
-popup placement.
+A herdr plugin is a `herdr-plugin.toml` manifest plus commands in any language.
+Grove's lives in `integrations/herdr/` — not `plugins/`, which holds plugins
+that extend *grove*; this one runs the other way. It calls hidden grove
+subcommands, `grove herdr-event` and `grove herdr-action`.
 
-Herdr plugins are a `herdr-plugin.toml` manifest plus executables in any
-language; herdr keeps per-plugin config/state dirs and does not sandbox
-execution. Install is `herdr plugin install <owner>/<repo>[/<subdir>]` or
-`herdr plugin link <path>` for development.
+**Scope: react to what herdr did.** You use grove inside herdr the way you
+always do — from a shell — and the backend needs no plugin. The plugin exists
+for the one thing the CLI cannot do: notice worktrees that appear or disappear
+without grove's involvement.
 
-```toml
-id = "lost-in-the.grove"
-name = "Grove"
-version = "0.2.0"
-min_herdr_version = "0.8.0"
-description = "Worktree flow manager"
-platforms = ["linux", "macos"]
+| Manifest entry | What it does |
+|---|---|
+| `[[events]] worktree.created`, `worktree.opened` | If grove does not track the checkout: raise a herdr notification pointing at `grove adopt` (once per worktree — re-opens report `already_open`), and keep the `grove=untracked` sidebar token in step with grove's state on every open. |
+| `[[events]] worktree.removed` | Drop grove's state entry, clear `last_worktree`, and (tmux backend) reap a session over the dead directory. No remove hooks, no git. |
+| `[[startup]]` | Re-report untracked tokens after a server restart (herdr drops all tokens). |
+| `[[actions]] status` | Report whether grove tracks the workspace's worktree. |
 
-# NOTE: this section described the manifest as originally planned. The shipped
-# manifest is integrations/herdr/herdr-plugin.toml, which no longer declares a
-# dashboard pane — see "The dashboard pane was removed" below. The rest of this
-# section's discussion of popup placement is retained as the record of why the
-# pane was attempted.
+Both create/open events are needed: `herdr worktree create` fires only
+`worktree.created`, `herdr worktree open` only `worktree.opened`, and the UI
+"new worktree" dialog behaves like the CLI create path (verified with a probe
+plugin on 0.8.0 and 0.9.1). `worktree.removed` fires only on herdr's own
+removal — the grove-rm flow emits `workspace.closed` — so there is no loop.
 
-[[actions]]
-id = "status"
-title = "Grove: worktree status"
-contexts = ["workspace"]
-command = ["grove", "herdr-action", "status"]
+**The sidebar marker.** A notification is off by default (`[ui.toast]
+delivery`) and gone once dismissed. The durable signal is a workspace metadata
+token, `workspace report-metadata <id> --source lost-in-the.grove --token
+grove=untracked`, cleared with `--clear-token grove` once grove tracks the
+worktree (`grove adopt` clears it directly, via `mux.Adopter`, and also gives
+the workspace grove's canonical label). Reporters supply values only: the
+token shows where the user's `[ui.sidebar.spaces]` rows name `$grove`. Grove
+always reports under one fixed source, because herdr caps the distinct sources
+a workspace sees over its lifetime.
 
-# Close the loop when the user drives worktrees from herdr's own UI. Both events
-# are required: `herdr worktree create` fires only worktree.created, and
-# `herdr worktree open` fires only worktree.opened (verified on herdr 0.8.0).
-# The UI "new worktree" dialog fires the same events as the CLI create path.
-[[events]]
-on = "worktree.created"
-command = ["grove", "herdr-event"]
+**Execution environment.** herdr runs plugin commands as plain argv with the
+*plugin directory* as cwd — after `herdr plugin install` that is a clone of
+grove's repository, with a `.grove` of its own — so discovery always starts
+from the path herdr names, never the cwd. It injects `HERDR_SOCKET_PATH`,
+`HERDR_BIN_PATH`, `HERDR_ENV=1`, `HERDR_PLUGIN_ROOT`, and for hooks
+`HERDR_PLUGIN_EVENT` (dotted name; `startup` for startup hooks) and
+`HERDR_PLUGIN_EVENT_JSON` (`{"event": <snake_case>, "data": {...}}`, `data`
+always carrying `workspace` with its worktree provenance and tokens). Hook
+output goes to `herdr plugin log list` and nowhere else. A hook may call back
+into the server: dispatch starts the process and returns rather than waiting.
+Hooks run concurrently (up to 32) with no timeout.
 
-[[events]]
-on = "worktree.opened"
-command = ["grove", "herdr-event"]
+An event name herdr does not know links with a warning and a hook that never
+fires — it is not rejected — so `min_herdr_version` is the oldest version
+actually tested (0.8.0). Install with `herdr plugin install
+lost-in-the/grove/integrations/herdr --ref <grove tag>`; there is no `plugin
+update`. herdr's marketplace lists public repos with the `herdr-plugin` GitHub
+topic, showing the manifest's `version`.
 
-# And in the other direction: reconcile grove's state when herdr removes a
-# worktree. Fires only on herdr's own removal (the grove-rm flow emits only
-# workspace.closed), so there is no loop; see the manifest for the full record.
-[[events]]
-on = "worktree.removed"
-command = ["grove", "herdr-event"]
-```
+### The dashboard pane was removed
 
-Verified manifest shapes: `PluginManifestPane`, `PluginManifestAction`,
-`PluginManifestEventHook` (`src/api/schema/plugins.rs:244–279`). Action contexts
-are `Global | Workspace | Tab | Pane | Selection` (`:355`).
+The plugin first shipped a pane running grove's TUI. Making it *reachable*
+(it ran `grove tui`, which is not a command) revealed it should not exist:
 
-Plugin processes receive `HERDR_PLUGIN_CONTEXT_JSON` (and
-`HERDR_PLUGIN_EVENT_JSON` for hooks) carrying `workspace_id`, `workspace_label`,
-`workspace_cwd`, and the full `worktree` block with `checkout_path` and
-`repo_root` — everything grove needs, with no extra socket round-trip.
-
-Available event hooks include `worktree.created`, `worktree.opened`,
-`worktree.removed`, `workspace.closed`, `workspace.renamed`, and
-`pane.agent_status_changed` (`src/api/schema/events.rs:194`).
-
-Three things the plugin buys:
-
-1. **Popup/overlay placement** — restores `grove session` and hosts the TUI.
-2. **Mouse-first entry points** — right-click a workspace for grove actions,
-   matching how herdr users actually work.
-3. **Overlap reconciliation** — if a user creates a worktree through *herdr's*
-   UI, the `worktree.opened` hook lets grove notice it, run its own hooks, and
-   keep the docker/tracker plugins in sync. And if a user *removes* one through
-   herdr, the `worktree.removed` hook drops grove's state entry (clearing
-   `last_worktree` and reaping an orphaned tmux session) instead of leaving a
-   ghost for `grove repair`. This is what makes the two tools coexist instead
-   of quietly diverging.
-
-**Repo placement:** not `plugins/` — that directory means *grove* plugins
-(docker, tracker) and the direction is inverted here. Use `integrations/herdr/`,
-with its own README per the existing plugin convention.
+- It duplicated herdr's sidebar, which already lists every worktree, grouped by
+  project, with agent status.
+- It could not switch: grove's TUI switch quits the event loop and acts
+  afterwards, so inside a pane it destroyed its own pane on every use.
+- herdr runs plugin commands with the plugin directory as cwd, so it resolved
+  the wrong project.
+- The TUI switch path fires no pre/post-switch hooks, so docker start/stop
+  would not run.
 
 ---
 
-## What shipped
+## Testing
 
-**`internal/mux`** — the interface above, plus `mux.Index`, the last-session
-store (moved out of `internal/tmux`, which is now purely the low-level tmux
-wrapper), and three backends: `TmuxBackend`, `HerdrBackend`, `OffBackend`.
-`OffBackend` means callers hold a non-nil multiplexer unconditionally and never
-branch on "is there one".
+- **Unit** (`internal/mux/herdr_test.go`, `cmd/grove/commands/herdr_plugin_test.go`):
+  the backend takes an injectable runner, so its whole command contract runs
+  against **captured herdr 0.9.1 responses** — envelopes, silent successes,
+  error codes, event payloads. Invented fixtures are how the `pane run` and
+  `process-info` bugs went unnoticed: the fakes answered the way grove
+  expected. The fake understands `--session`, so named-session behavior is
+  covered too. The negative assertions that matter most: `Ensure` never calls
+  `worktree create` or `workspace create`, `Kill` never calls
+  `worktree remove`, and never passes `--group`.
+- **Golden** (`TestGolden_Dashboard_Herdr`): agent badges and `active`/`open`
+  workspace badges.
+- **Live** ([`scripts/validate-herdr.sh`](../scripts/validate-herdr.sh),
+  `make test-herdr`): 35 checks against a real server — create, identity,
+  idempotency, rename, switch, remove, the ownership boundary, `grove open`
+  with a session command, drift correction, agent state (driven with
+  `herdr pane report-agent`, so no real agent is needed), the repository
+  workspace, named sessions, and with `--plugin` the untracked marker, adopt,
+  and removal sync. `--stop-server` adds the degradation checks.
+- **CI** (`herdr End-to-End`): installs a pinned, checksum-verified herdr,
+  starts it headless, and runs the live suite with `--plugin --stop-server`.
 
-**Call sites** — all 19 former `internal/tmux` importers now go through
-`ctx.Mux()` (commands) or `muxFor(cfg)` (TUI, which has no `GroveContext`).
+**The live suite is safe against a live server, and that is a property to
+preserve.** A herdr server is shared: the user's workspaces, their agents, and
+possibly the pane running the script all appear in `workspace list`. The
+script only ever closes workspaces whose checkout resolves inside its own
+scratch directory — in every running session — starts and deletes its own
+named session, refuses `--plugin` if the plugin is already installed, and
+keeps the server-stopping checks behind `--stop-server`. It runs as if from
+outside herdr (dropping a pane's `HERDR_SOCKET_PATH` / `HERDR_ENV` in favor of
+naming the same session), and an `EXIT` trap unlinks the plugin and stops its
+session even when interrupted.
 
-**Config** — `[mux] backend`, validated, merged, defaulted to `auto`.
-`Config.EffectiveMuxBackend()` folds in legacy `tmux.mode = "off"`.
+---
 
-**Agent status** — `mux.AgentStatus` flows into `grove ls` (an AGENT column and
-a JSON `agent` field, both appearing only when a backend reports one) and the
-TUI (a row badge and a detail row).
+## Verification log
 
-**Plugin** — `integrations/herdr/` with a workspace status action and three
-event hooks — `worktree.created` / `worktree.opened` (adoption prompt, raised
-as a herdr notification) and `worktree.removed` (state reconciliation) —
-backed by the hidden `grove herdr-action` / `grove herdr-event` subcommands.
-The dashboard pane it originally shipped with was removed; see "The dashboard
-pane was removed" below.
+**herdr 0.8.0** (Linux headless, then macOS arm64 with a live client and a
+real `claude` agent): create/list/switch/rename/remove round-trip; attach lands
+in the target workspace; real `blocked`/`idle`/`working` states tracked in
+`ls`, JSON, row badge, and detail row; `/tmp` → `/private/tmp` canonicalization
+resolves without duplicates; `control_mode` honored under tmux and ignored
+under herdr; popup falls back to a switch; tmux behavior unchanged.
 
-**Doctor** — optional `herdr` binary check, plus a server-reachability check
-that runs only when herdr is the resolved backend.
+**herdr 0.9.1** (Linux headless, real clients through a pty): the full live
+suite, all plugin hooks, per-client focus semantics, named sessions, protocol
+mismatch against a 0.8.0 CLI, and the untracked marker across a server
+restart.
 
-### Still to do
+Bugs that only live runs found:
 
-- **Golden files.** The TUI agent badge has unit tests but no VHS/golden
-  coverage (see [VISUAL_TESTING.md](VISUAL_TESTING.md)); capturing those needs a
-  coding agent running in a herdr pane to produce a non-`unknown` state.
-- **Backend-parameterized integration tests.** The three tests in
-  `tests/integration/` still shell out to tmux directly.
+1. **`worktree open` needs `--cwd <repo root>`.** Every session creation failed
+   with `invalid_request` until `Target.Repo` was threaded through.
+2. **`unknown` is the no-agent default**, so the AGENT column rendered
+   "unknown" on every row. Fixed with `AgentStatus.Observed()`.
+3. **herdr's provenance goes stale after a rename**, so the plugin's context
+   pointed at a deleted directory. Fixed by resolving the first path that
+   still exists.
+4. **The dashboard pane ran `grove tui`, which is not a command.** Linking the
+   manifest looked like verification because it parses either way. Now every
+   declared argv is resolved against the real command set in a test.
+5. **The adoption hook listened only for `worktree.opened`**, missing
+   `herdr worktree create` — its primary case.
+6. **`pane run` succeeds silently**, and grove took the silence for failure:
+   `grove open` with `[session] command` ran the command, then reported
+   "failed to create session".
+7. **`pane process-info` nests its list under `process_info`**; grove read an
+   always-empty list, so drift correction never ran under herdr.
+8. **Named sessions duplicated and orphaned workspaces.**
+9. **`focused` is not "attached"** — it is server-wide and set with no client.
+10. **`worktree open --path <repo>` opens the parent workspace** — the docs had
+    claimed grove declines the repository checkout.
+11. **A wedged named session stalled `grove to` / `grove rm` by 5s** (found in
+    review with a SIGSTOPped server) — now a 250ms peer budget, queried
+    concurrently.
+12. **A renamed worktree's workspace could be adopted, taken over, or closed**
+    for a new worktree at its old path — now guarded by `movedOn`.
 
-### Testing
+---
 
-The herdr backend takes an injectable runner, so its whole command contract is
-tested against canned JSON without a herdr server: envelope decoding (including
-noise on the stream and unknown fields), path-keyed resolution, tab labelling,
-and the three negative assertions that matter most — `Ensure` never calls
-`worktree create`, `Ensure` never calls `workspace create`, and `Kill` never
-calls `worktree remove`.
+## Known limitations
 
-Fixtures are shaped from the real schema: compact single-line JSON, the
-internally-tagged `"type"` field, and `agent_status` in snake_case.
-
-Not yet covered: the three integration tests that shell out to tmux
-(`tests/integration/`) are still tmux-only and would need backend
-parameterization to exercise herdr end to end.
-
-### Docs
-
-~290 tmux mentions across 13 files. Heaviest:
-[COMMAND_SPECIFICATIONS.md](COMMAND_SPECIFICATIONS.md) (73),
-[AGENT_GUIDE.md](AGENT_GUIDE.md) (41),
-[CONFIGURATION_REFERENCE.md](CONFIGURATION_REFERENCE.md) (27),
-[DATA_FLOWS.md](DATA_FLOWS.md) (28). This is the real cost of the work — plan it
-as a phase, not a cleanup.
+- **Multi-client focus.** `grove to` moves every attached client; herdr's CLI
+  cannot target one.
+- **Stopped named sessions** cannot be reached, so their copy of a removed
+  worktree's workspace is left for herdr to reconcile on restart.
+- **`grove rename`** relabels only the ambient session's workspace.
+- **A renamed worktree's workspace keeps its old path** in herdr's record, so a
+  new worktree created at that path gets no workspace of its own until the
+  renamed one's is closed; grove declines with a hint rather than take it over.
+- **`done` agent state** comes from unit and golden tests only; `pane
+  report-agent` cannot set it (herdr derives it), and live runs drove
+  `blocked`/`idle`/`working`.
+- **Windows**: grove ships windows builds and herdr supports Windows, but the
+  integration is untested there; the manifest declares `linux` and `macos`
+  only.
 
 ---
 
 ## Risks
 
-**Herdr is young and moving fast.** The CLI surface may shift under us. Mitigate
-with a `min_herdr_version` floor checked in `doctor`, lenient JSON decoding, and
-keeping the backend opt-in until it settles.
+**Herdr is young and moving fast.** Mitigated by lenient decoding, captured
+fixtures, doctor's protocol check, and a CI job pinned to a herdr release —
+bump `HERDR_VERSION` and `HERDR_SHA256` together in `.github/workflows/ci.yml`
+to test a new one.
 
 **Two sources of truth for worktrees.** Mitigated by the ownership rule above,
-the worktree event hooks (adoption prompt on create/open, state reconciliation
-on remove), and never calling herdr's mutating worktree verbs. Worth stating
-loudly in `AGENTS.md` so agents don't "helpfully" reach for
-`herdr worktree create`.
+the plugin's hooks (prompt and marker on create/open, state sync on remove),
+and never calling herdr's mutating worktree verbs. Stated loudly in `AGENTS.md`
+so agents don't "helpfully" reach for `herdr worktree create`.
 
-**Popup regression.** Between Phase 2 and Phase 4, `grove session` degrades to a
-full-window attach under herdr. Acceptable if the fallback message is explicit.
-
-**Upside worth noting:** herdr has a Windows preview, while grove's tmux path is
-unix-only. A herdr backend is a plausible future route to Windows support. Out of
-scope here, but it argues for not hard-coding unix assumptions into `internal/mux`.
-
----
-
-## Verification
-
-Run against herdr 0.8.0 (protocol 19) with `herdr server` headless, driving a
-real grove project with two worktrees. Everything below was executed, not
-reasoned about.
-
-These checks are automated in [`scripts/validate-herdr.sh`](../scripts/validate-herdr.sh):
-
-```bash
-herdr server &                 # or attach a client with `herdr`
-scripts/validate-herdr.sh      # --keep leaves the scratch project behind
-```
-
-It builds grove from the checkout, works entirely in a throwaway repo under
-`$TMPDIR`, and exits non-zero on any failure.
-
-**It is safe against a live server, and that is a property to preserve.** A
-herdr server is shared: the user's own workspaces, their running agents, and
-possibly the pane the script is executing in all appear in `herdr workspace
-list`. The script therefore closes only workspaces whose checkout resolves
-inside its own scratch directory (`lab_workspace_ids`) — never a bare sweep of
-that listing. The two degradation checks are the exception, since they stop the
-server and kill every pane it hosts; they are opt-in behind `--stop-server` and
-skipped by default.
-
-| Flow | Result |
-|---|---|
-| `grove new` | creates the checkout, adopts it as a workspace, labels it `demo-feature-a` |
-| `grove ls` | resolves every worktree **by checkout path**; attached/detached correct |
-| `grove rm` | git removes the checkout, `workspace close` drops the session; checkout deleted by grove, not herdr |
-| `grove rename` | relabels the workspace; later lookups self-heal via the name fallback |
-| `grove to` (inside herdr) | focuses the right workspace, does not attach |
-| Plugin manifest | `herdr plugin link` accepts it; actions, events, and panes all parse. Parsing is not execution — `TestHerdrPluginManifestCommandsResolve` additionally asserts every declared `grove` argv names a real subcommand |
-| Plugin action | `Grove: worktree status` runs and reports correctly |
-| Event hook | fires on a worktree grove doesn't track; stays silent on one it does |
-| Removal sync | `herdr worktree remove` on an adopted worktree drops the state entry, clears `last_worktree`, and logs the reconciliation to `herdr plugin log list` (live-verified 2026-08-11 with the linked plugin) |
-| Dead server | `server_not_running`; `grove ls` degrades to "no session", no hang. `Exists` answers false and `Ensure` reports the target unmanaged, so `grove to`/`open`/`attach` fall back to a plain directory switch — the behavior `grove doctor` promises. `List` still surfaces the raw error for doctor's server check |
-
-Five bugs surfaced that no amount of source reading had caught:
-
-1. **`worktree open` needs `--cwd <repo root>`.** Every session creation failed
-   with `invalid_request` until `Target.Repo` was threaded through. This was the
-   real one — the feature did not work at all without it.
-2. **`unknown` is the no-agent default**, so the AGENT column rendered "unknown"
-   on every row. Fixed with `AgentStatus.Observed()`.
-3. **herdr's checkout provenance goes stale after a rename**, so the plugin's
-   context pointed at a deleted directory. Fixed by resolving to the first
-   directory that still exists.
-4. **The dashboard pane ran `grove tui`, which is not a command.** The TUI is
-   reached through bare `grove`; `grove tui` exits with `unknown command "tui"`,
-   so the plugin's headline feature could never have worked. The manifest parses
-   either way, which is why linking it looked like verification. Pinned by a
-   test that resolves every declared argv against the real command set. The pane
-   itself has since been removed — see below.
-5. **The adoption hook was subscribed to the wrong event.** It listened only for
-   `worktree.opened`, but `herdr worktree create` — herdr's own "make me a
-   worktree" path, and the exact case the hook exists to catch — fires
-   `worktree.created` instead. Verified on herdr 0.8.0 with a probe plugin
-   subscribed to all four candidate events. The plugin's one job silently did
-   nothing in its primary case. Fixed by subscribing to both.
-
-### The dashboard pane was removed
-
-Making the pane *reachable* revealed that it should not exist.
-
-- **It duplicates herdr's own sidebar**, which already lists every worktree as a
-  workspace, grouped by project, with agent status.
-- **It cannot switch.** Grove's TUI switch is deferred: it records a target,
-  quits the event loop, and acts afterwards. Inside a herdr pane that means the
-  grove process exits and takes its own pane with it, so the dashboard destroys
-  itself on every use.
-- **It ran against the wrong repo.** herdr runs plugin commands with the *plugin
-  directory* as cwd, so grove resolved whatever project contains the plugin
-  checkout, not the user's workspace. `herdr plugin pane open --cwd` fixes this,
-  but only for a launcher that a pane declaration cannot express on its own.
-- **The TUI switch path fires no pre/post-switch hooks** (unlike `grove to`), so
-  docker start/stop would not run on a switch made from the dashboard.
-
-Grove is a shell tool. Inside herdr you reach it the same way you always do —
-`grove` in a pane — and the herdr *backend* makes that operate on herdr
-workspaces. The plugin is left with the one job the CLI cannot do: notice
-worktrees that appear without grove's involvement.
-
-**Latency.** `herdr workspace list` averages **3ms** against a warm server;
-`grove ls` end to end averages **52ms**, comfortably inside the 500ms budget.
-The listing is fetched once per command and shared through `mux.Index`.
-
-### Verified on macOS
-
-A second pass ran herdr 0.8.0 on macOS (Darwin 25.5.0, arm64) against a live
-server, covering what the Linux pass could not:
-
-- **`Attach` (focus-then-exec).** From a real TTY outside herdr, with focus
-  parked elsewhere, `grove to` lands *in the target workspace*. The ordering
-  holds.
-- **Real agent states.** A live `claude` in a pane drove `blocked` (a trust
-  prompt), `idle`, and `working`. The `ls` column, the JSON field, the TUI row
-  badge (`◆ working`) and the detail row (`Agent ◇ idle`) all tracked herdr.
-  `unknown` renders blank and the column stays hidden. herdr detected the agent
-  with no integration hook installed.
-- **Path canonicalization.** A project under `/tmp` (the macOS
-  `/tmp` → `/private/tmp` symlink) resolves to `detached`, not `none`, and
-  re-adopting via the canonical path creates no duplicate. Note
-  `validate-herdr.sh` works under `$TMPDIR`, which on macOS is `/var/folders/…`,
-  so the suite does *not* cover this — it was tested separately.
-- **`control_mode`.** Still yields `tmux -CC` under `backend = "tmux"`, honours
-  `false`, and is correctly ignored under `backend = "herdr"`.
-- **Popup fallback.** With `[session] popup = true` and no plugin, `grove open`
-  falls through to a workspace switch rather than no-op'ing.
-- **tmux regression.** new / ls / to / rename / rm behave as on `main`, and
-  legacy `[tmux] mode = "off"` still suppresses session management (`grove
-  config` reports `(effective): off`).
-
-### Still unverified
-
-- ~~Whether the adoption prompt is visible in practice.~~ **Resolved:** the
-  prompt is now also raised via `herdr notification show`, with the returned
-  suppression reason (`disabled` under herdr's default `[ui.toast] delivery`,
-  or `rate_limited`) recorded in grove's log. Delivery remains the *user's*
-  herdr setting — see the [plugin README](../integrations/herdr/README.md) for
-  turning it on.
-- **Named sessions.** grove follows ambient `HERDR_SESSION` with no explicit
-  scoping. Confirmed: no cross-session leakage in `grove ls`, but `grove to`
-  under a second session creates a *duplicate* workspace for the same checkout,
-  and a later `grove rm` then leaves an orphaned workspace in the other session
-  pointing at a deleted directory. `grove new` is safe — it refuses at the git
-  level. A known limitation, not yet a design.
-- **`done` agent state.** `blocked`/`idle`/`working` were driven with a real
-  agent; `done` still comes only from unit tests.
-- **CI.** Runners have no herdr installed, so they cover the tmux backend and
-  the herdr backend's unit-level contract, not a real server.
+**Upside:** herdr runs on Windows, while grove's tmux path is unix-only — a
+plausible future route to Windows support, and a reason not to hard-code unix
+assumptions into `internal/mux`.

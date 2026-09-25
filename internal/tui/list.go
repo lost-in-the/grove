@@ -9,12 +9,11 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/plugins"
 )
 
 const (
-	tmuxStatusAttached     = "attached"
-	tmuxStatusDetached     = "detached"
 	checkboxUnchecked      = "[ ]"
 	checkboxChecked        = "[x]"
 	boolTrue               = "true"
@@ -248,13 +247,13 @@ func syncStatusSymbol(item WorktreeItem, syncWidth int) string {
 	return padRight(" ", syncWidth)
 }
 
-// tmuxStatusSymbol returns a single-char tmux indicator.
-// ⬢ purple = attached, ⬡ purple = detached, space = none.
+// tmuxStatusSymbol returns a single-char session indicator.
+// ⬢ purple = attached/active, ⬡ purple = detached/open, space = none.
 func tmuxStatusSymbol(item WorktreeItem) string {
-	switch item.TmuxStatus {
-	case tmuxStatusAttached:
+	switch status := mux.Status(item.TmuxStatus); {
+	case status.Foreground():
 		return Styles.TmuxBadge.Render("⬢")
-	case tmuxStatusDetached:
+	case status.Background():
 		return Styles.TmuxBadge.Render("⬡")
 	default:
 		return " "

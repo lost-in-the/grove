@@ -277,7 +277,7 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 		}
 
 		if !exists {
-			managed, err := ensureSession(m, target)
+			managed, err := ensureSession(m, target, stderr)
 			if err != nil {
 				return fmt.Errorf("failed to create session: %w", err)
 			}
@@ -287,7 +287,7 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 			if !managed {
 				sessionName = ""
 			} else if !jsonOut {
-				cli.Success(stderr, "Created %s session '%s'", m.Backend(), sessionName)
+				reportEnsured(stderr, m, target)
 			}
 		}
 
@@ -301,7 +301,7 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 			// there is no session to report ready or attach to, so say nothing
 			// (selfSwitchTmuxEpilogue returns early in the same situation).
 			cli.Success(stderr, "Session '%s' ready", sessionName)
-			cli.Faint(stderr, "Run: %s", manualAttachHint(m, sessionName))
+			cli.Faint(stderr, "Run: %s", attachHint(m, target))
 		}
 		// auto mode outside the multiplexer: handled below via shell directive
 		// or direct attach
@@ -410,7 +410,7 @@ func selfSwitchTmuxEpilogue(ctx *GroveContext, mgr *worktree.Manager, targetTree
 		return fmt.Errorf("failed to check session: %w", err)
 	}
 	if !exists {
-		managed, err := ensureSession(m, target)
+		managed, err := ensureSession(m, target, stderr)
 		if err != nil {
 			return fmt.Errorf("failed to create session: %w", err)
 		}
@@ -418,12 +418,12 @@ func selfSwitchTmuxEpilogue(ctx *GroveContext, mgr *worktree.Manager, targetTree
 		if !managed {
 			return nil
 		}
-		cli.Success(stderr, "Created %s session '%s'", m.Backend(), target.Name)
+		reportEnsured(stderr, m, target)
 	}
 
 	if tmuxMode != tmuxModeAuto {
 		cli.Success(stderr, "Session '%s' ready", target.Name)
-		cli.Faint(stderr, "Run: %s", manualAttachHint(m, target.Name))
+		cli.Faint(stderr, "Run: %s", attachHint(m, target))
 		return nil
 	}
 

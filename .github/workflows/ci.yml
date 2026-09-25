@@ -86,6 +86,63 @@ jobs:
       - name: Run integration tests
         run: make test-integration
 
+  # grove's herdr backend and plugin against a real, headless herdr server.
+  # Unit tests pin grove's side of the contract with captured responses; this
+  # is what catches herdr changing its side. herdr ships as a single static
+  # binary, so there is nothing to install beyond it.
+  herdr:
+    name: herdr End-to-End
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      # Pinned release and its published SHA-256 (distribution/latest.json in
+      # herdrdev/herdr). Bump both together.
+      HERDR_VERSION: 0.9.1
+      HERDR_SHA256: 2a02fed16beb651ef006e1d43f048f652ca4dc58ad053cd2d44450563d5c54b7
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Install herdr
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL -o "$HOME/.local/bin/herdr" \
+            "https://github.com/herdrdev/herdr/releases/download/v${HERDR_VERSION}/herdr-linux-x86_64"
+          echo "${HERDR_SHA256}  $HOME/.local/bin/herdr" | sha256sum -c -
+          chmod +x "$HOME/.local/bin/herdr"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # The plugin's hooks run `grove` from the herdr server's PATH, so the
+      # build under test has to be there before the server starts.
+      - name: Install grove
+        run: go build -o "$HOME/.local/bin/grove" ./cmd/grove
+
+      - name: Start a headless herdr server
+        run: |
+          nohup herdr server > "$RUNNER_TEMP/herdr-server.log" 2>&1 &
+          for _ in $(seq 1 50); do
+            herdr status server | grep -q '^status: running' && exit 0
+            sleep 0.2
+          done
+          cat "$RUNNER_TEMP/herdr-server.log"
+          exit 1
+
+      - name: Validate grove against herdr
+        run: scripts/validate-herdr.sh --plugin --stop-server
+
+      - name: herdr logs
+        if: failure()
+        run: |
+          cat "$RUNNER_TEMP/herdr-server.log" || true
+          cat "$HOME/.config/herdr/herdr-server.log" || true
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

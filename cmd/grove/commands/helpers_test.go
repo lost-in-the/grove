@@ -9,6 +9,7 @@ import (
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/mux"
 )
 
 func TestRunFileSetup_NilConfig(t *testing.T) {
@@ -101,5 +102,33 @@ func TestRunFileSetup_SuppressesWarningInJSON(t *testing.T) {
 
 	if buf.String() != "" {
 		t.Errorf("expected no output in JSON mode, got %q", buf.String())
+	}
+}
+
+// preparingMux is a backend whose attach command cannot name its target
+// (herdr): the hint only works once PrepareAttach has focused it.
+type preparingMux struct {
+	*mux.OffBackend
+	prepared []mux.Target
+}
+
+func (p *preparingMux) AttachHint(mux.Target) string { return "herdr --session other" }
+func (p *preparingMux) PrepareAttach(t mux.Target) error {
+	p.prepared = append(p.prepared, t)
+	return nil
+}
+
+// Under shell integration grove prints an attach hint instead of attaching.
+// Printing it without focusing the target first sent the user to whatever
+// workspace herdr last had focused.
+func TestAttachToSessionPreparesTheTargetBeforeHinting(t *testing.T) {
+	m := &preparingMux{OffBackend: mux.NewOff()}
+	target := mux.Target{Name: "grove-testing", Path: "/repos/grove-testing"}
+
+	if err := attachToSession(m, target, nil, true, cli.NewStderr()); err != nil {
+		t.Fatalf("attachToSession() error = %v", err)
+	}
+	if len(m.prepared) != 1 || m.prepared[0].Path != target.Path {
+		t.Errorf("PrepareAttach calls = %v, want exactly the target", m.prepared)
 	}
 }

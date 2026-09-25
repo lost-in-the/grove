@@ -3,6 +3,7 @@ package mux
 import (
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // isExistingDir reports whether path is a directory that exists right now.
@@ -98,6 +99,39 @@ func (ix *Index) AgentFor(t Target) AgentStatus {
 		return AgentUnreported
 	}
 	return s.Agent
+}
+
+// sameGonePath compares two paths that may no longer exist — a checkout grove
+// has just removed, against the path a backend recorded for it. Each side is
+// canonicalized through its parent directory, which usually survives the
+// removal, so a symlinked projects dir (macOS /tmp → /private/tmp) still
+// matches.
+func sameGonePath(a, b string) bool {
+	return a != "" && b != "" && canonicalGonePath(a) == canonicalGonePath(b)
+}
+
+func canonicalGonePath(p string) string {
+	p = filepath.Clean(p)
+	if resolved, err := filepath.EvalSymlinks(filepath.Dir(p)); err == nil {
+		return filepath.Join(resolved, filepath.Base(p))
+	}
+	return p
+}
+
+// within reports whether path is dir or lies beneath it, comparing
+// canonicalized forms. Either side may no longer exist.
+func within(path, dir string) bool {
+	p, d := canonicalPath(path), canonicalPath(dir)
+	return p == d || strings.HasPrefix(p, d+string(filepath.Separator))
+}
+
+// canonicalPath resolves symlinks when the path exists, and otherwise
+// canonicalizes it through its surviving parent.
+func canonicalPath(p string) string {
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		return resolved
+	}
+	return canonicalGonePath(p)
 }
 
 // pathKeys returns the forms a path may be matched under: cleaned, and

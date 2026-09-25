@@ -23,9 +23,9 @@ func ErrNoSession(err error) bool { return errors.Is(err, errNoSession) }
 // ErrUnmanaged reports whether err means "this backend will not create a
 // session for that target".
 //
-// It is not a failure. herdr is the case that needs it: grove deliberately
-// never creates a workspace for a repository's main checkout — that is herdr's
-// to own, and grove imposing one reaches past worktree lifecycle, which is the
-// boundary the whole integration is built on. Commands treat it as "no session
-// management here" and fall through to changing directory.
+// It is not a failure. herdr is the backend that needs it: when its server is
+// unusable (stopped, or on a different protocol than the CLI), or when a path
+// is not a git worktree herdr can open, there is no session to create. Commands
+// treat it as "no session management here" and fall through to changing
+// directory.
 func ErrUnmanaged(err error) bool { return errors.Is(err, errUnmanaged) }

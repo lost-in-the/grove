@@ -1,9 +1,10 @@
 id = "lost-in-the.grove"
 name = "Grove"
-version = "0.2.0"
-# Every event below is verified against herdr 0.8.0, and herdr rejects a
-# manifest naming an event it doesn't know — a lower floor risks taking the
-# whole plugin down on an older herdr for the sake of versions never tested.
+version = "0.3.0"
+# Everything below is verified against herdr 0.8.0 and 0.9.1. An older herdr
+# that does not know an event still links the plugin — with an "unknown event"
+# warning — and then silently never fires that hook, so the floor is the
+# oldest version actually tested rather than a guess.
 min_herdr_version = "0.8.0"
 description = "Keeps grove's state in sync with worktrees created or removed through herdr"
 platforms = ["linux", "macos"]
@@ -13,10 +14,20 @@ platforms = ["linux", "macos"]
 # skip grove's bootstrap, and worktrees herdr removes must not linger in
 # grove's state. Everything else grove does is better reached from the shell.
 #
+# It also marks those worktrees in herdr's sidebar: an untracked worktree's
+# workspace carries a `grove=untracked` metadata token, which shows wherever
+# the user's `[ui.sidebar.spaces]` rows name `$grove` (see the README).
+#
 # There is deliberately no dashboard pane. herdr's sidebar already lists every
 # worktree as a workspace, so a grove picker inside herdr duplicates the primary
 # UI — and it cannot switch cleanly from a pane, because grove's TUI exits as
 # part of switching and takes its own pane with it. Use `grove` in a shell.
+
+# herdr drops every workspace metadata token when its server restarts. Report
+# the untracked markers again once the restored session's socket is ready.
+# Runs once per server start (and on live handoff), never on client attach.
+[[startup]]
+command = ["grove", "herdr-event"]
 
 # Report grove's view of the clicked workspace's worktree.
 [[actions]]
@@ -27,12 +38,14 @@ contexts = ["workspace"]
 command = ["grove", "herdr-action", "status"]
 
 # Close the loop when a worktree is created through herdr's own UI rather than
-# through grove: the hook notices a checkout grove has no state for and points
-# at `grove adopt`. It only reports — adopting runs post-create hooks, which
-# the user should opt into rather than have fired by a background event.
+# through grove: the hook notices a checkout grove has no state for, points at
+# `grove adopt` (a herdr notification, once per worktree), and keeps the
+# sidebar marker in step with grove's state on every open. It only reports —
+# adopting runs post-create hooks, which the user should opt into rather than
+# have fired by a background event.
 #
 # Both events are needed and they are not interchangeable. Verified against
-# herdr 0.8.0 with a probe plugin subscribed to all four candidates:
+# herdr 0.8.0 (and again on 0.9.1) with a probe plugin:
 #
 #   herdr worktree create -> worktree.created  (+ workspace.created x2)
 #   herdr worktree open   -> worktree.opened   (+ workspace.created)
@@ -59,7 +72,7 @@ command = ["grove", "herdr-event"]
 
 # Close the loop in the other direction: when a worktree is removed through
 # herdr, drop grove's record of it so `grove last`/`grove ls` don't point at a
-# checkout that no longer exists. Verified against herdr 0.8.0:
+# checkout that no longer exists. Verified against herdr 0.8.0 and 0.9.1:
 #
 #   - herdr's removal is a clean `git worktree remove` (directory and
 #     .git/worktrees registration both gone, branch left behind), so the hook

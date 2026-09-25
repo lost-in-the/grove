@@ -20,6 +20,8 @@ so its bootstrap never runs either — no state, no excludes, no post-create
 hooks, no docker. If you remove one through herdr, grove's record of it goes
 stale the same way. Nothing in grove can notice either on its own.
 
+Verified against herdr 0.8.0 and 0.9.1.
+
 There is deliberately **no dashboard pane**. herdr's sidebar already lists every
 worktree as a workspace, so a grove picker inside herdr duplicates the primary
 UI. It also cannot switch cleanly from a pane: grove's TUI exits as part of
@@ -35,9 +37,9 @@ should be a deliberate choice rather than something a background event fires.
 The prompt is raised as a **herdr notification**, not just written to the hook's
 stderr. A hook's stdout and stderr go to `herdr plugin log list` and nowhere
 else — there is no toast, badge, or overlay keyed on plugin output — so a hook
-that only writes there has effectively said nothing. Verified against herdr
-0.8.0 that a hook may call back into the socket API while the server is running
-it, without deadlocking.
+that only writes there has effectively said nothing. A hook may call back into
+the socket API while the server is running it: herdr starts hook processes and
+returns rather than waiting on them.
 
 > **You may need to turn notifications on.** Delivery is herdr's setting, not
 > grove's, and a plugin cannot override it. herdr ships `[ui.toast] delivery`
@@ -53,6 +55,28 @@ it, without deadlocking.
 > reason in its own log (`GROVE_LOG=1`) so a prompt that never appeared is
 > still explainable.
 
+**Sidebar marker.** A notification is gone once dismissed — and off by default.
+The durable signal is a workspace metadata token: the hook sets
+`grove=untracked` on the workspace of every worktree grove does not track, and
+clears it as soon as grove does (`grove adopt` clears it directly, and the next
+open of the worktree re-checks). herdr drops every token when its server
+restarts, so the plugin's startup hook reports them again.
+
+herdr shows a custom token only where your own sidebar layout names it —
+reporters supply values, styling stays yours. Add `$grove` to your space rows
+in `~/.config/herdr/config.toml`. Starting from herdr's defaults:
+
+```toml
+[ui.sidebar.spaces]
+rows = [
+  ["state_icon", "workspace"],
+  ["branch", "git_status", { token = "$grove", fg = "#e5c07b" }],
+]
+```
+
+The token exists only on untracked worktrees, so on every other row it — and
+its separator — simply disappears. Then `herdr server reload-config`.
+
 Only one event per user action raises a notification. That is deliberate:
 herdr's rate limiter drops near-simultaneous notifications (five within ~20ms
 yielded one shown and four `rate_limited`), and `herdr worktree create` alone
@@ -60,7 +84,7 @@ fires five hook invocations in the same millisecond across all event types. Do
 not add a second subscription that notifies.
 
 Both events are subscribed because they are not interchangeable — verified
-against herdr 0.8.0:
+against herdr 0.8.0 and 0.9.1:
 
 | herdr action | event fired |
 |---|---|
@@ -92,7 +116,7 @@ Deliberate non-actions, mirroring the adoption prompt's philosophy:
 This direction has no loop with `grove rm`: `worktree.removed` fires only when
 herdr itself removes a worktree. The grove-rm flow — git removes the checkout,
 then grove closes the herdr workspace — fires only `workspace.closed`, which
-the plugin does not subscribe to (verified on 0.8.0).
+the plugin does not subscribe to (verified on 0.8.0 and 0.9.1).
 
 **Worktree status action.** Right-click a workspace → "Grove: worktree status"
 reports whether grove tracks that checkout.
@@ -100,8 +124,14 @@ reports whether grove tracks that checkout.
 ## Install
 
 ```bash
-herdr plugin install lost-in-the/grove/integrations/herdr
+herdr plugin install lost-in-the/grove/integrations/herdr --ref vX.Y.Z
 ```
+
+Pin `--ref` to the tag of the grove release you have installed (`grove
+version`). The plugin calls grove's hidden `herdr-event` / `herdr-action`
+subcommands, so the manifest and the binary should come from the same release;
+without `--ref` herdr installs the default branch. There is no `herdr plugin
+update` — reinstall with a new `--ref` when you upgrade grove.
 
 For local development against a checkout:
 
@@ -110,7 +140,9 @@ herdr plugin link /path/to/grove/integrations/herdr
 ```
 
 Verify with `herdr plugin list`. `grove` must be on `PATH` — herdr runs plugin
-commands as plain argv without shell expansion.
+commands as plain argv without shell expansion. (Calls back into herdr go
+through `$HERDR_BIN_PATH`, which herdr sets for plugin processes, so `herdr`
+itself need not be on that `PATH`.)
 
 `min_herdr_version` is **required** in the manifest; omitting it fails the link
 outright. Omitting `platforms` links with a warning.
@@ -151,9 +183,10 @@ rules). Closing a grove session is `herdr workspace close`, which drops the
 panes and leaves the checkout alone.
 
 Grove also never calls `herdr workspace create`. The repository's own workspace
-— the one herdr's sidebar groups a project's worktrees under — appears on its
-own when herdr opens any linked worktree, and managing it is herdr's job, not
-grove's. Grove adopts it if it is there and otherwise just changes directory.
+— the one herdr's sidebar groups a project's worktrees under — is herdr's: it
+appears when herdr opens any linked worktree, and `grove to root` reaches it
+through the same `worktree open` call grove uses for every worktree, which
+herdr answers by opening that parent workspace.
 
 See [docs/HERDR_INTEGRATION.md](../../docs/HERDR_INTEGRATION.md) for the full
 design.

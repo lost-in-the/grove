@@ -107,19 +107,64 @@ func openInCurrent(cfg *config.Config) bool {
 // backend is managing one.
 //
 // A backend that declines the target is not a failure. herdr returns
-// mux.ErrUnmanaged for a repository's own checkout, because grove deliberately
-// does not create workspaces it has no business owning. That means there is no
-// session, and the caller should carry on with the plain directory switch it
-// would perform with session management turned off.
-func ensureSession(m mux.Multiplexer, t mux.Target) (bool, error) {
+// mux.ErrUnmanaged when its server is unusable or the path is not a worktree it
+// can open. That means there is no session, and the caller should carry on with
+// the plain directory switch it would perform with session management turned
+// off — saying why when the reason is one the user should act on.
+func ensureSession(m mux.Multiplexer, t mux.Target, stderr *cli.Writer) (bool, error) {
 	err := m.Ensure(t)
 	switch {
 	case err == nil:
 		return true, nil
 	case mux.ErrUnmanaged(err):
+		warnDegraded(stderr, err)
 		return false, nil
 	default:
 		return false, err
+	}
+}
+
+// attachHint readies the target where the backend needs it (mux.AttachPreparer
+// — herdr's client starts on whichever workspace is focused, so the workspace
+// is focused now) and returns the command the user runs to attach. Without the
+// preparation the printed hint would land them wherever focus last was.
+func attachHint(m mux.Multiplexer, t mux.Target) string {
+	if p, ok := m.(mux.AttachPreparer); ok {
+		if err := p.PrepareAttach(t); err != nil {
+			log.Printf("prepare attach for %q: %v", t.Name, err)
+		}
+	}
+	return m.AttachHint(t)
+}
+
+// locatedIn names the other server a SessionLocator backend adopted t's
+// session from, or "".
+func locatedIn(m mux.Multiplexer, t mux.Target) string {
+	if l, ok := m.(mux.SessionLocator); ok {
+		return l.LocatedIn(t)
+	}
+	return ""
+}
+
+// reportEnsured announces the session Ensure produced for a target that had
+// none: a new one, or — on a backend with several independent servers — an
+// existing one it found in another server and adopted instead of duplicating.
+func reportEnsured(stderr *cli.Writer, m mux.Multiplexer, t mux.Target) {
+	if where := locatedIn(m, t); where != "" {
+		cli.Info(stderr, "Using '%s' from %s session '%s'", t.Name, m.Backend(), where)
+		return
+	}
+	cli.Success(stderr, "Created %s session '%s'", m.Backend(), t.Name)
+}
+
+// warnDegraded explains an unmanaged target when the backend says it deserves
+// explaining (see mux.DegradedHint), and stays quiet otherwise.
+func warnDegraded(stderr *cli.Writer, err error) {
+	if stderr == nil {
+		return
+	}
+	if hint := mux.DegradedHint(err); hint != "" {
+		cli.Warning(stderr, "%s", hint)
 	}
 }
 
@@ -138,12 +183,6 @@ func sessionColumnTitle(m mux.Multiplexer) string {
 	default:
 		return "SESSION"
 	}
-}
-
-// manualAttachHint returns the command to show in manual mode, where grove
-// creates the session but leaves attaching to the user.
-func manualAttachHint(m mux.Multiplexer, sessionName string) string {
-	return m.AttachHint(mux.Target{Name: sessionName})
 }
 
 // controlModeFor returns the backend's control-mode support when it both
@@ -176,7 +215,7 @@ func attachToSession(m mux.Multiplexer, t mux.Target, controlModeCfg *bool, hasS
 		if d, ok := m.(mux.AttachDirectiver); ok && d.AttachDirective(t, useCC) {
 			return nil
 		}
-		cli.Faint(stderr, "Run: %s", m.AttachHint(t))
+		cli.Faint(stderr, "Run: %s", attachHint(m, t))
 		return nil
 	}
 
@@ -246,7 +285,7 @@ func switchToWorktree(ctx *GroveContext, stderr *cli.Writer, prevName, targetNam
 			// muxTarget builds for `grove to` (and the one `grove rename`'s
 			// tab-relabel guard matches against).
 			target := mux.Target{Name: sessionName, Path: targetPath, Repo: repoRoot, Short: targetName}
-			managed, err := ensureSession(m, target)
+			managed, err := ensureSession(m, target, stderr)
 			if err != nil {
 				cli.Warning(stderr, "Failed to create session: %v", err)
 			}
@@ -347,13 +386,34 @@ func removeWorktreeWithHooks(ctx *GroveContext, mgr *worktree.Manager, w *cli.Wr
 
 	// Kill the multiplexer session after the worktree is confirmed gone. This
 	// closes session state only — the checkout is already removed above.
+	//
+	// Exists only answers for the server grove is talking to. A backend that
+	// runs several independent servers (herdr's named sessions) may hold the
+	// worktree's session in another one, and its Kill closes those too — so it
+	// runs even when the ambient server has nothing.
 	if m := ctx.Mux(); m.Available() {
 		target := muxTarget(mgr, name, wtPath)
-		if exists, err := m.Exists(target); err == nil && exists {
-			if err := m.Kill(target); err != nil {
-				cli.Warning(w, "Failed to kill session: %v", err)
-			} else {
-				cli.Success(w, "Killed session '%s'", target.Name)
+		exists, err := m.Exists(target)
+		if err == nil {
+			if l, ok := m.(mux.SessionLocator); ok {
+				report, kerr := l.KillEverywhere(target)
+				if kerr != nil {
+					cli.Warning(w, "Failed to kill session: %v", kerr)
+				} else if exists {
+					cli.Success(w, "Killed session '%s'", target.Name)
+				}
+				for _, where := range report.ClosedIn {
+					cli.Success(w, "Closed its %s workspace in session '%s'", m.Backend(), where)
+				}
+				if warning := mux.UncheckedWarning(report, target); warning != "" {
+					cli.Warning(w, "%s", warning)
+				}
+			} else if exists {
+				if err := m.Kill(target); err != nil {
+					cli.Warning(w, "Failed to kill session: %v", err)
+				} else {
+					cli.Success(w, "Killed session '%s'", target.Name)
+				}
 			}
 		}
 	}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/state"
 )
@@ -58,14 +59,15 @@ func TestParseHerdrContextRejectsEmpty(t *testing.T) {
 	}
 }
 
+// Real worktree.opened payload from herdr 0.9.1, captured with a probe plugin
+// (paths rewritten). herdr always sends the workspace object; the top-level
+// workspace_id appears only on worktree.removed.
+const herdrOpenedEventJSON = `{"event":"worktree_opened","data":{"type":"worktree_opened","workspace":{"workspace_id":"wH","number":8,"label":"grove-testing","focused":false,"pane_count":1,"tab_count":1,"active_tab_id":"wH:t1","agent_status":"unknown","worktree":{"repo_key":"/repos/grove/.git","repo_name":"grove","repo_root":"/repos/grove","checkout_path":"/repos/grove-testing","is_linked_worktree":true}},"worktree":{"path":"/repos/grove-testing","branch":"feat/x","is_bare":false,"is_detached":false,"is_prunable":false,"is_linked_worktree":true,"open_workspace_id":"wH","label":"grove"},"already_open":false}}`
+
 func TestParseHerdrEvent(t *testing.T) {
 	// herdr serializes the envelope's event field in snake_case even though
 	// manifests and HERDR_PLUGIN_EVENT use the dotted form.
-	raw := `{"event":"worktree_opened","data":{"type":"worktree_opened","workspace_id":"w2",
-"worktree":{"path":"/repos/grove-testing","branch":"feat/x","is_bare":false,"is_detached":false,
-"is_prunable":false,"is_linked_worktree":true,"label":"grove-testing"},"already_open":false}}`
-
-	got, err := parseHerdrEvent(raw)
+	got, err := parseHerdrEvent(herdrOpenedEventJSON)
 	if err != nil {
 		t.Fatalf("parseHerdrEvent() error = %v", err)
 	}
@@ -75,17 +77,24 @@ func TestParseHerdrEvent(t *testing.T) {
 	if got.CheckoutPath() != "/repos/grove-testing" {
 		t.Errorf("CheckoutPath() = %q, want /repos/grove-testing", got.CheckoutPath())
 	}
+	if got.WorkspaceID() != "wH" {
+		t.Errorf("WorkspaceID() = %q, want wH from data.workspace", got.WorkspaceID())
+	}
+	if got.RepoRoot() != "/repos/grove" {
+		t.Errorf("RepoRoot() = %q, want /repos/grove", got.RepoRoot())
+	}
 	if got.AlreadyOpen {
 		t.Error("AlreadyOpen = true, want false")
+	}
+	if got.Token(mux.HerdrTokenName) != "" {
+		t.Errorf("Token() = %q, want empty for a workspace with no tokens", got.Token(mux.HerdrTokenName))
 	}
 }
 
 func TestParseHerdrEventAlreadyOpen(t *testing.T) {
-	// Re-opening a workspace grove already knows about must be distinguishable,
-	// so the hook can stay quiet instead of nagging on every focus.
-	raw := `{"event":"worktree_opened","data":{"type":"worktree_opened","workspace_id":"w2",
-"worktree":{"path":"/repos/grove-testing","label":"grove-testing","is_bare":false,
-"is_detached":false,"is_prunable":false,"is_linked_worktree":true},"already_open":true}}`
+	// A re-open (grove's own `grove to`, or herdr's picker) must be
+	// distinguishable, so the hook raises its prompt only once.
+	raw := strings.Replace(herdrOpenedEventJSON, `"already_open":false`, `"already_open":true`, 1)
 
 	got, err := parseHerdrEvent(raw)
 	if err != nil {
@@ -93,6 +102,18 @@ func TestParseHerdrEventAlreadyOpen(t *testing.T) {
 	}
 	if !got.AlreadyOpen {
 		t.Error("AlreadyOpen = false, want true")
+	}
+}
+
+func TestParseHerdrEventReadsWorkspaceTokens(t *testing.T) {
+	raw := strings.Replace(herdrOpenedEventJSON, `"agent_status":"unknown",`, `"agent_status":"unknown","tokens":{"grove":"untracked"},`, 1)
+
+	got, err := parseHerdrEvent(raw)
+	if err != nil {
+		t.Fatalf("parseHerdrEvent() error = %v", err)
+	}
+	if got.Token(mux.HerdrTokenName) != mux.HerdrUntracked {
+		t.Errorf("Token() = %q, want %q", got.Token(mux.HerdrTokenName), mux.HerdrUntracked)
 	}
 }
 
@@ -216,6 +237,9 @@ func TestHerdrPluginManifestCommandsResolve(t *testing.T) {
 			On      string   `toml:"on"`
 			Command []string `toml:"command"`
 		} `toml:"events"`
+		Startup []struct {
+			Command []string `toml:"command"`
+		} `toml:"startup"`
 	}
 
 	if _, err := toml.DecodeFile(manifestPath, &manifest); err != nil {
@@ -235,6 +259,9 @@ func TestHerdrPluginManifestCommandsResolve(t *testing.T) {
 	}
 	for _, e := range manifest.Events {
 		entries = append(entries, entry{"event " + e.On, e.Command})
+	}
+	for i, st := range manifest.Startup {
+		entries = append(entries, entry{fmt.Sprintf("startup hook %d", i), st.Command})
 	}
 	if len(entries) == 0 {
 		t.Fatal("manifest declared no commands; the test is not looking at the right file")
@@ -282,10 +309,10 @@ func TestHerdrPluginManifestCommandsResolve(t *testing.T) {
 }
 
 func TestNormalizeHerdrEventName(t *testing.T) {
-	// Only the first separator is a dot. Verified against herdr 0.8.0: it
-	// accepts "pane.agent_status_changed" and rejects both
-	// "pane.agent.status.changed" and "pane_agent_status_changed" as unknown
-	// events. The old ReplaceAll mangled every multi-word name, in both
+	// Only the first separator is a dot. Verified against herdr 0.8.0 and
+	// 0.9.1: it recognizes "pane.agent_status_changed" and warns that both
+	// "pane.agent.status.changed" and "pane_agent_status_changed" are unknown
+	// events (whose hooks then never fire). The old ReplaceAll mangled every multi-word name, in both
 	// directions — the wire form and the already-dotted HERDR_PLUGIN_EVENT.
 	tests := []struct {
 		name string
@@ -528,5 +555,83 @@ func TestReconcileRemovedWorktreeIgnoresPartialPayload(t *testing.T) {
 				t.Errorf("reconcileRemovedWorktree() error = %v, want nil", err)
 			}
 		})
+	}
+}
+
+// fakeTokenReporter records sidebar-token reports.
+type fakeTokenReporter struct {
+	reports  []string // "workspace=value", value empty for a clear
+	sessions []mux.Session
+}
+
+func (f *fakeTokenReporter) Available() bool { return true }
+func (f *fakeTokenReporter) ReportToken(id, value string) error {
+	f.reports = append(f.reports, id+"="+value)
+	return nil
+}
+func (f *fakeTokenReporter) List() ([]mux.Session, error) { return f.sessions, nil }
+
+func openedEvent(t *testing.T, tokens string) *herdrEvent {
+	t.Helper()
+	raw := herdrOpenedEventJSON
+	if tokens != "" {
+		raw = strings.Replace(raw, `"agent_status":"unknown",`, `"agent_status":"unknown","tokens":`+tokens+`,`, 1)
+	}
+	ev, err := parseHerdrEvent(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ev
+}
+
+// The marker follows grove's state, and herdr is only called when the marker
+// is wrong — grove's own `grove to` re-opens tracked worktrees constantly.
+func TestSyncUntrackedToken(t *testing.T) {
+	cases := []struct {
+		name    string
+		tokens  string
+		tracked bool
+		want    []string
+	}{
+		{"untracked, unmarked: mark it", "", false, []string{"wH=untracked"}},
+		{"untracked, already marked: leave it", `{"grove":"untracked"}`, false, nil},
+		{"tracked, still marked: clear it", `{"grove":"untracked"}`, true, []string{"wH="}},
+		{"tracked, unmarked: leave it", "", true, nil},
+	}
+	for _, tc := range cases {
+		f := &fakeTokenReporter{}
+		syncUntrackedToken(cli.NewStderr(), f, openedEvent(t, tc.tokens), tc.tracked)
+		if strings.Join(f.reports, ",") != strings.Join(tc.want, ",") {
+			t.Errorf("%s: reports = %v, want %v", tc.name, f.reports, tc.want)
+		}
+	}
+}
+
+// After a herdr restart every token is gone; the startup hook marks each
+// untracked worktree of a grove project again, and nothing else.
+func TestMarkUntrackedWorkspaces(t *testing.T) {
+	repoRoot, _ := removalFixture(t)
+
+	// An untracked worktree of the same repository.
+	untracked := repoRoot + "-herdr-made"
+	add := exec.Command("git", "worktree", "add", "-q", "-b", "herdr-made", untracked)
+	add.Dir = repoRoot
+	if out, err := add.CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add: %v\n%s", err, out)
+	}
+	// A directory in no grove project at all.
+	stranger := t.TempDir()
+
+	f := &fakeTokenReporter{sessions: []mux.Session{
+		{ID: "w1", Path: repoRoot},                         // main checkout: always tracked
+		{ID: "w2", Path: untracked},                        // untracked: mark
+		{ID: "w3", Path: stranger},                         // not grove's business
+		{ID: "w4", Path: filepath.Join(untracked, "gone")}, // missing dir: skip
+		{ID: "w5"}, // no git provenance
+	}}
+	markUntrackedWorkspaces(cli.NewStderr(), f)
+
+	if strings.Join(f.reports, ",") != "w2=untracked" {
+		t.Errorf("reports = %v, want only w2=untracked", f.reports)
 	}
 }

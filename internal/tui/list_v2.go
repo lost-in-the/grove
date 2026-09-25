@@ -166,10 +166,10 @@ func renderBadgesV2Bg(item WorktreeItem, selected bool) string {
 	// Session badge last (fixed-width text, most frequently present), named
 	// after the backend actually driven — "tmux" over a herdr workspace was
 	// the abstraction leaking into the dashboard.
-	switch item.TmuxStatus {
-	case tmuxStatusAttached:
+	switch status := mux.Status(item.TmuxStatus); {
+	case status.Foreground():
 		parts = append(parts, withBg(Styles.TmuxBadgeActive).Render("⬢ "+sessionBadgeWord(&item)))
-	case tmuxStatusDetached:
+	case status.Background():
 		parts = append(parts, withBg(Styles.TmuxBadge).Render("⬡ "+sessionBadgeWord(&item)))
 	}
 

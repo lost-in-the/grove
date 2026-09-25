@@ -202,7 +202,7 @@ func deleteWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *conf
 			return worktreeDeletedMsg{name: name, deleteBranch: deleteBranch, err: err}
 		}
 
-		killTmuxSessionForWorktree(cfg, projectName, name)
+		killTmuxSessionForWorktree(cfg, projectName, name, wtPath)
 
 		if err := stateMgr.RemoveWorktree(name); err != nil {
 			tuilog.Printf("warning: failed to remove %q from state: %v", name, err)
@@ -228,20 +228,23 @@ func deleteWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *conf
 	}
 }
 
-func killTmuxSessionForWorktree(cfg *config.Config, projectName, name string) {
+func killTmuxSessionForWorktree(cfg *config.Config, projectName, name, wtPath string) {
 	m := muxFor(cfg)
 	if !m.Available() {
 		return
 	}
-	// The checkout is already gone by the time this runs, so the session can
-	// only be resolved by name.
-	target := mux.Target{Name: worktree.TmuxSessionName(projectName, name)}
+	// The checkout is already gone by the time this runs, so the ambient
+	// session resolves by name; the path still lets a backend with several
+	// independent servers (herdr's named sessions) find copies elsewhere.
+	target := mux.Target{Name: worktree.TmuxSessionName(projectName, name), Path: wtPath}
 	exists, err := m.Exists(target)
 	if err != nil {
 		tuilog.Printf("warning: failed to check session %q: %v", target.Name, err)
 		return
 	}
-	if !exists {
+	// Exists only answers for the server grove is talking to; a
+	// SessionLocator's Kill also closes copies in the others.
+	if _, everywhere := m.(mux.SessionLocator); !exists && !everywhere {
 		return
 	}
 	if err := m.Kill(target); err != nil {

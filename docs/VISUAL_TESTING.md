@@ -461,10 +461,14 @@ Set FontSize 14
 ## Herdr backend
 
 Session behavior under the herdr backend is covered by
-[`scripts/validate-herdr.sh`](../scripts/validate-herdr.sh) rather than golden
-files — it drives a live herdr server and asserts on real workspace state. See
+[`scripts/validate-herdr.sh`](../scripts/validate-herdr.sh) (`make test-herdr`)
+rather than golden files — it drives a live herdr server and asserts on real
+workspace state, and CI runs it against a pinned headless herdr. See
 [HERDR_INTEGRATION.md](HERDR_INTEGRATION.md).
 
-The TUI's agent badge (`blocked` / `working` / `done`) has no golden coverage
-yet: producing a non-`unknown` state needs a real coding agent running in a
-herdr pane.
+The dashboard's herdr rendering — agent badges (`blocked` / `working` / `done`)
+and the filled/hollow (`⬢`/`⬡`) herdr session badges for active/open
+workspaces — is pinned by `TestGolden_Dashboard_Herdr`; the detail row's
+"active workspace" / "open workspace" wording by a unit test
+(`TestRenderTmuxValueHerdrStatuses`). The live suite drives agent states with
+`herdr pane report-agent`, so neither needs a real coding agent.

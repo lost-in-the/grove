@@ -1,15 +1,17 @@
 package mux
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
-	"strconv"
+	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/lost-in-the/grove/internal/cmdexec"
 )
@@ -28,12 +30,32 @@ type HerdrBackend struct {
 	// run executes a herdr invocation and returns its output. Injectable so
 	// the command contract can be tested without a herdr server.
 	run func(args []string) ([]byte, error)
-	// attach runs the blocking interactive client.
-	attach func() error
+	// peer runs a herdr invocation against a session other than the ambient
+	// one, under the short cmdexec.HerdrPeer budget: herdr reports a wedged
+	// server as running, and it must not stall a command that only needed to
+	// glance at it. The per-session siblings built by inSession run with it.
+	peer func(args []string) ([]byte, error)
+	// worktrees lists a repository's live git worktrees (main checkout
+	// first). Only consulted to tell a renamed worktree's workspace apart from
+	// the one a target owns — see movedOn.
+	worktrees func(repo string) ([]string, error)
+	// attach runs the blocking interactive client with the given launch
+	// arguments.
+	attach func(args []string) error
 	// available reports whether the herdr binary is installed.
 	available func() bool
 	// env reads an environment variable.
 	env func(string) string
+
+	// session pins every call to one named herdr session. Empty means the
+	// ambient one — whatever the CLI resolves from HERDR_SOCKET_PATH (set in
+	// every pane), HERDR_SESSION, or the default. Only the per-session
+	// siblings built by inSession set it.
+	session string
+	// located records targets whose existing workspace Ensure found in
+	// another session, keyed by cleaned checkout path. Attach and AttachHint
+	// follow it there instead of the ambient session.
+	located map[string]herdrLocation
 
 	// Read cache. Every herdr call is a subprocess spawn, and one `grove to`
 	// used to spawn ten of them — four identical `workspace list` (Exists,
@@ -47,19 +69,91 @@ type HerdrBackend struct {
 	sessionCache []Session
 	sessionValid bool
 	paneCache    map[string][]herdrPane
+	// others caches the running sessions other than the ambient one; nil
+	// means not fetched yet.
+	others *[]string
+	// worktreeCache holds worktrees() results per repository.
+	worktreeCache map[string][]string
+}
+
+// herdrLocation is where a target's workspace lives when that is not the
+// ambient session.
+type herdrLocation struct {
+	session     string
+	workspaceID string
 }
 
 // NewHerdr returns the herdr backend wired to the real CLI.
 func NewHerdr() *HerdrBackend {
 	return &HerdrBackend{
 		run:       runHerdr,
+		peer:      runHerdrPeer,
 		attach:    attachHerdr,
 		available: herdrAvailable,
 		env:       os.Getenv,
+		worktrees: gitWorktrees,
 	}
 }
 
-var _ Multiplexer = (*HerdrBackend)(nil)
+var (
+	_ Multiplexer    = (*HerdrBackend)(nil)
+	_ SessionLocator = (*HerdrBackend)(nil)
+	_ Adopter        = (*HerdrBackend)(nil)
+	_ AttachPreparer = (*HerdrBackend)(nil)
+)
+
+// The sidebar marker grove's herdr plugin keeps on workspaces whose worktree
+// grove does not track. herdr shows a workspace token only where the user's
+// own `[ui.sidebar.spaces]` rows name it (`$grove`) — reporters supply values,
+// styling stays the user's — and drops every token when its server restarts,
+// so the plugin's startup hook reports them again.
+const (
+	// HerdrTokenName is the custom workspace token grove reports.
+	HerdrTokenName = "grove"
+	// HerdrUntracked is its value on a worktree grove does not track.
+	HerdrUntracked = "untracked"
+	// herdrTokenSource is the one reporter id grove uses. herdr caps how
+	// many distinct sources a workspace sees over its lifetime, so it must
+	// never vary.
+	herdrTokenSource = "lost-in-the.grove"
+)
+
+// ReportToken sets grove's sidebar token on a workspace, or clears it when
+// value is empty.
+func (b *HerdrBackend) ReportToken(workspaceID, value string) error {
+	args := []string{"workspace", "report-metadata", workspaceID, "--source", herdrTokenSource}
+	if value == "" {
+		args = append(args, "--clear-token", HerdrTokenName)
+	} else {
+		args = append(args, "--token", HerdrTokenName+"="+value)
+	}
+	_, err := b.call(args)
+	return err
+}
+
+// Adopted brings the workspace of a worktree grove just adopted into line: it
+// takes grove's canonical `{project}-{name}` label instead of the one herdr
+// chose (the branch name, for a worktree created in herdr's UI), a generated
+// tab label becomes the worktree's short name, and the untracked marker goes.
+// A worktree with no workspace needs nothing. The lookup is by checkout path
+// only — the canonical label is what is being applied, not a key.
+func (b *HerdrBackend) Adopted(t Target) error {
+	sessions, err := b.List()
+	if err != nil {
+		if errServerUnusable(err) {
+			return nil
+		}
+		return err
+	}
+	s, ok := NewIndex(sessions).Lookup(Target{Path: t.Path})
+	if !ok {
+		return nil
+	}
+	if err := b.Rename(Target{Path: t.Path, Name: s.Name}, t); err != nil {
+		return err
+	}
+	return b.ReportToken(s.ID, "")
+}
 
 // Backend returns BackendHerdr.
 func (b *HerdrBackend) Backend() Backend { return BackendHerdr }
@@ -76,7 +170,23 @@ func (b *HerdrBackend) Inside() bool { return b.env("HERDR_ENV") == "1" }
 // same checkout and re-applies the label — so this needs no existence check.
 // It never creates a checkout: grove owns worktree lifecycle, and herdr's own
 // `worktree create` would impose its own naming and placement.
+//
+// The repository's own checkout goes through the same call. herdr answers it
+// by adopting — or, if it has none yet, creating — the repository's parent
+// workspace, the one its sidebar groups the project's worktrees under. That is
+// herdr's own bookkeeping, the same workspace it materializes as a side effect
+// of opening any linked worktree; grove never calls `workspace create`.
+//
+// A workspace another named session already has for the checkout is adopted
+// rather than duplicated — see adoptElsewhere.
 func (b *HerdrBackend) Ensure(t Target) error {
+	if err := b.refuseMovedOn(t); err != nil {
+		return err
+	}
+	if loc, ok := b.locateElsewhere(t); ok {
+		return b.adoptElsewhere(t, loc)
+	}
+
 	opened, err := b.open(t)
 	if err == nil {
 		b.labelTab(opened.Tab, t)
@@ -84,24 +194,36 @@ func (b *HerdrBackend) Ensure(t Target) error {
 	}
 
 	if errHasCode(err, "worktree_not_found", "not_git_worktree") {
-		return b.mainCheckout(t)
+		return b.adoptUnopenable(t)
 	}
-	if ErrServerNotRunning(err) {
-		return noServerUnmanaged(err)
+	if errServerUnusable(err) {
+		return serverUnmanaged(err)
 	}
 	return err
 }
 
-// noServerUnmanaged maps a dead-server failure onto errUnmanaged: with no
-// herdr server there is no session to manage, and callers already know how to
-// degrade an unmanaged target to a plain directory switch. Surfacing it as a
-// hard error instead would make every `grove to` fail outright — the exact
-// opposite of what `grove doctor` promises ("grove will fall back to plain
-// directory switching"). The tmux backend behaves the same way: a dead tmux
-// server reads as "no sessions", never as a fatal switch error.
-func noServerUnmanaged(err error) error {
-	return fmt.Errorf("%w: no herdr server is running (%v)", errUnmanaged, err)
+// serverUnmanaged maps an unusable server onto errUnmanaged: with no herdr
+// server to talk to there is no session to manage, and callers already know
+// how to degrade an unmanaged target to a plain directory switch. Surfacing it
+// as a hard error instead would make every `grove to` fail outright — the
+// exact opposite of what `grove doctor` promises ("grove will fall back to
+// plain directory switching"). The tmux backend behaves the same way: a dead
+// tmux server reads as "no sessions", never as a fatal switch error.
+//
+// The original error stays in the chain so callers can tell a stopped server
+// (expected, silent) from a protocol mismatch (worth a hint — it follows every
+// herdr upgrade until the old server is restarted).
+func serverUnmanaged(err error) error {
+	return fmt.Errorf("%w: herdr server unavailable: %w", errUnmanaged, err)
 }
+
+// herdrBusyRetryDelay is how long open waits before retrying a `worktree_busy`
+// refusal. herdr runs worktree discovery on a small pool of background slots
+// and turns a request away, rather than queueing it, when every slot is taken
+// ("too many worktree checks are pending; retry shortly"). One short retry
+// rides out a burst without eating much of the 500ms command budget. A var so
+// tests need not sleep.
+var herdrBusyRetryDelay = 150 * time.Millisecond
 
 // open runs `worktree open` and decodes the response, which carries the
 // workspace, its tab, and the root pane — everything a caller needs without a
@@ -114,6 +236,10 @@ func (b *HerdrBackend) open(t Target) (herdrOpened, error) {
 		return opened, err
 	}
 	raw, err := b.call(args)
+	if errHasCode(err, "worktree_busy") {
+		time.Sleep(herdrBusyRetryDelay)
+		raw, err = b.call(args)
+	}
 	if err != nil {
 		return opened, err
 	}
@@ -149,17 +275,16 @@ func (b *HerdrBackend) renameTab(tabID, name string) {
 	_, _ = b.call([]string{"tab", "rename", tabID, name})
 }
 
-// mainCheckout handles a target herdr will not "open" because it is not a
-// linked worktree — in practice the repository's own checkout.
+// adoptUnopenable handles a target herdr refuses to open as a worktree — a
+// path its git worktree list does not contain (`worktree_not_found`), or one
+// outside any git checkout (`not_git_worktree`). The repository's own checkout
+// is not one of these; herdr opens that as the parent workspace.
 //
-// grove does not create a workspace here. herdr already materializes one for
-// the repository when it opens any linked worktree, and that workspace is what
-// its sidebar groups the worktrees under; creating and owning it from grove
-// would reach past worktree lifecycle into territory herdr and the user's
-// agents manage. So: adopt the repository workspace if it exists, and
-// otherwise report the target as unmanaged so the caller just changes
+// grove does not create a workspace for such a path: nothing herdr recognizes
+// would group or track it. So adopt a workspace that already covers the path,
+// and otherwise report the target unmanaged so the caller just changes
 // directory.
-func (b *HerdrBackend) mainCheckout(t Target) error {
+func (b *HerdrBackend) adoptUnopenable(t Target) error {
 	exists, err := b.Exists(t)
 	if err != nil {
 		return err
@@ -167,7 +292,7 @@ func (b *HerdrBackend) mainCheckout(t Target) error {
 	if exists {
 		return nil
 	}
-	return fmt.Errorf("%w: %s is a repository checkout, not a linked worktree", errUnmanaged, t.Path)
+	return fmt.Errorf("%w: herdr does not recognize %s as a git worktree", errUnmanaged, t.Path)
 }
 
 // EnsureWithCommand adopts the checkout, then runs command in its root pane
@@ -178,18 +303,27 @@ func (b *HerdrBackend) EnsureWithCommand(t Target, command string) error {
 		return b.Ensure(t)
 	}
 
+	if err := b.refuseMovedOn(t); err != nil {
+		return err
+	}
+	// An existing workspace in another session is an existing session: adopt
+	// it and leave its panes alone, as for an already-open one below.
+	if loc, ok := b.locateElsewhere(t); ok {
+		return b.adoptElsewhere(t, loc)
+	}
+
 	opened, err := b.open(t)
 	if err != nil {
-		if ErrServerNotRunning(err) {
-			return noServerUnmanaged(err)
+		if errServerUnusable(err) {
+			return serverUnmanaged(err)
 		}
 		if !errHasCode(err, "worktree_not_found", "not_git_worktree") {
 			return err
 		}
-		// Repository checkout: grove does not create a workspace for it. If
-		// herdr already has one, run the command in its pane; otherwise the
-		// target is unmanaged and there is no pane to run anything in.
-		if err := b.mainCheckout(t); err != nil {
+		// A path herdr will not open: if a workspace already covers it, run
+		// the command in its pane; otherwise the target is unmanaged and there
+		// is no pane to run anything in.
+		if err := b.adoptUnopenable(t); err != nil {
 			return err
 		}
 		pane, perr := b.rootPane(t)
@@ -207,20 +341,29 @@ func (b *HerdrBackend) EnsureWithCommand(t Target, command string) error {
 
 // Exists reports whether a herdr workspace already covers the checkout.
 //
-// A dead server means no workspace exists, not that the question failed:
-// callers treat an Exists error as fatal (it aborts `grove to` before the cd
-// directive), while "false" routes them through Ensure, which reports the
-// target unmanaged and lets the plain directory switch proceed.
+// An unusable server — stopped, or speaking a different protocol than the
+// CLI after an upgrade — means no workspace is reachable, not that the
+// question failed: callers treat an Exists error as fatal (it aborts `grove
+// to` before the cd directive), while "false" routes them through Ensure,
+// which reports the target unmanaged and lets the plain directory switch
+// proceed.
+//
+// A workspace that matches only because herdr's record of it went stale — it
+// now serves a renamed worktree (movedOn) — does not count: treating it as
+// the target's would `cd` and focus another worktree's shell.
 func (b *HerdrBackend) Exists(t Target) (bool, error) {
 	sessions, err := b.List()
 	if err != nil {
-		if ErrServerNotRunning(err) {
+		if errServerUnusable(err) {
 			return false, nil
 		}
 		return false, err
 	}
-	_, ok := NewIndex(sessions).Lookup(t)
-	return ok, nil
+	s, ok := NewIndex(sessions).Lookup(t)
+	if !ok {
+		return false, nil
+	}
+	return !b.movedOn(b, s, t), nil
 }
 
 // List returns every herdr workspace, mapped onto grove's session model.
@@ -281,23 +424,61 @@ func (b *HerdrBackend) Current() (string, error) {
 }
 
 // AttachHint returns the command that attaches a herdr client. herdr has no
-// per-workspace launch flag, so the hint is the bare client — grove has
-// already focused the workspace it should land on.
-func (b *HerdrBackend) AttachHint(Target) string { return herdrBinary }
+// per-workspace launch flag, so the hint is the bare client — plus the session
+// to attach to when Ensure found the target's workspace in another one. It
+// only lands on the target once PrepareAttach has focused it there.
+func (b *HerdrBackend) AttachHint(t Target) string {
+	if loc, ok := b.locatedFor(t); ok {
+		return herdrBinary + " --session " + loc.session
+	}
+	return herdrBinary
+}
+
+// PrepareAttach focuses the target so that a client started afterwards — by
+// the user running AttachHint — lands on it: a new client starts on the
+// server's focused workspace (verified on 0.9.1).
+func (b *HerdrBackend) PrepareAttach(t Target) error { return b.Switch(t) }
 
 // Attach focuses the target workspace, then starts the interactive client.
 //
 // herdr's launch flags carry no workspace selector, so focus must happen
 // first — attaching first would land the user wherever they last were.
+// Focusing moves every client attached to that session, and a client that
+// attaches afterwards starts on the focused workspace (verified on 0.9.1).
 func (b *HerdrBackend) Attach(t Target) error {
-	if err := b.focus(t); err != nil {
+	if err := b.Switch(t); err != nil {
 		return err
 	}
-	return b.attach()
+	if loc, ok := b.locatedFor(t); ok {
+		return b.attach([]string{"--session", loc.session})
+	}
+	return b.attach(nil)
 }
 
 // Switch focuses the target workspace in the running client.
-func (b *HerdrBackend) Switch(t Target) error { return b.focus(t) }
+func (b *HerdrBackend) Switch(t Target) error {
+	if o := b.owner(t); o != b {
+		return o.Switch(t)
+	}
+	return b.focus(t)
+}
+
+// owner returns the backend addressing the session that holds t's workspace:
+// a per-session sibling for a target Ensure adopted from another session, b
+// itself otherwise. The sibling resolves t by path in its own session.
+func (b *HerdrBackend) owner(t Target) *HerdrBackend {
+	if loc, ok := b.locatedFor(t); ok {
+		return b.inSession(loc.session)
+	}
+	return b
+}
+
+// LocatedIn names the other session whose workspace Ensure adopted for t, or
+// "" when t's workspace is (or would be) in the ambient session.
+func (b *HerdrBackend) LocatedIn(t Target) string {
+	loc, _ := b.locatedFor(t)
+	return loc.session
+}
 
 // Rename relabels the workspace. The checkout path is the identity, so this is
 // cosmetic — but it keeps herdr's sidebar aligned with grove's naming.
@@ -336,20 +517,104 @@ func (b *HerdrBackend) tabs(workspaceID string) []herdrTab {
 	return listed.Tabs
 }
 
-// Kill closes the herdr workspace, leaving the checkout on disk.
+// Kill closes the target's herdr workspace — in the ambient session and in
+// every other running named session that has one — leaving the checkout on
+// disk. See KillEverywhere; sessions it could not check come back as an
+// error here, since a plain Kill has no other way to say so.
+func (b *HerdrBackend) Kill(t Target) error {
+	report, err := b.KillEverywhere(t)
+	if err == nil && len(report.Unchecked) > 0 {
+		err = uncheckedError(report.Unchecked, t)
+	}
+	return err
+}
+
+// uncheckedError says which sessions a removal could not check.
+func uncheckedError(sessions []string, t Target) error {
+	return fmt.Errorf("herdr session(s) %s did not answer within %v; a workspace there may still point at %s",
+		strings.Join(sessions, ", "), cmdexec.HerdrPeer, t.Path)
+}
+
+// UncheckedWarning describes a KillReport's unchecked sessions for a user, or
+// returns "" when every session was checked.
+func UncheckedWarning(report KillReport, t Target) string {
+	if len(report.Unchecked) == 0 {
+		return ""
+	}
+	return uncheckedError(report.Unchecked, t).Error()
+}
+
+// KillEverywhere closes the target's workspace in the ambient session and in
+// every other running named session, and names the other sessions it closed
+// one in.
 //
 // It deliberately does not use `herdr worktree remove`, which shells out to
 // `git worktree remove` and would bypass grove's protection rules. Removing a
 // target that has no workspace is a no-op, mirroring the tmux backend.
-func (b *HerdrBackend) Kill(t Target) error {
-	id, err := b.resolve(t)
+//
+// herdr sessions are independent servers, and nothing stops the same checkout
+// being open in two of them; closing only the ambient copy left the other as
+// an orphan pointing at a deleted directory. Other sessions are matched on
+// checkout path only — by the time grove removes a worktree its directory is
+// usually gone, and a label match in a session grove did not open could close
+// an unrelated workspace — and a match that movedOn says belongs to another
+// worktree is left alone. They are queried concurrently under the short peer
+// budget; one that does not answer (a wedged server still looks "running") is
+// reported as Unchecked rather than waited on, since its copy may remain. A
+// stopped session cannot be reached at all, and herdr drops such a
+// workspace's worktree link itself when it next starts.
+func (b *HerdrBackend) KillEverywhere(t Target) (KillReport, error) {
+	var report KillReport
+	var errs []error
+	if err := b.killAmbient(t); err != nil && !errServerUnusable(err) {
+		// The ambient server being down says nothing about the others.
+		errs = append(errs, err)
+	}
+
+	for _, peer := range b.peerListings() {
+		if peer.err != nil {
+			if !ErrServerNotRunning(peer.err) {
+				report.Unchecked = append(report.Unchecked, peer.name)
+			}
+			continue
+		}
+		for _, s := range peer.sessions {
+			if !sameGonePath(s.Path, t.Path) || b.movedOn(peer.sib, s, t) {
+				continue
+			}
+			if _, err := peer.sib.call([]string{"workspace", "close", s.ID}); err != nil {
+				errs = append(errs, fmt.Errorf("close workspace %s in herdr session %q: %w", s.ID, peer.name, err))
+				continue
+			}
+			report.ClosedIn = append(report.ClosedIn, peer.name)
+		}
+	}
+	return report, errors.Join(errs...)
+}
+
+// killAmbient closes the target's workspace in the ambient session.
+func (b *HerdrBackend) killAmbient(t Target) error {
+	s, err := b.resolveSession(t)
 	if err != nil {
 		if ErrNoSession(err) {
 			return nil
 		}
 		return err
 	}
-	_, err = b.call([]string{"workspace", "close", id})
+	// The removed worktree's checkout is gone, so the lookup above fell back
+	// to the label — which a renamed worktree's workspace can carry, after
+	// herdr's own `worktree open` reused it for a new checkout at the old path.
+	if b.movedOn(b, s, t) {
+		return nil
+	}
+	_, err = b.call([]string{"workspace", "close", s.ID})
+	if errHasCode(err, "workspace_group_close_required") {
+		// Since herdr 0.9.0, closing a repository's parent workspace while
+		// worktree workspaces are open under it needs --group, which would
+		// close every one of them. grove never asks for that — each worktree's
+		// session is closed on its own — so name what is in the way instead.
+		return fmt.Errorf("herdr workspace %s still has worktree workspaces open under it; close those first: %w", s.ID, err)
+	}
 	return err
 }
 
@@ -359,6 +624,9 @@ func (b *HerdrBackend) Kill(t Target) error {
 // and `pane process-info` names the foreground process so IsShell can match
 // the tmux backend's semantics. Only the drift check reaches this path.
 func (b *HerdrBackend) PaneInfo(t Target) (*PaneInfo, error) {
+	if o := b.owner(t); o != b {
+		return o.PaneInfo(t)
+	}
 	id, err := b.resolve(t)
 	if err != nil {
 		return nil, err
@@ -442,6 +710,9 @@ func Notify(title, body string) (string, error) {
 
 // SendCommand runs a command line in the workspace's focused pane.
 func (b *HerdrBackend) SendCommand(t Target, command string) error {
+	if o := b.owner(t); o != b {
+		return o.SendCommand(t, command)
+	}
 	pane, err := b.rootPane(t)
 	if err != nil {
 		return err
@@ -475,6 +746,317 @@ func (b *HerdrBackend) openArgs(t Target) ([]string, error) {
 	return args, nil
 }
 
+// --- named sessions ---
+//
+// A herdr session is its own server: its own socket, state, and workspaces,
+// with no awareness of the others (verified on 0.9.1 — `worktree open` checks
+// only its own server for an existing workspace). So the same checkout opened
+// under two sessions gets two workspaces, and closing one leaves the other
+// pointing at whatever grove later deletes. grove talks to the ambient session
+// and looks across the others only on the two paths where duplicates are made
+// or orphaned: opening a workspace the ambient session lacks, and removal.
+
+// herdrSessionInfo is one entry of `herdr session list --json`.
+type herdrSessionInfo struct {
+	Name       string `json:"name"`
+	Default    bool   `json:"default"`
+	Running    bool   `json:"running"`
+	SocketPath string `json:"socket_path"`
+}
+
+// inSession returns a backend that addresses the named session, sharing this
+// one's process plumbing but none of its caches. Its calls run under the short
+// peer budget.
+func (b *HerdrBackend) inSession(name string) *HerdrBackend {
+	return &HerdrBackend{
+		run: b.peer, peer: b.peer, attach: b.attach, available: b.available,
+		env: b.env, worktrees: b.worktrees, session: name,
+	}
+}
+
+// peerListing is one other session's workspaces, or why they are unknown.
+type peerListing struct {
+	name     string
+	sib      *HerdrBackend
+	sessions []Session
+	err      error
+}
+
+// peerListings lists every other running session's workspaces, concurrently:
+// each call is bounded by the peer budget, and running them side by side keeps
+// the whole sweep inside one budget however many sessions there are. Results
+// come back in otherSessions order, so matching stays deterministic.
+func (b *HerdrBackend) peerListings() []peerListing {
+	names := b.otherSessions()
+	out := make([]peerListing, len(names))
+	var wg sync.WaitGroup
+	for i, name := range names {
+		wg.Add(1)
+		go func(i int, name string) {
+			defer wg.Done()
+			sib := b.inSession(name)
+			sessions, err := sib.List()
+			out[i] = peerListing{name: name, sib: sib, sessions: sessions, err: err}
+		}(i, name)
+	}
+	wg.Wait()
+	return out
+}
+
+// otherSessions lists the running herdr sessions other than the ambient one.
+//
+// `herdr session list --json` reads the sessions directory and probes each
+// socket without sending a request, so it is one cheap process even with many
+// sessions (it prints bare JSON, not an API envelope). Any failure yields no
+// sessions: looking elsewhere is an improvement over the ambient-only
+// behavior, never a reason to fail the command.
+func (b *HerdrBackend) otherSessions() []string {
+	b.mu.Lock()
+	if b.others != nil {
+		others := *b.others
+		b.mu.Unlock()
+		return others
+	}
+	b.mu.Unlock()
+
+	var others []string
+	if out, err := b.peer([]string{"session", "list", "--json"}); err == nil {
+		var listed struct {
+			Sessions []herdrSessionInfo `json:"sessions"`
+		}
+		if json.Unmarshal(bytes.TrimSpace(out), &listed) == nil {
+			ambient := b.ambientSession(listed.Sessions)
+			for _, s := range listed.Sessions {
+				if s.Running && s.Name != "" && s.Name != ambient {
+					others = append(others, s.Name)
+				}
+			}
+		}
+	}
+
+	b.mu.Lock()
+	b.others = &others
+	b.mu.Unlock()
+	return others
+}
+
+// ambientSession names the session a bare herdr call reaches, following the
+// CLI's own precedence: HERDR_SOCKET_PATH (every pane sets it to its own
+// server, and it outranks HERDR_SESSION), then HERDR_SESSION, then the
+// default session. Returns "" for a socket no listed session owns.
+func (b *HerdrBackend) ambientSession(sessions []herdrSessionInfo) string {
+	if b.session != "" {
+		return b.session
+	}
+	if sock := b.env("HERDR_SOCKET_PATH"); sock != "" {
+		for _, s := range sessions {
+			if s.SocketPath != "" && filepath.Clean(s.SocketPath) == filepath.Clean(sock) {
+				return s.Name
+			}
+		}
+		return ""
+	}
+	if name := b.env("HERDR_SESSION"); name != "" {
+		return name
+	}
+	for _, s := range sessions {
+		if s.Default {
+			return s.Name
+		}
+	}
+	return "default"
+}
+
+// locateElsewhere finds the target's workspace in another running session,
+// but only when the ambient session has none — the one case where opening it
+// here would make a duplicate. The lookup is by checkout path alone: a label
+// is not proof of identity in a session grove may never have touched. A match
+// whose panes show it serving another worktree (movedOn) is not the target's.
+// A session that does not answer within the peer budget is skipped.
+func (b *HerdrBackend) locateElsewhere(t Target) (herdrLocation, bool) {
+	if t.Path == "" {
+		return herdrLocation{}, false
+	}
+	if exists, err := b.Exists(t); err != nil || exists {
+		return herdrLocation{}, false
+	}
+	for _, peer := range b.peerListings() {
+		if peer.err != nil {
+			continue
+		}
+		s, ok := NewIndex(peer.sessions).Lookup(Target{Path: t.Path})
+		if !ok || b.movedOn(peer.sib, s, t) {
+			continue
+		}
+		return herdrLocation{session: peer.name, workspaceID: s.ID}, true
+	}
+	return herdrLocation{}, false
+}
+
+// refuseMovedOn declines a target whose checkout path herdr still associates
+// with a renamed worktree's workspace. herdr's `worktree open` matches on its
+// recorded checkout, so it would hand that workspace over — and re-label it —
+// as the target's, taking another worktree's shells and agents with it. There
+// is no way to make herdr open a second workspace for the same path, so the
+// target is reported unmanaged, with a hint naming what is in the way.
+func (b *HerdrBackend) refuseMovedOn(t Target) error {
+	if t.Path == "" {
+		return nil
+	}
+	sessions, err := b.List()
+	if err != nil {
+		return nil // Ensure's own call reports it
+	}
+	s, ok := NewIndex(sessions).Lookup(Target{Path: t.Path})
+	if !ok {
+		return nil
+	}
+	tree, moved := b.servedWorktree(b, s, t)
+	if !moved {
+		return nil
+	}
+	return fmt.Errorf("%w: %w", errUnmanaged, &movedOnError{name: t.DisplayName(), workspaceID: s.ID, tree: tree})
+}
+
+// movedOnError says the workspace herdr associates with a target's path now
+// serves another worktree.
+type movedOnError struct {
+	name        string
+	workspaceID string
+	tree        string
+}
+
+func (e *movedOnError) Error() string {
+	return fmt.Sprintf("herdr's workspace %s for '%s' still belongs to the worktree at %s (renamed from this path)", e.workspaceID, e.name, e.tree)
+}
+
+// movedOn reports whether workspace s — matched to t by its recorded checkout
+// path or its label — actually serves a different worktree now.
+//
+// herdr records a workspace's checkout when it opens and never updates it, so
+// after `grove rename a b` the workspace still claims a's path; when a new
+// worktree later takes that path, herdr's `worktree open` and grove's lookups
+// both match the renamed worktree's workspace. Its panes give it away: a
+// process's working directory follows a directory rename, so they sit in b.
+// A workspace with a pane inside another live worktree of the same repository
+// belongs to that worktree, and must be neither adopted nor closed for t. A
+// pane that merely wandered off (`cd /tmp`, or into the main checkout) does
+// not count, so an ordinary workspace is never mistaken for a moved one.
+//
+// It costs one `pane list` for the candidate, plus one `git worktree list` per
+// repository only when a pane sits outside t.
+func (b *HerdrBackend) movedOn(owner *HerdrBackend, s Session, t Target) bool {
+	_, moved := b.servedWorktree(owner, s, t)
+	return moved
+}
+
+// servedWorktree is movedOn, also naming the worktree the workspace serves.
+func (b *HerdrBackend) servedWorktree(owner *HerdrBackend, s Session, t Target) (string, bool) {
+	panes, err := owner.paneList(s.ID)
+	if err != nil {
+		return "", false
+	}
+	var away []string
+	for _, p := range panes {
+		cwd := p.cwd()
+		if cwd == "" || !isExistingDir(cwd) || within(cwd, t.Path) {
+			continue
+		}
+		away = append(away, cwd)
+	}
+	if len(away) == 0 {
+		return "", false
+	}
+	repo := s.Repo
+	if repo == "" {
+		repo = t.Repo
+	}
+	if repo == "" {
+		return "", false
+	}
+	trees := b.repoWorktrees(repo)
+	for _, cwd := range away {
+		for i, tree := range trees {
+			// trees[0] is the main checkout: a pane there is not evidence of
+			// a renamed worktree, which is always a linked one.
+			if i == 0 || within(tree, t.Path) {
+				continue
+			}
+			if within(cwd, tree) {
+				return tree, true
+			}
+		}
+	}
+	return "", false
+}
+
+// repoWorktrees returns a repository's live worktrees, main checkout first,
+// cached for the backend's lifetime. A failure yields none, which movedOn
+// reads as "no evidence the workspace moved on".
+func (b *HerdrBackend) repoWorktrees(repo string) []string {
+	b.mu.Lock()
+	if trees, ok := b.worktreeCache[repo]; ok {
+		b.mu.Unlock()
+		return trees
+	}
+	b.mu.Unlock()
+
+	trees, err := b.worktrees(repo)
+	if err != nil {
+		trees = nil
+	}
+	b.mu.Lock()
+	if b.worktreeCache == nil {
+		b.worktreeCache = map[string][]string{}
+	}
+	b.worktreeCache[repo] = trees
+	b.mu.Unlock()
+	return trees
+}
+
+// adoptElsewhere settles a target whose workspace lives in another session.
+//
+// Outside herdr, that workspace is simply the target's session: remember it,
+// so Attach focuses it there and attaches that session's client. Inside a
+// herdr pane there is no way to move the user's client to another session from
+// the CLI (a nested attach is refused by design), and opening a second
+// workspace here is the duplicate this exists to prevent — so report the
+// target unmanaged, with a hint naming where it is open.
+func (b *HerdrBackend) adoptElsewhere(t Target, loc herdrLocation) error {
+	if b.Inside() {
+		return fmt.Errorf("%w: %w", errUnmanaged, &openElsewhereError{name: t.DisplayName(), session: loc.session})
+	}
+	b.mu.Lock()
+	if b.located == nil {
+		b.located = map[string]herdrLocation{}
+	}
+	b.located[filepath.Clean(t.Path)] = loc
+	b.mu.Unlock()
+	return nil
+}
+
+// locatedFor returns where Ensure found the target's workspace, when that was
+// another session.
+func (b *HerdrBackend) locatedFor(t Target) (herdrLocation, bool) {
+	if t.Path == "" {
+		return herdrLocation{}, false
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	loc, ok := b.located[filepath.Clean(t.Path)]
+	return loc, ok
+}
+
+// openElsewhereError says a target is already open in another herdr session.
+type openElsewhereError struct {
+	name    string
+	session string
+}
+
+func (e *openElsewhereError) Error() string {
+	return fmt.Sprintf("'%s' is already open in herdr session %q", e.name, e.session)
+}
+
 func (b *HerdrBackend) focus(t Target) error {
 	id, err := b.resolve(t)
 	if err != nil {
@@ -486,15 +1068,21 @@ func (b *HerdrBackend) focus(t Target) error {
 
 // resolve maps a target to herdr's opaque workspace id via the checkout path.
 func (b *HerdrBackend) resolve(t Target) (string, error) {
+	s, err := b.resolveSession(t)
+	return s.ID, err
+}
+
+// resolveSession maps a target to its workspace, by checkout path then label.
+func (b *HerdrBackend) resolveSession(t Target) (Session, error) {
 	sessions, err := b.List()
 	if err != nil {
-		return "", err
+		return Session{}, err
 	}
 	s, ok := NewIndex(sessions).Lookup(t)
 	if !ok {
-		return "", fmt.Errorf("%w: %s", errNoSession, t.Path)
+		return Session{}, fmt.Errorf("%w: %s", errNoSession, t.Path)
 	}
-	return s.ID, nil
+	return s, nil
 }
 
 func (b *HerdrBackend) rootPane(t Target) (string, error) {
@@ -555,14 +1143,21 @@ func (b *HerdrBackend) foregroundCommand(paneID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var info struct {
-		ForegroundProcesses []struct {
-			Name string `json:"name"`
-		} `json:"foreground_processes"`
+	// The process list sits one level down, under process_info — verified
+	// against herdr 0.8.0 and 0.9.1. Reading it from the top level decodes
+	// cleanly into an empty list, which silently made every pane look like a
+	// non-shell and disabled drift correction under herdr.
+	var result struct {
+		ProcessInfo struct {
+			ForegroundProcesses []struct {
+				Name string `json:"name"`
+			} `json:"foreground_processes"`
+		} `json:"process_info"`
 	}
-	if err := json.Unmarshal(raw, &info); err != nil {
+	if err := json.Unmarshal(raw, &result); err != nil {
 		return "", err
 	}
+	info := result.ProcessInfo
 	if len(info.ForegroundProcesses) == 0 {
 		return "", nil
 	}
@@ -588,7 +1183,7 @@ func (b *HerdrBackend) call(args []string) (json.RawMessage, error) {
 		b.mu.Unlock()
 	}
 
-	out, runErr := b.run(args)
+	out, runErr := b.run(b.sessionArgs(args))
 
 	// herdr prints a JSON envelope on both success and failure, and the error
 	// body carries an actionable code — prefer it over the process exit status.
@@ -604,14 +1199,33 @@ func (b *HerdrBackend) call(args []string) (json.RawMessage, error) {
 	if runErr != nil {
 		return nil, fmt.Errorf("herdr %s: %w", strings.Join(args, " "), runErr)
 	}
+	// herdr's acknowledgement-only verbs — `pane run` is the one grove uses —
+	// print nothing at all on success and exit 0; only their failures carry an
+	// envelope. Treating that silence as "unexpected output" made every
+	// `pane run` report failure after the command had already run. Callers
+	// that expect a result still fail, at decode time, on the empty payload.
+	if len(bytes.TrimSpace(out)) == 0 {
+		return nil, nil
+	}
 	return nil, fmt.Errorf("herdr %s: unexpected output: %s", strings.Join(args, " "), truncate(string(out), 200))
+}
+
+// sessionArgs prefixes a pinned session. The global --session flag outranks
+// HERDR_SOCKET_PATH, which every pane sets to its own server, so it reaches
+// another session even from inside herdr where HERDR_SESSION would not.
+func (b *HerdrBackend) sessionArgs(args []string) []string {
+	if b.session == "" {
+		return args
+	}
+	return append([]string{"--session", b.session}, args...)
 }
 
 // preservesHerdrReadCaches reports whether a herdr invocation leaves the
 // cached snapshots valid: the pure reads, plus the verbs that touch nothing
 // the caches hold (`pane run` starts a process in an existing pane —
-// SendCommand runs it right after a resolve that just warmed the cache — and
-// `notification show` touches no session state at all). The list is
+// SendCommand runs it right after a resolve that just warmed the cache —
+// `notification show` touches no session state at all, and `workspace
+// report-metadata` changes only tokens, which Session does not carry). The list is
 // deliberately closed: an unknown verb counts as a mutation, so a new command
 // can at worst waste a refetch, never serve stale data.
 func preservesHerdrReadCaches(args []string) bool {
@@ -620,7 +1234,7 @@ func preservesHerdrReadCaches(args []string) bool {
 	}
 	switch args[0] + " " + args[1] {
 	case "workspace list", "workspace get", "pane list", "pane process-info", "tab list",
-		"pane run", "notification show":
+		"pane run", "notification show", "workspace report-metadata":
 		return true
 	}
 	return false
@@ -688,6 +1302,48 @@ func (e *HerdrError) Error() string { return fmt.Sprintf("herdr: %s (%s)", e.Mes
 // ErrServerNotRunning reports whether err means no herdr server is listening.
 func ErrServerNotRunning(err error) bool { return errHasCode(err, "server_not_running") }
 
+// ErrProtocolMismatch reports whether err means the herdr CLI and the running
+// server speak different protocol versions. herdr's JSON API needs an exact
+// match, so this is what every call returns after herdr is upgraded until the
+// old server is restarted.
+func ErrProtocolMismatch(err error) bool { return errHasCode(err, "protocol_mismatch") }
+
+// errServerUnusable reports whether err means grove cannot talk to the herdr
+// server at all: none is running, or it cannot understand this CLI.
+func errServerUnusable(err error) bool {
+	return ErrServerNotRunning(err) || ErrProtocolMismatch(err)
+}
+
+// DegradedHint returns a one-line explanation for an unmanaged target that
+// deserves one, or "" when degrading is the expected, silent outcome.
+//
+// A stopped server is expected — grove falls back to a plain directory switch
+// and `grove doctor` explains it. A protocol mismatch is not: it follows every
+// herdr upgrade until the old server is restarted, and a `grove to` that
+// quietly stops switching workspaces would look like a grove bug.
+//
+// A worktree already open in another named session is likewise worth naming:
+// grove declined to open a duplicate, and the user needs to know where the
+// existing workspace is.
+//
+// So is a path whose herdr workspace now belongs to a renamed worktree: grove
+// will not take that workspace over, and freeing the path is the user's call.
+func DegradedHint(err error) string {
+	var elsewhere *openElsewhereError
+	if errors.As(err, &elsewhere) {
+		return fmt.Sprintf("%s — changing directory only (switch sessions in herdr, or run `herdr --session %s` outside it)", elsewhere.Error(), elsewhere.session)
+	}
+	var moved *movedOnError
+	if errors.As(err, &moved) {
+		return fmt.Sprintf("%s — changing directory only. herdr cannot open a second workspace for this path while that one records it; to free it, close that workspace (`herdr workspace close %s`, which also closes its panes) and reopen the renamed worktree with `grove to`", moved.Error(), moved.workspaceID)
+	}
+	var he *HerdrError
+	if !ErrProtocolMismatch(err) || !errors.As(err, &he) {
+		return ""
+	}
+	return fmt.Sprintf("herdr sessions unavailable, changing directory only: %s", he.Message)
+}
+
 func errHasCode(err error, codes ...string) bool {
 	var he *HerdrError
 	if !errors.As(err, &he) {
@@ -717,14 +1373,24 @@ func (w herdrWorkspace) session() Session {
 	s := Session{
 		Name:    w.Label,
 		ID:      w.WorkspaceID,
-		Status:  attachStatus(w.Focused),
+		Status:  focusStatus(w.Focused),
 		Agent:   parseAgentStatus(w.AgentStatus),
 		Windows: w.PaneCount,
 	}
 	if w.Worktree != nil {
 		s.Path = w.Worktree.CheckoutPath
+		s.Repo = w.Worktree.RepoRoot
 	}
 	return s
+}
+
+// focusStatus maps herdr's server-wide focus onto grove's session status —
+// see StatusActive for why this is not attached/detached.
+func focusStatus(focused bool) Status {
+	if focused {
+		return StatusActive
+	}
+	return StatusOpen
 }
 
 // herdrOpened is the `worktree open` response. It reports the workspace, its
@@ -742,9 +1408,23 @@ type herdrTab struct {
 }
 
 // hasDefaultLabel reports whether the tab still carries the label herdr
-// generated for it — its own number — rather than one a user or grove chose.
+// generated for it rather than one a user or grove chose.
+//
+// herdr's generated label is the tab's current *position* plus one, while
+// TabInfo.number is a stable counter that never renumbers — so after an
+// earlier tab closes the two disagree, and comparing against number would
+// mistake herdr's own label for a user's. Any all-digit label is treated as
+// generated instead: nobody names a tab a bare number on purpose.
 func (t herdrTab) hasDefaultLabel() bool {
-	return t.Label == "" || t.Label == strconv.Itoa(t.Number)
+	if t.Label == "" {
+		return true
+	}
+	for _, r := range t.Label {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 type herdrPane struct {
@@ -800,21 +1480,94 @@ var (
 
 func herdrAvailable() bool {
 	herdrAvailableOnce.Do(func() {
-		_, err := exec.LookPath(herdrBinary)
+		_, err := exec.LookPath(HerdrBinary())
 		herdrAvailableResult = err == nil
 	})
 	return herdrAvailableResult
 }
 
+// HerdrBinary returns the herdr executable grove should run.
+//
+// herdr exports HERDR_BIN_PATH into every pane and plugin process, naming the
+// binary of the server that owns them. That is herdr's documented way to call
+// back into itself, and it stays protocol-compatible with the server even
+// after a client-only update replaced whatever `herdr` is first on PATH. A
+// value that does not name a file is ignored in favor of PATH.
+func HerdrBinary() string {
+	if p := os.Getenv("HERDR_BIN_PATH"); p != "" {
+		if info, err := os.Stat(p); err == nil && !info.IsDir() {
+			return p
+		}
+	}
+	return herdrBinary
+}
+
+// HerdrServerStatus is herdr's own report on the server the CLI would talk to
+// — the ambient session, as selected by HERDR_SOCKET_PATH / HERDR_SESSION.
+type HerdrServerStatus struct {
+	Running bool   `json:"running"`
+	Version string `json:"version"`
+	Session string `json:"session"`
+	// Compatible is nil when no server is running.
+	Compatible *bool `json:"compatible"`
+	// RestartNeeded means the running server predates the installed CLI and
+	// has to be restarted before the CLI can drive it.
+	RestartNeeded bool `json:"restart_needed"`
+}
+
+// Usable reports whether the CLI can drive the server right now.
+func (s HerdrServerStatus) Usable() bool {
+	return s.Running && !s.RestartNeeded && (s.Compatible == nil || *s.Compatible)
+}
+
+// ProbeHerdrServer asks herdr whether its server is running and compatible
+// with the installed CLI. `herdr status server --json` answers without an API
+// envelope and exits 0 either way — verified on 0.8.0 and 0.9.1 — so this is
+// the one check that tells "stopped" apart from "running, but needs a restart
+// after an upgrade".
+func ProbeHerdrServer() (HerdrServerStatus, error) {
+	var status HerdrServerStatus
+	out, err := cmdexec.Output(context.TODO(), HerdrBinary(), []string{"status", "server", "--json"}, "", cmdexec.Herdr)
+	if err != nil {
+		return status, fmt.Errorf("herdr status server: %w", err)
+	}
+	if err := json.Unmarshal(bytes.TrimSpace(out), &status); err != nil {
+		return status, fmt.Errorf("decode herdr status server: %w", err)
+	}
+	return status, nil
+}
+
+// runHerdrPeer executes a herdr CLI command against another session under the
+// short peer budget — see cmdexec.HerdrPeer.
+func runHerdrPeer(args []string) ([]byte, error) {
+	return cmdexec.CombinedOutput(context.TODO(), HerdrBinary(), args, "", cmdexec.HerdrPeer)
+}
+
+// gitWorktrees lists a repository's worktrees via `git worktree list
+// --porcelain`, main checkout first.
+func gitWorktrees(repo string) ([]string, error) {
+	out, err := cmdexec.Output(context.TODO(), "git", []string{"-C", repo, "worktree", "list", "--porcelain"}, "", cmdexec.GitLocal)
+	if err != nil {
+		return nil, err
+	}
+	var trees []string
+	for _, line := range strings.Split(string(out), "\n") {
+		if path, ok := strings.CutPrefix(line, "worktree "); ok {
+			trees = append(trees, path)
+		}
+	}
+	return trees, nil
+}
+
 // runHerdr executes a herdr CLI command under the shared timeout budget.
 // Combined output is returned because herdr writes error envelopes to stderr.
 func runHerdr(args []string) ([]byte, error) {
-	return cmdexec.CombinedOutput(context.TODO(), herdrBinary, args, "", cmdexec.Herdr)
+	return cmdexec.CombinedOutput(context.TODO(), HerdrBinary(), args, "", cmdexec.Herdr)
 }
 
 // attachHerdr starts the interactive client, blocking until the user detaches.
-func attachHerdr() error {
-	cmd := exec.Command(herdrBinary)
+func attachHerdr(args []string) error {
+	cmd := exec.Command(HerdrBinary(), args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

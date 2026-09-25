@@ -39,7 +39,7 @@ type WorktreeItem struct {
 	IsEnvironment  bool
 	IsProtected    bool
 	IsPrunable     bool
-	TmuxStatus     string                      // "attached", "detached", "none"
+	TmuxStatus     string                      // tmux: "attached"/"detached"; herdr: "active"/"open"; "none"
 	SessionBackend string                      // backend word for badges/labels: "tmux", "herdr"
 	AgentStatus    mux.AgentStatus             // coding-agent state; empty unless the backend reports one
 	HasRemote      bool                        // true if branch has upstream tracking
@@ -90,11 +90,15 @@ func (w *WorktreeItem) StatusText() string {
 
 // TmuxText returns a display string for tmux status.
 func (w *WorktreeItem) TmuxText() string {
-	switch w.TmuxStatus {
-	case "attached":
+	switch mux.Status(w.TmuxStatus) {
+	case mux.StatusAttached:
 		return Styles.TmuxBadge.Render("⬡ attached")
-	case "detached":
+	case mux.StatusDetached:
 		return Styles.TmuxBadge.Render("⬡ tmux")
+	case mux.StatusActive:
+		return Styles.TmuxBadge.Render("⬢ active")
+	case mux.StatusOpen:
+		return Styles.TmuxBadge.Render("⬡ open")
 	default:
 		return ""
 	}
