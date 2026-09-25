@@ -264,11 +264,10 @@ Examples:
 		// says the worktree belongs in the shell already running.
 		if m := ctx.Mux(); m.Available() && !openInCurrent(ctx.Config) {
 			target := muxTarget(mgr, name, newTree.Path)
-			sessionName := target.Name
-			if err := m.Ensure(target); err != nil {
+			if managed, err := ensureSession(m, target, stderr); err != nil {
 				cli.Warning(stderr, "Failed to create session: %v", err)
-			} else if !forkJSON {
-				cli.Success(w, "Created %s session '%s'", m.Backend(), sessionName)
+			} else if managed && !forkJSON {
+				reportEnsured(w, m, target)
 			}
 		}
 

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -16,11 +17,15 @@ import (
 // to a named session (`--session NAME ...`) is looked up under "@NAME key"
 // first, so one fake can stand in for several independent herdr servers.
 type fakeHerdr struct {
+	mu         sync.Mutex // peer sessions are queried concurrently
 	calls      [][]string
+	peerCalls  [][]string // the subset that went through the peer runner
 	responses  map[string]string
 	errs       map[string]error
 	attached   int
 	attachArgs []string
+	// trees answers the worktree lister, keyed by repository.
+	trees map[string][]string
 }
 
 func newFakeHerdr() *fakeHerdr {
@@ -41,6 +46,8 @@ func (f *fakeHerdr) key(args []string) string {
 }
 
 func (f *fakeHerdr) run(args []string) ([]byte, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.calls = append(f.calls, args)
 	k := f.key(args)
 	if len(args) >= 2 && args[0] == "--session" {
@@ -57,9 +64,26 @@ func (f *fakeHerdr) run(args []string) ([]byte, error) {
 	return []byte(f.responses[k]), nil
 }
 
+// peer is the runner for other sessions: it answers like run, and records
+// that the call used the short peer budget.
+func (f *fakeHerdr) peer(args []string) ([]byte, error) {
+	f.mu.Lock()
+	f.peerCalls = append(f.peerCalls, args)
+	f.mu.Unlock()
+	return f.run(args)
+}
+
+func (f *fakeHerdr) worktrees(repo string) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.trees[repo], nil
+}
+
 func (f *fakeHerdr) backend() *HerdrBackend {
 	b := NewHerdr()
 	b.run = f.run
+	b.peer = f.peer
+	b.worktrees = f.worktrees
 	b.attach = func(args []string) error { f.attached++; f.attachArgs = args; return nil }
 	b.available = func() bool { return true }
 	b.env = func(string) string { return "" }
@@ -68,6 +92,8 @@ func (f *fakeHerdr) backend() *HerdrBackend {
 
 // called reports whether any invocation matched every supplied fragment.
 func (f *fakeHerdr) called(fragments ...string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	for _, call := range f.calls {
 		joined := strings.Join(call, " ")
 		matched := true
@@ -801,6 +827,8 @@ func TestHerdrListWithServerDownSurfacesError(t *testing.T) {
 // countCalls returns how many recorded invocations match the given key
 // (command group + subcommand).
 func (f *fakeHerdr) countCalls(key string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	n := 0
 	for _, call := range f.calls {
 		if f.key(call) == key {
@@ -1386,5 +1414,299 @@ func TestHerdrAdoptedWithoutAWorkspaceIsANoOp(t *testing.T) {
 	}
 	if f.called("workspace", "rename") || f.called("report-metadata") {
 		t.Errorf("Adopted touched herdr with no workspace to update; calls: %v", f.calls)
+	}
+}
+
+// --- review findings: peer budget, renamed worktrees, attach prep ---
+
+// panesIn returns a one-pane `pane list` response whose shell sits in cwd.
+func panesIn(wsID, cwd string) string {
+	return fmt.Sprintf(`{"id":"cli:pane:list","result":{"panes":[{"agent_status":"unknown","cwd":%q,"focused":true,"foreground_cwd":%q,"pane_id":"%s:p1","tab_id":"%s:t1","workspace_id":%q}],"type":"pane_list"}}`, cwd, cwd, wsID, wsID, wsID)
+}
+
+// Calls to other sessions must run under the short peer budget: herdr reports
+// a wedged server as running, and a full-timeout call to it stalled `grove
+// to` and `grove rm` by five seconds.
+func TestHerdrOtherSessionsUseThePeerRunner(t *testing.T) {
+	checkout := t.TempDir()
+	f := newFakeHerdr()
+	f.responses["workspace list"] = emptyWorkspaceListJSON
+	f.responses["session list"] = herdrSessionListJSON
+	f.responses["@other workspace list"] = workspaceListFor("w7", "grove-testing", checkout)
+
+	if err := f.backend().Ensure(Target{Name: "grove-testing", Path: checkout, Repo: "/repos/grove"}); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
+	peer := map[string]bool{}
+	for _, c := range f.peerCalls {
+		peer[strings.Join(c, " ")] = true
+	}
+	if !peer["session list --json"] || !peer["--session other workspace list"] {
+		t.Errorf("session list and the other session's listing must use the peer runner; peer calls: %v", f.peerCalls)
+	}
+	if peer["workspace list"] {
+		t.Errorf("the ambient listing went through the peer runner; peer calls: %v", f.peerCalls)
+	}
+}
+
+// Other sessions are listed side by side, so N sessions cost one peer budget
+// rather than N.
+func TestHerdrOtherSessionsAreQueriedConcurrently(t *testing.T) {
+	f := newFakeHerdr()
+	f.responses["workspace list"] = emptyWorkspaceListJSON
+	f.responses["session list"] = `{"sessions":[{"default":true,"name":"default","running":true,"socket_path":"/s/default"},{"name":"one","running":true,"socket_path":"/s/one"},{"name":"two","running":true,"socket_path":"/s/two"}]}`
+	f.responses["worktree open"] = herdrOpenedJSON
+	b := f.backend()
+
+	var arrived sync.WaitGroup
+	arrived.Add(2)
+	release := make(chan struct{})
+	go func() { arrived.Wait(); close(release) }()
+	b.peer = func(args []string) ([]byte, error) {
+		if len(args) > 3 && args[0] == "--session" && args[2] == "workspace" && args[3] == "list" {
+			arrived.Done()
+			select {
+			case <-release: // both listings were in flight at once
+			case <-time.After(2 * time.Second):
+				return nil, errors.New("listings ran one after another")
+			}
+			return []byte(emptyWorkspaceListJSON), nil
+		}
+		return f.peer(args)
+	}
+
+	if err := b.Ensure(Target{Name: "grove-testing", Path: t.TempDir(), Repo: "/repos/grove"}); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
+	select {
+	case <-release:
+	default:
+		t.Error("the two sessions were not listed concurrently")
+	}
+}
+
+// A session that does not answer in time cannot be checked, and its copy may
+// survive the removal — so say so rather than stay silent.
+func TestHerdrKillReportsSessionsItCouldNotCheck(t *testing.T) {
+	gone := filepath.Join(t.TempDir(), "grove-testing")
+	f := newFakeHerdr()
+	f.responses["workspace list"] = workspaceListFor("w2", "grove-testing", gone)
+	f.responses["workspace close"] = herdrCloseOKJSON
+	f.responses["session list"] = herdrSessionListJSON
+	f.errs["@other workspace list"] = errors.New("signal: killed")
+	f.responses["@other workspace list"] = ""
+
+	target := Target{Name: "grove-testing", Path: gone}
+	b := f.backend()
+	report, err := b.KillEverywhere(target)
+	if err != nil {
+		t.Fatalf("KillEverywhere() error = %v; an unchecked session is not a failure to close", err)
+	}
+	if strings.Join(report.Unchecked, ",") != "other" || len(report.ClosedIn) != 0 {
+		t.Errorf("report = %+v, want other unchecked and nothing closed elsewhere", report)
+	}
+	if w := UncheckedWarning(report, target); !strings.Contains(w, `herdr session(s) other did not answer`) {
+		t.Errorf("UncheckedWarning() = %q, want the session named", w)
+	}
+	if !f.called("workspace", "close", "w2") {
+		t.Errorf("the ambient copy must still be closed; calls: %v", f.calls)
+	}
+	// A plain Kill has no report to carry it, so it says so in its error.
+	if err := b.Kill(target); err == nil || !strings.Contains(err.Error(), "did not answer") {
+		t.Errorf("Kill() error = %v, want the unchecked session reported", err)
+	}
+}
+
+// A session that stopped between `session list` and its listing is not a
+// failure: herdr reconciles a stopped session's workspaces when it restarts.
+func TestHerdrKillIgnoresASessionThatJustStopped(t *testing.T) {
+	gone := filepath.Join(t.TempDir(), "grove-testing")
+	f := newFakeHerdr()
+	f.responses["workspace list"] = emptyWorkspaceListJSON
+	f.responses["session list"] = herdrSessionListJSON
+	f.responses["@other workspace list"] = `{"id":"cli:workspace:list","error":{"code":"server_not_running","message":"no herdr server is running"}}`
+	f.errs["@other workspace list"] = errors.New("exit status 1")
+
+	report, err := f.backend().KillEverywhere(Target{Name: "grove-testing", Path: gone})
+	if err != nil || len(report.Unchecked) != 0 {
+		t.Errorf("KillEverywhere() = %+v, %v; want a stopped session skipped silently", report, err)
+	}
+}
+
+func TestHerdrKillEverywhereNamesTheSessionsItClosedIn(t *testing.T) {
+	gone := filepath.Join(t.TempDir(), "grove-testing")
+	f := newFakeHerdr()
+	f.responses["workspace list"] = emptyWorkspaceListJSON
+	f.responses["session list"] = herdrSessionListJSON
+	f.responses["@other workspace list"] = workspaceListFor("w7", "grove-testing", gone)
+	f.responses["@other workspace close"] = herdrCloseOKJSON
+
+	report, err := f.backend().KillEverywhere(Target{Name: "grove-testing", Path: gone})
+	if err != nil {
+		t.Fatalf("KillEverywhere() error = %v", err)
+	}
+	if strings.Join(report.ClosedIn, ",") != "other" {
+		t.Errorf("ClosedIn = %v, want [other]", report.ClosedIn)
+	}
+}
+
+// renamedFixture lays out the rename hazard: the repo, a live worktree "b"
+// (renamed from "a"), and the path "a" that a new worktree now occupies. herdr
+// still records "a" for the renamed worktree's workspace, whose shell followed
+// the rename into "b".
+func renamedFixture(t *testing.T) (repo, oldPath, renamed string, f *fakeHerdr) {
+	t.Helper()
+	root := t.TempDir()
+	repo = filepath.Join(root, "grove")
+	oldPath = filepath.Join(root, "grove-a")
+	renamed = filepath.Join(root, "grove-b")
+	for _, d := range []string{repo, oldPath, renamed} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f = newFakeHerdr()
+	f.trees = map[string][]string{repo: {repo, oldPath, renamed}}
+	return repo, oldPath, renamed, f
+}
+
+func workspaceListInRepo(id, label, repo, checkout string) string {
+	return fmt.Sprintf(`{"id":"cli:workspace:list","result":{"type":"workspace_list","workspaces":[`+
+		`{"workspace_id":%q,"number":1,"label":%q,"focused":false,"pane_count":1,"tab_count":1,`+
+		`"active_tab_id":"%s:t1","agent_status":"unknown","worktree":{"repo_key":"k","repo_name":"grove",`+
+		`"repo_root":%q,"checkout_path":%q,"is_linked_worktree":true}}]}}`, id, label, id, repo, checkout)
+}
+
+// After `grove rename a b` and a new worktree at "a", herdr's `worktree open
+// --path a` would hand over — and re-label — the renamed worktree's
+// workspace. grove must decline instead, and not count it as a's session.
+func TestHerdrRefusesAWorkspaceARenamedWorktreeStillOwns(t *testing.T) {
+	repo, oldPath, renamed, f := renamedFixture(t)
+	f.responses["workspace list"] = workspaceListInRepo("w5", "grove-a", repo, oldPath)
+	f.responses["pane list"] = panesIn("w5", renamed)
+	b := f.backend()
+	target := Target{Name: "grove-a", Short: "a", Path: oldPath, Repo: repo}
+
+	if exists, err := b.Exists(target); err != nil || exists {
+		t.Errorf("Exists() = %v, %v; want false — the workspace serves the renamed worktree", exists, err)
+	}
+	err := b.Ensure(target)
+	if !ErrUnmanaged(err) {
+		t.Fatalf("Ensure() error = %v, want ErrUnmanaged", err)
+	}
+	if f.called("worktree", "open") {
+		t.Errorf("Ensure let herdr hand over the renamed worktree's workspace; calls: %v", f.calls)
+	}
+	if hint := DegradedHint(err); !strings.Contains(hint, "still belongs to the worktree at "+renamed) {
+		t.Errorf("DegradedHint() = %q, want it to name the renamed worktree", hint)
+	}
+}
+
+// ...and `grove rm a` must not close it: its shells are the renamed
+// worktree's live work.
+func TestHerdrKillLeavesARenamedWorktreesWorkspace(t *testing.T) {
+	repo, oldPath, renamed, f := renamedFixture(t)
+	f.responses["workspace list"] = workspaceListInRepo("w5", "grove-a", repo, oldPath)
+	f.responses["pane list"] = panesIn("w5", renamed)
+	f.responses["session list"] = herdrSessionListJSON
+	f.responses["@other workspace list"] = workspaceListInRepo("w7", "grove-a", repo, oldPath)
+	f.responses["@other pane list"] = panesIn("w7", renamed)
+
+	if err := f.backend().Kill(Target{Name: "grove-a", Path: oldPath, Repo: repo}); err != nil {
+		t.Fatalf("Kill() error = %v", err)
+	}
+	if f.called("workspace", "close") {
+		t.Errorf("Kill closed a workspace serving the renamed worktree; calls: %v", f.calls)
+	}
+}
+
+// The same guard across sessions: never adopt another session's workspace
+// that serves a different worktree.
+func TestHerdrDoesNotAdoptARenamedWorktreesWorkspaceElsewhere(t *testing.T) {
+	repo, oldPath, renamed, f := renamedFixture(t)
+	f.responses["workspace list"] = emptyWorkspaceListJSON
+	f.responses["session list"] = herdrSessionListJSON
+	f.responses["@other workspace list"] = workspaceListInRepo("w7", "grove-a", repo, oldPath)
+	f.responses["@other pane list"] = panesIn("w7", renamed)
+	f.responses["worktree open"] = herdrOpenedJSON
+	b := f.backend()
+	target := Target{Name: "grove-a", Path: oldPath, Repo: repo}
+
+	if err := b.Ensure(target); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
+	if b.LocatedIn(target) != "" {
+		t.Errorf("adopted the renamed worktree's workspace from session %q", b.LocatedIn(target))
+	}
+}
+
+// A pane that merely wandered off — `cd /tmp`, or into the main checkout — is
+// not evidence of a rename; an ordinary workspace must still be closed.
+func TestHerdrKillStillClosesAWorkspaceWhosePaneWandered(t *testing.T) {
+	for name, cwd := range map[string]func(repo string) string{
+		"elsewhere":     func(string) string { return t.TempDir() },
+		"main checkout": func(repo string) string { return repo },
+	} {
+		t.Run(name, func(t *testing.T) {
+			repo, oldPath, _, f := renamedFixture(t)
+			f.responses["workspace list"] = workspaceListInRepo("w5", "grove-a", repo, oldPath)
+			f.responses["pane list"] = panesIn("w5", cwd(repo))
+			f.responses["workspace close"] = herdrCloseOKJSON
+
+			if err := f.backend().Kill(Target{Name: "grove-a", Path: oldPath, Repo: repo}); err != nil {
+				t.Fatalf("Kill() error = %v", err)
+			}
+			if !f.called("workspace", "close", "w5") {
+				t.Errorf("Kill left an ordinary workspace open; calls: %v", f.calls)
+			}
+		})
+	}
+}
+
+// Under shell integration grove prints an attach hint instead of attaching.
+// herdr's client starts on the focused workspace, so the hint only works once
+// the target is focused — in the session that holds it.
+func TestHerdrPrepareAttachFocusesInTheOwningSession(t *testing.T) {
+	checkout := t.TempDir()
+	f := newFakeHerdr()
+	f.responses["workspace list"] = emptyWorkspaceListJSON
+	f.responses["session list"] = herdrSessionListJSON
+	f.responses["@other workspace list"] = workspaceListFor("w7", "grove-testing", checkout)
+	f.responses["@other workspace focus"] = `{"id":"cli:workspace:focus","result":{"type":"workspace_info"}}`
+	b := f.backend()
+	target := Target{Name: "grove-testing", Path: checkout, Repo: "/repos/grove"}
+
+	if err := b.Ensure(target); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
+	if err := b.PrepareAttach(target); err != nil {
+		t.Fatalf("PrepareAttach() error = %v", err)
+	}
+	if !f.called("--session", "other", "workspace", "focus", "w7") {
+		t.Errorf("PrepareAttach did not focus the workspace in its session; calls: %v", f.calls)
+	}
+}
+
+// Pane operations on an adopted workspace reach it in its own session — the
+// ambient session has no such workspace.
+func TestHerdrSendCommandReachesAnAdoptedWorkspace(t *testing.T) {
+	checkout := t.TempDir()
+	f := newFakeHerdr()
+	f.responses["workspace list"] = emptyWorkspaceListJSON
+	f.responses["session list"] = herdrSessionListJSON
+	f.responses["@other workspace list"] = workspaceListFor("w7", "grove-testing", checkout)
+	f.responses["@other pane list"] = panesIn("w7", checkout)
+	f.responses["@other pane run"] = herdrPaneRunOK
+	b := f.backend()
+	target := Target{Name: "grove-testing", Path: checkout, Repo: "/repos/grove"}
+
+	if err := b.Ensure(target); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
+	if err := b.SendCommand(target, "claude"); err != nil {
+		t.Fatalf("SendCommand() error = %v", err)
+	}
+	if !f.called("--session", "other", "pane", "run", "w7:p1", "claude") {
+		t.Errorf("SendCommand did not run in the adopted workspace's session; calls: %v", f.calls)
 	}
 }

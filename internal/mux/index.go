@@ -3,6 +3,7 @@ package mux
 import (
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // isExistingDir reports whether path is a directory that exists right now.
@@ -115,6 +116,22 @@ func canonicalGonePath(p string) string {
 		return filepath.Join(resolved, filepath.Base(p))
 	}
 	return p
+}
+
+// within reports whether path is dir or lies beneath it, comparing
+// canonicalized forms. Either side may no longer exist.
+func within(path, dir string) bool {
+	p, d := canonicalPath(path), canonicalPath(dir)
+	return p == d || strings.HasPrefix(p, d+string(filepath.Separator))
+}
+
+// canonicalPath resolves symlinks when the path exists, and otherwise
+// canonicalizes it through its surviving parent.
+func canonicalPath(p string) string {
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		return resolved
+	}
+	return canonicalGonePath(p)
 }
 
 // pathKeys returns the forms a path may be matched under: cleaned, and

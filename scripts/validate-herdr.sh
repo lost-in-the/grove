@@ -24,7 +24,17 @@
 #
 # --plugin links the checkout's plugin into herdr's registry for the run and
 # unlinks it after. It refuses to run if lost-in-the.grove is already
-# installed, rather than replace the user's copy.
+# installed, rather than replace the user's copy. The registry is shared by
+# every session, so while it is linked, worktree events in the user's other
+# sessions run this checkout's hooks too.
+#
+# The script runs as if from outside herdr, against whichever server the
+# calling shell would reach — so it is fine to run from inside a herdr pane.
+# The switch checks still focus lab workspaces on that server, which moves
+# any client attached to it.
+#
+# An interrupted run still unlinks the plugin and stops its named session
+# (trap below); its lab workspaces are closed at the start of the next run.
 #
 # The two degradation checks are the exception: they stop the herdr server,
 # which kills every pane it is running. They are therefore opt-in behind
@@ -52,6 +62,25 @@ done
 PASS=0
 FAIL=0
 
+# Set once each resource exists, so an interrupted run releases only what it
+# took. A second session and a linked plugin both outlive the script
+# otherwise — and a linked plugin makes every later --plugin run SKIP.
+LINKED_PLUGIN=0
+SESS=""
+cleanup() {
+  if [ "$LINKED_PLUGIN" -eq 1 ]; then
+    herdr plugin unlink lost-in-the.grove >/dev/null 2>&1
+    LINKED_PLUGIN=0
+  fi
+  if [ -n "$SESS" ]; then
+    herdr session stop "$SESS" >/dev/null 2>&1
+    herdr session delete "$SESS" >/dev/null 2>&1
+    SESS=""
+  fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+
 ok()   { printf '  \033[32mPASS\033[0m  %s\n' "$1"; PASS=$((PASS + 1)); }
 bad()  { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; [ -n "${2:-}" ] && printf '        %s\n' "$2"; FAIL=$((FAIL + 1)); }
 sect() { printf '\n\033[1m%s\033[0m\n' "$1"; }
@@ -68,6 +97,20 @@ command -v git   >/dev/null 2>&1 || die "git not found in PATH"
 # reporting the status — so the state has to come from its output.
 if ! herdr status server 2>&1 | grep -q '^status: running'; then
   die "no herdr server running — start one with 'herdr server' (headless) or 'herdr'"
+fi
+
+# Run as if from outside herdr, against the same server. Inside a pane,
+# HERDR_SOCKET_PATH (which outranks HERDR_SESSION) pins every call to the
+# pane's server and HERDR_ENV=1 makes grove act as a client inside it: the
+# named-session checks would open in the wrong session and take the "inside"
+# path, and every `grove new` would move that server's clients. Name the
+# session instead, and set the inside variables only on checks that want them.
+AMBIENT_SESSION=$(herdr status server --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("session") or "")' 2>/dev/null)
+unset HERDR_SOCKET_PATH HERDR_ENV HERDR_WORKSPACE_ID HERDR_TAB_ID HERDR_PANE_ID
+if [ -n "$AMBIENT_SESSION" ] && [ "$AMBIENT_SESSION" != "default" ]; then
+  export HERDR_SESSION="$AMBIENT_SESSION"
+else
+  unset HERDR_SESSION
 fi
 
 printf 'grove:  building from %s\n' "$PROJECT_DIR"
@@ -394,7 +437,6 @@ sect "named sessions"
 # herdr sessions are independent servers; `worktree open` checks only its own.
 # grove must adopt a workspace another session already has rather than open a
 # duplicate, and `grove rm` must close it wherever it is.
-SESS="grove-validate-$$"
 session_up() {
   herdr session list --json 2>/dev/null | SESS="$SESS" python3 -c '
 import json, os, sys
@@ -402,6 +444,7 @@ d = json.load(sys.stdin)
 sys.exit(0 if any(s["name"] == os.environ["SESS"] and s["running"] for s in d["sessions"]) else 1)
 '
 }
+SESS="grove-validate-$$"
 ( herdr --session "$SESS" server >"$LAB/session.log" 2>&1 & )
 wait_for "a second named session starts" session_up
 HERDR_SESSION="$SESS" "$GROVE" new gamma >/dev/null 2>&1
@@ -423,8 +466,7 @@ fi
 check "still no duplicate in the ambient session" "$(ws_count "" "$LAB/demo-gamma")" "0"
 "$GROVE" rm gamma --force >/dev/null 2>&1
 check "grove rm closes the workspace in the other session" "$(ws_count "$SESS" "$LAB/demo-gamma")" "0"
-herdr session stop "$SESS" >/dev/null 2>&1
-herdr session delete "$SESS" >/dev/null 2>&1
+cleanup
 
 sect "plugin hooks"
 if [ "$PLUGIN" -eq 0 ]; then
@@ -432,7 +474,7 @@ if [ "$PLUGIN" -eq 0 ]; then
 elif herdr plugin list 2>/dev/null | grep -q 'lost-in-the.grove'; then
   printf '  \033[33mSKIP\033[0m  lost-in-the.grove is already installed; not replacing it.\n'
 else
-  herdr plugin link "$PROJECT_DIR/integrations/herdr" >/dev/null 2>&1
+  herdr plugin link "$PROJECT_DIR/integrations/herdr" >/dev/null 2>&1 && LINKED_PLUGIN=1
   # A worktree made by herdr itself, as its UI does — kept inside $LAB.
   herdr worktree create --cwd "$DEMO" --branch herdr-made --path "$LAB/demo-herdr-made" --no-focus >/dev/null 2>&1
   marked() { [ "$(ws_field "" "$LAB/demo-herdr-made" tokens)" = '{"grove": "untracked"}' ]; }
@@ -444,12 +486,12 @@ else
   herdr worktree remove --workspace "$HM_WS" --force >/dev/null 2>&1
   untracked_again() { ! state_has herdr-made; }
   wait_for "removing it through herdr drops grove's state entry" untracked_again
-  herdr plugin unlink lost-in-the.grove >/dev/null 2>&1
+  cleanup
 fi
 
 sect "degradation with the server stopped"
 if [ "$STOP_SERVER" -eq 0 ]; then
-  printf '  \033[33mSKIP\033[0m  2 checks — stopping the server would kill every pane it hosts.\n'
+  printf '  \033[33mSKIP\033[0m  3 checks — stopping the server would kill every pane it hosts.\n'
   printf '        Re-run with --stop-server against a server you are not working in.\n'
 else
 # Close this run's workspaces first: herdr persists and restores its session

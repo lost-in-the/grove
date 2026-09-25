@@ -2451,12 +2451,16 @@ func (m *Model) handleTmuxSwitch(switchPath string) bool {
 	}
 	if !exists {
 		if err := mx.Ensure(target); err != nil {
-			// A target the backend declines (herdr with no usable server, or
-			// a path it cannot open) has no session, so returning false is the
-			// answer, not a warning: the caller falls back to changing
-			// directory.
+			// A target the backend declines (herdr with no usable server, a
+			// path it cannot open, or a worktree already open in another
+			// session) has no session, so returning false is the answer: the
+			// caller falls back to changing directory. When the backend says
+			// why is worth knowing, say it — this runs after the dashboard has
+			// exited and restored the terminal, so stderr is visible.
 			if !mux.ErrUnmanaged(err) {
 				tuilog.Printf("warning: failed to create session %q: %v", target.Name, err)
+			} else if hint := mux.DegradedHint(err); hint != "" {
+				cli.Warning(cli.NewStderr(), "%s", hint)
 			}
 			return false
 		}

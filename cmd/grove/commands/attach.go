@@ -114,7 +114,9 @@ This is a tmux-only command — it does not emit cd: directives.`,
 				emitCdOrExplain(stderr, targetTree.Path)
 				return nil
 			}
-			created = true
+			// Adopting an existing workspace from another herdr session is
+			// not creating one.
+			created = locatedIn(m, target) == ""
 			if !attachJSON {
 				reportEnsured(stderr, m, target)
 			}

@@ -467,6 +467,8 @@ workspace state, and CI runs it against a pinned headless herdr. See
 [HERDR_INTEGRATION.md](HERDR_INTEGRATION.md).
 
 The dashboard's herdr rendering — agent badges (`blocked` / `working` / `done`)
-and `active` / `open` workspace badges — is pinned by
-`TestGolden_Dashboard_Herdr`. The live suite drives agent states with
+and the filled/hollow (`⬢`/`⬡`) herdr session badges for active/open
+workspaces — is pinned by `TestGolden_Dashboard_Herdr`; the detail row's
+"active workspace" / "open workspace" wording by a unit test
+(`TestRenderTmuxValueHerdrStatuses`). The live suite drives agent states with
 `herdr pane report-agent`, so neither needs a real coding agent.

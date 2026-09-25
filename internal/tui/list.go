@@ -14,8 +14,6 @@ import (
 )
 
 const (
-	tmuxStatusAttached     = "attached"
-	tmuxStatusDetached     = "detached"
 	checkboxUnchecked      = "[ ]"
 	checkboxChecked        = "[x]"
 	boolTrue               = "true"

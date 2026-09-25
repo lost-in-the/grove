@@ -168,6 +168,15 @@ Examples:
 			// Create session with command if configured
 			err := m.EnsureWithCommand(target, sessionCmd)
 			switch {
+			case err == nil && locatedIn(m, target) != "":
+				// The backend adopted an existing session from another server
+				// (herdr's named sessions) and left its panes alone: that is
+				// an existing session, so the command goes through the
+				// existing-session path below rather than being claimed here.
+				if !openJSON {
+					reportEnsured(w, m, target)
+				}
+				sessionExists = true
 			case err == nil:
 				if !openJSON {
 					if sessionCmd != "" {
@@ -186,7 +195,8 @@ Examples:
 			default:
 				return fmt.Errorf("failed to create session: %w", err)
 			}
-		} else if sessionCmd != "" {
+		}
+		if sessionExists && sessionCmd != "" {
 			// Session exists — check if command is already running
 			pane, pErr := m.PaneInfo(target)
 			if pErr == nil && pane.IsShell() && pane.CurrentCommand != sessionCmd {

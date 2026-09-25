@@ -19,6 +19,13 @@ const (
 	// socket, and a dead server fails fast with server_not_running rather than
 	// hanging, so grove's sub-500ms budget survives a stopped herdr.
 	Herdr = 5 * time.Second
+	// HerdrPeer bounds calls to a herdr session other than the one grove is
+	// talking to. herdr reports a session running whenever its socket accepts
+	// connections, so a wedged (e.g. SIGSTOPped) server still looks alive and
+	// would hold every call for the full Herdr timeout. A healthy server
+	// answers in single-digit milliseconds; a peer that can't make this budget
+	// is skipped rather than allowed to stall `grove to` or `grove rm`.
+	HerdrPeer = 250 * time.Millisecond
 )
 
 // Output runs a command with timeout and returns its stdout.

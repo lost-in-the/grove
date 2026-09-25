@@ -124,15 +124,35 @@ func ensureSession(m mux.Multiplexer, t mux.Target, stderr *cli.Writer) (bool, e
 	}
 }
 
+// attachHint readies the target where the backend needs it (mux.AttachPreparer
+// — herdr's client starts on whichever workspace is focused, so the workspace
+// is focused now) and returns the command the user runs to attach. Without the
+// preparation the printed hint would land them wherever focus last was.
+func attachHint(m mux.Multiplexer, t mux.Target) string {
+	if p, ok := m.(mux.AttachPreparer); ok {
+		if err := p.PrepareAttach(t); err != nil {
+			log.Printf("prepare attach for %q: %v", t.Name, err)
+		}
+	}
+	return m.AttachHint(t)
+}
+
+// locatedIn names the other server a SessionLocator backend adopted t's
+// session from, or "".
+func locatedIn(m mux.Multiplexer, t mux.Target) string {
+	if l, ok := m.(mux.SessionLocator); ok {
+		return l.LocatedIn(t)
+	}
+	return ""
+}
+
 // reportEnsured announces the session Ensure produced for a target that had
 // none: a new one, or — on a backend with several independent servers — an
 // existing one it found in another server and adopted instead of duplicating.
 func reportEnsured(stderr *cli.Writer, m mux.Multiplexer, t mux.Target) {
-	if l, ok := m.(mux.SessionLocator); ok {
-		if where := l.LocatedIn(t); where != "" {
-			cli.Info(stderr, "Using '%s' from %s session '%s'", t.Name, m.Backend(), where)
-			return
-		}
+	if where := locatedIn(m, t); where != "" {
+		cli.Info(stderr, "Using '%s' from %s session '%s'", t.Name, m.Backend(), where)
+		return
 	}
 	cli.Success(stderr, "Created %s session '%s'", m.Backend(), t.Name)
 }
@@ -195,7 +215,7 @@ func attachToSession(m mux.Multiplexer, t mux.Target, controlModeCfg *bool, hasS
 		if d, ok := m.(mux.AttachDirectiver); ok && d.AttachDirective(t, useCC) {
 			return nil
 		}
-		cli.Faint(stderr, "Run: %s", m.AttachHint(t))
+		cli.Faint(stderr, "Run: %s", attachHint(m, t))
 		return nil
 	}
 
@@ -374,12 +394,26 @@ func removeWorktreeWithHooks(ctx *GroveContext, mgr *worktree.Manager, w *cli.Wr
 	if m := ctx.Mux(); m.Available() {
 		target := muxTarget(mgr, name, wtPath)
 		exists, err := m.Exists(target)
-		_, everywhere := m.(mux.SessionLocator)
-		if err == nil && (exists || everywhere) {
-			if err := m.Kill(target); err != nil {
-				cli.Warning(w, "Failed to kill session: %v", err)
+		if err == nil {
+			if l, ok := m.(mux.SessionLocator); ok {
+				report, kerr := l.KillEverywhere(target)
+				if kerr != nil {
+					cli.Warning(w, "Failed to kill session: %v", kerr)
+				} else if exists {
+					cli.Success(w, "Killed session '%s'", target.Name)
+				}
+				for _, where := range report.ClosedIn {
+					cli.Success(w, "Closed its %s workspace in session '%s'", m.Backend(), where)
+				}
+				if warning := mux.UncheckedWarning(report, target); warning != "" {
+					cli.Warning(w, "%s", warning)
+				}
 			} else if exists {
-				cli.Success(w, "Killed session '%s'", target.Name)
+				if err := m.Kill(target); err != nil {
+					cli.Warning(w, "Failed to kill session: %v", err)
+				} else {
+					cli.Success(w, "Killed session '%s'", target.Name)
+				}
 			}
 		}
 	}

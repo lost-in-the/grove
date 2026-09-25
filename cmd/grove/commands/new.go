@@ -259,13 +259,12 @@ Examples:
 		// second one elsewhere is not that.
 		if m := ctx.Mux(); !newNoTmux && m.Available() && !openInCurrent(ctx.Config) {
 			target := muxTarget(mgr, name, wt.Path)
-			sessionName := target.Name
-			if err := m.Ensure(target); err != nil {
+			if managed, err := ensureSession(m, target, w); err != nil {
 				if !newJSON {
 					cli.Warning(w, "Failed to create session: %v", err)
 				}
-			} else if !newJSON {
-				cli.Success(w, "Created %s session '%s'", m.Backend(), sessionName)
+			} else if managed && !newJSON {
+				reportEnsured(w, m, target)
 			}
 		}
 

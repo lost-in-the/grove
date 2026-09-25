@@ -301,7 +301,7 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 			// there is no session to report ready or attach to, so say nothing
 			// (selfSwitchTmuxEpilogue returns early in the same situation).
 			cli.Success(stderr, "Session '%s' ready", sessionName)
-			cli.Faint(stderr, "Run: %s", m.AttachHint(target))
+			cli.Faint(stderr, "Run: %s", attachHint(m, target))
 		}
 		// auto mode outside the multiplexer: handled below via shell directive
 		// or direct attach
@@ -423,7 +423,7 @@ func selfSwitchTmuxEpilogue(ctx *GroveContext, mgr *worktree.Manager, targetTree
 
 	if tmuxMode != tmuxModeAuto {
 		cli.Success(stderr, "Session '%s' ready", target.Name)
-		cli.Faint(stderr, "Run: %s", m.AttachHint(target))
+		cli.Faint(stderr, "Run: %s", attachHint(m, target))
 		return nil
 	}
 

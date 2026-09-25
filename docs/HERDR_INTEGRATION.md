@@ -166,7 +166,8 @@ orphaned:
   One `herdr session list --json` (bare JSON, no envelope; it probes each
   socket without a request) plus `herdr --session NAME workspace list` per
   other *running* session, matched on checkout path only — a label in a
-  session grove never touched is not proof of identity.
+  session grove never touched is not proof of identity — and never a
+  workspace that now serves another worktree (see "Renamed worktrees" below).
   - Found, **outside herdr**: adopt it. `Attach` focuses it in its session and
     runs `herdr --session NAME`; the attach hint names the session; the
     command reports "Using '…' from herdr session '…'".
@@ -181,12 +182,42 @@ orphaned:
   `grove rm` and the dashboard delete no longer gate `Kill` on the ambient-only
   `Exists` — `mux.SessionLocator` marks backends where that would miss copies.
 
-Cost: nothing on the common path; ~(1 + N) × 3–5ms on open-when-missing and on
-remove. Measured on 0.9.1: `grove to` 36–39ms, `grove rm` 35ms.
+**Bounded cost.** herdr reports a session as running whenever its socket
+accepts connections, so a wedged server (e.g. SIGSTOPped) still looks alive
+and would hold each call for herdr's full 5s timeout — review of this feature
+measured a frozen session stalling `grove to` and `grove rm` by 5s. Calls to
+other sessions therefore run under a separate 250ms budget
+(`cmdexec.HerdrPeer`; a healthy server answers in single-digit milliseconds),
+and the sessions are listed concurrently, so the whole sweep costs one budget
+however many there are. A session that misses it is skipped when opening, and
+named in a warning on removal, since its copy may remain. Nothing is paid on
+the common path; measured on 0.9.1, `grove to` takes 36–39ms and `grove rm`
+35ms with a second healthy session.
 
 Not handled: a **stopped** session cannot be reached (herdr drops such a
 workspace's worktree link itself when it next starts, showing placeholder
 panes), and `grove rename` relabels only the ambient session's workspace.
+
+### Renamed worktrees
+
+herdr's record of a workspace's checkout never follows a rename, so after
+`grove rename a b` the workspace for `b` still claims `a`'s path. When a new
+worktree later takes that path, everything that matches on the recorded path
+would treat `b`'s workspace as the new `a`'s: herdr's own `worktree open`
+would hand it over and re-label it, `grove to a` would `cd` its shell, and
+`grove rm a` would close it.
+
+The workspace's panes give it away — a process's working directory follows a
+directory rename, so they sit in `b`. `movedOn` treats a workspace with a pane
+inside **another live worktree of the same repository** as belonging to that
+worktree: `Exists` does not count it, `Ensure` declines the target with a hint
+rather than letting herdr take it over (herdr cannot open a second workspace
+for the same path, so freeing it means closing that workspace), and `Kill` and
+the cross-session lookups leave it alone. A pane that merely wandered off
+(`cd /tmp`, or into the main checkout) is not evidence, so an ordinary
+workspace is never mistaken for a moved one. It costs a `pane list` for the
+candidate, plus one `git worktree list` only when a pane sits outside the
+target.
 
 ---
 
@@ -234,8 +265,9 @@ The blocking attach must never run under shell integration: there grove's
 stdout is the wrapper's command-substitution pipe, so the client would draw
 into the pipe and the wrapper would parse its escape bytes as directives. herdr
 has no wrapper directive the way tmux does (`tmux-attach:`), so with
-`GROVE_SHELL=1` grove performs the directory switch and prints `Run: herdr`
-(or `herdr --session NAME`) instead (`attachToSession`).
+`GROVE_SHELL=1` grove performs the directory switch, focuses the target
+(`PrepareAttach`), and prints `Run: herdr` (or `herdr --session NAME`) instead
+(`attachToSession`) — so running the hint lands on the target.
 
 ---
 
@@ -300,7 +332,8 @@ gap stays explicit:
 | `Popuper` | tmux | `display-popup` overlay |
 | `ControlModer` | tmux | iTerm2 `tmux -CC` |
 | `AttachDirectiver` | tmux | hand attach to the shell wrapper |
-| `SessionLocator` | herdr | sessions may live in another server; `Kill` closes them everywhere |
+| `SessionLocator` | herdr | sessions may live in another server; `Kill` / `KillEverywhere` close them everywhere |
+| `AttachPreparer` | herdr | focus the target before printing an attach hint, since `herdr` cannot name one |
 | `Adopter` | herdr | bring a newly adopted worktree's session in line |
 
 Three backends: `TmuxBackend`, `HerdrBackend`, `OffBackend` (callers hold a
@@ -323,6 +356,7 @@ after a client-only update — and `herdr` from `PATH` otherwise.
 | `Exists` | lookup in `List` via `mux.Index` (path, then label) |
 | `Current` | `$HERDR_WORKSPACE_ID` → `workspace get` |
 | `Attach` | `workspace focus <id>`, then exec `herdr` (with `--session` when adopted from another session) |
+| `PrepareAttach` (`AttachPreparer`) | `workspace focus <id>` before an attach *hint* is printed (shell integration, manual mode), so the client the user starts lands on the target |
 | `Switch` | `workspace focus <id>` |
 | `Rename` | `workspace rename <id> <label>`, plus the tab when it carries a generated or grove-set label |
 | `Kill` | `workspace close <id>` in every running session — **never** `worktree remove` |
@@ -464,7 +498,10 @@ possibly the pane running the script all appear in `workspace list`. The
 script only ever closes workspaces whose checkout resolves inside its own
 scratch directory — in every running session — starts and deletes its own
 named session, refuses `--plugin` if the plugin is already installed, and
-keeps the server-stopping checks behind `--stop-server`.
+keeps the server-stopping checks behind `--stop-server`. It runs as if from
+outside herdr (dropping a pane's `HERDR_SOCKET_PATH` / `HERDR_ENV` in favor of
+naming the same session), and an `EXIT` trap unlinks the plugin and stops its
+session even when interrupted.
 
 ---
 
@@ -505,6 +542,11 @@ Bugs that only live runs found:
 9. **`focused` is not "attached"** — it is server-wide and set with no client.
 10. **`worktree open --path <repo>` opens the parent workspace** — the docs had
     claimed grove declines the repository checkout.
+11. **A wedged named session stalled `grove to` / `grove rm` by 5s** (found in
+    review with a SIGSTOPped server) — now a 250ms peer budget, queried
+    concurrently.
+12. **A renamed worktree's workspace could be adopted, taken over, or closed**
+    for a new worktree at its old path — now guarded by `movedOn`.
 
 ---
 
@@ -515,6 +557,9 @@ Bugs that only live runs found:
 - **Stopped named sessions** cannot be reached, so their copy of a removed
   worktree's workspace is left for herdr to reconcile on restart.
 - **`grove rename`** relabels only the ambient session's workspace.
+- **A renamed worktree's workspace keeps its old path** in herdr's record, so a
+  new worktree created at that path gets no workspace of its own until the
+  renamed one's is closed; grove declines with a hint rather than take it over.
 - **`done` agent state** comes from unit and golden tests only; `pane
   report-agent` cannot set it (herdr derives it), and live runs drove
   `blocked`/`idle`/`working`.

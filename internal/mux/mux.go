@@ -112,6 +112,9 @@ type Session struct {
 	// Path is the session's checkout path. Empty when the backend cannot
 	// report it — the tmux backend leaves this unset.
 	Path string
+	// Repo is the repository's main checkout, when the backend reports it
+	// (herdr's worktree provenance). The tmux backend leaves this unset.
+	Repo string
 	// ID is the backend's own handle, used for follow-up calls. For tmux this
 	// equals Name; for herdr it is the opaque workspace id (e.g. "w1").
 	ID string
@@ -220,6 +223,26 @@ type SessionLocator interface {
 	// LocatedIn names the other server whose session Ensure adopted for t, or
 	// "" when t's session is (or would be) in the one grove is talking to.
 	LocatedIn(t Target) string
+	// KillEverywhere is Kill, also reporting which other servers it closed
+	// t's session in and which it could not check.
+	KillEverywhere(t Target) (KillReport, error)
+}
+
+// KillReport is what KillEverywhere did beyond the server grove talks to.
+type KillReport struct {
+	// ClosedIn names the other servers t's session was closed in.
+	ClosedIn []string
+	// Unchecked names running servers that did not answer in time; a copy of
+	// t's session may remain in them.
+	Unchecked []string
+}
+
+// AttachPreparer is implemented by backends whose attach command cannot name
+// its target — herdr's client starts on whichever workspace its server has
+// focused. PrepareAttach readies the target so that a user who runs AttachHint
+// by hand lands on it.
+type AttachPreparer interface {
+	PrepareAttach(t Target) error
 }
 
 // Adopter is implemented by backends that keep their own record of whether
