@@ -79,6 +79,8 @@ export GROVE_TUI=0               # disable dashboard
 - **Read-only switching:** `grove to <name> --peek` — skips hooks and tmux. Safe for PR review.
 - **Shell directives:** Without `GROVE_SHELL=1`, grove emits `cd:`, `tmux-attach:`, `env:` lines raw. Filter them: `grove to x 2>&1 | grep -vE '^(cd:|tmux-attach(-cc)?:|env:)'`
 - **`grove new` and tmux:** `GROVE_AGENT_MODE=1` does NOT suppress tmux session creation in `grove new` — pass `--no-tmux` for that, or set `[tmux] mode = "off"` in config.
+- **herdr:** grove may drive [herdr](https://herdr.dev) instead of tmux (`[mux] backend` in `.grove/config.toml`, or automatically inside a herdr pane). Commands work the same. Never run `herdr worktree create` / `herdr worktree remove` on grove's behalf — they bypass grove's naming and protection rules; use `grove new` / `grove rm`.
+- **Session state in JSON:** `grove ls --json` (`.worktrees[].session`) and `grove here --json` (`.session.status`) report `attached` / `detached` / `none` under tmux and `active` / `open` / `none` under herdr. Grove before 0.11.0 named this field `tmux`. Under herdr, `grove ls --json` also gives an `agent` field (`idle` / `working` / `blocked` / `done`) — the quickest way to find a worktree whose agent is waiting on input.
 - **Trust:** `.grove/hooks.toml` runs as `sh -c` with full env. Run `grove doctor` and check hooks before `grove new`/`grove fetch` in an unfamiliar repo.
 
 ## Deterministic Helpers

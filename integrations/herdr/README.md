@@ -124,11 +124,11 @@ reports whether grove tracks that checkout.
 ## Install
 
 ```bash
-herdr plugin install lost-in-the/grove/integrations/herdr --ref vX.Y.Z
+herdr plugin install lost-in-the/grove/integrations/herdr --ref v0.11.0
 ```
 
 Pin `--ref` to the tag of the grove release you have installed (`grove
-version`). The plugin calls grove's hidden `herdr-event` / `herdr-action`
+version`; the plugin first shipped in v0.11.0). The plugin calls grove's hidden `herdr-event` / `herdr-action`
 subcommands, so the manifest and the binary should come from the same release;
 without `--ref` herdr installs the default branch. There is no `herdr plugin
 update` — reinstall with a new `--ref` when you upgrade grove.
