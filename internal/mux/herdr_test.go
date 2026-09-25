@@ -128,8 +128,10 @@ func TestHerdrListDecodesWorkspaces(t *testing.T) {
 	if main.Path != "/repos/grove" {
 		t.Errorf("Path = %q, want the worktree checkout_path", main.Path)
 	}
-	if main.Status != StatusAttached {
-		t.Errorf("focused workspace Status = %q, want %q", main.Status, StatusAttached)
+	// herdr's `focused` is one server-wide value that stays set with no
+	// client attached, so it maps to active/open, never attached/detached.
+	if main.Status != StatusActive {
+		t.Errorf("focused workspace Status = %q, want %q", main.Status, StatusActive)
 	}
 	if main.Agent != AgentWorking {
 		t.Errorf("Agent = %q, want %q", main.Agent, AgentWorking)
@@ -138,8 +140,8 @@ func TestHerdrListDecodesWorkspaces(t *testing.T) {
 		t.Errorf("Windows = %d, want pane_count 2", main.Windows)
 	}
 
-	if sessions[1].Status != StatusDetached {
-		t.Errorf("unfocused workspace Status = %q, want %q", sessions[1].Status, StatusDetached)
+	if sessions[1].Status != StatusOpen {
+		t.Errorf("unfocused workspace Status = %q, want %q", sessions[1].Status, StatusOpen)
 	}
 	if sessions[1].Agent != AgentBlocked {
 		t.Errorf("Agent = %q, want %q", sessions[1].Agent, AgentBlocked)
@@ -1309,5 +1311,21 @@ func TestHerdrAmbientSessionFollowsTheCLIPrecedence(t *testing.T) {
 		if got := b.ambientSession(listed.Sessions); got != tc.want {
 			t.Errorf("%s: ambientSession() = %q, want %q", tc.name, got, tc.want)
 		}
+	}
+}
+
+func TestStatusForegroundAndBackground(t *testing.T) {
+	for _, s := range []Status{StatusAttached, StatusActive} {
+		if !s.Foreground() || s.Background() {
+			t.Errorf("%q: Foreground/Background = %v/%v, want true/false", s, s.Foreground(), s.Background())
+		}
+	}
+	for _, s := range []Status{StatusDetached, StatusOpen} {
+		if s.Foreground() || !s.Background() {
+			t.Errorf("%q: Foreground/Background = %v/%v, want false/true", s, s.Foreground(), s.Background())
+		}
+	}
+	if StatusNone.Foreground() || StatusNone.Background() {
+		t.Error("StatusNone must be neither foreground nor background")
 	}
 }

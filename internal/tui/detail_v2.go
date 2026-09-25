@@ -258,13 +258,19 @@ func splitContainerDetail(detail string) (main, pointed string) {
 	return detail, ""
 }
 
-// renderTmuxValue returns styled tmux session indicator.
+// renderTmuxValue returns the styled session indicator. herdr reports
+// active/open rather than attached/detached (see mux.StatusActive), and names
+// its sessions workspaces.
 func renderTmuxValue(item *WorktreeItem) string {
-	switch item.TmuxStatus {
-	case tmuxStatusAttached:
+	switch mux.Status(item.TmuxStatus) {
+	case mux.StatusAttached:
 		return Styles.TmuxBadgeActive.Render("⬢ active session")
-	case tmuxStatusDetached:
+	case mux.StatusDetached:
 		return Styles.TmuxBadge.Render("⬡ detached session")
+	case mux.StatusActive:
+		return Styles.TmuxBadgeActive.Render("⬢ active workspace")
+	case mux.StatusOpen:
+		return Styles.TmuxBadge.Render("⬡ open workspace")
 	default:
 		return ""
 	}

@@ -165,16 +165,15 @@ check "both worktrees have workspaces" "$(wslist | grep -c 'demo-')" "2"
 sect "identity is the checkout path, not the label"
 # herdr labels are cosmetic and user-renameable; grove keys on the checkout
 # path, so relabelling behind grove's back must not desync it. "Not desynced"
-# means the worktree still resolves to a live session — attached or detached
-# is the client's business (a live GUI focuses freshly opened workspaces; the
-# headless server this script was first verified against focuses nothing), so
-# asserting a specific one of the two makes the check flap with focus.
+# means the worktree still resolves to a live session — active (herdr's
+# server-wide focused workspace) or open is focus's business, not identity's,
+# so asserting a specific one of the two makes the check flap with focus.
 WS=$(wslist | grep '|demo-alpha|' | cut -d'|' -f1 | head -n1)
 herdr workspace rename "$WS" "renamed-by-the-user" >/dev/null 2>&1
 S=$("$GROVE" ls | awk '$1=="alpha"{print $4}')
 case "$S" in
-  attached|detached) ok "relabelling a workspace does not desync grove" ;;
-  *) bad "relabelling a workspace does not desync grove" "got [$S] want [attached|detached]" ;;
+  active|open) ok "relabelling a workspace does not desync grove" ;;
+  *) bad "relabelling a workspace does not desync grove" "got [$S] want [active|open]" ;;
 esac
 herdr workspace rename "$WS" "demo-alpha" >/dev/null 2>&1
 
@@ -192,12 +191,12 @@ else
 fi
 # herdr's checkout provenance goes stale here; grove resolves via the name
 # fallback instead. That self-healing is the thing being asserted — any live
-# status proves it; attached-vs-detached only reflects where the client's
-# focus happens to sit (see the relabelling check above).
+# status proves it; active-vs-open only reflects where focus happens to sit
+# (see the relabelling check above).
 S=$("$GROVE" ls | awk '$1=="renamed"{print $4}')
 case "$S" in
-  attached|detached) ok "renamed worktree still resolves" ;;
-  *) bad "renamed worktree still resolves" "got [$S] want [attached|detached]" ;;
+  active|open) ok "renamed worktree still resolves" ;;
+  *) bad "renamed worktree still resolves" "got [$S] want [active|open]" ;;
 esac
 
 sect "switch"

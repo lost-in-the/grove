@@ -1062,7 +1062,7 @@ func (w herdrWorkspace) session() Session {
 	s := Session{
 		Name:    w.Label,
 		ID:      w.WorkspaceID,
-		Status:  attachStatus(w.Focused),
+		Status:  focusStatus(w.Focused),
 		Agent:   parseAgentStatus(w.AgentStatus),
 		Windows: w.PaneCount,
 	}
@@ -1070,6 +1070,15 @@ func (w herdrWorkspace) session() Session {
 		s.Path = w.Worktree.CheckoutPath
 	}
 	return s
+}
+
+// focusStatus maps herdr's server-wide focus onto grove's session status —
+// see StatusActive for why this is not attached/detached.
+func focusStatus(focused bool) Status {
+	if focused {
+		return StatusActive
+	}
+	return StatusOpen
 }
 
 // herdrOpened is the `worktree open` response. It reports the workspace, its

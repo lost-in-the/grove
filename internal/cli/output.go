@@ -100,6 +100,7 @@ const (
 	StatusDirty    StatusLevel = "dirty"
 	StatusWarning  StatusLevel = "warning"
 	StatusDetached StatusLevel = "detached"
+	StatusOpen     StatusLevel = "open"
 	StatusStale    StatusLevel = "stale"
 	StatusError    StatusLevel = "error"
 	StatusFail     StatusLevel = "fail"
@@ -115,7 +116,7 @@ func StatusText(w *Writer, status StatusLevel, text string) string {
 	switch status {
 	case StatusClean, StatusOK, StatusActive, StatusAttached:
 		return lipgloss.NewStyle().Foreground(theme.Colors.Success).Render(text)
-	case StatusDirty, StatusWarning, StatusDetached:
+	case StatusDirty, StatusWarning, StatusDetached, StatusOpen:
 		return lipgloss.NewStyle().Foreground(theme.Colors.Warning).Render(text)
 	case StatusStale, StatusError, StatusFail:
 		return lipgloss.NewStyle().Foreground(theme.Colors.Danger).Render(text)

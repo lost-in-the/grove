@@ -562,6 +562,8 @@ func TestTmuxText(t *testing.T) {
 	}{
 		{"attached", "attached"},
 		{"detached", "tmux"},
+		{"active", "active"},
+		{"open", "open"},
 		{"none", ""},
 	}
 	for _, tt := range tests {
@@ -572,6 +574,44 @@ func TestTmuxText(t *testing.T) {
 		}
 		if tt.check != "" && !strings.Contains(got, tt.check) {
 			t.Errorf("TmuxText() for %q = %q, expected %q", tt.status, got, tt.check)
+		}
+	}
+}
+
+// herdr reports active/open instead of attached/detached (its `focused` flag
+// is server-wide and set even with no client attached); the dashboard must
+// render both vocabularies, and name herdr's sessions workspaces.
+func TestRenderTmuxValueHerdrStatuses(t *testing.T) {
+	tests := []struct {
+		status string
+		want   string
+	}{
+		{"attached", "active session"},
+		{"detached", "detached session"},
+		{"active", "active workspace"},
+		{"open", "open workspace"},
+		{"none", ""},
+	}
+	for _, tt := range tests {
+		got := renderTmuxValue(&WorktreeItem{TmuxStatus: tt.status})
+		if tt.want == "" && got != "" {
+			t.Errorf("renderTmuxValue(%q) = %q, want empty", tt.status, got)
+		}
+		if tt.want != "" && !strings.Contains(got, tt.want) {
+			t.Errorf("renderTmuxValue(%q) = %q, want it to contain %q", tt.status, got, tt.want)
+		}
+	}
+}
+
+func TestTmuxStatusSymbolCoversHerdrStatuses(t *testing.T) {
+	for _, status := range []string{"attached", "active"} {
+		if got := tmuxStatusSymbol(WorktreeItem{TmuxStatus: status}); !strings.Contains(got, "⬢") {
+			t.Errorf("tmuxStatusSymbol(%q) = %q, want the filled badge", status, got)
+		}
+	}
+	for _, status := range []string{"detached", "open"} {
+		if got := tmuxStatusSymbol(WorktreeItem{TmuxStatus: status}); !strings.Contains(got, "⬡") {
+			t.Errorf("tmuxStatusSymbol(%q) = %q, want the hollow badge", status, got)
 		}
 	}
 }

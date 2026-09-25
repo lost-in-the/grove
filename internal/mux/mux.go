@@ -43,13 +43,32 @@ func (t Target) DisplayName() string {
 type Status string
 
 const (
-	// StatusAttached means a client is currently viewing the session.
+	// StatusAttached means a client is currently viewing the session (tmux).
 	StatusAttached Status = "attached"
-	// StatusDetached means the session exists but no client is viewing it.
+	// StatusDetached means the session exists but no client is viewing it
+	// (tmux).
 	StatusDetached Status = "detached"
+	// StatusActive means the workspace is the server's focused one (herdr).
+	//
+	// herdr cannot say whether anyone is looking: `focused` is a single
+	// server-wide "current workspace" that stays set with no client attached
+	// at all, and several clients may each view a different workspace. So
+	// herdr reports active/open rather than borrowing tmux's attached/detached,
+	// which would claim a viewer that may not exist.
+	StatusActive Status = "active"
+	// StatusOpen means the workspace exists but is not the focused one (herdr).
+	StatusOpen Status = "open"
 	// StatusNone means no session exists for the target.
 	StatusNone Status = "none"
 )
+
+// Foreground reports whether the status marks the session in front: attached
+// under tmux, active under herdr.
+func (s Status) Foreground() bool { return s == StatusAttached || s == StatusActive }
+
+// Background reports whether the session exists but is not in front:
+// detached under tmux, open under herdr.
+func (s Status) Background() bool { return s == StatusDetached || s == StatusOpen }
 
 // AgentStatus is the coding-agent lifecycle state a backend reports for a
 // session. Only herdr can report these; the tmux backend always returns

@@ -90,11 +90,15 @@ func (w *WorktreeItem) StatusText() string {
 
 // TmuxText returns a display string for tmux status.
 func (w *WorktreeItem) TmuxText() string {
-	switch w.TmuxStatus {
-	case "attached":
+	switch mux.Status(w.TmuxStatus) {
+	case mux.StatusAttached:
 		return Styles.TmuxBadge.Render("⬡ attached")
-	case "detached":
+	case mux.StatusDetached:
 		return Styles.TmuxBadge.Render("⬡ tmux")
+	case mux.StatusActive:
+		return Styles.TmuxBadge.Render("⬢ active")
+	case mux.StatusOpen:
+		return Styles.TmuxBadge.Render("⬡ open")
 	default:
 		return ""
 	}
