@@ -150,13 +150,19 @@ An explicit backend is honored even when its binary is missing — grove reports
 that rather than silently driving a different multiplexer than you asked for.
 
 **herdr differences.** herdr has no `tmux -CC` control mode, so `control_mode`
-below is ignored. Popup placement is reachable only through herdr's plugin pane
-surface, so `[session] popup` falls back to a full-window switch unless you
-install the plugin in [integrations/herdr](../integrations/herdr/README.md).
-In exchange, herdr reports each worktree's coding-agent state
+below is ignored. herdr has no popup placement grove can use, so `[session]
+popup` falls back to a full-window workspace switch. Session status reads
+`active` / `open` rather than `attached` / `detached`: herdr's focus is one
+server-wide "current workspace" that says nothing about whether anyone is
+looking. In exchange, herdr reports each worktree's coding-agent state
 (`idle`/`working`/`blocked`/`done`), which `grove ls` shows in an AGENT column
 and the dashboard shows as a badge. tmux cannot report this, so the column is
 hidden under tmux.
+
+grove talks to the herdr session it is running in (or `HERDR_SESSION`, or the
+default one). A worktree already open in another named session is adopted
+there rather than duplicated, and `grove rm` closes its workspace in every
+running session.
 
 Grove keeps ownership of worktree lifecycle under both backends: it creates the
 checkout itself and asks herdr only to adopt it, and it never invokes herdr's

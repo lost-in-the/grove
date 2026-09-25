@@ -44,7 +44,7 @@ Each row in the list shows:
 | Age | Time since last commit |
 | ± | Git status symbol: `✓` clean, `●` dirty, `✗` stale |
 | ↕ | Sync status: `↑N` ahead, `↓N` behind |
-| ⬡ | Tmux session: `⬢` attached, `⬡` detached |
+| ⬡ | Session: `⬢` attached (tmux) / active (herdr), `⬡` detached / open |
 | ◆ | Container status from plugins |
 
 The selected row always shows `❯` regardless of worktree status — the indicator column prioritizes selection cursor over status symbols.
@@ -62,7 +62,7 @@ Selecting a worktree updates the detail panel with:
 **Status section**
 - Working tree status: clean / dirty (N files) / stale
 - Sync status: synced / ahead N / behind N (only shown when a remote is tracked)
-- Tmux: active session / detached session (only shown when a session exists)
+- Session: active session / detached session under tmux, active workspace / open workspace under herdr (only shown when a session exists)
 
 **Changes section** (only when dirty)
 - List of changed files with type indicators: `M` modified, `+` added, `-` deleted

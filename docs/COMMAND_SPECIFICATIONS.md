@@ -170,14 +170,17 @@ User-facing surfaces name the resolved backend (the `grove ls` column, TUI
 badges, `grove here`'s label), and machine output uses the neutral `"session"`
 JSON key in `grove ls --json` and `grove here --json`.
 
-Three behaviors differ by backend:
+These behaviors differ by backend:
 
 | Behavior | tmux | herdr |
 |---|---|---|
 | Session identity | session name | checkout path (label is cosmetic) |
-| `grove open --popup` | `display-popup` overlay | full-window switch, unless the [herdr plugin](../integrations/herdr/README.md) is installed |
+| Session status values | `attached` / `detached` / `none` | `active` (the server's focused workspace) / `open` / `none` |
+| `grove open --popup` | `display-popup` overlay | full-window switch |
 | `control_mode` (iTerm2 `tmux -CC`) | honored | ignored |
 | Agent status in `grove ls` / dashboard | not reported | `idle` / `working` / `blocked` / `done` |
+| Several independent servers | n/a | a worktree open in another named session is adopted there (outside herdr: focus + `herdr --session NAME`; inside another session: warning + `cd` only), never duplicated; `grove rm` closes it in every running session |
+| Server unusable | stopped server → plain `cd` | stopped server → plain `cd`; protocol mismatch after an upgrade → plain `cd` plus a one-line warning |
 
 Session naming is unchanged: tmux session names and herdr workspace labels both
 use the canonical `{project}-{name}` form regardless of the directory pattern.
@@ -285,7 +288,7 @@ NAME            BRANCH          STATUS     TMUX        PATH
 - `NAME` = short name (without project prefix)
 - `BRANCH` = current branch
 - `STATUS` = git status: `clean`, `dirty` (uncommitted changes), `conflict`, `detached`
-- `TMUX` = session status: `attached` (you're in it), `detached` (exists, not attached), `none` (no session), `frozen`. **The header is named after the active backend** — `TMUX` under tmux, `HERDR` under herdr, `SESSION` when none is being driven. The values are the same either way.
+- `TMUX` = session status: `attached` (you're in it), `detached` (exists, not attached), `none` (no session), `frozen`. Under herdr the values are `active` (the server's focused workspace), `open` (the workspace exists), and `none`. **The header is named after the active backend** — `TMUX` under tmux, `HERDR` under herdr, `SESSION` when none is being driven. The values follow the backend (above).
 - `PATH` = absolute path
 
 **Output Format (--paths):**
