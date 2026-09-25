@@ -188,6 +188,21 @@ type ControlModer interface {
 	AttachControlMode(t Target) error
 }
 
+// SessionLocator is implemented by backends that run several independent
+// servers side by side — herdr's named sessions, each with its own workspaces
+// and no awareness of the others — so a target's session may live somewhere
+// other than the server grove is talking to.
+//
+// Ensure on such a backend adopts a target's existing session from another
+// server instead of opening a duplicate, and Kill closes the target's session
+// in every running server. Callers therefore must not gate Kill on Exists,
+// which only answers for the server grove is talking to.
+type SessionLocator interface {
+	// LocatedIn names the other server whose session Ensure adopted for t, or
+	// "" when t's session is (or would be) in the one grove is talking to.
+	LocatedIn(t Target) string
+}
+
 // AttachDirectiver is implemented by backends that can hand attachment off to
 // grove's shell wrapper instead of attaching in-process.
 type AttachDirectiver interface {

@@ -116,7 +116,7 @@ This is a tmux-only command — it does not emit cd: directives.`,
 			}
 			created = true
 			if !attachJSON {
-				cli.Success(stderr, "Created %s session '%s'", m.Backend(), sessionName)
+				reportEnsured(stderr, m, target)
 			}
 		}
 

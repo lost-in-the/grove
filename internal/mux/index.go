@@ -100,6 +100,23 @@ func (ix *Index) AgentFor(t Target) AgentStatus {
 	return s.Agent
 }
 
+// sameGonePath compares two paths that may no longer exist — a checkout grove
+// has just removed, against the path a backend recorded for it. Each side is
+// canonicalized through its parent directory, which usually survives the
+// removal, so a symlinked projects dir (macOS /tmp → /private/tmp) still
+// matches.
+func sameGonePath(a, b string) bool {
+	return a != "" && b != "" && canonicalGonePath(a) == canonicalGonePath(b)
+}
+
+func canonicalGonePath(p string) string {
+	p = filepath.Clean(p)
+	if resolved, err := filepath.EvalSymlinks(filepath.Dir(p)); err == nil {
+		return filepath.Join(resolved, filepath.Base(p))
+	}
+	return p
+}
+
 // pathKeys returns the forms a path may be matched under: cleaned, and
 // symlink-resolved when that differs and the path exists. Order matters —
 // callers try them in sequence.

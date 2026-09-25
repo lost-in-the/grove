@@ -124,6 +124,19 @@ func ensureSession(m mux.Multiplexer, t mux.Target, stderr *cli.Writer) (bool, e
 	}
 }
 
+// reportEnsured announces the session Ensure produced for a target that had
+// none: a new one, or — on a backend with several independent servers — an
+// existing one it found in another server and adopted instead of duplicating.
+func reportEnsured(stderr *cli.Writer, m mux.Multiplexer, t mux.Target) {
+	if l, ok := m.(mux.SessionLocator); ok {
+		if where := l.LocatedIn(t); where != "" {
+			cli.Info(stderr, "Using '%s' from %s session '%s'", t.Name, m.Backend(), where)
+			return
+		}
+	}
+	cli.Success(stderr, "Created %s session '%s'", m.Backend(), t.Name)
+}
+
 // warnDegraded explains an unmanaged target when the backend says it deserves
 // explaining (see mux.DegradedHint), and stays quiet otherwise.
 func warnDegraded(stderr *cli.Writer, err error) {
@@ -150,12 +163,6 @@ func sessionColumnTitle(m mux.Multiplexer) string {
 	default:
 		return "SESSION"
 	}
-}
-
-// manualAttachHint returns the command to show in manual mode, where grove
-// creates the session but leaves attaching to the user.
-func manualAttachHint(m mux.Multiplexer, sessionName string) string {
-	return m.AttachHint(mux.Target{Name: sessionName})
 }
 
 // controlModeFor returns the backend's control-mode support when it both
@@ -359,12 +366,19 @@ func removeWorktreeWithHooks(ctx *GroveContext, mgr *worktree.Manager, w *cli.Wr
 
 	// Kill the multiplexer session after the worktree is confirmed gone. This
 	// closes session state only — the checkout is already removed above.
+	//
+	// Exists only answers for the server grove is talking to. A backend that
+	// runs several independent servers (herdr's named sessions) may hold the
+	// worktree's session in another one, and its Kill closes those too — so it
+	// runs even when the ambient server has nothing.
 	if m := ctx.Mux(); m.Available() {
 		target := muxTarget(mgr, name, wtPath)
-		if exists, err := m.Exists(target); err == nil && exists {
+		exists, err := m.Exists(target)
+		_, everywhere := m.(mux.SessionLocator)
+		if err == nil && (exists || everywhere) {
 			if err := m.Kill(target); err != nil {
 				cli.Warning(w, "Failed to kill session: %v", err)
-			} else {
+			} else if exists {
 				cli.Success(w, "Killed session '%s'", target.Name)
 			}
 		}

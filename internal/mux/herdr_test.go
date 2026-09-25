@@ -1,6 +1,7 @@
 package mux
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -11,12 +12,15 @@ import (
 )
 
 // fakeHerdr records invocations and replays canned responses keyed by the
-// first two argv words (the herdr command group and subcommand).
+// first two argv words (the herdr command group and subcommand). A call pinned
+// to a named session (`--session NAME ...`) is looked up under "@NAME key"
+// first, so one fake can stand in for several independent herdr servers.
 type fakeHerdr struct {
-	calls     [][]string
-	responses map[string]string
-	errs      map[string]error
-	attached  int
+	calls      [][]string
+	responses  map[string]string
+	errs       map[string]error
+	attached   int
+	attachArgs []string
 }
 
 func newFakeHerdr() *fakeHerdr {
@@ -24,6 +28,9 @@ func newFakeHerdr() *fakeHerdr {
 }
 
 func (f *fakeHerdr) key(args []string) string {
+	if len(args) >= 2 && args[0] == "--session" {
+		args = args[2:]
+	}
 	if len(args) >= 2 {
 		return args[0] + " " + args[1]
 	}
@@ -36,6 +43,14 @@ func (f *fakeHerdr) key(args []string) string {
 func (f *fakeHerdr) run(args []string) ([]byte, error) {
 	f.calls = append(f.calls, args)
 	k := f.key(args)
+	if len(args) >= 2 && args[0] == "--session" {
+		scoped := "@" + args[1] + " " + k
+		if _, ok := f.responses[scoped]; ok {
+			k = scoped
+		} else if _, ok := f.errs[scoped]; ok {
+			k = scoped
+		}
+	}
 	if err, ok := f.errs[k]; ok {
 		return []byte(f.responses[k]), err
 	}
@@ -45,7 +60,7 @@ func (f *fakeHerdr) run(args []string) ([]byte, error) {
 func (f *fakeHerdr) backend() *HerdrBackend {
 	b := NewHerdr()
 	b.run = f.run
-	b.attach = func() error { f.attached++; return nil }
+	b.attach = func(args []string) error { f.attached++; f.attachArgs = args; return nil }
 	b.available = func() bool { return true }
 	b.env = func(string) string { return "" }
 	return b
@@ -1064,6 +1079,235 @@ func TestHerdrServerStatusUsable(t *testing.T) {
 	for _, tc := range cases {
 		if got := tc.status.Usable(); got != tc.want {
 			t.Errorf("%s: Usable() = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// --- named sessions ---
+
+// Real `herdr session list --json` shape (0.9.1): bare JSON, no envelope.
+const herdrSessionListJSON = `{"sessions":[{"default":true,"name":"default","running":true,"session_dir":"/home/u/.config/herdr","socket_path":"/home/u/.config/herdr/herdr.sock"},{"default":false,"name":"other","running":true,"session_dir":"/home/u/.config/herdr/sessions/other","socket_path":"/home/u/.config/herdr/sessions/other/herdr.sock"},{"default":false,"name":"asleep","running":false,"session_dir":"/home/u/.config/herdr/sessions/asleep","socket_path":"/home/u/.config/herdr/sessions/asleep/herdr.sock"}]}`
+
+// workspaceListFor returns a one-workspace listing for checkout.
+func workspaceListFor(id, label, checkout string) string {
+	return fmt.Sprintf(`{"id":"cli:workspace:list","result":{"type":"workspace_list","workspaces":[`+
+		`{"workspace_id":%q,"number":1,"label":%q,"focused":false,"pane_count":1,"tab_count":1,`+
+		`"active_tab_id":"%s:t1","agent_status":"unknown","worktree":{"repo_key":"k","repo_name":"grove",`+
+		`"repo_root":"/repos/grove","checkout_path":%q,"is_linked_worktree":true}}]}}`, id, label, id, checkout)
+}
+
+const emptyWorkspaceListJSON = `{"id":"cli:workspace:list","result":{"type":"workspace_list","workspaces":[]}}`
+
+// herdr sessions are independent servers; `worktree open` only checks its own
+// for an existing workspace. Outside herdr, a checkout already open in another
+// session must be adopted there — focused, and attached with --session —
+// rather than opened a second time in the ambient one.
+func TestHerdrEnsureAdoptsAWorkspaceFromAnotherSession(t *testing.T) {
+	checkout := t.TempDir()
+	f := newFakeHerdr()
+	f.responses["workspace list"] = emptyWorkspaceListJSON
+	f.responses["session list"] = herdrSessionListJSON
+	f.responses["@other workspace list"] = workspaceListFor("w7", "grove-testing", checkout)
+	f.responses["@other workspace focus"] = `{"id":"cli:workspace:focus","result":{"type":"workspace_info"}}`
+	b := f.backend()
+	target := Target{Name: "grove-testing", Path: checkout, Repo: "/repos/grove"}
+
+	if err := b.Ensure(target); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
+	if f.called("worktree", "open") {
+		t.Fatalf("Ensure opened a duplicate workspace; calls: %v", f.calls)
+	}
+	if got := b.LocatedIn(target); got != "other" {
+		t.Errorf("LocatedIn() = %q, want other", got)
+	}
+	if got := b.AttachHint(target); got != "herdr --session other" {
+		t.Errorf("AttachHint() = %q, want the session named", got)
+	}
+
+	if err := b.Attach(target); err != nil {
+		t.Fatalf("Attach() error = %v", err)
+	}
+	if !f.called("--session", "other", "workspace", "focus", "w7") {
+		t.Errorf("Attach did not focus the workspace in its own session; calls: %v", f.calls)
+	}
+	if strings.Join(f.attachArgs, " ") != "--session other" {
+		t.Errorf("attach args = %v, want --session other", f.attachArgs)
+	}
+}
+
+// Inside a herdr pane the CLI cannot move the user's client to another
+// session (a nested attach is refused by design). Opening a second workspace
+// here is the bug, so decline with a hint that names where it is open.
+func TestHerdrEnsureInsideHerdrDeclinesADuplicate(t *testing.T) {
+	checkout := t.TempDir()
+	f := newFakeHerdr()
+	f.responses["workspace list"] = emptyWorkspaceListJSON
+	f.responses["session list"] = herdrSessionListJSON
+	f.responses["@other workspace list"] = workspaceListFor("w7", "grove-testing", checkout)
+	b := f.backend()
+	b.env = func(key string) string {
+		switch key {
+		case "HERDR_ENV":
+			return "1"
+		case "HERDR_SOCKET_PATH":
+			return "/home/u/.config/herdr/herdr.sock"
+		}
+		return ""
+	}
+
+	err := b.Ensure(Target{Name: "grove-testing", Short: "testing", Path: checkout, Repo: "/repos/grove"})
+	if !ErrUnmanaged(err) {
+		t.Fatalf("Ensure() error = %v, want ErrUnmanaged", err)
+	}
+	if f.called("worktree", "open") {
+		t.Errorf("Ensure opened a duplicate workspace; calls: %v", f.calls)
+	}
+	hint := DegradedHint(err)
+	if !strings.Contains(hint, `open in herdr session "other"`) || !strings.Contains(hint, "herdr --session other") {
+		t.Errorf("DegradedHint() = %q, want the session named", hint)
+	}
+}
+
+func TestHerdrEnsureOpensHereWhenNoOtherSessionHasIt(t *testing.T) {
+	checkout := t.TempDir()
+	f := newFakeHerdr()
+	f.responses["workspace list"] = emptyWorkspaceListJSON
+	f.responses["session list"] = herdrSessionListJSON
+	f.responses["@other workspace list"] = workspaceListFor("w7", "grove-elsewhere", t.TempDir())
+	f.responses["worktree open"] = herdrOpenedJSON
+	b := f.backend()
+	target := Target{Name: "grove-testing", Path: checkout, Repo: "/repos/grove"}
+
+	if err := b.Ensure(target); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
+	if !f.called("worktree", "open") {
+		t.Errorf("Ensure did not open the workspace; calls: %v", f.calls)
+	}
+	if b.LocatedIn(target) != "" {
+		t.Errorf("LocatedIn() = %q, want the ambient session", b.LocatedIn(target))
+	}
+}
+
+// Matching across sessions is by checkout path only: a label in a session
+// grove never touched is not proof of identity.
+func TestHerdrEnsureIgnoresALabelMatchInAnotherSession(t *testing.T) {
+	f := newFakeHerdr()
+	f.responses["workspace list"] = emptyWorkspaceListJSON
+	f.responses["session list"] = herdrSessionListJSON
+	f.responses["@other workspace list"] = workspaceListFor("w7", "grove-testing", t.TempDir())
+	f.responses["worktree open"] = herdrOpenedJSON
+	b := f.backend()
+
+	if err := b.Ensure(Target{Name: "grove-testing", Path: t.TempDir(), Repo: "/repos/grove"}); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
+	if !f.called("worktree", "open") {
+		t.Errorf("a label match in another session suppressed the open; calls: %v", f.calls)
+	}
+}
+
+func TestHerdrSkipsStoppedSessions(t *testing.T) {
+	f := newFakeHerdr()
+	f.responses["workspace list"] = emptyWorkspaceListJSON
+	f.responses["session list"] = herdrSessionListJSON
+	f.responses["worktree open"] = herdrOpenedJSON
+
+	if err := f.backend().Ensure(Target{Name: "grove-testing", Path: t.TempDir(), Repo: "/repos/grove"}); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
+	if f.called("--session", "asleep") {
+		t.Errorf("queried a stopped session; calls: %v", f.calls)
+	}
+	if f.called("--session", "default") {
+		t.Errorf("queried the ambient session as if it were another; calls: %v", f.calls)
+	}
+}
+
+func TestHerdrEnsureWithCommandAdoptsElsewhereWithoutRunningIt(t *testing.T) {
+	checkout := t.TempDir()
+	f := newFakeHerdr()
+	f.responses["workspace list"] = emptyWorkspaceListJSON
+	f.responses["session list"] = herdrSessionListJSON
+	f.responses["@other workspace list"] = workspaceListFor("w7", "grove-testing", checkout)
+
+	if err := f.backend().EnsureWithCommand(Target{Name: "grove-testing", Path: checkout, Repo: "/repos/grove"}, "claude"); err != nil {
+		t.Fatalf("EnsureWithCommand() error = %v", err)
+	}
+	if f.called("pane", "run") || f.called("worktree", "open") {
+		t.Errorf("an existing workspace elsewhere must be left alone; calls: %v", f.calls)
+	}
+}
+
+// `grove rm` used to close only the ambient copy, orphaning the other
+// session's workspace on a deleted directory.
+func TestHerdrKillClosesCopiesInOtherSessions(t *testing.T) {
+	dir := t.TempDir()
+	gone := filepath.Join(dir, "grove-testing") // removed before Kill runs
+	f := newFakeHerdr()
+	f.responses["workspace list"] = workspaceListFor("w2", "grove-testing", gone)
+	f.responses["workspace close"] = herdrCloseOKJSON
+	f.responses["session list"] = herdrSessionListJSON
+	f.responses["@other workspace list"] = fmt.Sprintf(`{"id":"cli:workspace:list","result":{"type":"workspace_list","workspaces":[`+
+		`{"workspace_id":"w7","number":1,"label":"grove-testing","focused":false,"pane_count":1,"tab_count":1,"active_tab_id":"w7:t1","agent_status":"unknown","worktree":{"repo_key":"k","repo_name":"grove","repo_root":"/repos/grove","checkout_path":%q,"is_linked_worktree":true}},`+
+		`{"workspace_id":"w8","number":2,"label":"grove-testing","focused":false,"pane_count":1,"tab_count":1,"active_tab_id":"w8:t1","agent_status":"unknown","worktree":{"repo_key":"k","repo_name":"grove","repo_root":"/repos/grove","checkout_path":"/somewhere/else","is_linked_worktree":true}}]}}`, gone)
+	f.responses["@other workspace close"] = herdrCloseOKJSON
+
+	if err := f.backend().Kill(Target{Name: "grove-testing", Path: gone}); err != nil {
+		t.Fatalf("Kill() error = %v", err)
+	}
+	if !f.called("workspace", "close", "w2") {
+		t.Errorf("Kill did not close the ambient copy; calls: %v", f.calls)
+	}
+	if !f.called("--session", "other", "workspace", "close", "w7") {
+		t.Errorf("Kill did not close the copy in the other session; calls: %v", f.calls)
+	}
+	if f.called("workspace", "close", "w8") {
+		t.Errorf("Kill closed a workspace that only shares the label; calls: %v", f.calls)
+	}
+}
+
+func TestHerdrKillReachesOtherSessionsWhenTheAmbientOneIsDown(t *testing.T) {
+	gone := filepath.Join(t.TempDir(), "grove-testing")
+	f := newFakeHerdr()
+	f.responses["workspace list"] = `{"id":"cli:workspace:list","error":{"code":"server_not_running","message":"no herdr server is running"}}`
+	f.errs["workspace list"] = errors.New("exit status 1")
+	f.responses["session list"] = herdrSessionListJSON
+	f.responses["@other workspace list"] = workspaceListFor("w7", "grove-testing", gone)
+	f.responses["@other workspace close"] = herdrCloseOKJSON
+
+	if err := f.backend().Kill(Target{Name: "grove-testing", Path: gone}); err != nil {
+		t.Fatalf("Kill() error = %v, want nil with the ambient server down", err)
+	}
+	if !f.called("--session", "other", "workspace", "close", "w7") {
+		t.Errorf("Kill did not reach the other session; calls: %v", f.calls)
+	}
+}
+
+func TestHerdrAmbientSessionFollowsTheCLIPrecedence(t *testing.T) {
+	var listed struct {
+		Sessions []herdrSessionInfo `json:"sessions"`
+	}
+	if err := json.Unmarshal([]byte(herdrSessionListJSON), &listed); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name string
+		env  map[string]string
+		want string
+	}{
+		// Every pane sets HERDR_SOCKET_PATH, and it outranks HERDR_SESSION.
+		{"pane socket", map[string]string{"HERDR_SOCKET_PATH": "/home/u/.config/herdr/sessions/other/herdr.sock", "HERDR_SESSION": "default"}, "other"},
+		{"HERDR_SESSION", map[string]string{"HERDR_SESSION": "other"}, "other"},
+		{"default", nil, "default"},
+		{"unknown socket", map[string]string{"HERDR_SOCKET_PATH": "/tmp/stray.sock"}, ""},
+	}
+	for _, tc := range cases {
+		b := newFakeHerdr().backend()
+		b.env = func(k string) string { return tc.env[k] }
+		if got := b.ambientSession(listed.Sessions); got != tc.want {
+			t.Errorf("%s: ambientSession() = %q, want %q", tc.name, got, tc.want)
 		}
 	}
 }
