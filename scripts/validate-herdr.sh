@@ -452,6 +452,10 @@ if [ "$STOP_SERVER" -eq 0 ]; then
   printf '  \033[33mSKIP\033[0m  2 checks — stopping the server would kill every pane it hosts.\n'
   printf '        Re-run with --stop-server against a server you are not working in.\n'
 else
+# Close this run's workspaces first: herdr persists and restores its session
+# across a restart, and a restored workspace whose checkout is gone keeps its
+# label — which grove's rename fallback would match on the next run.
+close_lab_workspaces
 herdr server stop >/dev/null 2>&1
 sleep 1
 DOWN="$LAB/down.txt"
