@@ -95,14 +95,14 @@ This is a tmux-only command — it does not emit cd: directives.`,
 		}
 
 		if !exists {
-			managed, err := ensureSession(m, target)
+			managed, err := ensureSession(m, target, stderr)
 			if err != nil {
 				return fmt.Errorf("failed to create session: %w", err)
 			}
-			// `grove attach` on a target the backend declines (herdr + a
-			// repository checkout) has nothing to attach to. Say so plainly
-			// rather than failing — the worktree is fine, it just has no
-			// session of its own.
+			// `grove attach` on a target the backend declines (herdr with no
+			// usable server, or a path it cannot open as a worktree) has
+			// nothing to attach to. Say so plainly rather than failing — the
+			// worktree is fine, it just has no session right now.
 			if !managed {
 				if attachJSON {
 					return output.PrintJSON(output.AttachResult{
@@ -110,7 +110,7 @@ This is a tmux-only command — it does not emit cd: directives.`,
 						Path: targetTree.Path,
 					})
 				}
-				cli.Faint(stderr, "no %s session for '%s' — it is the repository checkout, which grove does not create a session for", m.Backend(), targetTree.DisplayName())
+				cli.Faint(stderr, "no %s session available for '%s' — changing directory only", m.Backend(), targetTree.DisplayName())
 				emitCdOrExplain(stderr, targetTree.Path)
 				return nil
 			}

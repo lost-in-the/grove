@@ -107,19 +107,31 @@ func openInCurrent(cfg *config.Config) bool {
 // backend is managing one.
 //
 // A backend that declines the target is not a failure. herdr returns
-// mux.ErrUnmanaged for a repository's own checkout, because grove deliberately
-// does not create workspaces it has no business owning. That means there is no
-// session, and the caller should carry on with the plain directory switch it
-// would perform with session management turned off.
-func ensureSession(m mux.Multiplexer, t mux.Target) (bool, error) {
+// mux.ErrUnmanaged when its server is unusable or the path is not a worktree it
+// can open. That means there is no session, and the caller should carry on with
+// the plain directory switch it would perform with session management turned
+// off — saying why when the reason is one the user should act on.
+func ensureSession(m mux.Multiplexer, t mux.Target, stderr *cli.Writer) (bool, error) {
 	err := m.Ensure(t)
 	switch {
 	case err == nil:
 		return true, nil
 	case mux.ErrUnmanaged(err):
+		warnDegraded(stderr, err)
 		return false, nil
 	default:
 		return false, err
+	}
+}
+
+// warnDegraded explains an unmanaged target when the backend says it deserves
+// explaining (see mux.DegradedHint), and stays quiet otherwise.
+func warnDegraded(stderr *cli.Writer, err error) {
+	if stderr == nil {
+		return
+	}
+	if hint := mux.DegradedHint(err); hint != "" {
+		cli.Warning(stderr, "%s", hint)
 	}
 }
 
@@ -246,7 +258,7 @@ func switchToWorktree(ctx *GroveContext, stderr *cli.Writer, prevName, targetNam
 			// muxTarget builds for `grove to` (and the one `grove rename`'s
 			// tab-relabel guard matches against).
 			target := mux.Target{Name: sessionName, Path: targetPath, Repo: repoRoot, Short: targetName}
-			managed, err := ensureSession(m, target)
+			managed, err := ensureSession(m, target, stderr)
 			if err != nil {
 				cli.Warning(stderr, "Failed to create session: %v", err)
 			}

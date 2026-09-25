@@ -1,15 +1,16 @@
 package mux
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/lost-in-the/grove/internal/cmdexec"
 )
@@ -76,6 +77,12 @@ func (b *HerdrBackend) Inside() bool { return b.env("HERDR_ENV") == "1" }
 // same checkout and re-applies the label — so this needs no existence check.
 // It never creates a checkout: grove owns worktree lifecycle, and herdr's own
 // `worktree create` would impose its own naming and placement.
+//
+// The repository's own checkout goes through the same call. herdr answers it
+// by adopting — or, if it has none yet, creating — the repository's parent
+// workspace, the one its sidebar groups the project's worktrees under. That is
+// herdr's own bookkeeping, the same workspace it materializes as a side effect
+// of opening any linked worktree; grove never calls `workspace create`.
 func (b *HerdrBackend) Ensure(t Target) error {
 	opened, err := b.open(t)
 	if err == nil {
@@ -84,24 +91,36 @@ func (b *HerdrBackend) Ensure(t Target) error {
 	}
 
 	if errHasCode(err, "worktree_not_found", "not_git_worktree") {
-		return b.mainCheckout(t)
+		return b.adoptUnopenable(t)
 	}
-	if ErrServerNotRunning(err) {
-		return noServerUnmanaged(err)
+	if errServerUnusable(err) {
+		return serverUnmanaged(err)
 	}
 	return err
 }
 
-// noServerUnmanaged maps a dead-server failure onto errUnmanaged: with no
-// herdr server there is no session to manage, and callers already know how to
-// degrade an unmanaged target to a plain directory switch. Surfacing it as a
-// hard error instead would make every `grove to` fail outright — the exact
-// opposite of what `grove doctor` promises ("grove will fall back to plain
-// directory switching"). The tmux backend behaves the same way: a dead tmux
-// server reads as "no sessions", never as a fatal switch error.
-func noServerUnmanaged(err error) error {
-	return fmt.Errorf("%w: no herdr server is running (%v)", errUnmanaged, err)
+// serverUnmanaged maps an unusable server onto errUnmanaged: with no herdr
+// server to talk to there is no session to manage, and callers already know
+// how to degrade an unmanaged target to a plain directory switch. Surfacing it
+// as a hard error instead would make every `grove to` fail outright — the
+// exact opposite of what `grove doctor` promises ("grove will fall back to
+// plain directory switching"). The tmux backend behaves the same way: a dead
+// tmux server reads as "no sessions", never as a fatal switch error.
+//
+// The original error stays in the chain so callers can tell a stopped server
+// (expected, silent) from a protocol mismatch (worth a hint — it follows every
+// herdr upgrade until the old server is restarted).
+func serverUnmanaged(err error) error {
+	return fmt.Errorf("%w: herdr server unavailable: %w", errUnmanaged, err)
 }
+
+// herdrBusyRetryDelay is how long open waits before retrying a `worktree_busy`
+// refusal. herdr runs worktree discovery on a small pool of background slots
+// and turns a request away, rather than queueing it, when every slot is taken
+// ("too many worktree checks are pending; retry shortly"). One short retry
+// rides out a burst without eating much of the 500ms command budget. A var so
+// tests need not sleep.
+var herdrBusyRetryDelay = 150 * time.Millisecond
 
 // open runs `worktree open` and decodes the response, which carries the
 // workspace, its tab, and the root pane — everything a caller needs without a
@@ -114,6 +133,10 @@ func (b *HerdrBackend) open(t Target) (herdrOpened, error) {
 		return opened, err
 	}
 	raw, err := b.call(args)
+	if errHasCode(err, "worktree_busy") {
+		time.Sleep(herdrBusyRetryDelay)
+		raw, err = b.call(args)
+	}
 	if err != nil {
 		return opened, err
 	}
@@ -149,17 +172,16 @@ func (b *HerdrBackend) renameTab(tabID, name string) {
 	_, _ = b.call([]string{"tab", "rename", tabID, name})
 }
 
-// mainCheckout handles a target herdr will not "open" because it is not a
-// linked worktree — in practice the repository's own checkout.
+// adoptUnopenable handles a target herdr refuses to open as a worktree — a
+// path its git worktree list does not contain (`worktree_not_found`), or one
+// outside any git checkout (`not_git_worktree`). The repository's own checkout
+// is not one of these; herdr opens that as the parent workspace.
 //
-// grove does not create a workspace here. herdr already materializes one for
-// the repository when it opens any linked worktree, and that workspace is what
-// its sidebar groups the worktrees under; creating and owning it from grove
-// would reach past worktree lifecycle into territory herdr and the user's
-// agents manage. So: adopt the repository workspace if it exists, and
-// otherwise report the target as unmanaged so the caller just changes
+// grove does not create a workspace for such a path: nothing herdr recognizes
+// would group or track it. So adopt a workspace that already covers the path,
+// and otherwise report the target unmanaged so the caller just changes
 // directory.
-func (b *HerdrBackend) mainCheckout(t Target) error {
+func (b *HerdrBackend) adoptUnopenable(t Target) error {
 	exists, err := b.Exists(t)
 	if err != nil {
 		return err
@@ -167,7 +189,7 @@ func (b *HerdrBackend) mainCheckout(t Target) error {
 	if exists {
 		return nil
 	}
-	return fmt.Errorf("%w: %s is a repository checkout, not a linked worktree", errUnmanaged, t.Path)
+	return fmt.Errorf("%w: herdr does not recognize %s as a git worktree", errUnmanaged, t.Path)
 }
 
 // EnsureWithCommand adopts the checkout, then runs command in its root pane
@@ -180,16 +202,16 @@ func (b *HerdrBackend) EnsureWithCommand(t Target, command string) error {
 
 	opened, err := b.open(t)
 	if err != nil {
-		if ErrServerNotRunning(err) {
-			return noServerUnmanaged(err)
+		if errServerUnusable(err) {
+			return serverUnmanaged(err)
 		}
 		if !errHasCode(err, "worktree_not_found", "not_git_worktree") {
 			return err
 		}
-		// Repository checkout: grove does not create a workspace for it. If
-		// herdr already has one, run the command in its pane; otherwise the
-		// target is unmanaged and there is no pane to run anything in.
-		if err := b.mainCheckout(t); err != nil {
+		// A path herdr will not open: if a workspace already covers it, run
+		// the command in its pane; otherwise the target is unmanaged and there
+		// is no pane to run anything in.
+		if err := b.adoptUnopenable(t); err != nil {
 			return err
 		}
 		pane, perr := b.rootPane(t)
@@ -207,14 +229,16 @@ func (b *HerdrBackend) EnsureWithCommand(t Target, command string) error {
 
 // Exists reports whether a herdr workspace already covers the checkout.
 //
-// A dead server means no workspace exists, not that the question failed:
-// callers treat an Exists error as fatal (it aborts `grove to` before the cd
-// directive), while "false" routes them through Ensure, which reports the
-// target unmanaged and lets the plain directory switch proceed.
+// An unusable server — stopped, or speaking a different protocol than the
+// CLI after an upgrade — means no workspace is reachable, not that the
+// question failed: callers treat an Exists error as fatal (it aborts `grove
+// to` before the cd directive), while "false" routes them through Ensure,
+// which reports the target unmanaged and lets the plain directory switch
+// proceed.
 func (b *HerdrBackend) Exists(t Target) (bool, error) {
 	sessions, err := b.List()
 	if err != nil {
-		if ErrServerNotRunning(err) {
+		if errServerUnusable(err) {
 			return false, nil
 		}
 		return false, err
@@ -350,6 +374,13 @@ func (b *HerdrBackend) Kill(t Target) error {
 		return err
 	}
 	_, err = b.call([]string{"workspace", "close", id})
+	if errHasCode(err, "workspace_group_close_required") {
+		// Since herdr 0.9.0, closing a repository's parent workspace while
+		// worktree workspaces are open under it needs --group, which would
+		// close every one of them. grove never asks for that — each worktree's
+		// session is closed on its own — so name what is in the way instead.
+		return fmt.Errorf("herdr workspace %s still has worktree workspaces open under it; close those first: %w", id, err)
+	}
 	return err
 }
 
@@ -555,14 +586,21 @@ func (b *HerdrBackend) foregroundCommand(paneID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var info struct {
-		ForegroundProcesses []struct {
-			Name string `json:"name"`
-		} `json:"foreground_processes"`
+	// The process list sits one level down, under process_info — verified
+	// against herdr 0.8.0 and 0.9.1. Reading it from the top level decodes
+	// cleanly into an empty list, which silently made every pane look like a
+	// non-shell and disabled drift correction under herdr.
+	var result struct {
+		ProcessInfo struct {
+			ForegroundProcesses []struct {
+				Name string `json:"name"`
+			} `json:"foreground_processes"`
+		} `json:"process_info"`
 	}
-	if err := json.Unmarshal(raw, &info); err != nil {
+	if err := json.Unmarshal(raw, &result); err != nil {
 		return "", err
 	}
+	info := result.ProcessInfo
 	if len(info.ForegroundProcesses) == 0 {
 		return "", nil
 	}
@@ -603,6 +641,14 @@ func (b *HerdrBackend) call(args []string) (json.RawMessage, error) {
 
 	if runErr != nil {
 		return nil, fmt.Errorf("herdr %s: %w", strings.Join(args, " "), runErr)
+	}
+	// herdr's acknowledgement-only verbs — `pane run` is the one grove uses —
+	// print nothing at all on success and exit 0; only their failures carry an
+	// envelope. Treating that silence as "unexpected output" made every
+	// `pane run` report failure after the command had already run. Callers
+	// that expect a result still fail, at decode time, on the empty payload.
+	if len(bytes.TrimSpace(out)) == 0 {
+		return nil, nil
 	}
 	return nil, fmt.Errorf("herdr %s: unexpected output: %s", strings.Join(args, " "), truncate(string(out), 200))
 }
@@ -688,6 +734,33 @@ func (e *HerdrError) Error() string { return fmt.Sprintf("herdr: %s (%s)", e.Mes
 // ErrServerNotRunning reports whether err means no herdr server is listening.
 func ErrServerNotRunning(err error) bool { return errHasCode(err, "server_not_running") }
 
+// ErrProtocolMismatch reports whether err means the herdr CLI and the running
+// server speak different protocol versions. herdr's JSON API needs an exact
+// match, so this is what every call returns after herdr is upgraded until the
+// old server is restarted.
+func ErrProtocolMismatch(err error) bool { return errHasCode(err, "protocol_mismatch") }
+
+// errServerUnusable reports whether err means grove cannot talk to the herdr
+// server at all: none is running, or it cannot understand this CLI.
+func errServerUnusable(err error) bool {
+	return ErrServerNotRunning(err) || ErrProtocolMismatch(err)
+}
+
+// DegradedHint returns a one-line explanation for an unmanaged target that
+// deserves one, or "" when degrading is the expected, silent outcome.
+//
+// A stopped server is expected — grove falls back to a plain directory switch
+// and `grove doctor` explains it. A protocol mismatch is not: it follows every
+// herdr upgrade until the old server is restarted, and a `grove to` that
+// quietly stops switching workspaces would look like a grove bug.
+func DegradedHint(err error) string {
+	var he *HerdrError
+	if !ErrProtocolMismatch(err) || !errors.As(err, &he) {
+		return ""
+	}
+	return fmt.Sprintf("herdr sessions unavailable, changing directory only: %s", he.Message)
+}
+
 func errHasCode(err error, codes ...string) bool {
 	var he *HerdrError
 	if !errors.As(err, &he) {
@@ -742,9 +815,23 @@ type herdrTab struct {
 }
 
 // hasDefaultLabel reports whether the tab still carries the label herdr
-// generated for it — its own number — rather than one a user or grove chose.
+// generated for it rather than one a user or grove chose.
+//
+// herdr's generated label is the tab's current *position* plus one, while
+// TabInfo.number is a stable counter that never renumbers — so after an
+// earlier tab closes the two disagree, and comparing against number would
+// mistake herdr's own label for a user's. Any all-digit label is treated as
+// generated instead: nobody names a tab a bare number on purpose.
 func (t herdrTab) hasDefaultLabel() bool {
-	return t.Label == "" || t.Label == strconv.Itoa(t.Number)
+	if t.Label == "" {
+		return true
+	}
+	for _, r := range t.Label {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 type herdrPane struct {
@@ -800,21 +887,72 @@ var (
 
 func herdrAvailable() bool {
 	herdrAvailableOnce.Do(func() {
-		_, err := exec.LookPath(herdrBinary)
+		_, err := exec.LookPath(HerdrBinary())
 		herdrAvailableResult = err == nil
 	})
 	return herdrAvailableResult
 }
 
+// HerdrBinary returns the herdr executable grove should run.
+//
+// herdr exports HERDR_BIN_PATH into every pane and plugin process, naming the
+// binary of the server that owns them. That is herdr's documented way to call
+// back into itself, and it stays protocol-compatible with the server even
+// after a client-only update replaced whatever `herdr` is first on PATH. A
+// value that does not name a file is ignored in favor of PATH.
+func HerdrBinary() string {
+	if p := os.Getenv("HERDR_BIN_PATH"); p != "" {
+		if info, err := os.Stat(p); err == nil && !info.IsDir() {
+			return p
+		}
+	}
+	return herdrBinary
+}
+
+// HerdrServerStatus is herdr's own report on the server the CLI would talk to
+// — the ambient session, as selected by HERDR_SOCKET_PATH / HERDR_SESSION.
+type HerdrServerStatus struct {
+	Running bool   `json:"running"`
+	Version string `json:"version"`
+	Session string `json:"session"`
+	// Compatible is nil when no server is running.
+	Compatible *bool `json:"compatible"`
+	// RestartNeeded means the running server predates the installed CLI and
+	// has to be restarted before the CLI can drive it.
+	RestartNeeded bool `json:"restart_needed"`
+}
+
+// Usable reports whether the CLI can drive the server right now.
+func (s HerdrServerStatus) Usable() bool {
+	return s.Running && !s.RestartNeeded && (s.Compatible == nil || *s.Compatible)
+}
+
+// ProbeHerdrServer asks herdr whether its server is running and compatible
+// with the installed CLI. `herdr status server --json` answers without an API
+// envelope and exits 0 either way — verified on 0.8.0 and 0.9.1 — so this is
+// the one check that tells "stopped" apart from "running, but needs a restart
+// after an upgrade".
+func ProbeHerdrServer() (HerdrServerStatus, error) {
+	var status HerdrServerStatus
+	out, err := cmdexec.Output(context.TODO(), HerdrBinary(), []string{"status", "server", "--json"}, "", cmdexec.Herdr)
+	if err != nil {
+		return status, fmt.Errorf("herdr status server: %w", err)
+	}
+	if err := json.Unmarshal(bytes.TrimSpace(out), &status); err != nil {
+		return status, fmt.Errorf("decode herdr status server: %w", err)
+	}
+	return status, nil
+}
+
 // runHerdr executes a herdr CLI command under the shared timeout budget.
 // Combined output is returned because herdr writes error envelopes to stderr.
 func runHerdr(args []string) ([]byte, error) {
-	return cmdexec.CombinedOutput(context.TODO(), herdrBinary, args, "", cmdexec.Herdr)
+	return cmdexec.CombinedOutput(context.TODO(), HerdrBinary(), args, "", cmdexec.Herdr)
 }
 
 // attachHerdr starts the interactive client, blocking until the user detaches.
 func attachHerdr() error {
-	cmd := exec.Command(herdrBinary)
+	cmd := exec.Command(HerdrBinary())
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

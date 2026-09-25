@@ -277,7 +277,7 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 		}
 
 		if !exists {
-			managed, err := ensureSession(m, target)
+			managed, err := ensureSession(m, target, stderr)
 			if err != nil {
 				return fmt.Errorf("failed to create session: %w", err)
 			}
@@ -410,7 +410,7 @@ func selfSwitchTmuxEpilogue(ctx *GroveContext, mgr *worktree.Manager, targetTree
 		return fmt.Errorf("failed to check session: %w", err)
 	}
 	if !exists {
-		managed, err := ensureSession(m, target)
+		managed, err := ensureSession(m, target, stderr)
 		if err != nil {
 			return fmt.Errorf("failed to create session: %w", err)
 		}

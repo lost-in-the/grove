@@ -177,9 +177,11 @@ Examples:
 					}
 				}
 			case mux.ErrUnmanaged(err):
-				// The backend declines this target — herdr does, for a
-				// repository's own checkout. There is no pane to launch the
-				// session command into and nothing to attach to.
+				// The backend declines this target — herdr does when its
+				// server is unusable or the path is not a worktree it can
+				// open. There is no pane to launch the session command into
+				// and nothing to attach to.
+				warnDegraded(w, err)
 				sessionManaged = false
 			default:
 				return fmt.Errorf("failed to create session: %w", err)

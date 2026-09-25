@@ -2451,9 +2451,10 @@ func (m *Model) handleTmuxSwitch(switchPath string) bool {
 	}
 	if !exists {
 		if err := mx.Ensure(target); err != nil {
-			// A target the backend declines (herdr + a repository checkout)
-			// has no session by design, so returning false is the answer, not
-			// a warning: the caller falls back to changing directory.
+			// A target the backend declines (herdr with no usable server, or
+			// a path it cannot open) has no session, so returning false is the
+			// answer, not a warning: the caller falls back to changing
+			// directory.
 			if !mux.ErrUnmanaged(err) {
 				tuilog.Printf("warning: failed to create session %q: %v", target.Name, err)
 			}

@@ -3,9 +3,11 @@ package mux
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // fakeHerdr records invocations and replays canned responses keyed by the
@@ -66,6 +68,29 @@ func (f *fakeHerdr) called(fragments ...string) bool {
 	}
 	return false
 }
+
+// Real herdr 0.9.1 responses, captured against a live server with paths
+// rewritten to /repos. Fixtures are the contract grove codes against: an
+// invented shape is how two bugs lived undetected — `pane run` prints nothing
+// on success, and `pane process-info` nests its process list under
+// process_info — because the fakes answered the way grove expected instead of
+// the way herdr does.
+const (
+	herdrOpenedJSON = `{"id":"cli:worktree:open","result":{"already_open":false,"root_pane":{"agent_status":"unknown","cwd":"/repos/grove-testing","focused":false,"foreground_cwd":"/repos/grove-testing","pane_id":"w2:p1","revision":0,"scroll":{"max_offset_from_bottom":0,"offset_from_bottom":0,"viewport_rows":40},"tab_id":"w2:t1","terminal_id":"term_65c537f47d25c8","workspace_id":"w2"},"tab":{"agent_status":"unknown","focused":false,"label":"1","number":1,"pane_count":1,"tab_id":"w2:t1","workspace_id":"w2"},"type":"worktree_opened","workspace":{"active_tab_id":"w2:t1","agent_status":"unknown","focused":false,"label":"grove-testing","number":2,"pane_count":1,"tab_count":1,"workspace_id":"w2","worktree":{"checkout_path":"/repos/grove-testing","is_linked_worktree":true,"repo_key":"/repos/grove/.git","repo_name":"grove","repo_root":"/repos/grove"}},"worktree":{"branch":"testing","is_bare":false,"is_detached":false,"is_linked_worktree":true,"is_prunable":false,"label":"grove","open_workspace_id":"w2","path":"/repos/grove-testing"}}}`
+
+	herdrPaneListJSON = `{"id":"cli:pane:list","result":{"panes":[{"agent_status":"unknown","cwd":"/repos/grove-testing","focused":true,"foreground_cwd":"/repos/grove-testing","pane_id":"w2:p1","revision":0,"scroll":{"max_offset_from_bottom":0,"offset_from_bottom":0,"viewport_rows":40},"tab_id":"w2:t1","terminal_id":"term_65c537f47d25c8","workspace_id":"w2"}],"type":"pane_list"}}`
+
+	herdrProcessInfoBashJSON = `{"id":"cli:pane:process_info","result":{"process_info":{"foreground_process_group_id":14839,"foreground_processes":[{"argv":["/bin/bash"],"cmdline":"/bin/bash","cwd":"/repos/grove-testing","name":"bash","pid":14839}],"pane_id":"w2:p1","shell_pid":14839},"type":"pane_process_info"}}`
+
+	// `pane run` success: exit 0, no output at all.
+	herdrPaneRunOK = ``
+
+	herdrCloseOKJSON = `{"id":"cli:workspace:close","result":{"type":"ok"}}`
+
+	herdrGroupCloseRequiredJSON = `{"error":{"code":"workspace_group_close_required","message":"workspace has linked worktree workspaces; use --group (close_group=true in the API) to close the group"},"id":"cli:workspace:close"}`
+
+	herdrProtocolMismatchJSON = `{"id":"cli:workspace:list","error":{"code":"protocol_mismatch","message":"client protocol 19 is older than server protocol 22; upgrade the Herdr client before using this command"}}`
+)
 
 const workspaceListJSON = `{"id":"cli:workspace:list","result":{"type":"workspace_list","workspaces":[{"workspace_id":"w1","number":1,"label":"grove-main","focused":true,"pane_count":2,"tab_count":1,"active_tab_id":"w1:t1","agent_status":"working","worktree":{"repo_key":"k","repo_name":"grove","repo_root":"/repos/grove","checkout_path":"/repos/grove","is_linked_worktree":false}},{"workspace_id":"w2","number":2,"label":"grove-testing","focused":false,"pane_count":1,"tab_count":1,"active_tab_id":"w2:t1","agent_status":"blocked","worktree":{"repo_key":"k","repo_name":"grove","repo_root":"/repos/grove","checkout_path":"/repos/grove-testing","is_linked_worktree":true}},{"workspace_id":"w3","number":3,"label":"scratch","focused":false,"pane_count":1,"tab_count":1,"active_tab_id":"w3:t1","agent_status":"idle"}]}}`
 
@@ -192,41 +217,41 @@ func TestHerdrEnsureIsIdempotent(t *testing.T) {
 	}
 }
 
-// mainCheckoutRefusal is the error herdr returns for `worktree open` against a
-// repository's own checkout: it is not a linked worktree, so there is nothing
-// to open.
-func mainCheckoutRefusal(f *fakeHerdr) {
-	f.responses["worktree open"] = `{"id":"x","error":{"code":"worktree_not_found","message":"worktree cannot be opened"}}`
+// unopenableRefusal is herdr's answer to `worktree open` on a path its git
+// worktree list does not contain (captured from herdr 0.9.1).
+func unopenableRefusal(f *fakeHerdr) {
+	f.responses["worktree open"] = `{"error":{"code":"worktree_not_found","message":"worktree path not found"},"id":"cli:worktree:open"}`
 	f.errs["worktree open"] = errors.New("exit status 1")
 }
 
 func TestHerdrNeverCreatesAWorkspace(t *testing.T) {
-	// grove owns worktree lifecycle, not herdr's workspace inventory. The
-	// repository's own workspace is herdr's to create — it is the thing herdr's
-	// sidebar groups a project's worktrees under, and grove imposing one
-	// reaches past the boundary the integration is built on. Ensure must report
-	// the target unmanaged instead, and the caller falls through to a plain
+	// A path herdr will not open as a worktree has nothing herdr would group
+	// or track it under, so grove must not invent a workspace for it: Ensure
+	// reports the target unmanaged and the caller falls through to a plain
 	// directory switch.
 	f := newFakeHerdr()
-	mainCheckoutRefusal(f)
+	unopenableRefusal(f)
 	f.responses["workspace list"] = `{"id":"x","result":{"type":"workspace_list","workspaces":[]}}`
 
-	err := f.backend().Ensure(Target{Name: "grove", Path: "/repos/grove", Repo: "/repos/grove"})
+	err := f.backend().Ensure(Target{Name: "grove-stray", Path: "/repos/stray", Repo: "/repos/grove"})
 	if !ErrUnmanaged(err) {
 		t.Fatalf("Ensure() error = %v, want an unmanaged-target error", err)
 	}
 	if f.called("workspace", "create") {
-		t.Errorf("Ensure created a workspace for the repository checkout; calls: %v", f.calls)
+		t.Errorf("Ensure created a workspace for a path herdr would not open; calls: %v", f.calls)
+	}
+	if DegradedHint(err) != "" {
+		t.Errorf("DegradedHint(%v) = %q, want silence for an unopenable path", err, DegradedHint(err))
 	}
 }
 
-func TestHerdrEnsureAdoptsAnExistingRepositoryWorkspace(t *testing.T) {
-	// herdr materializes the repository's workspace itself when it opens any
-	// linked worktree. When that workspace is already there, `grove to root`
-	// should land in it rather than report the target unmanaged.
+func TestHerdrEnsureAdoptsAWorkspaceCoveringAnUnopenablePath(t *testing.T) {
+	// A workspace herdr already has for the path — opened by hand, say — is
+	// still the right place to land, even though herdr would not open the
+	// path as a worktree now.
 	checkout := t.TempDir()
 	f := newFakeHerdr()
-	mainCheckoutRefusal(f)
+	unopenableRefusal(f)
 	f.responses["workspace list"] = fmt.Sprintf(
 		`{"id":"x","result":{"type":"workspace_list","workspaces":[`+
 			`{"workspace_id":"w1","number":1,"label":"grove","focused":false,`+
@@ -235,10 +260,30 @@ func TestHerdrEnsureAdoptsAnExistingRepositoryWorkspace(t *testing.T) {
 			`"checkout_path":%q,"is_linked_worktree":false}}]}}`, checkout, checkout)
 
 	if err := f.backend().Ensure(Target{Name: "grove", Path: checkout, Repo: checkout}); err != nil {
-		t.Fatalf("Ensure() error = %v, want nil for an already-present repository workspace", err)
+		t.Fatalf("Ensure() error = %v, want nil for an already-present workspace", err)
 	}
 	if f.called("workspace", "create") {
 		t.Errorf("Ensure created a workspace instead of adopting; calls: %v", f.calls)
+	}
+}
+
+func TestHerdrEnsureOpensTheRepositoryCheckoutAsTheParentWorkspace(t *testing.T) {
+	// herdr answers `worktree open --path <repo>` by adopting — or creating —
+	// the repository's parent workspace, the one its sidebar groups the
+	// project's worktrees under (verified on herdr 0.8.0 and 0.9.1). That is
+	// herdr's own bookkeeping; grove just calls the same verb it uses for
+	// every worktree, and still never `workspace create`.
+	f := newFakeHerdr()
+	f.responses["worktree open"] = herdrOpenedJSON
+
+	if err := f.backend().Ensure(Target{Name: "grove", Path: "/repos/grove", Repo: "/repos/grove"}); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
+	if !f.called("worktree", "open", "--cwd", "/repos/grove", "--path", "/repos/grove") {
+		t.Errorf("Ensure did not open the repository checkout; calls: %v", f.calls)
+	}
+	if f.called("workspace", "create") {
+		t.Errorf("Ensure called `workspace create`; calls: %v", f.calls)
 	}
 }
 
@@ -289,7 +334,7 @@ func TestHerdrExistsKeysOnPath(t *testing.T) {
 func TestHerdrKillClosesWorkspaceNotWorktree(t *testing.T) {
 	f := newFakeHerdr()
 	f.responses["workspace list"] = workspaceListJSON
-	f.responses["workspace close"] = `{"id":"x","result":{"type":"workspace_closed"}}`
+	f.responses["workspace close"] = herdrCloseOKJSON
 
 	if err := f.backend().Kill(Target{Name: "grove-testing", Path: "/repos/grove-testing"}); err != nil {
 		t.Fatalf("Kill() error = %v", err)
@@ -532,15 +577,21 @@ func TestHerdrPaneInfoTreatsAgentPaneAsNonShell(t *testing.T) {
 func TestHerdrPaneInfoNamesForegroundShell(t *testing.T) {
 	f := newFakeHerdr()
 	f.responses["workspace list"] = workspaceListJSON
-	f.responses["pane list"] = `{"id":"x","result":{"type":"pane_list","panes":[{"pane_id":"w2:p1","terminal_id":"t","workspace_id":"w2","tab_id":"w2:t1","focused":true,"cwd":"/elsewhere","agent_status":"unknown"}]}}`
-	f.responses["pane process-info"] = `{"id":"x","result":{"type":"pane_process_info","pane_id":"w2:p1","foreground_processes":[{"pid":1,"name":"zsh"}]}}`
+	f.responses["pane list"] = herdrPaneListJSON
+	f.responses["pane process-info"] = herdrProcessInfoBashJSON
 
 	info, err := f.backend().PaneInfo(Target{Name: "grove-testing", Path: "/repos/grove-testing"})
 	if err != nil {
 		t.Fatalf("PaneInfo() error = %v", err)
 	}
+	// Reading foreground_processes from the top level instead of under
+	// process_info decodes cleanly into an empty list, so this is the check
+	// that would have caught drift correction being silently dead.
+	if info.CurrentCommand != "bash" {
+		t.Errorf("CurrentCommand = %q, want bash from process_info.foreground_processes", info.CurrentCommand)
+	}
 	if !info.IsShell() {
-		t.Errorf("IsShell() = false for a zsh pane (command=%q)", info.CurrentCommand)
+		t.Errorf("IsShell() = false for a bash pane (command=%q)", info.CurrentCommand)
 	}
 }
 
@@ -548,7 +599,7 @@ func TestHerdrPaneInfoPrefersForegroundCwd(t *testing.T) {
 	f := newFakeHerdr()
 	f.responses["workspace list"] = workspaceListJSON
 	f.responses["pane list"] = `{"id":"x","result":{"type":"pane_list","panes":[{"pane_id":"w2:p1","terminal_id":"t","workspace_id":"w2","tab_id":"w2:t1","focused":true,"cwd":"/stale","foreground_cwd":"/live","agent_status":"unknown"}]}}`
-	f.responses["pane process-info"] = `{"id":"x","result":{"type":"pane_process_info","pane_id":"w2:p1","foreground_processes":[{"pid":1,"name":"bash"}]}}`
+	f.responses["pane process-info"] = herdrProcessInfoBashJSON
 
 	info, err := f.backend().PaneInfo(Target{Name: "grove-testing", Path: "/repos/grove-testing"})
 	if err != nil {
@@ -581,8 +632,8 @@ func TestHerdrEnsureUsesRepoRootNotCheckoutForSource(t *testing.T) {
 	if err := f.backend().Ensure(Target{Name: "grove", Path: "/repos/grove", Repo: "/repos/grove"}); err != nil {
 		t.Fatalf("Ensure() error = %v", err)
 	}
-	// The main checkout is its own repo root; herdr reuses the parent
-	// workspace and reports already_open rather than erroring.
+	// The main checkout is its own repo root; herdr opens it as the parent
+	// workspace rather than erroring.
 	if !f.called("--cwd", "/repos/grove", "--path", "/repos/grove") {
 		t.Errorf("calls: %v", f.calls)
 	}
@@ -750,9 +801,9 @@ func TestHerdrCachesReadsWithinAnInstance(t *testing.T) {
 	f := newFakeHerdr()
 	f.responses["workspace list"] = workspaceListJSON
 	f.responses["workspace focus"] = `{"id":"x","result":{"type":"ok"}}`
-	f.responses["pane list"] = `{"id":"x","result":{"type":"pane_list","panes":[{"pane_id":"w2:p1","terminal_id":"t","workspace_id":"w2","tab_id":"w2:t1","focused":true,"cwd":"/repos/grove-testing","agent_status":"unknown"}]}}`
-	f.responses["pane process-info"] = `{"id":"x","result":{"type":"process_info","foreground_processes":[{"name":"zsh"}]}}`
-	f.responses["pane run"] = `{"id":"x","result":{"type":"ok"}}`
+	f.responses["pane list"] = herdrPaneListJSON
+	f.responses["pane process-info"] = herdrProcessInfoBashJSON
+	f.responses["pane run"] = herdrPaneRunOK
 	b := f.backend()
 	target := Target{Name: "grove-testing", Path: "/repos/grove-testing"}
 
@@ -783,7 +834,7 @@ func TestHerdrCachesReadsWithinAnInstance(t *testing.T) {
 func TestHerdrMutationInvalidatesReadCache(t *testing.T) {
 	f := newFakeHerdr()
 	f.responses["workspace list"] = workspaceListJSON
-	f.responses["workspace close"] = `{"id":"x","result":{"type":"workspace_closed"}}`
+	f.responses["workspace close"] = herdrCloseOKJSON
 	b := f.backend()
 	target := Target{Name: "grove-testing", Path: "/repos/grove-testing"}
 
@@ -799,5 +850,220 @@ func TestHerdrMutationInvalidatesReadCache(t *testing.T) {
 
 	if got := f.countCalls("workspace list"); got != 2 {
 		t.Errorf("workspace list spawned %d times, want 2 (cache must drop on close); calls: %v", got, f.calls)
+	}
+}
+
+// `pane run` prints nothing on success. Treating that silence as "unexpected
+// output" made SendCommand report failure after the command had already run.
+func TestHerdrSendCommandAcceptsSilentSuccess(t *testing.T) {
+	f := newFakeHerdr()
+	f.responses["workspace list"] = workspaceListJSON
+	f.responses["pane list"] = herdrPaneListJSON
+	f.responses["pane run"] = herdrPaneRunOK
+
+	if err := f.backend().SendCommand(Target{Name: "grove-testing", Path: "/repos/grove-testing"}, "npm run dev"); err != nil {
+		t.Fatalf("SendCommand() error = %v, want nil for herdr's silent success", err)
+	}
+	if !f.called("pane", "run", "w2:p1", "npm run dev") {
+		t.Errorf("SendCommand did not run in the workspace's pane; calls: %v", f.calls)
+	}
+}
+
+// The `grove open` + `[session] command` path: a new workspace, then the
+// command in its root pane. This failed end to end — the command ran, and
+// grove then reported "failed to create session".
+func TestHerdrEnsureWithCommandRunsInTheNewPane(t *testing.T) {
+	f := newFakeHerdr()
+	f.responses["worktree open"] = herdrOpenedJSON
+	f.responses["pane run"] = herdrPaneRunOK
+
+	target := Target{Name: "grove-testing", Short: "testing", Path: "/repos/grove-testing", Repo: "/repos/grove"}
+	if err := f.backend().EnsureWithCommand(target, "claude"); err != nil {
+		t.Fatalf("EnsureWithCommand() error = %v", err)
+	}
+	if !f.called("pane", "run", "w2:p1", "claude") {
+		t.Errorf("EnsureWithCommand did not run the command in the root pane; calls: %v", f.calls)
+	}
+}
+
+// A silent success is only acceptable where no result is expected. A read
+// that comes back empty must still fail rather than look like "no sessions".
+func TestHerdrEmptyReadIsAnError(t *testing.T) {
+	f := newFakeHerdr()
+	f.responses["workspace list"] = ""
+
+	if _, err := f.backend().List(); err == nil {
+		t.Fatal("List() on empty output should error")
+	}
+}
+
+// After a herdr upgrade the old server keeps running but refuses every call
+// from the new CLI until it is restarted. That must degrade like a stopped
+// server — `grove to` falling back to a plain cd — and, unlike a stopped
+// server, say why.
+func TestHerdrProtocolMismatchDegradesWithAHint(t *testing.T) {
+	f := newFakeHerdr()
+	f.responses["workspace list"] = herdrProtocolMismatchJSON
+	f.errs["workspace list"] = errors.New("exit status 1")
+	f.responses["worktree open"] = strings.Replace(herdrProtocolMismatchJSON, "workspace:list", "worktree:open", 1)
+	f.errs["worktree open"] = errors.New("exit status 1")
+	b := f.backend()
+	target := Target{Name: "grove-testing", Path: "/repos/grove-testing", Repo: "/repos/grove"}
+
+	exists, err := b.Exists(target)
+	if err != nil || exists {
+		t.Fatalf("Exists() = %v, %v; want false, nil on a protocol mismatch", exists, err)
+	}
+
+	err = b.Ensure(target)
+	if !ErrUnmanaged(err) {
+		t.Fatalf("Ensure() error = %v, want ErrUnmanaged on a protocol mismatch", err)
+	}
+	if !ErrProtocolMismatch(err) {
+		t.Errorf("ErrProtocolMismatch(%v) = false; the cause must stay in the chain", err)
+	}
+	hint := DegradedHint(err)
+	if !strings.Contains(hint, "client protocol 19 is older than server protocol 22") {
+		t.Errorf("DegradedHint() = %q, want herdr's own explanation", hint)
+	}
+
+	if err := b.EnsureWithCommand(target, "claude"); !ErrUnmanaged(err) {
+		t.Errorf("EnsureWithCommand() error = %v, want ErrUnmanaged on a protocol mismatch", err)
+	}
+}
+
+// A stopped server is the expected, documented fallback — no hint.
+func TestHerdrStoppedServerDegradesSilently(t *testing.T) {
+	f := newFakeHerdr()
+	f.responses["worktree open"] = `{"id":"cli:worktree:open","error":{"code":"server_not_running","message":"no herdr server is running"}}`
+	f.errs["worktree open"] = errors.New("exit status 1")
+
+	err := f.backend().Ensure(Target{Name: "grove-x", Path: "/repos/grove-x", Repo: "/repos/grove"})
+	if !ErrUnmanaged(err) {
+		t.Fatalf("Ensure() error = %v, want ErrUnmanaged", err)
+	}
+	if hint := DegradedHint(err); hint != "" {
+		t.Errorf("DegradedHint() = %q, want silence for a stopped server", hint)
+	}
+}
+
+// herdr turns worktree discovery away, rather than queueing it, when its
+// background slots are all taken. One retry rides out the burst.
+func TestHerdrEnsureRetriesWorktreeBusyOnce(t *testing.T) {
+	defer func(d time.Duration) { herdrBusyRetryDelay = d }(herdrBusyRetryDelay)
+	herdrBusyRetryDelay = 0
+
+	f := newFakeHerdr()
+	b := f.backend()
+	opens := 0
+	b.run = func(args []string) ([]byte, error) {
+		f.calls = append(f.calls, args)
+		if f.key(args) != "worktree open" {
+			return []byte(`{"id":"x","result":{"type":"tab_info"}}`), nil
+		}
+		opens++
+		if opens == 1 {
+			return []byte(`{"error":{"code":"worktree_busy","message":"too many worktree checks are pending; retry shortly"},"id":"cli:worktree:open"}`), errors.New("exit status 1")
+		}
+		return []byte(herdrOpenedJSON), nil
+	}
+
+	if err := b.Ensure(Target{Name: "grove-testing", Path: "/repos/grove-testing", Repo: "/repos/grove"}); err != nil {
+		t.Fatalf("Ensure() error = %v, want the retry to succeed", err)
+	}
+	if opens != 2 {
+		t.Errorf("worktree open ran %d times, want 2", opens)
+	}
+}
+
+func TestHerdrEnsureGivesUpAfterOneBusyRetry(t *testing.T) {
+	defer func(d time.Duration) { herdrBusyRetryDelay = d }(herdrBusyRetryDelay)
+	herdrBusyRetryDelay = 0
+
+	f := newFakeHerdr()
+	f.responses["worktree open"] = `{"error":{"code":"worktree_busy","message":"too many worktree checks are pending; retry shortly"},"id":"cli:worktree:open"}`
+	f.errs["worktree open"] = errors.New("exit status 1")
+
+	err := f.backend().Ensure(Target{Name: "grove-testing", Path: "/repos/grove-testing", Repo: "/repos/grove"})
+	if err == nil {
+		t.Fatal("Ensure() should fail when herdr stays busy")
+	}
+	if got := f.countCalls("worktree open"); got != 2 {
+		t.Errorf("worktree open ran %d times, want exactly 2", got)
+	}
+}
+
+// Since herdr 0.9.0 closing a parent workspace with worktree workspaces under
+// it needs --group, which would close all of them. grove must never pass it,
+// and must say what is in the way.
+func TestHerdrKillExplainsAGroupCloseRefusal(t *testing.T) {
+	f := newFakeHerdr()
+	f.responses["workspace list"] = workspaceListJSON
+	f.responses["workspace close"] = herdrGroupCloseRequiredJSON
+	f.errs["workspace close"] = errors.New("exit status 1")
+
+	err := f.backend().Kill(Target{Name: "grove-main", Path: "/repos/grove"})
+	if err == nil || !strings.Contains(err.Error(), "worktree workspaces open") {
+		t.Fatalf("Kill() error = %v, want an explanation of the group refusal", err)
+	}
+	if f.called("--group") {
+		t.Errorf("Kill passed --group, which closes every worktree workspace; calls: %v", f.calls)
+	}
+}
+
+// herdr's generated tab label is the tab's position plus one, while `number`
+// is a stable counter — after an earlier tab closes they disagree. A generated
+// label must still be recognized as one, or grove leaves the tab unnamed.
+func TestHerdrTabLabelFromPositionCountsAsDefault(t *testing.T) {
+	f := newFakeHerdr()
+	f.responses["worktree open"] = strings.Replace(herdrOpenedJSON, `"label":"1","number":1`, `"label":"2","number":3`, 1)
+
+	target := Target{Name: "grove-testing", Short: "testing", Path: "/repos/grove-testing", Repo: "/repos/grove"}
+	if err := f.backend().Ensure(target); err != nil {
+		t.Fatalf("Ensure() error = %v", err)
+	}
+	if !f.called("tab", "rename", "w2:t1", "testing") {
+		t.Errorf("Ensure left a generated tab label in place; calls: %v", f.calls)
+	}
+}
+
+func TestHerdrBinaryPrefersHerdrBinPath(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "herdr-0.9.1")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("HERDR_BIN_PATH", bin)
+	if got := HerdrBinary(); got != bin {
+		t.Errorf("HerdrBinary() = %q, want HERDR_BIN_PATH %q", got, bin)
+	}
+
+	t.Setenv("HERDR_BIN_PATH", filepath.Join(t.TempDir(), "missing"))
+	if got := HerdrBinary(); got != "herdr" {
+		t.Errorf("HerdrBinary() = %q, want PATH fallback for a stale HERDR_BIN_PATH", got)
+	}
+
+	t.Setenv("HERDR_BIN_PATH", "")
+	if got := HerdrBinary(); got != "herdr" {
+		t.Errorf("HerdrBinary() = %q, want PATH fallback when unset", got)
+	}
+}
+
+func TestHerdrServerStatusUsable(t *testing.T) {
+	yes, no := true, false
+	cases := []struct {
+		name   string
+		status HerdrServerStatus
+		want   bool
+	}{
+		{"running and compatible", HerdrServerStatus{Running: true, Compatible: &yes}, true},
+		{"stopped", HerdrServerStatus{Running: false}, false},
+		{"incompatible", HerdrServerStatus{Running: true, Compatible: &no}, false},
+		{"restart needed", HerdrServerStatus{Running: true, Compatible: &yes, RestartNeeded: true}, false},
+	}
+	for _, tc := range cases {
+		if got := tc.status.Usable(); got != tc.want {
+			t.Errorf("%s: Usable() = %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }

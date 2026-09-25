@@ -119,28 +119,40 @@ Examples:
 
 		// Check: herdr available
 		runOptionalCheck(w, "Herdr", func() (string, error) {
-			if _, err := exec.LookPath("herdr"); err != nil {
+			bin := mux.HerdrBinary()
+			if _, err := exec.LookPath(bin); err != nil {
 				return "", fmt.Errorf("herdr not found in PATH (optional, alternative to tmux for session management)")
 			}
-			out, err := cmdexec.Output(context.TODO(), "herdr", []string{"--version"}, "", cmdexec.Herdr)
+			out, err := cmdexec.Output(context.TODO(), bin, []string{"--version"}, "", cmdexec.Herdr)
 			if err != nil {
 				return "", fmt.Errorf("herdr found but `herdr --version` failed: %v", err)
 			}
 			return strings.TrimSpace(string(out)), nil
 		})
 
-		// Check: herdr server reachable. Only meaningful once herdr is the
-		// resolved backend — grove's session calls need a live server, and a
-		// stopped one turns every `grove to` into a fallback path.
+		// Check: herdr server usable. Only meaningful once herdr is the
+		// resolved backend — grove's session calls need a live server that
+		// speaks the CLI's protocol, and anything else turns every `grove to`
+		// into a fallback path. herdr's JSON API needs an exact protocol
+		// match, so after an upgrade the old server keeps running but refuses
+		// every call until it is restarted; a bare listing can't tell that
+		// apart from "unreachable", herdr's own status report can.
 		if m := doctorMux(); m.Backend() == mux.BackendHerdr {
 			runOptionalCheck(w, "Herdr server", func() (string, error) {
-				if _, err := m.List(); err != nil {
-					if mux.ErrServerNotRunning(err) {
-						return "", fmt.Errorf("no herdr server running — start one with `herdr`, or grove will fall back to plain directory switching")
-					}
+				status, err := mux.ProbeHerdrServer()
+				if err != nil {
 					return "", fmt.Errorf("herdr server unreachable: %v", err)
 				}
-				return "reachable", nil
+				switch {
+				case !status.Running:
+					return "", fmt.Errorf("no herdr server running — start one with `herdr`, or grove will fall back to plain directory switching")
+				case !status.Usable():
+					// Usually the CLI was just upgraded and the old server is
+					// still running; herdr's JSON API needs an exact protocol
+					// match either way.
+					return "", fmt.Errorf("herdr server %s and the installed herdr CLI speak different protocols — after an upgrade, restart the server (`herdr server stop`, then `herdr`); if the CLI is the older one, update it. Until then grove falls back to plain directory switching", status.Version)
+				}
+				return fmt.Sprintf("reachable (herdr %s)", status.Version), nil
 			})
 		}
 
