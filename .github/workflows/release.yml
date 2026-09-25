@@ -60,6 +60,14 @@ jobs:
   # fails with "asset already_exists" once a tag has been released. It depends
   # only on the release existing and the source tarball (not GoReleaser's
   # artifacts), so `needs: goreleaser` is purely an ordering/success gate.
+  #
+  # The tap's default branch only accepts changes through a pull request, so
+  # scripts/update-homebrew-tap.sh opens one and merges it (auto-merge, else a
+  # direct merge, else a warning naming the PR to merge by hand). It is
+  # idempotent, so a re-run reuses the branch and PR, or does nothing once the
+  # tap is current. TAP_GITHUB_TOKEN needs Contents and Pull requests write on
+  # lost-in-the/homebrew-tap. scripts/test-update-homebrew-tap.sh exercises it
+  # in CI against a fake API.
   homebrew:
     name: Update Homebrew formula
     needs: goreleaser
@@ -71,65 +79,4 @@ jobs:
       - name: Update Homebrew formula
         env:
           TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-
-          # Extract version from tag (strip leading 'v')
-          VERSION="${GITHUB_REF_NAME#v}"
-
-          # Download source tarball and compute SHA256. Use -f so a transient
-          # 404/5xx fails the job instead of hashing an error page, and verify
-          # the download is non-empty before trusting the digest — a bad hash
-          # here would publish a broken formula (brew install would then fail
-          # checksum verification for every user).
-          TARBALL_URL="https://github.com/lost-in-the/grove/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
-          TARBALL="$(mktemp)"
-          curl -fsSL --retry 3 --retry-delay 2 "$TARBALL_URL" -o "$TARBALL"
-          if [ ! -s "$TARBALL" ]; then
-            echo "::error::Downloaded source tarball is empty: $TARBALL_URL"
-            exit 1
-          fi
-          SHA256=$(sha256sum "$TARBALL" | awk '{print $1}')
-
-          # Generate formula from template
-          sed -e "s/VERSION/${VERSION}/g" -e "s/SHA256/${SHA256}/g" .github/formula.rb.tmpl > grove.rb
-
-          # Push to homebrew-tap via GitHub API
-          FORMULA_CONTENT=$(base64 -w 0 grove.rb)
-
-          # Get current file SHA (needed for updates)
-          CURRENT_SHA=$(curl -s \
-            -H "Authorization: token ${TAP_GITHUB_TOKEN}" \
-            "https://api.github.com/repos/lost-in-the/homebrew-tap/contents/Formula/grove.rb" \
-            | jq -r '.sha // empty')
-
-          # Build request body
-          if [ -n "$CURRENT_SHA" ]; then
-            BODY=$(jq -n \
-              --arg message "grove ${VERSION}" \
-              --arg content "$FORMULA_CONTENT" \
-              --arg sha "$CURRENT_SHA" \
-              '{message: $message, content: $content, sha: $sha}')
-          else
-            BODY=$(jq -n \
-              --arg message "grove ${VERSION}" \
-              --arg content "$FORMULA_CONTENT" \
-              '{message: $message, content: $content}')
-          fi
-
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X PUT \
-            -H "Authorization: token ${TAP_GITHUB_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d "$BODY" \
-            "https://api.github.com/repos/lost-in-the/homebrew-tap/contents/Formula/grove.rb")
-
-          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-          BODY_OUT=$(echo "$RESPONSE" | sed '$d')
-
-          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
-            echo "::error::Failed to update Homebrew formula (HTTP $HTTP_CODE)"
-            echo "$BODY_OUT"
-            exit 1
-          fi
-
-          echo "Homebrew formula updated to ${VERSION}"
+        run: scripts/update-homebrew-tap.sh "${GITHUB_REF_NAME}"
