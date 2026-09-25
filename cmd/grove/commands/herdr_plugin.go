@@ -87,12 +87,15 @@ func parseHerdrContext(raw string) (*herdrContext, error) {
 type herdrEvent struct {
 	Event string
 	Data  struct {
-		WorkspaceID string `json:"workspace_id"`
-		// Workspace carries the workspace's git provenance. On
-		// worktree.removed its repo_root is the main checkout — the only
-		// path in the payload that still exists by the time the hook runs.
+		// Workspace is the affected workspace, with its git provenance and
+		// any metadata tokens reporters have set on it. herdr sends it with
+		// every worktree event (verified on 0.9.1). On worktree.removed its
+		// repo_root is the main checkout — the only path in the payload that
+		// still exists by the time the hook runs.
 		Workspace *struct {
-			Worktree *struct {
+			WorkspaceID string            `json:"workspace_id"`
+			Tokens      map[string]string `json:"tokens"`
+			Worktree    *struct {
 				RepoRoot     string `json:"repo_root"`
 				CheckoutPath string `json:"checkout_path"`
 			} `json:"worktree"`
@@ -118,6 +121,22 @@ func (e *herdrEvent) CheckoutPath() string {
 	return ""
 }
 
+// WorkspaceID returns the id of the workspace the event is about.
+func (e *herdrEvent) WorkspaceID() string {
+	if e.Data.Workspace == nil {
+		return ""
+	}
+	return e.Data.Workspace.WorkspaceID
+}
+
+// Token returns the value of a metadata token the event's workspace carries.
+func (e *herdrEvent) Token(name string) string {
+	if e.Data.Workspace == nil {
+		return ""
+	}
+	return e.Data.Workspace.Tokens[name]
+}
+
 // RepoRoot returns the main checkout of the repository the event's worktree
 // belongs to, or "" when the payload carries no git provenance.
 func (e *herdrEvent) RepoRoot() string {
@@ -132,9 +151,10 @@ func (e *herdrEvent) RepoRoot() string {
 //
 // Only the FIRST separator is a dot. The manifest name is
 // `pane.agent_status_changed` and the wire form is
-// `pane_agent_status_changed` — verified against herdr 0.8.0, which accepts the
-// former and rejects both `pane.agent.status.changed` and
-// `pane_agent_status_changed` as unknown events.
+// `pane_agent_status_changed` — verified against herdr 0.8.0 and still true on
+// 0.9.1: it recognizes the former, and links a manifest naming either
+// `pane.agent.status.changed` or `pane_agent_status_changed` with an "unknown
+// event" warning and a hook that never fires.
 //
 // So replacing every underscore would mangle every multi-word event, and this
 // function is applied to HERDR_PLUGIN_EVENT too, which already arrives dotted —
@@ -181,7 +201,9 @@ by the plugin in integrations/herdr and is not meant to be run by hand.
 On worktree.created and worktree.opened it reports whether grove already tracks
 the checkout, so a worktree made through herdr's own UI does not silently bypass
 grove's bootstrap. It only reports — adopting is left to 'grove adopt', which
-runs post-create hooks the user should opt into.
+runs post-create hooks the user should opt into. An untracked worktree's
+workspace also gets a "grove=untracked" sidebar token, cleared once grove
+tracks it; the startup hook reports those tokens again after herdr restarts.
 
 On worktree.removed it reconciles grove's state with a removal herdr already
 performed: the tracked entry is dropped (and last_worktree cleared) so 'grove
@@ -190,6 +212,14 @@ no remove hooks and touches neither git nor the branch — the checkout is
 already gone, and herdr's removal deliberately leaves the branch behind.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		w := cli.NewStderr()
+
+		// Startup hooks carry no event JSON — only HERDR_PLUGIN_EVENT=startup.
+		// herdr drops every metadata token when its server restarts, so this
+		// is where the untracked markers come back.
+		if os.Getenv("HERDR_PLUGIN_EVENT") == "startup" {
+			markUntrackedWorkspaces(w, mux.NewHerdr())
+			return nil
+		}
 
 		event, err := parseHerdrEvent(os.Getenv("HERDR_PLUGIN_EVENT_JSON"))
 		if err != nil {
@@ -204,9 +234,10 @@ already gone, and herdr's removal deliberately leaves the branch behind.`,
 		}
 
 		// worktree.removed fires only when herdr itself removed the worktree
-		// (verified on 0.8.0: the grove-rm flow — git removes the checkout,
-		// then the workspace closes — fires only workspace.closed, so there is
-		// no loop between grove rm's workspace close and this branch).
+		// (verified on 0.8.0 and 0.9.1: the grove-rm flow — git removes the
+		// checkout, then the workspace closes — fires only workspace.closed,
+		// so there is no loop between grove rm's workspace close and this
+		// branch).
 		if name == "worktree.removed" {
 			return reconcileRemovedWorktree(event, nil)
 		}
@@ -217,13 +248,6 @@ already gone, and herdr's removal deliberately leaves the branch behind.`,
 		// exactly one of them per worktree — subscribing to only one silently
 		// skips half the cases this hook exists for.
 		if name != "worktree.opened" && name != "worktree.created" {
-			return nil
-		}
-		// Focusing an already-open workspace re-fires worktree.opened. Staying
-		// quiet keeps this from nagging every time the user clicks a workspace.
-		// worktree.created carries no already_open field, so this is a no-op
-		// there.
-		if event.AlreadyOpen {
 			return nil
 		}
 
@@ -237,7 +261,18 @@ already gone, and herdr's removal deliberately leaves the branch behind.`,
 			// Not a grove project, or not readable — nothing to say.
 			return nil //nolint:nilerr // a non-grove worktree is not an error
 		}
-		if tracked {
+
+		// The sidebar marker follows grove's state on every open, including
+		// re-opens: a worktree adopted since the last one loses it, and one
+		// whose marker was lost to a server restart gets it back.
+		syncUntrackedToken(w, mux.NewHerdr(), event, tracked)
+
+		// `worktree open` on an already-open checkout — grove's own `grove
+		// to`, or herdr's "Open worktree" picker — re-fires worktree.opened
+		// with already_open set. The prompt was raised the first time; the
+		// token above keeps saying it. worktree.created carries no
+		// already_open field, so this is a no-op there.
+		if tracked || event.AlreadyOpen {
 			return nil
 		}
 
@@ -268,8 +303,10 @@ already gone, and herdr's removal deliberately leaves the branch behind.`,
 
 // groveContextForPath builds a minimal context for a directory, without the
 // cwd-relative discovery, drift notices, or plugin registration that
-// RequireGroveContext performs. herdr invokes plugin commands from an
-// arbitrary cwd, so discovery has to start from the path herdr named.
+// RequireGroveContext performs. herdr runs plugin commands with the plugin's
+// own directory as cwd — after `herdr plugin install` that is a clone of
+// grove's repository, which has a .grove of its own — so discovery has to
+// start from the path herdr named, never from the cwd.
 func groveContextForPath(path string) (*GroveContext, error) {
 	groveDir, err := grove.FindRoot(path)
 	if err != nil {
@@ -395,9 +432,10 @@ func reconcileRemovedWorktree(event *herdrEvent, muxOverride mux.Multiplexer) er
 	cli.Success(w, "removed '%s' from grove state after herdr removed its worktree", name)
 
 	// Reap a session left pointing at the dead directory. Skipped on the
-	// herdr backend: the workspace close is herdr's own removal flow, and a
-	// mutation callback into the server mid-event dispatch is unverified
-	// territory (only `notification show` has been proven safe there).
+	// herdr backend: herdr's own removal already closed the workspace before
+	// firing this event. (Calling back into the server from a hook is safe —
+	// herdr starts hook processes and returns rather than waiting on them —
+	// there is just nothing left to close.)
 	m := muxOverride
 	if m == nil {
 		m = ctx.Mux()
@@ -492,6 +530,75 @@ Actions:
 			return fmt.Errorf("unknown herdr action %q", args[0])
 		}
 	},
+}
+
+// herdrTokenReporter is the slice of the herdr backend the sidebar marker
+// needs; an interface so the hook logic is testable without a herdr server.
+type herdrTokenReporter interface {
+	Available() bool
+	ReportToken(workspaceID, value string) error
+}
+
+// herdrWorkspaceMarker adds the workspace listing the startup sweep walks.
+type herdrWorkspaceMarker interface {
+	herdrTokenReporter
+	List() ([]mux.Session, error)
+}
+
+// syncUntrackedToken keeps the event's workspace carrying grove's untracked
+// sidebar token exactly when grove does not track its worktree. It only calls
+// herdr when the token is wrong, so the common case — grove's own `grove to`
+// re-opening a tracked worktree — costs nothing. Best-effort: a missing marker
+// is not worth failing a background hook over.
+func syncUntrackedToken(w *cli.Writer, hb herdrTokenReporter, event *herdrEvent, tracked bool) {
+	id := event.WorkspaceID()
+	if id == "" || !hb.Available() {
+		return
+	}
+	marked := event.Token(mux.HerdrTokenName) == mux.HerdrUntracked
+	var value string
+	switch {
+	case !tracked && !marked:
+		value = mux.HerdrUntracked
+	case tracked && marked:
+		value = ""
+	default:
+		return
+	}
+	if err := hb.ReportToken(id, value); err != nil {
+		cli.Warning(w, "could not update grove's sidebar marker on workspace %s: %v", id, err)
+	}
+}
+
+// markUntrackedWorkspaces reports the untracked token on every workspace whose
+// worktree belongs to a grove project that does not track it. herdr drops
+// metadata tokens on restart, so the startup hook runs this once per server
+// start. Workspaces outside any grove project, and ones whose directory is
+// gone, are left alone.
+func markUntrackedWorkspaces(w *cli.Writer, hb herdrWorkspaceMarker) {
+	if !hb.Available() {
+		return
+	}
+	sessions, err := hb.List()
+	if err != nil {
+		cli.Warning(w, "could not list herdr workspaces: %v", err)
+		return
+	}
+	for _, s := range sessions {
+		if s.Path == "" {
+			continue
+		}
+		if info, err := os.Stat(s.Path); err != nil || !info.IsDir() {
+			continue
+		}
+		tracked, err := groveTracksWorktree(s.Path)
+		if err != nil || tracked {
+			continue
+		}
+		if err := hb.ReportToken(s.ID, mux.HerdrUntracked); err != nil {
+			cli.Warning(w, "could not mark workspace %s untracked: %v", s.ID, err)
+		}
+	}
 }
 
 func init() {

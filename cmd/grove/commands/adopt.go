@@ -12,6 +12,7 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/grove"
+	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
 
@@ -128,6 +129,17 @@ Examples:
 
 		cli.Success(w, "adopted %q (branch: %s)", name, branch)
 		cli.Faint(w, "state registered, excludes recorded, post-create hooks fired")
+
+		// A worktree made in herdr's UI has a workspace labeled with the
+		// branch and carrying the plugin's "untracked" marker; now that grove
+		// tracks it, give it grove's canonical label and drop the marker.
+		if m := ctx.Mux(); m.Available() {
+			if a, ok := m.(mux.Adopter); ok {
+				if err := a.Adopted(muxTarget(mgr, name, target)); err != nil {
+					cli.Warning(w, "adopted, but could not update its %s session: %v", m.Backend(), err)
+				}
+			}
+		}
 		return nil
 	}),
 }

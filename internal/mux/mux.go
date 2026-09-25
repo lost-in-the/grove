@@ -222,6 +222,14 @@ type SessionLocator interface {
 	LocatedIn(t Target) string
 }
 
+// Adopter is implemented by backends that keep their own record of whether
+// grove tracks a worktree — herdr's sidebar marker, set by grove's herdr
+// plugin on worktrees created outside grove. Adopted is called after grove
+// adopts such a worktree, to bring its session in line.
+type Adopter interface {
+	Adopted(t Target) error
+}
+
 // AttachDirectiver is implemented by backends that can hand attachment off to
 // grove's shell wrapper instead of attaching in-process.
 type AttachDirectiver interface {

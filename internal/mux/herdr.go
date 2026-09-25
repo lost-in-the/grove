@@ -85,7 +85,61 @@ func NewHerdr() *HerdrBackend {
 var (
 	_ Multiplexer    = (*HerdrBackend)(nil)
 	_ SessionLocator = (*HerdrBackend)(nil)
+	_ Adopter        = (*HerdrBackend)(nil)
 )
+
+// The sidebar marker grove's herdr plugin keeps on workspaces whose worktree
+// grove does not track. herdr shows a workspace token only where the user's
+// own `[ui.sidebar.spaces]` rows name it (`$grove`) — reporters supply values,
+// styling stays the user's — and drops every token when its server restarts,
+// so the plugin's startup hook reports them again.
+const (
+	// HerdrTokenName is the custom workspace token grove reports.
+	HerdrTokenName = "grove"
+	// HerdrUntracked is its value on a worktree grove does not track.
+	HerdrUntracked = "untracked"
+	// herdrTokenSource is the one reporter id grove uses. herdr caps how
+	// many distinct sources a workspace sees over its lifetime, so it must
+	// never vary.
+	herdrTokenSource = "lost-in-the.grove"
+)
+
+// ReportToken sets grove's sidebar token on a workspace, or clears it when
+// value is empty.
+func (b *HerdrBackend) ReportToken(workspaceID, value string) error {
+	args := []string{"workspace", "report-metadata", workspaceID, "--source", herdrTokenSource}
+	if value == "" {
+		args = append(args, "--clear-token", HerdrTokenName)
+	} else {
+		args = append(args, "--token", HerdrTokenName+"="+value)
+	}
+	_, err := b.call(args)
+	return err
+}
+
+// Adopted brings the workspace of a worktree grove just adopted into line: it
+// takes grove's canonical `{project}-{name}` label instead of the one herdr
+// chose (the branch name, for a worktree created in herdr's UI), a generated
+// tab label becomes the worktree's short name, and the untracked marker goes.
+// A worktree with no workspace needs nothing. The lookup is by checkout path
+// only — the canonical label is what is being applied, not a key.
+func (b *HerdrBackend) Adopted(t Target) error {
+	sessions, err := b.List()
+	if err != nil {
+		if errServerUnusable(err) {
+			return nil
+		}
+		return err
+	}
+	s, ok := NewIndex(sessions).Lookup(Target{Path: t.Path})
+	if !ok {
+		return nil
+	}
+	if err := b.Rename(Target{Path: t.Path, Name: s.Name}, t); err != nil {
+		return err
+	}
+	return b.ReportToken(s.ID, "")
+}
 
 // Backend returns BackendHerdr.
 func (b *HerdrBackend) Backend() Backend { return BackendHerdr }
@@ -920,8 +974,9 @@ func (b *HerdrBackend) sessionArgs(args []string) []string {
 // preservesHerdrReadCaches reports whether a herdr invocation leaves the
 // cached snapshots valid: the pure reads, plus the verbs that touch nothing
 // the caches hold (`pane run` starts a process in an existing pane —
-// SendCommand runs it right after a resolve that just warmed the cache — and
-// `notification show` touches no session state at all). The list is
+// SendCommand runs it right after a resolve that just warmed the cache —
+// `notification show` touches no session state at all, and `workspace
+// report-metadata` changes only tokens, which Session does not carry). The list is
 // deliberately closed: an unknown verb counts as a mutation, so a new command
 // can at worst waste a refetch, never serve stale data.
 func preservesHerdrReadCaches(args []string) bool {
@@ -930,7 +985,7 @@ func preservesHerdrReadCaches(args []string) bool {
 	}
 	switch args[0] + " " + args[1] {
 	case "workspace list", "workspace get", "pane list", "pane process-info", "tab list",
-		"pane run", "notification show":
+		"pane run", "notification show", "workspace report-metadata":
 		return true
 	}
 	return false

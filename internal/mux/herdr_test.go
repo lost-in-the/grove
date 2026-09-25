@@ -1329,3 +1329,62 @@ func TestStatusForegroundAndBackground(t *testing.T) {
 		t.Error("StatusNone must be neither foreground nor background")
 	}
 }
+
+// --- sidebar marker ---
+
+func TestHerdrReportTokenSetsAndClears(t *testing.T) {
+	f := newFakeHerdr()
+	f.responses["workspace report-metadata"] = "" // silent success, as herdr 0.9.1 answers
+	b := f.backend()
+
+	if err := b.ReportToken("w2", HerdrUntracked); err != nil {
+		t.Fatalf("ReportToken(set) error = %v", err)
+	}
+	if !f.called("workspace", "report-metadata", "w2", "--source", "lost-in-the.grove", "--token", "grove=untracked") {
+		t.Errorf("set did not report the token under grove's fixed source; calls: %v", f.calls)
+	}
+	if err := b.ReportToken("w2", ""); err != nil {
+		t.Fatalf("ReportToken(clear) error = %v", err)
+	}
+	if !f.called("workspace", "report-metadata", "w2", "--source", "lost-in-the.grove", "--clear-token", "grove") {
+		t.Errorf("clear did not clear the token; calls: %v", f.calls)
+	}
+}
+
+// A worktree created in herdr's UI has a workspace labeled with its branch,
+// a generated tab label, and the plugin's untracked marker. Once grove adopts
+// it, all three come in line with grove.
+func TestHerdrAdoptedRelabelsAndClearsTheMarker(t *testing.T) {
+	checkout := t.TempDir()
+	f := newFakeHerdr()
+	f.responses["workspace list"] = workspaceListFor("w9", "feat-x", checkout)
+	f.responses["workspace rename"] = `{"id":"cli:workspace:rename","result":{"type":"workspace_info"}}`
+	f.responses["tab list"] = `{"id":"cli:tab:list","result":{"tabs":[{"agent_status":"unknown","focused":false,"label":"1","number":1,"pane_count":1,"tab_id":"w9:t1","workspace_id":"w9"}],"type":"tab_list"}}`
+	f.responses["tab rename"] = `{"id":"cli:tab:rename","result":{"type":"tab_info"}}`
+	f.responses["workspace report-metadata"] = ""
+
+	if err := f.backend().Adopted(Target{Name: "app-feat-x", Short: "feat-x", Path: checkout}); err != nil {
+		t.Fatalf("Adopted() error = %v", err)
+	}
+	if !f.called("workspace", "rename", "w9", "app-feat-x") {
+		t.Errorf("Adopted did not apply the canonical label; calls: %v", f.calls)
+	}
+	if !f.called("tab", "rename", "w9:t1", "feat-x") {
+		t.Errorf("Adopted did not name the generated tab; calls: %v", f.calls)
+	}
+	if !f.called("report-metadata", "w9", "--clear-token", "grove") {
+		t.Errorf("Adopted did not clear the untracked marker; calls: %v", f.calls)
+	}
+}
+
+func TestHerdrAdoptedWithoutAWorkspaceIsANoOp(t *testing.T) {
+	f := newFakeHerdr()
+	f.responses["workspace list"] = emptyWorkspaceListJSON
+
+	if err := f.backend().Adopted(Target{Name: "app-feat-x", Path: t.TempDir()}); err != nil {
+		t.Fatalf("Adopted() error = %v", err)
+	}
+	if f.called("workspace", "rename") || f.called("report-metadata") {
+		t.Errorf("Adopted touched herdr with no workspace to update; calls: %v", f.calls)
+	}
+}
