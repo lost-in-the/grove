@@ -1,4 +1,4 @@
-.PHONY: build test test-integration test-integration-tui test-integration-docker test-all lint fmt clean install help test-fixture test-update-golden demo golden-diff golden-view tui-capture tui-capture-keys
+.PHONY: build test test-integration test-integration-tui test-integration-docker test-herdr test-all lint fmt clean install help test-fixture test-update-golden demo golden-diff golden-view tui-capture tui-capture-keys
 
 # Variables
 BINARY_NAME=grove
@@ -74,6 +74,9 @@ test-integration-tui: ## Run TUI integration tests (requires git, slower)
 test-integration-docker: ## Run Docker-aware integration tests (requires git; Docker optional)
 	@echo "Running Docker integration tests..."
 	@go test -v -race -tags=integration -timeout 300s ./tests/integration/
+
+test-herdr: ## Validate the herdr backend against a running herdr server (safe against a live one)
+	@scripts/validate-herdr.sh
 
 test-all: test test-integration-tui test-integration-docker ## Run unit + all integration tests
 

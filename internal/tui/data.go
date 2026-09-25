@@ -39,7 +39,7 @@ type WorktreeItem struct {
 	IsEnvironment  bool
 	IsProtected    bool
 	IsPrunable     bool
-	TmuxStatus     string                      // "attached", "detached", "none"
+	TmuxStatus     string                      // tmux: "attached"/"detached"; herdr: "active"/"open"; "none"
 	SessionBackend string                      // backend word for badges/labels: "tmux", "herdr"
 	AgentStatus    mux.AgentStatus             // coding-agent state; empty unless the backend reports one
 	HasRemote      bool                        // true if branch has upstream tracking

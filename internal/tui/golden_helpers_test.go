@@ -42,16 +42,20 @@ func goldenModel(t *testing.T, size termSize, opts ...testOpt) Model {
 
 	goldenMu.Lock()
 
-	// Force NO_COLOR mode for structural golden tests
-	t.Setenv("NO_COLOR", "1")
-	Colors = theme.NoColorScheme()
-	Styles = NewStyleSet(Colors)
-
+	// Registered before t.Setenv on purpose: cleanups run last-in-first-out,
+	// so NO_COLOR is restored first and NewColorScheme — which reads it —
+	// rebuilds the real scheme. The other order rebuilt a no-color scheme and
+	// leaked it into whichever test ran next.
 	t.Cleanup(func() {
 		Colors = NewColorScheme()
 		Styles = NewStyleSet(Colors)
 		goldenMu.Unlock()
 	})
+
+	// Force NO_COLOR mode for structural golden tests
+	t.Setenv("NO_COLOR", "1")
+	Colors = theme.NoColorScheme()
+	Styles = NewStyleSet(Colors)
 
 	allOpts := append([]testOpt{withSize(size.width, size.height)}, opts...)
 	return newTestModel(allOpts...)

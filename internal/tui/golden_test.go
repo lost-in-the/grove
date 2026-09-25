@@ -5,8 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/bubbles/v2/list"
 	"github.com/charmbracelet/x/exp/golden"
 
+	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/theme"
 )
 
@@ -311,4 +313,36 @@ func TestGolden_Themed_StatusBadges(t *testing.T) {
 func TestGolden_Themed_OverlayBorders(t *testing.T) {
 	m := goldenModelThemed(t, sizeStandard, withItems(3), withDeleteOverlay("Worktree has uncommitted changes"))
 	golden.RequireEqual(t, []byte(m.viewString()))
+}
+
+// withHerdrItems gives the items herdr sessions: workspace badges reading
+// active/open, and one of each coding-agent state herdr reports.
+func withHerdrItems(n int) testOpt {
+	agents := []mux.AgentStatus{mux.AgentBlocked, mux.AgentWorking, mux.AgentIdle, mux.AgentDone, mux.AgentUnknown}
+	return func(m *Model) {
+		items := makeTestItems(n)
+		listItems := make([]list.Item, len(items))
+		for i := range items {
+			items[i].SessionBackend = "herdr"
+			items[i].TmuxStatus = string(mux.StatusOpen)
+			if i == 0 {
+				items[i].TmuxStatus = string(mux.StatusActive)
+			}
+			items[i].AgentStatus = agents[i%len(agents)]
+			listItems[i] = items[i]
+		}
+		m.list.SetItems(listItems)
+	}
+}
+
+// The agent badge and the herdr session vocabulary: the badge text for each
+// agent state (unknown renders nothing — it is herdr's no-agent default), and
+// active/open workspace badges instead of tmux's attached/detached.
+func TestGolden_Dashboard_Herdr(t *testing.T) {
+	for _, size := range []termSize{sizeStandard, sizeWide} {
+		t.Run(size.name, func(t *testing.T) {
+			m := goldenModel(t, size, withHerdrItems(5))
+			golden.RequireEqual(t, []byte(m.viewString()))
+		})
+	}
 }
