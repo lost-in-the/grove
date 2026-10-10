@@ -1,40 +1,40 @@
-[2m [1m[1mtest-project[m  ·  5 worktrees  ·  on root  ·  ↕ name                                                             ● root[m [m
+[2m test-project  ·  5 worktrees  ·  on root  ·  ↕ name                                                             ● root [m
 [2m                                                                        │                                               [m
 [2m 1 ❯ root ────────────────────────────────────────────────────── 2h ago │                                               [m
-               ╭────────────────────────────────────────────────────────────────────────────────────────╮
-               │                                                                                        │
-               │   [1mNavigation[m                                                                           │
-               │  ────────────────────────────────────────────────────────────────────────────────────  │
-               │   [1m↑/k ↓/j[m                       Move up / down                                         │
-               │   [1menter[m                         Switch to selected worktree                            │
-               │   [1mU[m                             Switch and start containers                            │
-               │   [1m1-9[m                           Quick-switch by number                                 │
-               │   [1m/[m                             Filter worktrees                                       │
-               │   [1mtab[m                           Focus detail panel                                     │
-               │                                                                                        │
-               │   [1mDetail Panel (when focused)[m                                                          │
-               │  ────────────────────────────────────────────────────────────────────────────────────  │
-               │   [1m↑/k ↓/j[m                       Scroll up / down                                       │
-               │   [1mg / G[m                         Jump to top / bottom                                   │
-               │   [1mctrl+u / ctrl+d[m               Half page up / down                                    │
-               │   [1mB[m                             Open associated PR in browser                          │
-               │   [1mtab / esc[m                     Return to list                                         │
-               │                                                                                        │
-               │   [1mWorktree Actions[m                                                                     │
-               │  ────────────────────────────────────────────────────────────────────────────────────  │
-               │   [1mn[m                             Create new worktree                                    │
-               │   [1md[m                             Delete worktree                                        │
-               │   [1mR[m                             Rename worktree                                        │
-               │   [1mf[m                             Fork (copy) worktree                                   │
-               │   [1ma[m                             Bulk delete worktrees                                  │
-               │                                                                                        │
-               │   [1mWorkflow[m                                                                             │
-               │  ────────────────────────────────────────────────────────────────────────────────────  │
-               │  ────────────────────────────────────────────────────────────────────────────────────  │
-               │    [1m↑↓[m scroll · [1mesc[m close                                                               │
-               │                                                                                        │
-               ╰────────────────────────────────────────────────────────────────────────────────────────╯
+[2m       test com[m╭────────────────────────────────────────────────────────────────────────────────────────╮[2m               [m
+[2m               [m│                                                                                        │[2m               [m
+[2m 2 ○ feature-a…[m│   [1mNavigation[m                                                                           │[2m               [m
+[2m       test com[m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
+[2m               [m│   [1m↑/k ↓/j[m                       Move up / down                                         │[2m               [m
+[2m 3 ○ fix-bug ──[m│   [1menter[m                         Switch to selected worktree                            │[2m               [m
+[2m       test com[m│   [1mU[m                             Switch and start containers                            │[2m               [m
+[2m               [m│   [1m1-9[m                           Quick-switch by number                                 │[2m               [m
+[2m 4 ● testing ──[m│   [1m/[m                             Filter worktrees                                       │[2m               [m
+[2m       test com[m│   [1mtab[m                           Focus detail panel                                     │[2m               [m
+[2m               [m│                                                                                        │[2m               [m
+[2m 5 ○ refactor ─[m│   [1mDetail Panel (when focused)[m                                                          │[2m               [m
+[2m       test com[m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
+[2m               [m│   [1m↑/k ↓/j[m                       Scroll up / down                                       │[2m               [m
+[2m               [m│   [1mg / G[m                         Jump to top / bottom                                   │[2m               [m
+[2m               [m│   [1mctrl+u / ctrl+d[m               Half page up / down                                    │[2m               [m
+[2m               [m│   [1mB[m                             Open associated PR in browser                          │[2m               [m
+[2m               [m│   [1mtab / esc[m                     Return to list                                         │[2m               [m
+[2m               [m│                                                                                        │[2m               [m
+[2m               [m│   [1mWorktree Actions[m                                                                     │[2m               [m
+[2m               [m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
+[2m               [m│   [1mn[m                             Create new worktree                                    │[2m               [m
+[2m               [m│   [1md[m                             Delete worktree                                        │[2m               [m
+[2m               [m│   [1mR[m                             Rename worktree                                        │[2m               [m
+[2m               [m│   [1mf[m                             Fork (copy) worktree                                   │[2m               [m
+[2m               [m│   [1ma[m                             Bulk delete worktrees                                  │[2m               [m
+[2m               [m│                                                                                        │[2m               [m
+[2m               [m│   [1mWorkflow[m                                                                             │[2m               [m
+[2m               [m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
+[2m               [m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
+[2m               [m│    [1m↑↓[m scroll · [1mesc[m close                                                               │[2m               [m
+[2m               [m│                                                                                        │[2m               [m
+[2m               [m╰────────────────────────────────────────────────────────────────────────────────────────╯[2m               [m
 [2m                                                                        │                                               [m
 [2m                                                                        │                                               [m
 [2m                                                                        │                                               [m
-[2m  [1m↑↓[m navigate · [1menter[m switch · [1mU[m up · [1mn[m new · [1m/[m filter · [1mtab[m detail · [1mo[m sort · [1m?[m help · [1mq[m quit                          [m
+[2m  ↑↓ navigate · enter switch · U up · n new · / filter · tab detail · o sort · ? help · q quit                          [m

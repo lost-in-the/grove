@@ -1,24 +1,24 @@
-               ╭────────────────────────────────────────────────╮
-               │                                                │
-               │  [1mNew Worktree[m                                  │
-               │                                                │
-               │    ●━━━━━━━━━━━━━━━━━━●━━━━━━━━━━━━━━━━━━○     │
-               │    Branch ✓         [1mName[m           Confirm     │
-               │                                                │
-               │    ╭────────────────────────────────────╮      │
-               │    │ Summary                            │      │
-               │    │ Branch:   feature/auth (existing)  │      │
-               │    ╰────────────────────────────────────╯      │
-               │                                                │
-               │    [37mName: [m[37m[m                                      │
-               │    → test-project-auth                         │
-               │                                                │
-               │    ✓ valid name                                │
-               │                                                │
-               │                                                │
-               │                                                │
-               │                                                │
-               │                                                │
-               │                                                │
-               │                                                │
-               │    [enter] next  [shift+tab] back  [esc]       │
+[2m test-project  [m╭────────────────────────────────────────────────╮[2m        ● root [m
+[2m               [m│                                                │[2m               [m
+[2m 1 ❯ root ─────[m│  [1mNew Worktree[m                                  │[2m─────── 2h ago [m
+[2m       test com[m│                                                │[2m               [m
+[2m   •••         [m│    ●━━━━━━━━━━━━━━━━━━●━━━━━━━━━━━━━━━━━━○     │[2m               [m
+[2m ── root ──────[m│    Branch ✓         [1mName[m           Confirm     │[2m────────────── [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│    ╭────────────────────────────────────╮      │[2m               [m
+[2m               [m│    │ Summary                            │      │[2m               [m
+[2m               [m│    │ Branch:   feature/auth (existing)  │      │[2m               [m
+[2m               [m│    ╰────────────────────────────────────╯      │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│    [37mName: [m                                      │[2m               [m
+[2m               [m│    → test-project-auth                         │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│    ✓ valid name                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m  ↑↓ navigate ·[m│                                                │[2m               [m
+[2m  / filter · ta[m│    [enter] next  [shift+tab] back  [esc]       │[2m               [m
