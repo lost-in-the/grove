@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Overlays in the dashboard no longer erase the rows beside them, and the background behind them is dimmed evenly instead of stopping at the first styled word. (#19)
+
+### Changed
+- Updated the terminal UI libraries: bubbletea 2.0.10, lipgloss 2.0.6, bubbles 2.1.1, and glamour v2, which removes the older lipgloss v1 from the build.
+- Building grove from source now requires Go 1.26 or newer (bubbletea 2.0.10 needs it).
+
 ## [0.11.0] - 2026-09-25
 
 > **Upgrading:** One breaking change, for scripts that read grove's JSON: the session field was renamed from `tmux` to `session`. `grove ls --json` now reports `.worktrees[].session` (was `.worktrees[].tmux`), and `grove here --json` reports `.session.{session,status}` (was `.tmux.{session,status}`). Values are unchanged under tmux; under herdr they read `active` / `open`. Otherwise drop-in: tmux users see no behavior change, and shell integration is unchanged, so no re-source is needed. Highlights: **[herdr](https://herdr.dev) support** (`[mux] backend = "herdr"`), with each worktree's coding-agent state in `grove ls` and the dashboard, and a herdr plugin (`herdr plugin install lost-in-the/grove/integrations/herdr --ref v0.11.0`); **`[session] open_in`**; `grove doctor`'s closing action list; and opt-in per-slot git metadata for agent stacks.
