@@ -4,7 +4,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/glamour"
+	"charm.land/glamour/v2"
 )
 
 // renderMarkdown renders markdown to styled terminal output using glamour.
