@@ -20,14 +20,7 @@ func newTestModel(opts ...testOpt) Model {
 	s := GroveSpinner()
 
 	delegate := NewWorktreeDelegateV2()
-	l := list.New(nil, delegate, 0, 0)
-	l.SetShowTitle(false)
-	l.SetShowStatusBar(false)
-	l.SetShowHelp(false)
-	l.SetFilteringEnabled(true)
-	l.KeyMap.Filter.SetKeys("/")
-	l.KeyMap.CursorUp.SetKeys("up", "k")
-	l.KeyMap.CursorDown.SetKeys("down", "j")
+	l := newWorktreeList(delegate)
 
 	h := help.New()
 

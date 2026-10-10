@@ -147,15 +147,7 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		delegate = NewWorktreeDelegateV2()
 	}
 
-	l := list.New(nil, delegate, 0, 0)
-	l.SetShowTitle(false)
-	l.SetShowStatusBar(false)
-	l.SetShowHelp(false)
-	l.SetFilteringEnabled(true)
-	l.KeyMap.Filter.SetKeys("/")
-	// Map our navigation keys to list's keymap
-	l.KeyMap.CursorUp.SetKeys("up", "k")
-	l.KeyMap.CursorDown.SetKeys("down", "j")
+	l := newWorktreeList(delegate)
 
 	h := help.New()
 
