@@ -93,3 +93,16 @@ func (m *Model) popToRoot() {
 		m.restoreCursor(f)
 	}
 }
+
+// layoutView is the top view that owns layout and help context. Help and
+// update overlays describe the view beneath them, so they are skipped.
+func (s viewStack) layoutView() ActiveView {
+	for i := len(s) - 1; i >= 0; i-- {
+		if v := s[i].view; v != ViewHelp && v != ViewUpdate {
+			return v
+		}
+	}
+	return ViewDashboard
+}
+
+func (m Model) layoutView() ActiveView { return m.views.layoutView() }

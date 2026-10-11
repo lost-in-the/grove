@@ -273,6 +273,7 @@ func withToastVisible(msg string, level ToastLevel) testOpt {
 func withHelpExpanded() testOpt {
 	return func(m *Model) {
 		m.helpOverlay.Open(m.activeView(), m.width, m.height)
+		m.pushView(ViewHelp)
 	}
 }
 

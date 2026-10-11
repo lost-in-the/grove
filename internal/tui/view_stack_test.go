@@ -97,3 +97,14 @@ func TestRestoreCursor_UsesVisibleRowsUnderFilter(t *testing.T) {
 		t.Errorf("selected %q, want %q", item.Path, want)
 	}
 }
+
+func TestViewStack_LayoutViewSkipsHelpAndUpdate(t *testing.T) {
+	s := viewStack{}.push(viewFrame{view: ViewPRs}).push(viewFrame{view: ViewHelp})
+	if got := s.layoutView(); got != ViewPRs {
+		t.Errorf("layoutView with help on PRs = %v, want ViewPRs", got)
+	}
+	s = viewStack{}.push(viewFrame{view: ViewUpdate})
+	if got := s.layoutView(); got != ViewDashboard {
+		t.Errorf("layoutView with update on root = %v, want ViewDashboard", got)
+	}
+}

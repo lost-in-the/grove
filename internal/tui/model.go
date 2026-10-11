@@ -43,6 +43,7 @@ const (
 	ViewConfig
 	ViewRename
 	ViewCheckout
+	ViewUpdate
 )
 
 // Model is the root Bubble Tea model.
@@ -278,7 +279,7 @@ func (m Model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 		m.toast.Show(NewToast("Config load failed: "+m.cfgLoadErr.Error(), ToastWarning))
 		m.cfgLoadErr = nil
 	}
-	if m.helpOverlay.Active {
+	if m.activeView() == ViewHelp {
 		m.helpOverlay.Open(m.helpOverlay.ForView, m.width, m.height)
 	}
 	return m, nil
@@ -708,7 +709,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleDefault(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.activeView() == ViewConfig && m.configState != nil && m.configState.Form != nil {
+	if m.layoutView() == ViewConfig && m.configState != nil && m.configState.Form != nil {
 		return m.handleConfigFormMsg(msg)
 	}
 
@@ -744,7 +745,7 @@ func (m *Model) updateLayout() {
 	}
 
 	headerHeight := 1 // status bar
-	footerHeight := m.helpFooter.CompactHeight(m.activeView(), m.width-4)
+	footerHeight := m.helpFooter.CompactHeight(m.layoutView(), m.width-4)
 	available := m.height - headerHeight - footerHeight
 
 	contentWidth := m.width - 2 // body padding (1 char each side)
@@ -906,23 +907,22 @@ func (m Model) selectedItem() (WorktreeItem, bool) {
 }
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	// Help overlay intercepts all keys when active
-	if m.helpOverlay.Active {
+	// Help and update frames take every key; their trigger key or esc closes
+	// them and returns to the frame beneath.
+	switch m.activeView() {
+	case ViewHelp:
 		if key.Matches(msg, m.keys.Help) || key.Matches(msg, m.keys.Escape) {
 			m.helpOverlay.Close()
+			m.popView()
 			return m, nil
 		}
 		var cmd tea.Cmd
 		m.helpOverlay, cmd = m.helpOverlay.Update(msg)
 		return m, cmd
-	}
-
-	// Update overlay intercepts all keys when active. Mirrors HelpOverlay's
-	// pattern from #54: both the trigger key (u) and esc close the modal.
-	if m.updateOverlay != nil && m.updateOverlay.Active {
+	case ViewUpdate:
 		if key.Matches(msg, m.keys.Update) || key.Matches(msg, m.keys.Escape) {
 			m.updateOverlay.Close()
-			return m, nil
+			m.popView()
 		}
 		return m, nil
 	}
@@ -931,6 +931,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Views with active text inputs (Create, Rename, Checkout, Fork) pass ? through
 	if key.Matches(msg, m.keys.Help) && !m.viewHasTextInput() {
 		m.helpOverlay.Open(m.activeView(), m.width, m.height)
+		m.pushView(ViewHelp)
 		return m, nil
 	}
 
@@ -938,13 +939,11 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// is focused. Same gating as ?-for-help.
 	if key.Matches(msg, m.keys.Update) && !m.viewHasTextInput() && m.updateAvailable() {
 		m.updateOverlay.Open(version.Version, m.updateLatestVersion, m.updateLatestURL)
+		m.pushView(ViewUpdate)
 		return m, nil
 	}
 
 	switch m.activeView() {
-	case ViewHelp:
-		m.popView()
-		return m, nil
 	case ViewDelete:
 		return m.handleDeleteKey(msg)
 	case ViewCreate:
@@ -1897,7 +1896,7 @@ func (m Model) viewEmpty() string {
 }
 
 func (m Model) viewForActiveView() string {
-	switch m.activeView() {
+	switch m.layoutView() {
 	case ViewHelp:
 		return m.renderDashboard()
 	case ViewDelete:
