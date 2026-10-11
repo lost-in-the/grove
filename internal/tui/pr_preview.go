@@ -11,9 +11,8 @@ import (
 // Used for user-provided content (PR bodies, issue bodies).
 // Respects NO_COLOR and GROVE_NO_COLOR environment variables.
 //
-// Uses WithStandardStyle("dark") instead of WithAutoStyle() to avoid
-// terminal queries (OSC 11) that leak through Bubbletea's input parser
-// as spurious key press events.
+// Uses a fixed "dark" style: glamour v2 does not detect the terminal
+// background, so the style is chosen here.
 func renderMarkdown(md string, width int) string {
 	var opts []glamour.TermRendererOption
 	opts = append(opts, glamour.WithWordWrap(width))

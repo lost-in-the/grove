@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Overlays in the dashboard no longer erase the rows beside them, and the background behind them is dimmed evenly instead of stopping at the first styled word. (#19)
+- `esc` in the dashboard goes back exactly one level, and returns the cursor to the worktree it was on, even after the list refreshes.
 
 ### Changed
 - Updated the terminal UI libraries: bubbletea 2.0.10, lipgloss 2.0.6, bubbles 2.1.1, and glamour v2, which removes the older lipgloss v1 from the build.

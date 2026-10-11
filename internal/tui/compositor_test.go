@@ -92,3 +92,11 @@ func TestFitLines_TrimsAndPads(t *testing.T) {
 		t.Errorf("truncate: got %q", got[0])
 	}
 }
+
+// An overlay edge that lands inside a wide glyph blanks the orphaned half.
+func TestComposeOverlay_BlanksHalfCutWideGlyph(t *testing.T) {
+	got := ansi.Strip(composeOverlay("界界界界界", "XXX", 10, 1))
+	if got != "界 XXX界界" {
+		t.Errorf("got %q, want %q", got, "界 XXX界界")
+	}
+}

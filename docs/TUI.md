@@ -154,6 +154,8 @@ Press `tab` from the dashboard to move focus into the detail panel so you can sc
 
 Each overlay opens centered over the dimmed dashboard background. Press `esc` to close or cancel.
 
+`esc` goes back exactly one level. An overlay opened from the PR or issue browser returns there, and the dashboard cursor returns to the worktree it was on.
+
 ### New Worktree (`n`)
 
 A multi-step wizard:
@@ -331,6 +333,9 @@ The TUI uses **Bubbletea v2** (Elm Architecture):
 | `internal/tui/theme_v2.go` | `StyleSet` — lipgloss styles built from the color scheme |
 | `internal/tui/list_v2.go` | **Default** two-line delegate with indicator/status columns (`NewWorktreeDelegateV2`) |
 | `internal/tui/list.go` | Compact single-line V1 delegate with column headers (`NewWorktreeDelegate`) |
+| `internal/tui/view_stack.go` | View stack: frames, push and pop, cursor restore |
+| `internal/tui/compositor.go` | Draws an overlay over a dimmed background (`composeOverlay`) |
+| `internal/tui/worktree_list.go` | The dashboard list constructor (`newWorktreeList`) |
 
 ### List View Modes
 The `v` key toggles between V2 (default two-line) and V1 (compact single-line) at runtime. Set permanently via `tui.compact_list = true` in config.
