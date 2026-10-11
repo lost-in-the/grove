@@ -145,3 +145,26 @@ func TestPop_RefreshesDetailWhenSelectionChanges(t *testing.T) {
 		t.Error("detail after pop is not the focused rendering of the selected worktree")
 	}
 }
+
+// Forking from the PR browser's "worktree exists" prompt opens the fork
+// overlay over the PR browser, so esc returns there instead of the dashboard.
+func TestExistsPromptFork_EscReturnsToPRBrowser(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40), withPRData())
+	m.prState.ExistsPrompt = &ExistingWorktreePrompt{WorktreeName: "feature-auth", Branch: "feature/auth", ItemLabel: "PR #42"}
+
+	next, _ := m.Update(makeKeyMsg("n"))
+	m = next.(Model)
+	if m.activeView() != ViewFork {
+		t.Fatalf("after n: view=%v, want ViewFork", m.activeView())
+	}
+
+	next, _ = m.Update(makeKeyMsg("esc"))
+	m = next.(Model)
+	if m.activeView() != ViewPRs || m.prState == nil {
+		t.Fatalf("after esc: view=%v prState nil=%v; want ViewPRs with PR state kept", m.activeView(), m.prState == nil)
+	}
+	if m.prState.ExistsPrompt != nil {
+		t.Error("exists prompt still open after returning to the PR browser")
+	}
+}
+
