@@ -20,6 +20,11 @@ func TestRenderMarkdown_NoColorHasNoEscapes(t *testing.T) {
 			t.Errorf("output missing %q:\n%s", want, out)
 		}
 	}
+	// renderMarkdown falls back to the raw input on any renderer error. Only
+	// a real render turns "- first" into a bullet.
+	if !strings.Contains(out, "• first") {
+		t.Errorf("list was not rendered (renderer error fallback?):\n%s", out)
+	}
 }
 
 func TestRenderMarkdown_ColorKeepsText(t *testing.T) {
