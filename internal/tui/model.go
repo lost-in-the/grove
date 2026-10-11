@@ -147,15 +147,7 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		delegate = NewWorktreeDelegateV2()
 	}
 
-	l := list.New(nil, delegate, 0, 0)
-	l.SetShowTitle(false)
-	l.SetShowStatusBar(false)
-	l.SetShowHelp(false)
-	l.SetFilteringEnabled(true)
-	l.KeyMap.Filter.SetKeys("/")
-	// Map our navigation keys to list's keymap
-	l.KeyMap.CursorUp.SetKeys("up", "k")
-	l.KeyMap.CursorDown.SetKeys("down", "j")
+	l := newWorktreeList(delegate)
 
 	h := help.New()
 
@@ -2293,53 +2285,9 @@ func (m Model) overlayOnDashboard(active bool, renderFn func() string) string {
 	return centerOverlay(m.renderDashboard(), renderFn(), m.width, m.height)
 }
 
+// centerOverlay draws overlay centered over a dimmed bg. See composeOverlay.
 func centerOverlay(bg, overlay string, width, height int) string {
-	// Split background and overlay into lines
-	bgLines := strings.Split(bg, "\n")
-	overlayLines := strings.Split(overlay, "\n")
-
-	// Pad/trim bg to exactly height lines
-	for len(bgLines) < height {
-		bgLines = append(bgLines, "")
-	}
-	if len(bgLines) > height {
-		bgLines = bgLines[:height]
-	}
-
-	// Dim the background lines
-	dimStyle := lipgloss.NewStyle().Faint(true)
-	for i, line := range bgLines {
-		bgLines[i] = dimStyle.Render(line)
-	}
-
-	// Calculate overlay position (centered)
-	overlayHeight := len(overlayLines)
-	overlayWidth := 0
-	for _, line := range overlayLines {
-		if w := lipgloss.Width(line); w > overlayWidth {
-			overlayWidth = w
-		}
-	}
-
-	startRow := (height - overlayHeight) / 2
-	if startRow < 0 {
-		startRow = 0
-	}
-	startCol := (width - overlayWidth) / 2
-	if startCol < 0 {
-		startCol = 0
-	}
-
-	// Composite overlay on top of dimmed background
-	padding := strings.Repeat(" ", startCol)
-	for i, oLine := range overlayLines {
-		row := startRow + i
-		if row >= 0 && row < len(bgLines) {
-			bgLines[row] = padding + oLine
-		}
-	}
-
-	return strings.Join(bgLines, "\n")
+	return composeOverlay(bg, overlay, width, height)
 }
 
 func gatherDeleteWarnings(item *WorktreeItem) []string {

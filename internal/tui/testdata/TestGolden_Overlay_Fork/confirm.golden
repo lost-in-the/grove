@@ -1,24 +1,24 @@
-               ╭────────────────────────────────────────────────╮
-               │                                                │
-               │  [1mFork Worktree[m                                 │
-               │                                                │
-               │    ●━━━━━━━━━━━━━━━━━━●━━━━━━━━━━━━━━━━━━●     │
-               │    Name ✓           WIP ✓          [1mConfirm[m     │
-               │                                                │
-               │    Source:  feature-auth                       │
-               │    Name:    experiment                         │
-               │    Branch:  feature-auth-experiment            │
-               │                                                │
-               │    Ready to fork.                              │
-               │                                                │
-               │                                                │
-               │                                                │
-               │                                                │
-               │                                                │
-               │                                                │
-               │                                                │
-               │                                                │
-               │    [enter] fork  [backspace] back  [esc]       │
-               │  cancel                                        │
-               │                                                │
-               ╰────────────────────────────────────────────────╯
+[2m test-project  [m╭────────────────────────────────────────────────╮[2m        ● root [m
+[2m               [m│                                                │[2m               [m
+[2m 1 ❯ root ─────[m│  [1mFork Worktree[m                                 │[2m─────── 2h ago [m
+[2m       test com[m│                                                │[2m               [m
+[2m   •••         [m│    ●━━━━━━━━━━━━━━━━━━●━━━━━━━━━━━━━━━━━━●     │[2m               [m
+[2m ── root ──────[m│    Name ✓           WIP ✓          [1mConfirm[m     │[2m────────────── [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│    Source:  feature-auth                       │[2m               [m
+[2m               [m│    Name:    experiment                         │[2m               [m
+[2m               [m│    Branch:  feature-auth-experiment            │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│    Ready to fork.                              │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│    [enter] fork  [backspace] back  [esc]       │[2m               [m
+[2m               [m│  cancel                                        │[2m               [m
+[2m  ↑↓ navigate ·[m│                                                │[2m               [m
+[2m  / filter · ta[m╰────────────────────────────────────────────────╯[2m               [m

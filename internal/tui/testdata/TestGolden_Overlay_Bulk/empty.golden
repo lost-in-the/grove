@@ -1,24 +1,24 @@
-[2m [1m[1mtest-project[m  ·  3 worktrees  ·  on root  ·  ↕ name                     ● root[m [m
+[2m test-project  ·  3 worktrees  ·  on root  ·  ↕ name                     ● root [m
 [2m                                                                                [m
 [2m 1 ❯ root ────────────────────────────────────────────────────────────── 2h ago [m
 [2m       test commit for root                                                     [m
-[2m   [38;2;151;151;151m•[m[38;2;60;60;60m•[m[38;2;60;60;60m•[m                                                                          [m
+[2m   •••                                                                          [m
 [2m ── root ────────────────────────────────────────────────────────────────────── [m
 [2m                                                                                [m
-                        ╭─────────────────────────────╮
-                        │                             │
-                        │  [1mBulk Delete[m                │
-                        │                             │
-                        │  No worktrees to clean up.  │
-                        │                             │
-                        │  [esc] close                │
-                        │                             │
-                        ╰─────────────────────────────╯
+[2m                        [m╭─────────────────────────────╮[2m                         [m
+[2m                        [m│                             │[2m                         [m
+[2m                        [m│  [1mBulk Delete[m                │[2m                         [m
+[2m                        [m│                             │[2m                         [m
+[2m                        [m│  No worktrees to clean up.  │[2m                         [m
+[2m                        [m│                             │[2m                         [m
+[2m                        [m│  [esc] close                │[2m                         [m
+[2m                        [m│                             │[2m                         [m
+[2m                        [m╰─────────────────────────────╯[2m                         [m
 [2m                                                                                [m
 [2m                                                                                [m
 [2m                                                                                [m
 [2m                                                                                [m
 [2m                                                                                [m
 [2m                                                                                [m
-[2m  [1m↑↓[m navigate · [1menter[m switch · [1mU[m up · [1mn[m new                                     [m
-[2m  [1m/[m filter · [1mtab[m detail · [1mo[m sort · [1m?[m help · [1mq[m quit                              [m
+[2m  ↑↓ navigate · enter switch · U up · n new                                     [m
+[2m  / filter · tab detail · o sort · ? help · q quit                              [m

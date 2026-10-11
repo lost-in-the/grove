@@ -1,24 +1,24 @@
-[2m [1m[1mtest-project[m  ·  3 worktrees  ·  on root  ·  ↕ name                     ● root[m [m
+[2m test-project  ·  3 worktrees  ·  on root  ·  ↕ name                     ● root [m
 [2m                                                                                [m
-             ╭───────────────────────────────────────────────────╮
-             │                                                   │
-             │  [1mDelete Worktree[m                                  │
-             │                                                   │
-             │  [1mDelete "feature-auth"?[m                           │
-             │                                                   │
-             │  ⚠ Worktree has uncommitted changes               │
-             │  ⚠ Branch not merged                              │
-             │                                                   │
-             │  Path      /tmp/test-project-feature-auth         │
-             │  Branch    feature-auth                           │
-             │  Commit    abc1234 · 2 hours ago                  │
-             │  Status    ● clean                                │
-             │                                                   │
-             │  [ ] Also delete branch feature-auth              │
-             │                                                   │
-             │  [1my[m confirm  [1mn[m cancel  [1mspace[m toggle branch         │
-             │                                                   │
-             ╰───────────────────────────────────────────────────╯
+[2m 1 ❯ root ───[m╭───────────────────────────────────────────────────╮[2m────── 2h ago [m
+[2m       test c[m│                                                   │[2m              [m
+[2m   •••       [m│  [1mDelete Worktree[m                                  │[2m              [m
+[2m ── root ────[m│                                                   │[2m───────────── [m
+[2m             [m│  [1mDelete "feature-auth"?[m                           │[2m              [m
+[2m             [m│                                                   │[2m              [m
+[2m             [m│  ⚠ Worktree has uncommitted changes               │[2m              [m
+[2m             [m│  ⚠ Branch not merged                              │[2m              [m
+[2m             [m│                                                   │[2m              [m
+[2m             [m│  Path      /tmp/test-project-feature-auth         │[2m              [m
+[2m             [m│  Branch    feature-auth                           │[2m              [m
+[2m             [m│  Commit    abc1234 · 2 hours ago                  │[2m              [m
+[2m             [m│  Status    ● clean                                │[2m              [m
+[2m             [m│                                                   │[2m              [m
+[2m             [m│  [ ] Also delete branch feature-auth              │[2m              [m
+[2m             [m│                                                   │[2m              [m
+[2m             [m│  [1my[m confirm  [1mn[m cancel  [1mspace[m toggle branch         │[2m              [m
+[2m             [m│                                                   │[2m              [m
+[2m             [m╰───────────────────────────────────────────────────╯[2m              [m
 [2m                                                                                [m
-[2m  [1m↑↓[m navigate · [1menter[m switch · [1mU[m up · [1mn[m new                                     [m
-[2m  [1m/[m filter · [1mtab[m detail · [1mo[m sort · [1m?[m help · [1mq[m quit                              [m
+[2m  ↑↓ navigate · enter switch · U up · n new                                     [m
+[2m  / filter · tab detail · o sort · ? help · q quit                              [m

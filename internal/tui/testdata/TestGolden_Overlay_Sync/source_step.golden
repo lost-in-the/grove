@@ -1,24 +1,24 @@
-               ╭────────────────────────────────────────────────╮
-               │                                                │
-               │  [1mSync Changes[m                                  │
-               │                                                │
-               │    ●━━━━━━━━━━━━━━━━━━○━━━━━━━━━━━━━━━━━━○     │
-               │    [1mSource[m          Preview         Confirm     │
-               │                                                │
-               │    Pull uncommitted changes from another       │
-               │  worktree                                      │
-               │    into root.                                  │
-               │                                                │
-               │    ❯ feature-auth    2 files changed           │
-               │      fix-bug    clean                          │
-               │      testing    1 files changed                │
-               │                                                │
-               │                                                │
-               │                                                │
-               │                                                │
-               │                                                │
-               │                                                │
-               │                                                │
-               │                                                │
-               │                                                │
-               │                                                │
+[2m test-project  [m╭────────────────────────────────────────────────╮[2m        ● root [m
+[2m               [m│                                                │[2m               [m
+[2m 1 ❯ root ─────[m│  [1mSync Changes[m                                  │[2m─────── 2h ago [m
+[2m       test com[m│                                                │[2m               [m
+[2m   •••••       [m│    ●━━━━━━━━━━━━━━━━━━○━━━━━━━━━━━━━━━━━━○     │[2m               [m
+[2m ── root ──────[m│    [1mSource[m          Preview         Confirm     │[2m────────────── [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│    Pull uncommitted changes from another       │[2m               [m
+[2m               [m│  worktree                                      │[2m               [m
+[2m               [m│    into root.                                  │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│    ❯ feature-auth    2 files changed           │[2m               [m
+[2m               [m│      fix-bug    clean                          │[2m               [m
+[2m               [m│      testing    1 files changed                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m  ↑↓ navigate ·[m│                                                │[2m               [m
+[2m  / filter · ta[m│                                                │[2m               [m
