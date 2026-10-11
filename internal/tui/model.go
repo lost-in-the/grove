@@ -2228,7 +2228,7 @@ func (m Model) dashboardDetailFocusedHints() []Hint {
 	if item, ok := m.selectedItem(); ok && item.AssociatedPR != nil {
 		hints = append(hints, Hint{"B", "open PR"})
 	}
-	hints = append(hints, Hint{"tab", "list"}, Hint{"esc", "quit"})
+	hints = append(hints, Hint{"tab", "list"}, Hint{"esc", "list"})
 	return hints
 }
 
