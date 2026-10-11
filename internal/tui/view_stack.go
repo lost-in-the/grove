@@ -46,6 +46,8 @@ func (s viewStack) toRoot() (viewStack, viewFrame, bool) {
 // restoreCursor selects the worktree saved in f. A refresh can reorder or
 // remove rows while a frame is open, so the path wins over the row index.
 // Indexes refer to visible rows, which differ from all rows under a filter.
+// The detail pane is only re-rendered when the selection changed, so closing
+// a frame keeps its scroll position and focused style.
 func (m *Model) restoreCursor(f viewFrame) {
 	rows := m.list.VisibleItems()
 	if len(rows) == 0 {
@@ -60,7 +62,16 @@ func (m *Model) restoreCursor(f viewFrame) {
 			}
 		}
 	}
+	before, _ := m.selectedItem()
 	m.list.Select(target)
+	if after, _ := m.selectedItem(); after.Path == before.Path {
+		return
+	}
+	if m.detailFocused {
+		m.refreshDetailForFocus()
+		m.detail.GotoTop()
+		return
+	}
 	m.updateDetailContent()
 }
 

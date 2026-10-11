@@ -94,3 +94,54 @@ func TestRenderFrame_HelpOverDeleteDrawsDeleteBeneath(t *testing.T) {
 		t.Errorf("delete box missing from the frame beneath help:\n%s", beneath)
 	}
 }
+
+// Closing a frame over the same worktree must leave the detail pane alone:
+// popping used to re-render it, which reset its scroll to the top.
+func TestPop_KeepsDetailScrollWhenSelectionUnchanged(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.detail.SetContent(strings.Repeat("detail line\n", 200))
+	m.detail.SetYOffset(7)
+	m.pushView(ViewHelp)
+	m.popView()
+	if got := m.detail.YOffset(); got != 7 {
+		t.Errorf("detail scroll after pop = %d, want 7", got)
+	}
+}
+
+// A focused detail pane keeps its focused rendering when help closes.
+func TestPop_KeepsFocusedDetailRendering(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.detailFocused = true
+	m.refreshDetailForFocus()
+	before := m.detail.View()
+	m.pushView(ViewHelp)
+	m.popView()
+	if after := m.detail.View(); after != before {
+		t.Error("focused detail pane re-rendered unfocused after pop")
+	}
+}
+
+// When the selection does change on pop, the detail shows the new worktree
+// from the top, in the focused style if the pane has focus.
+func TestPop_RefreshesDetailWhenSelectionChanges(t *testing.T) {
+	m := newTestModel(withItems(5), withSize(120, 40))
+	m.detailFocused = true
+	m.list.Select(2)
+	m.pushView(ViewRename)
+	m.list.Select(4)
+	m.refreshDetailForFocus()
+	m.detail.SetYOffset(3)
+	m.popView()
+	item, _ := m.selectedItem()
+	if item.ShortName != "fix-bug" {
+		t.Fatalf("selected %q after pop, want fix-bug", item.ShortName)
+	}
+	if got := m.detail.YOffset(); got != 0 {
+		t.Errorf("detail scroll = %d, want 0 for a newly selected worktree", got)
+	}
+	m2 := m
+	m2.refreshDetailForFocus()
+	if m.detail.View() != m2.detail.View() {
+		t.Error("detail after pop is not the focused rendering of the selected worktree")
+	}
+}
