@@ -1,6 +1,11 @@
 package tui
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/charmbracelet/x/ansi"
+)
 
 // A refresh that reorders rows while an overlay is open must not move the
 // cursor: esc returns to the same worktree, not the same row.
@@ -68,5 +73,24 @@ func TestHelpKeepsFooterOfViewBeneath(t *testing.T) {
 	m = next.(Model)
 	if after := m.helpFooter.CompactHeight(m.layoutView(), m.width-4); after != before {
 		t.Errorf("footer height with help open = %d, want %d", after, before)
+	}
+}
+
+// An overlay draws over whatever frame it was opened from. Help is centered
+// on top of the delete box and hides it, so the delete box is checked in the
+// frame beneath help.
+func TestRenderFrame_HelpOverDeleteDrawsDeleteBeneath(t *testing.T) {
+	m := goldenModel(t, sizeUltraWide, withItems(5), withDeleteOverlay())
+	withHelpExpanded()(&m)
+	top := ansi.Strip(m.viewString())
+	if !strings.Contains(top, "Toggle branch deletion") {
+		t.Error("help panel missing")
+	}
+	if !strings.Contains(top, "test commit for root") {
+		t.Error("dashboard rows missing beneath both overlays")
+	}
+	beneath := ansi.Strip(m.renderFrame(len(m.views) - 2))
+	if !strings.Contains(beneath, `Delete "feature-auth"?`) {
+		t.Errorf("delete box missing from the frame beneath help:\n%s", beneath)
 	}
 }

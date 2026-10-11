@@ -292,7 +292,7 @@ func (m Model) renderIssuePanel() string {
 	})
 
 	if s.ExistsPrompt != nil {
-		return centerOverlay(panel, renderExistingWorktreePrompt(s.ExistsPrompt, m.width), m.width, m.height)
+		return composeOverlay(panel, renderExistingWorktreePrompt(s.ExistsPrompt, m.width), m.width, m.height)
 	}
 	return panel
 }

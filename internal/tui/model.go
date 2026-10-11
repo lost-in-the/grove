@@ -1862,11 +1862,82 @@ func (m Model) viewContent() string {
 		return m.viewEmpty()
 	}
 
-	result := m.viewForActiveView()
-	if result == "" {
-		result = m.renderDashboard()
+	return m.renderFrame(len(m.views) - 1)
+}
+
+// renderFrame renders frame i of the view stack; -1 is the dashboard root.
+// Overlay frames draw over the frame beneath them, so an overlay opened
+// from the PR browser shows the PR browser behind it.
+func (m Model) renderFrame(i int) string {
+	v := ViewDashboard
+	if i >= 0 {
+		v = m.views[i].view
 	}
-	return m.compositeActiveOverlay(result)
+	switch v {
+	case ViewDashboard:
+		return m.renderDashboard()
+	case ViewPRs:
+		if m.prState != nil {
+			return m.renderPRPanel()
+		}
+		return m.renderFrame(i - 1)
+	case ViewIssues:
+		if m.issueState != nil {
+			return m.renderIssuePanel()
+		}
+		return m.renderFrame(i - 1)
+	}
+	overlay := m.renderOverlay(v)
+	if overlay == "" {
+		return m.renderFrame(i - 1)
+	}
+	return composeOverlay(m.renderFrame(i-1), overlay, m.width, m.height)
+}
+
+// renderOverlay returns the panel for an overlay view, or "" when its state
+// is gone.
+func (m Model) renderOverlay(v ActiveView) string {
+	switch v {
+	case ViewDelete:
+		if m.deleteState != nil {
+			return renderDeleteV2(m.deleteState, m.width)
+		}
+	case ViewCreate:
+		if m.createState != nil {
+			return renderCreateV2(m.createState, m.width, m.spinner.View())
+		}
+	case ViewBulk:
+		if m.bulkState != nil {
+			return renderBulk(m.bulkState)
+		}
+	case ViewFork:
+		if m.forkState != nil {
+			return renderFork(m.forkState, m.width)
+		}
+	case ViewSync:
+		if m.syncState != nil {
+			return renderSync(m.syncState, m.width)
+		}
+	case ViewConfig:
+		if m.configState != nil {
+			return renderConfig(m.configState, m.width)
+		}
+	case ViewRename:
+		if m.renameState != nil {
+			return renderRename(m.renameState, m.width)
+		}
+	case ViewCheckout:
+		if m.checkoutState != nil {
+			return renderCheckout(m.checkoutState, m.width)
+		}
+	case ViewHelp:
+		return m.helpOverlay.View(m.width, m.height)
+	case ViewUpdate:
+		if m.updateOverlay != nil {
+			return m.updateOverlay.View(m.width, m.height)
+		}
+	}
+	return ""
 }
 
 func (m Model) viewNotReady() string {
@@ -1893,71 +1964,6 @@ func (m Model) viewEmpty() string {
 	hint := Styles.HelpKey.Render("n") + " " + Styles.HelpDesc.Render("to create your first worktree")
 	content := lipgloss.JoinVertical(lipgloss.Center, brand, "", msg, hint)
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, content)
-}
-
-func (m Model) viewForActiveView() string {
-	switch m.layoutView() {
-	case ViewHelp:
-		return m.renderDashboard()
-	case ViewDelete:
-		return m.overlayOnDashboard(m.deleteState != nil, func() string { return renderDeleteV2(m.deleteState, m.width) })
-	case ViewCreate:
-		if m.createState != nil {
-			overlay := renderCreateV2(m.createState, m.width, m.spinner.View())
-			var bg string
-			switch m.createState.Source {
-			case "pr":
-				if m.prState != nil {
-					bg = m.renderPRPanel()
-				}
-			case "issue":
-				if m.issueState != nil {
-					bg = m.renderIssuePanel()
-				}
-			}
-			if bg == "" {
-				bg = m.renderDashboard()
-			}
-			return centerOverlay(bg, overlay, m.width, m.height)
-		}
-		return ""
-	case ViewBulk:
-		return m.overlayOnDashboard(m.bulkState != nil, func() string { return renderBulk(m.bulkState) })
-	case ViewPRs:
-		if m.prState != nil {
-			return m.renderPRPanel()
-		}
-	case ViewIssues:
-		if m.issueState != nil {
-			return m.renderIssuePanel()
-		}
-	case ViewFork:
-		return m.overlayOnDashboard(m.forkState != nil, func() string { return renderFork(m.forkState, m.width) })
-	case ViewSync:
-		return m.overlayOnDashboard(m.syncState != nil, func() string { return renderSync(m.syncState, m.width) })
-	case ViewConfig:
-		return m.overlayOnDashboard(m.configState != nil, func() string { return renderConfig(m.configState, m.width) })
-	case ViewRename:
-		return m.overlayOnDashboard(m.renameState != nil, func() string { return renderRename(m.renameState, m.width) })
-	case ViewCheckout:
-		return m.overlayOnDashboard(m.checkoutState != nil, func() string { return renderCheckout(m.checkoutState, m.width) })
-	}
-	return ""
-}
-
-// compositeActiveOverlay renders whichever overlay (update or help) is active
-// on top of the given content. The update overlay takes precedence when both
-// are active. Returns content unchanged when no overlay is active.
-func (m Model) compositeActiveOverlay(content string) string {
-	if m.updateOverlay != nil && m.updateOverlay.Active {
-		panel := m.updateOverlay.View(m.width, m.height)
-		return centerOverlay(content, panel, m.width, m.height)
-	}
-	if m.helpOverlay.Active {
-		helpPanel := m.helpOverlay.View(m.width, m.height)
-		return centerOverlay(content, helpPanel, m.width, m.height)
-	}
-	return content
 }
 
 // updateAvailable reports whether the cached release info shows a newer
@@ -2261,21 +2267,6 @@ func clampLines(s string, n int) string {
 		lines = lines[:n]
 	}
 	return strings.Join(lines, "\n")
-}
-
-// overlayOnDashboard renders the overlay produced by renderFn centered on top
-// of the dashboard. If active is false (state is nil), it returns "" so the
-// caller falls through to the default dashboard render.
-func (m Model) overlayOnDashboard(active bool, renderFn func() string) string {
-	if !active {
-		return ""
-	}
-	return centerOverlay(m.renderDashboard(), renderFn(), m.width, m.height)
-}
-
-// centerOverlay draws overlay centered over a dimmed bg. See composeOverlay.
-func centerOverlay(bg, overlay string, width, height int) string {
-	return composeOverlay(bg, overlay, width, height)
 }
 
 func gatherDeleteWarnings(item *WorktreeItem) []string {
