@@ -57,7 +57,7 @@ func (m Model) fetchPRsCmd() tea.Msg {
 
 func (m Model) handlePRKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.prState == nil {
-		m.activeView = ViewDashboard
+		m.popView()
 		return m, nil
 	}
 
@@ -71,7 +71,7 @@ func (m Model) handlePRKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	if s.Loading || s.Creating {
 		if key.Matches(msg, m.keys.Escape) {
-			m.activeView = ViewDashboard
+			m.popView()
 			m.prState = nil
 			return m, nil
 		}
@@ -116,7 +116,7 @@ func (m Model) handlePRNormalKey(msg tea.KeyPressMsg, filtered []*tracker.PullRe
 
 	switch {
 	case key.Matches(msg, m.keys.Escape):
-		m.activeView = ViewDashboard
+		m.popView()
 		m.prState = nil
 		return m, nil
 
@@ -176,12 +176,11 @@ func (m Model) handlePREnter(s *PRViewState, filtered []*tracker.PullRequest) (t
 func (m Model) openCreateWizardForPR(pr *tracker.PullRequest) (tea.Model, tea.Cmd) {
 	branches, _ := git.ListAllBranches(m.projectRoot)
 	m.createState = prefillCreateStateForPR(pr, m.projectName, m.worktreeNamePattern(), branches)
-	m.createState.ReturnView = ViewPRs
 	m.createState.WorktreeBranches = m.worktreeBranchMap()
 	m.createState.ExistingWorktree = checkDuplicateWorktree(
 		m.createState.NameSuggestion, m.existingWorktreeItems(),
 	)
-	m.activeView = ViewCreate
+	m.pushView(ViewCreate)
 	return m, m.createState.NameInput.Focus()
 }
 

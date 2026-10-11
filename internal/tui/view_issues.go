@@ -54,7 +54,7 @@ func (m Model) fetchIssuesCmd() tea.Msg {
 
 func (m Model) handleIssueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.issueState == nil {
-		m.activeView = ViewDashboard
+		m.popView()
 		return m, nil
 	}
 
@@ -68,7 +68,7 @@ func (m Model) handleIssueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	if s.Loading || s.Creating {
 		if key.Matches(msg, m.keys.Escape) {
-			m.activeView = ViewDashboard
+			m.popView()
 			m.issueState = nil
 			return m, nil
 		}
@@ -105,7 +105,7 @@ func (m Model) handleIssueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Normal mode (not filtering, list focused)
 	switch {
 	case key.Matches(msg, m.keys.Escape):
-		m.activeView = ViewDashboard
+		m.popView()
 		m.issueState = nil
 		return m, nil
 
@@ -159,9 +159,8 @@ func (m Model) handleIssueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m Model) openCreateWizardForIssue(issue *tracker.Issue) (tea.Model, tea.Cmd) {
 	branches, _ := git.ListAllBranches(m.projectRoot)
 	m.createState = prefillCreateStateForIssue(issue, m.projectName, m.worktreeNamePattern(), branches)
-	m.createState.ReturnView = ViewIssues
 	m.createState.WorktreeBranches = m.worktreeBranchMap()
-	m.activeView = ViewCreate
+	m.pushView(ViewCreate)
 	return m, nil
 }
 

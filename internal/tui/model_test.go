@@ -54,8 +54,8 @@ func TestUpdateDashboardNavigation(t *testing.T) {
 			name: "n opens create view",
 			key:  "n",
 			assert: func(t *testing.T, m Model) {
-				if m.activeView != ViewCreate {
-					t.Errorf("expected ViewCreate, got %d", m.activeView)
+				if m.activeView() != ViewCreate {
+					t.Errorf("expected ViewCreate, got %d", m.activeView())
 				}
 				if m.createState == nil {
 					t.Fatal("expected createState to be set")
@@ -78,8 +78,8 @@ func TestUpdateDashboardNavigation(t *testing.T) {
 			name: "a opens bulk view",
 			key:  "a",
 			assert: func(t *testing.T, m Model) {
-				if m.activeView != ViewBulk {
-					t.Errorf("expected ViewBulk, got %d", m.activeView)
+				if m.activeView() != ViewBulk {
+					t.Errorf("expected ViewBulk, got %d", m.activeView())
 				}
 				if m.bulkState == nil {
 					t.Fatal("expected bulkState to be set")
@@ -106,8 +106,8 @@ func TestDeleteFlow(t *testing.T) {
 		// Move to item 1 (non-main)
 		m = sendKey(m, "j")
 		m = sendKey(m, "d")
-		if m.activeView != ViewDelete {
-			t.Errorf("expected ViewDelete, got %d", m.activeView)
+		if m.activeView() != ViewDelete {
+			t.Errorf("expected ViewDelete, got %d", m.activeView())
 		}
 		if m.deleteState == nil {
 			t.Fatal("expected deleteState to be set")
@@ -118,8 +118,8 @@ func TestDeleteFlow(t *testing.T) {
 		m := newTestModel(withItems(3), withSize(80, 24))
 		// Cursor is at 0 = main
 		m = sendKey(m, "d")
-		if m.activeView != ViewDashboard {
-			t.Errorf("expected ViewDashboard, got %d", m.activeView)
+		if m.activeView() != ViewDashboard {
+			t.Errorf("expected ViewDashboard, got %d", m.activeView())
 		}
 		if m.deleteState != nil {
 			t.Error("expected deleteState to be nil for main worktree")
@@ -144,8 +144,8 @@ func TestDeleteFlow(t *testing.T) {
 		m = sendKey(m, "j")
 		m = sendKey(m, "d")
 		m = sendKey(m, "n")
-		if m.activeView != ViewDashboard {
-			t.Errorf("expected ViewDashboard after cancel, got %d", m.activeView)
+		if m.activeView() != ViewDashboard {
+			t.Errorf("expected ViewDashboard after cancel, got %d", m.activeView())
 		}
 		if m.deleteState != nil {
 			t.Error("expected deleteState to be nil after cancel")
@@ -157,8 +157,8 @@ func TestDeleteFlow(t *testing.T) {
 		m = sendKey(m, "j")
 		m = sendKey(m, "d")
 		m = sendKey(m, "esc")
-		if m.activeView != ViewDashboard {
-			t.Errorf("expected ViewDashboard, got %d", m.activeView)
+		if m.activeView() != ViewDashboard {
+			t.Errorf("expected ViewDashboard, got %d", m.activeView())
 		}
 	})
 
@@ -182,12 +182,12 @@ func TestDeleteFlow(t *testing.T) {
 		m = sendKey(m, "y")
 		// Try to cancel while deleting — should be ignored
 		m = sendKey(m, "n")
-		if m.activeView != ViewDelete {
-			t.Errorf("expected ViewDelete (input blocked during delete), got %d", m.activeView)
+		if m.activeView() != ViewDelete {
+			t.Errorf("expected ViewDelete (input blocked during delete), got %d", m.activeView())
 		}
 		m = sendKey(m, "esc")
-		if m.activeView != ViewDelete {
-			t.Errorf("expected ViewDelete (esc blocked during delete), got %d", m.activeView)
+		if m.activeView() != ViewDelete {
+			t.Errorf("expected ViewDelete (esc blocked during delete), got %d", m.activeView())
 		}
 	})
 }
@@ -294,8 +294,8 @@ func TestCreateWizardFlow(t *testing.T) {
 		m := newTestModel(withItems(1), withSize(80, 24))
 		m = enterCreateManual(m)
 		m = sendKey(m, "esc")
-		if m.activeView != ViewDashboard {
-			t.Errorf("expected ViewDashboard, got %d", m.activeView)
+		if m.activeView() != ViewDashboard {
+			t.Errorf("expected ViewDashboard, got %d", m.activeView())
 		}
 		if m.createState != nil {
 			t.Error("expected createState to be nil")
@@ -373,8 +373,8 @@ func TestBulkFlow(t *testing.T) {
 	t.Run("a opens bulk view", func(t *testing.T) {
 		m := newTestModel(withItems(5), withSize(80, 24))
 		m = sendKey(m, "a")
-		if m.activeView != ViewBulk {
-			t.Errorf("expected ViewBulk, got %d", m.activeView)
+		if m.activeView() != ViewBulk {
+			t.Errorf("expected ViewBulk, got %d", m.activeView())
 		}
 		if m.bulkState == nil {
 			t.Fatal("expected bulkState to be set")
@@ -404,8 +404,8 @@ func TestBulkFlow(t *testing.T) {
 		m := newTestModel(withItems(5), withSize(80, 24))
 		m = sendKey(m, "a")
 		m = sendKey(m, "esc")
-		if m.activeView != ViewDashboard {
-			t.Errorf("expected ViewDashboard, got %d", m.activeView)
+		if m.activeView() != ViewDashboard {
+			t.Errorf("expected ViewDashboard, got %d", m.activeView())
 		}
 		if m.bulkState != nil {
 			t.Error("expected bulkState to be nil")
@@ -417,8 +417,8 @@ func TestBulkFlow(t *testing.T) {
 		m = sendKey(m, "a")
 		m = sendKey(m, "enter")
 		// Should still be in bulk view since nothing selected
-		if m.activeView != ViewBulk {
-			t.Errorf("expected ViewBulk (no selection), got %d", m.activeView)
+		if m.activeView() != ViewBulk {
+			t.Errorf("expected ViewBulk (no selection), got %d", m.activeView())
 		}
 	})
 
@@ -798,31 +798,31 @@ func TestNoColorGrove(t *testing.T) {
 
 func TestHandleDeleteKeyNilState(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
-	m.activeView = ViewDelete
+	m.setViewForTest(ViewDelete)
 	m.deleteState = nil
 	m = sendKey(m, "y")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView())
 	}
 }
 
 func TestHandleCreateKeyNilState(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
-	m.activeView = ViewCreate
+	m.setViewForTest(ViewCreate)
 	m.createState = nil
 	m = sendKey(m, "a")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView())
 	}
 }
 
 func TestHandleBulkKeyNilState(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
-	m.activeView = ViewBulk
+	m.setViewForTest(ViewBulk)
 	m.bulkState = nil
 	m = sendKey(m, "j")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView())
 	}
 }
 
@@ -863,7 +863,7 @@ func TestWorktreeCreatedMsgWithError(t *testing.T) {
 
 func TestWorktreeDeletedMsgWithError(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
-	m.activeView = ViewDelete
+	m.setViewForTest(ViewDelete)
 	m.deleteState = &DeleteState{Item: &WorktreeItem{ShortName: "test"}}
 	m = sendMsg(m, worktreeDeletedMsg{name: "test", err: errTest})
 	// Toast should show the error
@@ -874,7 +874,7 @@ func TestWorktreeDeletedMsgWithError(t *testing.T) {
 
 func TestWorktreeDeletedMsgErrorDuringDeletion(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
-	m.activeView = ViewDelete
+	m.setViewForTest(ViewDelete)
 	m.deleteState = &DeleteState{
 		Item:     &WorktreeItem{ShortName: "test"},
 		Deleting: true,
@@ -886,8 +886,8 @@ func TestWorktreeDeletedMsgErrorDuringDeletion(t *testing.T) {
 		t.Error("expected deleteState to be nil after error")
 	}
 	// Should return to dashboard
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView())
 	}
 	// Toast should show error
 	if m.toast.Current == nil || m.toast.Current.Level != ToastError {
@@ -897,11 +897,11 @@ func TestWorktreeDeletedMsgErrorDuringDeletion(t *testing.T) {
 
 func TestBulkDeleteDoneMsg(t *testing.T) {
 	m := newTestModel(withItems(5), withSize(80, 24))
-	m.activeView = ViewBulk
+	m.setViewForTest(ViewBulk)
 	m.bulkState = &BulkState{Deleting: true}
 	m = sendMsg(m, bulkDeleteDoneMsg{count: 3})
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView())
 	}
 	if m.bulkState != nil {
 		t.Error("expected bulkState nil after done")
@@ -955,8 +955,8 @@ func TestDeleteOnProtectedItem(t *testing.T) {
 	m.list.SetItems(items)
 	m = sendKey(m, "j") // move to protected item
 	m = sendKey(m, "d")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard for protected item, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard for protected item, got %d", m.activeView())
 	}
 }
 
@@ -997,8 +997,8 @@ func TestCreateBranchEsc(t *testing.T) {
 	m = enterCreateManual(m)
 	m.createState.Step = CreateStepBranchChoice
 	m = sendKey(m, "esc")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView())
 	}
 }
 
@@ -1211,8 +1211,8 @@ func TestCreateWizardEscFromBranchSelector(t *testing.T) {
 	m.createState.Step = CreateStepBranchChoice
 	m.createState.Branches = []string{"main"}
 	m = sendKey(m, "esc")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView())
 	}
 }
 
@@ -1222,14 +1222,14 @@ func TestCreateWizardEscFromBranchAction(t *testing.T) {
 	m.createState.Step = CreateStepBranchAction
 	m.createState.BaseBranch = "develop"
 	m = sendKey(m, "esc")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView())
 	}
 }
 
 func TestDownKeyOnEmptyBulkList(t *testing.T) {
 	m := newTestModel(withSize(80, 24))
-	m.activeView = ViewBulk
+	m.setViewForTest(ViewBulk)
 	m.bulkState = &BulkState{Items: nil, Selected: nil}
 	// Down on empty bulk list must not panic (underflow guard)
 	m = sendKey(m, "down")
@@ -1240,7 +1240,7 @@ func TestDownKeyOnEmptyBulkList(t *testing.T) {
 
 func TestDownKeyOnEmptyConfigTab(t *testing.T) {
 	m := newTestModel(withSize(80, 24))
-	m.activeView = ViewConfig
+	m.setViewForTest(ViewConfig)
 	m.configState = NewConfigState()
 	// Empty fields — Down must not panic
 	m = sendKey(m, "down")
@@ -1251,7 +1251,7 @@ func TestDownKeyOnEmptyConfigTab(t *testing.T) {
 
 func TestDownKeyOnEmptySyncSources(t *testing.T) {
 	m := newTestModel(withSize(80, 24))
-	m.activeView = ViewSync
+	m.setViewForTest(ViewSync)
 	m.syncState = &SyncState{Sources: nil}
 	// Down on empty sync sources must not panic
 	m = sendKey(m, "down")
@@ -1274,32 +1274,32 @@ func TestSortWithMixedTypes(t *testing.T) {
 
 func TestHandlePRKeyNilState(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
-	m.activeView = ViewPRs
+	m.setViewForTest(ViewPRs)
 	m.prState = nil
 	m = sendKey(m, "j")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView())
 	}
 }
 
 func TestHandleIssueKeyNilState(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
-	m.activeView = ViewIssues
+	m.setViewForTest(ViewIssues)
 	m.issueState = nil
 	m = sendKey(m, "j")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView())
 	}
 }
 
 func TestDeleteConfirmNilItem(t *testing.T) {
 	m := newTestModel(withSize(80, 24))
-	m.activeView = ViewDelete
+	m.setViewForTest(ViewDelete)
 	m.deleteState = &DeleteState{Item: nil}
 	// Confirm on nil item should not panic
 	m = sendKey(m, "y")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView())
 	}
 }
 
@@ -1556,8 +1556,8 @@ func TestCreateNameTypingThroughUpdate(t *testing.T) {
 func TestDashboardKey_B_NoOpWithoutPR(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
 	m = sendKey(m, "B")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after B with no PR, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after B with no PR, got %d", m.activeView())
 	}
 }
 
@@ -1572,8 +1572,8 @@ func TestDashboardKey_B_WithPR(t *testing.T) {
 
 	// Sending B should not panic even with an associated PR
 	m = sendKey(m, "B")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after B, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after B, got %d", m.activeView())
 	}
 }
 

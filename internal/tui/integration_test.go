@@ -692,14 +692,14 @@ func TestUpdate_WorktreeDeletedMsg(t *testing.T) {
 	mgr, stateMgr := newTestManagers(t, repo)
 
 	m := NewModel(mgr, stateMgr, repo)
-	m.activeView = ViewDelete
+	m.setViewForTest(ViewDelete)
 
 	msg := worktreeDeletedMsg{name: "test", err: nil}
 	updated, _ := m.Update(msg)
 	m = updated.(Model)
 
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after delete, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after delete, got %d", m.activeView())
 	}
 	if m.toast.Message() == "" {
 		t.Error("expected non-empty status message after successful delete")
@@ -711,15 +711,15 @@ func TestUpdate_WorktreeCreatedMsg(t *testing.T) {
 	mgr, stateMgr := newTestManagers(t, repo)
 
 	m := NewModel(mgr, stateMgr, repo)
-	m.activeView = ViewCreate
+	m.setViewForTest(ViewCreate)
 	m.createState = &CreateState{}
 
 	msg := worktreeCreatedMsg{name: "new-wt"}
 	updated, _ := m.Update(msg)
 	m = updated.(Model)
 
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after create, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after create, got %d", m.activeView())
 	}
 	if m.toast.Message() == "" {
 		t.Error("expected non-empty status message after successful create")
@@ -731,15 +731,15 @@ func TestUpdate_BulkDeleteDoneMsg(t *testing.T) {
 	mgr, stateMgr := newTestManagers(t, repo)
 
 	m := NewModel(mgr, stateMgr, repo)
-	m.activeView = ViewBulk
+	m.setViewForTest(ViewBulk)
 	m.bulkState = &BulkState{}
 
 	msg := bulkDeleteDoneMsg{count: 3}
 	updated, _ := m.Update(msg)
 	m = updated.(Model)
 
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after bulk delete, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after bulk delete, got %d", m.activeView())
 	}
 	if m.toast.Message() == "" {
 		t.Error("expected non-empty status message after bulk delete")

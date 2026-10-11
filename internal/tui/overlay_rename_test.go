@@ -10,8 +10,8 @@ func TestRenameOverlay_OpenClose(t *testing.T) {
 	// Move to non-main item (index 1)
 	m = sendKey(m, "j")
 	m = sendKey(m, "R")
-	if m.activeView != ViewRename {
-		t.Errorf("expected ViewRename, got %d", m.activeView)
+	if m.activeView() != ViewRename {
+		t.Errorf("expected ViewRename, got %d", m.activeView())
 	}
 	if m.renameState == nil {
 		t.Fatal("expected renameState to be set")
@@ -19,8 +19,8 @@ func TestRenameOverlay_OpenClose(t *testing.T) {
 
 	// Esc should close
 	m = sendKey(m, "esc")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after esc, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after esc, got %d", m.activeView())
 	}
 	if m.renameState != nil {
 		t.Error("expected renameState nil after close")
@@ -31,8 +31,8 @@ func TestRenameOverlay_MainWorktreeBlocked(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
 	// Item 0 is main — R should not open rename
 	m = sendKey(m, "R")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard for main worktree, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard for main worktree, got %d", m.activeView())
 	}
 	if m.renameState != nil {
 		t.Error("expected renameState nil for main worktree")
@@ -41,11 +41,11 @@ func TestRenameOverlay_MainWorktreeBlocked(t *testing.T) {
 
 func TestRenameOverlay_NilState(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewRename
+	m.setViewForTest(ViewRename)
 	m.renameState = nil
 	m = sendKey(m, "enter")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard for nil state, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard for nil state, got %d", m.activeView())
 	}
 }
 
@@ -62,8 +62,8 @@ func TestRenameOverlay_EmptyNameBlocked(t *testing.T) {
 	if m.renameState.Error == "" {
 		t.Error("expected error for empty name")
 	}
-	if m.activeView != ViewRename {
-		t.Errorf("expected ViewRename still active, got %d", m.activeView)
+	if m.activeView() != ViewRename {
+		t.Errorf("expected ViewRename still active, got %d", m.activeView())
 	}
 }
 
@@ -125,14 +125,14 @@ func TestRenameOverlay_InvalidCharsBlocked(t *testing.T) {
 	if m.renameState.Renaming {
 		t.Error("expected no rename to be dispatched for an invalid name")
 	}
-	if m.activeView != ViewRename {
-		t.Errorf("expected ViewRename to remain active, got %d", m.activeView)
+	if m.activeView() != ViewRename {
+		t.Errorf("expected ViewRename to remain active, got %d", m.activeView())
 	}
 }
 
 func TestRenameOverlay_RenamingIgnoresInput(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewRename
+	m.setViewForTest(ViewRename)
 	item := WorktreeItem{ShortName: "test"}
 	m.renameState = &RenameState{
 		Item:     &item,
@@ -140,14 +140,14 @@ func TestRenameOverlay_RenamingIgnoresInput(t *testing.T) {
 	}
 
 	m = sendKey(m, "esc")
-	if m.activeView != ViewRename {
-		t.Errorf("expected ViewRename while renaming, got %d", m.activeView)
+	if m.activeView() != ViewRename {
+		t.Errorf("expected ViewRename while renaming, got %d", m.activeView())
 	}
 }
 
 func TestRenameCompleteMsg_Success(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewRename
+	m.setViewForTest(ViewRename)
 	item := WorktreeItem{ShortName: "old-name"}
 	m.renameState = &RenameState{
 		Item:     &item,
@@ -155,8 +155,8 @@ func TestRenameCompleteMsg_Success(t *testing.T) {
 	}
 
 	m = sendMsg(m, renameCompleteMsg{oldName: "old-name", newName: "new-name"})
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after rename complete, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after rename complete, got %d", m.activeView())
 	}
 	if m.renameState != nil {
 		t.Error("expected renameState nil after success")
@@ -168,7 +168,7 @@ func TestRenameCompleteMsg_Success(t *testing.T) {
 
 func TestRenameCompleteMsg_Error(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewRename
+	m.setViewForTest(ViewRename)
 	item := WorktreeItem{ShortName: "old-name"}
 	m.renameState = &RenameState{
 		Item:     &item,
@@ -176,8 +176,8 @@ func TestRenameCompleteMsg_Error(t *testing.T) {
 	}
 
 	m = sendMsg(m, renameCompleteMsg{oldName: "old-name", newName: "new-name", err: errTest})
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after rename error, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after rename error, got %d", m.activeView())
 	}
 	// Toast should show error — can't easily test toast content without
 	// accessing unexported fields, but we verify the state cleanup is correct

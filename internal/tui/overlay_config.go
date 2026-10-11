@@ -298,7 +298,7 @@ func tabName(tab ConfigTab) string {
 // handleConfigKey handles key input for the config overlay.
 func (m Model) handleConfigKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.configState == nil {
-		m.activeView = ViewDashboard
+		m.popView()
 		return m, nil
 	}
 
@@ -309,12 +309,12 @@ func (m Model) handleConfigKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		switch {
 		case key.Matches(msg, m.keys.Enter):
 			// Save and close
-			m.activeView = ViewDashboard
+			m.popView()
 			m.configState = nil
 			return m, saveConfigCmd(s)
 		case key.Matches(msg, m.keys.Escape):
 			// Discard and close
-			m.activeView = ViewDashboard
+			m.popView()
 			m.configState = nil
 			return m, nil
 		}
@@ -330,7 +330,7 @@ func (m Model) handleConfigKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			s.Confirming = true
 			return m, nil
 		}
-		m.activeView = ViewDashboard
+		m.popView()
 		m.configState = nil
 		return m, nil
 	}
@@ -373,18 +373,18 @@ func (m Model) updateConfigForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Sync form values back to fields and detect dirty
 		m.syncConfigFormValues()
 		if s.Dirty {
-			m.activeView = ViewDashboard
+			m.popView()
 			m.configState = nil
 			return m, saveConfigCmd(s)
 		}
-		m.activeView = ViewDashboard
+		m.popView()
 		m.configState = nil
 		return m, nil
 	}
 
 	// Check if form was aborted
 	if s.Form.State == huh.StateAborted {
-		m.activeView = ViewDashboard
+		m.popView()
 		m.configState = nil
 		return m, nil
 	}

@@ -35,8 +35,8 @@ func TestCheckoutOverlay_OpenClose(t *testing.T) {
 	// Move to non-main item (index 1)
 	m = sendKey(m, "j")
 	m = sendKey(m, "b")
-	if m.activeView != ViewCheckout {
-		t.Errorf("expected ViewCheckout, got %d", m.activeView)
+	if m.activeView() != ViewCheckout {
+		t.Errorf("expected ViewCheckout, got %d", m.activeView())
 	}
 	if m.checkoutState == nil {
 		t.Fatal("expected checkoutState to be set")
@@ -47,8 +47,8 @@ func TestCheckoutOverlay_OpenClose(t *testing.T) {
 
 	// Esc should close
 	m = sendKey(m, "esc")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after esc, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after esc, got %d", m.activeView())
 	}
 	if m.checkoutState != nil {
 		t.Error("expected checkoutState to be nil after close")
@@ -59,8 +59,8 @@ func TestCheckoutOverlay_MainWorktreeBlocked(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
 	// Item 0 is main — b should not open checkout
 	m = sendKey(m, "b")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard for main worktree, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard for main worktree, got %d", m.activeView())
 	}
 	if m.checkoutState != nil {
 		t.Error("expected checkoutState nil for main worktree")
@@ -69,11 +69,11 @@ func TestCheckoutOverlay_MainWorktreeBlocked(t *testing.T) {
 
 func TestCheckoutOverlay_NilState(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	m.checkoutState = nil
 	m = sendKey(m, "enter")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard for nil state, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard for nil state, got %d", m.activeView())
 	}
 }
 
@@ -84,7 +84,7 @@ func TestCheckoutOverlay_BranchesMsg(t *testing.T) {
 		Path:      "/tmp/test-project-feature-auth",
 	}
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	m.checkoutState = NewCheckoutState(item)
 
 	branches := []string{"main", "develop", "feature/auth", "fix/bug"}
@@ -108,7 +108,7 @@ func TestCheckoutOverlay_BranchesMsg(t *testing.T) {
 
 func TestCheckoutOverlay_BranchesMsgError(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	m.checkoutState = NewCheckoutState(WorktreeItem{ShortName: "test"})
 
 	m = sendMsg(m, checkoutBranchesMsg{err: errTest})
@@ -119,7 +119,7 @@ func TestCheckoutOverlay_BranchesMsgError(t *testing.T) {
 
 func TestCheckoutOverlay_WIPCheckMsg(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	m.checkoutState = NewCheckoutState(WorktreeItem{ShortName: "test", Branch: "test"})
 
 	m = sendMsg(m, wipCheckMsg{hasWIP: true, files: []string{"file.go", "other.go"}})
@@ -133,7 +133,7 @@ func TestCheckoutOverlay_WIPCheckMsg(t *testing.T) {
 
 func TestCheckoutOverlay_WIPCheckIgnoresStalePath(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	m.checkoutState = NewCheckoutState(WorktreeItem{ShortName: "b", Branch: "b", Path: "/tmp/wt-b"})
 
 	// A stale result dispatched by a since-canceled overlay for a *different*
@@ -155,7 +155,7 @@ func TestCheckoutOverlay_WIPCheckIgnoresStalePath(t *testing.T) {
 
 func TestCheckoutOverlay_WIPCheckMsgError(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	m.checkoutState = NewCheckoutState(WorktreeItem{ShortName: "test"})
 
 	m = sendMsg(m, wipCheckMsg{err: errTest})
@@ -171,7 +171,7 @@ func TestCheckoutOverlay_SelectBranchCleanSkipsWIP(t *testing.T) {
 		Path:      "/tmp/test-project-feature-auth",
 	}
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	s := NewCheckoutState(item)
 	s.Branches = []string{"main", "develop", "fix/bug"}
 	s.HasWIP = false
@@ -200,7 +200,7 @@ func TestCheckoutOverlay_SelectBranchDirtyShowsWIP(t *testing.T) {
 		Path:      "/tmp/test-project-feature-auth",
 	}
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	s := NewCheckoutState(item)
 	s.Branches = []string{"main", "develop", "fix/bug"}
 	s.HasWIP = true
@@ -221,7 +221,7 @@ func TestCheckoutOverlay_SelectBranchDirtyShowsWIP(t *testing.T) {
 
 func TestCheckoutOverlay_NoBranches(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	s := NewCheckoutState(WorktreeItem{ShortName: "test", Branch: "test"})
 	s.Branches = []string{}
 	s.WIPCheckDone = true
@@ -238,7 +238,7 @@ func TestCheckoutOverlay_NoBranches(t *testing.T) {
 
 func TestCheckoutOverlay_EnterBlockedBeforeWIPCheck(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	s := NewCheckoutState(WorktreeItem{ShortName: "test", Branch: "test"})
 	s.Branches = []string{"main", "develop"}
 	s.WIPCheckDone = false // WIP check not yet received
@@ -267,7 +267,7 @@ func TestCheckoutOverlay_EnterBlockedBeforeWIPCheck(t *testing.T) {
 
 func TestCheckoutOverlay_ConfirmBackResetsStash(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	m.checkoutState = &CheckoutState{
 		Step:           CheckoutStepConfirm,
 		Item:           WorktreeItem{ShortName: "test", Branch: "test"},
@@ -291,7 +291,7 @@ func TestCheckoutOverlay_BranchAlreadyUsedShown(t *testing.T) {
 		Path:      "/tmp/test-project-feature-auth",
 	}
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	s := NewCheckoutState(item)
 	// Simulate receiving branches where feature/auth is filtered out
 	s.Branches = []string{"main", "develop"}
@@ -311,7 +311,7 @@ func TestCheckoutOverlay_BranchAlreadyUsedShown(t *testing.T) {
 
 func TestCheckoutOverlay_WIPStepStash(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	m.checkoutState = &CheckoutState{
 		Step:           CheckoutStepWIP,
 		Item:           WorktreeItem{ShortName: "test", Branch: "test"},
@@ -334,7 +334,7 @@ func TestCheckoutOverlay_WIPStepStash(t *testing.T) {
 
 func TestCheckoutOverlay_WIPStepCancel(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	m.checkoutState = &CheckoutState{
 		Step:           CheckoutStepWIP,
 		Item:           WorktreeItem{ShortName: "test", Branch: "test"},
@@ -348,8 +348,8 @@ func TestCheckoutOverlay_WIPStepCancel(t *testing.T) {
 
 	m = sendKey(m, "enter")
 	// Cancel should close the overlay
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after WIP cancel, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after WIP cancel, got %d", m.activeView())
 	}
 	if m.checkoutState != nil {
 		t.Error("expected checkoutState nil after WIP cancel")
@@ -358,7 +358,7 @@ func TestCheckoutOverlay_WIPStepCancel(t *testing.T) {
 
 func TestCheckoutOverlay_WIPStepBackGoesToBranch(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	m.checkoutState = &CheckoutState{
 		Step:           CheckoutStepWIP,
 		Item:           WorktreeItem{ShortName: "test", Branch: "test"},
@@ -379,7 +379,7 @@ func TestCheckoutOverlay_WIPStepBackGoesToBranch(t *testing.T) {
 
 func TestCheckoutOverlay_ConfirmEsc(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	m.checkoutState = &CheckoutState{
 		Step:           CheckoutStepConfirm,
 		Item:           WorktreeItem{ShortName: "test", Branch: "test"},
@@ -389,14 +389,14 @@ func TestCheckoutOverlay_ConfirmEsc(t *testing.T) {
 	m.checkoutState.Stepper.Current = 2
 
 	m = sendKey(m, "esc")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView())
 	}
 }
 
 func TestCheckoutOverlay_ConfirmBackNoWIP(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	m.checkoutState = &CheckoutState{
 		Step:           CheckoutStepConfirm,
 		Item:           WorktreeItem{ShortName: "test", Branch: "test"},
@@ -414,7 +414,7 @@ func TestCheckoutOverlay_ConfirmBackNoWIP(t *testing.T) {
 
 func TestCheckoutOverlay_ConfirmBackWithWIP(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	m.checkoutState = &CheckoutState{
 		Step:           CheckoutStepConfirm,
 		Item:           WorktreeItem{ShortName: "test", Branch: "test"},
@@ -432,7 +432,7 @@ func TestCheckoutOverlay_ConfirmBackWithWIP(t *testing.T) {
 
 func TestCheckoutOverlay_SwitchingIgnoresInput(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	m.checkoutState = &CheckoutState{
 		Step:           CheckoutStepConfirm,
 		Item:           WorktreeItem{ShortName: "test", Branch: "test"},
@@ -443,14 +443,14 @@ func TestCheckoutOverlay_SwitchingIgnoresInput(t *testing.T) {
 	m.checkoutState.Stepper.Current = 2
 
 	m = sendKey(m, "esc")
-	if m.activeView != ViewCheckout {
-		t.Errorf("expected ViewCheckout while switching, got %d", m.activeView)
+	if m.activeView() != ViewCheckout {
+		t.Errorf("expected ViewCheckout while switching, got %d", m.activeView())
 	}
 }
 
 func TestCheckoutOverlay_ConfirmWithNilManagers(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	m.checkoutState = &CheckoutState{
 		Step:           CheckoutStepConfirm,
 		Item:           WorktreeItem{ShortName: "test", Branch: "test", Path: "/tmp/test"},
@@ -469,7 +469,7 @@ func TestCheckoutOverlay_ConfirmWithNilManagers(t *testing.T) {
 
 func TestCheckoutCompleteMsg_Success(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	m.checkoutState = &CheckoutState{
 		Step:           CheckoutStepConfirm,
 		Item:           WorktreeItem{ShortName: "test", Branch: "test"},
@@ -479,8 +479,8 @@ func TestCheckoutCompleteMsg_Success(t *testing.T) {
 	}
 
 	m = sendMsg(m, checkoutCompleteMsg{branch: "develop"})
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after checkout complete, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after checkout complete, got %d", m.activeView())
 	}
 	if m.checkoutState != nil {
 		t.Error("expected checkoutState nil after success")
@@ -489,7 +489,7 @@ func TestCheckoutCompleteMsg_Success(t *testing.T) {
 
 func TestCheckoutCompleteMsg_Error(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	m.checkoutState = &CheckoutState{
 		Step:           CheckoutStepConfirm,
 		Item:           WorktreeItem{ShortName: "test", Branch: "test"},
@@ -499,8 +499,8 @@ func TestCheckoutCompleteMsg_Error(t *testing.T) {
 	}
 
 	m = sendMsg(m, checkoutCompleteMsg{err: errTest})
-	if m.activeView != ViewCheckout {
-		t.Errorf("expected ViewCheckout after error, got %d", m.activeView)
+	if m.activeView() != ViewCheckout {
+		t.Errorf("expected ViewCheckout after error, got %d", m.activeView())
 	}
 	if m.checkoutState.Err == nil {
 		t.Error("expected error on checkoutState")
@@ -512,7 +512,7 @@ func TestCheckoutCompleteMsg_Error(t *testing.T) {
 
 func TestCheckoutOverlay_NavigateBranchList(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	s := NewCheckoutState(WorktreeItem{ShortName: "test", Branch: "test"})
 	s.Branches = []string{"main", "develop", "fix/bug"}
 	s.BranchFilterInput.Focus()
@@ -677,7 +677,7 @@ func TestRenderCheckout_ConfirmWithStash(t *testing.T) {
 
 func TestCheckoutOverlay_FilterBranches(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	s := NewCheckoutState(WorktreeItem{ShortName: "test", Branch: "test"})
 	s.Branches = []string{"main", "develop", "fix/bug", "feature/auth"}
 	s.BranchFilterInput.Focus()
@@ -697,7 +697,7 @@ func TestCheckoutOverlay_FilterBranches(t *testing.T) {
 
 func TestCheckoutOverlay_WIPNavigateUpDown(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewCheckout
+	m.setViewForTest(ViewCheckout)
 	m.checkoutState = &CheckoutState{
 		Step:           CheckoutStepWIP,
 		Item:           WorktreeItem{ShortName: "test", Branch: "test"},

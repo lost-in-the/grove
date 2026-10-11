@@ -35,7 +35,6 @@ func newTestModel(opts ...testOpt) Model {
 		helpFooter:  NewHelpFooter(),
 		helpOverlay: NewHelpOverlay(),
 		detail:      viewport.New(viewport.WithWidth(80), viewport.WithHeight(20)),
-		activeView:  ViewDashboard,
 		loading:     false,
 		ready:       true,
 		width:       80,
@@ -161,4 +160,12 @@ func enterNameStep(m Model) Model {
 		m.createState.NameInput.Focus()
 	}
 	return m
+}
+
+// setViewForTest makes v the only frame above the dashboard root.
+func (m *Model) setViewForTest(v ActiveView) {
+	m.views = nil
+	if v != ViewDashboard {
+		m.pushView(v)
+	}
 }

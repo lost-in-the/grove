@@ -63,3 +63,33 @@ func (m *Model) restoreCursor(f viewFrame) {
 	m.list.Select(target)
 	m.updateDetailContent()
 }
+
+// activeView is the view on top of the stack, or the dashboard at the root.
+func (m Model) activeView() ActiveView { return m.views.top() }
+
+// pushView opens v, remembering the selected worktree to return to.
+func (m *Model) pushView(v ActiveView) {
+	f := viewFrame{view: v, returnIndex: m.list.Index()}
+	if item, ok := m.selectedItem(); ok {
+		f.returnPath = item.Path
+	}
+	m.views = m.views.push(f)
+}
+
+// popView goes back exactly one level. At the root it does nothing.
+func (m *Model) popView() {
+	var f viewFrame
+	var ok bool
+	if m.views, f, ok = m.views.pop(); ok {
+		m.restoreCursor(f)
+	}
+}
+
+// popToRoot closes every frame and returns to the dashboard.
+func (m *Model) popToRoot() {
+	var f viewFrame
+	var ok bool
+	if m.views, f, ok = m.views.toRoot(); ok {
+		m.restoreCursor(f)
+	}
+}

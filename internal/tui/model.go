@@ -78,7 +78,7 @@ type Model struct {
 	keys KeyMap
 
 	// State
-	activeView    ActiveView
+	views         viewStack
 	ready         bool // true after first WindowSizeMsg
 	loading       bool // true while fetching worktrees
 	detailFocused bool // true when dashboard detail panel has focus
@@ -189,7 +189,6 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		updateOverlay:       NewUpdateOverlay(),
 		updateLatestVersion: latest,
 		updateLatestURL:     latestURL,
-		activeView:          ViewDashboard,
 		loading:             true,
 	}
 }
@@ -206,12 +205,12 @@ func (m Model) Err() error { return m.err }
 // --- Tea interface ---
 
 func (m Model) Init() tea.Cmd {
-	tuilog.Printf("Init: loading=%v ready=%v activeView=%d", m.loading, m.ready, m.activeView)
+	tuilog.Printf("Init: loading=%v ready=%v activeView=%d", m.loading, m.ready, m.activeView())
 	cmds := []tea.Cmd{m.spinner.Tick, m.fetchWorktrees}
-	if m.activeView == ViewPRs {
+	if m.activeView() == ViewPRs {
 		cmds = append(cmds, m.fetchPRsCmd)
 	}
-	if m.activeView == ViewIssues {
+	if m.activeView() == ViewIssues {
 		cmds = append(cmds, m.fetchIssuesCmd)
 	}
 	return tea.Batch(cmds...)
@@ -394,7 +393,7 @@ func (m Model) handlePRLookup(msg prLookupMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) handleWorktreeDeleted(msg worktreeDeletedMsg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
-	m.activeView = ViewDashboard
+	m.popToRoot()
 	m.deleteState = nil
 	if msg.err != nil {
 		m.toast.Show(NewToast(fmt.Sprintf("Delete failed: %s", msg.err), ToastError))
@@ -434,7 +433,7 @@ func (m Model) handleCreationDone(msg creationDoneMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		return m, nil
 	}
-	m.activeView = ViewDashboard
+	m.popToRoot()
 	if cleanup != nil {
 		cleanup()
 	}
@@ -458,7 +457,7 @@ func (m Model) handleWorktreeCreated(msg worktreeCreatedMsg) (tea.Model, tea.Cmd
 		}
 		return m, nil
 	}
-	m.activeView = ViewDashboard
+	m.popToRoot()
 	m.createState = nil
 	m.pendingSelect = msg.name
 
@@ -498,7 +497,7 @@ func (m Model) handleIssuesFetched(msg issuesFetchedMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleBulkDeleteDone(msg bulkDeleteDoneMsg) (tea.Model, tea.Cmd) {
-	m.activeView = ViewDashboard
+	m.popToRoot()
 	m.bulkState = nil
 	if len(msg.failed) > 0 {
 		names := make([]string, 0, len(msg.failed))
@@ -538,7 +537,7 @@ func (m Model) handleWIPCheck(msg wipCheckMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleForkComplete(msg forkCompleteMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		if msg.name != "" {
-			m.activeView = ViewDashboard
+			m.popToRoot()
 			m.forkState = nil
 			m.pendingSelect = msg.name
 			m.toast.Show(NewToast(fmt.Sprintf("Forked %q (warning: %s)", msg.name, msg.err), ToastWarning))
@@ -550,7 +549,7 @@ func (m Model) handleForkComplete(msg forkCompleteMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	m.activeView = ViewDashboard
+	m.popToRoot()
 	m.forkState = nil
 	m.pendingSelect = msg.name
 	m.toast.Show(NewToast(fmt.Sprintf("Forked %q", msg.name), ToastSuccess))
@@ -576,7 +575,7 @@ func (m Model) handleSyncComplete(msg syncCompleteMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	m.activeView = ViewDashboard
+	m.popToRoot()
 	m.syncState = nil
 	m.toast.Show(NewToast(fmt.Sprintf("Synced %d files", msg.filesApplied), ToastSuccess))
 	return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
@@ -617,7 +616,7 @@ func (m Model) handleConfigSaved(msg configSavedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.configState != nil {
-		m.activeView = ViewDashboard
+		m.popToRoot()
 		m.configState = nil
 	}
 	m.toast.Show(NewToast("Configuration saved", ToastSuccess))
@@ -632,7 +631,7 @@ func (m Model) handleConfigSaved(msg configSavedMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) handleRenameComplete(msg renameCompleteMsg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
-	m.activeView = ViewDashboard
+	m.popToRoot()
 	m.renameState = nil
 	if msg.err != nil {
 		m.toast.Show(NewToast(fmt.Sprintf("Rename failed: %s", msg.err), ToastError))
@@ -670,7 +669,7 @@ func (m Model) handleCheckoutComplete(msg checkoutCompleteMsg) (tea.Model, tea.C
 		}
 		return m, nil
 	}
-	m.activeView = ViewDashboard
+	m.popToRoot()
 	m.checkoutState = nil
 	m.toast.Show(NewToast(fmt.Sprintf("Switched to branch %q", msg.branch), ToastSuccess))
 	return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
@@ -691,7 +690,7 @@ func (m Model) handleSpinnerTick(msg spinner.TickMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	tuilog.Printf("KeyMsg: code=%d string=%q text=%q", msg.Code, msg.String(), msg.Text)
-	if m.activeView != ViewDashboard {
+	if m.activeView() != ViewDashboard {
 		return m.handleKey(msg)
 	}
 
@@ -709,7 +708,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleDefault(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.activeView == ViewConfig && m.configState != nil && m.configState.Form != nil {
+	if m.activeView() == ViewConfig && m.configState != nil && m.configState.Form != nil {
 		return m.handleConfigFormMsg(msg)
 	}
 
@@ -745,7 +744,7 @@ func (m *Model) updateLayout() {
 	}
 
 	headerHeight := 1 // status bar
-	footerHeight := m.helpFooter.CompactHeight(m.activeView, m.width-4)
+	footerHeight := m.helpFooter.CompactHeight(m.activeView(), m.width-4)
 	available := m.height - headerHeight - footerHeight
 
 	contentWidth := m.width - 2 // body padding (1 char each side)
@@ -931,7 +930,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// ? opens help for views without text input
 	// Views with active text inputs (Create, Rename, Checkout, Fork) pass ? through
 	if key.Matches(msg, m.keys.Help) && !m.viewHasTextInput() {
-		m.helpOverlay.Open(m.activeView, m.width, m.height)
+		m.helpOverlay.Open(m.activeView(), m.width, m.height)
 		return m, nil
 	}
 
@@ -942,9 +941,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	switch m.activeView {
+	switch m.activeView() {
 	case ViewHelp:
-		m.activeView = ViewDashboard
+		m.popView()
 		return m, nil
 	case ViewDelete:
 		return m.handleDeleteKey(msg)
@@ -1038,12 +1037,12 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleDashboardForkKey()
 
 	case key.Matches(msg, m.keys.Sync):
-		m.activeView = ViewSync
+		m.pushView(ViewSync)
 		m.syncState = NewSyncState(m.existingWorktreeItems())
 		return m, gatherWIPInfoCmd(m.existingWorktreeItems())
 
 	case key.Matches(msg, m.keys.Config):
-		m.activeView = ViewConfig
+		m.pushView(ViewConfig)
 		m.configState = NewConfigState()
 		return m, loadConfigCmd()
 
@@ -1086,14 +1085,13 @@ func (m *Model) openSelectedPRURL() {
 }
 
 func (m Model) handleDashboardNewKey() (tea.Model, tea.Cmd) {
-	m.activeView = ViewCreate
+	m.pushView(ViewCreate)
 	branches, branchErr := git.ListAllBranches(m.projectRoot)
 	if branchErr != nil {
 		tuilog.Printf("warning: failed to list branches: %v", branchErr)
 	}
 	m.createState = &CreateState{
 		Step:              CreateStepBranchChoice,
-		ReturnView:        ViewDashboard,
 		ProjectName:       m.projectName,
 		NamePattern:       m.worktreeNamePattern(),
 		Branches:          branches,
@@ -1117,7 +1115,7 @@ func (m Model) worktreeNamePattern() string {
 func (m Model) handleDashboardDeleteKey() (tea.Model, tea.Cmd) {
 	item, ok := m.selectedItem()
 	if ok && !item.IsMain && !item.IsProtected {
-		m.activeView = ViewDelete
+		m.pushView(ViewDelete)
 		m.deleteState = &DeleteState{
 			Item:     &item,
 			Warnings: gatherDeleteWarnings(&item),
@@ -1157,7 +1155,7 @@ func (m Model) handleDashboardForkKey() (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	m.activeView = ViewFork
+	m.pushView(ViewFork)
 	m.forkState = NewForkState(item)
 	return m, wipCheckCmd(item.Path)
 }
@@ -1165,7 +1163,7 @@ func (m Model) handleDashboardForkKey() (tea.Model, tea.Cmd) {
 func (m Model) handleDashboardRenameKey() (tea.Model, tea.Cmd) {
 	item, ok := m.selectedItem()
 	if ok && !item.IsMain && !item.IsProtected {
-		m.activeView = ViewRename
+		m.pushView(ViewRename)
 		m.renameState = NewRenameState(&item)
 		return m, m.renameState.Input.Focus()
 	}
@@ -1175,7 +1173,7 @@ func (m Model) handleDashboardRenameKey() (tea.Model, tea.Cmd) {
 func (m Model) handleDashboardCheckoutKey() (tea.Model, tea.Cmd) {
 	item, ok := m.selectedItem()
 	if ok && !item.IsMain && !item.IsProtected {
-		m.activeView = ViewCheckout
+		m.pushView(ViewCheckout)
 		m.checkoutState = NewCheckoutState(item)
 		return m, tea.Batch(
 			m.checkoutState.BranchFilterInput.Focus(),
@@ -1224,7 +1222,7 @@ func (m Model) routeToList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) handleDeleteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.deleteState == nil {
-		m.activeView = ViewDashboard
+		m.popView()
 		return m, nil
 	}
 
@@ -1235,7 +1233,7 @@ func (m Model) handleDeleteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.Confirm):
 		if m.deleteState.Item == nil {
-			m.activeView = ViewDashboard
+			m.popView()
 			m.deleteState = nil
 			return m, nil
 		}
@@ -1244,7 +1242,7 @@ func (m Model) handleDeleteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.spinner.Tick, deleteWorktreeCmd(m.worktreeMgr, m.stateMgr, m.cfg, m.projectRoot, name, m.deleteState.DeleteBranch))
 
 	case key.Matches(msg, m.keys.Escape), key.Matches(msg, m.keys.Deny):
-		m.activeView = ViewDashboard
+		m.popView()
 		m.deleteState = nil
 		return m, nil
 
@@ -1258,7 +1256,7 @@ func (m Model) handleDeleteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) handleRenameKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.renameState == nil {
-		m.activeView = ViewDashboard
+		m.popView()
 		return m, nil
 	}
 
@@ -1268,7 +1266,7 @@ func (m Model) handleRenameKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	switch {
 	case key.Matches(msg, m.keys.Escape):
-		m.activeView = ViewDashboard
+		m.popView()
 		m.renameState = nil
 		return m, nil
 
@@ -1315,7 +1313,7 @@ func (m Model) handleRenameKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) handleCreateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.createState == nil {
-		m.activeView = ViewDashboard
+		m.popView()
 		return m, nil
 	}
 
@@ -1346,9 +1344,8 @@ func (m Model) handleBranchActionKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.keys.Escape):
-		returnView := s.ReturnView
 		m.createState = nil
-		m.activeView = returnView
+		m.popView()
 		return m, nil
 
 	case key.Matches(msg, m.keys.Back):
@@ -1407,9 +1404,8 @@ func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, s.NameInput.Focus()
 
 	case key.Matches(msg, m.keys.Escape):
-		returnView := s.ReturnView
 		m.createState = nil
-		m.activeView = returnView
+		m.popView()
 		return m, nil
 
 	case key.Matches(msg, m.keys.Back):
@@ -1438,18 +1434,16 @@ func (m Model) handleBranchChoiceKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.ShiftTab):
 		if s.Source != "" {
-			returnView := s.ReturnView
 			m.createState = nil
-			m.activeView = returnView
+			m.popView()
 			return m, nil
 		}
 		// First step from dashboard — no back, treat as no-op
 		return m, nil
 
 	case key.Matches(msg, m.keys.Escape):
-		returnView := s.ReturnView
 		m.createState = nil
-		m.activeView = returnView
+		m.popView()
 		return m, nil
 
 	case key.Matches(msg, m.keys.Up):
@@ -1524,9 +1518,8 @@ func (m Model) handleBranchSelectKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.keys.Escape):
-		returnView := s.ReturnView
 		m.createState = nil
-		m.activeView = returnView
+		m.popView()
 		return m, nil
 
 	case key.Matches(msg, m.keys.Back):
@@ -1573,9 +1566,8 @@ func (m Model) handleBranchCreateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, m.keys.Escape):
-		returnView := s.ReturnView
 		m.createState = nil
-		m.activeView = returnView
+		m.popView()
 		return m, nil
 
 	case key.Matches(msg, m.keys.Back):
@@ -1650,18 +1642,16 @@ func (m Model) handleNameKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// Always go back regardless of input content
 		if s.Source != "" {
 			// From PR/issue view — back returns to source view
-			returnView := s.ReturnView
 			m.createState = nil
-			m.activeView = returnView
+			m.popView()
 			return m, nil
 		}
 		s.Step = CreateStepBranchChoice
 		return m, nil
 
 	case key.Matches(msg, m.keys.Escape):
-		returnView := s.ReturnView
 		m.createState = nil
-		m.activeView = returnView
+		m.popView()
 		return m, nil
 
 	case key.Matches(msg, m.keys.Back):
@@ -1669,9 +1659,8 @@ func (m Model) handleNameKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if s.NameInput.Value() == "" {
 			if s.Source != "" {
 				// From PR/issue view — dismiss wizard, return to source view
-				returnView := s.ReturnView
 				m.createState = nil
-				m.activeView = returnView
+				m.popView()
 				return m, nil
 			}
 			s.Step = CreateStepBranchChoice
@@ -1707,7 +1696,7 @@ func (m Model) handleNameKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if s.ExistingWorktree != nil {
 			m.switchTo = s.ExistingWorktree.Path
 			m.switchToDisplayName = s.ExistingWorktree.displayName()
-			m.activeView = ViewDashboard
+			m.popToRoot()
 			m.createState = nil
 			return m, tea.Quit
 		}
@@ -1743,7 +1732,7 @@ func (m *Model) applySortToList() tea.Cmd {
 
 func (m Model) enterPRView() (tea.Model, tea.Cmd) {
 	branches := m.worktreeBranchMap()
-	m.activeView = ViewPRs
+	m.pushView(ViewPRs)
 	m.prState = &PRViewState{
 		Loading:          true,
 		WorktreeBranches: branches,
@@ -1754,7 +1743,7 @@ func (m Model) enterPRView() (tea.Model, tea.Cmd) {
 
 func (m Model) enterIssueView() (tea.Model, tea.Cmd) {
 	branches := m.worktreeBranchMap()
-	m.activeView = ViewIssues
+	m.pushView(ViewIssues)
 	m.issueState = &IssueViewState{
 		Loading:          true,
 		FilterInput:      newFilterInput(""),
@@ -1786,7 +1775,7 @@ func (m Model) enterBulkMode() (tea.Model, tea.Cmd) {
 		}
 	}
 
-	m.activeView = ViewBulk
+	m.pushView(ViewBulk)
 	m.bulkState = &BulkState{
 		Items:    deletable,
 		Selected: make([]bool, len(deletable)),
@@ -1796,7 +1785,7 @@ func (m Model) enterBulkMode() (tea.Model, tea.Cmd) {
 
 func (m Model) handleBulkKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.bulkState == nil {
-		m.activeView = ViewDashboard
+		m.popView()
 		return m, nil
 	}
 
@@ -1809,7 +1798,7 @@ func (m Model) handleBulkKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	switch {
 	case key.Matches(msg, m.keys.Escape):
-		m.activeView = ViewDashboard
+		m.popView()
 		m.bulkState = nil
 		return m, nil
 
@@ -1883,10 +1872,10 @@ func (m Model) viewContent() string {
 
 func (m Model) viewNotReady() string {
 	tuilog.Printf("View: not ready")
-	if m.activeView == ViewPRs && m.prState != nil {
+	if m.activeView() == ViewPRs && m.prState != nil {
 		return m.spinner.View() + " Loading PRs..."
 	}
-	if m.activeView == ViewIssues && m.issueState != nil {
+	if m.activeView() == ViewIssues && m.issueState != nil {
 		return m.spinner.View() + " Loading issues..."
 	}
 	return "loading..."
@@ -1908,7 +1897,7 @@ func (m Model) viewEmpty() string {
 }
 
 func (m Model) viewForActiveView() string {
-	switch m.activeView {
+	switch m.activeView() {
 	case ViewHelp:
 		return m.renderDashboard()
 	case ViewDelete:
@@ -2019,7 +2008,7 @@ func (m Model) appendUpdateBadge(footer string) string {
 // viewHasTextInput returns true if the active view has a focused text input
 // that should receive ? as a character rather than triggering help.
 func (m Model) viewHasTextInput() bool {
-	switch m.activeView {
+	switch m.activeView() {
 	case ViewCreate, ViewRename, ViewCheckout, ViewFork:
 		return true
 	case ViewPRs:
@@ -2306,7 +2295,7 @@ func gatherDeleteWarnings(item *WorktreeItem) []string {
 
 // ConfigureForPRs configures the model to start directly in the PR browser view.
 func (m Model) ConfigureForPRs() Model {
-	m.activeView = ViewPRs
+	m.pushView(ViewPRs)
 	m.prState = &PRViewState{
 		Loading:          true,
 		WorktreeBranches: m.worktreeBranchMap(),
@@ -2317,7 +2306,7 @@ func (m Model) ConfigureForPRs() Model {
 
 // ConfigureForIssues configures the model to start directly in the issue browser view.
 func (m Model) ConfigureForIssues() Model {
-	m.activeView = ViewIssues
+	m.pushView(ViewIssues)
 	m.issueState = &IssueViewState{
 		Loading:          true,
 		FilterInput:      newFilterInput(""),
@@ -2442,7 +2431,7 @@ func (m *Model) handleTmuxSwitch(switchPath string) bool {
 }
 
 func runModel(model Model) (string, bool, error) {
-	tuilog.Printf("runModel: projectRoot=%s activeView=%d", model.projectRoot, model.activeView)
+	tuilog.Printf("runModel: projectRoot=%s activeView=%d", model.projectRoot, model.activeView())
 
 	p := tea.NewProgram(model)
 

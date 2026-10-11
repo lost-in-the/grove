@@ -148,7 +148,7 @@ func TestRenderPRDetailContent_Body(t *testing.T) {
 
 func TestRenderPRFooter_ListFocused(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(120, 30))
-	m.activeView = ViewPRs
+	m.setViewForTest(ViewPRs)
 	m.prState = &PRViewState{
 		PRs:         []*tracker.PullRequest{{Number: 1, Title: "T", Branch: "b", Author: "u"}},
 		FilterInput: newFilterInput(""),
@@ -160,7 +160,7 @@ func TestRenderPRFooter_ListFocused(t *testing.T) {
 
 func TestRenderPRFooter_DetailFocused(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(120, 30))
-	m.activeView = ViewPRs
+	m.setViewForTest(ViewPRs)
 	m.prState = &PRViewState{
 		PRs:           []*tracker.PullRequest{{Number: 1, Title: "T", Branch: "b", Author: "u"}},
 		FilterInput:   newFilterInput(""),

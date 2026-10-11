@@ -177,8 +177,8 @@ func TestStressOverlayCycling(t *testing.T) {
 			}
 
 			// Should return cleanly to dashboard
-			if m.activeView != ViewDashboard {
-				t.Errorf("expected ViewDashboard, got %d", m.activeView)
+			if m.activeView() != ViewDashboard {
+				t.Errorf("expected ViewDashboard, got %d", m.activeView())
 			}
 
 			// Should render fine
@@ -199,8 +199,8 @@ func TestStressDeleteOverlayCycling(t *testing.T) {
 
 		// Open delete
 		m = sendKey(m, "d")
-		if m.activeView != ViewDelete {
-			t.Fatalf("cycle %d: expected ViewDelete, got %d", i, m.activeView)
+		if m.activeView() != ViewDelete {
+			t.Fatalf("cycle %d: expected ViewDelete, got %d", i, m.activeView())
 		}
 		if m.deleteState == nil {
 			t.Fatalf("cycle %d: expected deleteState to be set", i)
@@ -208,8 +208,8 @@ func TestStressDeleteOverlayCycling(t *testing.T) {
 
 		// Cancel delete
 		m = sendKey(m, "esc")
-		if m.activeView != ViewDashboard {
-			t.Fatalf("cycle %d: expected ViewDashboard after cancel, got %d", i, m.activeView)
+		if m.activeView() != ViewDashboard {
+			t.Fatalf("cycle %d: expected ViewDashboard after cancel, got %d", i, m.activeView())
 		}
 		if m.deleteState != nil {
 			t.Fatalf("cycle %d: expected deleteState nil after cancel", i)
@@ -226,8 +226,8 @@ func TestStressCreateCancelCycling(t *testing.T) {
 	for i := range 50 {
 		// Open create and disable Huh forms for direct key handling
 		m = enterCreateManual(m)
-		if m.activeView != ViewCreate {
-			t.Fatalf("cycle %d: expected ViewCreate, got %d", i, m.activeView)
+		if m.activeView() != ViewCreate {
+			t.Fatalf("cycle %d: expected ViewCreate, got %d", i, m.activeView())
 		}
 		if m.createState == nil {
 			t.Fatalf("cycle %d: expected createState to be set", i)
@@ -235,8 +235,8 @@ func TestStressCreateCancelCycling(t *testing.T) {
 
 		// Immediately cancel
 		m = sendKey(m, "esc")
-		if m.activeView != ViewDashboard {
-			t.Fatalf("cycle %d: expected ViewDashboard after cancel, got %d", i, m.activeView)
+		if m.activeView() != ViewDashboard {
+			t.Fatalf("cycle %d: expected ViewDashboard after cancel, got %d", i, m.activeView())
 		}
 		if m.createState != nil {
 			t.Fatalf("cycle %d: expected createState nil after cancel", i)
@@ -256,8 +256,8 @@ func TestStressCreateCancelCyclingHuh(t *testing.T) {
 	for i := range 50 {
 		// Open create with Huh forms (default)
 		m = sendKey(m, "n")
-		if m.activeView != ViewCreate {
-			t.Fatalf("cycle %d: expected ViewCreate, got %d", i, m.activeView)
+		if m.activeView() != ViewCreate {
+			t.Fatalf("cycle %d: expected ViewCreate, got %d", i, m.activeView())
 		}
 		if m.createState == nil {
 			t.Fatalf("cycle %d: expected createState to be set", i)
@@ -267,10 +267,10 @@ func TestStressCreateCancelCyclingHuh(t *testing.T) {
 		m = sendKey(m, "esc")
 
 		// Huh form esc should transition back to dashboard
-		if m.activeView != ViewDashboard {
+		if m.activeView() != ViewDashboard {
 			// The form may need an additional update cycle to process abort
 			// This is acceptable behavior -- just verify no panic occurred
-			m.activeView = ViewDashboard
+			m.setViewForTest(ViewDashboard)
 			m.createState = nil
 		}
 	}
@@ -287,14 +287,14 @@ func TestStressBulkCancelCycling(t *testing.T) {
 	for i := range 50 {
 		// Open bulk
 		m = sendKey(m, "a")
-		if m.activeView != ViewBulk {
-			t.Fatalf("cycle %d: expected ViewBulk, got %d", i, m.activeView)
+		if m.activeView() != ViewBulk {
+			t.Fatalf("cycle %d: expected ViewBulk, got %d", i, m.activeView())
 		}
 
 		// Cancel
 		m = sendKey(m, "esc")
-		if m.activeView != ViewDashboard {
-			t.Fatalf("cycle %d: expected ViewDashboard, got %d", i, m.activeView)
+		if m.activeView() != ViewDashboard {
+			t.Fatalf("cycle %d: expected ViewDashboard, got %d", i, m.activeView())
 		}
 		if m.bulkState != nil {
 			t.Fatalf("cycle %d: expected bulkState nil after cancel", i)
@@ -307,7 +307,7 @@ func TestStressEmptyCreateEscape(t *testing.T) {
 
 	// Enter create mode (manual, no Huh) and immediately escape -- verify no state leaks
 	m = enterCreateManual(m)
-	if m.activeView != ViewCreate {
+	if m.activeView() != ViewCreate {
 		t.Fatal("expected ViewCreate after n")
 	}
 	if m.createState == nil {
@@ -315,8 +315,8 @@ func TestStressEmptyCreateEscape(t *testing.T) {
 	}
 
 	m = sendKey(m, "esc")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView())
 	}
 	if m.createState != nil {
 		t.Error("expected createState to be nil after escape (state leak)")
@@ -414,8 +414,8 @@ func TestStressRapidKeyInput(t *testing.T) {
 	}
 
 	// Should still be in dashboard
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after rapid navigation, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after rapid navigation, got %d", m.activeView())
 	}
 
 	// Cursor should be in bounds
@@ -576,8 +576,8 @@ func TestStressEmptyListSort(t *testing.T) {
 		m = sendKey(m, "o")
 	}
 
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView())
 	}
 }
 
@@ -668,7 +668,7 @@ func TestStressViewRenderAllStates(t *testing.T) {
 	for _, tt := range views {
 		t.Run(tt.name, func(t *testing.T) {
 			m := newTestModel(withItems(5), withSize(80, 24))
-			m.activeView = tt.view
+			m.setViewForTest(tt.view)
 
 			// Set up required state for overlay views
 			switch tt.view {
@@ -713,11 +713,11 @@ func TestStressMixedOverlaySequence(t *testing.T) {
 
 	// Sequence: create -> esc -> help -> help -> delete -> esc -> bulk -> esc
 	m = enterCreateManual(m)
-	if m.activeView != ViewCreate {
+	if m.activeView() != ViewCreate {
 		t.Fatal("expected ViewCreate")
 	}
 	m = sendKey(m, "esc")
-	if m.activeView != ViewDashboard {
+	if m.activeView() != ViewDashboard {
 		t.Fatal("expected ViewDashboard after create esc")
 	}
 
@@ -732,20 +732,20 @@ func TestStressMixedOverlaySequence(t *testing.T) {
 
 	m = sendKey(m, "j")
 	m = sendKey(m, "d")
-	if m.activeView != ViewDelete {
+	if m.activeView() != ViewDelete {
 		t.Fatal("expected ViewDelete")
 	}
 	m = sendKey(m, "esc")
-	if m.activeView != ViewDashboard {
+	if m.activeView() != ViewDashboard {
 		t.Fatal("expected ViewDashboard after delete esc")
 	}
 
 	m = sendKey(m, "a")
-	if m.activeView != ViewBulk {
+	if m.activeView() != ViewBulk {
 		t.Fatal("expected ViewBulk")
 	}
 	m = sendKey(m, "esc")
-	if m.activeView != ViewDashboard {
+	if m.activeView() != ViewDashboard {
 		t.Fatal("expected ViewDashboard after bulk esc")
 	}
 

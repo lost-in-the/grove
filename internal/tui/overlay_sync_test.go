@@ -28,16 +28,16 @@ func TestNewSyncState(t *testing.T) {
 func TestSyncOverlay_OpenClose(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
 	m = sendKey(m, "s")
-	if m.activeView != ViewSync {
-		t.Errorf("expected ViewSync, got %d", m.activeView)
+	if m.activeView() != ViewSync {
+		t.Errorf("expected ViewSync, got %d", m.activeView())
 	}
 	if m.syncState == nil {
 		t.Fatal("expected syncState to be set")
 	}
 
 	m = sendKey(m, "esc")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after esc, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after esc, got %d", m.activeView())
 	}
 	if m.syncState != nil {
 		t.Error("expected syncState to be nil after close")
@@ -46,11 +46,11 @@ func TestSyncOverlay_OpenClose(t *testing.T) {
 
 func TestSyncOverlay_NilState(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewSync
+	m.setViewForTest(ViewSync)
 	m.syncState = nil
 	m = sendKey(m, "enter")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard for nil state, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard for nil state, got %d", m.activeView())
 	}
 }
 
@@ -120,7 +120,7 @@ func TestSyncOverlay_SelectSourceWithoutWIP(t *testing.T) {
 
 func TestSyncOverlay_PreviewBackAndForward(t *testing.T) {
 	m := newTestModel(withItems(5), withSize(80, 30))
-	m.activeView = ViewSync
+	m.setViewForTest(ViewSync)
 	m.syncState = &SyncState{
 		Step:   SyncStepPreview,
 		Target: WorktreeItem{ShortName: "main"},
@@ -140,7 +140,7 @@ func TestSyncOverlay_PreviewBackAndForward(t *testing.T) {
 
 func TestSyncOverlay_ConfirmBack(t *testing.T) {
 	m := newTestModel(withItems(5), withSize(80, 30))
-	m.activeView = ViewSync
+	m.setViewForTest(ViewSync)
 	m.syncState = &SyncState{
 		Step:   SyncStepConfirm,
 		Target: WorktreeItem{ShortName: "main"},
@@ -159,7 +159,7 @@ func TestSyncOverlay_ConfirmBack(t *testing.T) {
 
 func TestSyncOverlay_SyncingIgnoresInput(t *testing.T) {
 	m := newTestModel(withItems(5), withSize(80, 30))
-	m.activeView = ViewSync
+	m.setViewForTest(ViewSync)
 	m.syncState = &SyncState{
 		Step:    SyncStepConfirm,
 		Syncing: true,
@@ -167,14 +167,14 @@ func TestSyncOverlay_SyncingIgnoresInput(t *testing.T) {
 	}
 
 	m = sendKey(m, "esc")
-	if m.activeView != ViewSync {
-		t.Errorf("expected ViewSync while syncing, got %d", m.activeView)
+	if m.activeView() != ViewSync {
+		t.Errorf("expected ViewSync while syncing, got %d", m.activeView())
 	}
 }
 
 func TestSyncCompleteMsg_Success(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewSync
+	m.setViewForTest(ViewSync)
 	m.syncState = &SyncState{
 		Step:    SyncStepConfirm,
 		Syncing: true,
@@ -182,8 +182,8 @@ func TestSyncCompleteMsg_Success(t *testing.T) {
 	}
 
 	m = sendMsg(m, syncCompleteMsg{filesApplied: 3})
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after sync, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after sync, got %d", m.activeView())
 	}
 	if m.syncState != nil {
 		t.Error("expected syncState nil after success")
@@ -192,7 +192,7 @@ func TestSyncCompleteMsg_Success(t *testing.T) {
 
 func TestSyncCompleteMsg_Error(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewSync
+	m.setViewForTest(ViewSync)
 	m.syncState = &SyncState{
 		Step:    SyncStepConfirm,
 		Syncing: true,
@@ -200,8 +200,8 @@ func TestSyncCompleteMsg_Error(t *testing.T) {
 	}
 
 	m = sendMsg(m, syncCompleteMsg{err: errTest})
-	if m.activeView != ViewSync {
-		t.Errorf("expected ViewSync after error, got %d", m.activeView)
+	if m.activeView() != ViewSync {
+		t.Errorf("expected ViewSync after error, got %d", m.activeView())
 	}
 	if m.syncState.Err == nil {
 		t.Error("expected error on syncState")
@@ -213,7 +213,7 @@ func TestSyncCompleteMsg_Error(t *testing.T) {
 
 func TestSyncWIPInfoMsg(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewSync
+	m.setViewForTest(ViewSync)
 	m.syncState = &SyncState{
 		Step:    SyncStepSource,
 		Stepper: NewStepper("Source", "Preview", "Confirm"),
@@ -230,7 +230,7 @@ func TestSyncWIPInfoMsg(t *testing.T) {
 
 func TestSyncWIPInfoMsg_Error(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewSync
+	m.setViewForTest(ViewSync)
 	m.syncState = &SyncState{
 		Step:    SyncStepSource,
 		Stepper: NewStepper("Source", "Preview", "Confirm"),
@@ -247,7 +247,7 @@ func TestSyncWIPInfoMsg_Error(t *testing.T) {
 
 func TestSyncOverlay_ConfirmWithNilSource(t *testing.T) {
 	m := newTestModel(withItems(5), withSize(80, 30))
-	m.activeView = ViewSync
+	m.setViewForTest(ViewSync)
 	m.syncState = &SyncState{
 		Step:     SyncStepConfirm,
 		Target:   WorktreeItem{ShortName: "main"},

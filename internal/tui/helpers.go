@@ -236,7 +236,7 @@ func (m Model) handleExistsPromptKey(msg tea.KeyPressMsg, prompt *ExistingWorktr
 		dismiss()
 		return m, nil
 	case key.Matches(msg, m.keys.Enter):
-		m.activeView = ViewDashboard
+		m.popToRoot()
 		m.prState = nil
 		m.issueState = nil
 		m.pendingSelect = prompt.WorktreeName
@@ -251,7 +251,8 @@ func (m Model) handleExistsPromptKey(msg tea.KeyPressMsg, prompt *ExistingWorktr
 		}
 		m.prState = nil
 		m.issueState = nil
-		m.activeView = ViewFork
+		m.popToRoot()
+		m.pushView(ViewFork)
 		m.forkState = NewForkState(*item)
 		return m, wipCheckCmd(item.Path)
 	}
