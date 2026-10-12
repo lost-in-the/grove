@@ -7,6 +7,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 func testFormOptions() branchFormOptions {
@@ -276,8 +278,8 @@ func TestBranchForm_KeyLineNamesTheAction(t *testing.T) {
 		t.Errorf("key line = %q, want ⏎ switch for an in-use branch", s.keyLine())
 	}
 	s.Busy = true
-	if s.keyLine() != "creating…" {
-		t.Errorf("key line while busy = %q, want creating…", s.keyLine())
+	if s.keyLine() != "wait for this to finish" {
+		t.Errorf("key line while busy = %q, want the wait note (status names the work)", s.keyLine())
 	}
 }
 
@@ -469,5 +471,531 @@ func TestBranchForm_FailedCreationShowsLogUntilAKey(t *testing.T) {
 	}
 	if press(s, "x") != formContinue || s.Log != nil || s.branchValue() != "abc-12" {
 		t.Errorf("first key should only dismiss the log: log=%v branch=%q", s.Log != nil, s.branchValue())
+	}
+}
+
+func testSource() WorktreeItem {
+	return WorktreeItem{ShortName: "auth", Branch: "feature/auth", Path: "/r/auth"}
+}
+
+func TestCopyForm_DefaultsAndDerivedAlias(t *testing.T) {
+	s := newCopyForm(testFormOptions(), testSource())
+	if s.title() != "Copy auth" {
+		t.Errorf("title = %q", s.title())
+	}
+	if got := s.branchValue(); got != "feature/auth-copy" {
+		t.Errorf("branch = %q, want feature/auth-copy", got)
+	}
+	if got := s.aliasValue(); got != "auth-copy" {
+		t.Errorf("alias = %q, want auth-copy", got)
+	}
+	if s.Changes != WIPCopy {
+		t.Errorf("changes = %v, want copy (non-destructive default)", s.Changes)
+	}
+	if len(s.suggestions()) != 0 {
+		t.Error("copy mode offers no branch suggestions")
+	}
+}
+
+func TestCopyForm_EnterBlockedUntilWIPChecked(t *testing.T) {
+	s := newCopyForm(testFormOptions(), testSource())
+	if press(s, "enter") != formContinue {
+		t.Fatal("enter before the changes check must not submit")
+	}
+	if msg, _ := s.status(); msg != "checking for uncommitted changes…" {
+		t.Errorf("status = %q", msg)
+	}
+	s.setWIP("/r/auth", false, nil, nil)
+	if press(s, "enter") != formSubmit {
+		t.Error("enter after a clean check should submit")
+	}
+}
+
+func TestCopyForm_WIPCheckErrorBlocks(t *testing.T) {
+	s := newCopyForm(testFormOptions(), testSource())
+	s.setWIP("/r/auth", false, nil, errTestBoom)
+	if press(s, "enter") != formContinue {
+		t.Fatal("a failed changes check must block submit")
+	}
+	if msg, _ := s.status(); !strings.Contains(msg, "could not check") {
+		t.Errorf("status = %q", msg)
+	}
+}
+
+func TestCopyForm_IgnoresWIPForOtherPath(t *testing.T) {
+	s := newCopyForm(testFormOptions(), testSource())
+	s.setWIP("/r/other", false, nil, nil)
+	if s.wipChecked() {
+		t.Error("a check for another worktree must be ignored")
+	}
+}
+
+func TestCopyForm_RejectsExistingBranch(t *testing.T) {
+	s := newCopyForm(testFormOptions(), testSource())
+	s.setWIP("/r/auth", false, nil, nil)
+	s.Branch.SetValue("fix/login")
+	s.syncAlias()
+	if press(s, "enter") != formContinue {
+		t.Fatal("an existing branch must not submit")
+	}
+	if msg, _ := s.status(); msg != `branch "fix/login" already exists` {
+		t.Errorf("status = %q", msg)
+	}
+}
+
+func TestCopyForm_DirtyAddsChangesFieldAndCycles(t *testing.T) {
+	s := newCopyForm(testFormOptions(), testSource())
+	s.setWIP("/r/auth", true, []string{"a.go", "b.go"}, nil)
+	press(s, "tab")
+	press(s, "tab")
+	if s.Focus != fieldChanges {
+		t.Fatalf("focus = %v, want changes", s.Focus)
+	}
+	press(s, "right")
+	if got := changesLabel(s.Changes); got != "move" {
+		t.Errorf("changes = %s, want move after right", got)
+	}
+	press(s, "space")
+	press(s, "space")
+	if got := changesLabel(s.Changes); got != "copy" {
+		t.Errorf("changes = %s, want copy after cycling round", got)
+	}
+	press(s, "left")
+	if got := changesLabel(s.Changes); got != "leave" {
+		t.Errorf("changes = %s, want leave after left from copy", got)
+	}
+	press(s, "left")
+	press(s, "x")
+	if got := s.aliasValue(); got != "auth-copy" {
+		t.Errorf("typing on the changes row changed the alias to %q", got)
+	}
+	in := s.intent()
+	if in.Kind != intentCopy || in.Branch != "feature/auth-copy" || in.Alias != "auth-copy" || in.WIP != WIPMove {
+		t.Errorf("intent = %+v", in)
+	}
+}
+
+func TestCopyForm_CleanSourceLeavesChanges(t *testing.T) {
+	s := newCopyForm(testFormOptions(), testSource())
+	s.setWIP("/r/auth", false, nil, nil)
+	if in := s.intent(); in.WIP != WIPLeave {
+		t.Errorf("WIP = %v, want leave for a clean source", in.WIP)
+	}
+	press(s, "tab")
+	press(s, "tab")
+	if s.Focus == fieldChanges {
+		t.Error("a clean source has no changes field")
+	}
+}
+
+func TestSwitchForm_SuggestsFreeLocalBranchesOnly(t *testing.T) {
+	s := newSwitchForm(testFormOptions(), testSource())
+	got := map[string]bool{}
+	for _, sg := range s.suggestions() {
+		got[sg.Branch] = true
+	}
+	if !got["fix/login"] {
+		t.Error("free local branch fix/login should be offered")
+	}
+	for _, b := range []string{"main", "feature/auth", "remote-only"} {
+		if got[b] {
+			t.Errorf("%s must not be offered (in use or not local)", b)
+		}
+	}
+}
+
+func TestSwitchForm_RejectsCurrentAndInUse(t *testing.T) {
+	s := newSwitchForm(testFormOptions(), testSource())
+	s.setWIP("/r/auth", false, nil, nil)
+	for branch, want := range map[string]string{
+		"feature/auth": "auth is already on feature/auth",
+		"main":         "main is checked out in root",
+		"remote-only":  `no local branch "remote-only"`,
+	} {
+		s.Branch.SetValue(branch)
+		if press(s, "enter") != formContinue {
+			t.Errorf("%s: submitted", branch)
+		}
+		if msg, _ := s.status(); msg != want {
+			t.Errorf("%s: status = %q, want %q", branch, msg, want)
+		}
+	}
+}
+
+func TestSwitchForm_StashesWhenDirty(t *testing.T) {
+	s := newSwitchForm(testFormOptions(), testSource())
+	s.setWIP("/r/auth", true, []string{"a.go"}, nil)
+	typeInto(t, s, "fix/login")
+	if press(s, "enter") != formSubmit {
+		t.Fatal("expected submit")
+	}
+	in := s.intent()
+	if in.Kind != intentSwitchBranch || in.Branch != "fix/login" || !in.Stash || in.Target.Path != "/r/auth" {
+		t.Errorf("intent = %+v", in)
+	}
+}
+
+func TestBranchFormModes_KeyLines(t *testing.T) {
+	c := newCopyForm(testFormOptions(), testSource())
+	if !strings.HasPrefix(c.keyLine(), "⏎ copy") {
+		t.Errorf("copy key line = %q", c.keyLine())
+	}
+	sw := newSwitchForm(testFormOptions(), testSource())
+	if !strings.HasPrefix(sw.keyLine(), "⏎ switch") {
+		t.Errorf("switch key line = %q", sw.keyLine())
+	}
+	n := newBranchForm(testFormOptions())
+	if n.keyLine() != "⏎ create · tab field · ctrl+j/k pick · esc back" {
+		t.Errorf("new key line changed: %q", n.keyLine())
+	}
+}
+
+// In Switch mode there is nothing to create, so enter on a partial match
+// takes the highlighted branch.
+func TestSwitchForm_EnterAcceptsFirstMatch(t *testing.T) {
+	s := newSwitchForm(testFormOptions(), testSource())
+	s.setWIP("/r/auth", false, nil, nil)
+	typeInto(t, s, "fi")
+	if press(s, "enter") != formSubmit {
+		t.Fatal("expected submit")
+	}
+	if in := s.intent(); in.Branch != "fix/login" {
+		t.Errorf("branch = %q, want fix/login", in.Branch)
+	}
+}
+
+func TestSwitchForm_EnterBlockedUntilWIPChecked(t *testing.T) {
+	s := newSwitchForm(testFormOptions(), testSource())
+	typeInto(t, s, "fix/login")
+	if press(s, "enter") != formContinue {
+		t.Fatal("enter before the changes check must not submit")
+	}
+	s.setWIP("/r/other", false, nil, nil)
+	if press(s, "enter") != formContinue {
+		t.Fatal("a check for another worktree must not unblock enter")
+	}
+	s.setWIP("/r/auth", false, nil, nil)
+	if press(s, "enter") != formSubmit {
+		t.Error("enter after a clean check should submit")
+	}
+}
+
+func TestDashboardF_OpensCopyForm(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.list.Select(1)
+	next, cmd := m.Update(makeKeyMsg("f"))
+	m = next.(Model)
+	if m.activeView() != ViewBranchForm || m.branchForm == nil || m.branchForm.Mode != formModeCopy {
+		t.Fatalf("view=%v form=%+v, want the copy form", m.activeView(), m.branchForm)
+	}
+	found := false
+	if batch, ok := cmd().(tea.BatchMsg); ok {
+		for _, c := range batch {
+			if c == nil {
+				continue
+			}
+			if _, ok := c().(wipCheckMsg); ok {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Error("f did not start the uncommitted-changes check")
+	}
+
+	root := newTestModel(withItems(3), withSize(120, 40))
+	root.list.Select(0)
+	next, _ = root.Update(makeKeyMsg("f"))
+	if f := next.(Model).branchForm; f == nil || f.Mode != formModeCopy {
+		t.Error("f on the main worktree should open the copy form too")
+	}
+}
+
+func TestDashboardB_OpensSwitchFormButNotOnMain(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.list.Select(0)
+	next, _ := m.Update(makeKeyMsg("b"))
+	if next.(Model).activeView() != ViewDashboard {
+		t.Fatal("b on the main worktree must not open the switch form")
+	}
+	m.list.Select(1)
+	next, _ = m.Update(makeKeyMsg("b"))
+	m = next.(Model)
+	if m.branchForm == nil || m.branchForm.Mode != formModeSwitch {
+		t.Fatalf("form = %+v, want the switch form", m.branchForm)
+	}
+}
+
+func TestWIPCheck_RoutesToForm(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.list.Select(1)
+	next, _ := m.Update(makeKeyMsg("f"))
+	m = next.(Model)
+	path := m.branchForm.Source.Path
+	next, _ = m.Update(wipCheckMsg{path: path, hasWIP: true, files: []string{"x"}})
+	m = next.(Model)
+	if !m.branchForm.wipChecked() || !m.branchForm.HasWIP {
+		t.Error("changes check did not reach the form")
+	}
+}
+
+func TestCopyFormComplete_Success(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.branchForm = newCopyForm(testFormOptions(), testSource())
+	m.setViewForTest(ViewBranchForm)
+	m.branchForm.Busy = true
+	next, _ := m.Update(forkCompleteMsg{name: "auth-copy", path: "/r/auth-copy"})
+	m = next.(Model)
+	if m.activeView() != ViewDashboard || m.branchForm != nil || m.pendingSelect != "auth-copy" {
+		t.Errorf("view=%v form nil=%v pendingSelect=%q", m.activeView(), m.branchForm == nil, m.pendingSelect)
+	}
+}
+
+func TestCopyFormComplete_ErrorStaysOpen(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.branchForm = newCopyForm(testFormOptions(), testSource())
+	m.setViewForTest(ViewBranchForm)
+	m.branchForm.Busy = true
+	next, _ := m.Update(forkCompleteMsg{err: errTestBoom})
+	m = next.(Model)
+	if m.activeView() != ViewBranchForm || m.branchForm.Busy {
+		t.Fatalf("view=%v busy=%v", m.activeView(), m.branchForm.Busy)
+	}
+	if msg, kind := m.branchForm.status(); kind != formStatusError || msg != "boom" {
+		t.Errorf("status = %q (%v)", msg, kind)
+	}
+}
+
+func TestCopyFormComplete_PartialSuccessWarns(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.branchForm = newCopyForm(testFormOptions(), testSource())
+	m.setViewForTest(ViewBranchForm)
+	m.branchForm.Busy = true
+	next, _ := m.Update(forkCompleteMsg{name: "auth-copy", err: errTestBoom})
+	m = next.(Model)
+	if m.branchForm != nil || m.activeView() != ViewDashboard {
+		t.Fatal("a created-but-warned copy closes the form")
+	}
+	if !strings.Contains(m.toast.Message(), "warning") {
+		t.Errorf("toast = %q, want a warning", m.toast.Message())
+	}
+}
+
+func TestSwitchFormComplete(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.branchForm = newSwitchForm(testFormOptions(), testSource())
+	m.setViewForTest(ViewBranchForm)
+	m.branchForm.setWIP("/r/auth", true, []string{"a.go"}, nil)
+	m.branchForm.Busy = true
+	next, cmd := m.Update(checkoutCompleteMsg{err: errTestBoom})
+	m = next.(Model)
+	if m.branchForm == nil || m.branchForm.Busy {
+		t.Fatal("an error keeps the switch form open and idle")
+	}
+	if msg, kind := m.branchForm.status(); kind != formStatusError || msg != "boom" {
+		t.Errorf("status = %q (%v), want the error", msg, kind)
+	}
+	// The stash may already have run, so the old changes check is stale:
+	// enter waits for a fresh one.
+	if m.branchForm.wipChecked() || cmd == nil {
+		t.Errorf("after a failed switch: wipChecked=%v cmd nil=%v, want a fresh check", m.branchForm.wipChecked(), cmd == nil)
+	}
+	m.branchForm.Busy = true
+	next, _ = m.Update(checkoutCompleteMsg{branch: "fix/login"})
+	m = next.(Model)
+	if m.branchForm != nil || m.activeView() != ViewDashboard {
+		t.Error("success closes the switch form")
+	}
+}
+
+func TestCopyFormSubmit_WithoutManagerReportsError(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.branchForm = newCopyForm(testFormOptions(), testSource())
+	m.setViewForTest(ViewBranchForm)
+	m.branchForm.setWIP("/r/auth", false, nil, nil)
+	next, _ := m.Update(makeKeyMsg("enter"))
+	m = next.(Model)
+	if m.branchForm.Busy {
+		t.Error("copy started without a worktree manager")
+	}
+	if msg, _ := m.branchForm.status(); msg != "cannot copy a worktree: no repository loaded" {
+		t.Errorf("status = %q", msg)
+	}
+
+	// A worktree manager without a state manager is refused too, since
+	// bootstrap records the copy in state.
+	m.worktreeMgr = &worktree.Manager{}
+	m.branchForm.Status = ""
+	next, _ = m.Update(makeKeyMsg("enter"))
+	m = next.(Model)
+	if m.branchForm.Busy {
+		t.Error("copy started without a state manager")
+	}
+}
+
+// The cursor blinks from the moment the form opens, not after the first key.
+func TestDashboardN_ReturnsFocusCmd(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	_, cmd := m.Update(makeKeyMsg("n"))
+	if cmd == nil {
+		t.Error("n returned no command; the Branch cursor will not blink")
+	}
+}
+
+// While busy the status line names the work; the key line must not repeat it.
+func TestBranchForm_BusyVerbShownOnce(t *testing.T) {
+	s := newBranchForm(testFormOptions())
+	s.Branch.SetValue("abc-12")
+	s.syncAlias()
+	s.Busy = true
+	s.Log = NewActivityLog(formLogWidth(80), 6)
+	s.Log.AddLine("Creating worktree 'abc-12'...")
+	out := ansi.Strip(renderBranchForm(s, 80, 24, "⠋"))
+	if n := strings.Count(out, "creating…"); n != 1 {
+		t.Errorf("creating… appears %d times, want 1:\n%s", n, out)
+	}
+}
+
+// On a short terminal the newest log line, which carries the spinner, stays
+// in view.
+func TestBranchForm_BusyLogTailVisibleWhenShort(t *testing.T) {
+	s := newBranchForm(testFormOptions())
+	s.Branch.SetValue("abc-12")
+	s.syncAlias()
+	s.Busy = true
+	s.Log = NewActivityLog(formLogWidth(80), 6)
+	for _, l := range []string{"one", "two", "three", "four", "newest step"} {
+		s.Log.AddLine(l)
+	}
+	out := ansi.Strip(renderBranchForm(s, 80, 10, "⠋"))
+	if !strings.Contains(out, "⠋ newest step") {
+		t.Errorf("newest log line scrolled out of view:\n%s", out)
+	}
+}
+
+func TestIssueBrowser_SeedsBranchName(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40), withIssueData())
+	next, _ := m.Update(makeKeyMsg("enter"))
+	m = next.(Model)
+	if m.branchForm == nil {
+		t.Fatal("enter on an issue did not open the form")
+	}
+	if got := m.branchForm.branchValue(); got != "issue-101" {
+		t.Errorf("branch = %q, want issue-101", got)
+	}
+	if got := m.branchForm.aliasValue(); got != "issue-101" {
+		t.Errorf("alias = %q, want issue-101", got)
+	}
+}
+
+// The status line says what enter will do. In Switch mode enter takes the
+// highlighted branch, so the status names it instead of rejecting the
+// partial text.
+func TestSwitchForm_StatusNamesThePick(t *testing.T) {
+	s := newSwitchForm(testFormOptions(), testSource())
+	s.setWIP("/r/auth", false, nil, nil)
+	if msg, _ := s.status(); msg != "type a branch name" {
+		t.Errorf("empty: status = %q", msg)
+	}
+	typeInto(t, s, "fi")
+	if msg, _ := s.status(); msg != "⏎ switches to fix/login" {
+		t.Errorf("partial: status = %q", msg)
+	}
+	typeInto(t, s, "x/login")
+	if msg, _ := s.status(); msg != "✓ ready" {
+		t.Errorf("exact: status = %q", msg)
+	}
+}
+
+// switchNeighborOptions has a free branch next to each rejected name, so a
+// highlighted neighbor could be taken by mistake.
+func switchNeighborOptions() branchFormOptions {
+	o := testFormOptions()
+	o.AllBranches = append(o.AllBranches, "main-2", "feature/auth-v2")
+	o.LocalBranches = append(o.LocalBranches, "main-2", "feature/auth-v2")
+	return o
+}
+
+// An exactly typed in-use or current branch is an error, never a switch to
+// the highlighted neighbor.
+func TestSwitchForm_ExactRejectedNameNeverTakesNeighbor(t *testing.T) {
+	for typed, want := range map[string]string{
+		"main":         "main is checked out in root",
+		"feature/auth": "auth is already on feature/auth",
+	} {
+		s := newSwitchForm(switchNeighborOptions(), testSource())
+		s.setWIP("/r/auth", false, nil, nil)
+		typeInto(t, s, typed)
+		if msg, _ := s.status(); msg != want {
+			t.Errorf("%s: status = %q, want %q", typed, msg, want)
+		}
+		if press(s, "enter") != formContinue {
+			t.Errorf("%s: enter submitted a switch to %q", typed, s.intent().Branch)
+		}
+	}
+}
+
+// Enter with nothing typed does not stash and switch to the first branch.
+func TestSwitchForm_EmptyEnterDoesNotSubmit(t *testing.T) {
+	s := newSwitchForm(testFormOptions(), testSource())
+	s.setWIP("/r/auth", true, []string{"a.go"}, nil)
+	if press(s, "enter") != formContinue {
+		t.Error("enter with an empty Branch submitted")
+	}
+}
+
+// A changes check that failed is not "dirty": Copy offers no Changes field.
+func TestCopyForm_FailedCheckHasNoChangesField(t *testing.T) {
+	s := newCopyForm(testFormOptions(), testSource())
+	s.setWIP("/r/auth", true, []string{"a.go"}, errTestBoom)
+	for _, f := range s.fieldOrder() {
+		if f == fieldChanges {
+			t.Error("Changes is focusable after a failed check")
+		}
+	}
+}
+
+func TestCopyForm_RejectsRemoteOnlyBranch(t *testing.T) {
+	s := newCopyForm(testFormOptions(), testSource())
+	s.setWIP("/r/auth", false, nil, nil)
+	s.Branch.SetValue("remote-only")
+	s.syncAlias()
+	if press(s, "enter") != formContinue {
+		t.Fatal("a remote-only branch name must not submit")
+	}
+	if msg, _ := s.status(); msg != `branch "remote-only" already exists` {
+		t.Errorf("status = %q", msg)
+	}
+}
+
+// Moving the highlight with ctrl+j is an explicit pick, even with nothing
+// typed.
+func TestSwitchForm_ExplicitPickOnEmptySubmits(t *testing.T) {
+	s := newSwitchForm(testFormOptions(), testSource())
+	s.setWIP("/r/auth", false, nil, nil)
+	press(s, "ctrl+j")
+	if msg, _ := s.status(); msg != "⏎ switches to fix/login" {
+		t.Errorf("status = %q", msg)
+	}
+	if press(s, "enter") != formSubmit || s.intent().Branch != "fix/login" {
+		t.Errorf("enter after ctrl+j did not take fix/login (branch %q)", s.branchValue())
+	}
+}
+
+func TestCopyForm_DetachedSourceSaysSo(t *testing.T) {
+	src := testSource()
+	src.Branch = ""
+	s := newCopyForm(testFormOptions(), src)
+	s.setWidth(120, 40)
+	out := ansi.Strip(renderBranchForm(s, 120, 40, "⠋"))
+	if !strings.Contains(out, "auth · detached HEAD") {
+		t.Errorf("From row does not name a detached source:\n%s", out)
+	}
+}
+
+func TestExistsPrompt_OffersCopy(t *testing.T) {
+	out := ansi.Strip(renderExistingWorktreePrompt(&ExistingWorktreePrompt{WorktreeName: "auth", Branch: "feature/auth", ItemLabel: "PR #42"}, 120))
+	if !strings.Contains(out, "[n] copy") || strings.Contains(out, "fork") {
+		t.Errorf("exists prompt should offer copy, not fork:\n%s", out)
 	}
 }

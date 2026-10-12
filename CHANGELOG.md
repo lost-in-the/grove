@@ -10,9 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Overlays in the dashboard no longer erase the rows beside them, and the background behind them is dimmed evenly instead of stopping at the first styled word. (#19)
 - `esc` in the dashboard goes back exactly one level, and returns the cursor to the worktree it was on, even after the list refreshes.
+- With `NO_COLOR` set, the footer now shows which key you pressed (reverse video). Before, the highlight looked the same as every other key.
+- The issue browser fills in the branch `issue-N` again when it opens the New Worktree form.
 
 ### Changed
 - The New Worktree wizard is now a single form: Branch, Base, and Alias. It never moves or changes size, and its status line says what `enter` will do. A new branch now starts from the configured default branch, not from whatever the main checkout has checked out. An alias already used by another worktree is reported as an error instead of switching to that worktree.
+- Copy worktree (`f`, formerly fork) and Switch branch (`b`) use the New Worktree form. Copy lets you name the new branch, copies uncommitted changes by default instead of moving them, and waits for the changes check before acting. Switch lists only local branches no worktree has checked out.
+- The config editor no longer offers `skip_branch_notice` and `default_branch_action`. The branch form replaced the notice they controlled; the keys still load without error.
 - Updated the terminal UI libraries: bubbletea 2.0.10, lipgloss 2.0.6, bubbles 2.1.1, and glamour v2, which removes the older lipgloss v1 from the build.
 - Building grove from source now requires Go 1.26 or newer (bubbletea 2.0.10 needs it).
 

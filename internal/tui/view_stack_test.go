@@ -43,12 +43,12 @@ func TestViewStack_ToRootReturnsBottomFrame(t *testing.T) {
 func TestViewStack_CopiesDoNotShareFrames(t *testing.T) {
 	base := viewStack{}.push(viewFrame{view: ViewPRs}).push(viewFrame{view: ViewBranchForm})
 	popped, _, _ := base.pop()
-	branched := popped.push(viewFrame{view: ViewFork})
+	branched := popped.push(viewFrame{view: ViewSync})
 	if base.top() != ViewBranchForm {
-		t.Errorf("original copy changed: top = %v, want ViewCreate", base.top())
+		t.Errorf("original copy changed: top = %v, want ViewBranchForm", base.top())
 	}
-	if branched.top() != ViewFork {
-		t.Errorf("branched top = %v, want ViewFork", branched.top())
+	if branched.top() != ViewSync {
+		t.Errorf("branched top = %v, want ViewSync", branched.top())
 	}
 }
 

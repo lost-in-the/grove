@@ -257,11 +257,12 @@ working_dir = "main"
 	}
 
 	srcPath := filepath.Join(filepath.Dir(repo), "rails-app-src")
-	forkState := &ForkState{
+	req := forkRequest{
 		Source: WorktreeItem{ShortName: "src", Branch: "src", Path: srcPath},
 		Name:   "forked",
+		Branch: "src-forked",
 	}
-	msg := forkWorktreeCmd(mgr, stateMgr, nil, repo, forkState)()
+	msg := forkWorktreeCmd(mgr, stateMgr, nil, repo, req)()
 	done, ok := msg.(forkCompleteMsg)
 	if !ok {
 		t.Fatalf("expected forkCompleteMsg, got %T", msg)
@@ -822,11 +823,12 @@ working_dir = "main"
 	}
 
 	srcPath := filepath.Join(filepath.Dir(repo), "rails-app-src")
-	forkState := &ForkState{
+	req := forkRequest{
 		Source: WorktreeItem{ShortName: "src", Branch: "src", Path: srcPath},
 		Name:   "forked",
+		Branch: "src-forked",
 	}
-	msg := forkWorktreeCmd(mgr, stateMgr, nil, repo, forkState)()
+	msg := forkWorktreeCmd(mgr, stateMgr, nil, repo, req)()
 	done, ok := msg.(forkCompleteMsg)
 	if !ok {
 		t.Fatalf("expected forkCompleteMsg, got %T", msg)
@@ -954,5 +956,92 @@ func TestIntegration_BranchFormCreatesNewBranchFromBase(t *testing.T) {
 	}
 	if got := strings.TrimSpace(runGit(t, done.path, "rev-parse", "HEAD")); got != baseHead {
 		t.Errorf("worktree HEAD = %q, want base %s at %q", got, base, baseHead)
+	}
+}
+
+// Copy with "move" carries an untracked file to the new worktree and leaves
+// the source without it.
+func TestForkWorktreeCmd_MoveCleansUntrackedFromSource(t *testing.T) {
+	repo := setupRailsFixtureWithWorktrees(t, "src")
+	mgr, stateMgr := newTestManagers(t, repo)
+	srcPath := filepath.Join(filepath.Dir(repo), "rails-app-src")
+	if err := os.WriteFile(filepath.Join(srcPath, "wip.txt"), []byte("wip\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	req := forkRequest{
+		Source: WorktreeItem{ShortName: "src", Branch: "src", Path: srcPath},
+		Name:   "moved",
+		Branch: "src-moved",
+		HasWIP: true,
+		WIP:    WIPMove,
+	}
+	done, ok := forkWorktreeCmd(mgr, stateMgr, nil, repo, req)().(forkCompleteMsg)
+	if !ok || done.err != nil {
+		t.Fatalf("copy failed: %+v", done)
+	}
+	if _, err := os.Stat(filepath.Join(done.path, "wip.txt")); err != nil {
+		t.Errorf("wip.txt missing from the copy: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(srcPath, "wip.txt")); err == nil {
+		t.Error("wip.txt is still in the source after a move")
+	}
+}
+
+// End to end through the form: f on a dirty worktree, choose move, enter.
+// The copy gets the change and the source loses it.
+func TestIntegration_CopyFormMoveCleansSource(t *testing.T) {
+	repo := setupRailsFixtureWithWorktrees(t, "src")
+	mgr, stateMgr := newTestManagers(t, repo)
+	srcPath := filepath.Join(filepath.Dir(repo), "rails-app-src")
+	if err := os.WriteFile(filepath.Join(srcPath, "wip.txt"), []byte("wip\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := newTestModel(withSize(120, 40))
+	m.worktreeMgr, m.stateMgr, m.projectRoot = mgr, stateMgr, repo
+	next, cmd := m.openCopyForm(WorktreeItem{ShortName: "src", Branch: "src", Path: srcPath})
+	m = next.(Model)
+	for _, c := range cmd().(tea.BatchMsg) {
+		if c == nil {
+			continue
+		}
+		if msg, ok := c().(wipCheckMsg); ok {
+			next, _ = m.Update(msg)
+			m = next.(Model)
+		}
+	}
+	if !m.branchForm.HasWIP {
+		t.Fatal("changes check did not report wip.txt")
+	}
+	for _, k := range []string{"tab", "tab", "right"} {
+		next, _ = m.Update(makeKeyMsg(k))
+		m = next.(Model)
+	}
+	if m.branchForm.Changes != WIPMove {
+		t.Fatalf("changes = %v, want move", m.branchForm.Changes)
+	}
+	next, cmd = m.Update(makeKeyMsg("enter"))
+	m = next.(Model)
+	if cmd == nil || !m.branchForm.Busy {
+		t.Fatal("enter did not start the copy")
+	}
+	var done forkCompleteMsg
+	found := false
+	for _, c := range cmd().(tea.BatchMsg) {
+		if c == nil {
+			continue
+		}
+		if msg, ok := c().(forkCompleteMsg); ok {
+			done, found = msg, true
+		}
+	}
+	if !found || done.err != nil {
+		t.Fatalf("copy failed: found=%v %+v", found, done)
+	}
+	if _, err := os.Stat(filepath.Join(done.path, "wip.txt")); err != nil {
+		t.Errorf("wip.txt missing from the copy: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(srcPath, "wip.txt")); err == nil {
+		t.Error("wip.txt is still in the source after a move")
 	}
 }

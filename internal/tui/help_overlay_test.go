@@ -7,9 +7,6 @@ import (
 
 func TestNewHelpOverlay(t *testing.T) {
 	h := NewHelpOverlay()
-	if h.Active {
-		t.Error("expected Active to be false on new overlay")
-	}
 	if h.cache == nil {
 		t.Error("expected cache to be initialized")
 	}
@@ -19,21 +16,8 @@ func TestHelpOverlayOpen(t *testing.T) {
 	h := NewHelpOverlay()
 	h.Open(ViewDelete, 100, 40)
 
-	if !h.Active {
-		t.Error("expected Active to be true after Open")
-	}
 	if h.ForView != ViewDelete {
 		t.Errorf("expected ForView=ViewDelete, got %d", h.ForView)
-	}
-}
-
-func TestHelpOverlayClose(t *testing.T) {
-	h := NewHelpOverlay()
-	h.Open(ViewDashboard, 100, 40)
-	h.Close()
-
-	if h.Active {
-		t.Error("expected Active to be false after Close")
 	}
 }
 
@@ -46,11 +30,9 @@ func TestHelpSectionsForAllViews(t *testing.T) {
 		ViewBulk,
 		ViewPRs,
 		ViewIssues,
-		ViewFork,
 		ViewSync,
 		ViewConfig,
 		ViewRename,
-		ViewCheckout,
 	}
 
 	for _, view := range views {

@@ -25,7 +25,7 @@
 [2m               [m│   [1mn[m                             Create new worktree                                    │[2m               [m
 [2m               [m│   [1md[m                             Delete worktree                                        │[2m               [m
 [2m               [m│   [1mR[m                             Rename worktree                                        │[2m               [m
-[2m               [m│   [1mf[m                             Fork (copy) worktree                                   │[2m               [m
+[2m               [m│   [1mf[m                             Copy worktree to a new branch                          │[2m               [m
 [2m               [m│   [1ma[m                             Bulk delete worktrees                                  │[2m               [m
 [2m               [m│                                                                                        │[2m               [m
 [2m               [m│   [1mWorkflow[m                                                                             │[2m               [m

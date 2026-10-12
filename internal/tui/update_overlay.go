@@ -12,8 +12,6 @@ import (
 // It's purely informational — no auto-update functionality. The user runs the
 // suggested install command in their shell to upgrade.
 type UpdateOverlay struct {
-	Active bool
-
 	// Cached at open-time so View() doesn't repeatedly read the cache file.
 	currentVersion string
 	latestVersion  string
@@ -33,24 +31,18 @@ var (
 	updateOverlayRuleStyle  = lipgloss.NewStyle().Foreground(Colors.SurfaceBorder)
 )
 
-// NewUpdateOverlay creates an inactive UpdateOverlay.
+// NewUpdateOverlay creates an empty UpdateOverlay.
 func NewUpdateOverlay() *UpdateOverlay {
 	return &UpdateOverlay{}
 }
 
-// Open activates the overlay populated from the supplied release info.
+// Open populates the overlay from the supplied release info.
 // The caller is responsible for verifying that an update is actually available
 // (typically via updatecheck.CachedRelease) before calling Open.
 func (u *UpdateOverlay) Open(currentVersion, latestVersion, latestURL string) {
-	u.Active = true
 	u.currentVersion = currentVersion
 	u.latestVersion = latestVersion
 	u.latestURL = latestURL
-}
-
-// Close deactivates the overlay.
-func (u *UpdateOverlay) Close() {
-	u.Active = false
 }
 
 // View renders the overlay panel centered to the given terminal dimensions.

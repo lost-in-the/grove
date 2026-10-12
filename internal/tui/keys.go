@@ -167,7 +167,7 @@ func DefaultKeyMap() KeyMap {
 		),
 		Fork: key.NewBinding(
 			key.WithKeys("f"),
-			key.WithHelp("f", "fork"),
+			key.WithHelp("f", "copy"),
 		),
 		Sync: key.NewBinding(
 			key.WithKeys("s"),

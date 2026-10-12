@@ -51,6 +51,22 @@ func formCases() []formCase {
 			s.Log.AddLine("Creating worktree 'abc-12'...")
 			return s
 		}},
+		{"copy_checking", func() *BranchFormState { return newCopyForm(testFormOptions(), testSource()) }},
+		{"copy_dirty", func() *BranchFormState {
+			s := newCopyForm(testFormOptions(), testSource())
+			s.setWIP("/r/auth", true, []string{"a.go", "b.go"}, nil)
+			return s
+		}},
+		{"switch_clean", func() *BranchFormState {
+			s := newSwitchForm(testFormOptions(), testSource())
+			s.setWIP("/r/auth", false, nil, nil)
+			return s
+		}},
+		{"switch_dirty", func() *BranchFormState {
+			s := newSwitchForm(testFormOptions(), testSource())
+			s.setWIP("/r/auth", true, []string{"a.go"}, nil)
+			return s
+		}},
 	}
 }
 
@@ -109,5 +125,40 @@ func TestGolden_BranchForm(t *testing.T) {
 				golden.RequireEqual(t, []byte(renderBranchForm(f, sz.width, sz.height, "⠋")))
 			})
 		}
+	}
+}
+
+func TestCopyForm_RendersChangesChoice(t *testing.T) {
+	s := newCopyForm(testFormOptions(), testSource())
+	s.setWIP("/r/auth", true, []string{"a.go", "b.go"}, nil)
+	s.setWidth(120, 40)
+	out := ansi.Strip(renderBranchForm(s, 120, 40, "⠋"))
+	for _, want := range []string{"Copy auth", "● copy", "○ move", "○ leave", "2 files", "From"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestSwitchForm_RendersStashNote(t *testing.T) {
+	s := newSwitchForm(testFormOptions(), testSource())
+	s.setWIP("/r/auth", true, []string{"a.go"}, nil)
+	s.setWidth(120, 40)
+	out := ansi.Strip(renderBranchForm(s, 120, 40, "⠋"))
+	for _, want := range []string{"Switch branch of auth", "stash 1 file before switching", "feature/auth"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestCopyForm_ChangesRowFocusVisibleWhenShort(t *testing.T) {
+	s := newCopyForm(testFormOptions(), testSource())
+	s.setWIP("/r/auth", true, []string{"a.go"}, nil)
+	s.setFocus(fieldChanges)
+	s.setWidth(80, 12)
+	out := ansi.Strip(renderBranchForm(s, 80, 12, "⠋"))
+	if !strings.Contains(out, "● copy") {
+		t.Errorf("focused Changes row scrolled out of view:\n%s", out)
 	}
 }

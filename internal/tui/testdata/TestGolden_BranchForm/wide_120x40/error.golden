@@ -1,13 +1,13 @@
 ╭──────────────────────────────────────────────────────────────────────╮
 │ [1mNew worktree[m                                                         │
-│ ❯ Branch [37m[mabc-12[7;37m [m                                                     │
-│          ❯ + new "abc-12"                              new from main │
+│ ❯ Branch  [37m[mabc-12[7;37m [m                                                    │
+│           ❯ + new "abc-12"                             new from main │
 │                                                                      │
 │                                                                      │
 │                                                                      │
-│   Base   [37m[m[37mmain[m [37m                                                      [m │
-│   Alias  [37m[m[37mabc-12[m [37m                                                    [m │
-│          → grove-abc-12 · session grove-abc-12                       │
+│   Base    [37m[m[37mmain[m [37m                                                     [m │
+│   Alias   [37m[m[37mabc-12[m [37m                                                   [m │
+│           → grove-abc-12 · session grove-abc-12                      │
 │                                                                      │
 │ failed to create worktree: something went wrong in git               │
 │ ⏎ create · tab field · ctrl+j/k pick · esc back                      │

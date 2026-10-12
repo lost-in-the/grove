@@ -115,13 +115,6 @@ func TestGolden_Overlay_Issues(t *testing.T) {
 	})
 }
 
-func TestGolden_Overlay_Fork(t *testing.T) {
-	t.Run("confirm", func(t *testing.T) {
-		m := goldenModel(t, sizeStandard, withItems(3), withForkOverlay())
-		golden.RequireEqual(t, []byte(m.viewString()))
-	})
-}
-
 func TestGolden_Overlay_Sync(t *testing.T) {
 	t.Run("source_step", func(t *testing.T) {
 		m := goldenModel(t, sizeStandard, withItems(5), withSyncOverlay())
