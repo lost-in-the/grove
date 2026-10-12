@@ -1,10 +1,10 @@
 [2m test-project ·[m╭────────────────────────────────────────────────╮[2m           1/5 [m
 [2m               [m│                                                │[2m               [m
 [2m ❯ ● root      [m│  [1mSync Changes[m                                  │[2m       0s      [m
-[2m               [m│                                                │[2m               [m
-[2m   •••••       [m│    ●━━━━━━━━━━━━━━━━━━○━━━━━━━━━━━━━━━━━━○     │[2m               [m
-[2m ── root ──────[m│    [1mSource[m          Preview         Confirm     │[2m────────────── [m
-[2m               [m│                                                │[2m               [m
+[2m   ○ feature-au[m│                                                │[2m      60m      [m
+[2m   ○ fix-bug   [m│    ●━━━━━━━━━━━━━━━━━━○━━━━━━━━━━━━━━━━━━○     │[2m       2h      [m
+[2m   ● testing   [m│    [1mSource[m          Preview         Confirm     │[2m       3h      [m
+[2m   ○ refactor  [m│                                                │[2m       4h      [m
 [2m               [m│    Pull uncommitted changes from another       │[2m               [m
 [2m               [m│  worktree                                      │[2m               [m
 [2m               [m│    into root.                                  │[2m               [m
@@ -19,6 +19,6 @@
 [2m               [m│                                                │[2m               [m
 [2m               [m│                                                │[2m               [m
 [2m               [m│                                                │[2m               [m
-[2m               [m│                                                │[2m               [m
+[2m root · test co[m│                                                │[2m               [m
 [2m  ↑↓ navigate ·[m│                                                │[2m               [m
 [2m  / filter · ta[m│                                                │[2m               [m

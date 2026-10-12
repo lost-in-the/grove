@@ -42,6 +42,7 @@ const (
 	ViewConfig
 	ViewRename
 	ViewUpdate
+	ViewDetailSheet // full-screen detail below 110 columns
 )
 
 // Model is the root Bubble Tea model.
@@ -290,6 +291,9 @@ func (m Model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.activeView() == ViewHelp {
 		m.helpOverlay.Open(m.helpOverlay.ForView, m.width, m.height)
+	}
+	if m.layoutView() == ViewDetailSheet {
+		m.refreshDetailSheet()
 	}
 	return m, nil
 }
@@ -743,25 +747,11 @@ func (m *Model) updateLayout() {
 		m.detail.SetWidth(detailWidth)
 		m.detail.SetHeight(available)
 	} else {
-		// Stacked: cap list height at item count * row height + padding
-		itemCount := len(m.list.Items())
-		rowHeight := m.delegateHeight()
-		idealListHeight := itemCount*rowHeight + 2 // +2 for padding
-		maxListHeight := (available - listHeaderHeight) * 75 / 100
-		listHeight := idealListHeight
-		if listHeight > maxListHeight {
-			listHeight = maxListHeight
-		}
-		if listHeight < 3 {
-			listHeight = 3
-		}
-		detailHeight := available - listHeaderHeight - listHeight - 1
-		if detailHeight < 3 {
-			detailHeight = 3
-		}
-		m.list.SetSize(contentWidth, listHeight)
+		// The list takes everything but the selection line. The detail
+		// viewport is sized for the full-screen sheet.
+		m.list.SetSize(contentWidth, max(1, available-1))
 		m.detail.SetWidth(contentWidth)
-		m.detail.SetHeight(detailHeight)
+		m.detail.SetHeight(max(3, available))
 	}
 
 	m.refreshDelegate()
@@ -782,11 +772,6 @@ func (m *Model) toggleCompactMode() {
 	m.refreshDelegate()
 	m.updateLayout()
 	m.updateDetailContent()
-}
-
-// delegateHeight returns the row height for the current density.
-func (m *Model) delegateHeight() int {
-	return m.rowDelegate().Height()
 }
 
 // startupCompact decides the starting density: a saved preference, else the
@@ -948,6 +933,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleConfigKey(msg)
 	case ViewRename:
 		return m.handleRenameKey(msg)
+	case ViewDetailSheet:
+		return m.handleDetailSheetKey(msg)
 	case ViewDashboard:
 		return m.handleDashboardKey(msg)
 	}
@@ -981,8 +968,7 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case key.Matches(msg, m.keys.Tab):
-		m.detailFocused = true
-		m.refreshDetailForFocus()
+		m.openDetail()
 		return m, nil
 
 	case msg.String() == "B":
@@ -1078,8 +1064,7 @@ func (m Model) handleMotionKey(msg tea.KeyPressMsg) (Model, bool) {
 	case "ctrl+u":
 		m.moveCursorTo(m.list.Index() - m.halfPage())
 	case "l":
-		m.detailFocused = true
-		m.refreshDetailForFocus()
+		m.openDetail()
 	default:
 		return m, false
 	}
@@ -1441,6 +1426,10 @@ func (m Model) viewContent() string {
 	if !m.ready {
 		return m.viewNotReady()
 	}
+	if LayoutBreakpoint(m.width) == LayoutGuard {
+		// Nothing else is drawn; all state is kept for when it widens.
+		return "grove needs ≥44 columns"
+	}
 	if m.loading {
 		return m.viewLoading()
 	}
@@ -1482,6 +1471,8 @@ func (m Model) renderFrame(i int) string {
 			return m.renderIssuePanel()
 		}
 		return m.renderFrame(i - 1)
+	case ViewDetailSheet:
+		return m.renderDetailSheet()
 	}
 	overlay := m.renderOverlay(v)
 	if overlay == "" {
@@ -1670,10 +1661,7 @@ func (m Model) renderSideBySideBody() string {
 
 func (m Model) renderStackedBody() string {
 	bodyWidth := m.width - 2
-	listView := m.list.View()
-	separator := renderNamedSeparator(m.selectedItemName(), bodyWidth)
-	detailView := m.renderDetailPanel()
-	return lipgloss.JoinVertical(lipgloss.Left, listView, separator, detailView)
+	return lipgloss.JoinVertical(lipgloss.Left, m.list.View(), m.renderSelectionLine(bodyWidth))
 }
 
 // clampBodyToHeight trims the body so statusBar + body + footer fits exactly m.height lines.
@@ -1687,15 +1675,6 @@ func (m Model) clampBodyToHeight(body, footer string) string {
 		return clampLines(body, bodyBudget)
 	}
 	return body
-}
-
-// selectedItemName returns the short name of the currently selected worktree.
-func (m Model) selectedItemName() string {
-	item, ok := m.selectedItem()
-	if !ok {
-		return ""
-	}
-	return item.ShortName
 }
 
 // renderVerticalDivider creates a thin column of │ characters for side-by-side layout.

@@ -1104,10 +1104,11 @@ func TestDashboardKey_B_WithPR(t *testing.T) {
 	}
 }
 
+// Below 110 columns tab opens the detail sheet instead of focusing a pane.
 func TestDashboardKey_Tab(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
 	m = sendKey(m, "tab")
-	if !m.detailFocused {
-		t.Error("expected detailFocused=true after tab")
+	if m.activeView() != ViewDetailSheet {
+		t.Errorf("view = %v after tab at 80 columns, want the detail sheet", m.activeView())
 	}
 }

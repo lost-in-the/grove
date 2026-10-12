@@ -93,12 +93,3 @@ func TestViewSideBySideLayout(t *testing.T) {
 		t.Error("expected non-empty view for wide terminal")
 	}
 }
-
-func TestViewStackedLayout(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(80, 24))
-	v := m.viewString()
-	// Stacked layout should contain a separator
-	if !strings.Contains(v, "─") {
-		t.Error("expected separator in stacked layout")
-	}
-}

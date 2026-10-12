@@ -1,9 +1,9 @@
 [2m test-project · 3 worktrees · ⬍ name                                        1/3 [m
 [2m                                                                                [m
 [2m ❯ ● root    [m╭───────────────────────────────────────────────────╮[2m      0s      [m
+[2m   ○ feature-[m│                                                   │[2m     60m      [m
+[2m   ○ fix-bug [m│  [1mDelete Worktree[m                                  │[2m      2h      [m
 [2m             [m│                                                   │[2m              [m
-[2m   •••       [m│  [1mDelete Worktree[m                                  │[2m              [m
-[2m ── root ────[m│                                                   │[2m───────────── [m
 [2m             [m│  [1mDelete "feature-auth"?[m                           │[2m              [m
 [2m             [m│                                                   │[2m              [m
 [2m             [m│  ⚠ Worktree has uncommitted changes               │[2m              [m
@@ -19,6 +19,6 @@
 [2m             [m│  [1my[m confirm  [1mn[m cancel  [1mspace[m toggle branch         │[2m              [m
 [2m             [m│                                                   │[2m              [m
 [2m             [m╰───────────────────────────────────────────────────╯[2m              [m
-[2m                                                                                [m
+[2m root · test commit for root                                                    [m
 [2m  ↑↓ navigate · enter switch · U up · n new                                     [m
 [2m  / filter · tab detail · o sort · ? help · q quit                              [m

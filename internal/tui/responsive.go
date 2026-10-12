@@ -1,32 +1,36 @@
 package tui
 
-// Layout describes the terminal width breakpoint.
+// Layout is the dashboard's width tier (spec 5.6).
 type Layout int
 
 const (
-	// LayoutNarrow is for terminals under 80 chars — hide non-essential columns.
-	LayoutNarrow Layout = iota
-	// LayoutMedium is for 80–100 chars — stacked layout, all columns visible.
-	LayoutMedium
-	// LayoutWide is for >100 chars — side-by-side layout.
-	LayoutWide
+	// LayoutGuard is under 44 columns: one line asks for more room.
+	LayoutGuard Layout = iota
+	// LayoutList is 44 to 109 columns: the list and a selection line.
+	LayoutList
+	// LayoutSplit is 110 columns and up: the list and a docked detail pane.
+	LayoutSplit
 )
 
-// LayoutBreakpoint returns the Layout tier for a given terminal width.
+const (
+	minWidth   = 44
+	splitWidth = 110
+)
+
+// LayoutBreakpoint returns the tier for a terminal width.
 func LayoutBreakpoint(width int) Layout {
 	switch {
-	case width > 100:
-		return LayoutWide
-	case width >= 80:
-		return LayoutMedium
-	default:
-		return LayoutNarrow
+	case width >= splitWidth:
+		return LayoutSplit
+	case width >= minWidth:
+		return LayoutList
 	}
+	return LayoutGuard
 }
 
-// isWideLayout reports whether the given width should use the side-by-side
-// (wide) layout. Centralizes the breakpoint so panel sizing and rendering
-// never disagree.
+// isWideLayout reports whether the width docks the detail pane beside the
+// list. Centralizes the breakpoint so panel sizing and rendering never
+// disagree.
 func isWideLayout(width int) bool {
-	return LayoutBreakpoint(width) == LayoutWide
+	return LayoutBreakpoint(width) == LayoutSplit
 }

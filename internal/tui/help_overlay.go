@@ -231,6 +231,8 @@ func helpSectionsFor(view ActiveView) []helpSection {
 	switch view {
 	case ViewDashboard, ViewHelp:
 		return helpSectionsDashboard
+	case ViewDetailSheet:
+		return helpSectionsDetailSheet
 	case ViewDelete:
 		return helpSectionsDelete
 	case ViewBranchForm:
@@ -382,5 +384,15 @@ var helpSectionsRename = []helpSection{
 	{title: "Rename Worktree", note: "Change the short name of a worktree.", items: []helpEntry{
 		{"enter", "Confirm rename"},
 		{"esc", "Cancel"},
+	}},
+}
+
+var helpSectionsDetailSheet = []helpSection{
+	{title: "Worktree Detail", note: "The selected worktree, full screen. Opened with tab or l below 110 columns.", items: []helpEntry{
+		{"↑/k ↓/j", "Scroll up / down"},
+		{"g / G", "Jump to top / bottom"},
+		{"ctrl+u / ctrl+d", "Half page up / down"},
+		{"B", "Open associated PR in browser"},
+		{"esc / h / tab", "Back to the list"},
 	}},
 }

@@ -64,6 +64,11 @@ func (h *HelpFooter) HasHighlight() bool {
 // CompactHints returns context-aware key hints for the given view.
 func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 	switch view {
+	case ViewDetailSheet:
+		return []Hint{
+			{"↑↓", "scroll"},
+			{"esc", "list"},
+		}
 	case ViewDashboard:
 		return []Hint{
 			{"↑↓", "navigate"},
