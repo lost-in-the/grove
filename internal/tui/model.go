@@ -85,6 +85,7 @@ type Model struct {
 	// Sort
 	sortMode     SortMode
 	sortReversed bool // O reverses the current sort
+	pendingG     bool // g was pressed; a second g goes to the top
 
 	// Overlay state
 	deleteState *DeleteState
@@ -654,6 +655,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.list.FilterState() == list.Filtering {
+		m.pendingG = false
 		prevIdx := m.list.Index()
 		var cmd tea.Cmd
 		m.list, cmd = m.list.Update(msg)
@@ -920,6 +922,9 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.detailFocused {
 		return m.handleDashboardDetailKey(msg)
 	}
+	if updated, handled := m.handleMotionKey(msg); handled {
+		return updated, nil
+	}
 
 	switch {
 	// With a filter applied, esc clears it (the list's own ClearFilter
@@ -1010,8 +1015,56 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m.routeToList(msg)
 }
 
+// handleMotionKey handles the vim motions on the dashboard list: gg top,
+// G bottom, ctrl+d and ctrl+u half a page, l to open the detail pane. g
+// waits for a second key; any other key after it does nothing.
+func (m Model) handleMotionKey(msg tea.KeyPressMsg) (Model, bool) {
+	k := msg.String()
+	if m.pendingG {
+		m.pendingG = false
+		if k == "g" {
+			m.moveCursorTo(0)
+		}
+		return m, true
+	}
+	switch k {
+	case "g":
+		m.pendingG = true
+	case "G":
+		m.moveCursorTo(len(m.list.VisibleItems()) - 1)
+	case "ctrl+d":
+		m.moveCursorTo(m.list.Index() + m.halfPage())
+	case "ctrl+u":
+		m.moveCursorTo(m.list.Index() - m.halfPage())
+	case "l":
+		m.detailFocused = true
+		m.refreshDetailForFocus()
+	default:
+		return m, false
+	}
+	return m, true
+}
+
+// halfPage is half the list's visible rows, at least 1.
+func (m Model) halfPage() int {
+	return max(1, m.list.Height()/max(1, m.rowDelegate().Height())/2)
+}
+
+// moveCursorTo selects visible row i, clamped to the list.
+func (m *Model) moveCursorTo(i int) {
+	n := len(m.list.VisibleItems())
+	if n == 0 {
+		return
+	}
+	i = max(0, min(i, n-1))
+	if i != m.list.Index() {
+		m.list.Select(i)
+		m.updateDetailContent()
+	}
+}
+
 func (m Model) handleDashboardDetailKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if key.Matches(msg, m.keys.Escape) || key.Matches(msg, m.keys.Tab) {
+	if key.Matches(msg, m.keys.Escape) || key.Matches(msg, m.keys.Tab) || msg.String() == "h" {
 		m.detailFocused = false
 		m.refreshDetailForFocus()
 		return m, nil

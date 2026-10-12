@@ -17,6 +17,11 @@ func newWorktreeList(delegate list.ItemDelegate) list.Model {
 	l.KeyMap.Filter.SetKeys("/")
 	l.KeyMap.CursorUp.SetKeys("up", "k")
 	l.KeyMap.CursorDown.SetKeys("down", "j")
+	// The list's default paging keys (h l b u f d g G) belong to grove.
+	l.KeyMap.PrevPage.SetKeys("pgup")
+	l.KeyMap.NextPage.SetKeys("pgdown")
+	l.KeyMap.GoToStart.SetKeys("home")
+	l.KeyMap.GoToEnd.SetKeys("end")
 	l.DisableQuitKeybindings()
 	l.KeyMap.ForceQuit.SetEnabled(true)
 	return l
