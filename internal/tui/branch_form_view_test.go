@@ -65,7 +65,9 @@ func TestBranchForm_FrameSizeIsFixed(t *testing.T) {
 	for _, sz := range formSizes {
 		wantW, wantH := branchFormSize(sz.width, sz.height)
 		for _, c := range formCases() {
-			out := renderBranchForm(c.build(), sz.width, sz.height, "⠋")
+			f := c.build()
+			f.setWidth(sz.width, sz.height)
+			out := renderBranchForm(f, sz.width, sz.height, "⠋")
 			if w, h := lipgloss.Width(out), lipgloss.Height(out); w != wantW || h != wantH {
 				t.Errorf("%s/%s: frame %dx%d, want %dx%d", sz.name, c.name, w, h, wantW, wantH)
 			}
@@ -102,7 +104,9 @@ func TestGolden_BranchForm(t *testing.T) {
 		for _, c := range formCases() {
 			t.Run(sz.name+"/"+c.name, func(t *testing.T) {
 				goldenModel(t, sz)
-				golden.RequireEqual(t, []byte(renderBranchForm(c.build(), sz.width, sz.height, "⠋")))
+				f := c.build()
+				f.setWidth(sz.width, sz.height)
+				golden.RequireEqual(t, []byte(renderBranchForm(f, sz.width, sz.height, "⠋")))
 			})
 		}
 	}

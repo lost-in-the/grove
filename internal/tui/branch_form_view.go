@@ -102,7 +102,7 @@ func (s *BranchFormState) label(name string, f formField) string {
 
 // bodyLines returns the body and the index of the focused field's line.
 func (s *BranchFormState) bodyLines(inner int, spinner string) ([]string, int) {
-	if s.Busy && s.Log != nil {
+	if s.Log != nil && (s.Busy || s.Log.IsDone()) {
 		return strings.Split(s.Log.View(spinner), "\n"), 0
 	}
 	indent := strings.Repeat(" ", formLabelWidth)

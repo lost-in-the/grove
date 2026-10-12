@@ -261,7 +261,7 @@ func (s *BranchFormState) setFocus(f formField) tea.Cmd {
 	s.Base.Blur()
 	s.Alias.Blur()
 	s.Focus = f
-	s.Pick = 0
+	s.Pick = s.defaultPick()
 	return s.input(f).Focus()
 }
 
@@ -283,6 +283,52 @@ func (s *BranchFormState) movePick(delta int) {
 		return
 	}
 	s.Pick = max(0, min(s.Pick+delta, n-1))
+}
+
+// defaultPick highlights the row that matches what enter would do: the exact
+// match, else the new-branch row, else the first row.
+func (s *BranchFormState) defaultPick() int {
+	q := s.branchValue()
+	if s.Focus == fieldBase {
+		q = s.baseValue()
+	}
+	sg := s.suggestions()
+	for i, x := range sg {
+		if !x.New && x.Branch == q {
+			return i
+		}
+	}
+	for i, x := range sg {
+		if x.New {
+			return i
+		}
+	}
+	return 0
+}
+
+// setWidth sizes the text inputs to the frame, so a long value scrolls to
+// keep the cursor visible instead of running past the border.
+func (s *BranchFormState) setWidth(termW, termH int) {
+	w, _ := branchFormSize(termW, termH)
+	iw := max(4, w-4-formLabelWidth-1)
+	s.Branch.SetWidth(iw)
+	s.Base.SetWidth(iw)
+	s.Alias.SetWidth(iw)
+}
+
+// pickDefaultBase chooses Base for a new branch: the configured default
+// branch, else the repository's detected default when it exists, else the
+// main worktree's branch, else "main".
+func pickDefaultBase(configured, detected, mainBranch string, known func(string) bool) string {
+	switch {
+	case configured != "":
+		return configured
+	case detected != "" && known(detected):
+		return detected
+	case mainBranch != "":
+		return mainBranch
+	}
+	return "main"
 }
 
 // acceptPick copies the highlighted suggestion into the focused field.
@@ -364,6 +410,9 @@ func (s *BranchFormState) keyLine() string {
 	if s.Busy {
 		return "creating…"
 	}
+	if s.Log != nil {
+		return "any key to edit · esc back"
+	}
 	act := "⏎ create"
 	if s.inUse[s.branchValue()] != nil {
 		act = "⏎ switch"
@@ -375,6 +424,13 @@ func (s *BranchFormState) keyLine() string {
 // global Up/Down bindings, because those include j and k, which must type.
 func (s *BranchFormState) handleKey(msg tea.KeyPressMsg, keys KeyMap) (formResult, tea.Cmd) {
 	if s.Busy {
+		return formContinue, nil
+	}
+	if s.Log != nil {
+		if key.Matches(msg, keys.Escape) {
+			return formCancel, nil
+		}
+		s.Log = nil
 		return formContinue, nil
 	}
 	switch k := msg.String(); {
@@ -392,6 +448,9 @@ func (s *BranchFormState) handleKey(msg tea.KeyPressMsg, keys KeyMap) (formResul
 		s.movePick(1)
 		return formContinue, nil
 	case k == "enter":
+		if s.Focus == fieldBranch || s.Focus == fieldBase {
+			s.acceptPick()
+		}
 		if f, _, ok := s.validate(); !ok {
 			return formContinue, s.setFocus(f)
 		}
@@ -401,21 +460,30 @@ func (s *BranchFormState) handleKey(msg tea.KeyPressMsg, keys KeyMap) (formResul
 	return formContinue, s.typeInto(msg)
 }
 
-func (s *BranchFormState) typeInto(msg tea.KeyPressMsg) tea.Cmd {
+func (s *BranchFormState) typeInto(msg tea.Msg) tea.Cmd {
 	in := s.input(s.Focus)
 	var cmd tea.Cmd
 	*in, cmd = in.Update(msg)
 	s.Status = ""
 	switch s.Focus {
 	case fieldBranch:
-		s.Pick = 0
 		s.syncAlias()
+		s.Pick = s.defaultPick()
 	case fieldBase:
-		s.Pick = 0
+		s.Pick = s.defaultPick()
 	case fieldAlias:
 		s.aliasEdited = s.aliasValue() != s.derivedAlias()
 	}
 	return cmd
+}
+
+// paste types pasted text into the focused field.
+func (s *BranchFormState) paste(msg tea.PasteMsg) tea.Cmd {
+	if s.Busy {
+		return nil
+	}
+	s.Log = nil
+	return s.typeInto(msg)
 }
 
 func (s *BranchFormState) getActivityLog() *ActivityLog { return s.Log }
@@ -435,19 +503,38 @@ func (m Model) openBranchForm(p branchFormPrefill) (tea.Model, tea.Cmd) {
 	if err != nil {
 		tuilog.Printf("warning: failed to list local branches: %v", err)
 	}
-	strategy := ""
+	strategy, configured := "", ""
 	if m.cfg != nil {
 		strategy = m.cfg.TUI.WorktreeNameFromBranch
+		configured = m.cfg.DefaultBranch
+	}
+	detected := ""
+	if configured == "" {
+		if d, err := git.DetectDefaultBranch(m.projectRoot); err == nil {
+			detected = d
+		}
+	}
+	worktrees := m.existingWorktreeItems()
+	mainBranch := ""
+	known := map[string]bool{}
+	for _, w := range worktrees {
+		if w.IsMain {
+			mainBranch = w.Branch
+		}
+	}
+	for _, b := range append(all, local...) {
+		known[b] = true
 	}
 	s := newBranchForm(branchFormOptions{
 		ProjectName:   m.projectName,
 		NamePattern:   m.worktreeNamePattern(),
 		NameStrategy:  strategy,
-		DefaultBase:   ResolveDefaultBranch(m.cfg),
+		DefaultBase:   pickDefaultBase(configured, detected, mainBranch, func(b string) bool { return known[b] }),
 		AllBranches:   all,
 		LocalBranches: local,
-		Worktrees:     m.existingWorktreeItems(),
+		Worktrees:     worktrees,
 	})
+	s.setWidth(m.width, m.height)
 	cmd := s.applyPrefill(p)
 	m.branchForm = s
 	m.pushView(ViewBranchForm)

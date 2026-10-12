@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func testFormOptions() branchFormOptions {
@@ -187,9 +188,10 @@ func TestBranchForm_DuplicateAliasIsAnError(t *testing.T) {
 func TestBranchForm_TabAcceptsHighlightedSuggestion(t *testing.T) {
 	s := newBranchForm(testFormOptions())
 	typeInto(t, s, "logi")
+	press(s, "up")
 	press(s, "tab")
 	if got := strings.TrimSpace(s.Branch.Value()); got != "fix/login" {
-		t.Errorf("branch = %q, want fix/login accepted from the suggestion", got)
+		t.Errorf("branch = %q, want fix/login accepted from the row moved to", got)
 	}
 }
 
@@ -370,5 +372,102 @@ func TestBranchForm_TypingThroughUpdateReachesBranch(t *testing.T) {
 	}
 	if got := m.branchForm.Branch.Value(); got != "fixjk" {
 		t.Errorf("branch = %q, want fixjk", got)
+	}
+}
+
+// --- Final review fixes ---
+
+func TestBranchForm_PickDefaultsToExactMatch(t *testing.T) {
+	opts := testFormOptions()
+	opts.AllBranches = append([]string{"domain-x"}, opts.AllBranches...)
+	opts.LocalBranches = append([]string{"domain-x"}, opts.LocalBranches...)
+	s := newBranchForm(opts)
+	typeInto(t, s, "main")
+	press(s, "tab")
+	if got := s.branchValue(); got != "main" {
+		t.Errorf("branch after tab = %q, want main kept (exact match is highlighted)", got)
+	}
+}
+
+func TestBranchForm_PickDefaultsToNewRowForPartial(t *testing.T) {
+	s := newBranchForm(testFormOptions())
+	typeInto(t, s, "fea")
+	sg := s.suggestions()
+	if s.Pick < 0 || s.Pick >= len(sg) || !sg[s.Pick].New {
+		t.Errorf("highlighted row = %+v, want the + new row matching what enter will do", sg)
+	}
+}
+
+func TestBranchForm_EnterAcceptsMovedPick(t *testing.T) {
+	s := newBranchForm(testFormOptions())
+	typeInto(t, s, "logi")
+	press(s, "up")
+	if press(s, "enter") != formSubmit {
+		t.Fatal("enter should submit")
+	}
+	if in := s.intent(); in.Kind != intentCreateExisting || in.Branch != "fix/login" {
+		t.Errorf("intent = %+v, want the highlighted fix/login", in)
+	}
+}
+
+func TestBranchForm_PlaceholderAndLongInputRender(t *testing.T) {
+	s := newBranchForm(testFormOptions())
+	s.setWidth(80, 24)
+	if out := ansi.Strip(renderBranchForm(s, 80, 24, "⠋")); !strings.Contains(out, "type to search or create") {
+		t.Errorf("placeholder missing:\n%s", out)
+	}
+	long := strings.Repeat("x", 70) + "-tail"
+	typeInto(t, s, long)
+	if out := ansi.Strip(renderBranchForm(s, 80, 24, "⠋")); !strings.Contains(out, "x-tail") {
+		t.Errorf("the end of a long branch name is not visible:\n%s", out)
+	}
+}
+
+func TestBranchFormPaste_FillsFocusedField(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m = sendKey(m, "n")
+	next, _ := m.Update(tea.PasteMsg{Content: "pasted-branch"})
+	m = next.(Model)
+	if got := m.branchForm.branchValue(); got != "pasted-branch" {
+		t.Fatalf("branch = %q, want pasted-branch", got)
+	}
+	if got := m.branchForm.aliasValue(); got != "pasted-branch" {
+		t.Errorf("alias = %q, want it derived from the pasted branch", got)
+	}
+}
+
+func TestPickDefaultBase(t *testing.T) {
+	known := func(b string) bool { return b == "master" || b == "develop" }
+	cases := []struct{ name, configured, detected, mainBranch, want string }{
+		{"config wins", "develop", "master", "master", "develop"},
+		{"detected when known", "", "master", "develop", "master"},
+		{"main worktree when detection fails", "", "", "master", "master"},
+		{"main worktree when detected is unknown", "", "trunk", "develop", "develop"},
+		{"literal main last", "", "", "", "main"},
+	}
+	for _, c := range cases {
+		if got := pickDefaultBase(c.configured, c.detected, c.mainBranch, known); got != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+func TestBranchForm_FailedCreationShowsLogUntilAKey(t *testing.T) {
+	s := newBranchForm(testFormOptions())
+	typeInto(t, s, "abc-12")
+	s.Busy = true
+	s.Log = NewActivityLog(60, 6)
+	s.Log.AddLine("Creating worktree 'abc-12'...")
+	s.Log.SetDone(errTestBoom)
+	s.setCreatingDone("fatal: a very long git error that the status line cannot hold in full")
+	out := ansi.Strip(renderBranchForm(s, 80, 24, "⠋"))
+	if !strings.Contains(out, "Creating worktree 'abc-12'") {
+		t.Errorf("activity log hidden after a failure:\n%s", out)
+	}
+	if !strings.Contains(s.keyLine(), "any key to edit") {
+		t.Errorf("key line = %q, want a hint to dismiss the log", s.keyLine())
+	}
+	if press(s, "x") != formContinue || s.Log != nil || s.branchValue() != "abc-12" {
+		t.Errorf("first key should only dismiss the log: log=%v branch=%q", s.Log != nil, s.branchValue())
 	}
 }

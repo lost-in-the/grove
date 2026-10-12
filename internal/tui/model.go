@@ -260,6 +260,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleSpinnerTick(msg)
 	case tea.KeyPressMsg:
 		return m.handleKeyPress(msg)
+	case tea.PasteMsg:
+		if m.activeView() == ViewBranchForm && m.branchForm != nil {
+			return m, m.branchForm.paste(msg)
+		}
+		return m.handleDefault(msg)
 	default:
 		return m.handleDefault(msg)
 	}
@@ -271,6 +276,9 @@ func (m Model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.height = msg.Height
 	m.ready = true
 	m.updateLayout()
+	if m.branchForm != nil {
+		m.branchForm.setWidth(m.width, m.height)
+	}
 	tuilog.Printf("WindowSizeMsg: %dx%d, list size: %dx%d", msg.Width, msg.Height, m.list.Width(), m.list.Height())
 	if !wasReady && m.cfgLoadErr != nil {
 		m.toast.Show(NewToast("Config load failed: "+m.cfgLoadErr.Error(), ToastWarning))
