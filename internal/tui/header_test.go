@@ -106,3 +106,42 @@ func stripAnsi(s string) string {
 	}
 	return result.String()
 }
+
+// Under herdr the header counts agents that need you, after the worktree
+// count and before the sort (spec 5.5).
+func TestHeader_TriageSummary(t *testing.T) {
+	h := Header{ProjectName: "grove", WorktreeCount: 5, Blocked: 2, Done: 1, SortLabel: "name", Cursor: 1, Total: 5}
+	view := stripAnsi(h.View(100))
+	if !strings.HasPrefix(view, " grove · 5 worktrees · ! 2 blocked · ✓ 1 done · ⬍ name") {
+		t.Errorf("wide: %q", view)
+	}
+
+	view = stripAnsi(h.View(44))
+	if !strings.Contains(view, "! 2 · ✓ 1") || strings.Contains(view, "blocked") {
+		t.Errorf("at 44 the summary should drop its words: %q", view)
+	}
+	if lipgloss.Width(view) != 44 || !strings.HasSuffix(view, "1/5 ") {
+		t.Errorf("at 44 the header should stay 44 cells with 1/5: %q", view)
+	}
+
+	h.Done = 0
+	if view := stripAnsi(h.View(100)); strings.Contains(view, "✓") || !strings.Contains(view, "! 2 blocked · ⬍") {
+		t.Errorf("a zero count should show nothing: %q", view)
+	}
+	h.Blocked = 0
+	if view := stripAnsi(h.View(100)); strings.Contains(view, "!") {
+		t.Errorf("no summary when nothing needs you: %q", view)
+	}
+}
+
+func TestDashboardHeader_CountsAgentsOnlyWhenAgentAware(t *testing.T) {
+	// withHerdrItems(5) cycles blocked, working, idle, done, unknown.
+	m := newTestModel(withHerdrItems(5), withSize(100, 24))
+	if h := m.buildDashboardHeader(); h.Blocked != 1 || h.Done != 1 {
+		t.Errorf("herdr: blocked %d done %d, want 1 and 1", h.Blocked, h.Done)
+	}
+	m.agentAware = false
+	if h := m.buildDashboardHeader(); h.Blocked != 0 || h.Done != 0 {
+		t.Errorf("tmux: blocked %d done %d, want none", h.Blocked, h.Done)
+	}
+}

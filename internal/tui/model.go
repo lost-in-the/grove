@@ -1627,7 +1627,7 @@ func (m Model) renderDashboard() string {
 
 // buildDashboardHeader populates the header from the current worktree list state.
 func (m Model) buildDashboardHeader() Header {
-	return Header{
+	h := Header{
 		ProjectName:   m.projectName,
 		WorktreeCount: len(m.list.Items()),
 		SortLabel:     m.sortMode.String(),
@@ -1635,6 +1635,19 @@ func (m Model) buildDashboardHeader() Header {
 		Cursor:        m.list.Index() + 1,
 		Total:         len(m.list.VisibleItems()),
 	}
+	if m.agentAware {
+		for _, li := range m.list.Items() {
+			if item, ok := li.(WorktreeItem); ok {
+				switch item.AgentStatus {
+				case mux.AgentBlocked:
+					h.Blocked++
+				case mux.AgentDone:
+					h.Done++
+				}
+			}
+		}
+	}
+	return h
 }
 
 // renderDashboardBody renders the list and detail panels in side-by-side or stacked layout.
