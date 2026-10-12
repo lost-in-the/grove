@@ -28,7 +28,7 @@ The dashboard adjusts to your terminal width:
 
 ### Header
 
-Left to right: project name, worktree count, and sort (`⬍ name`, with `↑` when reversed). The cursor's position among the visible rows (`3/12`) sits on the right and tracks any filter. On narrow terminals the count drops its word and the project name truncates.
+Left to right: project name, worktree count, agents that need you (under herdr: `! 2 blocked · ✓ 1 done`, hidden when both are zero), and sort (`⬍ name`, with `↑` when reversed). The cursor's position among the visible rows (`3/12`) sits on the right and tracks any filter. On narrow terminals the count and the agent summary drop their words (`! 2 · ✓ 1`) and the project name truncates.
 
 ### Worktree List
 
@@ -102,7 +102,7 @@ Toast levels:
 |-----|--------|
 | `↑` / `k` | Move up |
 | `↓` / `j` | Move down |
-| `g` | Open the goto strip: `g` top of list, `p` pull requests, `i` issues, `c` config, `u` upgrade grove. Any other key closes it. |
+| `g` | Open the goto strip: `g` top of list, `p` pull requests, `i` issues, `c` config, `u` upgrade grove, and under herdr `a` the next agent needing you. Any other key closes it. |
 | `g` `g` / `G` | Top / bottom of the list |
 | `ctrl+d` / `ctrl+u` | Half a page down / up |
 | `pgdown` / `pgup`, `home` / `end` | Page down / up, first / last page |
@@ -123,7 +123,7 @@ Toast levels:
 | `p` | Browse GitHub PRs |
 | `i` | Browse GitHub issues |
 | `a` | Bulk delete |
-| `o` | Cycle sort mode: name, age, dirty |
+| `o` | Cycle sort mode: name, age, dirty, and attention under herdr |
 | `O` | Reverse the sort |
 | `r` | Refresh worktree list |
 | `v` | Show or hide the commit message line |
@@ -315,8 +315,18 @@ Press `o` to cycle through sort modes, and `O` to reverse the current one:
 | `name` | Alphabetical (default) |
 | `age` | Most recent commit first |
 | `dirty` | Worktrees with uncommitted changes first |
+| `attention` | Under herdr only: blocked agents, then done, then working, then the rest |
 
 The main worktree always stays at the top regardless of sort mode or direction.
+
+## Agent Triage
+
+Under herdr the dashboard keeps track of which coding agents need you. Under tmux none of this appears.
+
+- **Header:** counts blocked and done agents (`! 2 blocked · ✓ 1 done`).
+- **Sort:** `o` reaches `attention`, which puts blocked agents first, then done, then working.
+- **`g a`:** moves to the next blocked agent below the cursor, wrapping; with none blocked, to the next done one; with neither, it says `no agents need you`. If the filter hides the target, the filter is cleared.
+- **Poll:** every 3 seconds the dashboard asks herdr for agent state (one `herdr workspace list`). Only the session and agent columns change. Under attention sort the rows re-sort and the cursor stays on the same worktree. A failed poll keeps the last known state and logs a warning.
 
 ## Find
 
@@ -391,6 +401,8 @@ Every dashboard key is an `Action` in `internal/tui/actions.go`: its keys, label
 | `internal/tui/messages_view.go` | Session message history overlay |
 | `internal/tui/actions.go` | The dashboard action table (keys, labels, synonyms, footer order) |
 | `internal/tui/strip.go` | Docked strips (`g` goto, `m` pin) drawn above the footer |
+| `internal/tui/goto_agent.go` | `g a`: the next agent needing you |
+| `internal/tui/poll.go` | The 3-second herdr agent poll: tick, generation, applying results |
 | `internal/tui/pins.go` | Pin rules (`pinSet`): pin, unpin, move, rename, prune |
 | `internal/tui/pins_view.go` | Pin and `-` keys, and the `m` strip |
 | `internal/tui/age.go` | Commit age, rounded like git's relative dates (`shortAge`) |
