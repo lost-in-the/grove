@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The issue browser fills in the branch `issue-N` again when it opens the New Worktree form.
 
 ### Changed
-- Dashboard rows are one line: agent state (under herdr), cursor, status, alias, branch chip, counts, age, and session and container glyphs. The cursor no longer hides a row's status. As the terminal narrows, columns drop in a fixed order and long aliases shorten in the middle. `v` adds the commit message back; one line is the new default unless you saved a choice.
+- Dashboard rows are one line: agent state (under herdr), cursor, status, alias, branch chip, counts, age, and session and container glyphs. Ages round the way `git log --date=relative` does (`35h`, `13d`, `11mo`), so a row agrees with git. The cursor no longer hides a row's status. As the terminal narrows, columns drop in a fixed order and long aliases shorten in the middle. `v` adds the commit message back; one line is the new default unless you saved a choice.
 - The header shows the sort and your position in the list (`3/12`) instead of the current branch.
 - Sort modes are name, age (last commit), and dirty; `O` reverses. Age replaces recent (last accessed).
 - New list keys: `gg` / `G`, `ctrl+d` / `ctrl+u`, `l` / `h` for the detail panel. The list pages only on `pgup` / `pgdown`, so a bare `u` no longer pages it.

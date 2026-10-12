@@ -14,8 +14,8 @@ const (
 	rowLeadW       = 2  // pin, agent, cursor, and status each take 2
 	rowCountsW     = 11 // ↑n ↓n ~n, right-aligned
 	rowCountsTight = 5  // one collapsed count, e.g. ↓123
-	rowAgeW        = 3
-	rowTailW       = 4 // session and container glyphs
+	rowAgeW        = 4  // git-style age, up to "11mo"
+	rowTailW       = 4  // session and container glyphs
 	rowAliasFloor  = 16
 	rowChipMin     = 10 // "⎇ " plus enough of the branch to recognize
 	rowAliasCap    = 32 // longer aliases truncate rather than shed columns

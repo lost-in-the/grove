@@ -39,7 +39,7 @@ Each worktree is one row. Left to right:
 | Alias | The worktree's short name, truncated in the middle when space is short (`abc-1349-migrate-…-path`) |
 | Branch chip | `⎇ branch`, only when the branch's last segment differs from the alias. `tui.list_secondary` picks `branch`, `dir`, or `off`. |
 | Counts | `↑n` ahead, `↓n` behind, `~n` changed files |
-| Age | Last commit: `now`, `59m`, `23h`, `6d`, `52w`, `2y` |
+| Age | Last commit, rounded the way git does: `45s`, `89m`, `35h`, `13d`, `10w`, `11mo`, `2y` |
 | Tail | Session `⬢` active / `⬡` open, then container `◆` running / `◇` stopped |
 
 The cursor and status are separate columns, so the selected row keeps its status. As the terminal narrows, the chip goes first, then the age, then the counts collapse to the strongest one (`↓`, then `~`, then `↑`), and only then does the alias shorten, down to 16 columns.
@@ -344,7 +344,7 @@ The TUI uses **Bubbletea v2** (Elm Architecture):
 | `internal/tui/theme_v2.go` | `StyleSet` — lipgloss styles built from the color scheme |
 | `internal/tui/row_delegate.go` | The dashboard row (`rowDelegate`); one or two lines |
 | `internal/tui/row_layout.go` | Column widths and the shed order (`layoutColumns`, `middleTruncate`) |
-| `internal/tui/age.go` | Three-cell commit age (`shortAge`) |
+| `internal/tui/age.go` | Commit age, rounded like git's relative dates (`shortAge`) |
 | `internal/tui/view_stack.go` | View stack: frames, push and pop, cursor restore |
 | `internal/tui/compositor.go` | Draws an overlay over a dimmed background (`composeOverlay`) and toasts on top (`composeLayerAt`) |
 | `internal/tui/worktree_list.go` | The dashboard list constructor (`newWorktreeList`) |

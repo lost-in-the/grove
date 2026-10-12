@@ -1,8 +1,8 @@
  [1m[1mtest-project[m · 5 worktrees · ⬍ name                                                                                1/5[m 
                                                                         │                                               
- ❯ ● [1mroot[m                                                      now      │                                               
+ ❯ ● [1mroot[m                                                       0s      │                                               
      test commit for root                                               │                                               
-   ○ feature-auth                                               1h      │                                               
+   ○ feature-auth                                              60m      │                                               
      test commit for feature-auth                                       │                                               
    ○ fix-bug                                                    2h      │                                               
      test commit for fix-bug                                            │                                               

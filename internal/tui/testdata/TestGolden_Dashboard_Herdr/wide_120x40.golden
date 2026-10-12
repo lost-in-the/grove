@@ -1,7 +1,7 @@
  [1m[1mtest-project[m · 5 worktrees · ⬍ name                                                                                1/5[m 
                                                                         │                                               
- ! ❯ ● [1mroot[m                                                    now ⬢    │                                               
- ▸   ○ feature-auth                                             1h ⬡    │                                               
+ ! ❯ ● [1mroot[m                                                     0s ⬢    │                                               
+ ▸   ○ feature-auth                                            60m ⬡    │                                               
      ○ fix-bug                                                  2h ⬡    │                                               
  ✓   ● testing                                                  3h ⬡    │                                               
      ○ refactor                                                 4h ⬡    │                                               
