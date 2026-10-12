@@ -68,6 +68,8 @@ func dashboardActions() []Action {
 		{ID: "worktree.new", Keys: []string{"n"}, Label: "new", Footer: 4,
 			Synonyms: []string{"create", "add", "new worktree"},
 			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { return m.handleDashboardNewKey() }},
+		{ID: "omni.open", Keys: []string{"space"}, Display: "␣", Label: "find",
+			Run: func(m Model, _ string) (tea.Model, tea.Cmd) { return m.openOmni(omniScopeAll) }},
 		{ID: "list.filter", Keys: []string{"/"}, Label: "filter", Footer: 5, Synonyms: []string{"search"}},
 		{ID: "detail.open", Keys: []string{"tab", "l"}, Label: "detail", Footer: 6,
 			Synonyms: []string{"details", "info"},
@@ -88,6 +90,12 @@ func dashboardActions() []Action {
 		// footer and keep the key map and this table in step.
 		{ID: "app.help", Keys: []string{"?"}, Label: "help", Footer: 9},
 		{ID: "app.update", Keys: []string{"u"}, Label: "update", Synonyms: []string{"upgrade"}},
+		{ID: "app.shortcuts", Label: "keyboard shortcuts", Synonyms: []string{"help", "keys", "cli commands"},
+			Run: func(m Model, _ string) (tea.Model, tea.Cmd) {
+				m.helpOverlay.Open(ViewDashboard, m.width, m.height)
+				m.pushView(ViewHelp)
+				return m, nil
+			}},
 		{ID: "app.quit", Keys: []string{"q"}, Label: "quit", Footer: 10, Synonyms: []string{"exit"},
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) { return m, tea.Quit }},
 		{ID: "app.back", Keys: []string{"esc"}, Label: "back",

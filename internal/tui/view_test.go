@@ -46,9 +46,12 @@ func TestViewDashboardEmpty(t *testing.T) {
 	}
 }
 
+// The full key reference stays one action away: ? then "keyboard".
 func TestViewHelpOverlay(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
 	m = sendKey(m, "?")
+	m = typeOmni(m, "keyboard")
+	m = sendKey(m, "enter")
 	v := m.viewString()
 	if !strings.Contains(v, "Navigation") {
 		t.Error("expected 'Navigation' section in help overlay")

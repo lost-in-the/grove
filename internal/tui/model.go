@@ -25,6 +25,7 @@ import (
 	"github.com/lost-in-the/grove/internal/updatecheck"
 	"github.com/lost-in-the/grove/internal/version"
 	"github.com/lost-in-the/grove/internal/worktree"
+	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
 // ActiveView tracks which view is currently displayed.
@@ -43,6 +44,8 @@ const (
 	ViewRename
 	ViewUpdate
 	ViewDetailSheet // full-screen detail below 110 columns
+	ViewOmni        // search over worktrees, actions, PRs, and issues
+	ViewMessages    // session history of warnings and errors
 )
 
 // Model is the root Bubble Tea model.
@@ -94,12 +97,20 @@ type Model struct {
 	// Overlay state
 	deleteState *DeleteState
 	branchForm  *BranchFormState
-	bulkState   *BulkState
-	prState     *PRViewState
-	issueState  *IssueViewState
-	syncState   *SyncState
-	configState *ConfigState
-	renameState *RenameState
+	omni        *OmniState
+
+	// Session caches of PR and issue data, filled whenever a browser
+	// fetches, so omni can search them without calling gh (spec 9.2).
+	prCache      []*tracker.PullRequest
+	issueCache   []*tracker.Issue
+	pendingPR    int // after the PR browser fetches, put its cursor on this PR
+	pendingIssue int
+	bulkState    *BulkState
+	prState      *PRViewState
+	issueState   *IssueViewState
+	syncState    *SyncState
+	configState  *ConfigState
+	renameState  *RenameState
 
 	// Post-create selection
 	pendingSelect string
@@ -268,6 +279,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.PasteMsg:
 		if m.activeView() == ViewBranchForm && m.branchForm != nil {
 			return m, m.branchForm.paste(msg)
+		}
+		if m.activeView() == ViewOmni && m.omni != nil {
+			return m, m.typeOmni(msg)
 		}
 		return m.handleDefault(msg)
 	default:
@@ -500,24 +514,46 @@ func (m Model) handleCreationDone(msg creationDoneMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handlePRsFetched(msg prsFetchedMsg) (tea.Model, tea.Cmd) {
+	if msg.err == nil {
+		m.prCache = msg.prs
+	}
 	if m.prState != nil {
 		m.prState.Loading = false
 		if msg.err != nil {
 			m.prState.Error = msg.err.Error()
 		} else {
 			m.prState.PRs = msg.prs
+			if m.pendingPR != 0 {
+				for i, pr := range msg.prs {
+					if pr.Number == m.pendingPR {
+						m.prState.Cursor = i
+					}
+				}
+				m.pendingPR = 0
+			}
 		}
 	}
 	return m, nil
 }
 
 func (m Model) handleIssuesFetched(msg issuesFetchedMsg) (tea.Model, tea.Cmd) {
+	if msg.err == nil {
+		m.issueCache = msg.issues
+	}
 	if m.issueState != nil {
 		m.issueState.Loading = false
 		if msg.err != nil {
 			m.issueState.Error = msg.err.Error()
 		} else {
 			m.issueState.Issues = msg.issues
+			if m.pendingIssue != 0 {
+				for i, is := range msg.issues {
+					if is.Number == m.pendingIssue {
+						m.issueState.Cursor = i
+					}
+				}
+				m.pendingIssue = 0
+			}
 		}
 	}
 	return m, nil
@@ -936,6 +972,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// ? opens help for views without text input
 	// Views with active text inputs (Create, Rename, Checkout, Fork) pass ? through
 	if key.Matches(msg, m.keys.Help) && !m.viewHasTextInput() {
+		if m.activeView() == ViewDashboard && !m.detailFocused {
+			// On the dashboard, ? is omni scoped to actions (spec 9.1).
+			return m.openOmni(omniScopeActions)
+		}
 		m.helpOverlay.Open(m.activeView(), m.width, m.height)
 		m.pushView(ViewHelp)
 		return m, nil
@@ -966,6 +1006,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleConfigKey(msg)
 	case ViewRename:
 		return m.handleRenameKey(msg)
+	case ViewOmni:
+		return m.handleOmniKey(msg)
 	case ViewDetailSheet:
 		return m.handleDetailSheetKey(msg)
 	case ViewDashboard:
@@ -1414,7 +1456,7 @@ func (m Model) renderFrame(i int) string {
 	if overlay == "" {
 		return m.renderFrame(i - 1)
 	}
-	if v == ViewBranchForm {
+	if v == ViewBranchForm || v == ViewOmni {
 		return composeOverlayAt(m.renderFrame(i-1), overlay, m.width, m.height, formTop)
 	}
 	return composeOverlay(m.renderFrame(i-1), overlay, m.width, m.height)
@@ -1431,6 +1473,10 @@ func (m Model) renderOverlay(v ActiveView) string {
 	case ViewBranchForm:
 		if m.branchForm != nil {
 			return renderBranchForm(m.branchForm, m.width, m.height, m.spinner.View())
+		}
+	case ViewOmni:
+		if m.omni != nil {
+			return renderOmni(m.omni, m.width, m.height)
 		}
 	case ViewBulk:
 		if m.bulkState != nil {
@@ -1532,7 +1578,7 @@ func (m Model) appendUpdateBadge(footer string) string {
 // that should receive ? as a character rather than triggering help.
 func (m Model) viewHasTextInput() bool {
 	switch m.activeView() {
-	case ViewBranchForm, ViewRename:
+	case ViewBranchForm, ViewRename, ViewOmni:
 		return true
 	case ViewPRs:
 		return m.prState != nil && m.prState.Filtering

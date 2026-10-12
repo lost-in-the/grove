@@ -64,6 +64,12 @@ func (h *HelpFooter) HasHighlight() bool {
 // CompactHints returns context-aware key hints for the given view.
 func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 	switch view {
+	case ViewOmni:
+		return []Hint{
+			{"enter", "choose"},
+			{"ctrl+j/k", "move"},
+			{"esc", "close"},
+		}
 	case ViewDetailSheet:
 		return []Hint{
 			{"↑↓", "scroll"},

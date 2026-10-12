@@ -126,6 +126,12 @@ func makeKeyMsg(keyStr string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyPgDown}
 	case "pgup":
 		return tea.KeyPressMsg{Code: tea.KeyPgUp}
+	case "space":
+		return tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}
+	case "ctrl+j":
+		return tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl}
+	case "ctrl+k":
+		return tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl}
 	case "ctrl+d":
 		return tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl}
 	case "ctrl+u":
