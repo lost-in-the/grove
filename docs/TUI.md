@@ -129,7 +129,8 @@ Toast levels:
 | `v` | Show or hide the commit message line |
 | `u` | Open update modal (only when a newer release is cached — the footer badge indicates availability) |
 | `/` | Filter list |
-| `?` | Toggle expanded help |
+| `space` | Find: search worktrees, actions, and loaded PRs and issues (see Find below) |
+| `?` | Find, limited to actions: every dashboard action with its key. `keyboard shortcuts` there opens the full key reference. |
 | `q` / `esc` | Quit |
 
 #### Detail Panel (when focused)
@@ -317,6 +318,20 @@ Press `o` to cycle through sort modes, and `O` to reverse the current one:
 
 The main worktree always stays at the top regardless of sort mode or direction.
 
+## Find
+
+`space` opens a search box over the current screen. Before you type it shows agents that need you (under herdr), pinned worktrees, and recently used ones. As you type it lists, in order:
+
+| Group | Matched on | `enter` |
+|---|---|---|
+| actions | label, plain-language synonyms (`fork`, `checkout`, `trash`) | runs it on the worktree that was selected when you opened Find |
+| worktrees | alias, branch | switches to it |
+| pull requests, issues | number, title, branch | opens the browser with the cursor on it |
+
+Matching is fuzzy, matched letters are highlighted, and a synonym that matched is shown beside the action (`copy worktree · fork`). PRs and issues come only from data already loaded this session: Find never calls `gh`. `ctrl+j` / `ctrl+k` or the arrows move; `esc` closes. The box keeps its size and position while you type.
+
+`?` opens the same box limited to actions. Searching `messages` (or `warnings`, `errors`, `log`) opens the session's warnings and errors, newest first: toasts disappear after a few seconds, these stay until you quit.
+
 ## Pins
 
 Pin up to nine worktrees to the digit keys. Press `m` to open a strip above the footer listing every slot and the worktree in it, then:
@@ -371,6 +386,9 @@ Every dashboard key is an `Action` in `internal/tui/actions.go`: its keys, label
 | `internal/tui/row_layout.go` | Column widths and the shed order (`layoutColumns`, `middleTruncate`) |
 | `internal/tui/responsive.go` | Width tiers: guard under 44, list with a selection line, split at 110 |
 | `internal/tui/detail_sheet.go` | The full-screen detail sheet and the selection line |
+| `internal/tui/omni.go` | Find: sources, fuzzy matching, result groups (`omniResults`) |
+| `internal/tui/omni_view.go` | The Find overlay: state, keys, fixed frame |
+| `internal/tui/messages_view.go` | Session message history overlay |
 | `internal/tui/actions.go` | The dashboard action table (keys, labels, synonyms, footer order) |
 | `internal/tui/strip.go` | Docked strips (`g` goto, `m` pin) drawn above the footer |
 | `internal/tui/pins.go` | Pin rules (`pinSet`): pin, unpin, move, rename, prune |

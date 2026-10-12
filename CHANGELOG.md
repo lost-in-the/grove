@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Text colors meet 4.5:1 contrast on the selected row and header too, in every theme. The focused detail panel's title says `focused`.
 - New `tui.list_secondary` setting: `branch` (default), `dir`, or `off`.
 - Pins: `m` then a digit pins the selected worktree to that slot, shown in the row's first column; a bare digit switches to it, also with a filter applied. `1`-`9` no longer switch by row position.
+- `space` opens Find: one search over worktrees, actions, and the PRs and issues already loaded, with fuzzy matching and plain-language synonyms (`fork` finds copy worktree). `?` opens it limited to actions; the full key reference is the `keyboard shortcuts` action there.
+- Warnings and errors are kept for the session; search `messages` in Find to read them after their toast is gone.
+- The dashboard footer is shorter: `↑↓ navigate · enter switch · ␣ find · tab detail · / filter · g goto · ? help`.
 - `g` opens a goto strip above the footer: `g` top of list, `p` pull requests, `i` issues, `c` config, `u` upgrade grove. The footer shows `g goto`.
 - `-` switches to the previous worktree, as `grove last` does; its row shows `↩`.
 - Below 110 columns the dashboard shows a one-line summary of the selected worktree instead of a cramped detail panel, and `tab` or `l` opens the detail full screen. Under 44 columns a single line asks for more room, and everything is restored when the terminal widens.

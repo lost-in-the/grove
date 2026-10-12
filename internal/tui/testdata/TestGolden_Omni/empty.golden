@@ -1,0 +1,24 @@
+[2m test-project · 5 worktrees · ⬍ name                                        1/5 [m
+[2m                                                                                [m
+[2m ❯ ● root   [m╭──────────────────────────────────────────────────────╮[2m    0s      [m
+[2m   ○ feature[m│ [1mFind[m                                                 │[2m   60m      [m
+[2m   ○ fix-bug[m│ [1m␣ ▏[37;22;7mt[38;5;240;27mype a worktree, action, or #PR                  [m │[2m    2h      [m
+[2m   ● testing[m│ pinned         ❯ root                              1 │[2m    3h      [m
+[2m   ○ refacto[m│ recent           feature-auth                        │[2m    4h      [m
+[2m            [m│                  fix-bug                             │[2m            [m
+[2m            [m│                  testing                             │[2m            [m
+[2m            [m│                  refactor                            │[2m            [m
+[2m            [m│                                                      │[2m            [m
+[2m            [m│                                                      │[2m            [m
+[2m            [m│                                                      │[2m            [m
+[2m            [m│                                                      │[2m            [m
+[2m            [m│                                                      │[2m            [m
+[2m            [m│                                                      │[2m            [m
+[2m            [m│                                                      │[2m            [m
+[2m            [m│                                                      │[2m            [m
+[2m            [m│                                                      │[2m            [m
+[2m            [m│                                                      │[2m            [m
+[2m            [m│ ⏎ stays on root                                      │[2m            [m
+[2m root · test[m│ ⏎ choose · ctrl+j/k move · esc back                  │[2m            [m
+[2m  ↑↓ navigat[m╰──────────────────────────────────────────────────────╯[2m            [m
+[2m  tab detail · / filter · g goto · ? help                                       [m

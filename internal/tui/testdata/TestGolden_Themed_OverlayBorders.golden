@@ -20,5 +20,5 @@
 [2m             [38;2;248;113;113;22m│[m                                                   [38;2;248;113;113m│[39;2m              [m
 [2m             [38;2;248;113;113;22m╰───────────────────────────────────────────────────╯[39;2m              [m
 [2m root · test commit for root                                                    [m
-[2m  ↑↓ navigate · enter switch · U up · n new · / filter                          [m
-[2m  tab detail · o sort · g goto · ? help · q quit                                [m
+[2m  ↑↓ navigate · enter switch · ␣ find                                           [m
+[2m  tab detail · / filter · g goto · ? help                                       [m

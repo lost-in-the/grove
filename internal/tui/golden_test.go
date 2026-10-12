@@ -395,3 +395,41 @@ func TestGolden_Dashboard_GStrip(t *testing.T) {
 		})
 	}
 }
+
+// Omni over the dashboard: empty, with a query, and scoped to actions.
+func TestGolden_Omni(t *testing.T) {
+	cases := map[string]func(m *Model){
+		"empty": func(m *Model) {
+			m.pins = pinSet{"1": "root"}
+			next, _ := m.openOmni(omniScopeAll)
+			*m = next.(Model)
+		},
+		"query": func(m *Model) {
+			next, _ := m.openOmni(omniScopeAll)
+			*m = next.(Model)
+			m.omni.Input.SetValue("fix")
+			m.omni.refresh()
+		},
+		"actions": func(m *Model) {
+			next, _ := m.openOmni(omniScopeActions)
+			*m = next.(Model)
+		},
+	}
+	for name, setup := range cases {
+		t.Run(name, func(t *testing.T) {
+			m := goldenModel(t, sizeStandard, withItems(5), setup)
+			golden.RequireEqual(t, []byte(m.viewString()))
+		})
+	}
+}
+
+// The message history with fixed times, so ages never drift.
+func TestGolden_Messages(t *testing.T) {
+	m := goldenModel(t, sizeStandard, withItems(3), func(m *Model) {
+		m.toast.Show(&Toast{Message: "Created \"auth\" (hook failed: exit 1)", Level: ToastWarning, Duration: time.Hour, CreatedAt: testNow.Add(-2 * time.Hour)})
+		m.toast.Show(&Toast{Message: "Delete failed: worktree is locked", Level: ToastError, Duration: time.Hour, CreatedAt: testNow.Add(-90 * time.Second)})
+		m.toast.Dismiss()
+		m.pushView(ViewMessages)
+	})
+	golden.RequireEqual(t, []byte(m.viewString()))
+}

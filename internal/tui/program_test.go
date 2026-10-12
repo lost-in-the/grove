@@ -69,8 +69,15 @@ func TestProgram_HelpOverlay(t *testing.T) {
 		return regexp.MustCompile(`(?i)rails-app`).MatchString(s)
 	}, teatest.WithDuration(5*time.Second))
 
-	// Press ? for help
+	// ? lists actions; the keyboard shortcuts action opens the full help.
 	tm.Send(tea.KeyPressMsg{Code: '?', Text: "?"})
+	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+		return regexp.MustCompile(`Actions`).MatchString(stripANSI(string(bts)))
+	}, teatest.WithDuration(5*time.Second))
+	for _, r := range "keyboard" {
+		tm.Send(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	// Wait for help overlay text
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
@@ -94,21 +101,18 @@ func TestProgram_HelpOverlay_QuestionMarkToggles(t *testing.T) {
 		return regexp.MustCompile(`(?i)rails-app`).MatchString(s)
 	}, teatest.WithDuration(5*time.Second))
 
-	// Press ? to open the overlay. The overlay footer always renders "esc close",
-	// which is unique to the overlay (the dashboard footer uses "esc back").
+	// ? opens the action list; its prompt is unique to it.
 	tm.Send(tea.KeyPressMsg{Code: '?', Text: "?"})
 
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
-		s := stripANSI(string(bts))
-		return regexp.MustCompile(`esc\s+close`).MatchString(s)
+		return regexp.MustCompile(`type an action`).MatchString(stripANSI(string(bts)))
 	}, teatest.WithDuration(5*time.Second))
 
-	// Press ? again — toggles the overlay closed; overlay footer disappears
-	tm.Send(tea.KeyPressMsg{Code: '?', Text: "?"})
+	// esc closes it; the prompt disappears
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEscape})
 
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
-		s := stripANSI(string(bts))
-		return !regexp.MustCompile(`esc\s+close`).MatchString(s)
+		return !regexp.MustCompile(`type an action`).MatchString(stripANSI(string(bts)))
 	}, teatest.WithDuration(5*time.Second))
 
 	tm.Send(tea.KeyPressMsg{Code: 'q', Text: "q"})

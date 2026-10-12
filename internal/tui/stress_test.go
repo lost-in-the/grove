@@ -163,16 +163,16 @@ func TestStressOverlayCycling(t *testing.T) {
 			m := newTestModel(withItems(5), withSize(80, 24))
 
 			for i := range tt.cycles {
-				// Open help
+				// Open the action list
 				m = sendKey(m, tt.key)
-				if m.activeView() != ViewHelp {
-					t.Fatalf("cycle %d: expected ViewHelp after open", i)
+				if m.activeView() != ViewOmni {
+					t.Fatalf("cycle %d: expected omni after open", i)
 				}
 
-				// Close help
-				m = sendKey(m, tt.key)
-				if m.activeView() == ViewHelp {
-					t.Fatalf("cycle %d: expected help closed", i)
+				// Close it
+				m = sendKey(m, "esc")
+				if m.activeView() == ViewOmni {
+					t.Fatalf("cycle %d: expected omni closed", i)
 				}
 			}
 
@@ -570,12 +570,12 @@ func TestStressMixedOverlaySequence(t *testing.T) {
 	}
 
 	m = sendKey(m, "?")
-	if m.activeView() != ViewHelp {
-		t.Fatal("expected help overlay active")
+	if m.activeView() != ViewOmni {
+		t.Fatal("expected the action list")
 	}
-	m = sendKey(m, "?")
-	if m.activeView() == ViewHelp {
-		t.Fatal("expected help overlay closed")
+	m = sendKey(m, "esc")
+	if m.activeView() == ViewOmni {
+		t.Fatal("expected the action list closed")
 	}
 
 	m = sendKey(m, "j")

@@ -25,6 +25,7 @@ import (
 	"github.com/lost-in-the/grove/internal/updatecheck"
 	"github.com/lost-in-the/grove/internal/version"
 	"github.com/lost-in-the/grove/internal/worktree"
+	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
 // ActiveView tracks which view is currently displayed.
@@ -43,6 +44,8 @@ const (
 	ViewRename
 	ViewUpdate
 	ViewDetailSheet // full-screen detail below 110 columns
+	ViewOmni        // search over worktrees, actions, PRs, and issues
+	ViewMessages    // session history of warnings and errors
 )
 
 // Model is the root Bubble Tea model.
@@ -94,12 +97,21 @@ type Model struct {
 	// Overlay state
 	deleteState *DeleteState
 	branchForm  *BranchFormState
-	bulkState   *BulkState
-	prState     *PRViewState
-	issueState  *IssueViewState
-	syncState   *SyncState
-	configState *ConfigState
-	renameState *RenameState
+	omni        *OmniState
+
+	// Session caches of PR and issue data, filled whenever a browser
+	// fetches, so omni can search them without calling gh (spec 9.2).
+	prCache        []*tracker.PullRequest
+	issueCache     []*tracker.Issue
+	pendingPR      int // after the PR browser fetches, put its cursor on this PR
+	messagesOffset int // first row shown in the message history
+	pendingIssue   int
+	bulkState      *BulkState
+	prState        *PRViewState
+	issueState     *IssueViewState
+	syncState      *SyncState
+	configState    *ConfigState
+	renameState    *RenameState
 
 	// Post-create selection
 	pendingSelect string
@@ -187,6 +199,7 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		list:                l,
 		compactMode:         compact,
 		pins:                pins,
+		now:                 time.Now,
 		lastActive:          lastWorktreeName(stateMgr),
 		spinner:             s,
 		help:                h,
@@ -269,6 +282,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.activeView() == ViewBranchForm && m.branchForm != nil {
 			return m, m.branchForm.paste(msg)
 		}
+		if m.activeView() == ViewOmni && m.omni != nil {
+			return m, m.typeOmni(msg)
+		}
 		return m.handleDefault(msg)
 	default:
 		return m.handleDefault(msg)
@@ -283,6 +299,10 @@ func (m Model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.updateLayout()
 	if m.branchForm != nil {
 		m.branchForm.setWidth(m.width, m.height)
+	}
+	if m.omni != nil {
+		w, _ := omniFrameSize(m.width, m.height)
+		m.omni.Input.SetWidth(max(4, w-8))
 	}
 	tuilog.Printf("WindowSizeMsg: %dx%d, list size: %dx%d", msg.Width, msg.Height, m.list.Width(), m.list.Height())
 	if !wasReady && m.cfgLoadErr != nil {
@@ -500,24 +520,46 @@ func (m Model) handleCreationDone(msg creationDoneMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handlePRsFetched(msg prsFetchedMsg) (tea.Model, tea.Cmd) {
+	// Read and clear the pending PR now, so a failed fetch or a browser
+	// closed before it returned cannot move a later, unrelated open.
+	pending := m.pendingPR
+	m.pendingPR = 0
+	if msg.err == nil {
+		m.prCache = msg.prs
+	}
 	if m.prState != nil {
 		m.prState.Loading = false
 		if msg.err != nil {
 			m.prState.Error = msg.err.Error()
 		} else {
 			m.prState.PRs = msg.prs
+			for i, pr := range msg.prs {
+				if pending != 0 && pr.Number == pending {
+					m.prState.Cursor = i
+				}
+			}
 		}
 	}
 	return m, nil
 }
 
 func (m Model) handleIssuesFetched(msg issuesFetchedMsg) (tea.Model, tea.Cmd) {
+	pending := m.pendingIssue
+	m.pendingIssue = 0
+	if msg.err == nil {
+		m.issueCache = msg.issues
+	}
 	if m.issueState != nil {
 		m.issueState.Loading = false
 		if msg.err != nil {
 			m.issueState.Error = msg.err.Error()
 		} else {
 			m.issueState.Issues = msg.issues
+			for i, is := range msg.issues {
+				if pending != 0 && is.Number == pending {
+					m.issueState.Cursor = i
+				}
+			}
 		}
 	}
 	return m, nil
@@ -936,6 +978,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// ? opens help for views without text input
 	// Views with active text inputs (Create, Rename, Checkout, Fork) pass ? through
 	if key.Matches(msg, m.keys.Help) && !m.viewHasTextInput() {
+		if m.activeView() == ViewDashboard && !m.detailFocused {
+			// On the dashboard, ? is omni scoped to actions (spec 9.1).
+			return m.openOmni(omniScopeActions)
+		}
 		m.helpOverlay.Open(m.activeView(), m.width, m.height)
 		m.pushView(ViewHelp)
 		return m, nil
@@ -966,6 +1012,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleConfigKey(msg)
 	case ViewRename:
 		return m.handleRenameKey(msg)
+	case ViewOmni:
+		return m.handleOmniKey(msg)
+	case ViewMessages:
+		return m.handleMessagesKey(msg)
 	case ViewDetailSheet:
 		return m.handleDetailSheetKey(msg)
 	case ViewDashboard:
@@ -1414,7 +1464,7 @@ func (m Model) renderFrame(i int) string {
 	if overlay == "" {
 		return m.renderFrame(i - 1)
 	}
-	if v == ViewBranchForm {
+	if v == ViewBranchForm || v == ViewOmni {
 		return composeOverlayAt(m.renderFrame(i-1), overlay, m.width, m.height, formTop)
 	}
 	return composeOverlay(m.renderFrame(i-1), overlay, m.width, m.height)
@@ -1432,6 +1482,12 @@ func (m Model) renderOverlay(v ActiveView) string {
 		if m.branchForm != nil {
 			return renderBranchForm(m.branchForm, m.width, m.height, m.spinner.View())
 		}
+	case ViewOmni:
+		if m.omni != nil {
+			return renderOmni(m.omni, m.width, m.height)
+		}
+	case ViewMessages:
+		return m.renderMessages()
 	case ViewBulk:
 		if m.bulkState != nil {
 			return renderBulk(m.bulkState)
@@ -1532,7 +1588,7 @@ func (m Model) appendUpdateBadge(footer string) string {
 // that should receive ? as a character rather than triggering help.
 func (m Model) viewHasTextInput() bool {
 	switch m.activeView() {
-	case ViewBranchForm, ViewRename:
+	case ViewBranchForm, ViewRename, ViewOmni:
 		return true
 	case ViewPRs:
 		return m.prState != nil && m.prState.Filtering

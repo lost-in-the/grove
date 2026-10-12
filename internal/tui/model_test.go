@@ -44,11 +44,11 @@ func TestUpdateDashboardNavigation(t *testing.T) {
 			},
 		},
 		{
-			name: "? opens help overlay",
+			name: "? opens omni scoped to actions",
 			key:  "?",
 			assert: func(t *testing.T, m Model) {
-				if m.activeView() != ViewHelp {
-					t.Errorf("view = %v after ?, want ViewHelp", m.activeView())
+				if m.activeView() != ViewOmni || m.omni.Scope != omniScopeActions {
+					t.Errorf("view = %v after ?, want omni on actions", m.activeView())
 				}
 			},
 		},
@@ -191,16 +191,16 @@ func TestDeleteFlow(t *testing.T) {
 	})
 }
 
+// ? lists actions; esc closes it. A second ? types into the search.
 func TestHelpOverlayToggleFromDashboard(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
 	m = sendKey(m, "?")
-	if m.activeView() != ViewHelp {
-		t.Fatal("expected ViewHelp after first ?")
+	if m.activeView() != ViewOmni {
+		t.Fatal("expected omni after ?")
 	}
-	// Second ? should close
-	m = sendKey(m, "?")
+	m = sendKey(m, "esc")
 	if m.activeView() != ViewDashboard {
-		t.Error("expected ViewDashboard after second ?")
+		t.Error("expected ViewDashboard after esc")
 	}
 }
 

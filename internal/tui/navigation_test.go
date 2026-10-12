@@ -38,8 +38,8 @@ func TestHelpOpensAsFrameAndEscCloses(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(120, 40))
 	next, _ := m.Update(makeKeyMsg("?"))
 	m = next.(Model)
-	if m.activeView() != ViewHelp {
-		t.Fatalf("after ?: view=%v, want ViewHelp", m.activeView())
+	if m.activeView() != ViewOmni {
+		t.Fatalf("after ?: view=%v, want omni", m.activeView())
 	}
 	next, _ = m.Update(makeKeyMsg("esc"))
 	m = next.(Model)

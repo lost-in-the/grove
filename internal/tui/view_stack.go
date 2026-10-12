@@ -111,7 +111,7 @@ func (m *Model) popToRoot() {
 // update overlays describe the view beneath them, so they are skipped.
 func (s viewStack) layoutView() ActiveView {
 	for i := len(s) - 1; i >= 0; i-- {
-		if v := s[i].view; v != ViewHelp && v != ViewUpdate {
+		if v := s[i].view; v != ViewHelp && v != ViewUpdate && v != ViewOmni && v != ViewMessages {
 			return v
 		}
 	}
