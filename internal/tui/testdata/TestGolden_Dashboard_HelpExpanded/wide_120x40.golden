@@ -6,6 +6,8 @@
 [2m   ● testing   [m│   [1mNavigation[m                                                                           │[2m               [m
 [2m   ○ refactor  [m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
 [2m               [m│   [1m↑/k ↓/j[m                       Move up / down                                         │[2m               [m
+[2m               [m│   [1mg[m                             Goto strip (g top, p PRs, i issues, c config, u        │[2m               [m
+[2m               [m│   upgrade)                                                                             │[2m               [m
 [2m               [m│   [1mgg / G[m                        Top / bottom of list                                   │[2m               [m
 [2m               [m│   [1mctrl+d / ctrl+u[m               Half page down / up                                    │[2m               [m
 [2m               [m│   [1menter[m                         Switch to selected worktree                            │[2m               [m
@@ -28,8 +30,6 @@
 [2m               [m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
 [2m               [m│   [1mn[m                             Create new worktree                                    │[2m               [m
 [2m               [m│   [1md[m                             Delete worktree                                        │[2m               [m
-[2m               [m│   [1mR[m                             Rename worktree                                        │[2m               [m
-[2m               [m│   [1mf[m                             Copy worktree to a new branch                          │[2m               [m
 [2m               [m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
 [2m               [m│    [1m↑↓[m scroll · [1mesc[m close                                                               │[2m               [m
 [2m               [m│                                                                                        │[2m               [m

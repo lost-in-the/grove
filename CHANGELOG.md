@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Text colors meet 4.5:1 contrast on the selected row and header too, in every theme. The focused detail panel's title says `focused`.
 - New `tui.list_secondary` setting: `branch` (default), `dir`, or `off`.
 - Pins: `m` then a digit pins the selected worktree to that slot, shown in the row's first column; a bare digit switches to it, also with a filter applied. `1`-`9` no longer switch by row position.
+- `g` opens a goto strip above the footer: `g` top of list, `p` pull requests, `i` issues, `c` config, `u` upgrade grove. The footer shows `g goto`.
 - `-` switches to the previous worktree, as `grove last` does; its row shows `↩`.
 - Below 110 columns the dashboard shows a one-line summary of the selected worktree instead of a cramped detail panel, and `tab` or `l` opens the detail full screen. Under 44 columns a single line asks for more room, and everything is restored when the terminal widens.
 - The New Worktree wizard is now a single form: Branch, Base, and Alias. It never moves or changes size, and its status line says what `enter` will do. A new branch now starts from the configured default branch, not from whatever the main checkout has checked out. An alias already used by another worktree is reported as an error instead of switching to that worktree.
