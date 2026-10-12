@@ -16,7 +16,7 @@ const (
 	formMaxWidth    = 76
 	formHeight      = 14
 	formSuggestRows = 4
-	formLabelWidth  = 9
+	formLabelWidth  = 10
 )
 
 // branchFormSize is the frame's width and height for a terminal size. It
@@ -97,10 +97,15 @@ func (s *BranchFormState) label(name string, f formField) string {
 	if s.Focus == f {
 		marker = Styles.ListCursor.Render("❯ ")
 	}
-	return marker + Styles.DetailLabel.Render(fmt.Sprintf("%-7s", name))
+	return marker + Styles.DetailLabel.Render(fmt.Sprintf("%-8s", name))
 }
 
+// noField labels a read-only row; it never takes focus.
+const noField formField = -1
+
 // bodyLines returns the body and the index of the focused field's line.
+// Every mode returns the same nine rows: Branch, four suggestion rows, then
+// four rows that depend on the mode.
 func (s *BranchFormState) bodyLines(inner int, spinner string) ([]string, int) {
 	if s.Log != nil && (s.Busy || s.Log.IsDone()) {
 		return strings.Split(s.Log.View(spinner), "\n"), 0
@@ -108,19 +113,28 @@ func (s *BranchFormState) bodyLines(inner int, spinner string) ([]string, int) {
 	indent := strings.Repeat(" ", formLabelWidth)
 	lines := []string{s.label("Branch", fieldBranch) + s.Branch.View()}
 	lines = append(lines, s.suggestionLines(indent, inner)...)
-	if s.isNewBranch() {
-		lines = append(lines, s.label("Base", fieldBase)+s.Base.View())
-	} else {
-		lines = append(lines, s.label("Base", fieldBase)+Styles.DetailDim.Render("n/a · existing branch"))
+	switch s.Mode {
+	case formModeCopy:
+		lines = append(lines,
+			s.label("From", noField)+Styles.DetailDim.Render(s.Source.ShortName+" · "+s.Source.Branch),
+			s.label("Alias", fieldAlias)+s.Alias.View(),
+			indent+Styles.DetailDim.Render(s.preview()),
+			s.changesRow(fieldChanges))
+	case formModeSwitch:
+		lines = append(lines,
+			s.label("In", noField)+Styles.DetailDim.Render(s.Source.ShortName),
+			s.label("Now", noField)+Styles.DetailDim.Render(s.Source.Branch),
+			"",
+			s.changesRow(noField))
+	default:
+		if s.isNewBranch() {
+			lines = append(lines, s.label("Base", fieldBase)+s.Base.View())
+		} else {
+			lines = append(lines, s.label("Base", fieldBase)+Styles.DetailDim.Render("n/a · existing branch"))
+		}
+		lines = append(lines, s.label("Alias", fieldAlias)+s.Alias.View(),
+			indent+Styles.DetailDim.Render(s.preview()), "")
 	}
-	lines = append(lines, s.label("Alias", fieldAlias)+s.Alias.View())
-	preview := ""
-	if a := s.aliasValue(); a != "" {
-		preview = fmt.Sprintf("→ %s · session %s",
-			worktree.InterpolateNamePattern(s.opts.NamePattern, s.opts.ProjectName, a),
-			worktree.TmuxSessionName(s.opts.ProjectName, a))
-	}
-	lines = append(lines, indent+Styles.DetailDim.Render(preview), "")
 
 	focus := 0
 	switch s.Focus {
@@ -128,14 +142,63 @@ func (s *BranchFormState) bodyLines(inner int, spinner string) ([]string, int) {
 		focus = 1 + formSuggestRows
 	case fieldAlias:
 		focus = 2 + formSuggestRows
+	case fieldChanges:
+		focus = 4 + formSuggestRows
 	}
 	return lines, focus
+}
+
+// preview names the folder and session the alias produces.
+func (s *BranchFormState) preview() string {
+	a := s.aliasValue()
+	if a == "" {
+		return ""
+	}
+	return fmt.Sprintf("→ %s · session %s",
+		worktree.InterpolateNamePattern(s.opts.NamePattern, s.opts.ProjectName, a),
+		worktree.TmuxSessionName(s.opts.ProjectName, a))
+}
+
+// changesRow is the Changes field, or a blank row when there is nothing to
+// say about changes.
+func (s *BranchFormState) changesRow(f formField) string {
+	line := s.changesLine()
+	if line == "" {
+		return ""
+	}
+	return s.label("Changes", f) + line
+}
+
+// changesLine describes the source's uncommitted changes and, in Copy
+// mode, what will happen to them. It is blank while the check runs and when
+// there are none; the status line covers both.
+func (s *BranchFormState) changesLine() string {
+	switch {
+	case s.wipErr != nil:
+		return Styles.ErrorText.Render("check failed")
+	case !s.HasWIP:
+		return ""
+	case s.Mode == formModeSwitch:
+		return Styles.WarningText.Render("stash " + fileCount(len(s.WIPFiles)) + " before switching")
+	}
+	parts := make([]string, len(changesOrder))
+	for i, w := range changesOrder {
+		mark := "○ "
+		if w == s.Changes {
+			mark = "● "
+		}
+		parts[i] = mark + changesLabel(w)
+	}
+	return strings.Join(parts, "  ") + Styles.DetailDim.Render(" · "+fileCount(len(s.WIPFiles)))
 }
 
 // suggestionLines always returns formSuggestRows lines, so the body never
 // changes height.
 func (s *BranchFormState) suggestionLines(indent string, inner int) []string {
 	out := make([]string, formSuggestRows)
+	if s.Mode == formModeCopy {
+		out[0] = indent + Styles.DetailDim.Render(fmt.Sprintf("new branch from %s's HEAD", s.Source.ShortName))
+	}
 	sg := s.suggestions()
 	start := max(0, min(s.Pick-formSuggestRows+1, len(sg)-formSuggestRows))
 	for i := 0; i < formSuggestRows && start+i < len(sg); i++ {

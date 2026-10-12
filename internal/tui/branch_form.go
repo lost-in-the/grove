@@ -247,6 +247,13 @@ func (s *BranchFormState) cycleChanges(delta int) {
 	s.Changes = changesOrder[(i+delta+len(changesOrder))%len(changesOrder)]
 }
 
+func fileCount(n int) string {
+	if n == 1 {
+		return "1 file"
+	}
+	return fmt.Sprintf("%d files", n)
+}
+
 func (s *BranchFormState) busyVerb() string {
 	switch s.Mode {
 	case formModeCopy:
@@ -598,9 +605,9 @@ func (s *BranchFormState) status() (string, formStatusKind) {
 		switch s.Mode {
 		case formModeCopy:
 			verb := map[WIPStrategy]string{WIPCopy: "copied", WIPMove: "moved", WIPLeave: "left behind"}[s.Changes]
-			return fmt.Sprintf("✓ ready · %d changed files will be %s", len(s.WIPFiles), verb), formStatusReady
+			return fmt.Sprintf("✓ ready · %s changed, will be %s", fileCount(len(s.WIPFiles)), verb), formStatusReady
 		case formModeSwitch:
-			return fmt.Sprintf("✓ ready · %d changed files will be stashed", len(s.WIPFiles)), formStatusReady
+			return fmt.Sprintf("✓ ready · %s changed, will be stashed", fileCount(len(s.WIPFiles))), formStatusReady
 		}
 	}
 	return "✓ ready", formStatusReady

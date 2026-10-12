@@ -1,0 +1,14 @@
+╭──────────────────────────────────────────────────────────────────────╮
+│ [1mCopy auth[m                                                            │
+│ ❯ Branch  [37m[mfeature/auth-copy[7;37m [m                                         │
+│           new branch from auth's HEAD                                │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│   From    auth · feature/auth                                        │
+│   Alias   [37m[m[37mauth-copy[m [37m                                                [m │
+│           → grove-auth-copy · session grove-auth-copy                │
+│                                                                      │
+│ checking for uncommitted changes…                                    │
+│ ⏎ copy · tab field · esc back                                        │
+╰──────────────────────────────────────────────────────────────────────╯
