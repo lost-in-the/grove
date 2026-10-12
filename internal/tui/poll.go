@@ -7,7 +7,6 @@ import (
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/tuilog"
 )
@@ -32,12 +31,11 @@ func agentPollTick() tea.Cmd {
 	return tea.Tick(agentPollInterval, func(time.Time) tea.Msg { return agentPollTickMsg{} })
 }
 
-// pollAgentsCmd lists the multiplexer's sessions. cfg is captured when the
-// command is built: the command runs on another goroutine and must not read
-// the model.
-func pollAgentsCmd(cfg *config.Config, gen int) tea.Cmd {
+// pollAgentsCmd lists the multiplexer's sessions. The caller resolves mx on
+// the update goroutine: the command runs on another one and must not read the
+// model or its config.
+func pollAgentsCmd(mx mux.Multiplexer, gen int) tea.Cmd {
 	return func() tea.Msg {
-		mx := muxFor(cfg)
 		sessions, err := mx.List()
 		return agentPollMsg{gen: gen, sessions: sessions, backend: string(mx.Backend()), err: err}
 	}
@@ -54,7 +52,7 @@ func (m Model) handleAgentPollTick() (tea.Model, tea.Cmd) {
 	}
 	m.pollGen++
 	m.pollInFlight = true
-	return m, tea.Batch(agentPollTick(), pollAgentsCmd(m.cfg, m.pollGen))
+	return m, tea.Batch(agentPollTick(), pollAgentsCmd(muxFor(m.cfg), m.pollGen))
 }
 
 // handleAgentPoll applies a poll's sessions to the items. Only the session

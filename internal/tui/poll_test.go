@@ -7,12 +7,14 @@ import (
 	"testing"
 
 	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/lost-in-the/grove/internal/mux"
 )
 
-// sessionsFor reports a herdr session for every item as it stands, matched
-// by path, so a poll built from it changes nothing until a test edits it.
+// sessionsFor reports a herdr session for every item as it stands, so a
+// poll built from it changes nothing until a test edits it. Sessions match
+// by name: the test paths do not exist, so the index drops them.
 func sessionsFor(m Model) []mux.Session {
 	var out []mux.Session
 	for _, li := range m.list.Items() {
@@ -52,16 +54,32 @@ func itemNamed(m Model, alias string) WorktreeItem {
 	return WorktreeItem{}
 }
 
+// fetchCmds is how many commands a fetch result returns. Running the batch
+// only lists them; none of them runs.
+func fetchCmds(t *testing.T, m Model, backend string) (Model, int) {
+	t.Helper()
+	result, cmd := m.Update(worktreesFetchedMsg{items: makeTestItems(3), backend: backend})
+	batch, ok := cmd().(tea.BatchMsg)
+	if !ok {
+		t.Fatalf("a fetch should return a batch, got %T", cmd())
+	}
+	return result.(Model), len(batch)
+}
+
+// The first herdr fetch adds exactly one command, the tick; a tmux fetch
+// and a later herdr fetch add none.
 func TestPoll_StartsOnlyWhenAgentAware(t *testing.T) {
-	items := makeTestItems(3)
-	m := newTestModel(withSize(100, 24))
-	if m = sendMsg(m, worktreesFetchedMsg{items: items, backend: "herdr"}); !m.polling {
-		t.Error("the first herdr fetch should start the poll")
+	_, tmuxN := fetchCmds(t, newTestModel(withSize(100, 24)), "tmux")
+	m, herdrN := fetchCmds(t, newTestModel(withSize(100, 24)), "herdr")
+	if herdrN != tmuxN+1 || !m.polling {
+		t.Errorf("first herdr fetch: %d commands (tmux %d), polling %v; want one more, the tick", herdrN, tmuxN, m.polling)
 	}
+	if _, againN := fetchCmds(t, m, "herdr"); againN != tmuxN {
+		t.Errorf("a second herdr fetch returned %d commands, want %d: it must not start a second loop", againN, tmuxN)
+	}
+
 	m = newTestModel(withSize(100, 24))
-	if m = sendMsg(m, worktreesFetchedMsg{items: items, backend: "tmux"}); m.polling {
-		t.Error("a tmux fetch must not start the poll")
-	}
+	m = sendMsg(m, worktreesFetchedMsg{items: makeTestItems(3), backend: "tmux"})
 	// A tick under tmux (none should arrive) does not poll or re-arm.
 	result, cmd := m.Update(agentPollTickMsg{})
 	if m = result.(Model); cmd != nil || m.pollInFlight {
@@ -153,16 +171,22 @@ func TestPoll_AttentionSortKeepsCursorOnPath(t *testing.T) {
 		t.Errorf("cursor on %q, want fix-bug", selectedName(m))
 	}
 
-	// With a filter applied the rows still re-sort and nothing blanks.
+	// With a filter applied nothing blanks and the cursor follows its
+	// worktree off the first row, where refiltering leaves it. The filter
+	// orders rows by match score, ties in item order: feature-auth, fix-bug,
+	// refactor before; blocked fix-bug moves ahead of feature-auth after.
 	m.list.SetFilterText("f")
-	m.moveCursorTo(indexOfPath(m.list.VisibleItems(), itemNamed(m, "fix-bug").Path))
+	m.moveCursorTo(indexOfPath(m.list.VisibleItems(), itemNamed(m, "feature-auth").Path))
 	m = inFlight(m)
 	m = sendMsg(m, agentPollMsg{gen: m.pollGen, sessions: withAgent(sessionsFor(m), "fix-bug", mux.AgentBlocked), backend: "herdr"})
-	if m.list.FilterState() != list.FilterApplied || len(m.list.VisibleItems()) == 0 {
-		t.Fatalf("filter %v with %d rows after the poll", m.list.FilterState(), len(m.list.VisibleItems()))
+	if m.list.FilterState() != list.FilterApplied {
+		t.Fatalf("filter %v after the poll", m.list.FilterState())
 	}
-	if first := m.list.VisibleItems()[0].(WorktreeItem); first.ShortName != "fix-bug" || selectedName(m) != "fix-bug" {
-		t.Errorf("filtered: first row %q, cursor %q; want fix-bug for both", first.ShortName, selectedName(m))
+	if got := strings.Join(names(m.list.VisibleItems()), " "); got != "fix-bug feature-auth refactor" {
+		t.Errorf("filtered rows after the poll: %q", got)
+	}
+	if selectedName(m) != "feature-auth" {
+		t.Errorf("filtered: cursor on %q, want feature-auth", selectedName(m))
 	}
 }
 

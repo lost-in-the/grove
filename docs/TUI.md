@@ -326,7 +326,7 @@ Under herdr the dashboard keeps track of which coding agents need you. Under tmu
 - **Header:** counts blocked and done agents (`! 2 blocked · ✓ 1 done`).
 - **Sort:** `o` reaches `attention`, which puts blocked agents first, then done, then working.
 - **`g a`:** moves to the next blocked agent below the cursor, wrapping; with none blocked, to the next done one; with neither, it says `no agents need you`. If the filter hides the target, the filter is cleared.
-- **Poll:** every 3 seconds the dashboard asks herdr for agent state (one `herdr workspace list`). Only the session and agent columns change. Under attention sort the rows re-sort and the cursor stays on the same worktree. A failed poll keeps the last known state and logs a warning.
+- **Poll:** every 3 seconds the dashboard asks herdr for agent state (one `herdr workspace list`). Only the session and agent columns change. Under attention sort the rows re-sort and the cursor stays on the same worktree; while you are typing a filter they wait, and catch up on the next poll. A failed poll keeps the last known state and logs a warning.
 
 ## Find
 
