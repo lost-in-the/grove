@@ -194,16 +194,8 @@ func withConfigOverlay() testOpt {
 		cs.Fields[ConfigTabProtection] = []ConfigField{
 			{Key: "protection.protected", Label: "protected", Value: "main, staging", Loaded: "main, staging", Type: ConfigList, Description: "Protected worktrees (comma-separated)"},
 		}
-		// Build the Huh form so renderConfig shows the form view
-		overlayWidth := 80 * 60 / 100
-		if overlayWidth < 60 {
-			overlayWidth = 60
-		}
-		if overlayWidth > 80 {
-			overlayWidth = 80
-		}
-		cs.buildForms(overlayWidth-6, 0)
 		m.configState = cs
+		cs.buildForms(m.configFormSize())
 	}
 }
 

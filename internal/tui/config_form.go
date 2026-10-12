@@ -78,13 +78,15 @@ func buildSectionForm(fields []ConfigField, vals *configFormValues, width, heigh
 	km.Quit.SetEnabled(false) // grove handles esc
 	km.Select.Filter.SetEnabled(false)
 
+	// Help and errors go off before the height is set: WithHeight reserves
+	// rows for whichever footers are on at the time.
 	return huh.NewForm(huh.NewGroup(huhFields...)).
 		WithTheme(groveHuhTheme()).
 		WithKeyMap(km).
-		WithWidth(width).
-		WithHeight(height).
 		WithShowHelp(false).
-		WithShowErrors(false)
+		WithShowErrors(false).
+		WithWidth(width).
+		WithHeight(height)
 }
 
 // buildConfigHuhField creates a Huh field from a ConfigField.

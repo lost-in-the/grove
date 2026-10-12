@@ -219,62 +219,46 @@ func TestTabName(t *testing.T) {
 }
 
 func TestRenderConfig_AllStates(t *testing.T) {
+	frame := func(edit func(m *Model)) string {
+		m := newTestModel(withItems(3), withSize(100, 30))
+		m.setViewForTest(ViewConfig)
+		m.configState = NewConfigState()
+		_, m.configState.formH = m.configFormSize()
+		edit(&m)
+		return stripAnsi(m.viewString())
+	}
+
 	t.Run("no form yet", func(t *testing.T) {
-		s := NewConfigState()
-		v := renderConfig(s, 80)
-		if v == "" {
-			t.Fatal("expected non-empty render")
-		}
-		if !strings.Contains(v, "Configuration") {
-			t.Error("expected 'Configuration' title")
-		}
-		if !strings.Contains(v, "Loading configuration...") {
-			t.Error("expected loading message when form is nil")
+		if v := frame(func(*Model) {}); !strings.Contains(v, "Loading configuration") || !strings.Contains(v, "settings") {
+			t.Errorf("expected the frame with a loading message:\n%s", v)
 		}
 	})
 
 	t.Run("with form", func(t *testing.T) {
-		s := NewConfigState()
-		cfg := config.LoadDefaults()
-		cfg.ProjectName = "test-project"
-		s.Config = cfg
-		s.Fields = populateConfigFields(cfg)
-		s.buildForms(60, 0)
-
-		v := renderConfig(s, 100)
-		plain := ansiStripRE.ReplaceAllString(v, "")
-		if !strings.Contains(plain, "project_name") {
-			t.Errorf("expected 'project_name' field in render, got:\n%s", v)
-		}
-		if !strings.Contains(plain, "General") {
-			t.Errorf("expected 'General' group title, got:\n%s", v)
+		v := frame(func(m *Model) {
+			cfg := config.LoadDefaults()
+			m.configState.Fields = populateConfigFields(cfg)
+			m.configState.buildForms(m.configFormSize())
+		})
+		if !strings.Contains(v, "project_name") || !strings.Contains(v, "[1] general") {
+			t.Errorf("expected the general section and its tab:\n%s", v)
 		}
 	})
 
 	t.Run("confirming state", func(t *testing.T) {
-		s := NewConfigState()
-		cfg := config.LoadDefaults()
-		s.Config = cfg
-		s.Fields = populateConfigFields(cfg)
-		s.Dirty = true
-		s.Confirming = true
-
-		v := renderConfig(s, 100)
-		if !strings.Contains(v, "Save changes?") {
-			t.Error("expected 'Save changes?' prompt in confirming state")
-		}
-		if !strings.Contains(v, "save") || !strings.Contains(v, "discard") {
-			t.Error("expected save/discard hints in confirming state")
+		v := frame(func(m *Model) {
+			m.configState.Fields = populateConfigFields(config.LoadDefaults())
+			m.configState.buildForms(m.configFormSize())
+			m.configState.Confirming = true
+		})
+		if !strings.Contains(v, "Save changes?") || !strings.Contains(v, "save") || !strings.Contains(v, "discard") {
+			t.Errorf("expected the save prompt:\n%s", v)
 		}
 	})
 
 	t.Run("error state", func(t *testing.T) {
-		s := NewConfigState()
-		s.Err = errTest
-
-		v := renderConfig(s, 80)
-		if !strings.Contains(v, "test error") {
-			t.Error("expected error text in render")
+		if v := frame(func(m *Model) { m.configState.Err = errTest }); !strings.Contains(v, "test error") {
+			t.Errorf("expected the error in the status line:\n%s", v)
 		}
 	})
 }
