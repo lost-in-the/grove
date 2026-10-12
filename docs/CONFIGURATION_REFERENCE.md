@@ -1019,7 +1019,7 @@ Per-run flags:
 
 The check runs in a detached background process and never delays command execution. Notifications are only printed when a newer stable release is available and stdout is a TTY.
 
-The opt-out env vars (`NO_UPDATE_NOTIFIER`, `GROVE_NO_UPDATE_NOTIFIER`, `GROVE_AGENT_MODE`, `GROVE_NONINTERACTIVE`) and the `--no-update-notifier` flag suppress every update surface uniformly: the CLI box on command exit, the `grove version` annotation, the TUI footer badge, and the `u`-keybind modal. Use `grove --check-update` to force a synchronous check that bypasses opt-outs.
+The opt-out env vars (`NO_UPDATE_NOTIFIER`, `GROVE_NO_UPDATE_NOTIFIER`, `GROVE_AGENT_MODE`, `GROVE_NONINTERACTIVE`) and the `--no-update-notifier` flag suppress the passive update notices: the CLI box on command exit, the `grove version` annotation, and the dashboard's header badge. In the dashboard, `g u` is an explicit request, so it still opens the upgrade overlay and reports the cached release. Use `grove --check-update` to force a synchronous check that bypasses opt-outs.
 
 ---
 

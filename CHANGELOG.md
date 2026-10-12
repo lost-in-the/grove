@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Warnings and errors are kept for the session; search `messages` in Find to read them after their toast is gone.
 - The dashboard footer is shorter: `↑↓ navigate · enter switch · ␣ find · tab detail · / filter · g goto · ? help`.
 - `g` opens a goto strip above the footer: `g` top of list, `p` pull requests, `i` issues, `c` config, `u` upgrade grove. The footer shows `g goto`.
+- A newer grove release now shows as a `⭡0.12.0` badge in the header instead of the footer. `g u` opens the upgrade overlay, and says `grove is up to date` when nothing newer is cached; bare `u` no longer does anything. The update opt-outs hide the badge, but `g u` still reports the cached release.
 - Under herdr the dashboard tracks agents that need you: the header counts blocked and done agents, `o` adds an `attention` sort, `g a` jumps to the next blocked (or done) agent, and agent state refreshes every 3 seconds without a full reload.
 - `-` switches to the previous worktree, as `grove last` does; its row shows `↩`.
 - Below 110 columns the dashboard shows a one-line summary of the selected worktree instead of a cramped detail panel, and `tab` or `l` opens the detail full screen. Under 44 columns a single line asks for more room, and everything is restored when the terminal widens.
