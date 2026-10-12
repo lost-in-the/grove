@@ -217,14 +217,17 @@ func (m Model) openConfig() (tea.Model, tea.Cmd) {
 	return m, loadConfigCmd()
 }
 
-// openUpgrade opens the update modal when a newer release is cached, and
-// otherwise says there is nothing to do.
+// openUpgrade opens the upgrade overlay: the newer release when one is
+// cached, otherwise that grove is up to date (spec 12).
 func (m Model) openUpgrade() (tea.Model, tea.Cmd) {
-	if !m.updateAvailable() || m.updateOverlay == nil {
-		m.toast.Show(NewToast("grove is up to date", ToastInfo))
-		return m, nil
+	if m.updateOverlay == nil {
+		m.updateOverlay = NewUpdateOverlay()
 	}
-	m.updateOverlay.Open(version.Version, m.updateLatestVersion, m.updateLatestURL)
+	if m.updateAvailable() {
+		m.updateOverlay.Open(version.Version, m.updateLatestVersion, m.updateLatestURL)
+	} else {
+		m.updateOverlay.Open(version.Version, "", "")
+	}
 	m.pushView(ViewUpdate)
 	return m, nil
 }

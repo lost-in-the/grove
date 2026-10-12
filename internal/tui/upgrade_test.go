@@ -3,6 +3,10 @@ package tui
 import (
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/exp/golden"
+
+	"github.com/lost-in-the/grove/internal/version"
 )
 
 // The badge shows in the header only when update notices are allowed; the
@@ -55,5 +59,37 @@ func TestUpgradeOverlay_UDoesNotClose(t *testing.T) {
 	}
 	if view := stripAnsi(m.updateOverlay.View(100, 24)); !strings.Contains(view, "esc close") || strings.Contains(view, "esc/u") {
 		t.Errorf("the key line should read esc close:\n%s", view)
+	}
+}
+
+// With nothing newer cached, and no overlay built yet, g u still opens the
+// overlay and says grove is up to date (spec 12).
+func TestGU_UpToDateOpensOverlay(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(100, 24))
+	m = sendKey(sendKey(m, "g"), "u")
+	if m.activeView() != ViewUpdate || m.toast.Current != nil {
+		t.Fatalf("g u: view %v, toast %v; want the overlay and no toast", m.activeView(), m.toast.Current)
+	}
+	view := stripAnsi(m.viewString())
+	if !strings.Contains(view, "grove is up to date") || strings.Contains(view, "Brew") {
+		t.Errorf("want the up-to-date state without install commands:\n%s", view)
+	}
+}
+
+func TestGolden_Upgrade(t *testing.T) {
+	// The overlay shows the running version; pin it so a release does not
+	// change the goldens.
+	was := version.Version
+	version.Version = "1.2.3"
+	t.Cleanup(func() { version.Version = was })
+	for name, opts := range map[string][]testOpt{
+		"available":  {withItems(3), withUpdateCached()},
+		"up_to_date": {withItems(3)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := goldenModel(t, sizeStandard, opts...)
+			m = sendKey(sendKey(m, "g"), "u")
+			golden.RequireEqual(t, []byte(m.viewString()))
+		})
 	}
 }

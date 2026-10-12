@@ -59,12 +59,12 @@ func TestGStrip_ListHeightRecovers(t *testing.T) {
 	}
 }
 
-func TestGStrip_UpgradeWithoutUpdateFlashes(t *testing.T) {
+func TestGStrip_UpgradeWithoutUpdateOpensUpToDate(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(120, 40))
 	m = sendKey(m, "g")
 	m = sendKey(m, "u")
-	if m.activeView() != ViewDashboard || m.toast.Message() != "grove is up to date" {
-		t.Errorf("g u: view %v toast %q", m.activeView(), m.toast.Message())
+	if m.activeView() != ViewUpdate || m.toast.Current != nil {
+		t.Errorf("g u: view %v toast %q; want the overlay and no toast", m.activeView(), m.toast.Message())
 	}
 }
 

@@ -1,0 +1,24 @@
+[2m test-project · 3 worktrees · ⬍ name                               ⭡99.0.0  1/3 [m
+[2m                                                                                [m
+[2m ❯ ● root                                                               0s      [m
+[2m   [m╭────────────────────────────────────────────────────────────────────────╮[2m   [m
+[2m   [m│                                                                        │[2m   [m
+[2m   [m│  [1m⭡ Update available[m                                                    │[2m   [m
+[2m   [m│                                                                        │[2m   [m
+[2m   [m│  [38;2;150;156;180mCurrent:    [38;2;205;214;244m1.2.3[m                                                     │[2m   [m
+[2m   [m│  [38;2;150;156;180mLatest:     [38;2;255;255;255;1m99.0.0[m                                                    │[2m   [m
+[2m   [m│                                                                        │[2m   [m
+[2m   [m│  [38;2;150;156;180mBrew:       [38;2;167;139;250mbrew upgrade lost-in-the/tap/grove[m                        │[2m   [m
+[2m   [m│  [38;2;150;156;180mGo:         [38;2;167;139;250mgo install github.com/lost-in-the/grove/cmd/grove@latest[m  │[2m   [m
+[2m   [m│  [38;2;150;156;180mBinary:     [38;2;96;165;250;4mhttps://github.com/lost-in-the/grove/releases[m             │[2m   [m
+[2m   [m│                                                                        │[2m   [m
+[2m   [m│  [38;2;150;156;180mChangelog:  [38;2;96;165;250;4mhttps://example.com/release[m                               │[2m   [m
+[2m   [m│                                                                        │[2m   [m
+[2m   [m│  [38;2;69;71;90m────────────────────────────────────────────────────────────────────[m  │[2m   [m
+[2m   [m│    [1mesc[m close                                                           │[2m   [m
+[2m   [m│                                                                        │[2m   [m
+[2m   [m╰────────────────────────────────────────────────────────────────────────╯[2m   [m
+[2m                                                                                [m
+[2m root · test commit for root                                                    [m
+[2m  ↑↓ navigate · enter switch · ␣ find                                           [m
+[2m  tab detail · / filter · g goto · ? help                                       [m
