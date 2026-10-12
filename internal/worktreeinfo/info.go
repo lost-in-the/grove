@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/lost-in-the/grove/internal/cmdexec"
 )
@@ -152,8 +153,9 @@ func RecentCommits(worktreePath string, n int) []RecentCommit {
 // HeadCommitInfo holds enriched metadata for the HEAD commit of a worktree.
 type HeadCommitInfo struct {
 	ShortHash string
-	Message   string // commit subject
-	Age       string // relative date, e.g. "2 hours ago"
+	Message   string    // commit subject
+	Age       string    // relative date, e.g. "2 hours ago"
+	Time      time.Time // committer date
 }
 
 // HeadAndRecentCommits returns both the HEAD commit info and the n most
@@ -166,9 +168,9 @@ func HeadAndRecentCommits(worktreePath string, n int) (HeadCommitInfo, []RecentC
 	if n < 1 {
 		n = 1
 	}
-	// Format: full_hash<RS>short_hash<RS>subject<RS>relative_date
+	// Format: full_hash<RS>short_hash<RS>subject<RS>relative_date<RS>unix_time
 	out, err := cmdexec.Output(context.TODO(), "git",
-		[]string{"log", fmt.Sprintf("-%d", n), "--format=%H%x1E%h%x1E%s%x1E%cr"},
+		[]string{"log", fmt.Sprintf("-%d", n), "--format=%H%x1E%h%x1E%s%x1E%cr%x1E%ct"},
 		worktreePath, cmdexec.GitLocal)
 	if err != nil {
 		return HeadCommitInfo{}, nil
@@ -188,6 +190,11 @@ func HeadAndRecentCommits(worktreePath string, n int) (HeadCommitInfo, []RecentC
 		short, subject, age := parts[1], parts[2], parts[3]
 		if i == 0 {
 			head = HeadCommitInfo{ShortHash: short, Message: subject, Age: age}
+			if len(parts) > 4 {
+				if sec, err := strconv.ParseInt(parts[4], 10, 64); err == nil {
+					head.Time = time.Unix(sec, 0)
+				}
+			}
 		}
 		recents = append(recents, RecentCommit{SHA: short, Message: subject})
 	}

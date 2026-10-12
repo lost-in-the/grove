@@ -78,6 +78,9 @@ func withLoading() testOpt {
 }
 
 // makeTestItems generates n WorktreeItem values for testing.
+// testNow is the fixed clock for tests and goldens, so ages never drift.
+var testNow = time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
+
 func makeTestItems(n int) []WorktreeItem {
 	names := []string{"root", "feature-auth", "fix-bug", "testing", "refactor", "docs", "perf", "ci", "staging", "dev"}
 	items := make([]WorktreeItem, n)
@@ -91,6 +94,7 @@ func makeTestItems(n int) []WorktreeItem {
 			Commit:        "abc1234",
 			CommitMessage: "test commit for " + name,
 			CommitAge:     "2 hours ago",
+			CommitTime:    testNow.Add(-time.Duration(i) * time.Hour),
 			IsMain:        i == 0,
 			IsCurrent:     i == 0,
 			IsDirty:       i%3 == 0,

@@ -32,6 +32,7 @@ type WorktreeItem struct {
 	Commit         string
 	CommitMessage  string
 	CommitAge      string
+	CommitTime     time.Time // HEAD's committer date; zero when unknown
 	IsDirty        bool
 	DirtyFiles     []string
 	IsMain         bool
@@ -214,6 +215,7 @@ func (fc *fetchContext) enrichGitInfo(item *WorktreeItem, tree *worktree.Worktre
 	item.Commit = commitInfo.ShortHash
 	item.CommitMessage = commitInfo.Message
 	item.CommitAge = commitInfo.Age
+	item.CommitTime = commitInfo.Time
 	item.RecentCommits = recents
 
 	// Dirty file list was populated by Manager.List(); split it here.
