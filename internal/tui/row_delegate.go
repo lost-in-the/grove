@@ -134,7 +134,7 @@ func (d rowDelegate) Render(w io.Writer, m list.Model, index int, listItem list.
 	switch {
 	case selected:
 		left.WriteString(st(Styles.ListCursor).Render("❯") + sp)
-	case d.LastActive != "" && item.displayName() == d.LastActive:
+	case d.LastActive != "" && !item.IsCurrent && item.displayName() == d.LastActive:
 		left.WriteString(st(Styles.TextMuted).Render("↩") + sp)
 	default:
 		left.WriteString(plain.Render("  "))

@@ -309,3 +309,12 @@ func TestRowDelegate_LastActiveMarker(t *testing.T) {
 		t.Errorf("selected last-active row shows the cursor: %q", l)
 	}
 }
+
+// ↩ marks where - goes; on the current worktree it would go nowhere.
+func TestRowDelegate_NoLastActiveMarkerOnCurrent(t *testing.T) {
+	d := testRowDelegate()
+	d.LastActive = "root"
+	if l := ansi.Strip(renderRows(d, rowFixture(), 80, 1)[0]); strings.Contains(l, "↩") {
+		t.Errorf("current worktree shows ↩: %q", l)
+	}
+}
