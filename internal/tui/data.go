@@ -283,10 +283,17 @@ func FetchDetailMetrics(items []WorktreeItem, defaultBranch string) map[string]D
 // FetchWorktrees gathers all enriched worktree data for display.
 // pluginMgr is optional — pass nil to skip plugin status collection.
 func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager, pluginMgr ...*plugins.Manager) ([]WorktreeItem, error) {
+	items, _, err := fetchWorktreesAndBackend(mgr, stateMgr, pluginMgr...)
+	return items, err
+}
+
+// fetchWorktreesAndBackend is FetchWorktrees plus the multiplexer backend it
+// resolved, which the dashboard uses to decide once whether it is agent-aware.
+func fetchWorktreesAndBackend(mgr *worktree.Manager, stateMgr *state.Manager, pluginMgr ...*plugins.Manager) ([]WorktreeItem, string, error) {
 	trees, err := mgr.List()
 	if err != nil {
 		// Manager.List already wraps with "failed to list worktrees".
-		return nil, err
+		return nil, "", err
 	}
 
 	fc := loadFetchContext(mgr, stateMgr)
@@ -357,5 +364,5 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager, pluginMgr ..
 		}
 	}
 
-	return items, nil
+	return items, fc.backend, nil
 }

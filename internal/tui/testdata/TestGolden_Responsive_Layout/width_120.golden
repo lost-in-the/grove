@@ -1,19 +1,19 @@
  [1m[1mtest-project[m  ·  5 worktrees  ·  on root  ·  ↕ name                                                             ● root[m 
                                                                         │                                               
- 1 ❯ root ────────────────────────────────────────────────────── 2h ago │                                               
-       test commit for root                                             │                                               
+ ❯ ● [1mroot[m                                                      now      │                                               
+     test commit for root                                               │                                               
+   ○ feature-auth                                               1h      │                                               
+     test commit for feature-auth                                       │                                               
+   ○ fix-bug                                                    2h      │                                               
+     test commit for fix-bug                                            │                                               
+   ● testing                                                    3h      │                                               
+     test commit for testing                                            │                                               
+   ○ refactor                                                   4h      │                                               
+     test commit for refactor                                           │                                               
                                                                         │                                               
- 2 ○ feature-a… ──────────────────────────────────────────────── 2h ago │                                               
-       test commit for feature-auth                                     │                                               
                                                                         │                                               
- 3 ○ fix-bug ─────────────────────────────────────────────────── 2h ago │                                               
-       test commit for fix-bug                                          │                                               
                                                                         │                                               
- 4 ● testing ─────────────────────────────────────────────────── 2h ago │                                               
-       test commit for testing                                          │                                               
                                                                         │                                               
- 5 ○ refactor ────────────────────────────────────────────────── 2h ago │                                               
-       test commit for refactor                                         │                                               
                                                                         │                                               
                                                                         │                                               
                                                                         │                                               

@@ -19,8 +19,7 @@ func newTestModel(opts ...testOpt) Model {
 
 	s := GroveSpinner()
 
-	delegate := NewWorktreeDelegateV2()
-	l := newWorktreeList(delegate)
+	l := newWorktreeList(rowDelegate{Secondary: "branch", Now: func() time.Time { return testNow }})
 
 	h := help.New()
 
@@ -32,6 +31,7 @@ func newTestModel(opts ...testOpt) Model {
 		spinner:     s,
 		help:        h,
 		toast:       NewToastModel(),
+		now:         func() time.Time { return testNow },
 		helpFooter:  NewHelpFooter(),
 		helpOverlay: NewHelpOverlay(),
 		detail:      viewport.New(viewport.WithWidth(80), viewport.WithHeight(20)),

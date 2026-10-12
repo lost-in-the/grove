@@ -306,6 +306,8 @@ func withHerdrItems(n int) testOpt {
 			listItems[i] = items[i]
 		}
 		m.list.SetItems(listItems)
+		m.agentAware = true
+		m.refreshDelegate()
 	}
 }
 

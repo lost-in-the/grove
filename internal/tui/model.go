@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -110,10 +111,15 @@ type Model struct {
 
 	// Layout
 	width, height int
-	compactMode   bool // true = V1 single-line delegate, false = V2 two-line
+	compactMode   bool // true = one-line rows, false = rows with the commit message
 
-	// List delegate (stored for header rendering in compact mode)
-	listDelegate WorktreeDelegate
+	// agentAware is true when the first fetch reported the herdr backend.
+	// It is decided once, so columns never appear or vanish mid-session.
+	agentAware    bool
+	agentAwareSet bool
+
+	// now is the clock rows use for ages; tests pin it.
+	now func() time.Time
 }
 
 // NewModel creates a new TUI model.
@@ -134,16 +140,7 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		compact = *prefs.CompactMode
 	}
 
-	var delegate list.ItemDelegate
-	var v1Delegate WorktreeDelegate
-	if compact {
-		v1Delegate = NewWorktreeDelegate()
-		delegate = v1Delegate
-	} else {
-		delegate = NewWorktreeDelegateV2()
-	}
-
-	l := newWorktreeList(delegate)
+	l := newWorktreeList(rowDelegate{TwoLine: !compact, Secondary: "branch"})
 
 	h := help.New()
 
@@ -175,7 +172,6 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		cfgLoadErr:          cfgErr,
 		keys:                keys,
 		list:                l,
-		listDelegate:        v1Delegate,
 		compactMode:         compact,
 		spinner:             s,
 		help:                h,
@@ -301,7 +297,10 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 	// Capture SetItems' cmd: with a filter applied it re-runs the filter, and
 	// dropping it left the list showing no items until the user re-filtered (B38).
 	setItemsCmd := m.list.SetItems(listItems)
-	m.computeColumnWidths()
+	if !m.agentAwareSet && msg.backend != "" {
+		m.agentAware, m.agentAwareSet = msg.backend == "herdr", true
+	}
+	m.refreshDelegate()
 	m.loading = false
 
 	if m.pendingSelect != "" {
@@ -697,11 +696,7 @@ func (m *Model) updateLayout() {
 
 	contentWidth := m.width - 2 // body padding (1 char each side)
 
-	// Column headers + separator are only shown in compact mode (2 lines).
 	listHeaderHeight := 0
-	if m.compactMode {
-		listHeaderHeight = 2
-	}
 
 	useSideBySide := isWideLayout(m.width)
 	if useSideBySide {
@@ -734,7 +729,7 @@ func (m *Model) updateLayout() {
 		m.detail.SetHeight(detailHeight)
 	}
 
-	m.computeColumnWidths()
+	m.refreshDelegate()
 
 	m.help.SetWidth(contentWidth)
 }
@@ -749,42 +744,29 @@ func (m *Model) toggleCompactMode() {
 		tuilog.Printf("warning: failed to save UI prefs: %v", err)
 	}
 
-	if m.compactMode {
-		d := ComputeDelegateWidths(m.list.Items(), m.list.Width())
-		m.listDelegate = d
-		m.list.SetDelegate(d)
-	} else {
-		d := ComputeDelegateWidthsV2(m.list.Items(), m.list.Width())
-		m.list.SetDelegate(d)
-	}
+	m.refreshDelegate()
 	m.updateLayout()
 	m.updateDetailContent()
 }
 
-// delegateHeight returns the item height for the active delegate.
+// delegateHeight returns the row height for the current density.
 func (m *Model) delegateHeight() int {
-	if m.compactMode {
-		return 1
-	}
-	return 2
+	return m.rowDelegate().Height()
 }
 
-// computeColumnWidths scans list items to find max name/branch lengths,
-// then distributes available width proportionally.
-func (m *Model) computeColumnWidths() {
-	listWidth := m.list.Width()
-	if listWidth <= 0 {
-		return
+// rowDelegate is the dashboard row delegate for the current settings.
+func (m *Model) rowDelegate() rowDelegate {
+	return rowDelegate{
+		TwoLine:    !m.compactMode,
+		AgentAware: m.agentAware,
+		Secondary:  "branch",
+		Now:        m.now,
 	}
+}
 
-	if m.compactMode {
-		d := ComputeDelegateWidths(m.list.Items(), listWidth)
-		m.listDelegate = d
-		m.list.SetDelegate(d)
-	} else {
-		d := ComputeDelegateWidthsV2(m.list.Items(), listWidth)
-		m.list.SetDelegate(d)
-	}
+// refreshDelegate installs the row delegate for the current settings.
+func (m *Model) refreshDelegate() {
+	m.list.SetDelegate(m.rowDelegate())
 }
 
 func (m *Model) updateDetailContent() {
@@ -1230,7 +1212,7 @@ func (m Model) handleRenameKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m *Model) applySortToList() tea.Cmd {
 	sorted := sortWorktreeItems(m.list.Items(), m.sortMode)
 	cmd := m.list.SetItems(sorted)
-	m.computeColumnWidths()
+	m.refreshDelegate()
 	m.updateDetailContent()
 	return cmd
 }
@@ -1592,17 +1574,8 @@ func (m Model) renderDashboardBody() string {
 
 func (m Model) renderSideBySideBody() string {
 	listWidth := m.list.Width()
-	listContent := m.list.View()
-	if m.compactMode {
-		header := renderListHeader(m.listDelegate, listWidth)
-		listContent = lipgloss.JoinVertical(lipgloss.Left, header, listContent)
-	}
-	listContent = lipgloss.NewStyle().Width(listWidth).Render(listContent)
-	dividerHeight := m.list.Height()
-	if m.compactMode {
-		dividerHeight += 2
-	}
-	divider := renderVerticalDivider(dividerHeight, Colors.SurfaceDim)
+	listContent := lipgloss.NewStyle().Width(listWidth).Render(m.list.View())
+	divider := renderVerticalDivider(m.list.Height(), Colors.SurfaceDim)
 	detailView := m.renderDetailPanel()
 	return lipgloss.JoinHorizontal(lipgloss.Top, listContent, divider, detailView)
 }
@@ -1610,10 +1583,6 @@ func (m Model) renderSideBySideBody() string {
 func (m Model) renderStackedBody() string {
 	bodyWidth := m.width - 2
 	listView := m.list.View()
-	if m.compactMode {
-		header := renderListHeader(m.listDelegate, bodyWidth)
-		listView = lipgloss.JoinVertical(lipgloss.Left, header, listView)
-	}
 	separator := renderNamedSeparator(m.selectedItemName(), bodyWidth)
 	detailView := m.renderDetailPanel()
 	return lipgloss.JoinVertical(lipgloss.Left, listView, separator, detailView)

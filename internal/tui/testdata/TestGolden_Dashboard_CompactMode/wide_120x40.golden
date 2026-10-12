@@ -1,12 +1,12 @@
  [1m[1mtest-project[m  ·  5 worktrees  ·  on root  ·  ↕ name                                                             ● root[m 
-     NAME         BRANCH       AGE     ± ↕    ⬡ ◆                       │                                               
- ────────────────────────────────────────────────────────────────────── │                                               
                                                                         │                                               
- 1 ❯ [1mroot        [m root         2h ago  ●                                │                                               
- 2 ○ feature-auth feature-auth 2h ago  ✓                                │                                               
- 3 ○ fix-bug      fix-bug      2h ago  ✓                                │                                               
- 4 ● testing      testing      2h ago  ●                                │                                               
- 5 ○ refactor     refactor     2h ago  ✓                                │                                               
+ ❯ ● [1mroot[m                                                      now      │                                               
+   ○ feature-auth                                               1h      │                                               
+   ○ fix-bug                                                    2h      │                                               
+   ● testing                                                    3h      │                                               
+   ○ refactor                                                   4h      │                                               
+                                                                        │                                               
+                                                                        │                                               
                                                                         │                                               
                                                                         │                                               
                                                                         │                                               

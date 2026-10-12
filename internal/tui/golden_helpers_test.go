@@ -238,13 +238,11 @@ func withSortMode(mode SortMode) testOpt {
 	}
 }
 
-// withCompactMode switches the model to compact (V1) delegate.
+// withCompactMode switches the model to one-line rows.
 func withCompactMode() testOpt {
 	return func(m *Model) {
 		m.compactMode = true
-		d := ComputeDelegateWidths(m.list.Items(), m.list.Width())
-		m.listDelegate = d
-		m.list.SetDelegate(d)
+		m.refreshDelegate()
 		m.updateLayout()
 	}
 }

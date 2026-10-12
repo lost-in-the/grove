@@ -1,10 +1,10 @@
 [2m test-project  ·  3 worktrees  ·  on root  ·  ↕ name                     ● root [m
 [2m          [m╭──────────────────────────────────────────────────────────╮[2m          [m
-[2m 1 ❯ root [m│                                                          │[2m── 2h ago [m
-[2m       tes[m│  [1mConfiguration[m                                           │[2m          [m
-[2m   •••    [m│                                                          │[2m          [m
-[2m ── root ─[m│  [1mGeneral[m                                                 │[2m───────── [m
-[2m          [m│  ┃ [1mproject_name[m                                          │[2m          [m
+[2m ❯ ● root [m│                                                          │[2m now      [m
+[2m     test [m│  [1mConfiguration[m                                           │[2m          [m
+[2m          [m│                                                          │[2m          [m
+[2m   •••    [m│  [1mGeneral[m                                                 │[2m          [m
+[2m ── root ─[m│  ┃ [1mproject_name[m                                          │[2m───────── [m
 [2m          [m│  ┃ Project name                                          │[2m          [m
 [2m          [m│  ┃ > grove-cli[7m [m                                          │[2m          [m
 [2m          [m│                                                          │[2m          [m

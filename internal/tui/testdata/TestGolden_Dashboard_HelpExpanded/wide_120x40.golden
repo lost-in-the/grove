@@ -1,19 +1,19 @@
 [2m test-project  ·  5 worktrees  ·  on root  ·  ↕ name                                                             ● root [m
 [2m                                                                        │                                               [m
-[2m 1 ❯ root ────────────────────────────────────────────────────── 2h ago │                                               [m
-[2m       test com[m╭────────────────────────────────────────────────────────────────────────────────────────╮[2m               [m
+[2m ❯ ● root                                                      now      │                                               [m
+[2m     test commi[m╭────────────────────────────────────────────────────────────────────────────────────────╮[2m               [m
+[2m   ○ feature-au[m│                                                                                        │[2m               [m
+[2m     test commi[m│   [1mNavigation[m                                                                           │[2m               [m
+[2m   ○ fix-bug   [m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
+[2m     test commi[m│   [1m↑/k ↓/j[m                       Move up / down                                         │[2m               [m
+[2m   ● testing   [m│   [1menter[m                         Switch to selected worktree                            │[2m               [m
+[2m     test commi[m│   [1mU[m                             Switch and start containers                            │[2m               [m
+[2m   ○ refactor  [m│   [1m1-9[m                           Quick-switch by number                                 │[2m               [m
+[2m     test commi[m│   [1m/[m                             Filter worktrees                                       │[2m               [m
+[2m               [m│   [1mtab[m                           Focus detail panel                                     │[2m               [m
 [2m               [m│                                                                                        │[2m               [m
-[2m 2 ○ feature-a…[m│   [1mNavigation[m                                                                           │[2m               [m
-[2m       test com[m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
-[2m               [m│   [1m↑/k ↓/j[m                       Move up / down                                         │[2m               [m
-[2m 3 ○ fix-bug ──[m│   [1menter[m                         Switch to selected worktree                            │[2m               [m
-[2m       test com[m│   [1mU[m                             Switch and start containers                            │[2m               [m
-[2m               [m│   [1m1-9[m                           Quick-switch by number                                 │[2m               [m
-[2m 4 ● testing ──[m│   [1m/[m                             Filter worktrees                                       │[2m               [m
-[2m       test com[m│   [1mtab[m                           Focus detail panel                                     │[2m               [m
-[2m               [m│                                                                                        │[2m               [m
-[2m 5 ○ refactor ─[m│   [1mDetail Panel (when focused)[m                                                          │[2m               [m
-[2m       test com[m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
+[2m               [m│   [1mDetail Panel (when focused)[m                                                          │[2m               [m
+[2m               [m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
 [2m               [m│   [1m↑/k ↓/j[m                       Scroll up / down                                       │[2m               [m
 [2m               [m│   [1mg / G[m                         Jump to top / bottom                                   │[2m               [m
 [2m               [m│   [1mctrl+u / ctrl+d[m               Half page up / down                                    │[2m               [m

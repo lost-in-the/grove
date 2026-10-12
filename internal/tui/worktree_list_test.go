@@ -8,7 +8,7 @@ import (
 )
 
 func TestNewWorktreeList_DisablesListQuit(t *testing.T) {
-	l := newWorktreeList(NewWorktreeDelegateV2())
+	l := newWorktreeList(rowDelegate{})
 	if l.KeyMap.Quit.Enabled() {
 		t.Fatal("list Quit binding is enabled; grove handles quitting, so the list's own binding must be off")
 	}
@@ -17,7 +17,7 @@ func TestNewWorktreeList_DisablesListQuit(t *testing.T) {
 // The list re-derives its bindings on SetItems, SetSize, and filter changes,
 // so the guard must survive those, not just construction.
 func TestNewWorktreeList_QuitStaysDisabledAfterListUpdates(t *testing.T) {
-	l := newWorktreeList(NewWorktreeDelegateV2())
+	l := newWorktreeList(rowDelegate{})
 	l.SetItems([]list.Item{makeTestItems(1)[0]})
 	l.SetSize(80, 24)
 	l.SetFilteringEnabled(true)
@@ -30,7 +30,7 @@ func TestNewWorktreeList_QuitStaysDisabledAfterListUpdates(t *testing.T) {
 }
 
 func TestNewWorktreeList_KeepsGroveBindings(t *testing.T) {
-	l := newWorktreeList(NewWorktreeDelegateV2())
+	l := newWorktreeList(rowDelegate{})
 	if got := l.KeyMap.Filter.Keys(); len(got) != 1 || got[0] != "/" {
 		t.Errorf("Filter keys = %v, want [/]", got)
 	}

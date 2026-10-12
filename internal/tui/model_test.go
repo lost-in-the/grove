@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
+
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
@@ -490,15 +492,16 @@ func TestRenderTmuxValueHerdrStatuses(t *testing.T) {
 	}
 }
 
-func TestTmuxStatusSymbolCoversHerdrStatuses(t *testing.T) {
+func TestTailGlyphsCoverHerdrStatuses(t *testing.T) {
+	same := func(s lipgloss.Style) lipgloss.Style { return s }
 	for _, status := range []string{"attached", "active"} {
-		if got := tmuxStatusSymbol(WorktreeItem{TmuxStatus: status}); !strings.Contains(got, "⬢") {
-			t.Errorf("tmuxStatusSymbol(%q) = %q, want the filled badge", status, got)
+		if got := tailGlyphs(WorktreeItem{TmuxStatus: status}, same, " "); !strings.Contains(got, "⬢") {
+			t.Errorf("tailGlyphs(%q) = %q, want the filled badge", status, got)
 		}
 	}
 	for _, status := range []string{"detached", "open"} {
-		if got := tmuxStatusSymbol(WorktreeItem{TmuxStatus: status}); !strings.Contains(got, "⬡") {
-			t.Errorf("tmuxStatusSymbol(%q) = %q, want the hollow badge", status, got)
+		if got := tailGlyphs(WorktreeItem{TmuxStatus: status}, same, " "); !strings.Contains(got, "⬡") {
+			t.Errorf("tailGlyphs(%q) = %q, want the hollow badge", status, got)
 		}
 	}
 }

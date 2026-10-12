@@ -134,8 +134,8 @@ func joinCaptured(a, b string) string {
 }
 
 func (m Model) fetchWorktrees() tea.Msg {
-	items, err := FetchWorktrees(m.worktreeMgr, m.stateMgr, m.pluginMgr)
-	return worktreesFetchedMsg{items: items, err: err}
+	items, backend, err := fetchWorktreesAndBackend(m.worktreeMgr, m.stateMgr, m.pluginMgr)
+	return worktreesFetchedMsg{items: items, backend: backend, err: err}
 }
 
 // fetchDetailMetricsCmd returns a tea.Cmd that loads the detail-panel-only
