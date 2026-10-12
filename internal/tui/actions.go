@@ -97,16 +97,16 @@ func dashboardActions() []Action {
 				return m, tea.Quit
 			}},
 
-		{ID: "worktree.delete", Keys: []string{"d"}, Label: "delete worktree",
+		{ID: "worktree.delete", Enabled: notMainOrProtected, Keys: []string{"d"}, Label: "delete worktree",
 			Synonyms: []string{"remove", "trash", "rm"},
 			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { return m.handleDashboardDeleteKey() }},
-		{ID: "worktree.rename", Keys: []string{"R"}, Label: "rename worktree",
+		{ID: "worktree.rename", Enabled: notMainOrProtected, Keys: []string{"R"}, Label: "rename worktree",
 			Synonyms: []string{"move", "retitle"},
 			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { return m.handleDashboardRenameKey() }},
 		{ID: "worktree.copy", Keys: []string{"f"}, Label: "copy worktree",
 			Synonyms: []string{"fork", "duplicate", "clone"},
 			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { return m.handleDashboardForkKey() }},
-		{ID: "worktree.switch_branch", Keys: []string{"b"}, Label: "switch branch",
+		{ID: "worktree.switch_branch", Enabled: notMainOrProtected, Keys: []string{"b"}, Label: "switch branch",
 			Synonyms: []string{"checkout", "change branch"},
 			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { return m.handleDashboardCheckoutKey() }},
 		{ID: "worktree.sync", Keys: []string{"s"}, Label: "sync changes",
@@ -226,4 +226,11 @@ func dashboardFooterHints() []Hint {
 		hints[i] = Hint{a.display(), a.Label}
 	}
 	return hints
+}
+
+// notMainOrProtected enables actions that cannot apply to the main or a
+// protected worktree.
+func notMainOrProtected(m Model) bool {
+	item, ok := m.selectedItem()
+	return ok && !item.IsMain && !item.IsProtected
 }

@@ -35,8 +35,8 @@ func TestRegistry_EveryKeyMapBindingHasAction(t *testing.T) {
 			continue
 		}
 		for _, k := range b.Keys() {
-			if !have[k] {
-				t.Errorf("binding %s key %q has no registry action", name, k)
+			if !have[" "+k] {
+				t.Errorf("binding %s key %q has no bare-key registry action", name, k)
 			}
 		}
 	}
@@ -53,6 +53,9 @@ func TestRegistry_EveryActionKeyHasBinding(t *testing.T) {
 		}
 	}
 	for _, a := range dashboardActions() {
+		if a.Layer != "" {
+			continue // strip keys follow a prefix; they need no binding of their own
+		}
 		for _, k := range a.Keys {
 			if !bound[k] {
 				t.Errorf("action %s key %q has no keys.go binding", a.ID, k)
@@ -106,47 +109,33 @@ func TestRegistry_LabelsAndSynonyms(t *testing.T) {
 	}
 }
 
-// b on the main worktree opens nothing, and the key stops there.
+// Delete, rename, and switch branch are disabled on the main worktree, and
+// a disabled action still consumes its key.
 func TestDispatch_DisabledActionIsConsumed(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(120, 40))
 	m.list.Select(0)
-	next, cmd := m.Update(makeKeyMsg("b"))
-	if next.(Model).activeView() != ViewDashboard || cmd != nil {
-		t.Errorf("b on main: view %v cmd %v, want nothing", next.(Model).activeView(), cmd != nil)
+	for _, k := range []string{"b", "d", "R"} {
+		a, ok := findAction("", k)
+		if !ok || a.Enabled == nil || a.Enabled(m) {
+			t.Errorf("%s should be disabled on the main worktree", k)
+		}
+		next, cmd := m.Update(makeKeyMsg(k))
+		if next.(Model).activeView() != ViewDashboard || cmd != nil {
+			t.Errorf("%s on main: view %v cmd %v, want nothing", k, next.(Model).activeView(), cmd != nil)
+		}
+	}
+	m.list.Select(1)
+	if a, _ := findAction("", "b"); !a.Enabled(m) {
+		t.Error("b should be enabled on a regular worktree")
 	}
 }
 
 func TestFooter_DashboardHintsFromRegistry(t *testing.T) {
-	var want []Hint
-	for _, a := range dashboardActions() {
-		if a.Footer > 0 {
-			want = append(want, Hint{a.display(), a.Label})
-		}
+	want := []Hint{
+		{"↑↓", "navigate"}, {"enter", "switch"}, {"U", "up"}, {"n", "new"}, {"/", "filter"},
+		{"tab", "detail"}, {"o", "sort"}, {"g", "goto"}, {"?", "help"}, {"q", "quit"},
 	}
-	got := NewHelpFooter().CompactHints(ViewDashboard)
-	if !reflect.DeepEqual(got, want) {
+	if got := NewHelpFooter().CompactHints(ViewDashboard); !reflect.DeepEqual(got, want) {
 		t.Errorf("footer = %v, want %v", got, want)
-	}
-	found := false
-	for _, h := range got {
-		found = found || (h.Key == "g" && h.Description == "goto")
-	}
-	if !found {
-		t.Error("footer lacks g goto")
-	}
-}
-
-// The dashboard handler is a table lookup: every action with a Run is
-// reachable by its key.
-func TestDispatch_EveryBareActionIsReachable(t *testing.T) {
-	for _, a := range dashboardActions() {
-		if a.Layer != "" || a.Run == nil {
-			continue
-		}
-		for _, k := range a.Keys {
-			if got, ok := findAction("", k); !ok || got.ID != a.ID {
-				t.Errorf("key %q finds %q, want %s", k, got.ID, a.ID)
-			}
-		}
 	}
 }

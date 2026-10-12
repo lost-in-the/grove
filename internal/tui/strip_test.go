@@ -80,3 +80,25 @@ func TestStrip_FitsWidth(t *testing.T) {
 		}
 	}
 }
+
+func TestGStrip_UpgradeWithUpdateOpensModal(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.updateOverlay = NewUpdateOverlay()
+	m.updateLatestVersion, m.updateLatestURL = "99.0.0", "https://example.com/release"
+	m = sendKey(m, "g")
+	m = sendKey(m, "u")
+	if m.activeView() != ViewUpdate {
+		t.Errorf("g u with an update cached: view %v, want the update modal", m.activeView())
+	}
+}
+
+// Opening a strip shrinks the list; the selected row stays on screen.
+func TestGStrip_SelectedRowStaysVisible(t *testing.T) {
+	m := newTestModel(withItems(10), withSize(80, 16))
+	m.updateLayout()
+	m.moveCursorTo(9)
+	m = sendKey(m, "g")
+	if !strings.Contains(ansi.Strip(m.viewString()), "❯ ● dev") && !strings.Contains(ansi.Strip(m.viewString()), "❯ ○ dev") {
+		t.Errorf("selected row dev scrolled out of view with the strip open:\n%s", ansi.Strip(m.viewString()))
+	}
+}
