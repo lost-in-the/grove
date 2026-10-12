@@ -2,45 +2,30 @@ package tui
 
 import (
 	"fmt"
-	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/lost-in-the/grove/internal/state"
 	"github.com/lost-in-the/grove/internal/tuilog"
 )
 
-// handlePinKey handles m and the digits (spec 8.1). m opens the pin strip;
-// the next key pins (1-9), unpins (0), or closes it. A bare 1-9 switches to
-// the worktree in that slot.
-func (m Model) handlePinKey(msg tea.KeyPressMsg) (Model, tea.Cmd, bool) {
+// handlePinStripKey takes the key after m (spec 8.1): a digit pins (1-9)
+// or unpins (0) the selected worktree; any other key only closes the strip.
+// ctrl+c still quits.
+func (m Model) handlePinStripKey(msg tea.KeyPressMsg) (Model, tea.Cmd, bool) {
 	k := msg.String()
-	if m.pendingM {
-		m.pendingM = false
-		if len(k) == 1 && k[0] >= '0' && k[0] <= '9' {
-			if item, ok := m.selectedItem(); ok {
-				alias := item.ShortName
-				m.changePins(func(p pinSet) pinSet { return p.pin(k, alias) })
-			}
+	m.pendingM = false
+	if len(k) == 1 && k[0] >= '0' && k[0] <= '9' {
+		if item, ok := m.selectedItem(); ok {
+			alias := item.ShortName
+			m.changePins(func(p pinSet) pinSet { return p.pin(k, alias) })
 		}
-		m.updateLayout()
-		if k == "ctrl+c" {
-			return m, nil, false // still quits
-		}
-		return m, nil, true
 	}
-	switch {
-	case k == "m":
-		m.pendingM = true
-		m.updateLayout()
-		return m, nil, true
-	case len(k) == 1 && k[0] >= '1' && k[0] <= '9':
-		updated, cmd := m.switchToSlot(k)
-		return updated, cmd, true
+	m.updateLayout()
+	if k == "ctrl+c" {
+		return m, nil, false
 	}
-	return m, nil, false
+	return m, nil, true
 }
 
 // switchToSlot switches to the worktree pinned to slot, or flashes that the
@@ -79,54 +64,22 @@ func (m *Model) changePins(op func(pinSet) pinSet) {
 }
 
 // pinStripLines is the m strip (spec 8.2): a title naming the selected
-// worktree, then every slot with its alias, wrapped to the width.
+// worktree, then every slot with its alias.
 func (m Model) pinStripLines() []string {
-	width := max(20, m.width-2)
-	selected := ""
+	desc := "pin to slot"
 	if item, ok := m.selectedItem(); ok {
-		selected = " · " + item.ShortName + " is selected"
+		desc += " · " + item.ShortName + " is selected"
 	}
-	title := " " + Styles.HelpKey.Render("m") + Styles.HelpDesc.Render(" pin to slot"+selected)
-	title = ansi.Truncate(title, width, "…")
-	entry := func(key, desc string) string {
-		return Styles.HelpKey.Render(key) + " " + Styles.HelpDesc.Render(desc)
-	}
-	var entries []string
+	var entries []stripEntry
 	for d := '1'; d <= '9'; d++ {
-		alias := middleTruncate(m.pins[string(d)], 20)
+		alias := m.pins[string(d)]
 		if alias == "" {
 			alias = "·"
 		}
-		entries = append(entries, entry(string(d), alias))
+		entries = append(entries, stripEntry{string(d), alias})
 	}
-	entries = append(entries, entry("0", "unpin"), entry("esc", "close"))
-
-	lines := []string{title}
-	line := " "
-	for _, e := range entries {
-		next := line + " " + e
-		if line != " " {
-			next = line + "   " + e
-		}
-		if lipgloss.Width(next) > width && line != " " {
-			lines = append(lines, line)
-			next = "  " + e
-		}
-		line = next
-	}
-	return append(lines, line)
-}
-
-func (m Model) renderPinStrip() string {
-	return strings.Join(m.pinStripLines(), "\n")
-}
-
-// pinStripHeight is the strip's height while it is open, else 0.
-func (m Model) pinStripHeight() int {
-	if !m.pendingM {
-		return 0
-	}
-	return len(m.pinStripLines())
+	entries = append(entries, stripEntry{"0", "unpin"}, stripEntry{"esc", "close"})
+	return stripLines(stripTitle("m", desc), entries, m.width-2)
 }
 
 // switchToLastActive switches to the worktree used before this one, as

@@ -102,6 +102,7 @@ Toast levels:
 |-----|--------|
 | `↑` / `k` | Move up |
 | `↓` / `j` | Move down |
+| `g` | Open the goto strip: `g` top of list, `p` pull requests, `i` issues, `c` config, `u` upgrade grove. Any other key closes it. |
 | `g` `g` / `G` | Top / bottom of the list |
 | `ctrl+d` / `ctrl+u` | Half a page down / up |
 | `pgdown` / `pgup`, `home` / `end` | Page down / up, first / last page |
@@ -353,6 +354,9 @@ The TUI uses **Bubbletea v2** (Elm Architecture):
 - `charm.land/lipgloss/v2` — styling (ANSI-aware widths, colors, borders)
 - `charm.land/bubbles/v2` — components (list, textinput, viewport)
 
+### Action Registry
+Every dashboard key is an `Action` in `internal/tui/actions.go`: its keys, label, plain-language synonyms, layer (`""` or `"g"`), footer position, an enabled check, and what it runs. Dispatch, the footer hints, and the strips read this table. `actions_test.go` checks it against `keys.go` both ways, so a new binding without an action (or an action without a binding) fails the build. Add dashboard keys there, not in `handleDashboardKey`.
+
 ### Key Patterns
 - **ANSI-aware string measurement** — always use `lipgloss.Width(s)` not `len(s)` for visible width
 - **Style.Render()** for applying styles, not `Style.SetString()` + `Style.String()`
@@ -367,6 +371,8 @@ The TUI uses **Bubbletea v2** (Elm Architecture):
 | `internal/tui/row_layout.go` | Column widths and the shed order (`layoutColumns`, `middleTruncate`) |
 | `internal/tui/responsive.go` | Width tiers: guard under 44, list with a selection line, split at 110 |
 | `internal/tui/detail_sheet.go` | The full-screen detail sheet and the selection line |
+| `internal/tui/actions.go` | The dashboard action table (keys, labels, synonyms, footer order) |
+| `internal/tui/strip.go` | Docked strips (`g` goto, `m` pin) drawn above the footer |
 | `internal/tui/pins.go` | Pin rules (`pinSet`): pin, unpin, move, rename, prune |
 | `internal/tui/pins_view.go` | Pin and `-` keys, and the `m` strip |
 | `internal/tui/age.go` | Commit age, rounded like git's relative dates (`shortAge`) |

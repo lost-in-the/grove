@@ -70,17 +70,7 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 			{"esc", "list"},
 		}
 	case ViewDashboard:
-		return []Hint{
-			{"↑↓", "navigate"},
-			{"enter", "switch"},
-			{"U", "up"},
-			{"n", "new"},
-			{"/", "filter"},
-			{"tab", "detail"},
-			{"o", "sort"},
-			{"?", "help"},
-			{"q", "quit"},
-		}
+		return dashboardFooterHints()
 	case ViewIssues:
 		return []Hint{
 			{"↑↓", "navigate"},
