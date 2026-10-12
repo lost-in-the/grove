@@ -80,7 +80,7 @@ func TestHelpKeepsFooterOfViewBeneath(t *testing.T) {
 // on top of the delete box and hides it, so the delete box is checked in the
 // frame beneath help.
 func TestRenderFrame_HelpOverDeleteDrawsDeleteBeneath(t *testing.T) {
-	m := goldenModel(t, sizeUltraWide, withItems(5), withDeleteOverlay())
+	m := goldenModel(t, sizeUltraWide, withItems(5), withTwoLine(), withDeleteOverlay())
 	withHelpExpanded()(&m)
 	top := ansi.Strip(m.viewString())
 	if !strings.Contains(top, "Toggle branch deletion") {

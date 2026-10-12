@@ -134,13 +134,16 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 
 	s := GroveSpinner()
 
-	// Determine compact mode: persisted preference > config > default (false)
-	compact := cfg != nil && cfg.TUI.CompactList != nil && *cfg.TUI.CompactList
-	if prefs := loadUIPrefs(projectRoot); prefs != nil && prefs.CompactMode != nil {
-		compact = *prefs.CompactMode
+	var configCompact, prefCompact *bool
+	if cfg != nil {
+		configCompact = cfg.TUI.CompactList
 	}
+	if prefs := loadUIPrefs(projectRoot); prefs != nil {
+		prefCompact = prefs.CompactMode
+	}
+	compact := startupCompact(configCompact, prefCompact)
 
-	l := newWorktreeList(rowDelegate{TwoLine: !compact, Secondary: "branch"})
+	l := newWorktreeList(rowDelegate{TwoLine: !compact, Secondary: listSecondary(cfg)})
 
 	h := help.New()
 
@@ -754,12 +757,33 @@ func (m *Model) delegateHeight() int {
 	return m.rowDelegate().Height()
 }
 
+// startupCompact decides the starting density: a saved preference, else the
+// tui.compact_list config, else one-line rows (spec 5.4).
+func startupCompact(config, pref *bool) bool {
+	switch {
+	case pref != nil:
+		return *pref
+	case config != nil:
+		return *config
+	}
+	return true
+}
+
+// listSecondary is the text after the alias: "branch" (default), "dir", or
+// "off" (tui.list_secondary).
+func listSecondary(cfg *config.Config) string {
+	if cfg == nil || cfg.TUI.ListSecondary == "" {
+		return "branch"
+	}
+	return cfg.TUI.ListSecondary
+}
+
 // rowDelegate is the dashboard row delegate for the current settings.
 func (m *Model) rowDelegate() rowDelegate {
 	return rowDelegate{
 		TwoLine:    !m.compactMode,
 		AgentAware: m.agentAware,
-		Secondary:  "branch",
+		Secondary:  listSecondary(m.cfg),
 		Now:        m.now,
 	}
 }

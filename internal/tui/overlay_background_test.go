@@ -11,7 +11,7 @@ import (
 // delete overlay is centered well to its right, so every message visible
 // without the overlay must stay visible with it.
 func TestOverlay_KeepsBackgroundRowsVisible(t *testing.T) {
-	m := goldenModel(t, sizeUltraWide, withItems(10))
+	m := goldenModel(t, sizeUltraWide, withItems(10), withTwoLine())
 
 	before := ansi.Strip(m.renderDashboard())
 	var visible []string

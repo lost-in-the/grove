@@ -10,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/plugins"
 )
@@ -198,5 +199,50 @@ func TestAgentAware_SetOnceFromFirstFetch(t *testing.T) {
 	next, _ = next.(Model).Update(worktreesFetchedMsg{items: makeTestItems(2), backend: "herdr"})
 	if next.(Model).agentAware {
 		t.Error("a later fetch flipped agentAware on")
+	}
+}
+
+func TestStartupCompact(t *testing.T) {
+	yes, no := true, false
+	for _, c := range []struct {
+		name         string
+		config, pref *bool
+		want         bool
+	}{
+		{"default is one line", nil, nil, true},
+		{"saved false keeps two lines", nil, &no, false},
+		{"config false gives two lines", &no, nil, false},
+		{"saved pref beats config", &no, &yes, true},
+	} {
+		if got := startupCompact(c.config, c.pref); got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestDensity_VToggles(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.projectRoot = t.TempDir()
+	m.compactMode = true
+	m.refreshDelegate()
+	m = sendKey(m, "v")
+	if h := m.rowDelegate().Height(); h != 2 {
+		t.Errorf("after v: height %d, want 2", h)
+	}
+	m = sendKey(m, "v")
+	if h := m.rowDelegate().Height(); h != 1 {
+		t.Errorf("after v again: height %d, want 1", h)
+	}
+}
+
+func TestListSecondaryFromConfig(t *testing.T) {
+	for in, want := range map[string]string{"": "branch", "branch": "branch", "dir": "dir", "off": "off"} {
+		cfg := &config.Config{TUI: config.TUIConfig{ListSecondary: in}}
+		if got := listSecondary(cfg); got != want {
+			t.Errorf("listSecondary(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if got := listSecondary(nil); got != "branch" {
+		t.Errorf("nil config = %q", got)
 	}
 }

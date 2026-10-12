@@ -238,10 +238,10 @@ func withSortMode(mode SortMode) testOpt {
 	}
 }
 
-// withCompactMode switches the model to one-line rows.
-func withCompactMode() testOpt {
+// withTwoLine switches the model to rows with the commit message.
+func withTwoLine() testOpt {
 	return func(m *Model) {
-		m.compactMode = true
+		m.compactMode = false
 		m.refreshDelegate()
 		m.updateLayout()
 	}

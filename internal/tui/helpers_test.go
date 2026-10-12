@@ -32,6 +32,7 @@ func newTestModel(opts ...testOpt) Model {
 		help:        h,
 		toast:       NewToastModel(),
 		now:         func() time.Time { return testNow },
+		compactMode: true,
 		helpFooter:  NewHelpFooter(),
 		helpOverlay: NewHelpOverlay(),
 		detail:      viewport.New(viewport.WithWidth(80), viewport.WithHeight(20)),

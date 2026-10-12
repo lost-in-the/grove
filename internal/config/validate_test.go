@@ -210,3 +210,29 @@ func TestValidateDockerPlugin_FileNotDir(t *testing.T) {
 		t.Errorf("expected error about not being a directory, got %q", err.Error())
 	}
 }
+
+func TestValidate_ListSecondary(t *testing.T) {
+	for _, val := range []string{"", "branch", "dir", "off"} {
+		cfg := &Config{DefaultBranch: "main", Switch: SwitchConfig{DirtyHandling: "prompt"}, TUI: TUIConfig{ListSecondary: val}}
+		if err := Validate(cfg); err != nil {
+			t.Errorf("list_secondary %q should pass, got %v", val, err)
+		}
+	}
+	cfg := &Config{DefaultBranch: "main", Switch: SwitchConfig{DirtyHandling: "prompt"}, TUI: TUIConfig{ListSecondary: "bogus"}}
+	err := Validate(cfg)
+	if err == nil || !strings.Contains(err.Error(), "branch, dir, off") {
+		t.Errorf("list_secondary bogus: err = %v, want one naming branch, dir, off", err)
+	}
+}
+
+func TestMergeTUIConfig_ListSecondary(t *testing.T) {
+	base := TUIConfig{ListSecondary: "branch"}
+	mergeTUIConfig(&base, &TUIConfig{ListSecondary: "dir"})
+	if base.ListSecondary != "dir" {
+		t.Errorf("override not applied: %q", base.ListSecondary)
+	}
+	mergeTUIConfig(&base, &TUIConfig{})
+	if base.ListSecondary != "dir" {
+		t.Errorf("empty override cleared the value: %q", base.ListSecondary)
+	}
+}
