@@ -63,25 +63,25 @@ func dashboardActions() []Action {
 		{ID: "worktree.switch", Keys: []string{"enter"}, Label: "switch to worktree", Short: "switch", Footer: 2,
 			Synonyms: []string{"go to", "open", "cd"},
 			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { return m.handleDashboardEnterKey() }},
-		{ID: "worktree.switch_up", Keys: []string{"U"}, Label: "switch and start containers", Short: "up", Footer: 3,
+		{ID: "worktree.switch_up", Keys: []string{"U"}, Label: "switch and start containers", Short: "up",
 			Synonyms: []string{"switch and start containers", "docker up"},
 			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { return m.handleDashboardSwitchUpKey() }},
-		{ID: "worktree.new", Keys: []string{"n"}, Label: "new worktree", Short: "new", Footer: 4,
+		{ID: "worktree.new", Keys: []string{"n"}, Label: "new worktree", Short: "new",
 			Synonyms: []string{"create", "add", "new worktree"},
 			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { return m.handleDashboardNewKey() }},
-		{ID: "omni.open", Keys: []string{"space"}, Display: "␣", Label: "find",
+		{ID: "omni.open", Keys: []string{"space"}, Display: "␣", Label: "find", Footer: 3,
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) { return m.openOmni(omniScopeAll) }},
 		{ID: "list.filter", Keys: []string{"/"}, Label: "filter", Footer: 5, Synonyms: []string{"search"}},
-		{ID: "detail.open", Keys: []string{"tab", "l"}, Label: "show detail", Short: "detail", Footer: 6,
+		{ID: "detail.open", Keys: []string{"tab", "l"}, Label: "show detail", Short: "detail", Footer: 4,
 			Synonyms: []string{"details", "info"},
 			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { m.openDetail(); return m, nil }},
-		{ID: "list.sort", Keys: []string{"o"}, Label: "change sort", Short: "sort", Footer: 7,
+		{ID: "list.sort", Keys: []string{"o"}, Label: "change sort", Short: "sort",
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) {
 				m.helpFooter.SetHighlight("o")
 				m.sortMode = m.sortMode.Next()
 				return m, m.applySortToList()
 			}},
-		{ID: "goto.open", Keys: []string{"g"}, Label: "goto", Footer: 8,
+		{ID: "goto.open", Keys: []string{"g"}, Label: "goto", Footer: 6,
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) {
 				m.pendingG = true
 				m.updateLayout()
@@ -89,7 +89,7 @@ func dashboardActions() []Action {
 			}},
 		// ? and u run from handleKey in every view; their entries feed the
 		// footer and keep the key map and this table in step.
-		{ID: "app.help", Keys: []string{"?"}, Label: "help", Footer: 9},
+		{ID: "app.help", Keys: []string{"?"}, Label: "help", Footer: 7},
 		{ID: "app.update", Keys: []string{"u"}, Label: "update", Synonyms: []string{"upgrade"}},
 		{ID: "app.messages", Label: "messages", Synonyms: []string{"warnings", "errors", "log", "history"},
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) { return m.openMessages() }},
@@ -99,7 +99,7 @@ func dashboardActions() []Action {
 				m.pushView(ViewHelp)
 				return m, nil
 			}},
-		{ID: "app.quit", Keys: []string{"q"}, Label: "quit", Footer: 10, Synonyms: []string{"exit"},
+		{ID: "app.quit", Keys: []string{"q"}, Label: "quit", Synonyms: []string{"exit"},
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) { return m, tea.Quit }},
 		{ID: "app.back", Keys: []string{"esc"}, Label: "back",
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) {
