@@ -4,6 +4,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestToastLevelIcon(t *testing.T) {
@@ -185,16 +188,37 @@ func TestToastViewContainsContent(t *testing.T) {
 	}
 }
 
-func TestToastViewRightAligned(t *testing.T) {
+// View returns only the box; the compositor places it.
+func TestToastViewIsTheBoxOnly(t *testing.T) {
 	tm := NewToastModel()
 	tm.Show(NewToast("short", ToastSuccess))
 	view := tm.View(80)
-
 	if view == "" {
 		t.Fatal("view should not be empty")
 	}
-	// The view should have leading spaces (right-aligned)
-	if !strings.HasPrefix(view, " ") {
-		t.Error("toast view should be right-aligned with leading spaces")
+	if strings.HasPrefix(view, " ") {
+		t.Error("toast view should not carry left padding")
+	}
+	if w := lipgloss.Width(view); w >= 80 {
+		t.Errorf("toast width = %d, want the box's own width", w)
+	}
+}
+
+// The toast draws over the top-right of the screen, above everything.
+func TestToast_VisibleOnDashboard(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 24), withToastVisible("Deleted testing", ToastSuccess))
+	out := ansi.Strip(m.viewString())
+	if !strings.Contains(out, "Deleted testing") {
+		t.Fatalf("toast not drawn:\n%s", out)
+	}
+	if first := strings.SplitN(out, "\n", 2)[0]; !strings.HasPrefix(strings.TrimSpace(first), "test-project") {
+		t.Errorf("toast covered the header's left side: %q", first)
+	}
+}
+
+func TestToast_VisibleOverPRBrowser(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40), withPRData(), withToastVisible("Loaded PRs", ToastInfo))
+	if out := ansi.Strip(m.viewString()); !strings.Contains(out, "Loaded PRs") {
+		t.Fatalf("toast not drawn over the PR browser:\n%s", out)
 	}
 }

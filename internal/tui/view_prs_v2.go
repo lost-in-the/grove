@@ -320,13 +320,6 @@ func (m Model) renderContextPanel(cfg contextPanelConfig) string {
 		body = lipgloss.JoinVertical(lipgloss.Left, listContent, separator, detailView)
 	}
 
-	if m.toast != nil && m.toast.Current != nil {
-		toastView := m.toast.View(m.width)
-		if toastView != "" {
-			statusBar = compositeToastOnHeader(statusBar, toastView, m.width)
-		}
-	}
-
 	body = lipgloss.NewStyle().Padding(0, 1).Render(body)
 
 	if m.height > 0 && bodyBudget > 0 {

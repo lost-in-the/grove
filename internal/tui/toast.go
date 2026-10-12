@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"image/color"
-	"strings"
 	"time"
 
 	lipgloss "charm.land/lipgloss/v2"
@@ -138,8 +137,8 @@ func (tm *ToastModel) Message() string {
 	return tm.Current.Message
 }
 
-// View renders the toast right-aligned within the given width.
-// Returns empty string if no toast is active.
+// View renders the toast box, at most width cells wide. The compositor
+// places it. Returns empty string if no toast is active.
 func (tm *ToastModel) View(width int) string {
 	if tm.Current == nil {
 		return ""
@@ -156,11 +155,8 @@ func (tm *ToastModel) View(width int) string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(t.Level.borderColor()).
 		Padding(0, 1).
+		MaxWidth(width).
 		Render(content)
 
-	boxWidth := lipgloss.Width(box)
-	padding := width - boxWidth
-	padding = max(padding, 0)
-
-	return strings.Repeat(" ", padding) + box
+	return box
 }

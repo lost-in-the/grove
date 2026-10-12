@@ -1368,7 +1368,17 @@ func (m Model) viewContent() string {
 		return m.viewEmpty()
 	}
 
-	return m.renderFrame(len(m.views) - 1)
+	return m.withToast(m.renderFrame(len(m.views) - 1))
+}
+
+// withToast draws the current toast over the top-right corner of a finished
+// screen, above any overlay.
+func (m Model) withToast(screen string) string {
+	if m.toast == nil || m.toast.Current == nil {
+		return screen
+	}
+	box := m.toast.View(m.width)
+	return composeLayerAt(screen, box, m.width, m.height, m.width-lipgloss.Width(box), 0)
 }
 
 // renderFrame renders frame i of the view stack; -1 is the dashboard root.
@@ -1541,8 +1551,6 @@ func (m Model) renderDashboard() string {
 	}
 	footer = m.appendUpdateBadge(footer)
 
-	statusBar = m.applyToastToHeader(statusBar)
-
 	body = lipgloss.NewStyle().Padding(0, 1).Render(body)
 	body = m.clampBodyToHeight(body, footer)
 
@@ -1609,18 +1617,6 @@ func (m Model) renderStackedBody() string {
 	separator := renderNamedSeparator(m.selectedItemName(), bodyWidth)
 	detailView := m.renderDetailPanel()
 	return lipgloss.JoinVertical(lipgloss.Left, listView, separator, detailView)
-}
-
-// applyToastToHeader composites a toast notification onto the header if one is active.
-func (m Model) applyToastToHeader(statusBar string) string {
-	if m.toast == nil || m.toast.Current == nil {
-		return statusBar
-	}
-	toastView := m.toast.View(m.width)
-	if toastView == "" {
-		return statusBar
-	}
-	return compositeToastOnHeader(statusBar, toastView, m.width)
 }
 
 // clampBodyToHeight trims the body so statusBar + body + footer fits exactly m.height lines.
@@ -1731,28 +1727,6 @@ func (m Model) dashboardDetailFocusedHints() []Hint {
 	}
 	hints = append(hints, Hint{"tab", "list"}, Hint{"esc", "list"})
 	return hints
-}
-
-// compositeToastOnHeader overlays a right-aligned toast onto the header line,
-// avoiding layout shift in alt-screen mode.
-func compositeToastOnHeader(header, toast string, width int) string {
-	headerWidth := lipgloss.Width(header)
-	toastWidth := lipgloss.Width(toast)
-
-	// If both fit, place toast on the right side of the header line
-	if headerWidth+toastWidth+2 <= width {
-		gap := width - headerWidth - toastWidth
-		return header + strings.Repeat(" ", gap) + toast
-	}
-
-	// If toast alone fits, it takes priority (temporary notification)
-	if toastWidth < width {
-		padding := width - toastWidth
-		return strings.Repeat(" ", padding) + toast
-	}
-
-	// Fallback: just show header
-	return header
 }
 
 // clampLines pads or trims s to exactly n lines.
