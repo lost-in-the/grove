@@ -1749,7 +1749,7 @@ func renderDetailV2Focused(item *WorktreeItem, width int) string {
 		Width(width - 2).
 		Render(body)
 
-	title := " " + Styles.DetailTitle.Render(item.ShortName) + " "
+	title := " " + Styles.DetailTitle.Render(item.ShortName) + Styles.TextMuted.Render(" · focused") + " "
 	card = injectBorderTitleWithColor(card, title, Colors.Primary)
 
 	return card

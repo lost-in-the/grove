@@ -80,82 +80,25 @@ func TestContrastRatio(t *testing.T) {
 	}
 }
 
-func TestDefaultColorScheme_MeetsWCAGAA(t *testing.T) {
-	const darkBg = "#1E1E2E"
-	const lightBg = "#FFFFFF"
+// Every text color reads at 4.5:1 or better on every background it is drawn
+// on: the surface, the selected row, and the header bar (spec 5.9).
+func TestPalette_TextContrast(t *testing.T) {
 	const minRatio = 4.5
-
-	type pair struct {
-		dark  string
-		light string
-	}
-
-	fgColors := map[string]pair{
-		"Primary":    {dark: "#A78BFA", light: "#7C3AED"},
-		"Success":    {dark: "#34D399", light: "#047857"},
-		"Warning":    {dark: "#FBBF24", light: "#92400E"},
-		"Danger":     {dark: "#F87171", light: "#DC2626"},
-		"Info":       {dark: "#60A5FA", light: "#2563EB"},
-		"TextNormal": {dark: "#CDD6F4", light: "#1E293B"},
-		"TextBright": {dark: "#FFFFFF", light: "#0F172A"},
-		"TextMuted":  {dark: "#9399B2", light: "#475569"},
-	}
-
-	for name, fg := range fgColors {
-		t.Run(name+"/dark", func(t *testing.T) {
-			if _, _, _, err := HexToRGB(fg.dark); err != nil {
-				t.Fatalf("%s dark color is invalid: %v", name, err)
+	for pname, p := range map[string]Palette{"default": DefaultPalette, "high-contrast": HighContrastPalette} {
+		texts := map[string]Pair{
+			"Primary": p.Primary, "Secondary": p.Secondary,
+			"Success": p.Success, "Warning": p.Warning, "Danger": p.Danger, "Info": p.Info,
+			"TextNormal": p.TextNormal, "TextBright": p.TextBright, "TextMuted": p.TextMuted, "TextDim": p.TextDim,
+		}
+		bgs := map[string]Pair{"SurfaceBg": p.SurfaceBg, "SelectionBg": p.SelectionBg, "HeaderBg": p.HeaderBg}
+		for tname, fg := range texts {
+			for bname, bg := range bgs {
+				for mode, pair := range map[string][2]string{"dark": {fg.Dark, bg.Dark}, "light": {fg.Light, bg.Light}} {
+					if r := ContrastRatio(pair[0], pair[1]); r < minRatio {
+						t.Errorf("%s %s: %s on %s = %.2f:1, want %.1f", pname, mode, tname, bname, r, minRatio)
+					}
+				}
 			}
-			ratio := ContrastRatio(fg.dark, darkBg)
-			if ratio < minRatio {
-				t.Errorf("%s dark: contrast ratio %.2f < %.1f (WCAG AA)", name, ratio, minRatio)
-			}
-		})
-		t.Run(name+"/light", func(t *testing.T) {
-			if _, _, _, err := HexToRGB(fg.light); err != nil {
-				t.Fatalf("%s light color is invalid: %v", name, err)
-			}
-			ratio := ContrastRatio(fg.light, lightBg)
-			if ratio < minRatio {
-				t.Errorf("%s light: contrast ratio %.2f < %.1f (WCAG AA)", name, ratio, minRatio)
-			}
-		})
-	}
-}
-
-func TestHighContrastScheme_MeetsWCAGAA(t *testing.T) {
-	p := HighContrastPalette
-	const minRatio = 4.5
-
-	fgColors := map[string]Pair{
-		"Primary":    p.Primary,
-		"Success":    p.Success,
-		"Warning":    p.Warning,
-		"Danger":     p.Danger,
-		"Info":       p.Info,
-		"TextMuted":  p.TextMuted,
-		"TextNormal": p.TextNormal,
-		"TextBright": p.TextBright,
-	}
-
-	for name, fg := range fgColors {
-		t.Run(name+"/dark", func(t *testing.T) {
-			if _, _, _, err := HexToRGB(fg.Dark); err != nil {
-				t.Fatalf("%s dark color is invalid: %v", name, err)
-			}
-			ratio := ContrastRatio(fg.Dark, p.SurfaceBg.Dark)
-			if ratio < minRatio {
-				t.Errorf("%s dark: ratio %.2f < %.1f", name, ratio, minRatio)
-			}
-		})
-		t.Run(name+"/light", func(t *testing.T) {
-			if _, _, _, err := HexToRGB(fg.Light); err != nil {
-				t.Fatalf("%s light color is invalid: %v", name, err)
-			}
-			ratio := ContrastRatio(fg.Light, p.SurfaceBg.Light)
-			if ratio < minRatio {
-				t.Errorf("%s light: ratio %.2f < %.1f", name, ratio, minRatio)
-			}
-		})
+		}
 	}
 }

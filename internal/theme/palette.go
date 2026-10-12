@@ -32,14 +32,16 @@ func (p Palette) Scheme() ColorScheme {
 
 // DefaultPalette is the standard theme: purple and blue brand colors,
 // Tailwind status colors, Catppuccin Mocha (dark) and Slate (light) surfaces.
+// Text colors are nudged where needed so each reads at 4.5:1 or better on
+// the surface, the selected row, and the header bar.
 var DefaultPalette = Palette{
 	Primary:   Pair{"#A78BFA", "#7C3AED"},
 	Secondary: Pair{"#38BDF8", "#0369A1"},
 
-	Success: Pair{"#34D399", "#047857"},
+	Success: Pair{"#34D399", "#047555"},
 	Warning: Pair{"#FBBF24", "#92400E"},
-	Danger:  Pair{"#F87171", "#DC2626"},
-	Info:    Pair{"#60A5FA", "#2563EB"},
+	Danger:  Pair{"#F87171", "#C82020"},
+	Info:    Pair{"#60A5FA", "#195AEA"},
 
 	SurfaceBg:     Pair{"#1E1E2E", "#FFFFFF"},
 	SurfaceFg:     Pair{"#CDD6F4", "#1E293B"},
@@ -51,8 +53,8 @@ var DefaultPalette = Palette{
 
 	TextNormal: Pair{"#CDD6F4", "#1E293B"},
 	TextBright: Pair{"#FFFFFF", "#0F172A"},
-	TextMuted:  Pair{"#9399B2", "#475569"},
-	TextDim:    Pair{"#7F849C", "#64748B"},
+	TextMuted:  Pair{"#969CB4", "#475569"},
+	TextDim:    Pair{"#989CAF", "#59687C"},
 }
 
 // HighContrastPalette (GROVE_HIGH_CONTRAST) pushes every text color further
@@ -61,8 +63,8 @@ var HighContrastPalette = Palette{
 	Primary:   Pair{"#C4B5FD", "#6D28D9"},
 	Secondary: Pair{"#7DD3FC", "#0369A1"},
 
-	Success: Pair{"#6EE7B7", "#047857"},
-	Warning: Pair{"#FDE68A", "#B45309"},
+	Success: Pair{"#6EE7B7", "#047555"},
+	Warning: Pair{"#FDE68A", "#A64D08"},
 	Danger:  Pair{"#FCA5A5", "#B91C1C"},
 	Info:    Pair{"#93C5FD", "#1D4ED8"},
 
@@ -77,5 +79,5 @@ var HighContrastPalette = Palette{
 	TextNormal: Pair{"#E4E8F7", "#0F172A"},
 	TextBright: Pair{"#FFFFFF", "#000000"},
 	TextMuted:  Pair{"#A6ADC8", "#475569"},
-	TextDim:    Pair{"#7F849C", "#64748B"},
+	TextDim:    Pair{"#989CAF", "#59687C"},
 }
