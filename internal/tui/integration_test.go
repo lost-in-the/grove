@@ -257,11 +257,12 @@ working_dir = "main"
 	}
 
 	srcPath := filepath.Join(filepath.Dir(repo), "rails-app-src")
-	forkState := &ForkState{
+	req := forkRequest{
 		Source: WorktreeItem{ShortName: "src", Branch: "src", Path: srcPath},
 		Name:   "forked",
+		Branch: "src-forked",
 	}
-	msg := forkWorktreeCmd(mgr, stateMgr, nil, repo, forkState)()
+	msg := forkWorktreeCmd(mgr, stateMgr, nil, repo, req)()
 	done, ok := msg.(forkCompleteMsg)
 	if !ok {
 		t.Fatalf("expected forkCompleteMsg, got %T", msg)
@@ -822,11 +823,12 @@ working_dir = "main"
 	}
 
 	srcPath := filepath.Join(filepath.Dir(repo), "rails-app-src")
-	forkState := &ForkState{
+	req := forkRequest{
 		Source: WorktreeItem{ShortName: "src", Branch: "src", Path: srcPath},
 		Name:   "forked",
+		Branch: "src-forked",
 	}
-	msg := forkWorktreeCmd(mgr, stateMgr, nil, repo, forkState)()
+	msg := forkWorktreeCmd(mgr, stateMgr, nil, repo, req)()
 	done, ok := msg.(forkCompleteMsg)
 	if !ok {
 		t.Fatalf("expected forkCompleteMsg, got %T", msg)
