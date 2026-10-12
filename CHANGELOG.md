@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Overlays in the dashboard no longer erase the rows beside them, and the background behind them is dimmed evenly instead of stopping at the first styled word. (#19)
 - `esc` in the dashboard goes back exactly one level, and returns the cursor to the worktree it was on, even after the list refreshes.
+- With `NO_COLOR` set, the footer now shows which key you pressed (reverse video). Before, the highlight looked the same as every other key.
+- The issue browser fills in the branch `issue-N` again when it opens the New Worktree form.
 
 ### Changed
 - The New Worktree wizard is now a single form: Branch, Base, and Alias. It never moves or changes size, and its status line says what `enter` will do. A new branch now starts from the configured default branch, not from whatever the main checkout has checked out. An alias already used by another worktree is reported as an error instead of switching to that worktree.

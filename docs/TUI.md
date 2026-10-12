@@ -154,7 +154,7 @@ The New Worktree form uses its own keys, listed in its section below.
 
 ## Overlays
 
-Each overlay opens centered over the dimmed dashboard background. Press `esc` to close or cancel.
+Each overlay opens over the dimmed view beneath it. Press `esc` to close or cancel.
 
 `esc` goes back exactly one level. An overlay opened from the PR or issue browser returns there, and the dashboard cursor returns to the worktree it was on.
 
@@ -175,7 +175,7 @@ The status line says what `enter` will do. If the branch is already in use, `ent
 | `enter` | Create, or switch to an in-use branch's worktree |
 | `esc` | Close (does nothing while creating) |
 
-The PR browser opens this form with the PR's branch filled in. The issue browser fills in the alias `issue-N`.
+The PR browser opens this form with the PR's branch filled in. The issue browser fills in the branch `issue-N`.
 
 ### Delete Worktree (`d`)
 
