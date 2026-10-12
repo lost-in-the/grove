@@ -849,7 +849,6 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch m.activeView() {
 	case ViewHelp:
 		if key.Matches(msg, m.keys.Help) || key.Matches(msg, m.keys.Escape) {
-			m.helpOverlay.Close()
 			m.popView()
 			return m, nil
 		}
@@ -858,7 +857,6 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case ViewUpdate:
 		if key.Matches(msg, m.keys.Update) || key.Matches(msg, m.keys.Escape) {
-			m.updateOverlay.Close()
 			m.popView()
 		}
 		return m, nil

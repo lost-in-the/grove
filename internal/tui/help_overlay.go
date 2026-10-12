@@ -11,7 +11,6 @@ import (
 
 // HelpOverlay renders context-sensitive help as a scrollable overlay.
 type HelpOverlay struct {
-	Active    bool
 	ForView   ActiveView
 	viewport  viewport.Model
 	cache     map[ActiveView]string
@@ -25,9 +24,8 @@ func NewHelpOverlay() *HelpOverlay {
 	}
 }
 
-// Open activates the overlay for the given view.
+// Open renders help for the given view at the given size.
 func (h *HelpOverlay) Open(view ActiveView, width, height int) {
-	h.Active = true
 	h.ForView = view
 
 	w, ht := calcHelpOverlaySize(width, height)
@@ -61,11 +59,6 @@ func (h *HelpOverlay) Open(view ActiveView, width, height int) {
 		viewport.WithHeight(vpHeight),
 	)
 	h.viewport.SetContent(rendered)
-}
-
-// Close deactivates the overlay.
-func (h *HelpOverlay) Close() {
-	h.Active = false
 }
 
 // Update handles scroll keys within the help viewport.

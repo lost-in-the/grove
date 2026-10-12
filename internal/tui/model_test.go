@@ -45,8 +45,8 @@ func TestUpdateDashboardNavigation(t *testing.T) {
 			name: "? opens help overlay",
 			key:  "?",
 			assert: func(t *testing.T, m Model) {
-				if !m.helpOverlay.Active {
-					t.Error("expected helpOverlay.Active=true after ?")
+				if m.activeView() != ViewHelp {
+					t.Errorf("view = %v after ?, want ViewHelp", m.activeView())
 				}
 			},
 		},
@@ -192,13 +192,13 @@ func TestDeleteFlow(t *testing.T) {
 func TestHelpOverlayToggleFromDashboard(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
 	m = sendKey(m, "?")
-	if !m.helpOverlay.Active {
-		t.Fatal("expected helpOverlay.Active=true after first ?")
+	if m.activeView() != ViewHelp {
+		t.Fatal("expected ViewHelp after first ?")
 	}
 	// Second ? should close
 	m = sendKey(m, "?")
-	if m.helpOverlay.Active {
-		t.Error("expected helpOverlay.Active=false after second ?")
+	if m.activeView() != ViewDashboard {
+		t.Error("expected ViewDashboard after second ?")
 	}
 }
 

@@ -38,13 +38,13 @@ func TestHelpOpensAsFrameAndEscCloses(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(120, 40))
 	next, _ := m.Update(makeKeyMsg("?"))
 	m = next.(Model)
-	if m.activeView() != ViewHelp || !m.helpOverlay.Active {
-		t.Fatalf("after ?: view=%v active=%v, want ViewHelp and true", m.activeView(), m.helpOverlay.Active)
+	if m.activeView() != ViewHelp {
+		t.Fatalf("after ?: view=%v, want ViewHelp", m.activeView())
 	}
 	next, _ = m.Update(makeKeyMsg("esc"))
 	m = next.(Model)
-	if m.activeView() != ViewDashboard || m.helpOverlay.Active {
-		t.Errorf("after esc: view=%v active=%v, want ViewDashboard and false", m.activeView(), m.helpOverlay.Active)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("after esc: view=%v, want ViewDashboard", m.activeView())
 	}
 }
 
@@ -175,5 +175,15 @@ func TestDetailFocusedHints_EscReturnsToList(t *testing.T) {
 		if h.Key == "esc" && h.Description != "list" {
 			t.Errorf("esc hint = %q, want %q", h.Description, "list")
 		}
+	}
+}
+
+// The update view must close cleanly even when no update overlay was built.
+func TestUpdateView_KeyWithoutOverlayDoesNotPanic(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.setViewForTest(ViewUpdate)
+	next, _ := m.Update(makeKeyMsg("esc"))
+	if next.(Model).activeView() != ViewDashboard {
+		t.Error("esc did not close the update view")
 	}
 }

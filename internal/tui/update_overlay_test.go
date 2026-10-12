@@ -15,13 +15,6 @@ func stripUpdateView(s string) string {
 	return stripANSIUpdate.ReplaceAllString(s, "")
 }
 
-func TestNewUpdateOverlay(t *testing.T) {
-	u := NewUpdateOverlay()
-	if u.Active {
-		t.Error("expected Active to be false on new overlay")
-	}
-}
-
 func TestUpdateOverlayOpen(t *testing.T) {
 	u := NewUpdateOverlay()
 	// Use the live version.Version so this test doesn't silently break on the
@@ -29,9 +22,6 @@ func TestUpdateOverlayOpen(t *testing.T) {
 	// Open should round-trip it through currentVersion unchanged.
 	u.Open(version.Version, "99.0.0", "https://github.com/lost-in-the/grove/releases/tag/v99.0.0")
 
-	if !u.Active {
-		t.Error("expected Active to be true after Open")
-	}
 	if u.currentVersion != version.Version {
 		t.Errorf("currentVersion = %q, want %q", u.currentVersion, version.Version)
 	}
@@ -40,15 +30,6 @@ func TestUpdateOverlayOpen(t *testing.T) {
 	}
 	if u.latestURL != "https://github.com/lost-in-the/grove/releases/tag/v99.0.0" {
 		t.Errorf("latestURL = %q, want full release tag URL", u.latestURL)
-	}
-}
-
-func TestUpdateOverlayClose(t *testing.T) {
-	u := NewUpdateOverlay()
-	u.Open("0.7.0", "0.8.0", "https://x")
-	u.Close()
-	if u.Active {
-		t.Error("expected Active to be false after Close")
 	}
 }
 
