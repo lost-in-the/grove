@@ -101,16 +101,17 @@ type Model struct {
 
 	// Session caches of PR and issue data, filled whenever a browser
 	// fetches, so omni can search them without calling gh (spec 9.2).
-	prCache      []*tracker.PullRequest
-	issueCache   []*tracker.Issue
-	pendingPR    int // after the PR browser fetches, put its cursor on this PR
-	pendingIssue int
-	bulkState    *BulkState
-	prState      *PRViewState
-	issueState   *IssueViewState
-	syncState    *SyncState
-	configState  *ConfigState
-	renameState  *RenameState
+	prCache        []*tracker.PullRequest
+	issueCache     []*tracker.Issue
+	pendingPR      int // after the PR browser fetches, put its cursor on this PR
+	messagesOffset int // first row shown in the message history
+	pendingIssue   int
+	bulkState      *BulkState
+	prState        *PRViewState
+	issueState     *IssueViewState
+	syncState      *SyncState
+	configState    *ConfigState
+	renameState    *RenameState
 
 	// Post-create selection
 	pendingSelect string
@@ -1008,6 +1009,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleRenameKey(msg)
 	case ViewOmni:
 		return m.handleOmniKey(msg)
+	case ViewMessages:
+		return m.handleMessagesKey(msg)
 	case ViewDetailSheet:
 		return m.handleDetailSheetKey(msg)
 	case ViewDashboard:
@@ -1478,6 +1481,8 @@ func (m Model) renderOverlay(v ActiveView) string {
 		if m.omni != nil {
 			return renderOmni(m.omni, m.width, m.height)
 		}
+	case ViewMessages:
+		return m.renderMessages()
 	case ViewBulk:
 		if m.bulkState != nil {
 			return renderBulk(m.bulkState)

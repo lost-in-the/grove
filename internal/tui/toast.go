@@ -106,7 +106,11 @@ func (t *Toast) Expired() bool {
 // ToastModel manages the currently visible toast.
 type ToastModel struct {
 	Current *Toast
+	history []*Toast // warnings and errors, newest first (spec N22)
 }
+
+// historyMax is how many warnings and errors the session keeps.
+const historyMax = 50
 
 // NewToastModel creates an empty ToastModel.
 func NewToastModel() *ToastModel {
@@ -116,6 +120,18 @@ func NewToastModel() *ToastModel {
 // Show displays a new toast, replacing any existing one.
 func (tm *ToastModel) Show(toast *Toast) {
 	tm.Current = toast
+	if toast != nil && (toast.Level == ToastWarning || toast.Level == ToastError) {
+		tm.history = append([]*Toast{toast}, tm.history...)
+		if len(tm.history) > historyMax {
+			tm.history = tm.history[:historyMax]
+		}
+	}
+}
+
+// History returns the session's warnings and errors, newest first. A toast
+// disappears after a few seconds; these stay until the TUI exits.
+func (tm *ToastModel) History() []*Toast {
+	return tm.history
 }
 
 // Tick checks if the current toast has expired and clears it.

@@ -422,3 +422,14 @@ func TestGolden_Omni(t *testing.T) {
 		})
 	}
 }
+
+// The message history with fixed times, so ages never drift.
+func TestGolden_Messages(t *testing.T) {
+	m := goldenModel(t, sizeStandard, withItems(3), func(m *Model) {
+		m.toast.Show(&Toast{Message: "Created \"auth\" (hook failed: exit 1)", Level: ToastWarning, Duration: time.Hour, CreatedAt: testNow.Add(-2 * time.Hour)})
+		m.toast.Show(&Toast{Message: "Delete failed: worktree is locked", Level: ToastError, Duration: time.Hour, CreatedAt: testNow.Add(-90 * time.Second)})
+		m.toast.Dismiss()
+		m.pushView(ViewMessages)
+	})
+	golden.RequireEqual(t, []byte(m.viewString()))
+}

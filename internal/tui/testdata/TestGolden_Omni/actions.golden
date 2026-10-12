@@ -8,6 +8,7 @@
 [2m            [m│                new worktree                        n │[2m            [m
 [2m            [m│                show detail                       tab │[2m            [m
 [2m            [m│                change sort                         o │[2m            [m
+[2m            [m│                messages                              │[2m            [m
 [2m            [m│                keyboard shortcuts                    │[2m            [m
 [2m            [m│                quit                                q │[2m            [m
 [2m            [m│                copy worktree                       f │[2m            [m
@@ -17,7 +18,6 @@
 [2m            [m│                pull requests                       p │[2m            [m
 [2m            [m│                issues                              i │[2m            [m
 [2m            [m│                config                              c │[2m            [m
-[2m            [m│                refresh                             r │[2m            [m
 [2m            [m│ ⏎ runs switch to worktree                            │[2m            [m
 [2m root · test[m│ ⏎ choose · ctrl+j/k move · esc back                  │[2m            [m
 [2m  ↑↓ navigat[m╰──────────────────────────────────────────────────────╯[2m            [m
