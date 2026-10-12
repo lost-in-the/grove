@@ -84,12 +84,3 @@ const (
 	SymbolSuccess = "\u2713" // check mark
 	SymbolError   = "\u2717" // ballot x
 )
-
-// renderCreatingDetail renders an activity log for the detail pane in panel
-// layouts (PR view, issue view). Falls back to spinner + fallbackMsg if no log.
-func renderCreatingDetail(log *ActivityLog, spinnerView, fallbackMsg string) string {
-	if log != nil {
-		return log.View(spinnerView)
-	}
-	return spinnerView + " " + fallbackMsg
-}

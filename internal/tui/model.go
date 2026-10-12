@@ -17,7 +17,6 @@ import (
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/config"
-	"github.com/lost-in-the/grove/internal/git"
 	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/plugins"
 	"github.com/lost-in-the/grove/internal/state"
@@ -34,7 +33,7 @@ const (
 	ViewDashboard ActiveView = iota
 	ViewHelp
 	ViewDelete
-	ViewCreate
+	ViewBranchForm
 	ViewBulk
 	ViewPRs
 	ViewIssues
@@ -89,7 +88,7 @@ type Model struct {
 
 	// Overlay state
 	deleteState   *DeleteState
-	createState   *CreateState
+	branchForm    *BranchFormState
 	bulkState     *BulkState
 	prState       *PRViewState
 	issueState    *IssueViewState
@@ -233,8 +232,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleCreationLog(msg)
 	case creationDoneMsg:
 		return m.handleCreationDone(msg)
-	case worktreeCreatedMsg:
-		return m.handleWorktreeCreated(msg)
 	case prsFetchedMsg:
 		return m.handlePRsFetched(msg)
 	case issuesFetchedMsg:
@@ -446,29 +443,6 @@ func (m Model) handleCreationDone(msg creationDoneMsg) (tea.Model, tea.Cmd) {
 	}
 	if msg.hookOutput != "" {
 		tuilog.Printf("hook output for %s%q: %s", label, msg.name, msg.hookOutput)
-	}
-	return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
-}
-
-func (m Model) handleWorktreeCreated(msg worktreeCreatedMsg) (tea.Model, tea.Cmd) {
-	if msg.err != nil {
-		if m.createState != nil {
-			m.createState.Creating = false
-			m.createState.Error = msg.err.Error()
-		}
-		return m, nil
-	}
-	m.popToRoot()
-	m.createState = nil
-	m.pendingSelect = msg.name
-
-	if msg.hookErr != nil {
-		m.toast.Show(NewToast(fmt.Sprintf("Created %q (hook failed: %s)", msg.name, msg.hookErr), ToastWarning))
-	} else {
-		m.toast.Show(NewToast(fmt.Sprintf("Created %q", msg.name), ToastSuccess))
-	}
-	if msg.hookOutput != "" {
-		tuilog.Printf("hook output for %q: %s", msg.name, msg.hookOutput)
 	}
 	return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
 }
@@ -724,16 +698,8 @@ func (m Model) handleDefault(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) creationTrackerForSource(source string) (ct creationTracker, label string, cleanup func()) {
 	switch source {
 	case "create":
-		if m.createState != nil {
-			return m.createState, "", func() { m.createState = nil }
-		}
-	case "pr":
-		if m.prState != nil {
-			return m.prState, "from PR ", func() { m.prState = nil }
-		}
-	case "issue":
-		if m.issueState != nil {
-			return m.issueState, "from issue ", func() { m.issueState = nil }
+		if m.branchForm != nil {
+			return m.branchForm, "", func() { m.branchForm = nil }
 		}
 	}
 	return nil, "", nil
@@ -871,7 +837,7 @@ func (m Model) isAnimating() bool {
 
 // isOperationAnimating reports whether any worktree operation spinner is active.
 func (m Model) isOperationAnimating() bool {
-	return (m.createState != nil && m.createState.Creating) ||
+	return (m.branchForm != nil && m.branchForm.Busy) ||
 		(m.forkState != nil && m.forkState.Forking) ||
 		(m.syncState != nil && m.syncState.Syncing) ||
 		(m.deleteState != nil && m.deleteState.Deleting) ||
@@ -881,8 +847,8 @@ func (m Model) isOperationAnimating() bool {
 
 // isTrackerAnimating reports whether PR or issue state is loading/creating.
 func (m Model) isTrackerAnimating() bool {
-	return (m.prState != nil && (m.prState.Loading || m.prState.Creating)) ||
-		(m.issueState != nil && (m.issueState.Loading || m.issueState.Creating))
+	return (m.prState != nil && m.prState.Loading) ||
+		(m.issueState != nil && m.issueState.Loading)
 }
 
 // existingWorktreeItems returns all current worktree items from the list.
@@ -946,8 +912,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch m.activeView() {
 	case ViewDelete:
 		return m.handleDeleteKey(msg)
-	case ViewCreate:
-		return m.handleCreateKey(msg)
+	case ViewBranchForm:
+		return m.handleBranchFormKey(msg)
 	case ViewBulk:
 		return m.handleBulkKey(msg)
 	case ViewPRs:
@@ -1084,21 +1050,7 @@ func (m *Model) openSelectedPRURL() {
 }
 
 func (m Model) handleDashboardNewKey() (tea.Model, tea.Cmd) {
-	m.pushView(ViewCreate)
-	branches, branchErr := git.ListAllBranches(m.projectRoot)
-	if branchErr != nil {
-		tuilog.Printf("warning: failed to list branches: %v", branchErr)
-	}
-	m.createState = &CreateState{
-		Step:              CreateStepBranchChoice,
-		ProjectName:       m.projectName,
-		NamePattern:       m.worktreeNamePattern(),
-		Branches:          branches,
-		BranchFilterInput: newBranchFilterInput(),
-		BranchNameInput:   newBranchNameInput(),
-		WorktreeBranches:  m.worktreeBranchMap(),
-	}
-	return m, nil
+	return m.openBranchForm(branchFormPrefill{})
 }
 
 // worktreeNamePattern returns the configured worktree naming pattern for
@@ -1310,417 +1262,6 @@ func (m Model) handleRenameKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m Model) handleCreateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if m.createState == nil {
-		m.popView()
-		return m, nil
-	}
-
-	switch m.createState.Step {
-	case CreateStepBranchChoice:
-		return m.handleBranchChoiceKey(msg)
-	case CreateStepBranchSelect:
-		return m.handleBranchSelectKey(msg)
-	case CreateStepBranchCreate:
-		return m.handleBranchCreateKey(msg)
-	case CreateStepBranchAction:
-		return m.handleBranchActionKey(msg)
-	case CreateStepName:
-		return m.handleNameKey(msg)
-	case CreateStepConfirm:
-		return m.handleConfirmKey(msg)
-	}
-
-	return m, nil
-}
-
-// handleBranchActionKey handles the branch action step (split vs fork).
-func (m Model) handleBranchActionKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	s := m.createState
-	switch {
-	case key.Matches(msg, m.keys.ShiftTab):
-		s.Step = CreateStepBranchSelect
-		return m, nil
-
-	case key.Matches(msg, m.keys.Escape):
-		m.createState = nil
-		m.popView()
-		return m, nil
-
-	case key.Matches(msg, m.keys.Back):
-		s.Step = CreateStepBranchSelect
-		return m, nil
-
-	case key.Matches(msg, m.keys.Up):
-		if s.ActionChoice > 0 {
-			s.ActionChoice--
-		}
-		return m, nil
-
-	case key.Matches(msg, m.keys.Down):
-		if s.ActionChoice < 1 {
-			s.ActionChoice++
-		}
-		return m, nil
-
-	case key.Matches(msg, m.keys.Toggle):
-		s.DontShowAgain = !s.DontShowAgain
-		return m, nil
-
-	case key.Matches(msg, m.keys.Enter):
-		if s.DontShowAgain && m.cfg != nil {
-			action := "fork"
-			if s.ActionChoice == 0 {
-				action = "split"
-			}
-			if err := config.SetProjectConfigValues(map[string]string{
-				"tui.skip_branch_notice":    "true",
-				"tui.default_branch_action": `"` + action + `"`,
-			}); err != nil {
-				m.toast.Show(NewToast("Failed to save preference: "+err.Error(), ToastWarning))
-			}
-		}
-
-		if s.ActionChoice == 1 {
-			// fork: create a new branch based on the selected branch
-			s.ForkBase = s.BaseBranch
-			s.BaseBranch = ""
-		}
-		// Initialize name input and proceed to Name step
-		s.NameInput = newNameInput("")
-		s.Step = CreateStepName
-		return m, s.NameInput.Focus()
-	}
-	return m, nil
-}
-
-// handleConfirmKey handles the confirmation step key input.
-func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	s := m.createState
-	switch {
-	case key.Matches(msg, m.keys.ShiftTab):
-		s.Step = CreateStepName
-		return m, s.NameInput.Focus()
-
-	case key.Matches(msg, m.keys.Escape):
-		m.createState = nil
-		m.popView()
-		return m, nil
-
-	case key.Matches(msg, m.keys.Back):
-		s.Step = CreateStepName
-		return m, s.NameInput.Focus()
-
-	case key.Matches(msg, m.keys.Enter):
-		return m.startCreate(s)
-	}
-	return m, nil
-}
-
-func (m *Model) startCreate(s *CreateState) (tea.Model, tea.Cmd) {
-	if s.Creating {
-		return m, nil
-	}
-	s.Error = ""
-	s.Creating = true
-	s.ActivityLog = NewActivityLog(60, 10)
-	return m, tea.Batch(m.spinner.Tick, createWorktreeCmd(m.worktreeMgr, m.stateMgr, m.cfg, m.projectRoot, s.Name, s.BaseBranch, s.NewBranchName, s.ForkBase))
-}
-
-// handleBranchChoiceKey handles the initial "Select existing" vs "Create new" choice.
-func (m Model) handleBranchChoiceKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	s := m.createState
-	switch {
-	case key.Matches(msg, m.keys.ShiftTab):
-		if s.Source != "" {
-			m.createState = nil
-			m.popView()
-			return m, nil
-		}
-		// First step from dashboard — no back, treat as no-op
-		return m, nil
-
-	case key.Matches(msg, m.keys.Escape):
-		m.createState = nil
-		m.popView()
-		return m, nil
-
-	case key.Matches(msg, m.keys.Up):
-		if s.BranchChoice > 0 {
-			s.BranchChoice--
-		}
-		return m, nil
-
-	case key.Matches(msg, m.keys.Down):
-		if s.BranchChoice < 1 {
-			s.BranchChoice++
-		}
-		return m, nil
-
-	case key.Matches(msg, m.keys.Enter):
-		if s.BranchChoice == 0 {
-			s.Step = CreateStepBranchSelect
-			s.BranchCursor = 0
-			s.BranchFilterMode = BranchFilterOff
-			return m, nil
-		}
-		// Create new branch — pre-fill from source context if available
-		s.Step = CreateStepBranchCreate
-		s.BranchNameInput = newBranchNameInput()
-		if s.NameSuggestion != "" {
-			s.BranchNameInput.SetValue(s.NameSuggestion)
-		}
-		return m, s.BranchNameInput.Focus()
-	}
-	return m, nil
-}
-
-// handleBranchSelectKey handles the filterable branch list step.
-func (m Model) handleBranchSelectKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	s := m.createState
-
-	// When filter is active, route most keys to the textinput
-	if s.BranchFilterMode == BranchFilterOn {
-		switch {
-		case key.Matches(msg, m.keys.Escape):
-			// Exit filter mode, keep filter text
-			s.BranchFilterMode = BranchFilterOff
-			s.BranchFilterInput.Blur()
-			return m, nil
-
-		case key.Matches(msg, m.keys.Enter):
-			// Accept filter and exit filter mode
-			s.BranchFilterMode = BranchFilterOff
-			s.BranchFilterInput.Blur()
-			return m, nil
-
-		default:
-			// All other keys go to the textinput (j/k are typed as text)
-			prevVal := s.BranchFilterInput.Value()
-			var cmd tea.Cmd
-			s.BranchFilterInput, cmd = s.BranchFilterInput.Update(msg)
-			if s.BranchFilterInput.Value() != prevVal {
-				s.BranchCursor = 0
-			}
-			return m, cmd
-		}
-	}
-
-	// Filter is off — j/k navigate, / enters filter mode
-	filter := s.BranchFilterInput.Value()
-	filtered := filteredBranches(s.Branches, filter)
-	totalItems := len(filtered)
-
-	switch {
-	case key.Matches(msg, m.keys.ShiftTab):
-		s.Step = CreateStepBranchChoice
-		return m, nil
-
-	case key.Matches(msg, m.keys.Escape):
-		m.createState = nil
-		m.popView()
-		return m, nil
-
-	case key.Matches(msg, m.keys.Back):
-		s.Step = CreateStepBranchChoice
-		s.BranchFilterInput.SetValue("")
-		s.BranchCursor = 0
-		return m, nil
-
-	case msg.String() == "/":
-		s.BranchFilterMode = BranchFilterOn
-		return m, s.BranchFilterInput.Focus()
-
-	case key.Matches(msg, m.keys.Up):
-		if s.BranchCursor > 0 {
-			s.BranchCursor--
-		}
-		return m, nil
-
-	case key.Matches(msg, m.keys.Down):
-		if totalItems > 0 && s.BranchCursor < totalItems-1 {
-			s.BranchCursor++
-		}
-		return m, nil
-
-	case key.Matches(msg, m.keys.Enter):
-		if totalItems == 0 {
-			return m, nil
-		}
-		if s.BranchCursor < len(filtered) {
-			return m.selectExistingBranch(filtered[s.BranchCursor])
-		}
-		return m, nil
-	}
-	return m, nil
-}
-
-// handleBranchCreateKey handles the new branch name text input step.
-func (m Model) handleBranchCreateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	s := m.createState
-
-	switch {
-	case key.Matches(msg, m.keys.ShiftTab):
-		s.Step = CreateStepBranchChoice
-		return m, nil
-
-	case key.Matches(msg, m.keys.Escape):
-		m.createState = nil
-		m.popView()
-		return m, nil
-
-	case key.Matches(msg, m.keys.Back):
-		if s.BranchNameInput.Value() == "" {
-			s.Step = CreateStepBranchChoice
-			return m, nil
-		}
-		// Let textinput handle backspace
-		var cmd tea.Cmd
-		s.BranchNameInput, cmd = s.BranchNameInput.Update(msg)
-		return m, cmd
-
-	case key.Matches(msg, m.keys.Enter):
-		name := s.BranchNameInput.Value()
-		if name == "" {
-			return m, nil
-		}
-		s.BaseBranch = ""
-		s.ForkBase = ""
-		s.NewBranchName = name
-		if s.NameSuggestion == "" {
-			s.NameSuggestion = name
-		}
-		s.NameInput = newNameInput("")
-		s.Step = CreateStepName
-		return m, s.NameInput.Focus()
-
-	default:
-		var cmd tea.Cmd
-		s.BranchNameInput, cmd = s.BranchNameInput.Update(msg)
-		return m, cmd
-	}
-}
-
-func (m Model) selectExistingBranch(branch string) (tea.Model, tea.Cmd) {
-	s := m.createState
-	s.BaseBranch = branch
-	s.ForkBase = ""
-	s.NewBranchName = ""
-
-	strategy := ""
-	if m.cfg != nil {
-		strategy = m.cfg.TUI.WorktreeNameFromBranch
-	}
-	// Keep the existing suggestion if pre-set from a source (e.g., issue name)
-	if s.NameSuggestion == "" {
-		s.NameSuggestion = worktree.DeriveWorktreeName(branch, strategy)
-	}
-	s.NameInput = newNameInput("")
-
-	if m.cfg != nil && m.cfg.TUI.SkipBranchNotice != nil && *m.cfg.TUI.SkipBranchNotice {
-		if m.cfg.TUI.DefaultBranchAction == "fork" {
-			s.ForkBase = s.BaseBranch
-			s.BaseBranch = ""
-		}
-		s.Step = CreateStepName
-		return m, s.NameInput.Focus()
-	}
-
-	s.ActionChoice = 0
-	s.DontShowAgain = false
-	s.Step = CreateStepBranchAction
-	return m, nil
-}
-
-// handleNameKey handles the name step key input.
-func (m Model) handleNameKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	s := m.createState
-
-	switch {
-	case key.Matches(msg, m.keys.ShiftTab):
-		// Always go back regardless of input content
-		if s.Source != "" {
-			// From PR/issue view — back returns to source view
-			m.createState = nil
-			m.popView()
-			return m, nil
-		}
-		s.Step = CreateStepBranchChoice
-		return m, nil
-
-	case key.Matches(msg, m.keys.Escape):
-		m.createState = nil
-		m.popView()
-		return m, nil
-
-	case key.Matches(msg, m.keys.Back):
-		// Only go back if the name input is empty
-		if s.NameInput.Value() == "" {
-			if s.Source != "" {
-				// From PR/issue view — dismiss wizard, return to source view
-				m.createState = nil
-				m.popView()
-				return m, nil
-			}
-			s.Step = CreateStepBranchChoice
-			return m, nil
-		}
-		// Otherwise let textinput handle backspace
-		prevVal := s.NameInput.Value()
-		var cmd tea.Cmd
-		s.NameInput, cmd = s.NameInput.Update(msg)
-		if s.NameInput.Value() != prevVal {
-			s.Name = s.NameInput.Value()
-			s.Error = ""
-			s.ExistingWorktree = checkDuplicateWorktree(s.Name, m.existingWorktreeItems())
-		}
-		return m, cmd
-
-	case key.Matches(msg, m.keys.Enter):
-		effectiveName := s.NameInput.Value()
-		if effectiveName == "" && s.NameSuggestion != "" {
-			effectiveName = s.NameSuggestion
-			s.NameInput.SetValue(effectiveName)
-		}
-		s.Name = effectiveName
-		if effectiveName == "" {
-			s.Error = "name cannot be empty"
-			return m, nil
-		}
-		if errMsg := ValidateWorktreeName(effectiveName); errMsg != "" {
-			s.Error = errMsg
-			return m, nil
-		}
-		// If duplicate exists, switch to it
-		if s.ExistingWorktree != nil {
-			m.switchTo = s.ExistingWorktree.Path
-			m.switchToDisplayName = s.ExistingWorktree.displayName()
-			m.popToRoot()
-			m.createState = nil
-			return m, tea.Quit
-		}
-		s.Error = ""
-		s.Step = CreateStepConfirm
-		return m, nil
-
-	default:
-		// Route remaining keys through the name textinput
-		prevVal := s.NameInput.Value()
-		var cmd tea.Cmd
-		s.NameInput, cmd = s.NameInput.Update(msg)
-		if s.NameInput.Value() != prevVal {
-			s.Name = s.NameInput.Value()
-			if errMsg := ValidateWorktreeName(s.Name); errMsg != "" {
-				s.Error = errMsg
-			} else {
-				s.Error = ""
-			}
-			s.ExistingWorktree = checkDuplicateWorktree(s.Name, m.existingWorktreeItems())
-		}
-		return m, cmd
-	}
-}
-
 func (m *Model) applySortToList() tea.Cmd {
 	sorted := sortWorktreeItems(m.list.Items(), m.sortMode)
 	cmd := m.list.SetItems(sorted)
@@ -1891,6 +1432,9 @@ func (m Model) renderFrame(i int) string {
 	if overlay == "" {
 		return m.renderFrame(i - 1)
 	}
+	if v == ViewBranchForm {
+		return composeOverlayAt(m.renderFrame(i-1), overlay, m.width, m.height, formTop)
+	}
 	return composeOverlay(m.renderFrame(i-1), overlay, m.width, m.height)
 }
 
@@ -1902,9 +1446,9 @@ func (m Model) renderOverlay(v ActiveView) string {
 		if m.deleteState != nil {
 			return renderDeleteV2(m.deleteState, m.width)
 		}
-	case ViewCreate:
-		if m.createState != nil {
-			return renderCreateV2(m.createState, m.width, m.spinner.View())
+	case ViewBranchForm:
+		if m.branchForm != nil {
+			return renderBranchForm(m.branchForm, m.width, m.height, m.spinner.View())
 		}
 	case ViewBulk:
 		if m.bulkState != nil {
@@ -2014,7 +1558,7 @@ func (m Model) appendUpdateBadge(footer string) string {
 // that should receive ? as a character rather than triggering help.
 func (m Model) viewHasTextInput() bool {
 	switch m.activeView() {
-	case ViewCreate, ViewRename, ViewCheckout, ViewFork:
+	case ViewBranchForm, ViewRename, ViewCheckout, ViewFork:
 		return true
 	case ViewPRs:
 		return m.prState != nil && m.prState.Filtering

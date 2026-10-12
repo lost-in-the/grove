@@ -139,29 +139,6 @@ func sendMsg(m Model, msg tea.Msg) Model {
 	return result.(Model)
 }
 
-// enterCreateManual enters the create wizard and navigates to the branch select step.
-func enterCreateManual(m Model) Model {
-	m = sendKey(m, "n") // opens wizard at BranchChoice
-	if m.createState != nil {
-		m.createState.Branches = []string{"main", "develop", "feature/auth"}
-		m = sendKey(m, "enter") // select "Select existing branch" → BranchSelect
-	}
-	return m
-}
-
-// enterNameStep transitions the create wizard to the name step with a properly
-// initialized NameInput textinput.
-func enterNameStep(m Model) Model {
-	if m.createState != nil {
-		ni := newNameInput("")
-		m.createState.NameInput = ni
-		m.createState.Step = CreateStepName
-		// Focus the input synchronously for tests (ignore the cmd)
-		m.createState.NameInput.Focus()
-	}
-	return m
-}
-
 // setViewForTest makes v the only frame above the dashboard root.
 func (m *Model) setViewForTest(v ActiveView) {
 	m.views = nil

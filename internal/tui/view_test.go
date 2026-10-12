@@ -72,8 +72,8 @@ func TestViewCreateOverlay(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
 	m = sendKey(m, "n")
 	v := m.viewString()
-	if !strings.Contains(v, "New Worktree") {
-		t.Error("expected 'New Worktree' in create overlay")
+	if !strings.Contains(v, "New worktree") {
+		t.Error("expected 'New worktree' in the branch form")
 	}
 }
 

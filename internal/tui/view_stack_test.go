@@ -13,12 +13,12 @@ func TestViewStack_EmptyTopIsDashboard(t *testing.T) {
 }
 
 func TestViewStack_PushPopOrder(t *testing.T) {
-	s := viewStack{}.push(viewFrame{view: ViewPRs}).push(viewFrame{view: ViewCreate})
-	if s.top() != ViewCreate {
+	s := viewStack{}.push(viewFrame{view: ViewPRs}).push(viewFrame{view: ViewBranchForm})
+	if s.top() != ViewBranchForm {
 		t.Fatalf("top = %v, want ViewCreate", s.top())
 	}
 	s, f, ok := s.pop()
-	if !ok || f.view != ViewCreate || s.top() != ViewPRs {
+	if !ok || f.view != ViewBranchForm || s.top() != ViewPRs {
 		t.Errorf("pop = (%v, %v), top now %v; want (ViewCreate, true), top ViewPRs", f.view, ok, s.top())
 	}
 }
@@ -33,7 +33,7 @@ func TestViewStack_PopAtRootIsNoOp(t *testing.T) {
 func TestViewStack_ToRootReturnsBottomFrame(t *testing.T) {
 	s := viewStack{}.
 		push(viewFrame{view: ViewPRs, returnPath: "/a"}).
-		push(viewFrame{view: ViewCreate, returnPath: "/b"})
+		push(viewFrame{view: ViewBranchForm, returnPath: "/b"})
 	s, f, ok := s.toRoot()
 	if !ok || len(s) != 0 || f.returnPath != "/a" {
 		t.Errorf("toRoot: ok=%v len=%d path=%q; want true, 0, /a", ok, len(s), f.returnPath)
@@ -41,10 +41,10 @@ func TestViewStack_ToRootReturnsBottomFrame(t *testing.T) {
 }
 
 func TestViewStack_CopiesDoNotShareFrames(t *testing.T) {
-	base := viewStack{}.push(viewFrame{view: ViewPRs}).push(viewFrame{view: ViewCreate})
+	base := viewStack{}.push(viewFrame{view: ViewPRs}).push(viewFrame{view: ViewBranchForm})
 	popped, _, _ := base.pop()
 	branched := popped.push(viewFrame{view: ViewFork})
-	if base.top() != ViewCreate {
+	if base.top() != ViewBranchForm {
 		t.Errorf("original copy changed: top = %v, want ViewCreate", base.top())
 	}
 	if branched.top() != ViewFork {

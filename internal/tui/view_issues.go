@@ -10,7 +10,6 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/lost-in-the/grove/internal/git"
 	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
@@ -20,8 +19,6 @@ type IssueViewState struct {
 	Cursor           int
 	Loading          bool
 	Error            string
-	Creating         bool
-	ActivityLog      *ActivityLog // streaming creation progress
 	FilterInput      textinput.Model
 	Filtering        bool // true when filter input is active (activated by /)
 	DetailFocused    bool // true when detail panel has focus (Tab to toggle)
@@ -29,12 +26,6 @@ type IssueViewState struct {
 	lastItemNumber   int               // tracks the last-rendered issue number to update viewport content
 	WorktreeBranches map[string]string // branch → worktree short name
 	ExistsPrompt     *ExistingWorktreePrompt
-}
-
-func (s *IssueViewState) getActivityLog() *ActivityLog { return s.ActivityLog }
-func (s *IssueViewState) setCreatingDone(errMsg string) {
-	s.Creating = false
-	s.Error = errMsg
 }
 
 func (m Model) fetchIssuesCmd() tea.Msg {
@@ -66,7 +57,7 @@ func (m Model) handleIssueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		)
 	}
 
-	if s.Loading || s.Creating {
+	if s.Loading {
 		if key.Matches(msg, m.keys.Escape) {
 			m.popView()
 			m.issueState = nil
@@ -157,11 +148,7 @@ func (m Model) handleIssueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) openCreateWizardForIssue(issue *tracker.Issue) (tea.Model, tea.Cmd) {
-	branches, _ := git.ListAllBranches(m.projectRoot)
-	m.createState = prefillCreateStateForIssue(issue, m.projectName, m.worktreeNamePattern(), branches)
-	m.createState.WorktreeBranches = m.worktreeBranchMap()
-	m.pushView(ViewCreate)
-	return m, nil
+	return m.openBranchForm(branchFormPrefill{Alias: fmt.Sprintf("issue-%d", issue.Number)})
 }
 
 // renderIssueItemList renders a scrollable list of issue items with cursor, scroll window, and overflow indicator.
@@ -279,9 +266,6 @@ func (m Model) renderIssuePanel() string {
 		renderDetail: func(width, height int) string {
 			if s.Loading {
 				return ""
-			}
-			if s.Creating {
-				return renderCreatingDetail(s.ActivityLog, m.spinner.View(), "Creating worktree from issue...")
 			}
 			if len(filtered) > 0 && s.Cursor < len(filtered) {
 				return m.renderIssueDetailViewport(filtered[s.Cursor], width, height)

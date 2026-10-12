@@ -706,26 +706,6 @@ func TestUpdate_WorktreeDeletedMsg(t *testing.T) {
 	}
 }
 
-func TestUpdate_WorktreeCreatedMsg(t *testing.T) {
-	repo := setupRailsFixture(t)
-	mgr, stateMgr := newTestManagers(t, repo)
-
-	m := NewModel(mgr, stateMgr, repo)
-	m.setViewForTest(ViewCreate)
-	m.createState = &CreateState{}
-
-	msg := worktreeCreatedMsg{name: "new-wt"}
-	updated, _ := m.Update(msg)
-	m = updated.(Model)
-
-	if m.activeView() != ViewDashboard {
-		t.Errorf("expected ViewDashboard after create, got %d", m.activeView())
-	}
-	if m.toast.Message() == "" {
-		t.Error("expected non-empty status message after successful create")
-	}
-}
-
 func TestUpdate_BulkDeleteDoneMsg(t *testing.T) {
 	repo := setupRailsFixture(t)
 	mgr, stateMgr := newTestManagers(t, repo)
@@ -921,5 +901,58 @@ working_dir = "main"
 	}
 	if dockerCalled {
 		t.Error("docker auto-up ran despite bootstrap failure (CLI skips it)")
+	}
+}
+
+// Typing a new branch into the branch form and pressing enter creates the
+// worktree on that branch, cut from Base, through the dashboard's command.
+func TestIntegration_BranchFormCreatesNewBranchFromBase(t *testing.T) {
+	repo := setupRailsFixture(t)
+	mgr, stateMgr := newTestManagers(t, repo)
+	base := strings.TrimSpace(runGit(t, repo, "rev-parse", "--abbrev-ref", "HEAD"))
+	baseHead := strings.TrimSpace(runGit(t, repo, "rev-parse", "HEAD"))
+
+	m := newTestModel(withSize(120, 40))
+	m.worktreeMgr, m.stateMgr, m.projectRoot = mgr, stateMgr, repo
+	next, _ := m.openBranchForm(branchFormPrefill{Branch: "form-made"})
+	m = next.(Model)
+	m.branchForm.Base.SetValue(base)
+
+	next, cmd := m.Update(makeKeyMsg("enter"))
+	m = next.(Model)
+	if !m.branchForm.Busy || cmd == nil {
+		t.Fatalf("busy=%v cmd=%v, want creation started", m.branchForm.Busy, cmd != nil)
+	}
+
+	var done creationDoneMsg
+	found := false
+	for _, c := range cmd().(tea.BatchMsg) {
+		if c == nil {
+			continue
+		}
+		switch msg := c().(type) {
+		case creationLogMsg:
+			done, found = drainCreationStream(t, readCreationLog(msg.ch, msg.source)), true
+		case creationDoneMsg:
+			done, found = msg, true
+		}
+	}
+	if !found {
+		t.Fatal("no creation command in the batch")
+	}
+	if done.err != nil {
+		t.Fatalf("creation failed: %v", done.err)
+	}
+
+	next, _ = m.Update(done)
+	m = next.(Model)
+	if m.activeView() != ViewDashboard || m.branchForm != nil || m.pendingSelect != "form-made" {
+		t.Errorf("after done: view=%v form nil=%v pendingSelect=%q", m.activeView(), m.branchForm == nil, m.pendingSelect)
+	}
+	if got := strings.TrimSpace(runGit(t, done.path, "rev-parse", "--abbrev-ref", "HEAD")); got != "form-made" {
+		t.Errorf("worktree branch = %q, want form-made", got)
+	}
+	if got := strings.TrimSpace(runGit(t, done.path, "rev-parse", "HEAD")); got != baseHead {
+		t.Errorf("worktree HEAD = %q, want base %s at %q", got, base, baseHead)
 	}
 }

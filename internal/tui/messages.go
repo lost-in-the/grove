@@ -30,14 +30,6 @@ type worktreeDeletedMsg struct {
 	branchErr    error // non-nil if worktree removed but branch deletion failed
 }
 
-// worktreeCreatedMsg is sent after a worktree creation attempt.
-type worktreeCreatedMsg struct {
-	name       string
-	err        error
-	hookOutput string
-	hookErr    error // non-nil if hook execution failed
-}
-
 // bulkDeleteDoneMsg is sent when bulk deletion completes.
 type bulkDeleteDoneMsg struct {
 	count  int
@@ -56,27 +48,25 @@ type issuesFetchedMsg struct {
 	err    error
 }
 
-// creationTracker is implemented by state structs that track streaming worktree
-// creation (CreateState, PRViewState, IssueViewState). It allows the common
-// creationDoneMsg / creationLogMsg handling to be written once.
+// creationTracker is implemented by the state that shows streaming worktree
+// creation progress (the branch form). It lets creationDoneMsg and
+// creationLogMsg be handled in one place.
 type creationTracker interface {
 	getActivityLog() *ActivityLog
-	setCreatingDone(errMsg string) // sets Creating=false and Error=errMsg
+	setCreatingDone(errMsg string) // ends the busy state and records errMsg
 }
 
 // creationLogMsg carries a single log line from a streaming creation goroutine.
 // The channel is carried so Update can chain the next read.
 type creationLogMsg struct {
-	source string // "create", "pr", or "issue" — routes to the right log
+	source string // routes to the tracker; only "create" is used
 	line   string
 	ch     <-chan creationEvent
 }
 
 // creationDoneMsg signals that streaming creation has finished.
-// It carries the same fields as worktreeCreatedMsg so the existing
-// completion logic can be reused.
 type creationDoneMsg struct {
-	source     string // "create", "pr", or "issue" — routes to the right handler
+	source     string // routes to the tracker; only "create" is used
 	name       string
 	path       string
 	err        error

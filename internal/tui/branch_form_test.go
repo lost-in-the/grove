@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -275,5 +276,99 @@ func TestBranchForm_KeyLineNamesTheAction(t *testing.T) {
 	s.Busy = true
 	if s.keyLine() != "creating…" {
 		t.Errorf("key line while busy = %q, want creating…", s.keyLine())
+	}
+}
+
+func TestDashboardN_OpensBranchForm(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	next, _ := m.Update(makeKeyMsg("n"))
+	m = next.(Model)
+	if m.activeView() != ViewBranchForm || m.branchForm == nil {
+		t.Fatalf("after n: view=%v form=%v, want ViewBranchForm", m.activeView(), m.branchForm != nil)
+	}
+	next, _ = m.Update(makeKeyMsg("esc"))
+	m = next.(Model)
+	if m.activeView() != ViewDashboard || m.branchForm != nil {
+		t.Errorf("after esc: view=%v form nil=%v", m.activeView(), m.branchForm == nil)
+	}
+}
+
+func TestOpenBranchFormForPR_TreatsBranchAsRemote(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40), withPRData())
+	next, _ := m.openBranchForm(branchFormPrefill{Branch: "never-fetched", RemoteBranch: true, FocusAlias: true})
+	m = next.(Model)
+	if in := m.branchForm.intent(); in.Kind != intentCreateExisting || in.Branch != "never-fetched" {
+		t.Errorf("intent = %+v, want create from existing never-fetched", in)
+	}
+}
+
+// Without a worktree manager, submitting reports an error instead of
+// starting a creation goroutine that would dereference the nil manager.
+func TestBranchFormSubmit_WithoutManagerReportsError(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	next, _ := m.openBranchForm(branchFormPrefill{Branch: "brand-new"})
+	m = next.(Model)
+	m.branchForm.local["main"] = true
+	m.branchForm.Base.SetValue("main")
+	next, _ = m.Update(makeKeyMsg("enter"))
+	m = next.(Model)
+	if m.branchForm.Busy {
+		t.Fatal("creation started without a worktree manager")
+	}
+	if _, kind := m.branchForm.status(); kind != formStatusError {
+		t.Errorf("status kind = %v, want an error", kind)
+	}
+}
+
+func TestBranchFormCreationDone_SuccessReturnsToDashboard(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	next, _ := m.openBranchForm(branchFormPrefill{})
+	m = next.(Model)
+	m.branchForm.Busy = true
+	next, _ = m.Update(creationDoneMsg{source: "create", name: "brand-new"})
+	m = next.(Model)
+	if m.activeView() != ViewDashboard || m.branchForm != nil || m.pendingSelect != "brand-new" {
+		t.Errorf("view=%v form nil=%v pendingSelect=%q", m.activeView(), m.branchForm == nil, m.pendingSelect)
+	}
+}
+
+func TestBranchFormCreationDone_ErrorStaysOpen(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	next, _ := m.openBranchForm(branchFormPrefill{})
+	m = next.(Model)
+	m.branchForm.Busy = true
+	next, _ = m.Update(creationDoneMsg{source: "create", err: errTestBoom})
+	m = next.(Model)
+	if m.activeView() != ViewBranchForm || m.branchForm.Busy {
+		t.Fatalf("view=%v busy=%v, want form open and idle", m.activeView(), m.branchForm.Busy)
+	}
+	if msg, kind := m.branchForm.status(); kind != formStatusError || msg != errTestBoom.Error() {
+		t.Errorf("status = %q (%v)", msg, kind)
+	}
+}
+
+func TestBranchFormInUse_SwitchesAndQuits(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	next, _ := m.openBranchForm(branchFormPrefill{Branch: "feature-auth"})
+	m = next.(Model)
+	next, cmd := m.Update(makeKeyMsg("enter"))
+	m = next.(Model)
+	if m.switchTo != "/tmp/test-project-feature-auth" || cmd == nil {
+		t.Errorf("switchTo=%q cmd=%v, want a switch to feature-auth and quit", m.switchTo, cmd != nil)
+	}
+}
+
+var errTestBoom = errors.New("boom")
+
+// Keys typed on the dashboard after n reach the form's Branch field through
+// Update, including j and k, which navigate everywhere else.
+func TestBranchForm_TypingThroughUpdateReachesBranch(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m = sendKey(m, "n")
+	for _, k := range []string{"f", "i", "x", "j", "k"} {
+		m = sendKey(m, k)
+	}
+	if got := m.branchForm.Branch.Value(); got != "fixjk" {
+		t.Errorf("branch = %q, want fixjk", got)
 	}
 }

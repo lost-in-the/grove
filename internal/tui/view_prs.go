@@ -11,7 +11,6 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/lost-in-the/grove/internal/git"
 	"github.com/lost-in-the/grove/internal/tuilog"
 	"github.com/lost-in-the/grove/plugins/tracker"
 )
@@ -24,20 +23,12 @@ type PRViewState struct {
 	Error            string
 	WorktreeBranches map[string]string // branch → worktree short name
 	ExistsPrompt     *ExistingWorktreePrompt
-	Creating         bool
 	CreatingPR       *tracker.PullRequest // PR being created
-	ActivityLog      *ActivityLog         // streaming creation progress
 	FilterInput      textinput.Model
 	Filtering        bool // true when filter input is active (activated by /)
 	DetailFocused    bool // true when detail panel has focus (Tab to toggle)
 	DetailViewport   viewport.Model
 	lastItemNumber   int // tracks the last-rendered PR number to update viewport content
-}
-
-func (s *PRViewState) getActivityLog() *ActivityLog { return s.ActivityLog }
-func (s *PRViewState) setCreatingDone(errMsg string) {
-	s.Creating = false
-	s.Error = errMsg
 }
 
 func (m Model) fetchPRsCmd() tea.Msg {
@@ -69,7 +60,7 @@ func (m Model) handlePRKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		)
 	}
 
-	if s.Loading || s.Creating {
+	if s.Loading {
 		if key.Matches(msg, m.keys.Escape) {
 			m.popView()
 			m.prState = nil
@@ -174,14 +165,7 @@ func (m Model) handlePREnter(s *PRViewState, filtered []*tracker.PullRequest) (t
 }
 
 func (m Model) openCreateWizardForPR(pr *tracker.PullRequest) (tea.Model, tea.Cmd) {
-	branches, _ := git.ListAllBranches(m.projectRoot)
-	m.createState = prefillCreateStateForPR(pr, m.projectName, m.worktreeNamePattern(), branches)
-	m.createState.WorktreeBranches = m.worktreeBranchMap()
-	m.createState.ExistingWorktree = checkDuplicateWorktree(
-		m.createState.NameSuggestion, m.existingWorktreeItems(),
-	)
-	m.pushView(ViewCreate)
-	return m, m.createState.NameInput.Focus()
+	return m.openBranchForm(branchFormPrefill{Branch: pr.Branch, RemoteBranch: true, FocusAlias: true})
 }
 
 func filteredPRs(prs []*tracker.PullRequest, filter string) []*tracker.PullRequest {

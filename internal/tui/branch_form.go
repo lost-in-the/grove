@@ -8,6 +8,8 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/lost-in-the/grove/internal/git"
+	"github.com/lost-in-the/grove/internal/tuilog"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
 
@@ -421,4 +423,80 @@ func (s *BranchFormState) getActivityLog() *ActivityLog { return s.Log }
 func (s *BranchFormState) setCreatingDone(errMsg string) {
 	s.Busy = false
 	s.Status = errMsg
+}
+
+// openBranchForm opens the form in New mode over the current view.
+func (m Model) openBranchForm(p branchFormPrefill) (tea.Model, tea.Cmd) {
+	all, err := git.ListAllBranches(m.projectRoot)
+	if err != nil {
+		tuilog.Printf("warning: failed to list branches: %v", err)
+	}
+	local, err := git.ListLocalBranches(m.projectRoot)
+	if err != nil {
+		tuilog.Printf("warning: failed to list local branches: %v", err)
+	}
+	strategy := ""
+	if m.cfg != nil {
+		strategy = m.cfg.TUI.WorktreeNameFromBranch
+	}
+	s := newBranchForm(branchFormOptions{
+		ProjectName:   m.projectName,
+		NamePattern:   m.worktreeNamePattern(),
+		NameStrategy:  strategy,
+		DefaultBase:   ResolveDefaultBranch(m.cfg),
+		AllBranches:   all,
+		LocalBranches: local,
+		Worktrees:     m.existingWorktreeItems(),
+	})
+	cmd := s.applyPrefill(p)
+	m.branchForm = s
+	m.pushView(ViewBranchForm)
+	return m, cmd
+}
+
+func (m Model) handleBranchFormKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	s := m.branchForm
+	if s == nil {
+		m.popView()
+		return m, nil
+	}
+	res, cmd := s.handleKey(msg, m.keys)
+	switch res {
+	case formCancel:
+		m.branchForm = nil
+		m.popView()
+		return m, nil
+	case formSubmit:
+		return m.submitBranchForm(s)
+	}
+	return m, cmd
+}
+
+func (m Model) submitBranchForm(s *BranchFormState) (tea.Model, tea.Cmd) {
+	in := s.intent()
+	switch in.Kind {
+	case intentSwitchTo:
+		m.switchTo = in.Target.Path
+		m.switchToDisplayName = in.Target.displayName()
+		m.branchForm = nil
+		m.popToRoot()
+		return m, tea.Quit
+	case intentCreateExisting, intentCreateNew:
+		if m.worktreeMgr == nil {
+			s.Status = "cannot create a worktree: no repository loaded"
+			return m, nil
+		}
+		s.Busy = true
+		s.Status = ""
+		s.Log = NewActivityLog(formLogWidth(m.width), 6)
+		existing, newBranch := "", ""
+		if in.Kind == intentCreateExisting {
+			existing = in.Branch
+		} else {
+			newBranch = in.Branch
+		}
+		return m, tea.Batch(m.spinner.Tick,
+			createWorktreeCmd(m.worktreeMgr, m.stateMgr, m.cfg, m.projectRoot, in.Alias, existing, newBranch, in.FromRef))
+	}
+	return m, nil
 }

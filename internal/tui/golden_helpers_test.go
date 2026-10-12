@@ -95,34 +95,6 @@ func withDeleteOverlay(warnings ...string) testOpt {
 	}
 }
 
-// withCreateStep sets up the create overlay at a specific step.
-func withCreateStep(step CreateStep) testOpt {
-	return func(m *Model) {
-		m.setViewForTest(ViewCreate)
-		m.createState = &CreateState{
-			Step:              step,
-			Branches:          []string{"main", "develop", "feature/auth", "fix/login-bug", "release/v2"},
-			ProjectName:       m.projectName,
-			BranchFilterInput: newBranchFilterInput(),
-			BranchNameInput:   newBranchNameInput(),
-		}
-		switch step {
-		case CreateStepName:
-			m.createState.BaseBranch = "feature/auth"
-			m.createState.NameSuggestion = "auth"
-			m.createState.NameInput = newNameInput("auth")
-		case CreateStepBranchAction:
-			m.createState.BaseBranch = "feature/auth"
-		case CreateStepConfirm:
-			m.createState.BaseBranch = "feature/auth"
-			m.createState.Name = "auth-work"
-			ni := newNameInput("")
-			ni.SetValue("auth-work")
-			m.createState.NameInput = ni
-		}
-	}
-}
-
 // withBulkOverlay sets up the bulk delete overlay with n items.
 func withBulkOverlay(n int) testOpt {
 	return func(m *Model) {

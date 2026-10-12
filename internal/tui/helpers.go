@@ -10,7 +10,6 @@ import (
 	lipgloss "charm.land/lipgloss/v2"
 
 	"github.com/lost-in-the/grove/internal/worktree"
-	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
 // renderFilterBar writes the filter/count bar used by list views (Issues, PRs).
@@ -265,40 +264,4 @@ func (m Model) findWorktreeByName(name string) *WorktreeItem {
 		}
 	}
 	return nil
-}
-
-// prefillCreateStateForPR creates a CreateState pre-filled from a PR,
-// skipping directly to the name step.
-func prefillCreateStateForPR(pr *tracker.PullRequest, projectName, namePattern string, branches []string) *CreateState {
-	suggestion := worktree.DeriveWorktreeName(pr.Branch, "")
-	ni := newNameInput("")
-	return &CreateState{
-		Step:              CreateStepName,
-		Source:            "pr",
-		ProjectName:       projectName,
-		NamePattern:       namePattern,
-		BaseBranch:        pr.Branch,
-		NameSuggestion:    suggestion,
-		NameInput:         ni,
-		Branches:          branches,
-		BranchFilterInput: newBranchFilterInput(),
-		BranchNameInput:   newBranchNameInput(),
-	}
-}
-
-// prefillCreateStateForIssue creates a CreateState pre-filled from an issue,
-// starting at the branch choice step so the user can pick a base branch.
-// The issue-derived name is carried as NameSuggestion for the Name step.
-func prefillCreateStateForIssue(issue *tracker.Issue, projectName, namePattern string, branches []string) *CreateState {
-	name := fmt.Sprintf("issue-%d", issue.Number)
-	return &CreateState{
-		Step:              CreateStepBranchChoice,
-		Source:            "issue",
-		ProjectName:       projectName,
-		NamePattern:       namePattern,
-		NameSuggestion:    name,
-		Branches:          branches,
-		BranchFilterInput: newBranchFilterInput(),
-		BranchNameInput:   newBranchNameInput(),
-	}
 }
