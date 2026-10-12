@@ -47,10 +47,18 @@ func (m Model) renderConfigFrame() string {
 	return frame
 }
 
-// configHeader is "<project> ▸ settings".
+// configHeader is "<project> ▸ settings", with "● n unsaved" on the right
+// when anything changed.
 func (m Model) configHeader() string {
+	inner := max(0, m.width-2) // HeaderBar pads one cell each side
 	left := Styles.Header.Render(m.projectName) + Styles.TextMuted.Render(" ▸ ") + Styles.TextBright.Render("settings")
-	content := ansi.Truncate(left, max(0, m.width-2), "…")
+	right := ""
+	if n := m.configState.unsaved(); n > 0 {
+		right = Styles.WarningText.Render(fmt.Sprintf("● %d unsaved", n))
+	}
+	left = ansi.Truncate(left, max(0, inner-lipgloss.Width(right)-1), "…")
+	gap := max(1, inner-lipgloss.Width(left)-lipgloss.Width(right))
+	content := ansi.Truncate(left+strings.Repeat(" ", gap)+right, inner, "")
 	return Styles.HeaderBar.Width(m.width).MaxHeight(1).Render(content)
 }
 

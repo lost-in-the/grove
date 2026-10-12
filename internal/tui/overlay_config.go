@@ -51,7 +51,6 @@ type ConfigState struct {
 	Tab        ConfigTab       // active section
 	Fields     [][]ConfigField // fields per section; the forms bind to their values
 	Err        error
-	Dirty      bool           // unsaved changes exist
 	Confirming bool           // save confirmation prompt active
 	Config     *config.Config // loaded config
 
@@ -63,6 +62,20 @@ type ConfigState struct {
 
 // form is the active section's form, or nil before the config loads.
 func (s *ConfigState) form() *huh.Form { return s.Forms[s.Tab] }
+
+// unsaved counts the fields whose value differs from the one loaded from
+// disk. Call syncConfigFormValues first so bools are current.
+func (s *ConfigState) unsaved() int {
+	n := 0
+	for _, fields := range s.Fields {
+		for _, f := range fields {
+			if f.Value != f.Loaded {
+				n++
+			}
+		}
+	}
+	return n
+}
 
 // NewConfigState creates an empty ConfigState.
 func NewConfigState() *ConfigState {
@@ -91,30 +104,35 @@ func loadConfigCmd() tea.Cmd {
 	}
 }
 
-// saveConfigCmd saves modified config fields.
-func saveConfigCmd(state *ConfigState) tea.Cmd {
-	return func() tea.Msg {
-		updates := make(map[string]string)
-		for _, tabFields := range state.Fields {
-			for _, field := range tabFields {
-				// Only save changed fields
-				if field.Value != field.Loaded {
-					val := field.Value
-					// Quote string values for TOML with proper escaping
-					if field.Type == ConfigString || field.Type == ConfigEnum {
-						val = strconv.Quote(val)
-					}
-					updates[field.Key] = val
-				}
+// configUpdates is the TOML value of every changed field, keyed by its
+// config key.
+func configUpdates(state *ConfigState) map[string]string {
+	updates := make(map[string]string)
+	for _, tabFields := range state.Fields {
+		for _, field := range tabFields {
+			if field.Value == field.Loaded {
+				continue
 			}
+			val := field.Value
+			// Quote string values for TOML with proper escaping
+			if field.Type == ConfigString || field.Type == ConfigEnum {
+				val = strconv.Quote(val)
+			}
+			updates[field.Key] = val
 		}
+	}
+	return updates
+}
 
+// saveConfigCmd saves the changed fields. The updates are worked out here,
+// not in the command, which runs on another goroutine.
+func saveConfigCmd(state *ConfigState) tea.Cmd {
+	updates := configUpdates(state)
+	return func() tea.Msg {
 		if len(updates) == 0 {
 			return configSavedMsg{}
 		}
-
-		err := config.SetProjectConfigValues(updates)
-		return configSavedMsg{err: err}
+		return configSavedMsg{err: config.SetProjectConfigValues(updates)}
 	}
 }
 
@@ -306,7 +324,7 @@ func (m Model) handleConfigKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // bindings.
 func (m Model) leaveConfig() (tea.Model, tea.Cmd) {
 	m.syncConfigFormValues()
-	if m.configState.Dirty {
+	if m.configState.unsaved() > 0 {
 		m.configState.Confirming = true
 		return m, nil
 	}
@@ -334,6 +352,7 @@ func (m Model) updateConfigForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if f, ok := model.(*huh.Form); ok {
 		s.Forms[s.Tab] = f
 	}
+	m.syncConfigFormValues() // keeps the unsaved count current
 
 	switch s.form().State {
 	case huh.StateCompleted:
@@ -372,8 +391,7 @@ func (s *ConfigState) rebuildForm(tab ConfigTab) tea.Cmd {
 	return s.Forms[tab].Init()
 }
 
-// syncConfigFormValues reads values from form bindings back into ConfigFields
-// and marks dirty if anything changed from the loaded value.
+// syncConfigFormValues reads the bool bindings back into their fields.
 func (m *Model) syncConfigFormValues() {
 	s := m.configState
 	if s == nil || s.FormValues == nil {
@@ -387,8 +405,8 @@ func (m *Model) syncConfigFormValues() {
 	}
 }
 
-// syncConfigField updates a single config field from form values and marks
-// the state dirty when the value differs from the loaded one.
+// syncConfigField updates a bool field from its binding. String, enum, and
+// list fields bind straight to Value.
 func syncConfigField(f *ConfigField, s *ConfigState) {
 	if f.Type == ConfigBool {
 		if bPtr, ok := s.FormValues.bools[f.Key]; ok {
@@ -398,10 +416,5 @@ func syncConfigField(f *ConfigField, s *ConfigState) {
 				f.Value = boolFalse
 			}
 		}
-	}
-	// String/Enum/List fields are bound directly via &f.Value
-
-	if f.Value != f.Loaded {
-		s.Dirty = true
 	}
 }

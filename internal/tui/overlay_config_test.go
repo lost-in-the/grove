@@ -263,9 +263,15 @@ func TestRenderConfig_AllStates(t *testing.T) {
 	})
 }
 
+// changeAField edits the first general field, as typing into it would.
+func changeAField(m Model) {
+	f := &m.configState.Fields[ConfigTabGeneral][0]
+	f.Value = f.Loaded + "-edited"
+}
+
 func TestConfigOverlay_EscDirtyConfirms(t *testing.T) {
 	m := newConfigTestModel(t)
-	m.configState.Dirty = true
+	changeAField(m)
 
 	m = sendKey(m, "esc")
 	// Should show confirmation prompt, not close
@@ -282,7 +288,7 @@ func TestConfigOverlay_EscDirtyConfirms(t *testing.T) {
 
 func TestConfigOverlay_ConfirmEnterSaves(t *testing.T) {
 	m := newConfigTestModel(t)
-	m.configState.Dirty = true
+	changeAField(m)
 	m.configState.Confirming = true
 
 	m = sendKey(m, "enter")
@@ -297,7 +303,7 @@ func TestConfigOverlay_ConfirmEnterSaves(t *testing.T) {
 
 func TestConfigOverlay_ConfirmEscDiscards(t *testing.T) {
 	m := newConfigTestModel(t)
-	m.configState.Dirty = true
+	changeAField(m)
 	m.configState.Confirming = true
 
 	m = sendKey(m, "esc")
@@ -340,8 +346,8 @@ func TestSyncConfigFormValues(t *testing.T) {
 	}
 
 	m.syncConfigFormValues()
-	if !m.configState.Dirty {
-		t.Error("expected Dirty=true after changing a bool value")
+	if n := m.configState.unsaved(); n != 1 {
+		t.Errorf("expected 1 unsaved after changing a bool value, got %d", n)
 	}
 }
 
@@ -372,8 +378,7 @@ func TestConfigEditKey_DirtyDetection(t *testing.T) {
 
 func TestConfigForm_EscapeClosesOverlay(t *testing.T) {
 	m := newConfigTestModel(t)
-	// Form is not dirty, so esc should close directly
-	m.configState.Dirty = false
+	// Nothing changed, so esc should close directly
 	m = sendKey(m, "esc")
 	if m.activeView() != ViewDashboard {
 		t.Errorf("expected ViewDashboard after esc on clean form, got %d", m.activeView())
