@@ -124,10 +124,10 @@ func TestDefaultColorScheme_MeetsWCAGAA(t *testing.T) {
 }
 
 func TestHighContrastScheme_MeetsWCAGAA(t *testing.T) {
-	p := HighContrastPairs
+	p := HighContrastPalette
 	const minRatio = 4.5
 
-	fgColors := map[string]HighContrastPair{
+	fgColors := map[string]Pair{
 		"Primary":    p.Primary,
 		"Success":    p.Success,
 		"Warning":    p.Warning,
