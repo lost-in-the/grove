@@ -98,22 +98,3 @@ func TestActivityLog_DoneAllLinesDim(t *testing.T) {
 		t.Errorf("after SetDone, spinner prefix should not appear in output, got %q", out)
 	}
 }
-
-func TestRenderCreatingDetail_WithLog(t *testing.T) {
-	log := NewActivityLog(60, 5)
-	log.AddLine("fetching PR...")
-	out := ansi.Strip(renderCreatingDetail(log, "⠋", "fallback"))
-	if !strings.Contains(out, "fetching PR...") {
-		t.Errorf("renderCreatingDetail with log should contain log line, got %q", out)
-	}
-}
-
-func TestRenderCreatingDetail_NilLog(t *testing.T) {
-	out := renderCreatingDetail(nil, "⠋", "fallback")
-	if !strings.Contains(out, "fallback") {
-		t.Errorf("renderCreatingDetail with nil log should contain 'fallback', got %q", out)
-	}
-	if !strings.Contains(out, "⠋") {
-		t.Errorf("renderCreatingDetail with nil log should contain spinner, got %q", out)
-	}
-}

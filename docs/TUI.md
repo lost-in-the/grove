@@ -139,6 +139,8 @@ Press `tab` from the dashboard to move focus into the detail panel so you can sc
 
 ### Overlay / Wizard Keys
 
+The New Worktree form uses its own keys, listed in its section below.
+
 | Key | Action |
 |-----|--------|
 | `enter` | Confirm / advance step |
@@ -158,16 +160,22 @@ Each overlay opens centered over the dimmed dashboard background. Press `esc` to
 
 ### New Worktree (`n`)
 
-A multi-step wizard:
+One form, three fields. It stays the same size and position while you use it.
 
-1. **Branch** — Choose "Select an existing branch" or "Create a new branch."
-   - *Select existing:* A navigable branch list. Press `/` to filter by name (`j`/`k` navigate, all keys reach the filter input). Press `esc` to exit filter mode. Remote-only branches (those that exist on `origin` but not locally) appear in the list; selecting one fetches it from origin automatically.
-   - *Create new:* A focused text input for the new branch name (all keys including `j`/`k` are typed as text).
-   - If you select an existing branch, Grove asks whether to use it as-is (split) or create a new branch from it (fork). You can save this preference to skip the prompt.
-2. **Name** — Enter a short name (e.g., `my-feature`). Grove displays the full name preview (`project-my-feature`) as you type and warns about conflicts with existing worktrees.
-3. **Confirm** — Review the name and branch, then press `enter` to create.
+- **Branch:** type to search local and remote branches. Each row says whether the branch exists, is remote, or is already in use by a worktree. A name that matches nothing is created as a new branch.
+- **Base:** for a new branch only. Defaults to the configured default branch (`default_base_branch`).
+- **Alias:** the worktree's short name, derived from the branch until you edit it. The line below shows the folder and session name.
 
-Press `shift+tab` at any step to navigate backwards through the wizard. Press `esc` to cancel.
+The status line says what `enter` will do. If the branch is already in use, `enter` switches to that worktree instead of creating one. An alias already used by another worktree is an error.
+
+| Key | Action |
+|---|---|
+| `tab` / `shift+tab` | Next / previous field (`tab` on Branch accepts the highlighted row) |
+| `ctrl+j` / `ctrl+k`, `↓` / `↑` | Move through suggestions |
+| `enter` | Create, or switch to an in-use branch's worktree |
+| `esc` | Close (does nothing while creating) |
+
+The PR browser opens this form with the PR's branch filled in. The issue browser fills in the alias `issue-N`.
 
 ### Delete Worktree (`d`)
 

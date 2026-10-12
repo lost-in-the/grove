@@ -117,9 +117,6 @@ func (m Model) renderPRPanel() string {
 			if s.Loading {
 				return ""
 			}
-			if s.Creating {
-				return renderCreatingDetail(s.ActivityLog, m.spinner.View(), renderCreatingMsg(s))
-			}
 			if len(filtered) > 0 && s.Cursor < len(filtered) {
 				return m.renderPRDetailViewport(filtered[s.Cursor], width, height)
 			}
@@ -132,15 +129,6 @@ func (m Model) renderPRPanel() string {
 		return composeOverlay(panel, renderExistingWorktreePrompt(s.ExistsPrompt, m.width), m.width, m.height)
 	}
 	return panel
-}
-
-// renderCreatingMsg returns the "creating worktree" message for PR view.
-func renderCreatingMsg(s *PRViewState) string {
-	if s.CreatingPR != nil {
-		return fmt.Sprintf("Creating worktree for PR #%d: %s...",
-			s.CreatingPR.Number, truncate(s.CreatingPR.Title, 40))
-	}
-	return "Creating worktree from PR..."
 }
 
 // renderPRList renders the PR list content for the panel layout.

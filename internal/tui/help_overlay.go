@@ -240,8 +240,8 @@ func helpSectionsFor(view ActiveView) []helpSection {
 		return helpSectionsDashboard
 	case ViewDelete:
 		return helpSectionsDelete
-	case ViewCreate:
-		return helpSectionsCreate
+	case ViewBranchForm:
+		return helpSectionsBranchForm
 	case ViewBulk:
 		return helpSectionsBulk
 	case ViewPRs:
@@ -316,11 +316,12 @@ var helpSectionsDelete = []helpSection{
 	}},
 }
 
-var helpSectionsCreate = []helpSection{
-	{title: "Create Worktree", note: "Create a new worktree with a new or existing branch.", items: []helpEntry{
-		{"tab / shift+tab", "Navigate fields"},
-		{"enter", "Create worktree"},
-		{"esc", "Cancel"},
+var helpSectionsBranchForm = []helpSection{
+	{title: "New Worktree", note: "Type a branch to search or create. The form shows what will happen.", items: []helpEntry{
+		{"tab / shift+tab", "Next / previous field"},
+		{"ctrl+j / ctrl+k", "Move through suggestions"},
+		{"enter", "Create, or switch to a branch's worktree"},
+		{"esc", "Close"},
 	}},
 }
 

@@ -1,0 +1,14 @@
+╭──────────────────────────────────────────────────────╮
+│ [1mNew worktree[m                                         │
+│ ❯ Branch [37m[mfeature/auth[7;37m [m                               │
+│          ❯ feature/auth                 in use: auth │
+│                                                      │
+│                                                      │
+│                                                      │
+│   Base   n/a · existing branch                       │
+│   Alias  [37m[m[37mauth[m [37m                                      [m │
+│          → grove-auth · session grove-auth           │
+│                                                      │
+│ in use by auth · ⏎ switches there                    │
+│ ⏎ switch · tab field · ctrl+j/k pick · esc back      │
+╰──────────────────────────────────────────────────────╯

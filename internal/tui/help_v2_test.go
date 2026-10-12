@@ -13,7 +13,7 @@ func TestHelpFooterCompactHints(t *testing.T) {
 	}{
 		{"Dashboard hints", ViewDashboard, []string{"↑↓", "enter", "U", "n", "/", "o", "?", "q"}},
 		{"Issues hints", ViewIssues, []string{"↑↓", "enter", "/", "esc"}},
-		{"Create hints", ViewCreate, []string{"enter", "esc"}},
+		{"Create hints", ViewBranchForm, []string{"enter", "esc"}},
 		{"Delete hints", ViewDelete, []string{"y", "n", "space"}},
 		{"Bulk hints", ViewBulk, []string{"space", "enter", "esc"}},
 		{"PRs hints", ViewPRs, []string{"enter", "esc", "↑↓"}},

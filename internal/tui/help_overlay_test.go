@@ -42,7 +42,7 @@ func TestHelpSectionsForAllViews(t *testing.T) {
 		ViewDashboard,
 		ViewHelp,
 		ViewDelete,
-		ViewCreate,
+		ViewBranchForm,
 		ViewBulk,
 		ViewPRs,
 		ViewIssues,

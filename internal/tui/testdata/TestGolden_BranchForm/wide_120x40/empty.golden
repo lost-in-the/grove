@@ -1,0 +1,14 @@
+╭──────────────────────────────────────────────────────────────────────╮
+│ [1mNew worktree[m                                                         │
+│ ❯ Branch [37m[m[7;37mt[m[38;5;240mype to search or create[m[38;5;240m                                   [m │
+│          ❯ main                                         in use: root │
+│            feature/auth                                 in use: auth │
+│            fix/login                                        existing │
+│            remote-only                                        remote │
+│   Base   n/a · existing branch                                       │
+│   Alias  [37m[m[37m[m [37m                                                          [m │
+│                                                                      │
+│                                                                      │
+│ type a branch name                                                   │
+│ ⏎ create · tab field · ctrl+j/k pick · esc back                      │
+╰──────────────────────────────────────────────────────────────────────╯

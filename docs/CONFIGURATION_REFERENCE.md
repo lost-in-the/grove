@@ -70,7 +70,7 @@ project_name = "my-app"            # string
 # Default: ~/projects
 projects_dir = "~/projects"        # string
 
-# Default base branch for new worktrees when no branch is specified.
+# Default Base for a new branch in the TUI's New Worktree form.
 # Default: "main"
 default_base_branch = "main"       # string
 ```
@@ -317,15 +317,11 @@ Controls TUI (interactive dashboard) behavior.
 
 ```toml
 [tui]
-# Suppress the "branch already exists" notice shown when creating a worktree
-# for an existing branch.
-# Default: false (show the notice)
+# No longer used: the New Worktree form has no split/fork question.
+# The key is still accepted.
 skip_branch_notice = false         # bool
 
-# Action to take when skip_branch_notice is true and a branch conflict is encountered.
-# "split" — create worktree from the existing branch
-# "fork"  — create a new branch derived from the existing one
-# Default: "" (prompt the user)
+# No longer used, for the same reason. The key is still accepted.
 default_branch_action = "split"    # string: split | fork
 
 # How to derive a worktree name from a branch name in the TUI.

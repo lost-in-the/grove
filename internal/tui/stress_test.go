@@ -220,67 +220,6 @@ func TestStressDeleteOverlayCycling(t *testing.T) {
 	}
 }
 
-func TestStressCreateCancelCycling(t *testing.T) {
-	m := newTestModel(withItems(5), withSize(80, 24))
-
-	for i := range 50 {
-		// Open create and disable Huh forms for direct key handling
-		m = enterCreateManual(m)
-		if m.activeView() != ViewCreate {
-			t.Fatalf("cycle %d: expected ViewCreate, got %d", i, m.activeView())
-		}
-		if m.createState == nil {
-			t.Fatalf("cycle %d: expected createState to be set", i)
-		}
-
-		// Immediately cancel
-		m = sendKey(m, "esc")
-		if m.activeView() != ViewDashboard {
-			t.Fatalf("cycle %d: expected ViewDashboard after cancel, got %d", i, m.activeView())
-		}
-		if m.createState != nil {
-			t.Fatalf("cycle %d: expected createState nil after cancel", i)
-		}
-	}
-
-	// Verify clean dashboard state
-	v := m.viewString()
-	if v == "" {
-		t.Error("expected non-empty view after create cancel cycling")
-	}
-}
-
-func TestStressCreateCancelCyclingHuh(t *testing.T) {
-	m := newTestModel(withItems(5), withSize(80, 24))
-
-	for i := range 50 {
-		// Open create with Huh forms (default)
-		m = sendKey(m, "n")
-		if m.activeView() != ViewCreate {
-			t.Fatalf("cycle %d: expected ViewCreate, got %d", i, m.activeView())
-		}
-		if m.createState == nil {
-			t.Fatalf("cycle %d: expected createState to be set", i)
-		}
-
-		// Send esc to Huh form -- it sets StateAborted which is checked in handleCreateKeyHuh
-		m = sendKey(m, "esc")
-
-		// Huh form esc should transition back to dashboard
-		if m.activeView() != ViewDashboard {
-			// The form may need an additional update cycle to process abort
-			// This is acceptable behavior -- just verify no panic occurred
-			m.setViewForTest(ViewDashboard)
-			m.createState = nil
-		}
-	}
-
-	v := m.viewString()
-	if v == "" {
-		t.Error("expected non-empty view after Huh create cancel cycling")
-	}
-}
-
 func TestStressBulkCancelCycling(t *testing.T) {
 	m := newTestModel(withItems(10), withSize(80, 24))
 
@@ -299,39 +238,6 @@ func TestStressBulkCancelCycling(t *testing.T) {
 		if m.bulkState != nil {
 			t.Fatalf("cycle %d: expected bulkState nil after cancel", i)
 		}
-	}
-}
-
-func TestStressEmptyCreateEscape(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(80, 24))
-
-	// Enter create mode (manual, no Huh) and immediately escape -- verify no state leaks
-	m = enterCreateManual(m)
-	if m.activeView() != ViewCreate {
-		t.Fatal("expected ViewCreate after n")
-	}
-	if m.createState == nil {
-		t.Fatal("expected createState to be initialized")
-	}
-
-	m = sendKey(m, "esc")
-	if m.activeView() != ViewDashboard {
-		t.Errorf("expected ViewDashboard, got %d", m.activeView())
-	}
-	if m.createState != nil {
-		t.Error("expected createState to be nil after escape (state leak)")
-	}
-	if m.deleteState != nil {
-		t.Error("expected deleteState nil (state leak)")
-	}
-	if m.bulkState != nil {
-		t.Error("expected bulkState nil (state leak)")
-	}
-
-	// Verify dashboard renders cleanly
-	v := m.viewString()
-	if !strings.Contains(v, "test-project") {
-		t.Error("expected project name in dashboard after clean escape")
 	}
 }
 
@@ -473,7 +379,7 @@ func TestStressResizeDuringOverlay(t *testing.T) {
 				m = sendKey(m, "n")
 				return m
 			},
-			ViewCreate,
+			ViewBranchForm,
 		},
 		{
 			"resize during bulk overlay",
@@ -508,8 +414,8 @@ func TestStressResizeDuringOverlay(t *testing.T) {
 			if tt.view == ViewDelete && m.deleteState == nil {
 				t.Error("expected deleteState preserved after resize")
 			}
-			if tt.view == ViewCreate && m.createState == nil {
-				t.Error("expected createState preserved after resize")
+			if tt.view == ViewBranchForm && m.branchForm == nil {
+				t.Error("expected branchForm preserved after resize")
 			}
 			if tt.view == ViewBulk && m.bulkState == nil {
 				t.Error("expected bulkState preserved after resize")
@@ -581,54 +487,6 @@ func TestStressEmptyListSort(t *testing.T) {
 	}
 }
 
-func TestStressCreateWithSpecialCharacters(t *testing.T) {
-	specialInputs := []struct {
-		name  string
-		input string
-	}{
-		{"slash", "/"},
-		{"backslash", "\\"},
-		{"asterisk", "*"},
-		{"question", "?"},
-		{"pipe", "|"},
-		{"colon", ":"},
-		{"quote", "\""},
-		{"angle brackets", "<"},
-	}
-
-	for _, tt := range specialInputs {
-		t.Run(tt.name, func(t *testing.T) {
-			m := newTestModel(withItems(1), withSize(80, 24))
-			m = enterCreateManual(m)
-			m = enterNameStep(m)
-			m = sendKey(m, tt.input)
-
-			// Should show validation error
-			if m.createState.Error == "" {
-				t.Errorf("expected validation error for %q input", tt.input)
-			}
-		})
-	}
-}
-
-func TestStressCreateEmptySubmit(t *testing.T) {
-	m := newTestModel(withItems(1), withSize(80, 24))
-	m = enterCreateManual(m)
-	m = enterNameStep(m)
-
-	// Submit empty name
-	m = sendKey(m, "enter")
-	if m.createState == nil {
-		t.Fatal("expected createState preserved after empty submit")
-	}
-	if m.createState.Error == "" {
-		t.Error("expected error for empty name submit")
-	}
-	if m.createState.Step != CreateStepName {
-		t.Errorf("expected still on CreateStepName, got %d", m.createState.Step)
-	}
-}
-
 func TestStressQuickSwitchAllNumbers(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
 
@@ -659,7 +517,7 @@ func TestStressViewRenderAllStates(t *testing.T) {
 		{"Dashboard", ViewDashboard},
 		{"Help", ViewHelp},
 		{"Delete", ViewDelete},
-		{"Create", ViewCreate},
+		{"Create", ViewBranchForm},
 		{"Bulk", ViewBulk},
 		{"PRs", ViewPRs},
 		{"Issues", ViewIssues},
@@ -675,8 +533,8 @@ func TestStressViewRenderAllStates(t *testing.T) {
 			case ViewDelete:
 				item := WorktreeItem{ShortName: "test", Branch: "test"}
 				m.deleteState = &DeleteState{Item: &item}
-			case ViewCreate:
-				m.createState = &CreateState{Step: CreateStepName, ProjectName: "proj"}
+			case ViewBranchForm:
+				m.branchForm = newBranchForm(testFormOptions())
 			case ViewBulk:
 				m.bulkState = &BulkState{Items: makeTestItems(3), Selected: []bool{false, false, false}}
 			case ViewPRs:
@@ -712,8 +570,8 @@ func TestStressMixedOverlaySequence(t *testing.T) {
 	m := newTestModel(withItems(5), withSize(80, 24))
 
 	// Sequence: create -> esc -> help -> help -> delete -> esc -> bulk -> esc
-	m = enterCreateManual(m)
-	if m.activeView() != ViewCreate {
+	m = sendKey(m, "n")
+	if m.activeView() != ViewBranchForm {
 		t.Fatal("expected ViewCreate")
 	}
 	m = sendKey(m, "esc")
@@ -750,8 +608,8 @@ func TestStressMixedOverlaySequence(t *testing.T) {
 	}
 
 	// All state should be clean
-	if m.createState != nil {
-		t.Error("createState should be nil")
+	if m.branchForm != nil {
+		t.Error("branchForm should be nil")
 	}
 	if m.deleteState != nil {
 		t.Error("deleteState should be nil")
@@ -763,5 +621,72 @@ func TestStressMixedOverlaySequence(t *testing.T) {
 	v := m.viewString()
 	if v == "" {
 		t.Error("expected non-empty view after mixed sequence")
+	}
+}
+
+func TestStressCreateCancelCycling(t *testing.T) {
+	m := newTestModel(withItems(5), withSize(80, 24))
+	for i := range 50 {
+		m = sendKey(m, "n")
+		if m.activeView() != ViewBranchForm || m.branchForm == nil {
+			t.Fatalf("cycle %d: view=%v form=%v, want the branch form", i, m.activeView(), m.branchForm != nil)
+		}
+		m = sendKey(m, "esc")
+		if m.activeView() != ViewDashboard || m.branchForm != nil {
+			t.Fatalf("cycle %d: view=%v form nil=%v after esc", i, m.activeView(), m.branchForm == nil)
+		}
+	}
+	if m.viewString() == "" {
+		t.Error("expected non-empty view after create cancel cycling")
+	}
+}
+
+func TestStressEmptyCreateEscape(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 24))
+	m = sendKey(m, "n")
+	m = sendKey(m, "esc")
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView())
+	}
+	if m.branchForm != nil || m.deleteState != nil || m.bulkState != nil {
+		t.Error("state leaked after escaping the branch form")
+	}
+	if !strings.Contains(m.viewString(), "test-project") {
+		t.Error("expected project name in dashboard after clean escape")
+	}
+}
+
+func TestStressCreateWithSpecialCharacters(t *testing.T) {
+	for _, in := range []string{"/", "\\", "*", "?", "|", ":", "\"", "<"} {
+		t.Run(in, func(t *testing.T) {
+			m := newTestModel(withItems(1), withSize(80, 24))
+			m = sendKey(m, "n")
+			for _, k := range []string{"f", "i", "x", "tab", "tab"} {
+				m = sendKey(m, k)
+			}
+			if m.branchForm.Focus != fieldAlias {
+				t.Fatalf("focus = %v, want alias", m.branchForm.Focus)
+			}
+			m = sendKey(m, in)
+			if _, kind := m.branchForm.status(); kind == formStatusReady {
+				t.Errorf("alias with %q accepted; want a validation message", in)
+			}
+			m = sendKey(m, "enter")
+			if m.branchForm == nil || m.branchForm.Busy {
+				t.Errorf("enter with an invalid alias started creation")
+			}
+		})
+	}
+}
+
+func TestStressCreateEmptySubmit(t *testing.T) {
+	m := newTestModel(withItems(1), withSize(80, 24))
+	m = sendKey(m, "n")
+	m = sendKey(m, "enter")
+	if m.branchForm == nil || m.branchForm.Busy {
+		t.Fatal("empty submit must keep the form open and idle")
+	}
+	if msg, _ := m.branchForm.status(); msg != "type a branch name" {
+		t.Errorf("status = %q, want type a branch name", msg)
 	}
 }

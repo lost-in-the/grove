@@ -71,11 +71,8 @@ func TestReadCreationLog_ChannelClose(t *testing.T) {
 func TestCreationLogMsg_ChainsNext(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
 	// Set up create state with ActivityLog
-	m.setViewForTest(ViewCreate)
-	m.createState = &CreateState{
-		Creating:    true,
-		ActivityLog: NewActivityLog(60, 10),
-	}
+	m.setViewForTest(ViewBranchForm)
+	m.branchForm = busyFormForTest()
 
 	ch := make(chan creationEvent, 5)
 	msg := creationLogMsg{source: "create", line: "building...", ch: ch}
@@ -84,11 +81,11 @@ func TestCreationLogMsg_ChainsNext(t *testing.T) {
 	m = result.(Model)
 
 	// Verify the log line was added
-	if len(m.createState.ActivityLog.lines) != 1 {
-		t.Fatalf("expected 1 log line, got %d", len(m.createState.ActivityLog.lines))
+	if len(m.branchForm.Log.lines) != 1 {
+		t.Fatalf("expected 1 log line, got %d", len(m.branchForm.Log.lines))
 	}
-	if m.createState.ActivityLog.lines[0] != "building..." {
-		t.Errorf("log line = %q, want %q", m.createState.ActivityLog.lines[0], "building...")
+	if m.branchForm.Log.lines[0] != "building..." {
+		t.Errorf("log line = %q, want %q", m.branchForm.Log.lines[0], "building...")
 	}
 
 	// Verify a chained read cmd was returned
@@ -99,11 +96,8 @@ func TestCreationLogMsg_ChainsNext(t *testing.T) {
 
 func TestCreationDoneMsg_Create(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
-	m.setViewForTest(ViewCreate)
-	m.createState = &CreateState{
-		Creating:    true,
-		ActivityLog: NewActivityLog(60, 10),
-	}
+	m.setViewForTest(ViewBranchForm)
+	m.branchForm = busyFormForTest()
 
 	msg := creationDoneMsg{source: "create", name: "wt"}
 	result, _ := m.Update(msg)
@@ -114,43 +108,24 @@ func TestCreationDoneMsg_Create(t *testing.T) {
 	}
 }
 
-func TestCreationDoneMsg_PR(t *testing.T) {
-	m := newTestModel(withPRData(), withSize(80, 24))
-	m.setViewForTest(ViewPRs)
-	m.prState.Creating = true
-	m.prState.ActivityLog = NewActivityLog(60, 10)
-
-	msg := creationDoneMsg{source: "pr", name: "wt"}
-	result, _ := m.Update(msg)
-	m = result.(Model)
-
-	// Successful PR creation transitions to dashboard
-	if m.activeView() != ViewDashboard {
-		t.Errorf("activeView should be ViewDashboard after PR create done, got %d", m.activeView())
-	}
-}
-
 func TestCreationDoneMsg_Error(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
-	m.setViewForTest(ViewCreate)
-	m.createState = &CreateState{
-		Creating:    true,
-		ActivityLog: NewActivityLog(60, 10),
-	}
+	m.setViewForTest(ViewBranchForm)
+	m.branchForm = busyFormForTest()
 
 	msg := creationDoneMsg{source: "create", err: fmt.Errorf("fail")}
 	result, _ := m.Update(msg)
 	m = result.(Model)
 
 	// On error, should stay in create view with error set
-	if m.createState == nil {
-		t.Fatal("createState should not be nil on error")
+	if m.branchForm == nil {
+		t.Fatal("branchForm should not be nil on error")
 	}
-	if m.createState.Error != "fail" {
-		t.Errorf("createState.Error = %q, want %q", m.createState.Error, "fail")
+	if msg, kind := m.branchForm.status(); kind != formStatusError || msg != "fail" {
+		t.Errorf("status = %q (%v), want error %q", msg, kind, "fail")
 	}
-	if m.createState.Creating {
-		t.Error("Creating should be false after error")
+	if m.branchForm.Busy {
+		t.Error("Busy should be false after error")
 	}
 }
 
@@ -240,4 +215,12 @@ func stubDockerAutoUp(t *testing.T, fn func(*config.Config, string) (bool, error
 	orig := dockerAutoUp
 	dockerAutoUp = fn
 	return func() { dockerAutoUp = orig }
+}
+
+// busyFormForTest is a branch form mid-creation, with an empty activity log.
+func busyFormForTest() *BranchFormState {
+	s := newBranchForm(testFormOptions())
+	s.Busy = true
+	s.Log = NewActivityLog(60, 10)
+	return s
 }

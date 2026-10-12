@@ -11,16 +11,28 @@ import (
 // so the dim looks the same under NO_COLOR, high contrast, and every theme.
 var backdropStyle = lipgloss.NewStyle().Faint(true)
 
-// composeOverlay draws overlay centered over a dimmed copy of bg. The result
-// is exactly height lines, none wider than width. Background cells outside
-// the overlay's rectangle are kept.
+// composeOverlay draws overlay centered over a dimmed copy of bg.
 func composeOverlay(bg, overlay string, width, height int) string {
+	return composeOverlayAt(bg, overlay, width, height, -1)
+}
+
+// composeOverlayAt draws overlay over a dimmed copy of bg, horizontally
+// centered, with its top edge at row top (top < 0 centers vertically). An
+// overlay that would run off the bottom moves up. The result is exactly
+// height lines, none wider than width. Background cells outside the
+// overlay's rectangle are kept.
+func composeOverlayAt(bg, overlay string, width, height, top int) string {
 	if width <= 0 || height <= 0 {
 		return overlay
 	}
 	box := strings.Join(fitLines(overlay, width, min(lipgloss.Height(overlay), height)), "\n")
+	boxH := lipgloss.Height(box)
 	x := max(0, (width-lipgloss.Width(box))/2)
-	y := max(0, (height-lipgloss.Height(box))/2)
+	y := (height - boxH) / 2
+	if top >= 0 {
+		y = top
+	}
+	y = max(0, min(y, height-boxH))
 	return lipgloss.NewCompositor(
 		lipgloss.NewLayer(dimBackdrop(bg, width, height)),
 		lipgloss.NewLayer(box).X(x).Y(y).Z(1),

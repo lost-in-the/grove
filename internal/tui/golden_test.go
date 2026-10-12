@@ -90,25 +90,6 @@ func TestGolden_Overlay_Delete(t *testing.T) {
 	})
 }
 
-func TestGolden_Overlay_Create(t *testing.T) {
-	t.Run("branch_choice_step", func(t *testing.T) {
-		m := goldenModel(t, sizeStandard, withItems(3), withCreateStep(CreateStepBranchChoice))
-		golden.RequireEqual(t, []byte(m.viewString()))
-	})
-	t.Run("branch_select_step", func(t *testing.T) {
-		m := goldenModel(t, sizeStandard, withItems(3), withCreateStep(CreateStepBranchSelect))
-		golden.RequireEqual(t, []byte(m.viewString()))
-	})
-	t.Run("name_step", func(t *testing.T) {
-		m := goldenModel(t, sizeStandard, withItems(3), withCreateStep(CreateStepName))
-		golden.RequireEqual(t, []byte(m.viewString()))
-	})
-	t.Run("confirm_step", func(t *testing.T) {
-		m := goldenModel(t, sizeStandard, withItems(3), withCreateStep(CreateStepConfirm))
-		golden.RequireEqual(t, []byte(m.viewString()))
-	})
-}
-
 func TestGolden_Overlay_Bulk(t *testing.T) {
 	t.Run("with_items", func(t *testing.T) {
 		m := goldenModel(t, sizeStandard, withItems(5), withBulkOverlay(5))
@@ -249,7 +230,7 @@ func TestGolden_Component_HelpFooter(t *testing.T) {
 	}{
 		{"dashboard", ViewDashboard},
 		{"delete", ViewDelete},
-		{"create", ViewCreate},
+		{"create", ViewBranchForm},
 	}
 	for _, tc := range contexts {
 		t.Run(tc.name, func(t *testing.T) {
