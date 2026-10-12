@@ -17,6 +17,8 @@ type formMode int
 
 const (
 	formModeNew formMode = iota
+	formModeCopy
+	formModeSwitch
 )
 
 type formField int
@@ -25,6 +27,7 @@ const (
 	fieldBranch formField = iota
 	fieldBase
 	fieldAlias
+	fieldChanges
 )
 
 type formResult int
@@ -42,6 +45,8 @@ const (
 	intentSwitchTo
 	intentCreateExisting
 	intentCreateNew
+	intentCopy
+	intentSwitchBranch
 )
 
 type formIntent struct {
@@ -50,6 +55,8 @@ type formIntent struct {
 	Branch  string
 	FromRef string
 	Target  *WorktreeItem
+	WIP     WIPStrategy
+	Stash   bool
 }
 
 type formStatusKind int
@@ -106,6 +113,14 @@ type BranchFormState struct {
 	Busy   bool
 	Log    *ActivityLog
 	Status string
+
+	Source   *WorktreeItem // copy: the worktree copied; switch: the worktree switched
+	HasWIP   bool
+	WIPFiles []string
+	Changes  WIPStrategy
+
+	wipDone bool
+	wipErr  error
 }
 
 func newBranchForm(opts branchFormOptions) *BranchFormState {
@@ -172,7 +187,85 @@ func (s *BranchFormState) applyPrefill(p branchFormPrefill) tea.Cmd {
 	return nil
 }
 
-func (s *BranchFormState) title() string { return "New worktree" }
+// newCopyForm copies source into a new worktree on a new branch cut from
+// source's HEAD. Changes defaults to copy, which leaves the source as it is.
+func newCopyForm(opts branchFormOptions, source WorktreeItem) *BranchFormState {
+	s := newBranchForm(opts)
+	s.Mode = formModeCopy
+	s.Source = &source
+	s.Changes = WIPCopy
+	s.Branch.Placeholder = "new branch name"
+	if source.Branch != "" {
+		s.Branch.SetValue(source.Branch + "-copy")
+		s.Branch.CursorEnd()
+	}
+	s.syncAlias()
+	s.setFocus(fieldBranch)
+	return s
+}
+
+// newSwitchForm switches target's checkout to another local branch.
+func newSwitchForm(opts branchFormOptions, target WorktreeItem) *BranchFormState {
+	s := newBranchForm(opts)
+	s.Mode = formModeSwitch
+	s.Source = &target
+	s.Branch.Placeholder = "type to search local branches"
+	s.setFocus(fieldBranch)
+	return s
+}
+
+// setWIP records the uncommitted-changes check for the form's worktree. A
+// result for any other path comes from an earlier form and is ignored.
+func (s *BranchFormState) setWIP(path string, has bool, files []string, err error) {
+	if s.Source == nil || s.Source.Path != path {
+		return
+	}
+	s.wipDone, s.HasWIP, s.WIPFiles, s.wipErr = true, has, files, err
+}
+
+func (s *BranchFormState) wipChecked() bool { return s.wipDone }
+
+var changesOrder = []WIPStrategy{WIPCopy, WIPMove, WIPLeave}
+
+func changesLabel(w WIPStrategy) string {
+	switch w {
+	case WIPMove:
+		return "move"
+	case WIPLeave:
+		return "leave"
+	}
+	return "copy"
+}
+
+func (s *BranchFormState) cycleChanges(delta int) {
+	i := 0
+	for j, w := range changesOrder {
+		if w == s.Changes {
+			i = j
+		}
+	}
+	s.Changes = changesOrder[(i+delta+len(changesOrder))%len(changesOrder)]
+}
+
+func (s *BranchFormState) busyVerb() string {
+	switch s.Mode {
+	case formModeCopy:
+		return "copying…"
+	case formModeSwitch:
+		return "switching…"
+	}
+	return "creating…"
+}
+
+func (s *BranchFormState) title() string {
+	switch s.Mode {
+	case formModeCopy:
+		return "Copy " + s.Source.ShortName
+	case formModeSwitch:
+		return "Switch branch of " + s.Source.ShortName
+	}
+	return "New worktree"
+}
 
 func (s *BranchFormState) branchValue() string { return strings.TrimSpace(s.Branch.Value()) }
 func (s *BranchFormState) baseValue() string   { return strings.TrimSpace(s.Base.Value()) }
@@ -223,8 +316,32 @@ func (s *BranchFormState) matchBranches(q string) []formSuggestion {
 	return out
 }
 
+// switchCandidates lists local branches no worktree has checked out.
+func (s *BranchFormState) switchCandidates(q string) []formSuggestion {
+	ql := strings.ToLower(q)
+	var out []formSuggestion
+	for _, b := range s.order {
+		if !s.local[b] || s.inUse[b] != nil {
+			continue
+		}
+		if ql == "" || strings.Contains(strings.ToLower(b), ql) {
+			out = append(out, formSuggestion{Branch: b, Note: "local"})
+		}
+	}
+	return out
+}
+
 // suggestions lists the rows for the focused field.
 func (s *BranchFormState) suggestions() []formSuggestion {
+	switch s.Mode {
+	case formModeCopy:
+		return nil
+	case formModeSwitch:
+		if s.Focus != fieldBranch {
+			return nil
+		}
+		return s.switchCandidates(s.branchValue())
+	}
 	switch s.Focus {
 	case fieldBranch:
 		q := s.branchValue()
@@ -240,6 +357,15 @@ func (s *BranchFormState) suggestions() []formSuggestion {
 }
 
 func (s *BranchFormState) fieldOrder() []formField {
+	switch s.Mode {
+	case formModeCopy:
+		if s.HasWIP {
+			return []formField{fieldBranch, fieldAlias, fieldChanges}
+		}
+		return []formField{fieldBranch, fieldAlias}
+	case formModeSwitch:
+		return []formField{fieldBranch}
+	}
 	if s.isNewBranch() {
 		return []formField{fieldBranch, fieldBase, fieldAlias}
 	}
@@ -260,6 +386,10 @@ func (s *BranchFormState) setFocus(f formField) tea.Cmd {
 	s.Branch.Blur()
 	s.Base.Blur()
 	s.Alias.Blur()
+	if f == fieldChanges {
+		s.Focus, s.Pick = f, 0
+		return nil
+	}
 	s.Focus = f
 	s.Pick = s.defaultPick()
 	return s.input(f).Focus()
@@ -348,6 +478,12 @@ func (s *BranchFormState) acceptPick() {
 // validate returns the first invalid field and why. An in-use branch is
 // valid: submitting it switches to the worktree already using it.
 func (s *BranchFormState) validate() (formField, string, bool) {
+	switch s.Mode {
+	case formModeCopy:
+		return s.validateCopy()
+	case formModeSwitch:
+		return s.validateSwitch()
+	}
 	b := s.branchValue()
 	if b == "" {
 		return fieldBranch, "type a branch name", false
@@ -361,6 +497,10 @@ func (s *BranchFormState) validate() (formField, string, bool) {
 			return fieldBase, fmt.Sprintf("base branch %q not found", base), false
 		}
 	}
+	return s.validateAlias()
+}
+
+func (s *BranchFormState) validateAlias() (formField, string, bool) {
 	a := s.aliasValue()
 	if a == "" {
 		return fieldAlias, "type an alias", false
@@ -374,7 +514,58 @@ func (s *BranchFormState) validate() (formField, string, bool) {
 	return fieldBranch, "", true
 }
 
+// validateWIP blocks submit until the uncommitted-changes check has
+// returned, and when it failed, so changes are never handled blind.
+func (s *BranchFormState) validateWIP() (formField, string, bool) {
+	if s.wipErr != nil {
+		return s.Focus, "could not check for uncommitted changes: " + s.wipErr.Error(), false
+	}
+	if !s.wipDone {
+		return s.Focus, "checking for uncommitted changes…", false
+	}
+	return fieldBranch, "", true
+}
+
+func (s *BranchFormState) validateCopy() (formField, string, bool) {
+	b := s.branchValue()
+	if b == "" {
+		return fieldBranch, "type a name for the new branch", false
+	}
+	if s.known(b) {
+		return fieldBranch, fmt.Sprintf("branch %q already exists", b), false
+	}
+	if f, msg, ok := s.validateAlias(); !ok {
+		return f, msg, false
+	}
+	return s.validateWIP()
+}
+
+func (s *BranchFormState) validateSwitch() (formField, string, bool) {
+	b := s.branchValue()
+	switch {
+	case b == "":
+		return fieldBranch, "type a branch name", false
+	case b == s.Source.Branch:
+		return fieldBranch, fmt.Sprintf("%s is already on %s", s.Source.ShortName, b), false
+	case s.inUse[b] != nil:
+		return fieldBranch, fmt.Sprintf("%s is checked out in %s", b, s.inUse[b].ShortName), false
+	case !s.local[b]:
+		return fieldBranch, fmt.Sprintf("no local branch %q", b), false
+	}
+	return s.validateWIP()
+}
+
 func (s *BranchFormState) intent() formIntent {
+	switch s.Mode {
+	case formModeCopy:
+		in := formIntent{Kind: intentCopy, Alias: s.aliasValue(), Branch: s.branchValue(), Target: s.Source, WIP: WIPLeave}
+		if s.HasWIP {
+			in.WIP = s.Changes
+		}
+		return in
+	case formModeSwitch:
+		return formIntent{Kind: intentSwitchBranch, Branch: s.branchValue(), Target: s.Source, Stash: s.HasWIP}
+	}
 	b := s.branchValue()
 	if w := s.inUse[b]; w != nil {
 		return formIntent{Kind: intentSwitchTo, Branch: b, Target: w}
@@ -392,32 +583,53 @@ func (s *BranchFormState) intent() formIntent {
 
 func (s *BranchFormState) status() (string, formStatusKind) {
 	if s.Busy {
-		return "creating…", formStatusInfo
+		return s.busyVerb(), formStatusInfo
 	}
 	if s.Status != "" {
 		return s.Status, formStatusError
 	}
-	if w := s.inUse[s.branchValue()]; w != nil {
+	if w := s.inUse[s.branchValue()]; s.Mode == formModeNew && w != nil {
 		return fmt.Sprintf("in use by %s · ⏎ switches there", w.ShortName), formStatusInfo
 	}
 	if _, msg, ok := s.validate(); !ok {
 		return msg, formStatusHint
+	}
+	if s.HasWIP {
+		switch s.Mode {
+		case formModeCopy:
+			verb := map[WIPStrategy]string{WIPCopy: "copied", WIPMove: "moved", WIPLeave: "left behind"}[s.Changes]
+			return fmt.Sprintf("✓ ready · %d changed files will be %s", len(s.WIPFiles), verb), formStatusReady
+		case formModeSwitch:
+			return fmt.Sprintf("✓ ready · %d changed files will be stashed", len(s.WIPFiles)), formStatusReady
+		}
 	}
 	return "✓ ready", formStatusReady
 }
 
 func (s *BranchFormState) keyLine() string {
 	if s.Busy {
-		return "creating…"
+		return s.busyVerb()
 	}
 	if s.Log != nil {
 		return "any key to edit · esc back"
 	}
 	act := "⏎ create"
-	if s.inUse[s.branchValue()] != nil {
+	switch {
+	case s.Mode == formModeCopy:
+		act = "⏎ copy"
+	case s.Mode == formModeSwitch, s.inUse[s.branchValue()] != nil:
 		act = "⏎ switch"
 	}
-	return act + " · tab field · ctrl+j/k pick · esc back"
+	parts := []string{act}
+	if len(s.fieldOrder()) > 1 {
+		parts = append(parts, "tab field")
+	}
+	if s.Focus == fieldChanges {
+		parts = append(parts, "←/→ changes")
+	} else if s.Mode != formModeCopy {
+		parts = append(parts, "ctrl+j/k pick")
+	}
+	return strings.Join(append(parts, "esc back"), " · ")
 }
 
 // handleKey applies one key. Navigation keys are explicit strings, never the
@@ -457,10 +669,22 @@ func (s *BranchFormState) handleKey(msg tea.KeyPressMsg, keys KeyMap) (formResul
 		s.Status = ""
 		return formSubmit, nil
 	}
+	if s.Focus == fieldChanges {
+		switch msg.String() {
+		case "left":
+			s.cycleChanges(-1)
+		case "right", "space":
+			s.cycleChanges(1)
+		}
+		return formContinue, nil
+	}
 	return formContinue, s.typeInto(msg)
 }
 
 func (s *BranchFormState) typeInto(msg tea.Msg) tea.Cmd {
+	if s.Focus == fieldChanges {
+		return nil
+	}
 	in := s.input(s.Focus)
 	var cmd tea.Cmd
 	*in, cmd = in.Update(msg)

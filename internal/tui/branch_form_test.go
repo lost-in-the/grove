@@ -471,3 +471,209 @@ func TestBranchForm_FailedCreationShowsLogUntilAKey(t *testing.T) {
 		t.Errorf("first key should only dismiss the log: log=%v branch=%q", s.Log != nil, s.branchValue())
 	}
 }
+
+func testSource() WorktreeItem {
+	return WorktreeItem{ShortName: "auth", Branch: "feature/auth", Path: "/r/auth"}
+}
+
+func TestCopyForm_DefaultsAndDerivedAlias(t *testing.T) {
+	s := newCopyForm(testFormOptions(), testSource())
+	if s.title() != "Copy auth" {
+		t.Errorf("title = %q", s.title())
+	}
+	if got := s.branchValue(); got != "feature/auth-copy" {
+		t.Errorf("branch = %q, want feature/auth-copy", got)
+	}
+	if got := s.aliasValue(); got != "auth-copy" {
+		t.Errorf("alias = %q, want auth-copy", got)
+	}
+	if s.Changes != WIPCopy {
+		t.Errorf("changes = %v, want copy (non-destructive default)", s.Changes)
+	}
+	if len(s.suggestions()) != 0 {
+		t.Error("copy mode offers no branch suggestions")
+	}
+}
+
+func TestCopyForm_EnterBlockedUntilWIPChecked(t *testing.T) {
+	s := newCopyForm(testFormOptions(), testSource())
+	if press(s, "enter") != formContinue {
+		t.Fatal("enter before the changes check must not submit")
+	}
+	if msg, _ := s.status(); msg != "checking for uncommitted changes…" {
+		t.Errorf("status = %q", msg)
+	}
+	s.setWIP("/r/auth", false, nil, nil)
+	if press(s, "enter") != formSubmit {
+		t.Error("enter after a clean check should submit")
+	}
+}
+
+func TestCopyForm_WIPCheckErrorBlocks(t *testing.T) {
+	s := newCopyForm(testFormOptions(), testSource())
+	s.setWIP("/r/auth", false, nil, errTestBoom)
+	if press(s, "enter") != formContinue {
+		t.Fatal("a failed changes check must block submit")
+	}
+	if msg, _ := s.status(); !strings.Contains(msg, "could not check") {
+		t.Errorf("status = %q", msg)
+	}
+}
+
+func TestCopyForm_IgnoresWIPForOtherPath(t *testing.T) {
+	s := newCopyForm(testFormOptions(), testSource())
+	s.setWIP("/r/other", false, nil, nil)
+	if s.wipChecked() {
+		t.Error("a check for another worktree must be ignored")
+	}
+}
+
+func TestCopyForm_RejectsExistingBranch(t *testing.T) {
+	s := newCopyForm(testFormOptions(), testSource())
+	s.setWIP("/r/auth", false, nil, nil)
+	s.Branch.SetValue("fix/login")
+	s.syncAlias()
+	if press(s, "enter") != formContinue {
+		t.Fatal("an existing branch must not submit")
+	}
+	if msg, _ := s.status(); msg != `branch "fix/login" already exists` {
+		t.Errorf("status = %q", msg)
+	}
+}
+
+func TestCopyForm_DirtyAddsChangesFieldAndCycles(t *testing.T) {
+	s := newCopyForm(testFormOptions(), testSource())
+	s.setWIP("/r/auth", true, []string{"a.go", "b.go"}, nil)
+	press(s, "tab")
+	press(s, "tab")
+	if s.Focus != fieldChanges {
+		t.Fatalf("focus = %v, want changes", s.Focus)
+	}
+	press(s, "right")
+	if got := changesLabel(s.Changes); got != "move" {
+		t.Errorf("changes = %s, want move after right", got)
+	}
+	press(s, "space")
+	press(s, "space")
+	if got := changesLabel(s.Changes); got != "copy" {
+		t.Errorf("changes = %s, want copy after cycling round", got)
+	}
+	press(s, "left")
+	if got := changesLabel(s.Changes); got != "leave" {
+		t.Errorf("changes = %s, want leave after left from copy", got)
+	}
+	press(s, "left")
+	press(s, "x")
+	if got := s.aliasValue(); got != "auth-copy" {
+		t.Errorf("typing on the changes row changed the alias to %q", got)
+	}
+	in := s.intent()
+	if in.Kind != intentCopy || in.Branch != "feature/auth-copy" || in.Alias != "auth-copy" || in.WIP != WIPMove {
+		t.Errorf("intent = %+v", in)
+	}
+}
+
+func TestCopyForm_CleanSourceLeavesChanges(t *testing.T) {
+	s := newCopyForm(testFormOptions(), testSource())
+	s.setWIP("/r/auth", false, nil, nil)
+	if in := s.intent(); in.WIP != WIPLeave {
+		t.Errorf("WIP = %v, want leave for a clean source", in.WIP)
+	}
+	press(s, "tab")
+	press(s, "tab")
+	if s.Focus == fieldChanges {
+		t.Error("a clean source has no changes field")
+	}
+}
+
+func TestSwitchForm_SuggestsFreeLocalBranchesOnly(t *testing.T) {
+	s := newSwitchForm(testFormOptions(), testSource())
+	got := map[string]bool{}
+	for _, sg := range s.suggestions() {
+		got[sg.Branch] = true
+	}
+	if !got["fix/login"] {
+		t.Error("free local branch fix/login should be offered")
+	}
+	for _, b := range []string{"main", "feature/auth", "remote-only"} {
+		if got[b] {
+			t.Errorf("%s must not be offered (in use or not local)", b)
+		}
+	}
+}
+
+func TestSwitchForm_RejectsCurrentAndInUse(t *testing.T) {
+	s := newSwitchForm(testFormOptions(), testSource())
+	s.setWIP("/r/auth", false, nil, nil)
+	for branch, want := range map[string]string{
+		"feature/auth": "auth is already on feature/auth",
+		"main":         "main is checked out in root",
+		"remote-only":  `no local branch "remote-only"`,
+	} {
+		s.Branch.SetValue(branch)
+		if press(s, "enter") != formContinue {
+			t.Errorf("%s: submitted", branch)
+		}
+		if msg, _ := s.status(); msg != want {
+			t.Errorf("%s: status = %q, want %q", branch, msg, want)
+		}
+	}
+}
+
+func TestSwitchForm_StashesWhenDirty(t *testing.T) {
+	s := newSwitchForm(testFormOptions(), testSource())
+	s.setWIP("/r/auth", true, []string{"a.go"}, nil)
+	typeInto(t, s, "fix/login")
+	if press(s, "enter") != formSubmit {
+		t.Fatal("expected submit")
+	}
+	in := s.intent()
+	if in.Kind != intentSwitchBranch || in.Branch != "fix/login" || !in.Stash || in.Target.Path != "/r/auth" {
+		t.Errorf("intent = %+v", in)
+	}
+}
+
+func TestBranchFormModes_KeyLines(t *testing.T) {
+	c := newCopyForm(testFormOptions(), testSource())
+	if !strings.HasPrefix(c.keyLine(), "⏎ copy") {
+		t.Errorf("copy key line = %q", c.keyLine())
+	}
+	sw := newSwitchForm(testFormOptions(), testSource())
+	if !strings.HasPrefix(sw.keyLine(), "⏎ switch") {
+		t.Errorf("switch key line = %q", sw.keyLine())
+	}
+	n := newBranchForm(testFormOptions())
+	if n.keyLine() != "⏎ create · tab field · ctrl+j/k pick · esc back" {
+		t.Errorf("new key line changed: %q", n.keyLine())
+	}
+}
+
+// In Switch mode there is nothing to create, so enter on a partial match
+// takes the highlighted branch.
+func TestSwitchForm_EnterAcceptsFirstMatch(t *testing.T) {
+	s := newSwitchForm(testFormOptions(), testSource())
+	s.setWIP("/r/auth", false, nil, nil)
+	typeInto(t, s, "fi")
+	if press(s, "enter") != formSubmit {
+		t.Fatal("expected submit")
+	}
+	if in := s.intent(); in.Branch != "fix/login" {
+		t.Errorf("branch = %q, want fix/login", in.Branch)
+	}
+}
+
+func TestSwitchForm_EnterBlockedUntilWIPChecked(t *testing.T) {
+	s := newSwitchForm(testFormOptions(), testSource())
+	typeInto(t, s, "fix/login")
+	if press(s, "enter") != formContinue {
+		t.Fatal("enter before the changes check must not submit")
+	}
+	s.setWIP("/r/other", false, nil, nil)
+	if press(s, "enter") != formContinue {
+		t.Fatal("a check for another worktree must not unblock enter")
+	}
+	s.setWIP("/r/auth", false, nil, nil)
+	if press(s, "enter") != formSubmit {
+		t.Error("enter after a clean check should submit")
+	}
+}
