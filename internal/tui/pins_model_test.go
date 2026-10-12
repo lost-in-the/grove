@@ -161,3 +161,29 @@ func TestPins_PrunedOnlyAfterSuccessfulFetch(t *testing.T) {
 		t.Errorf("successful fetch: pins %v, want only root", ok.pins)
 	}
 }
+
+func TestLastActive_DashSwitches(t *testing.T) {
+	m := pinModel(t, pinSet{})
+	m.lastActive = "fix-bug"
+	next, cmd := pressKey(m, "-")
+	if next.switchTo != "/tmp/test-project-fix-bug" || !isQuit(cmd) {
+		t.Errorf("-: switchTo %q quit %v", next.switchTo, isQuit(cmd))
+	}
+}
+
+func TestLastActive_CurrentQuitsWithoutSwitch(t *testing.T) {
+	m := pinModel(t, pinSet{})
+	m.lastActive = "root"
+	next, cmd := pressKey(m, "-")
+	if next.switchTo != "" || !isQuit(cmd) {
+		t.Errorf("- on the current worktree: switchTo %q quit %v", next.switchTo, isQuit(cmd))
+	}
+}
+
+func TestLastActive_NoneFlashes(t *testing.T) {
+	m := pinModel(t, pinSet{})
+	next, cmd := pressKey(m, "-")
+	if isQuit(cmd) || next.toast.Message() != "no previous worktree" {
+		t.Errorf("toast %q quit %v", next.toast.Message(), isQuit(cmd))
+	}
+}

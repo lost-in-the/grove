@@ -88,6 +88,7 @@ type Model struct {
 	pendingG     bool // g was pressed; a second g goes to the top
 	pendingM     bool // m was pressed; the pin strip is open
 	pins         pinSet
+	lastActive   string // display name of the worktree before this one (state.LastWorktree)
 
 	// Overlay state
 	deleteState *DeleteState
@@ -185,6 +186,7 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		list:                l,
 		compactMode:         compact,
 		pins:                pins,
+		lastActive:          lastWorktreeName(stateMgr),
 		spinner:             s,
 		help:                h,
 		toast:               NewToastModel(),
@@ -818,6 +820,7 @@ func (m *Model) rowDelegate() rowDelegate {
 		TwoLine:    !m.compactMode,
 		Pins:       len(m.pins) > 0,
 		PinOf:      pinOf,
+		LastActive: m.lastActive,
 		AgentAware: m.agentAware,
 		Secondary:  listSecondary(m.cfg),
 		Now:        m.now,
@@ -957,6 +960,9 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if updated, cmd, handled := m.handlePinKey(msg); handled {
 		return updated, cmd
+	}
+	if msg.String() == "-" {
+		return m.switchToLastActive()
 	}
 	if updated, handled := m.handleMotionKey(msg); handled {
 		return updated, nil

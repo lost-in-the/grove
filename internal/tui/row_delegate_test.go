@@ -296,3 +296,16 @@ func TestDashboard_PinColumnOnlyWithPins(t *testing.T) {
 		t.Errorf("delegate = %+v, want the pin column with root in slot 1", d)
 	}
 }
+
+func TestRowDelegate_LastActiveMarker(t *testing.T) {
+	d := testRowDelegate()
+	d.LastActive = "auth"
+	rows := renderRows(d, rowFixture(), 80, 0)
+	if l := ansi.Strip(rows[1]); !strings.HasPrefix(l, "↩ ○ auth") {
+		t.Errorf("last-active row: %q", l)
+	}
+	rows = renderRows(d, rowFixture(), 80, 1)
+	if l := ansi.Strip(rows[1]); !strings.HasPrefix(l, "❯ ○ auth") {
+		t.Errorf("selected last-active row shows the cursor: %q", l)
+	}
+}

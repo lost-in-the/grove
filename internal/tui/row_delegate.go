@@ -24,6 +24,7 @@ type rowDelegate struct {
 	TwoLine    bool
 	Pins       bool              // draw the pin column
 	PinOf      map[string]string // alias -> slot digit
+	LastActive string            // display name of the last-active worktree; its row shows ↩
 	AgentAware bool              // draw the agent column
 	Secondary  string
 	Now        func() time.Time
@@ -130,9 +131,12 @@ func (d rowDelegate) Render(w io.Writer, m list.Model, index int, listItem list.
 	if d.AgentAware {
 		left.WriteString(pad(agentGlyph(item.AgentStatus, st), rowLeadW))
 	}
-	if selected {
+	switch {
+	case selected:
 		left.WriteString(st(Styles.ListCursor).Render("❯") + sp)
-	} else {
+	case d.LastActive != "" && item.displayName() == d.LastActive:
+		left.WriteString(st(Styles.TextMuted).Render("↩") + sp)
+	default:
 		left.WriteString(plain.Render("  "))
 	}
 	left.WriteString(statusGlyph(item, st) + sp)

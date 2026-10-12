@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/lost-in-the/grove/internal/state"
 	"github.com/lost-in-the/grove/internal/tuilog"
 )
 
@@ -116,4 +117,34 @@ func (m Model) pinStripHeight() int {
 		return 0
 	}
 	return len(m.pinStripLines())
+}
+
+// switchToLastActive switches to the worktree used before this one, as
+// grove last does. On the current worktree it just quits.
+func (m Model) switchToLastActive() (Model, tea.Cmd) {
+	for _, li := range m.list.Items() {
+		item, ok := li.(WorktreeItem)
+		if !ok || m.lastActive == "" || item.displayName() != m.lastActive {
+			continue
+		}
+		if !item.IsCurrent {
+			m.switchTo = item.Path
+			m.switchToDisplayName = item.displayName()
+		}
+		return m, tea.Quit
+	}
+	m.toast.Show(NewToast("no previous worktree", ToastInfo))
+	return m, nil
+}
+
+// lastWorktreeName reads state.LastWorktree, or "" when there is none.
+func lastWorktreeName(stateMgr *state.Manager) string {
+	if stateMgr == nil {
+		return ""
+	}
+	name, err := stateMgr.GetLastWorktree()
+	if err != nil {
+		return ""
+	}
+	return name
 }
