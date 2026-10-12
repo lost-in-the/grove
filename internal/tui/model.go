@@ -292,10 +292,26 @@ func (m Model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	if m.activeView() == ViewHelp {
 		m.helpOverlay.Open(m.helpOverlay.ForView, m.width, m.height)
 	}
+	m.reconcileDetailWithWidth()
+	return m, nil
+}
+
+// reconcileDetailWithWidth keeps the detail mode right for the width tier:
+// pane focus exists only at 110+, the full-screen sheet only below it.
+func (m *Model) reconcileDetailWithWidth() {
+	wide := isWideLayout(m.width)
+	if !wide && m.detailFocused {
+		m.detailFocused = false
+		m.refreshDetailForFocus()
+	}
 	if m.layoutView() == ViewDetailSheet {
+		if wide && m.activeView() == ViewDetailSheet {
+			m.popView()
+			m.updateDetailContent()
+			return
+		}
 		m.refreshDetailSheet()
 	}
-	return m, nil
 }
 
 func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.Cmd) {
@@ -323,7 +339,7 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 			aliases[item.ShortName] = true
 		}
 		if pruned := m.pins.prune(aliases); len(pruned) != len(m.pins) {
-			m.setPins(pruned)
+			m.changePins(func(p pinSet) pinSet { return p.prune(aliases) })
 		}
 	}
 	if !m.agentAwareSet {
@@ -426,7 +442,8 @@ func (m Model) handleWorktreeDeleted(msg worktreeDeletedMsg) (tea.Model, tea.Cmd
 	m.popToRoot()
 	m.deleteState = nil
 	if msg.err == nil && m.pins.slotOf(msg.name) != "" {
-		m.setPins(m.pins.drop(msg.name))
+		name := msg.name
+		m.changePins(func(p pinSet) pinSet { return p.drop(name) })
 	}
 	if msg.err != nil {
 		m.toast.Show(NewToast(fmt.Sprintf("Delete failed: %s", msg.err), ToastError))
@@ -649,7 +666,8 @@ func (m Model) handleRenameComplete(msg renameCompleteMsg) (tea.Model, tea.Cmd) 
 	} else {
 		m.toast.Show(NewToast(fmt.Sprintf("Renamed %q to %q", msg.oldName, msg.newName), ToastSuccess))
 		if m.pins.slotOf(msg.oldName) != "" {
-			m.setPins(m.pins.rename(msg.oldName, msg.newName))
+			old, renamed := msg.oldName, msg.newName
+			m.changePins(func(p pinSet) pinSet { return p.rename(old, renamed) })
 		}
 		m.pendingSelect = msg.newName
 		cmds = append(cmds, m.spinner.Tick)
@@ -882,6 +900,21 @@ func (m Model) selectedItem() (WorktreeItem, bool) {
 }
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// A pending g or m owns the next key, before help, update, or any
+	// other dashboard key sees it.
+	if m.activeView() == ViewDashboard && !m.detailFocused {
+		if m.pendingG {
+			if updated, handled := m.handleMotionKey(msg); handled {
+				return updated, nil
+			}
+		}
+		if m.pendingM {
+			if updated, cmd, handled := m.handlePinKey(msg); handled {
+				return updated, cmd
+			}
+		}
+	}
+
 	// Help and update frames take every key; their trigger key or esc closes
 	// them and returns to the frame beneath.
 	switch m.activeView() {
@@ -1627,7 +1660,9 @@ func (m Model) renderDashboard() string {
 
 	body = lipgloss.NewStyle().Padding(0, 1).Render(body)
 	body = m.clampBodyToHeight(body, footer)
-
+	if body == "" {
+		return lipgloss.JoinVertical(lipgloss.Left, statusBar, footer)
+	}
 	return lipgloss.JoinVertical(lipgloss.Left, statusBar, body, footer)
 }
 
@@ -1674,7 +1709,7 @@ func (m Model) clampBodyToHeight(body, footer string) string {
 	if bodyBudget > 0 {
 		return clampLines(body, bodyBudget)
 	}
-	return body
+	return "" // no room: the body gives way so the screen never overflows
 }
 
 // renderVerticalDivider creates a thin column of │ characters for side-by-side layout.

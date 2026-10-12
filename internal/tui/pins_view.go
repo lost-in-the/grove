@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/lost-in-the/grove/internal/state"
 	"github.com/lost-in-the/grove/internal/tuilog"
@@ -20,7 +21,8 @@ func (m Model) handlePinKey(msg tea.KeyPressMsg) (Model, tea.Cmd, bool) {
 		m.pendingM = false
 		if len(k) == 1 && k[0] >= '0' && k[0] <= '9' {
 			if item, ok := m.selectedItem(); ok {
-				m.setPins(m.pins.pin(k, item.ShortName))
+				alias := item.ShortName
+				m.changePins(func(p pinSet) pinSet { return p.pin(k, alias) })
 			}
 		}
 		m.updateLayout()
@@ -60,12 +62,19 @@ func (m Model) switchToSlot(slot string) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// setPins replaces the pins, saves them, and redraws the pin column.
-func (m *Model) setPins(p pinSet) {
-	m.pins = p
-	if err := updateUIPrefs(m.projectRoot, func(prefs *UIPrefs) { prefs.Pins = p }); err != nil {
+// changePins applies op to the pins saved on disk, not just this model's
+// copy, so another dashboard on the same project keeps its pins. The model
+// then adopts the saved result and redraws the pin column.
+func (m *Model) changePins(op func(pinSet) pinSet) {
+	next := op(m.pins)
+	err := updateUIPrefs(m.projectRoot, func(prefs *UIPrefs) {
+		next = op(pinSet(prefs.Pins).clone())
+		prefs.Pins = next
+	})
+	if err != nil {
 		tuilog.Printf("warning: failed to save pins: %v", err)
 	}
+	m.pins = next
 	m.refreshDelegate()
 }
 
@@ -78,12 +87,13 @@ func (m Model) pinStripLines() []string {
 		selected = " · " + item.ShortName + " is selected"
 	}
 	title := " " + Styles.HelpKey.Render("m") + Styles.HelpDesc.Render(" pin to slot"+selected)
+	title = ansi.Truncate(title, width, "…")
 	entry := func(key, desc string) string {
 		return Styles.HelpKey.Render(key) + " " + Styles.HelpDesc.Render(desc)
 	}
 	var entries []string
 	for d := '1'; d <= '9'; d++ {
-		alias := m.pins[string(d)]
+		alias := middleTruncate(m.pins[string(d)], 20)
 		if alias == "" {
 			alias = "·"
 		}

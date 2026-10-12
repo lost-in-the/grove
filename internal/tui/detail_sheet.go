@@ -20,18 +20,20 @@ func (m *Model) openDetail() {
 		return
 	}
 	m.pushView(ViewDetailSheet)
+	m.updateLayout()
 	m.refreshDetailSheet()
 }
 
 // refreshDetailSheet renders the selected worktree into the detail
-// viewport, in the focused style, from the top.
+// viewport, from the top. The sheet is the whole screen, so it uses the
+// unfocused card: there is nothing else to focus.
 func (m *Model) refreshDetailSheet() {
 	item, ok := m.selectedItem()
 	if !ok {
 		m.detail.SetContent("")
 		return
 	}
-	m.detail.SetContent(renderDetailV2Focused(&item, m.detail.Width()))
+	m.detail.SetContent(renderDetailV2(&item, m.detail.Width()))
 	m.detail.GotoTop()
 }
 
@@ -39,6 +41,8 @@ func (m Model) handleDetailSheetKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.Escape), key.Matches(msg, m.keys.Tab), msg.String() == "h":
 		m.popView()
+		m.updateLayout()
+		m.updateDetailContent()
 		return m, nil
 	case key.Matches(msg, m.keys.Quit):
 		return m, tea.Quit

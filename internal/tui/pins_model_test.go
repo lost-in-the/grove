@@ -6,14 +6,19 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 
-// pinModel is a 120x40 dashboard with real prefs on disk and the given pins.
+// pinModel is a 120x40 dashboard with the given pins saved on disk, as the
+// app has them after loading.
 func pinModel(t *testing.T, pins pinSet) Model {
 	t.Helper()
 	m := newTestModel(withItems(4), withSize(120, 40))
 	m.projectRoot = prefsRoot(t)
+	if err := updateUIPrefs(m.projectRoot, func(p *UIPrefs) { p.Pins = pins }); err != nil {
+		t.Fatal(err)
+	}
 	m.pins = pins
 	m.refreshDelegate()
 	return m
@@ -185,5 +190,83 @@ func TestLastActive_NoneFlashes(t *testing.T) {
 	next, cmd := pressKey(m, "-")
 	if isQuit(cmd) || next.toast.Message() != "no previous worktree" {
 		t.Errorf("toast %q quit %v", next.toast.Message(), isQuit(cmd))
+	}
+}
+
+// After g, the next key belongs to the chord: pins, -, and m do nothing.
+func TestPins_GChordOwnsTheNextKey(t *testing.T) {
+	for _, k := range []string{"3", "-", "m"} {
+		m := pinModel(t, pinSet{"3": "fix-bug"})
+		m.lastActive = "fix-bug"
+		m = sendKey(m, "g")
+		next, cmd := pressKey(m, k)
+		if next.switchTo != "" || isQuit(cmd) || next.pendingM || next.pendingG {
+			t.Errorf("g %s: switchTo %q quit %v pendingM %v pendingG %v", k, next.switchTo, isQuit(cmd), next.pendingM, next.pendingG)
+		}
+	}
+}
+
+// m then ? or any other key only closes the strip, and the list gets its
+// height back.
+func TestPins_StripClosesOnHelpKey(t *testing.T) {
+	m := pinModel(t, pinSet{})
+	h := m.list.Height()
+	m = sendKey(m, "m")
+	m = sendKey(m, "?")
+	if m.activeView() != ViewDashboard || m.pendingM || m.list.Height() != h {
+		t.Errorf("m ?: view %v pendingM %v height %d (want dashboard, closed, %d)", m.activeView(), m.pendingM, m.list.Height(), h)
+	}
+}
+
+// A long alias never makes the strip wider than the screen.
+func TestPins_StripFitsWidth(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(60, 24))
+	m.projectRoot = prefsRoot(t)
+	items := m.list.Items()
+	it := items[0].(WorktreeItem)
+	it.ShortName = strings.Repeat("very-long-alias-", 4)
+	items[0] = it
+	m.list.SetItems(items)
+	m.pins = pinSet{"1": it.ShortName}
+	m = sendKey(m, "m")
+	for i, line := range strings.Split(m.viewString(), "\n") {
+		if w := lipgloss.Width(line); w > 60 {
+			t.Errorf("line %d is %d cells", i, w)
+		}
+	}
+}
+
+// Two dashboards on one project keep each other's pins.
+func TestPins_SaveKeepsAnotherInstancesPins(t *testing.T) {
+	root := prefsRoot(t)
+	a := newTestModel(withItems(4), withSize(120, 40))
+	a.projectRoot, a.pins = root, pinSet{}
+	b := newTestModel(withItems(4), withSize(120, 40))
+	b.projectRoot, b.pins = root, pinSet{}
+	a.list.Select(0)
+	a = sendKey(a, "m")
+	a = sendKey(a, "1")
+	b.list.Select(2)
+	b = sendKey(b, "m")
+	b = sendKey(b, "2")
+	saved := loadUIPrefs(root)
+	if saved == nil || saved.Pins["1"] != "root" || saved.Pins["2"] != "fix-bug" {
+		t.Errorf("saved pins = %+v, want both instances' pins", saved)
+	}
+	if b.pins["1"] != "root" {
+		t.Errorf("b.pins = %v, want it to pick up slot 1 from disk", b.pins)
+	}
+}
+
+func TestPins_FailedRenameOrDeleteKeepsPin(t *testing.T) {
+	m := pinModel(t, pinSet{"2": "feature-auth"})
+	r := sendMsg(m, renameCompleteMsg{oldName: "feature-auth", newName: "auth", err: errors.New("boom")})
+	d := sendMsg(m, worktreeDeletedMsg{name: "feature-auth", err: errors.New("boom")})
+	if r.pins["2"] != "feature-auth" || d.pins["2"] != "feature-auth" {
+		t.Errorf("rename %v delete %v, want the pin kept after failures", r.pins, d.pins)
+	}
+	bd := sendMsg(m, worktreeDeletedMsg{name: "feature-auth", branchErr: errors.New("branch")})
+	if _, ok := bd.pins["2"]; ok {
+		t.Error("a delete that removed the worktree but not its branch kept the pin")
 	}
 }

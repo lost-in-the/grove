@@ -86,3 +86,45 @@ func TestGuard_Under44(t *testing.T) {
 		t.Errorf("after widening: view %v branch %q, want the form with abc", m.activeView(), m.branchForm.branchValue())
 	}
 }
+
+func resize(m Model, w, h int) Model {
+	next, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+	return next.(Model)
+}
+
+// Detail mode follows the width tier across a resize.
+func TestDetail_ReconciledOnResize(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m = sendKey(m, "tab")
+	m = resize(m, 100, 30)
+	if m.detailFocused {
+		t.Error("pane focus survived shrinking below 110")
+	}
+	s := newTestModel(withItems(3), withSize(80, 24))
+	s = sendKey(s, "tab")
+	s = resize(s, 120, 40)
+	if s.activeView() != ViewDashboard {
+		t.Errorf("sheet survived widening to 120: view %v", s.activeView())
+	}
+	if strings.Contains(ansi.Strip(s.detail.View()), "focused") {
+		t.Error("docked pane still looks focused after the sheet closed")
+	}
+}
+
+// The sheet is the whole screen; it does not claim focus over anything.
+func TestDetailSheet_TitleHasNoFocusLabel(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 24))
+	m = sendKey(m, "tab")
+	if strings.Contains(ansi.Strip(m.viewString()), "· focused") {
+		t.Error("full-screen sheet says focused")
+	}
+}
+
+// Very short screens never draw more lines than they have.
+func TestDashboard_TinyHeightsDoNotOverflow(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 5))
+	m = sendKey(m, "m")
+	if n := len(strings.Split(m.viewString(), "\n")); n > 5 {
+		t.Errorf("80x5 with the strip draws %d lines", n)
+	}
+}
