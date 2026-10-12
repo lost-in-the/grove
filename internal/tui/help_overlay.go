@@ -255,18 +255,20 @@ func helpSectionsFor(view ActiveView) []helpSection {
 var helpSectionsDashboard = []helpSection{
 	{title: "Navigation", items: []helpEntry{
 		{"↑/k ↓/j", "Move up / down"},
+		{"gg / G", "Top / bottom of list"},
+		{"ctrl+d / ctrl+u", "Half page down / up"},
 		{"enter", "Switch to selected worktree"},
 		{"U", "Switch and start containers"},
 		{"1-9", "Quick-switch by number"},
 		{"/", "Filter worktrees"},
-		{"tab", "Focus detail panel"},
+		{"tab / l", "Focus detail panel"},
 	}},
 	{title: "Detail Panel (when focused)", items: []helpEntry{
 		{"↑/k ↓/j", "Scroll up / down"},
 		{"g / G", "Jump to top / bottom"},
 		{"ctrl+u / ctrl+d", "Half page up / down"},
 		{"B", "Open associated PR in browser"},
-		{"tab / esc", "Return to list"},
+		{"tab / esc / h", "Return to list"},
 	}},
 	{title: "Worktree Actions", items: []helpEntry{
 		{"n", "Create new worktree"},
@@ -282,8 +284,9 @@ var helpSectionsDashboard = []helpSection{
 		{"i", "Browse issues"},
 	}},
 	{title: "Display", items: []helpEntry{
-		{"o", "Cycle sort (name → recent → dirty)"},
-		{"v", "Toggle compact/detailed view"},
+		{"o", "Cycle sort (name → age → dirty)"},
+		{"O", "Reverse sort"},
+		{"v", "Show or hide commit messages"},
 		{"r", "Refresh worktree list"},
 		{"c", "Open configuration"},
 	}},

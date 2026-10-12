@@ -8,12 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Toast notifications show again. They had stopped appearing on the dashboard; they now draw in the top-right corner above everything else.
 - Overlays in the dashboard no longer erase the rows beside them, and the background behind them is dimmed evenly instead of stopping at the first styled word. (#19)
 - `esc` in the dashboard goes back exactly one level, and returns the cursor to the worktree it was on, even after the list refreshes.
 - With `NO_COLOR` set, the footer now shows which key you pressed (reverse video). Before, the highlight looked the same as every other key.
 - The issue browser fills in the branch `issue-N` again when it opens the New Worktree form.
 
 ### Changed
+- Dashboard rows are one line: agent state (under herdr), cursor, status, alias, branch chip, counts, age, and session and container glyphs. The cursor no longer hides a row's status. As the terminal narrows, columns drop in a fixed order and long aliases shorten in the middle. `v` adds the commit message back; one line is the new default unless you saved a choice.
+- The header shows the sort and your position in the list (`3/12`) instead of the current branch.
+- Sort modes are name, age (last commit), and dirty; `O` reverses. Age replaces recent (last accessed).
+- New list keys: `gg` / `G`, `ctrl+d` / `ctrl+u`, `l` / `h` for the detail panel. The list pages only on `pgup` / `pgdown`, so a bare `u` no longer pages it.
+- Text colors meet 4.5:1 contrast on the selected row and header too, in every theme. The focused detail panel's title says `focused`.
+- New `tui.list_secondary` setting: `branch` (default), `dir`, or `off`.
 - The New Worktree wizard is now a single form: Branch, Base, and Alias. It never moves or changes size, and its status line says what `enter` will do. A new branch now starts from the configured default branch, not from whatever the main checkout has checked out. An alias already used by another worktree is reported as an error instead of switching to that worktree.
 - Copy worktree (`f`, formerly fork) and Switch branch (`b`) use the New Worktree form. Copy lets you name the new branch, copies uncommitted changes by default instead of moving them, and waits for the changes check before acting. Switch lists only local branches no worktree has checked out.
 - The config editor no longer offers `skip_branch_notice` and `default_branch_action`. The branch form replaced the notice they controlled; the keys still load without error.
