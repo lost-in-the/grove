@@ -35,7 +35,7 @@ const (
 
 // ConfigField represents a single editable config field.
 type ConfigField struct {
-	Key         string // TOML key path, e.g. "tui.skip_branch_notice"
+	Key         string // TOML key path, e.g. "tmux.mode"
 	Label       string // display name
 	Value       string // current value as string
 	Default     string // default value for display
@@ -152,20 +152,9 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 	}
 
 	// Behavior tab
-	skipNotice := boolFalse
-	if cfg.TUI.SkipBranchNotice != nil && *cfg.TUI.SkipBranchNotice {
-		skipNotice = boolTrue
-	}
 	tmuxMode := cfg.Tmux.Mode
 	if tmuxMode == "" {
 		tmuxMode = "auto"
-	}
-	// The enum select cannot represent an empty value — huh normalizes it to the
-	// first option ("split") on display. Reflect that in both Value and Default so
-	// an untouched field is not reported dirty.
-	defaultBranchAction := cfg.TUI.DefaultBranchAction
-	if defaultBranchAction == "" {
-		defaultBranchAction = "split"
 	}
 	fields[ConfigTabBehavior] = []ConfigField{
 		{
@@ -193,24 +182,6 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Default:     cfg.Naming.Pattern,
 			Type:        ConfigString,
 			Description: "Worktree directory template; {project} and {name} each exactly once",
-		},
-		{
-			Key:         "tui.skip_branch_notice",
-			Label:       "skip_branch_notice",
-			Value:       skipNotice,
-			Default:     skipNotice,
-			Type:        ConfigBool,
-			Description: "Skip branch-exists notice",
-		},
-		{
-			Key:         "tui.default_branch_action",
-			Label:       "default_branch_action",
-			Value:       defaultBranchAction,
-			Default:     defaultBranchAction,
-			Type:        ConfigEnum,
-			Options:     []string{"split", "fork"},
-			Description: "Default action when branch exists",
-			Placeholder: "(prompt each time)",
 		},
 	}
 

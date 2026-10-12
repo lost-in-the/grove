@@ -180,8 +180,15 @@ func TestPopulateConfigFields(t *testing.T) {
 
 	// Behavior tab
 	behavior := fields[ConfigTabBehavior]
-	if len(behavior) != 5 {
-		t.Errorf("expected 5 Behavior fields, got %d", len(behavior))
+	if len(behavior) != 3 {
+		t.Errorf("expected 3 Behavior fields, got %d", len(behavior))
+	}
+	// The branch form replaced the branch-exists notice, so these settings
+	// no longer do anything and must not be offered.
+	for _, f := range behavior {
+		if f.Key == "tui.skip_branch_notice" || f.Key == "tui.default_branch_action" {
+			t.Errorf("Behavior tab still offers the unused setting %q", f.Key)
+		}
 	}
 
 	// Plugins tab

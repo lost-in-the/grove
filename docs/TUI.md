@@ -110,8 +110,8 @@ Toast levels:
 | `n` | Create new worktree |
 | `d` | Delete selected worktree |
 | `R` | Rename selected worktree |
-| `f` | Fork selected worktree |
-| `b` | Switch branch of selected worktree |
+| `f` | Copy selected worktree (new branch from its HEAD) |
+| `b` | Switch the selected worktree to another local branch |
 | `s` | Sync changes from another worktree |
 | `c` | Open config editor |
 | `p` | Browse GitHub PRs |
@@ -201,28 +201,27 @@ Renaming moves the git worktree directory, updates the state entry, and renames 
 
 > The main worktree and protected worktrees cannot be renamed.
 
-### Fork Worktree (`f`)
+### Copy Worktree (`f`)
 
-Fork creates a new worktree branched from the currently selected one — useful when you want to try a different approach without losing your current work.
+Opens the New Worktree form in Copy mode for the selected worktree. Use it to try a different approach without losing your current work.
 
-Steps:
-1. **Name** — Enter a name for the forked worktree. The new branch will be named `{source-branch}-{name}`.
-2. **WIP** (skipped if source is clean) — Choose how to handle uncommitted changes:
-   - **Move** — Transfer changes to the fork; source becomes clean.
-   - **Copy** — Apply changes to both the fork and the source.
-   - **Leave** — Fork starts from the commit HEAD; source keeps its changes.
-3. **Confirm** — Review and press `enter` to create.
+- **Branch:** starts as `<branch>-copy`. It must be a new branch; it is cut from the selected worktree's HEAD.
+- **Alias:** follows the branch until you edit it.
+- **Changes:** appears only when the worktree has uncommitted changes. Use `←` / `→` or `space` on this row:
+  - **copy** (default): apply the changes to both worktrees.
+  - **move:** apply them to the copy and clean the source.
+  - **leave:** the copy starts clean; the source keeps its changes.
+
+`enter` waits until the uncommitted-changes check finishes. The CLI equivalent is `grove fork`.
 
 ### Switch Branch (`b`)
 
-Changes which branch a worktree has checked out — without needing to delete and recreate it.
+Opens the form in Switch mode, to change which branch the selected worktree has checked out.
 
-Steps:
-1. **Branch** — Select a target branch from a filterable list. Branches already used by other worktrees are excluded. Remote-only branches appear in the list; selecting one fetches it from origin automatically.
-2. **WIP** (skipped if worktree is clean) — Choose how to handle uncommitted changes:
-   - **Stash** — Stash changes before switching (`git stash`).
-   - **Cancel** — Abort the branch switch.
-3. **Confirm** — Review current and target branches, then press `enter` to switch.
+- **Branch:** suggestions list local branches that no worktree has checked out.
+- **Changes:** if the worktree has uncommitted changes, they are stashed (`git stash`) before switching.
+
+`enter` waits until the uncommitted-changes check finishes.
 
 > The main worktree and protected worktrees cannot have their branch changed.
 
@@ -246,7 +245,7 @@ An in-TUI editor for your grove config. Changes take effect immediately after sa
 | Tab | Settings |
 |-----|----------|
 | General | `project_name`, `alias`, `projects_dir`, `default_branch` |
-| Behavior | `dirty_handling`, `tmux_mode`, `naming_pattern`, `skip_branch_notice`, `default_branch_action` |
+| Behavior | `dirty_handling`, `tmux_mode`, `naming_pattern` |
 | Plugins | Docker plugin `enabled`, `auto_start`, `auto_stop` |
 | Protection | `protected` list, `immutable` list |
 
