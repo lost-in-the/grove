@@ -204,37 +204,6 @@ func TestHelpOverlayToggleFromDashboard(t *testing.T) {
 	}
 }
 
-func TestQuickSwitch(t *testing.T) {
-	t.Run("1 switches to first item", func(t *testing.T) {
-		m := newTestModel(withItems(5), withSize(80, 24))
-		// Item 0 is current (main), so pressing "1" should quit (current worktree)
-		result, cmd := m.Update(makeKeyMsg("1"))
-		_ = result.(Model)
-		// It's the current worktree, so it should just quit
-		if cmd == nil {
-			t.Error("expected quit command for current worktree")
-		}
-	})
-
-	t.Run("2 switches to second item", func(t *testing.T) {
-		m := newTestModel(withItems(5), withSize(80, 24))
-		result, _ := m.Update(makeKeyMsg("2"))
-		m = result.(Model)
-		if m.switchTo == "" {
-			t.Error("expected switchTo to be set for non-current item")
-		}
-	})
-
-	t.Run("9 does nothing with only 5 items", func(t *testing.T) {
-		m := newTestModel(withItems(5), withSize(80, 24))
-		result, _ := m.Update(makeKeyMsg("9"))
-		m = result.(Model)
-		if m.switchTo != "" {
-			t.Error("expected no switch for out-of-range number")
-		}
-	})
-}
-
 func TestSortCycling(t *testing.T) {
 	m := newTestModel(withItems(5), withSize(80, 24))
 	if m.sortMode != SortByName {

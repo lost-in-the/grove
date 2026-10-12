@@ -487,23 +487,13 @@ func TestStressEmptyListSort(t *testing.T) {
 	}
 }
 
+// With no pins, no digit switches: 1-9 mean pin slots, not row positions.
 func TestStressQuickSwitchAllNumbers(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
-
-	// Press all number keys 1-9
 	for r := '1'; r <= '9'; r++ {
-		testM := m // copy model for each test
-		result, _ := testM.Update(makeKeyMsg(string(r)))
-		testM = result.(Model)
-
-		idx := int(r - '1')
-		if idx < 3 {
-			// Valid index: should switch or quit
-		} else {
-			// Out of range: should do nothing
-			if testM.switchTo != "" {
-				t.Errorf("digit %c: expected no switch for out-of-range, got %q", r, testM.switchTo)
-			}
+		result, _ := m.Update(makeKeyMsg(string(r)))
+		if got := result.(Model).switchTo; got != "" {
+			t.Errorf("digit %c with no pins switched to %q", r, got)
 		}
 	}
 }

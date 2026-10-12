@@ -86,6 +86,8 @@ type Model struct {
 	sortMode     SortMode
 	sortReversed bool // O reverses the current sort
 	pendingG     bool // g was pressed; a second g goes to the top
+	pendingM     bool // m was pressed; the pin strip is open
+	pins         pinSet
 
 	// Overlay state
 	deleteState *DeleteState
@@ -140,8 +142,12 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 	if cfg != nil {
 		configCompact = cfg.TUI.CompactList
 	}
+	pins := pinSet{}
 	if prefs := loadUIPrefs(projectRoot); prefs != nil {
 		prefCompact = prefs.CompactMode
+		for slot, alias := range prefs.Pins {
+			pins[slot] = alias
+		}
 	}
 	compact := startupCompact(configCompact, prefCompact)
 
@@ -178,6 +184,7 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		keys:                keys,
 		list:                l,
 		compactMode:         compact,
+		pins:                pins,
 		spinner:             s,
 		help:                h,
 		toast:               NewToastModel(),
@@ -302,6 +309,17 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 	// Capture SetItems' cmd: with a filter applied it re-runs the filter, and
 	// dropping it left the list showing no items until the user re-filtered (B38).
 	setItemsCmd := m.list.SetItems(listItems)
+	// Prune only here, after a successful fetch: a failed fetch must never
+	// wipe pins (spec 8.3).
+	if len(m.pins) > 0 {
+		aliases := map[string]bool{}
+		for _, item := range msg.items {
+			aliases[item.ShortName] = true
+		}
+		if pruned := m.pins.prune(aliases); len(pruned) != len(m.pins) {
+			m.setPins(pruned)
+		}
+	}
 	if !m.agentAwareSet {
 		// Decided by the first successful fetch, even one that found no
 		// backend, so the column never appears mid-session.
@@ -401,6 +419,9 @@ func (m Model) handleWorktreeDeleted(msg worktreeDeletedMsg) (tea.Model, tea.Cmd
 	var cmds []tea.Cmd
 	m.popToRoot()
 	m.deleteState = nil
+	if msg.err == nil && m.pins.slotOf(msg.name) != "" {
+		m.setPins(m.pins.drop(msg.name))
+	}
 	if msg.err != nil {
 		m.toast.Show(NewToast(fmt.Sprintf("Delete failed: %s", msg.err), ToastError))
 	} else if msg.branchErr != nil {
@@ -621,6 +642,9 @@ func (m Model) handleRenameComplete(msg renameCompleteMsg) (tea.Model, tea.Cmd) 
 		m.toast.Show(NewToast(fmt.Sprintf("Rename failed: %s", msg.err), ToastError))
 	} else {
 		m.toast.Show(NewToast(fmt.Sprintf("Renamed %q to %q", msg.oldName, msg.newName), ToastSuccess))
+		if m.pins.slotOf(msg.oldName) != "" {
+			m.setPins(m.pins.rename(msg.oldName, msg.newName))
+		}
 		m.pendingSelect = msg.newName
 		cmds = append(cmds, m.spinner.Tick)
 	}
@@ -700,7 +724,7 @@ func (m *Model) updateLayout() {
 	}
 
 	headerHeight := 1 // status bar
-	footerHeight := m.helpFooter.CompactHeight(m.layoutView(), m.width-4)
+	footerHeight := m.helpFooter.CompactHeight(m.layoutView(), m.width-4) + m.pinStripHeight()
 	available := m.height - headerHeight - footerHeight
 
 	contentWidth := m.width - 2 // body padding (1 char each side)
@@ -925,6 +949,9 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.detailFocused {
 		return m.handleDashboardDetailKey(msg)
 	}
+	if updated, cmd, handled := m.handlePinKey(msg); handled {
+		return updated, cmd
+	}
 	if updated, handled := m.handleMotionKey(msg); handled {
 		return updated, nil
 	}
@@ -1009,10 +1036,6 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, m.keys.Checkout):
 		return m.handleDashboardCheckoutKey()
-	}
-
-	if updated, cmd, handled := m.handleQuickSwitch(msg); handled {
-		return updated, cmd
 	}
 
 	return m.routeToList(msg)
@@ -1169,32 +1192,6 @@ func (m Model) handleDashboardCheckoutKey() (tea.Model, tea.Cmd) {
 		return m.openSwitchForm(item)
 	}
 	return m, nil
-}
-
-func (m Model) handleQuickSwitch(msg tea.KeyPressMsg) (Model, tea.Cmd, bool) {
-	runes := []rune(msg.Text)
-	if len(runes) != 1 || m.list.FilterState() != list.Unfiltered {
-		return m, nil, false
-	}
-	r := runes[0]
-	if r < '1' || r > '9' {
-		return m, nil, false
-	}
-	idx := int(r - '1')
-	items := m.list.Items()
-	if idx >= len(items) {
-		return m, nil, true
-	}
-	item, ok := items[idx].(WorktreeItem)
-	if !ok {
-		return m, nil, true
-	}
-	if item.IsCurrent {
-		return m, tea.Quit, true
-	}
-	m.switchTo = item.Path
-	m.switchToDisplayName = item.displayName()
-	return m, tea.Quit, true
 }
 
 func (m Model) routeToList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -1621,6 +1618,9 @@ func (m Model) renderDashboard() string {
 		footer = m.helpFooter.RenderCompact(ViewDashboard, m.width-4)
 	}
 	footer = m.appendUpdateBadge(footer)
+	if m.pendingM {
+		footer = m.renderPinStrip() + "\n" + footer
+	}
 
 	body = lipgloss.NewStyle().Padding(0, 1).Render(body)
 	body = m.clampBodyToHeight(body, footer)

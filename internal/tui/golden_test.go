@@ -342,3 +342,19 @@ func withRichRows() testOpt {
 		m.updateLayout()
 	}
 }
+
+// The m strip docked above the footer, with one slot taken.
+func TestGolden_Dashboard_PinStrip(t *testing.T) {
+	for _, size := range []termSize{sizeStandard, sizeWide} {
+		t.Run(size.name, func(t *testing.T) {
+			m := goldenModel(t, size, withItems(5), func(m *Model) {
+				m.pins = pinSet{"1": "root"}
+				m.list.Select(2)
+				m.pendingM = true
+				m.refreshDelegate()
+				m.updateLayout()
+			})
+			golden.RequireEqual(t, []byte(m.viewString()))
+		})
+	}
+}
