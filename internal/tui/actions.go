@@ -204,6 +204,10 @@ func dashboardActions() []Action {
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) { return m.openConfig() }},
 		{ID: "goto.upgrade", Layer: "g", Keys: []string{"u"}, Label: "upgrade grove",
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) { return m.openUpgrade() }},
+		{ID: "goto.agent", Layer: "g", Keys: []string{"a"}, Label: "agent needing you",
+			Synonyms: []string{"blocked", "attention", "needs you"},
+			Enabled:  func(m Model) bool { return m.agentAware },
+			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { return m.gotoAgent() }},
 	}
 }
 

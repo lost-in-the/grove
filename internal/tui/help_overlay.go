@@ -257,7 +257,7 @@ func helpSectionsFor(view ActiveView) []helpSection {
 var helpSectionsDashboard = []helpSection{
 	{title: "Navigation", items: []helpEntry{
 		{"↑/k ↓/j", "Move up / down"},
-		{"g", "Goto strip (g top, p PRs, i issues, c config, u upgrade)"},
+		{"g", "Goto strip (g top, p PRs, i issues, c config, u upgrade, a agent under herdr)"},
 		{"gg / G", "Top / bottom of list"},
 		{"ctrl+d / ctrl+u", "Half page down / up"},
 		{"enter", "Switch to selected worktree"},

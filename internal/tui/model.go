@@ -1051,6 +1051,9 @@ func (m Model) handleGLayerKey(msg tea.KeyPressMsg) (Model, tea.Cmd, bool) {
 		return m, nil, false
 	}
 	if a, ok := findAction("g", k); ok && a.Run != nil {
+		if a.Enabled != nil && !a.Enabled(m) {
+			return m, nil, true
+		}
 		next, cmd := a.Run(m, k)
 		return next.(Model), cmd, true
 	}
