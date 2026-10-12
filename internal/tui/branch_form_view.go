@@ -119,14 +119,14 @@ func (s *BranchFormState) bodyLines(inner int, spinner string) ([]string, int) {
 	switch s.Mode {
 	case formModeCopy:
 		lines = append(lines,
-			s.label("From", noField)+Styles.DetailDim.Render(s.Source.ShortName+" · "+s.Source.Branch),
+			s.label("From", noField)+Styles.DetailDim.Render(s.Source.ShortName+" · "+sourceBranch(s.Source)),
 			s.label("Alias", fieldAlias)+s.Alias.View(),
 			indent+Styles.DetailDim.Render(s.preview()),
 			s.changesRow(fieldChanges))
 	case formModeSwitch:
 		lines = append(lines,
 			s.label("In", noField)+Styles.DetailDim.Render(s.Source.ShortName),
-			s.label("Now", noField)+Styles.DetailDim.Render(s.Source.Branch),
+			s.label("Now", noField)+Styles.DetailDim.Render(sourceBranch(s.Source)),
 			"",
 			s.changesRow(noField))
 	default:
@@ -149,6 +149,14 @@ func (s *BranchFormState) bodyLines(inner int, spinner string) ([]string, int) {
 		focus = 4 + formSuggestRows
 	}
 	return lines, focus
+}
+
+// sourceBranch names the source's branch, or says it has none.
+func sourceBranch(w *WorktreeItem) string {
+	if w.Branch == "" {
+		return "detached HEAD"
+	}
+	return w.Branch
 }
 
 // preview names the folder and session the alias produces.

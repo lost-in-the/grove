@@ -109,6 +109,7 @@ type BranchFormState struct {
 	aliasEdited bool
 	Focus       formField
 	Pick        int
+	picked      bool // the user moved the highlight since last typing
 
 	Busy   bool
 	Log    *ActivityLog
@@ -220,7 +221,9 @@ func (s *BranchFormState) setWIP(path string, has bool, files []string, err erro
 	if s.Source == nil || s.Source.Path != path {
 		return
 	}
-	s.wipDone, s.HasWIP, s.WIPFiles, s.wipErr = true, has, files, err
+	// A failed check is not "dirty": enter stays blocked and there is no
+	// Changes choice to make.
+	s.wipDone, s.HasWIP, s.WIPFiles, s.wipErr = true, has && err == nil, files, err
 }
 
 func (s *BranchFormState) wipChecked() bool { return s.wipDone }
@@ -338,6 +341,18 @@ func (s *BranchFormState) switchCandidates(q string) []formSuggestion {
 	return out
 }
 
+// switchPickApplies reports whether enter in Switch mode takes the
+// highlighted branch: after partial text, or after the user moved the
+// highlight. An exact branch name, even a rejected one, is never replaced by
+// a neighbor, and an untouched empty field picks nothing.
+func (s *BranchFormState) switchPickApplies() bool {
+	b := s.branchValue()
+	if b == "" {
+		return s.picked
+	}
+	return !s.known(b) && s.inUse[b] == nil && b != s.Source.Branch
+}
+
 // suggestions lists the rows for the focused field.
 func (s *BranchFormState) suggestions() []formSuggestion {
 	switch s.Mode {
@@ -423,6 +438,7 @@ func (s *BranchFormState) moveFocus(delta int) tea.Cmd {
 }
 
 func (s *BranchFormState) movePick(delta int) {
+	s.picked = true
 	n := len(s.suggestions())
 	if n == 0 {
 		s.Pick = 0
@@ -604,7 +620,7 @@ func (s *BranchFormState) status() (string, formStatusKind) {
 	if s.Status != "" {
 		return s.Status, formStatusError
 	}
-	if sg := s.suggestions(); s.Mode == formModeSwitch && s.Pick < len(sg) && sg[s.Pick].Branch != s.branchValue() {
+	if sg := s.suggestions(); s.Mode == formModeSwitch && s.switchPickApplies() && s.Pick < len(sg) {
 		// enter takes the highlighted branch, so say so.
 		if _, msg, ok := s.validateWIP(); !ok {
 			return msg, formStatusHint
@@ -683,7 +699,7 @@ func (s *BranchFormState) handleKey(msg tea.KeyPressMsg, keys KeyMap) (formResul
 		s.movePick(1)
 		return formContinue, nil
 	case k == "enter":
-		if s.Focus == fieldBranch || s.Focus == fieldBase {
+		if (s.Focus == fieldBranch || s.Focus == fieldBase) && (s.Mode != formModeSwitch || s.switchPickApplies()) {
 			s.acceptPick()
 		}
 		if f, _, ok := s.validate(); !ok {
@@ -712,6 +728,7 @@ func (s *BranchFormState) typeInto(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
 	*in, cmd = in.Update(msg)
 	s.Status = ""
+	s.picked = false
 	switch s.Focus {
 	case fieldBranch:
 		s.syncAlias()

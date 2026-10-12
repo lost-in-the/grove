@@ -499,15 +499,23 @@ func (m Model) handleWIPCheck(msg wipCheckMsg) (tea.Model, tea.Cmd) {
 }
 
 // finishFormWithError shows a failed copy or switch in the form, which stays
-// open so the user can change something and try again.
+// open so the user can change something and try again. The failed command
+// may already have stashed or captured changes, so the old check is stale:
+// enter waits for a fresh one.
 func (m Model) finishFormWithError(err error) (tea.Model, tea.Cmd) {
-	if s := m.branchForm; s != nil {
-		if s.Log != nil {
-			s.Log.SetDone(err)
-		}
-		s.setCreatingDone(err.Error())
+	s := m.branchForm
+	if s == nil {
+		return m, nil
 	}
-	return m, nil
+	if s.Log != nil {
+		s.Log.SetDone(err)
+	}
+	s.setCreatingDone(err.Error())
+	if s.Source == nil {
+		return m, nil
+	}
+	s.wipDone = false
+	return m, wipCheckCmd(s.Source.Path)
 }
 
 func (m Model) handleForkComplete(msg forkCompleteMsg) (tea.Model, tea.Cmd) {

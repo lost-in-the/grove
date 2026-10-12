@@ -111,10 +111,9 @@ func scrollWindow(total, cursor, maxVisible int) (start, end int) {
 }
 
 // wipCheckMsg is sent after checking a worktree for uncommitted changes.
-// Used by both the checkout and fork overlays. The path field correlates the
-// result back to the worktree that was checked, so a stale result from a
-// canceled overlay cannot corrupt a later overlay opened for a different
-// worktree.
+// Used by the branch form's Copy and Switch modes. The path field correlates
+// the result back to the worktree that was checked, so a stale result from a
+// canceled form cannot corrupt a later form opened for a different worktree.
 type wipCheckMsg struct {
 	path   string
 	hasWIP bool
@@ -210,7 +209,7 @@ type ExistingWorktreePrompt struct {
 }
 
 // renderExistingWorktreePrompt renders a popup offering to go to the existing
-// worktree or create a new one (fork).
+// worktree or copy it to a new branch.
 func renderExistingWorktreePrompt(p *ExistingWorktreePrompt, width int) string {
 	d := calcOverlayDims(width)
 
@@ -220,7 +219,7 @@ func renderExistingWorktreePrompt(p *ExistingWorktreePrompt, width int) string {
 	b.WriteString(d.indent + "  → " + Styles.SuccessText.Render(p.WorktreeName) + "\n")
 
 	content := b.String()
-	footer := "\n" + Styles.Footer.Render(d.indent+"[enter] go to worktree  [n] fork  [esc] back")
+	footer := "\n" + Styles.Footer.Render(d.indent+"[enter] go to worktree  [n] copy  [esc] back")
 
 	return Styles.OverlayBorder.Width(d.overlay).Render(
 		Styles.OverlayTitle.Render("Worktree Exists") + "\n\n" + padToHeight(content, 8) + footer,
@@ -228,7 +227,7 @@ func renderExistingWorktreePrompt(p *ExistingWorktreePrompt, width int) string {
 }
 
 // handleExistsPromptKey handles key input for the "worktree exists" popup.
-// Enter navigates to the existing worktree. N opens the fork overlay. Esc dismisses.
+// Enter navigates to the existing worktree. N opens Copy. Esc dismisses.
 func (m Model) handleExistsPromptKey(msg tea.KeyPressMsg, prompt *ExistingWorktreePrompt, dismiss func()) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.Escape):
