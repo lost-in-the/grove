@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/spinner"
 
 	"github.com/lost-in-the/grove/internal/mux"
 )
@@ -105,7 +106,22 @@ func TestGA_AbsentUnderTmux(t *testing.T) {
 		t.Errorf("tmux g strip should not list a: %q", strip)
 	}
 	m = pressGA(m)
-	if selectedName(m) != "root" || m.toast.Current != nil {
-		t.Errorf("g a under tmux: selected %q, toast %+v; want nothing", selectedName(m), m.toast.Current)
+	if selectedName(m) != "root" || m.toast.Current != nil || m.activeView() != ViewDashboard || m.pendingG {
+		t.Errorf("g a under tmux: selected %q, toast %+v, view %v, pending g %v; want nothing to happen",
+			selectedName(m), m.toast.Current, m.activeView(), m.pendingG)
+	}
+}
+
+// The flash must start the spinner loop: toasts expire on its ticks, and an
+// idle dashboard has no loop running, so without one the flash never clears.
+func TestGA_NoneFlashStartsTheTicksThatClearIt(t *testing.T) {
+	m := newTestModel(withAgents(mux.AgentUnreported, mux.AgentWorking), withSize(100, 24))
+	m = sendKey(m, "g")
+	_, cmd := m.Update(makeKeyMsg("a"))
+	if cmd == nil {
+		t.Fatal("g a with nothing needing you returned no command; the toast would never expire")
+	}
+	if _, ok := cmd().(spinner.TickMsg); !ok {
+		t.Error("g a should start the spinner tick that expires toasts")
 	}
 }
