@@ -749,7 +749,7 @@ func (m *Model) toggleCompactMode() {
 
 	// Persist preference (best-effort, don't block on errors)
 	newVal := m.compactMode
-	if err := saveUIPrefs(m.projectRoot, &UIPrefs{CompactMode: &newVal}); err != nil {
+	if err := updateUIPrefs(m.projectRoot, func(p *UIPrefs) { p.CompactMode = &newVal }); err != nil {
 		tuilog.Printf("warning: failed to save UI prefs: %v", err)
 	}
 

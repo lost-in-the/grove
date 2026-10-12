@@ -68,3 +68,45 @@ func TestUIPrefsCorruptFile(t *testing.T) {
 		t.Error("expected nil prefs for corrupt file")
 	}
 }
+
+func prefsRoot(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".grove"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+func TestUIPrefs_PinsRoundTrip(t *testing.T) {
+	root := prefsRoot(t)
+	if err := updateUIPrefs(root, func(p *UIPrefs) { p.Pins = map[string]string{"2": "fix-bug"} }); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadUIPrefs(root); got == nil || got.Pins["2"] != "fix-bug" {
+		t.Errorf("pins not saved: %+v", got)
+	}
+}
+
+// One setting's save never drops another.
+func TestUIPrefs_UpdateKeepsOtherFields(t *testing.T) {
+	root := prefsRoot(t)
+	_ = updateUIPrefs(root, func(p *UIPrefs) { p.Pins = map[string]string{"1": "root"} })
+	no := false
+	_ = updateUIPrefs(root, func(p *UIPrefs) { p.CompactMode = &no })
+	got := loadUIPrefs(root)
+	if got == nil || got.Pins["1"] != "root" || got.CompactMode == nil || *got.CompactMode {
+		t.Errorf("prefs = %+v, want pins and compact_mode false", got)
+	}
+}
+
+func TestToggleCompact_KeepsPins(t *testing.T) {
+	root := prefsRoot(t)
+	_ = updateUIPrefs(root, func(p *UIPrefs) { p.Pins = map[string]string{"3": "testing"} })
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.projectRoot = root
+	m = sendKey(m, "v")
+	if got := loadUIPrefs(root); got == nil || got.Pins["3"] != "testing" {
+		t.Errorf("v dropped the pins: %+v", got)
+	}
+}

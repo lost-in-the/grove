@@ -10,7 +10,8 @@ import (
 
 // UIPrefs stores user preferences that persist across TUI sessions.
 type UIPrefs struct {
-	CompactMode *bool `json:"compact_mode,omitempty"`
+	CompactMode *bool             `json:"compact_mode,omitempty"`
+	Pins        map[string]string `json:"pins,omitempty"` // slot "1".."9" -> alias
 }
 
 // prefsFileName is the file within .grove/ that stores UI preferences.
@@ -41,6 +42,17 @@ func saveUIPrefs(projectRoot string, prefs *UIPrefs) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0644)
+}
+
+// updateUIPrefs loads the saved preferences, applies fn, and saves them, so
+// changing one setting never drops another.
+func updateUIPrefs(projectRoot string, fn func(*UIPrefs)) error {
+	prefs := loadUIPrefs(projectRoot)
+	if prefs == nil {
+		prefs = &UIPrefs{}
+	}
+	fn(prefs)
+	return saveUIPrefs(projectRoot, prefs)
 }
 
 // uiPrefsPath returns the full path to the UI preferences file.
