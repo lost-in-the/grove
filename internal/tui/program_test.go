@@ -133,10 +133,8 @@ func TestProgram_UpdateOverlay_OpensOnGUWhenAvailable(t *testing.T) {
 	repo := setupRailsFixture(t)
 	mgr, stateMgr := newTestManagers(t, repo)
 	m := NewModel(mgr, stateMgr, repo)
-	// Inject a fake update so the overlay gate passes regardless of the
-	// real ~/.grove/update-check.json contents on the test host. With the
-	// Skip-honoring gate in NewModel, a non-TTY test run produces empty
-	// fields by design, so direct injection is the canonical seam.
+	// Inject a fake update: a test build's -dev version fails semver
+	// parsing, so the real cache never yields one here.
 	m.updateLatestVersion = "99.0.0"
 	m.updateLatestURL = "https://github.com/lost-in-the/grove/releases/tag/v99.0.0"
 
@@ -164,18 +162,21 @@ func TestProgram_UpdateOverlay_OpensOnGUWhenAvailable(t *testing.T) {
 	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
 }
 
-// TestProgram_UpdateOverlay_GateRespectsSkip verifies NewModel honors
-// updatecheck.Skip for the badge, the parity guarantee with the CLI box and
-// `grove version`. The cache is still read, so `g u` can report it (spec 12).
+// TestProgram_UpdateOverlay_GateRespectsSkip verifies NewModel takes the
+// badge gate from updatecheck.Skip, the parity guarantee with the CLI box and
+// `grove version`. Skip is stubbed both ways: under go test it is always true
+// (stdout is not a TTY), so the real one proves nothing.
 func TestProgram_UpdateOverlay_GateRespectsSkip(t *testing.T) {
-	t.Setenv("GROVE_NO_UPDATE_NOTIFIER", "1")
-
 	repo := setupRailsFixture(t)
 	mgr, stateMgr := newTestManagers(t, repo)
-	m := NewModel(mgr, stateMgr, repo)
+	was := updateSkip
+	t.Cleanup(func() { updateSkip = was })
 
-	if m.updateNotify {
-		t.Fatal("updateNotify should be false when Skip returns true")
+	for _, skip := range []bool{true, false} {
+		updateSkip = func(bool, string) bool { return skip }
+		if m := NewModel(mgr, stateMgr, repo); m.updateNotify == skip {
+			t.Errorf("Skip %v: updateNotify %v, want %v", skip, m.updateNotify, !skip)
+		}
 	}
 }
 

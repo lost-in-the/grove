@@ -93,3 +93,18 @@ func TestGolden_Upgrade(t *testing.T) {
 		})
 	}
 }
+
+// Find reaches the overlay by "update" as well as "upgrade": the overlay,
+// the cache, and the docs all say update.
+func TestOmni_UpdateFindsUpgrade(t *testing.T) {
+	groups := omniResults("update", omniScopeActions, omniSource{Actions: omniActionsFrom(dashboardActions())})
+	found := false
+	for _, g := range groups {
+		for _, it := range g.Items {
+			found = found || it.Ref == "goto.upgrade"
+		}
+	}
+	if !found {
+		t.Errorf("Find \"update\" should offer upgrade grove: %+v", groups)
+	}
+}

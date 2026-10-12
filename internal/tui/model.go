@@ -147,6 +147,9 @@ type Model struct {
 	now func() time.Time
 }
 
+// updateSkip reports whether update notices are opted out; tests stub it.
+var updateSkip = updatecheck.Skip
+
 // NewModel creates a new TUI model.
 func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, pluginMgr ...*plugins.Manager) Model {
 	// projectRoot is already resolved — load config from its .grove directly
@@ -189,7 +192,7 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 	// badge, matching the CLI box and `grove version`. `g u` is an explicit
 	// request, so it still reports the cache (spec 12).
 	latest, latestURL, _ := updatecheck.CachedRelease(version.Version)
-	notify := !updatecheck.Skip(false, version.Version)
+	notify := !updateSkip(false, version.Version)
 
 	return Model{
 		worktreeMgr:         mgr,
@@ -959,8 +962,8 @@ func (m Model) selectedItem() (WorktreeItem, bool) {
 }
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	// A pending g or m owns the next key, before help, update, or any
-	// other dashboard key sees it.
+	// A pending g or m owns the next key, before help or any other
+	// dashboard key sees it.
 	if m.activeView() == ViewDashboard && !m.detailFocused {
 		if m.pendingG {
 			if updated, cmd, handled := m.handleGLayerKey(msg); handled {
@@ -974,8 +977,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Help and update frames take every key; their trigger key or esc closes
-	// them and returns to the frame beneath.
+	// Help and upgrade frames take every key. esc closes either, and ? also
+	// closes help; both return to the frame beneath.
 	switch m.activeView() {
 	case ViewHelp:
 		if key.Matches(msg, m.keys.Help) || key.Matches(msg, m.keys.Escape) {

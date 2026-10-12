@@ -72,7 +72,7 @@ func (h Header) View(width int) string {
 	}
 	if !fits(left) {
 		// The name is at its minimum; clip the left side so the right stays.
-		left = ansi.Truncate(left, max(0, inner-1-lipgloss.Width(right)), "")
+		left = ansi.Truncate(left, max(0, inner-1-lipgloss.Width(right)), "…")
 	}
 
 	gap := inner - lipgloss.Width(left) - lipgloss.Width(right)

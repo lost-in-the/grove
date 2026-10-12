@@ -163,4 +163,8 @@ func TestHeader_UpgradeBadge(t *testing.T) {
 	if !strings.HasSuffix(view, "⭡0.12.0  10/10 ") {
 		t.Errorf("at 44 the badge and 10/10 should stay: %q", view)
 	}
+	// The clipped left side ends in an ellipsis, so the cut is visible.
+	if left := strings.TrimRight(strings.TrimSuffix(view, "⭡0.12.0  10/10 "), " "); !strings.HasSuffix(left, "…") {
+		t.Errorf("the clipped left side should end in …: %q", left)
+	}
 }
