@@ -101,7 +101,7 @@ var Styles = NewStyleSet(Colors)
 
 // NewStyleSet creates a StyleSet from a ColorScheme.
 func NewStyleSet(cs ColorScheme) StyleSet {
-	return StyleSet{
+	ss := StyleSet{
 		// Borders
 		RoundedBorder: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
@@ -197,4 +197,10 @@ func NewStyleSet(cs ColorScheme) StyleSet {
 			BorderForeground(cs.Primary),
 		InputText: lipgloss.NewStyle().Foreground(cs.TextNormal),
 	}
+	// Without color the highlight would be plain bold, the same as any key.
+	// Reverse video keeps a pressed key visible.
+	if cs.Primary == nil {
+		ss.HelpKeyHighlight = ss.HelpKeyHighlight.Reverse(true)
+	}
+	return ss
 }
