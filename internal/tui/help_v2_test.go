@@ -17,7 +17,6 @@ func TestHelpFooterCompactHints(t *testing.T) {
 		{"Delete hints", ViewDelete, []string{"y", "n", "space"}},
 		{"Bulk hints", ViewBulk, []string{"space", "enter", "esc"}},
 		{"PRs hints", ViewPRs, []string{"enter", "esc", "↑↓"}},
-		{"Fork hints", ViewFork, []string{"enter", "esc"}},
 		{"Sync hints", ViewSync, []string{"enter", "esc", "↑↓"}},
 		{"Config hints", ViewConfig, []string{"enter", "esc", "tab"}},
 	}

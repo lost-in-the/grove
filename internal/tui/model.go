@@ -37,11 +37,9 @@ const (
 	ViewBulk
 	ViewPRs
 	ViewIssues
-	ViewFork
 	ViewSync
 	ViewConfig
 	ViewRename
-	ViewCheckout
 	ViewUpdate
 )
 
@@ -87,16 +85,14 @@ type Model struct {
 	sortMode SortMode
 
 	// Overlay state
-	deleteState   *DeleteState
-	branchForm    *BranchFormState
-	bulkState     *BulkState
-	prState       *PRViewState
-	issueState    *IssueViewState
-	forkState     *ForkState
-	syncState     *SyncState
-	configState   *ConfigState
-	renameState   *RenameState
-	checkoutState *CheckoutState
+	deleteState *DeleteState
+	branchForm  *BranchFormState
+	bulkState   *BulkState
+	prState     *PRViewState
+	issueState  *IssueViewState
+	syncState   *SyncState
+	configState *ConfigState
+	renameState *RenameState
 
 	// Post-create selection
 	pendingSelect string
@@ -252,8 +248,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleConfigSaved(msg)
 	case renameCompleteMsg:
 		return m.handleRenameComplete(msg)
-	case checkoutBranchesMsg:
-		return m.handleCheckoutBranches(msg)
 	case checkoutCompleteMsg:
 		return m.handleCheckoutComplete(msg)
 	case spinner.TickMsg:
@@ -496,46 +490,38 @@ func (m Model) handleBulkDeleteDone(msg bulkDeleteDoneMsg) (tea.Model, tea.Cmd) 
 }
 
 func (m Model) handleWIPCheck(msg wipCheckMsg) (tea.Model, tea.Cmd) {
-	// Only apply the result to the overlay whose worktree path matches, so a
-	// stale check dispatched by a since-canceled overlay cannot overwrite the
-	// WIP state of a different overlay opened afterwards.
-	if m.forkState != nil && m.forkState.Source.Path == msg.path {
-		m.forkState.HasWIP = msg.hasWIP
-		m.forkState.WIPFiles = msg.files
-		if msg.err != nil {
-			m.forkState.Err = msg.err
-		}
+	// The form ignores a result for any other worktree, so a stale check from
+	// a form canceled earlier cannot mark this one clean.
+	if m.branchForm != nil {
+		m.branchForm.setWIP(msg.path, msg.hasWIP, msg.files, msg.err)
 	}
-	if m.checkoutState != nil && m.checkoutState.Item.Path == msg.path {
-		m.checkoutState.HasWIP = msg.hasWIP
-		m.checkoutState.WIPCheckDone = true
-		m.checkoutState.WIPFiles = msg.files
-		if msg.err != nil {
-			m.checkoutState.Err = msg.err
+	return m, nil
+}
+
+// finishFormWithError shows a failed copy or switch in the form, which stays
+// open so the user can change something and try again.
+func (m Model) finishFormWithError(err error) (tea.Model, tea.Cmd) {
+	if s := m.branchForm; s != nil {
+		if s.Log != nil {
+			s.Log.SetDone(err)
 		}
+		s.setCreatingDone(err.Error())
 	}
 	return m, nil
 }
 
 func (m Model) handleForkComplete(msg forkCompleteMsg) (tea.Model, tea.Cmd) {
-	if msg.err != nil {
-		if msg.name != "" {
-			m.popToRoot()
-			m.forkState = nil
-			m.pendingSelect = msg.name
-			m.toast.Show(NewToast(fmt.Sprintf("Forked %q (warning: %s)", msg.name, msg.err), ToastWarning))
-			return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
-		}
-		if m.forkState != nil {
-			m.forkState.Err = msg.err
-			m.forkState.Forking = false
-		}
-		return m, nil
+	if msg.err != nil && msg.name == "" {
+		return m.finishFormWithError(msg.err)
 	}
 	m.popToRoot()
-	m.forkState = nil
+	m.branchForm = nil
 	m.pendingSelect = msg.name
-	m.toast.Show(NewToast(fmt.Sprintf("Forked %q", msg.name), ToastSuccess))
+	if msg.err != nil {
+		m.toast.Show(NewToast(fmt.Sprintf("Copied to %q (warning: %s)", msg.name, msg.err), ToastWarning))
+	} else {
+		m.toast.Show(NewToast(fmt.Sprintf("Copied to %q", msg.name), ToastSuccess))
+	}
 	return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
 }
 
@@ -627,33 +613,12 @@ func (m Model) handleRenameComplete(msg renameCompleteMsg) (tea.Model, tea.Cmd) 
 	return m, tea.Batch(cmds...)
 }
 
-func (m Model) handleCheckoutBranches(msg checkoutBranchesMsg) (tea.Model, tea.Cmd) {
-	if m.checkoutState != nil {
-		if msg.err != nil {
-			m.checkoutState.Err = msg.err
-		} else {
-			var available []string
-			for _, br := range msg.branches {
-				if !msg.usedBranches[br] {
-					available = append(available, br)
-				}
-			}
-			m.checkoutState.Branches = available
-		}
-	}
-	return m, nil
-}
-
 func (m Model) handleCheckoutComplete(msg checkoutCompleteMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
-		if m.checkoutState != nil {
-			m.checkoutState.Err = msg.err
-			m.checkoutState.Switching = false
-		}
-		return m, nil
+		return m.finishFormWithError(msg.err)
 	}
 	m.popToRoot()
-	m.checkoutState = nil
+	m.branchForm = nil
 	m.toast.Show(NewToast(fmt.Sprintf("Switched to branch %q", msg.branch), ToastSuccess))
 	return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
 }
@@ -846,11 +811,9 @@ func (m Model) isAnimating() bool {
 // isOperationAnimating reports whether any worktree operation spinner is active.
 func (m Model) isOperationAnimating() bool {
 	return (m.branchForm != nil && m.branchForm.Busy) ||
-		(m.forkState != nil && m.forkState.Forking) ||
 		(m.syncState != nil && m.syncState.Syncing) ||
 		(m.deleteState != nil && m.deleteState.Deleting) ||
-		(m.renameState != nil && m.renameState.Renaming) ||
-		(m.checkoutState != nil && m.checkoutState.Switching)
+		(m.renameState != nil && m.renameState.Renaming)
 }
 
 // isTrackerAnimating reports whether PR or issue state is loading/creating.
@@ -928,16 +891,12 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handlePRKey(msg)
 	case ViewIssues:
 		return m.handleIssueKey(msg)
-	case ViewFork:
-		return m.handleForkKey(msg)
 	case ViewSync:
 		return m.handleSyncKey(msg)
 	case ViewConfig:
 		return m.handleConfigKey(msg)
 	case ViewRename:
 		return m.handleRenameKey(msg)
-	case ViewCheckout:
-		return m.handleCheckoutKey(msg)
 	case ViewDashboard:
 		return m.handleDashboardKey(msg)
 	}
@@ -1114,9 +1073,7 @@ func (m Model) handleDashboardForkKey() (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	m.pushView(ViewFork)
-	m.forkState = NewForkState(item)
-	return m, wipCheckCmd(item.Path)
+	return m.openCopyForm(item)
 }
 
 func (m Model) handleDashboardRenameKey() (tea.Model, tea.Cmd) {
@@ -1132,13 +1089,7 @@ func (m Model) handleDashboardRenameKey() (tea.Model, tea.Cmd) {
 func (m Model) handleDashboardCheckoutKey() (tea.Model, tea.Cmd) {
 	item, ok := m.selectedItem()
 	if ok && !item.IsMain && !item.IsProtected {
-		m.pushView(ViewCheckout)
-		m.checkoutState = NewCheckoutState(item)
-		return m, tea.Batch(
-			m.checkoutState.BranchFilterInput.Focus(),
-			listCheckoutBranchesCmd(m.projectRoot, item.Path),
-			wipCheckCmd(item.Path),
-		)
+		return m.openSwitchForm(item)
 	}
 	return m, nil
 }
@@ -1462,10 +1413,6 @@ func (m Model) renderOverlay(v ActiveView) string {
 		if m.bulkState != nil {
 			return renderBulk(m.bulkState)
 		}
-	case ViewFork:
-		if m.forkState != nil {
-			return renderFork(m.forkState, m.width)
-		}
 	case ViewSync:
 		if m.syncState != nil {
 			return renderSync(m.syncState, m.width)
@@ -1477,10 +1424,6 @@ func (m Model) renderOverlay(v ActiveView) string {
 	case ViewRename:
 		if m.renameState != nil {
 			return renderRename(m.renameState, m.width)
-		}
-	case ViewCheckout:
-		if m.checkoutState != nil {
-			return renderCheckout(m.checkoutState, m.width)
 		}
 	case ViewHelp:
 		return m.helpOverlay.View(m.width, m.height)
@@ -1566,7 +1509,7 @@ func (m Model) appendUpdateBadge(footer string) string {
 // that should receive ? as a character rather than triggering help.
 func (m Model) viewHasTextInput() bool {
 	switch m.activeView() {
-	case ViewBranchForm, ViewRename, ViewCheckout, ViewFork:
+	case ViewBranchForm, ViewRename:
 		return true
 	case ViewPRs:
 		return m.prState != nil && m.prState.Filtering

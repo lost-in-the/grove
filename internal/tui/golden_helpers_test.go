@@ -156,24 +156,6 @@ func withIssueData() testOpt {
 	}
 }
 
-// withForkOverlay sets up the fork overlay at the confirm step.
-func withForkOverlay() testOpt {
-	return func(m *Model) {
-		source := makeTestItems(3)[1]
-		ni := newForkNameInput()
-		ni.SetValue("experiment")
-		m.setViewForTest(ViewFork)
-		m.forkState = &ForkState{
-			Step:      ForkStepConfirm,
-			Source:    source,
-			Name:      "experiment",
-			NameInput: ni,
-			Stepper:   NewStepper("Name", "WIP", "Confirm"),
-		}
-		m.forkState.Stepper.Current = 2
-	}
-}
-
 // withSyncOverlay sets up the sync overlay at the source selection step.
 func withSyncOverlay() testOpt {
 	return func(m *Model) {

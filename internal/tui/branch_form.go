@@ -724,8 +724,8 @@ func (s *BranchFormState) setCreatingDone(errMsg string) {
 	s.Status = errMsg
 }
 
-// openBranchForm opens the form in New mode over the current view.
-func (m Model) openBranchForm(p branchFormPrefill) (tea.Model, tea.Cmd) {
+// branchFormOptionsFor gathers what every form mode needs from the repo.
+func (m Model) branchFormOptionsFor() branchFormOptions {
 	all, err := git.ListAllBranches(m.projectRoot)
 	if err != nil {
 		tuilog.Printf("warning: failed to list branches: %v", err)
@@ -756,7 +756,7 @@ func (m Model) openBranchForm(p branchFormPrefill) (tea.Model, tea.Cmd) {
 	for _, b := range append(all, local...) {
 		known[b] = true
 	}
-	s := newBranchForm(branchFormOptions{
+	return branchFormOptions{
 		ProjectName:   m.projectName,
 		NamePattern:   m.worktreeNamePattern(),
 		NameStrategy:  strategy,
@@ -764,12 +764,37 @@ func (m Model) openBranchForm(p branchFormPrefill) (tea.Model, tea.Cmd) {
 		AllBranches:   all,
 		LocalBranches: local,
 		Worktrees:     worktrees,
-	})
+	}
+}
+
+// openBranchForm opens the form in New mode over the current view.
+func (m Model) openBranchForm(p branchFormPrefill) (tea.Model, tea.Cmd) {
+	s := newBranchForm(m.branchFormOptionsFor())
 	s.setWidth(m.width, m.height)
 	cmd := s.applyPrefill(p)
 	m.branchForm = s
 	m.pushView(ViewBranchForm)
 	return m, cmd
+}
+
+// openCopyForm opens the form in Copy mode for source, and starts the
+// uncommitted-changes check that enter waits for.
+func (m Model) openCopyForm(source WorktreeItem) (tea.Model, tea.Cmd) {
+	s := newCopyForm(m.branchFormOptionsFor(), source)
+	s.setWidth(m.width, m.height)
+	m.branchForm = s
+	m.pushView(ViewBranchForm)
+	return m, wipCheckCmd(source.Path)
+}
+
+// openSwitchForm opens the form in Switch mode for target, and starts the
+// uncommitted-changes check that enter waits for.
+func (m Model) openSwitchForm(target WorktreeItem) (tea.Model, tea.Cmd) {
+	s := newSwitchForm(m.branchFormOptionsFor(), target)
+	s.setWidth(m.width, m.height)
+	m.branchForm = s
+	m.pushView(ViewBranchForm)
+	return m, wipCheckCmd(target.Path)
 }
 
 func (m Model) handleBranchFormKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -815,6 +840,21 @@ func (m Model) submitBranchForm(s *BranchFormState) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(m.spinner.Tick,
 			createWorktreeCmd(m.worktreeMgr, m.stateMgr, m.cfg, m.projectRoot, in.Alias, existing, newBranch, in.FromRef))
+	case intentCopy:
+		if m.worktreeMgr == nil || m.stateMgr == nil {
+			s.Status = "cannot copy a worktree: no repository loaded"
+			return m, nil
+		}
+		s.Busy, s.Status = true, ""
+		s.Log = NewActivityLog(formLogWidth(m.width), 6)
+		s.Log.AddLine(fmt.Sprintf("Copying %s to %s on branch %s...", in.Target.ShortName, in.Alias, in.Branch))
+		return m, tea.Batch(m.spinner.Tick, forkWorktreeCmd(m.worktreeMgr, m.stateMgr, m.cfg, m.projectRoot,
+			forkRequest{Source: *in.Target, Name: in.Alias, Branch: in.Branch, HasWIP: s.HasWIP, WIP: in.WIP}))
+	case intentSwitchBranch:
+		s.Busy, s.Status = true, ""
+		s.Log = NewActivityLog(formLogWidth(m.width), 6)
+		s.Log.AddLine(fmt.Sprintf("Switching %s to branch %s...", in.Target.ShortName, in.Branch))
+		return m, tea.Batch(m.spinner.Tick, checkoutBranchCmd(in.Target.Path, in.Branch, in.Stash))
 	}
 	return m, nil
 }

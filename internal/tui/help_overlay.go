@@ -248,16 +248,12 @@ func helpSectionsFor(view ActiveView) []helpSection {
 		return helpSectionsPRs
 	case ViewIssues:
 		return helpSectionsIssues
-	case ViewFork:
-		return helpSectionsFork
 	case ViewSync:
 		return helpSectionsSync
 	case ViewConfig:
 		return helpSectionsConfig
 	case ViewRename:
 		return helpSectionsRename
-	case ViewCheckout:
-		return helpSectionsCheckout
 	default:
 		return helpSectionsDashboard
 	}
@@ -283,7 +279,7 @@ var helpSectionsDashboard = []helpSection{
 		{"n", "Create new worktree"},
 		{"d", "Delete worktree"},
 		{"R", "Rename worktree"},
-		{"f", "Fork (copy) worktree"},
+		{"f", "Copy worktree to a new branch"},
 		{"a", "Bulk delete worktrees"},
 	}},
 	{title: "Workflow", items: []helpEntry{
@@ -317,10 +313,11 @@ var helpSectionsDelete = []helpSection{
 }
 
 var helpSectionsBranchForm = []helpSection{
-	{title: "New Worktree", note: "Type a branch to search or create. The form shows what will happen.", items: []helpEntry{
+	{title: "Branch Form", note: "New (n), copy (f), and switch branch (b) share this form. It shows what enter will do.", items: []helpEntry{
 		{"tab / shift+tab", "Next / previous field"},
 		{"ctrl+j / ctrl+k", "Move through suggestions"},
-		{"enter", "Create, or switch to a branch's worktree"},
+		{"←/→ / space", "Choose what happens to uncommitted changes (copy)"},
+		{"enter", "Create, copy, or switch"},
 		{"esc", "Close"},
 	}},
 }
@@ -367,14 +364,6 @@ var helpSectionsIssues = []helpSection{
 	}},
 }
 
-var helpSectionsFork = []helpSection{
-	{title: "Fork Worktree", note: "Copy a worktree to a new branch, optionally moving uncommitted changes.", items: []helpEntry{
-		{"tab / shift+tab", "Navigate fields"},
-		{"enter", "Create fork"},
-		{"esc", "Cancel"},
-	}},
-}
-
 var helpSectionsSync = []helpSection{
 	{title: "Sync Changes", note: "Pull uncommitted changes from another worktree into the current one (source → preview → confirm).", items: []helpEntry{
 		{"↑/k ↓/j", "Choose source worktree"},
@@ -396,15 +385,6 @@ var helpSectionsConfig = []helpSection{
 var helpSectionsRename = []helpSection{
 	{title: "Rename Worktree", note: "Change the short name of a worktree.", items: []helpEntry{
 		{"enter", "Confirm rename"},
-		{"esc", "Cancel"},
-	}},
-}
-
-var helpSectionsCheckout = []helpSection{
-	{title: "Switch Branch", note: "Switch the git branch of the current worktree.", items: []helpEntry{
-		{"↑/k ↓/j", "Navigate branches"},
-		{"/", "Filter branches"},
-		{"enter", "Switch to branch"},
 		{"esc", "Cancel"},
 	}},
 }

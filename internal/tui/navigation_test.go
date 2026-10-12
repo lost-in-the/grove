@@ -154,8 +154,8 @@ func TestExistsPromptFork_EscReturnsToPRBrowser(t *testing.T) {
 
 	next, _ := m.Update(makeKeyMsg("n"))
 	m = next.(Model)
-	if m.activeView() != ViewFork {
-		t.Fatalf("after n: view=%v, want ViewFork", m.activeView())
+	if m.activeView() != ViewBranchForm || m.branchForm == nil || m.branchForm.Mode != formModeCopy {
+		t.Fatalf("after n: view=%v, want the copy form", m.activeView())
 	}
 
 	next, _ = m.Update(makeKeyMsg("esc"))

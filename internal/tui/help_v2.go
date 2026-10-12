@@ -114,11 +114,6 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 			{"/", "filter"},
 			{"esc", "close"},
 		}
-	case ViewFork:
-		return []Hint{
-			{"enter", "continue"},
-			{"esc", "cancel"},
-		}
 	case ViewSync:
 		return []Hint{
 			{"↑↓", "navigate"},
@@ -135,11 +130,6 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 	case ViewRename:
 		return []Hint{
 			{"enter", "rename"},
-			{"esc", "cancel"},
-		}
-	case ViewCheckout:
-		return []Hint{
-			{"enter", "continue"},
 			{"esc", "cancel"},
 		}
 	default:

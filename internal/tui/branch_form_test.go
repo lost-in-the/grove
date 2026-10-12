@@ -677,3 +677,123 @@ func TestSwitchForm_EnterBlockedUntilWIPChecked(t *testing.T) {
 		t.Error("enter after a clean check should submit")
 	}
 }
+
+func TestDashboardF_OpensCopyForm(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.list.Select(1)
+	next, cmd := m.Update(makeKeyMsg("f"))
+	m = next.(Model)
+	if m.activeView() != ViewBranchForm || m.branchForm == nil || m.branchForm.Mode != formModeCopy {
+		t.Fatalf("view=%v form=%+v, want the copy form", m.activeView(), m.branchForm)
+	}
+	if cmd == nil {
+		t.Error("expected the changes check command")
+	}
+
+	root := newTestModel(withItems(3), withSize(120, 40))
+	root.list.Select(0)
+	next, _ = root.Update(makeKeyMsg("f"))
+	if f := next.(Model).branchForm; f == nil || f.Mode != formModeCopy {
+		t.Error("f on the main worktree should open the copy form too")
+	}
+}
+
+func TestDashboardB_OpensSwitchFormButNotOnMain(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.list.Select(0)
+	next, _ := m.Update(makeKeyMsg("b"))
+	if next.(Model).activeView() != ViewDashboard {
+		t.Fatal("b on the main worktree must not open the switch form")
+	}
+	m.list.Select(1)
+	next, _ = m.Update(makeKeyMsg("b"))
+	m = next.(Model)
+	if m.branchForm == nil || m.branchForm.Mode != formModeSwitch {
+		t.Fatalf("form = %+v, want the switch form", m.branchForm)
+	}
+}
+
+func TestWIPCheck_RoutesToForm(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.list.Select(1)
+	next, _ := m.Update(makeKeyMsg("f"))
+	m = next.(Model)
+	path := m.branchForm.Source.Path
+	next, _ = m.Update(wipCheckMsg{path: path, hasWIP: true, files: []string{"x"}})
+	m = next.(Model)
+	if !m.branchForm.wipChecked() || !m.branchForm.HasWIP {
+		t.Error("changes check did not reach the form")
+	}
+}
+
+func TestCopyFormComplete_Success(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.branchForm = newCopyForm(testFormOptions(), testSource())
+	m.setViewForTest(ViewBranchForm)
+	m.branchForm.Busy = true
+	next, _ := m.Update(forkCompleteMsg{name: "auth-copy", path: "/r/auth-copy"})
+	m = next.(Model)
+	if m.activeView() != ViewDashboard || m.branchForm != nil || m.pendingSelect != "auth-copy" {
+		t.Errorf("view=%v form nil=%v pendingSelect=%q", m.activeView(), m.branchForm == nil, m.pendingSelect)
+	}
+}
+
+func TestCopyFormComplete_ErrorStaysOpen(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.branchForm = newCopyForm(testFormOptions(), testSource())
+	m.setViewForTest(ViewBranchForm)
+	m.branchForm.Busy = true
+	next, _ := m.Update(forkCompleteMsg{err: errTestBoom})
+	m = next.(Model)
+	if m.activeView() != ViewBranchForm || m.branchForm.Busy {
+		t.Fatalf("view=%v busy=%v", m.activeView(), m.branchForm.Busy)
+	}
+	if msg, kind := m.branchForm.status(); kind != formStatusError || msg != "boom" {
+		t.Errorf("status = %q (%v)", msg, kind)
+	}
+}
+
+func TestCopyFormComplete_PartialSuccessWarns(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.branchForm = newCopyForm(testFormOptions(), testSource())
+	m.setViewForTest(ViewBranchForm)
+	m.branchForm.Busy = true
+	next, _ := m.Update(forkCompleteMsg{name: "auth-copy", err: errTestBoom})
+	m = next.(Model)
+	if m.branchForm != nil || m.activeView() != ViewDashboard {
+		t.Fatal("a created-but-warned copy closes the form")
+	}
+	if !strings.Contains(m.toast.Message(), "warning") {
+		t.Errorf("toast = %q, want a warning", m.toast.Message())
+	}
+}
+
+func TestSwitchFormComplete(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.branchForm = newSwitchForm(testFormOptions(), testSource())
+	m.setViewForTest(ViewBranchForm)
+	m.branchForm.Busy = true
+	next, _ := m.Update(checkoutCompleteMsg{err: errTestBoom})
+	m = next.(Model)
+	if m.branchForm == nil || m.branchForm.Busy {
+		t.Fatal("an error keeps the switch form open and idle")
+	}
+	m.branchForm.Busy = true
+	next, _ = m.Update(checkoutCompleteMsg{branch: "fix/login"})
+	m = next.(Model)
+	if m.branchForm != nil || m.activeView() != ViewDashboard {
+		t.Error("success closes the switch form")
+	}
+}
+
+func TestCopyFormSubmit_WithoutManagerReportsError(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.branchForm = newCopyForm(testFormOptions(), testSource())
+	m.setViewForTest(ViewBranchForm)
+	m.branchForm.setWIP("/r/auth", false, nil, nil)
+	next, _ := m.Update(makeKeyMsg("enter"))
+	m = next.(Model)
+	if m.branchForm.Busy {
+		t.Error("copy started without a worktree manager")
+	}
+}
