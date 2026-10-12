@@ -8,7 +8,7 @@
 [2m          [m│   └ Move up / down                                       │[2m          [m
 [2m          [m│   [1mg[m                                                      │[2m          [m
 [2m          [m│   └ Goto strip (g top, p PRs, i issues, c config, u      │[2m          [m
-[2m          [m│  upgrade)                                                │[2m          [m
+[2m          [m│  upgrade, a agent under herdr)                           │[2m          [m
 [2m          [m│   [1mgg / G[m                                                 │[2m          [m
 [2m          [m│   └ Top / bottom of list                                 │[2m          [m
 [2m          [m│   [1mctrl+d / ctrl+u[m                                        │[2m          [m

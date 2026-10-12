@@ -39,11 +39,11 @@ func stripTitle(prefix, desc string) string {
 	return Styles.HelpKey.Render(prefix) + Styles.HelpDesc.Render(" "+desc)
 }
 
-// gStripLines is the goto strip: the table's g-layer actions.
+// gStripLines is the goto strip: the table's enabled g-layer actions.
 func (m Model) gStripLines() []string {
 	var entries []stripEntry
 	for _, a := range dashboardActions() {
-		if a.Layer == "g" {
+		if a.Layer == "g" && (a.Enabled == nil || a.Enabled(m)) {
 			entries = append(entries, stripEntry{a.display(), a.Label})
 		}
 	}

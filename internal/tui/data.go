@@ -175,22 +175,28 @@ func loadFetchContext(mgr *worktree.Manager, stateMgr *state.Manager) fetchConte
 	return fc
 }
 
-func (fc *fetchContext) setTmuxStatus(item *WorktreeItem, tree worktree.Worktree) {
-	target := mux.Target{
-		Name: worktree.TmuxSessionName(fc.projectName, tree.ShortName),
-		Path: tree.Path,
+// applySession sets the item's session fields from the multiplexer's
+// sessions: the fetch and the agent poll both use it, so they match sessions
+// the same way. An item with no session gets "none" and no agent.
+func applySession(item *WorktreeItem, ix *mux.Index, projectName, backend string) {
+	// Sessions are named from the tree's short name. The main worktree's
+	// item shows "root", so its directory name stands in.
+	name := item.ShortName
+	if item.IsMain {
+		name = item.FullName
 	}
-	s, ok := fc.sessions.Lookup(target)
+	s, ok := ix.Lookup(mux.Target{Name: worktree.TmuxSessionName(projectName, name), Path: item.Path})
 	if !ok {
 		// Fall back to a session named after the worktree directory, which is
 		// how sessions created outside grove look.
-		s, ok = fc.sessions.Lookup(mux.Target{Name: tree.Name})
+		s, ok = ix.Lookup(mux.Target{Name: item.FullName})
 	}
 	if !ok {
+		item.TmuxStatus, item.SessionBackend, item.AgentStatus = "none", "", mux.AgentUnreported
 		return
 	}
 	item.TmuxStatus = string(s.Status)
-	item.SessionBackend = fc.backend
+	item.SessionBackend = backend
 	item.AgentStatus = s.Agent
 }
 
@@ -319,9 +325,8 @@ func fetchWorktreesAndBackend(mgr *worktree.Manager, stateMgr *state.Manager, pl
 		item.IsMain = tree.IsMain
 		item.IsCurrent = tree.Path == fc.currentPath
 		item.IsPrunable = tree.IsPrunable
-		item.TmuxStatus = "none"
 
-		fc.setTmuxStatus(item, *tree)
+		applySession(item, fc.sessions, fc.projectName, fc.backend)
 		fc.setStateInfo(item, tree.ShortName)
 
 		if fc.cfg != nil {

@@ -746,7 +746,7 @@ Each item is checked at the start of the phase named.
 |---|---|---|---|
 | 1 | huh `WithHeight` plus no footer gives an exact, stable height | 7 | Draw a fixed-height viewport around the form |
 | 2 | `ctrl+j` arrives distinct from `⏎` under tmux, herdr, and a plain terminal | 3 | Arrows remain; drop the `ctrl+j/k` hint |
-| 3 | Herdr `List()` latency fits a 3s poll | 6 | Raise the interval |
+| 3 | Herdr `List()` latency fits a 3s poll. Measured in phase 6: one `herdr workspace list` call, 113ms cold, 3ms warm (10 runs). Fits. | 6 | Raise the interval |
 | 4 | `default_branch_action` config: the TUI no longer prompts. Confirm the CLI still uses it, and update the config docs. | 3 | Document it as CLI-only |
 | 5 | Last-accessed data for omni's "recent" group exists in state | 5 | Drop the group |
 | 6 | `bubbles/tree` stability for the file rail | 8 | Keep the custom rail |

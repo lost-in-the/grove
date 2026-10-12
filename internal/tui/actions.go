@@ -78,7 +78,7 @@ func dashboardActions() []Action {
 		{ID: "list.sort", Keys: []string{"o"}, Label: "change sort", Short: "sort",
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) {
 				m.helpFooter.SetHighlight("o")
-				m.sortMode = m.sortMode.Next()
+				m.sortMode = m.sortMode.Next(m.agentAware)
 				return m, m.applySortToList()
 			}},
 		{ID: "goto.open", Keys: []string{"g"}, Label: "goto", Footer: 6,
@@ -204,6 +204,10 @@ func dashboardActions() []Action {
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) { return m.openConfig() }},
 		{ID: "goto.upgrade", Layer: "g", Keys: []string{"u"}, Label: "upgrade grove",
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) { return m.openUpgrade() }},
+		{ID: "goto.agent", Layer: "g", Keys: []string{"a"}, Label: "agent needing you",
+			Synonyms: []string{"blocked", "attention", "needs you"},
+			Enabled:  func(m Model) bool { return m.agentAware },
+			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { return m.gotoAgent() }},
 	}
 }
 
