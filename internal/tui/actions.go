@@ -78,7 +78,7 @@ func dashboardActions() []Action {
 		{ID: "list.sort", Keys: []string{"o"}, Label: "change sort", Short: "sort",
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) {
 				m.helpFooter.SetHighlight("o")
-				m.sortMode = m.sortMode.Next()
+				m.sortMode = m.sortMode.Next(m.agentAware)
 				return m, m.applySortToList()
 			}},
 		{ID: "goto.open", Keys: []string{"g"}, Label: "goto", Footer: 6,

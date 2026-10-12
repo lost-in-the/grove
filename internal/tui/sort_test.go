@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/list"
+
+	"github.com/lost-in-the/grove/internal/mux"
 )
 
 func TestSortModeString(t *testing.T) {
@@ -27,15 +29,15 @@ func TestSortModeString(t *testing.T) {
 
 func TestSortModeNext(t *testing.T) {
 	mode := SortByName
-	mode = mode.Next()
+	mode = mode.Next(false)
 	if mode != SortByAge {
 		t.Errorf("expected SortByAge, got %d", mode)
 	}
-	mode = mode.Next()
+	mode = mode.Next(false)
 	if mode != SortByDirtyFirst {
 		t.Errorf("expected SortByDirtyFirst, got %d", mode)
 	}
-	mode = mode.Next()
+	mode = mode.Next(false)
 	if mode != SortByName {
 		t.Errorf("expected SortByName after full cycle, got %d", mode)
 	}
@@ -107,7 +109,7 @@ func names(items []list.Item) []string {
 }
 
 func TestSortCycleIsNameAgeDirty(t *testing.T) {
-	if SortByName.Next() != SortByAge || SortByAge.Next() != SortByDirtyFirst || SortByDirtyFirst.Next() != SortByName {
+	if SortByName.Next(false) != SortByAge || SortByAge.Next(false) != SortByDirtyFirst || SortByDirtyFirst.Next(false) != SortByName {
 		t.Error("o should cycle name, age, dirty")
 	}
 }
@@ -159,5 +161,57 @@ func TestSortPreservesOriginal(t *testing.T) {
 	}
 	if sorted[0].(WorktreeItem).ShortName != "a" {
 		t.Error("sorted slice not in expected order")
+	}
+}
+
+// Attention orders blocked, done, working, then the rest; ties break by
+// alias and main stays first (spec 5.7).
+func TestSort_AttentionOrder(t *testing.T) {
+	items := []list.Item{
+		WorktreeItem{ShortName: "zeta", AgentStatus: mux.AgentWorking},
+		WorktreeItem{ShortName: "idle", AgentStatus: mux.AgentIdle},
+		WorktreeItem{ShortName: "main", IsMain: true},
+		WorktreeItem{ShortName: "done-b", AgentStatus: mux.AgentDone},
+		WorktreeItem{ShortName: "blocked-b", AgentStatus: mux.AgentBlocked},
+		WorktreeItem{ShortName: "none"},
+		WorktreeItem{ShortName: "blocked-a", AgentStatus: mux.AgentBlocked},
+		WorktreeItem{ShortName: "done-a", AgentStatus: mux.AgentDone},
+	}
+	got := strings.Join(names(sortWorktreeItems(items, SortByAttention, false)), " ")
+	want := "main blocked-a blocked-b done-a done-b zeta idle none"
+	if got != want {
+		t.Errorf("attention order:\n got %s\nwant %s", got, want)
+	}
+	if SortByAttention.String() != "attention" {
+		t.Errorf("label %q", SortByAttention.String())
+	}
+}
+
+func TestSort_CycleIncludesAttentionOnlyWhenAgentAware(t *testing.T) {
+	if SortByDirtyFirst.Next(false) != SortByName {
+		t.Error("under tmux dirty should cycle back to name")
+	}
+	if SortByDirtyFirst.Next(true) != SortByAttention || SortByAttention.Next(true) != SortByName {
+		t.Error("under herdr the cycle should be name, age, dirty, attention")
+	}
+
+	m := newTestModel(withHerdrItems(5), withSize(100, 24))
+	for range 3 {
+		m = sendKey(m, "o")
+	}
+	if m.sortMode != SortByAttention {
+		t.Fatalf("o three times under herdr: %s, want attention", m.sortMode)
+	}
+	// root is main (and blocked); then done, working, and the rest by alias.
+	if got := strings.Join(names(m.list.Items()), " "); got != "root testing feature-auth fix-bug refactor" {
+		t.Errorf("rows under attention: %s", got)
+	}
+
+	m = newTestModel(withItems(5), withSize(100, 24))
+	for range 3 {
+		m = sendKey(m, "o")
+	}
+	if m.sortMode != SortByName {
+		t.Errorf("o three times under tmux: %s, want name", m.sortMode)
 	}
 }
