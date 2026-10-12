@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -173,5 +174,22 @@ func TestOmniActionsFrom_DescriptiveAndNotItself(t *testing.T) {
 		if got := byID[id].Label; got != want {
 			t.Errorf("%s label = %q, want %q", id, got, want)
 		}
+	}
+}
+
+// A label hit beats a synonym hit, so the row reads as the action itself.
+func TestOmniResults_LabelBeatsSynonym(t *testing.T) {
+	gs := omniResults("re", omniScopeActions, omniTestSource())
+	for _, it := range gs[0].Items {
+		if strings.HasPrefix(it.Label, "re") && it.Matched != "" {
+			t.Errorf("%q matched its synonym %q though its label matched", it.Label, it.Matched)
+		}
+	}
+}
+
+func TestOmniResults_NeedsYouShowsStatus(t *testing.T) {
+	gs := omniResults("", omniScopeAll, omniTestSource())
+	if gs[0].Name != "needs you" || gs[0].Items[0].Detail != "blocked" || gs[0].Items[1].Detail != "done" {
+		t.Errorf("needs you = %+v", gs[0].Items)
 	}
 }

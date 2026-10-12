@@ -13,7 +13,7 @@ import (
 
 const (
 	omniMaxHeight = 20
-	omniGroupW    = 13 // group name column
+	omniGroupW    = 15 // group name column; fits "pull requests" plus a gap
 )
 
 // OmniState is the open omni overlay (spec 9).
@@ -150,10 +150,16 @@ func (m Model) chooseOmni() (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 		}
+		m.toast.Show(NewToast("that worktree is gone", ToastWarning))
+		return m, nil
 	case omniAction:
-		if sel, ok := m.selectedItem(); !ok || sel.Path != s.Target {
-			m.toast.Show(NewToast("that worktree is gone", ToastWarning))
-			return m, nil
+		// Only an action opened with a worktree selected needs that
+		// worktree; config, new, pull requests and the like do not.
+		if s.Target != "" {
+			if sel, ok := m.selectedItem(); !ok || sel.Path != s.Target {
+				m.toast.Show(NewToast("that worktree is gone", ToastWarning))
+				return m, nil
+			}
 		}
 		for _, a := range dashboardActions() {
 			if a.ID != it.Ref || a.Run == nil {
@@ -268,13 +274,16 @@ func omniStatus(s *OmniState) (string, string) {
 	keys := "⏎ choose · ctrl+j/k move · esc back"
 	it, ok := s.selected()
 	if !ok {
-		if s.Input.Value() == "" {
+		if strings.TrimSpace(s.Input.Value()) == "" {
 			return "type to search", keys
 		}
 		return "no matches", keys
 	}
 	switch it.Kind {
 	case omniWorktree:
+		if it.Current {
+			return "⏎ stays on " + it.Label, keys
+		}
 		return "⏎ switches to " + it.Label, keys
 	case omniAction:
 		return "⏎ runs " + it.Label, keys

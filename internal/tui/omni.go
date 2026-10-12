@@ -38,6 +38,7 @@ type omniItem struct {
 	Hits    []int  // rune indexes of matched characters, in Matched if set, else Label
 	Detail  string // dim trailing text: the action's key, the worktree's branch
 	Ref     string // action ID, worktree path, or PR / issue number
+	Current bool   // a worktree row for the worktree you are in
 	score   int
 }
 
@@ -166,11 +167,17 @@ func actionKey(a Action) string {
 	return k
 }
 
+// matchActions matches the label first; synonyms count only when the label
+// misses, so a row reads as the action itself whenever it can. Keys are not
+// matched: one-letter keys would swamp one-letter queries.
 func matchActions(q string, actions []Action) []omniItem {
 	var out []omniItem
 	for _, a := range actions {
-		candidates := append([]string{a.Label}, a.Synonyms...)
-		if m, hits, score, ok := bestMatch(q, candidates); ok {
+		m, hits, score, ok := bestMatch(q, []string{a.Label})
+		if !ok {
+			m, hits, score, ok = bestMatch(q, a.Synonyms)
+		}
+		if ok {
 			out = append(out, item(omniAction, a.Label, m, hits, actionKey(a), a.ID, score))
 		}
 	}
@@ -185,7 +192,9 @@ func matchWorktrees(q string, wts []WorktreeItem) []omniItem {
 			candidates = append(candidates, w.Branch)
 		}
 		if m, hits, score, ok := bestMatch(q, candidates); ok {
-			out = append(out, item(omniWorktree, w.ShortName, m, hits, "", w.Path, score))
+			it := item(omniWorktree, w.ShortName, m, hits, "", w.Path, score)
+			it.Current = w.IsCurrent
+			out = append(out, it)
 		}
 	}
 	return out
@@ -217,14 +226,20 @@ func matchIssues(q string, issues []*tracker.Issue) []omniItem {
 // emptyQueryGroups is what omni shows before you type (spec 9.1): agents
 // that need you, pinned worktrees, and recently used ones.
 func emptyQueryGroups(src omniSource) []omniGroup {
-	wt := func(w WorktreeItem) omniItem { return item(omniWorktree, w.ShortName, w.ShortName, nil, "", w.Path, 0) }
+	wt := func(w WorktreeItem) omniItem {
+		it := item(omniWorktree, w.ShortName, w.ShortName, nil, "", w.Path, 0)
+		it.Current = w.IsCurrent
+		return it
+	}
 
 	var needs []omniItem
 	if src.AgentAware {
 		for _, want := range []mux.AgentStatus{mux.AgentBlocked, mux.AgentDone} {
 			for _, w := range src.Worktrees {
 				if w.AgentStatus == want {
-					needs = append(needs, wt(w))
+					it := wt(w)
+					it.Detail = string(want)
+					needs = append(needs, it)
 				}
 			}
 		}

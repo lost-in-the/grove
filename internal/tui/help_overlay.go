@@ -233,10 +233,6 @@ func helpSectionsFor(view ActiveView) []helpSection {
 		return helpSectionsDashboard
 	case ViewDetailSheet:
 		return helpSectionsDetailSheet
-	case ViewOmni:
-		return helpSectionsOmni
-	case ViewMessages:
-		return helpSectionsMessages
 	case ViewDelete:
 		return helpSectionsDelete
 	case ViewBranchForm:
@@ -401,21 +397,5 @@ var helpSectionsDetailSheet = []helpSection{
 		{"ctrl+u / ctrl+d", "Half page up / down"},
 		{"B", "Open associated PR in browser"},
 		{"esc / h / tab", "Back to the list"},
-	}},
-}
-
-var helpSectionsOmni = []helpSection{
-	{title: "Find", note: "Search worktrees, actions, and cached PRs and issues. ? opens it on actions only.", items: []helpEntry{
-		{"type", "Narrow the results"},
-		{"ctrl+j / ctrl+k, ↓ / ↑", "Move through results"},
-		{"enter", "Switch, run the action on the selected worktree, or open the PR or issue"},
-		{"esc", "Close"},
-	}},
-}
-
-var helpSectionsMessages = []helpSection{
-	{title: "Messages", note: "Warnings and errors from this session, newest first. Toasts vanish after a few seconds; these stay.", items: []helpEntry{
-		{"↑/k ↓/j", "Scroll"},
-		{"esc", "Close"},
 	}},
 }

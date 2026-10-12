@@ -3,7 +3,7 @@
 [2m ❯ ● root   [m╭──────────────────────────────────────────────────────╮[2m    0s      [m
 [2m   ○ feature[m│ [1mFind[m                                                 │[2m   60m      [m
 [2m   ○ fix-bug[m│ [1m␣ ▏[mfix[37;7m [m                                              │[2m    2h      [m
-[2m   ● testing[m│ worktrees    ❯ [1mfix[m-bug                               │[2m    3h      [m
+[2m   ● testing[m│ worktrees      ❯ [1mfix[m-bug                             │[2m    3h      [m
 [2m   ○ refacto[m│                                                      │[2m    4h      [m
 [2m            [m│                                                      │[2m            [m
 [2m            [m│                                                      │[2m            [m

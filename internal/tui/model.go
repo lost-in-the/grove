@@ -300,6 +300,10 @@ func (m Model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	if m.branchForm != nil {
 		m.branchForm.setWidth(m.width, m.height)
 	}
+	if m.omni != nil {
+		w, _ := omniFrameSize(m.width, m.height)
+		m.omni.Input.SetWidth(max(4, w-8))
+	}
 	tuilog.Printf("WindowSizeMsg: %dx%d, list size: %dx%d", msg.Width, msg.Height, m.list.Width(), m.list.Height())
 	if !wasReady && m.cfgLoadErr != nil {
 		m.toast.Show(NewToast("Config load failed: "+m.cfgLoadErr.Error(), ToastWarning))
@@ -516,6 +520,10 @@ func (m Model) handleCreationDone(msg creationDoneMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handlePRsFetched(msg prsFetchedMsg) (tea.Model, tea.Cmd) {
+	// Read and clear the pending PR now, so a failed fetch or a browser
+	// closed before it returned cannot move a later, unrelated open.
+	pending := m.pendingPR
+	m.pendingPR = 0
 	if msg.err == nil {
 		m.prCache = msg.prs
 	}
@@ -525,13 +533,10 @@ func (m Model) handlePRsFetched(msg prsFetchedMsg) (tea.Model, tea.Cmd) {
 			m.prState.Error = msg.err.Error()
 		} else {
 			m.prState.PRs = msg.prs
-			if m.pendingPR != 0 {
-				for i, pr := range msg.prs {
-					if pr.Number == m.pendingPR {
-						m.prState.Cursor = i
-					}
+			for i, pr := range msg.prs {
+				if pending != 0 && pr.Number == pending {
+					m.prState.Cursor = i
 				}
-				m.pendingPR = 0
 			}
 		}
 	}
@@ -539,6 +544,8 @@ func (m Model) handlePRsFetched(msg prsFetchedMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleIssuesFetched(msg issuesFetchedMsg) (tea.Model, tea.Cmd) {
+	pending := m.pendingIssue
+	m.pendingIssue = 0
 	if msg.err == nil {
 		m.issueCache = msg.issues
 	}
@@ -548,13 +555,10 @@ func (m Model) handleIssuesFetched(msg issuesFetchedMsg) (tea.Model, tea.Cmd) {
 			m.issueState.Error = msg.err.Error()
 		} else {
 			m.issueState.Issues = msg.issues
-			if m.pendingIssue != 0 {
-				for i, is := range msg.issues {
-					if is.Number == m.pendingIssue {
-						m.issueState.Cursor = i
-					}
+			for i, is := range msg.issues {
+				if pending != 0 && is.Number == pending {
+					m.issueState.Cursor = i
 				}
-				m.pendingIssue = 0
 			}
 		}
 	}

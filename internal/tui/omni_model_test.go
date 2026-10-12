@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
@@ -27,11 +29,10 @@ func TestOmni_SpaceOpens(t *testing.T) {
 	if m.omni.Target != "/tmp/test-project-feature-auth" {
 		t.Errorf("target = %q", m.omni.Target)
 	}
-	// Opening omni never fetches: at most the input's cursor blink.
-	if cmd != nil {
-		if _, isFetch := cmd().(prsFetchedMsg); isFetch {
-			t.Error("opening omni fetched PRs")
-		}
+	// Opening omni never fetches: no browser state, no loading.
+	_ = cmd
+	if m.prState != nil || m.issueState != nil || m.loading {
+		t.Error("opening omni started a fetch")
 	}
 }
 
@@ -191,5 +192,106 @@ func TestOmni_HighlightsMatches(t *testing.T) {
 	}
 	if ansi.Strip(lit) != "rename worktree" {
 		t.Errorf("highlighting changed the text: %q", ansi.Strip(lit))
+	}
+}
+
+// Actions that need no worktree run even with nothing selected.
+func TestOmni_ActionWithoutSelection(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.list.SetFilterText("zzzz-nothing")
+	m = sendKey(m, "?")
+	m = typeOmni(m, "config")
+	m = sendKey(m, "enter")
+	if m.activeView() != ViewConfig {
+		t.Errorf("config with no selection: view %v toast %q", m.activeView(), m.toast.Message())
+	}
+}
+
+// A pending PR from omni never moves a later, unrelated open.
+func TestOmni_PendingPRDoesNotGoStale(t *testing.T) {
+	prs := []*tracker.PullRequest{{Number: 7, Title: "First"}, {Number: 42, Title: "Answer"}}
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m = sendMsg(m, prsFetchedMsg{prs: prs})
+	m = sendKey(m, "space")
+	m = typeOmni(m, "#42")
+	m = sendKey(m, "enter")
+	m = sendMsg(m, prsFetchedMsg{err: errors.New("gh failed")})
+	m = sendKey(m, "esc")
+	m = sendKey(m, "p")
+	m = sendMsg(m, prsFetchedMsg{prs: prs})
+	if m.prState.Cursor != 0 {
+		t.Errorf("after a failed fetch, a later p put the cursor on %d", m.prState.Cursor)
+	}
+
+	b := newTestModel(withItems(3), withSize(120, 40))
+	b = sendMsg(b, prsFetchedMsg{prs: prs})
+	b = sendKey(b, "space")
+	b = typeOmni(b, "#42")
+	b = sendKey(b, "enter")
+	b = sendKey(b, "esc")
+	b = sendMsg(b, prsFetchedMsg{prs: prs}) // lands after the browser closed
+	b = sendKey(b, "p")
+	b = sendMsg(b, prsFetchedMsg{prs: prs})
+	if b.prState.Cursor != 0 {
+		t.Errorf("after closing early, a later p put the cursor on %d", b.prState.Cursor)
+	}
+}
+
+// Every printable key types into the search; none acts.
+func TestOmni_KeysTypeIntoInput(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m = sendKey(m, "space")
+	for _, k := range []string{"j", "k", "q", "?", "g", "1", "-", "/", "u", "m"} {
+		m = sendKey(m, k)
+	}
+	if got := m.omni.Input.Value(); got != "jkq?g1-/um" || m.activeView() != ViewOmni {
+		t.Errorf("input %q view %v", got, m.activeView())
+	}
+}
+
+func TestOmni_ResizeKeepsInputInFrame(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m = sendKey(m, "space")
+	m = resize(m, 60, 24)
+	w, _ := omniFrameSize(60, 24)
+	if got := m.omni.Input.Width(); got > w-8 {
+		t.Errorf("input width %d in a %d-wide frame", got, w)
+	}
+}
+
+func TestOmni_RowsAlignAcrossGroups(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m = sendMsg(m, prsFetchedMsg{prs: []*tracker.PullRequest{{Number: 1, Title: "Fix the thing"}}})
+	m = sendMsg(m, issuesFetchedMsg{issues: []*tracker.Issue{{Number: 2, Title: "Fix login"}}})
+	m = sendKey(m, "space")
+	m = typeOmni(m, "fix")
+	col := -1
+	for _, line := range strings.Split(ansi.Strip(renderOmni(m.omni, 120, 40)), "\n") {
+		if strings.Contains(line, "⏎") {
+			continue // the status line repeats a label
+		}
+		for _, label := range []string{"Fix the thing", "Fix login", "fix-bug"} {
+			if i := strings.Index(line, label); i >= 0 {
+				c := lipgloss.Width(line[:i])
+				if col >= 0 && c != col {
+					t.Errorf("%q starts at column %d, others at %d", label, c, col)
+				}
+				col = c
+			}
+		}
+	}
+}
+
+func TestOmni_StatusOnCurrentWorktree(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m = sendKey(m, "space")
+	m = typeOmni(m, "root")
+	for i, r := range m.omni.rows() {
+		if r.Item.Kind == omniWorktree && r.Item.Label == "root" {
+			m.omni.Cursor = i
+		}
+	}
+	if st, _ := omniStatus(m.omni); st != "⏎ stays on root" {
+		t.Errorf("status = %q", st)
 	}
 }

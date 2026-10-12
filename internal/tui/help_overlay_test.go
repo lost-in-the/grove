@@ -34,8 +34,6 @@ func TestHelpSectionsForAllViews(t *testing.T) {
 		ViewConfig,
 		ViewRename,
 		ViewDetailSheet,
-		ViewOmni,
-		ViewMessages,
 	}
 
 	for _, view := range views {
