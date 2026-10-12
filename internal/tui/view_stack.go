@@ -85,6 +85,7 @@ func (m *Model) pushView(v ActiveView) {
 		f.returnPath = item.Path
 	}
 	m.views = m.views.push(f)
+	m.pendingG = false
 }
 
 // popView goes back exactly one level. At the root it does nothing.

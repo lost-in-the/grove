@@ -122,3 +122,24 @@ func TestLayoutColumns_ChipIsReadableOrGone(t *testing.T) {
 		}
 	}
 }
+
+// With room to spare, a long alias gets its full width; the 32 cap only
+// governs shedding.
+func TestLayoutColumns_LongAliasUsesSpareRoom(t *testing.T) {
+	for _, w := range []int{120, 200} {
+		if l := layoutColumns(w, 0, 47, true); l.AliasW != 47 {
+			t.Errorf("width %d: alias %d, want 47 (chip %d)", w, l.AliasW, l.ChipW)
+		}
+	}
+}
+
+// Trimming the head back to a "-" boundary never wastes more than a few
+// cells.
+func TestMiddleTruncate_DoesNotWasteSpace(t *testing.T) {
+	for w := 16; w <= 28; w++ {
+		got := middleTruncate("abc-1349-migrate-the-read-path", w)
+		if lipgloss.Width(got) < w-3 {
+			t.Errorf("width %d: %q is %d cells", w, got, lipgloss.Width(got))
+		}
+	}
+}

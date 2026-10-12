@@ -93,8 +93,13 @@ func TestRowDelegate_SelectedRowHasNoBareCells(t *testing.T) {
 	raw := renderRows(testRowDelegate(), rowFixture(), 80, 0)[0]
 	parts := strings.Split(raw, "\x1b[m")
 	for i, p := range parts[:len(parts)-1] {
-		if i > 0 && p != "" && !strings.HasPrefix(p, "\x1b[") {
-			t.Fatalf("unstyled text after a reset: %q", p)
+		if p == "" {
+			continue
+		}
+		// The SGR sequences that open this segment must set a background.
+		lead := p[:len(p)-len(strings.TrimLeft(p, "\x1b[0123456789;:m"))]
+		if !strings.Contains(lead, "48;") && !strings.Contains(lead, "48:") {
+			t.Fatalf("segment %d has no selection background: %q", i, p)
 		}
 	}
 	if last := parts[len(parts)-1]; last != "" {
@@ -168,7 +173,7 @@ func TestRowDelegate_WidthIsExact(t *testing.T) {
 		d := testRowDelegate()
 		d.TwoLine = two
 		d.AgentAware = two
-		for w := 44; w <= 160; w++ {
+		for w := 44; w <= 200; w++ {
 			for i, r := range renderRows(d, rowFixture(), w, 0) {
 				for _, line := range strings.Split(r, "\n") {
 					if got := lipgloss.Width(line); got != w {
@@ -244,5 +249,24 @@ func TestListSecondaryFromConfig(t *testing.T) {
 	}
 	if got := listSecondary(nil); got != "branch" {
 		t.Errorf("nil config = %q", got)
+	}
+}
+
+// The first fetch decides agentAware even when no backend was available.
+func TestAgentAware_SetByFirstFetchWithoutBackend(t *testing.T) {
+	m := newTestModel(withSize(120, 40))
+	next, _ := m.Update(worktreesFetchedMsg{items: makeTestItems(2), backend: ""})
+	next, _ = next.(Model).Update(worktreesFetchedMsg{items: makeTestItems(2), backend: "herdr"})
+	if next.(Model).agentAware {
+		t.Error("a later fetch turned agentAware on after a first fetch with no backend")
+	}
+}
+
+// The focused config button draws surface-colored text on Primary, the pair
+// TestPalette_ButtonContrast checks (TextBright on Primary is under 3:1).
+func TestConfigForm_FocusedButtonUsesSurfaceText(t *testing.T) {
+	s := groveHuhTheme().Theme(true)
+	if got := s.Focused.FocusedButton.GetForeground(); got != Colors.SurfaceBg {
+		t.Errorf("focused button text = %v, want SurfaceBg %v", got, Colors.SurfaceBg)
 	}
 }

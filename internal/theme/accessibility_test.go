@@ -102,3 +102,20 @@ func TestPalette_TextContrast(t *testing.T) {
 		}
 	}
 }
+
+// Config form buttons put text on Primary (focused) and SurfaceBorder
+// (blurred); those pairs read at 4.5:1 too.
+func TestPalette_ButtonContrast(t *testing.T) {
+	for pname, p := range map[string]Palette{"default": DefaultPalette, "high-contrast": HighContrastPalette} {
+		for name, pair := range map[string][2]Pair{
+			"SurfaceBg on Primary":        {p.SurfaceBg, p.Primary},
+			"TextNormal on SurfaceBorder": {p.TextNormal, p.SurfaceBorder},
+		} {
+			for mode, hex := range map[string][2]string{"dark": {pair[0].Dark, pair[1].Dark}, "light": {pair[0].Light, pair[1].Light}} {
+				if r := ContrastRatio(hex[0], hex[1]); r < 4.5 {
+					t.Errorf("%s %s: %s = %.2f:1", pname, mode, name, r)
+				}
+			}
+		}
+	}
+}

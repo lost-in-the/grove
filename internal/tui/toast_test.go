@@ -222,3 +222,21 @@ func TestToast_VisibleOverPRBrowser(t *testing.T) {
 		t.Fatalf("toast not drawn over the PR browser:\n%s", out)
 	}
 }
+
+// On a narrow screen the message shortens; the box keeps its border.
+func TestToastView_NarrowKeepsBorder(t *testing.T) {
+	tm := NewToastModel()
+	tm.Show(NewToast("This toast message is far wider than forty-four columns allow", ToastError))
+	view := ansi.Strip(tm.View(44))
+	for i, line := range strings.Split(view, "\n") {
+		if w := lipgloss.Width(line); w > 44 {
+			t.Errorf("line %d is %d cells", i, w)
+		}
+		if !strings.HasSuffix(line, "╮") && !strings.HasSuffix(line, "│") && !strings.HasSuffix(line, "╯") {
+			t.Errorf("line %d lost its right border: %q", i, line)
+		}
+	}
+	if !strings.Contains(view, "…") {
+		t.Errorf("message should be shortened with …: %q", view)
+	}
+}

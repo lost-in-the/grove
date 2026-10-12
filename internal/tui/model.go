@@ -302,7 +302,9 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 	// Capture SetItems' cmd: with a filter applied it re-runs the filter, and
 	// dropping it left the list showing no items until the user re-filtered (B38).
 	setItemsCmd := m.list.SetItems(listItems)
-	if !m.agentAwareSet && msg.backend != "" {
+	if !m.agentAwareSet {
+		// Decided by the first successful fetch, even one that found no
+		// backend, so the column never appears mid-session.
 		m.agentAware, m.agentAwareSet = msg.backend == "herdr", true
 	}
 	m.refreshDelegate()
@@ -606,6 +608,7 @@ func (m Model) handleConfigSaved(msg configSavedMsg) (tea.Model, tea.Cmd) {
 		m.toast.Show(NewToast("Saved but reload failed — restart TUI to apply", ToastWarning))
 	} else {
 		m.cfg = cfg
+		m.refreshDelegate() // tui.list_secondary and density settings
 	}
 	return m, nil
 }
@@ -1022,6 +1025,9 @@ func (m Model) handleMotionKey(msg tea.KeyPressMsg) (Model, bool) {
 	k := msg.String()
 	if m.pendingG {
 		m.pendingG = false
+		if k == "ctrl+c" {
+			return m, false // still quits
+		}
 		if k == "g" {
 			m.moveCursorTo(0)
 		}
@@ -1045,9 +1051,9 @@ func (m Model) handleMotionKey(msg tea.KeyPressMsg) (Model, bool) {
 	return m, true
 }
 
-// halfPage is half the list's visible rows, at least 1.
+// halfPage is half the rows the list shows per page, at least 1.
 func (m Model) halfPage() int {
-	return max(1, m.list.Height()/max(1, m.rowDelegate().Height())/2)
+	return max(1, m.list.Paginator.PerPage/2)
 }
 
 // moveCursorTo selects visible row i, clamped to the list.

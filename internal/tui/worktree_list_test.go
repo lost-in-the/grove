@@ -140,3 +140,39 @@ func TestDashboard_MotionKeysTypeIntoFilter(t *testing.T) {
 		t.Error("pendingG survived into filter typing")
 	}
 }
+
+// ctrl+c quits even right after g.
+func TestDashboard_CtrlCQuitsAfterG(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 24))
+	m = sendKey(m, "g")
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	if cmd == nil {
+		t.Fatal("ctrl+c after g returned no command")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Errorf("ctrl+c after g produced %T, want tea.QuitMsg", cmd())
+	}
+}
+
+// A pending g does not outlive an overlay opened in between.
+func TestDashboard_PendingGClearedByOverlay(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(80, 24))
+	m = sendKey(m, "g")
+	m = sendKey(m, "?")
+	m = sendKey(m, "esc")
+	m = sendKey(m, "j")
+	if got := m.list.Index(); got != 1 {
+		t.Errorf("j after g, ?, esc: index %d, want 1", got)
+	}
+}
+
+// Half a page is half the rows the list actually shows.
+func TestDashboard_HalfPageIsHalfTheVisibleRows(t *testing.T) {
+	for _, size := range [][2]int{{80, 24}, {120, 40}} {
+		m := newTestModel(withItems(60), withSize(size[0], size[1]))
+		m.updateLayout()
+		if want := max(1, m.list.Paginator.PerPage/2); m.halfPage() != want {
+			t.Errorf("%dx%d: halfPage %d, want %d (PerPage %d)", size[0], size[1], m.halfPage(), want, m.list.Paginator.PerPage)
+		}
+	}
+}

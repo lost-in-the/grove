@@ -29,7 +29,7 @@ func groveHuhTheme() huh.Theme {
 		t.Focused.SelectedPrefix = lipgloss.NewStyle().Foreground(cs.Success).SetString("✓ ")
 		t.Focused.UnselectedPrefix = lipgloss.NewStyle().Foreground(cs.TextMuted).SetString("• ")
 		t.Focused.UnselectedOption = t.Focused.UnselectedOption.Foreground(cs.TextNormal)
-		t.Focused.FocusedButton = t.Focused.FocusedButton.Foreground(cs.TextBright).Background(cs.Primary)
+		t.Focused.FocusedButton = t.Focused.FocusedButton.Foreground(cs.SurfaceBg).Background(cs.Primary)
 		t.Focused.Next = t.Focused.FocusedButton
 		t.Focused.BlurredButton = t.Focused.BlurredButton.Foreground(cs.TextNormal).Background(cs.SurfaceBorder)
 

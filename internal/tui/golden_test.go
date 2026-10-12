@@ -317,3 +317,28 @@ func TestGolden_Dashboard_Herdr(t *testing.T) {
 		})
 	}
 }
+
+// Rows with a chip, counts, ages, and tail glyphs, so column alignment is
+// encoded in a golden.
+func TestGolden_Dashboard_RichRows(t *testing.T) {
+	for _, size := range []termSize{sizeStandard, sizeWide} {
+		t.Run(size.name, func(t *testing.T) {
+			m := goldenModel(t, size, withRichRows())
+			golden.RequireEqual(t, []byte(m.viewString()))
+		})
+	}
+}
+
+func withRichRows() testOpt {
+	return func(m *Model) {
+		items := rowFixture()
+		li := make([]list.Item, len(items))
+		for i, it := range items {
+			it.Path = "/tmp/test-project-" + it.ShortName
+			li[i] = it
+		}
+		m.list.SetItems(li)
+		m.refreshDelegate()
+		m.updateLayout()
+	}
+}

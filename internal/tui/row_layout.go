@@ -73,10 +73,12 @@ func layoutColumns(width, lead, maxAlias int, anyChip bool) rowLayout {
 		l.Collapsed = true
 		r = room()
 	}
-	l.AliasW = max(rowAliasFloor, min(need, r))
+	// The cap only governs shedding: with room to spare, a long alias
+	// gets its full width.
+	l.AliasW = max(rowAliasFloor, min(max(maxAlias, rowAliasFloor), r))
 	// The chip is first to go: it shows only while nothing else has shed
 	// and the alias has all it needs, so it never squeezes the alias.
-	if spare := r - need - 1; anyChip && l.ShowAge && !l.Collapsed && spare >= rowChipMin {
+	if spare := r - l.AliasW - 1; anyChip && l.ShowAge && !l.Collapsed && l.AliasW >= need && spare >= rowChipMin {
 		l.ChipW = spare
 	}
 	return l
@@ -130,7 +132,9 @@ func middleTruncate(s string, w int) string {
 		return ansi.Truncate(s, w, "…")
 	}
 	head := ansi.Truncate(s, budget, "")
-	if j := strings.LastIndex(head, "-"); j > 0 && j+1 >= len(ticketID.FindString(s)) {
+	// Trim back to a "-" boundary when that costs only a few cells, never
+	// cutting into a leading ticket id.
+	if j := strings.LastIndex(head, "-"); j > 0 && len(head)-(j+1) <= 3 && j+1 >= len(ticketID.FindString(s)) {
 		head = head[:j+1]
 	}
 	return head + "…" + tail
