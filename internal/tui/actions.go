@@ -87,10 +87,9 @@ func dashboardActions() []Action {
 				m.updateLayout()
 				return m, nil
 			}},
-		// ? and u run from handleKey in every view; their entries feed the
-		// footer and keep the key map and this table in step.
+		// ? runs from handleKey in every view; its entry feeds the footer
+		// and keeps the key map and this table in step.
 		{ID: "app.help", Keys: []string{"?"}, Label: "help", Footer: 7},
-		{ID: "app.update", Keys: []string{"u"}, Label: "update", Synonyms: []string{"upgrade"}},
 		{ID: "app.messages", Label: "messages", Synonyms: []string{"warnings", "errors", "log", "history"},
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) { return m.openMessages() }},
 		{ID: "app.shortcuts", Label: "keyboard shortcuts", Synonyms: []string{"help", "keys", "cli commands"},
@@ -203,7 +202,8 @@ func dashboardActions() []Action {
 		{ID: "goto.config", Layer: "g", Keys: []string{"c"}, Label: "config",
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) { return m.openConfig() }},
 		{ID: "goto.upgrade", Layer: "g", Keys: []string{"u"}, Label: "upgrade grove",
-			Run: func(m Model, _ string) (tea.Model, tea.Cmd) { return m.openUpgrade() }},
+			Synonyms: []string{"update", "release", "new version"},
+			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { return m.openUpgrade() }},
 		{ID: "goto.agent", Layer: "g", Keys: []string{"a"}, Label: "agent needing you",
 			Synonyms: []string{"blocked", "attention", "needs you"},
 			Enabled:  func(m Model) bool { return m.agentAware },
@@ -218,14 +218,17 @@ func (m Model) openConfig() (tea.Model, tea.Cmd) {
 	return m, loadConfigCmd()
 }
 
-// openUpgrade opens the update modal when a newer release is cached, and
-// otherwise says there is nothing to do.
+// openUpgrade opens the upgrade overlay: the newer release when one is
+// cached, otherwise that grove is up to date (spec 12).
 func (m Model) openUpgrade() (tea.Model, tea.Cmd) {
-	if !m.updateAvailable() || m.updateOverlay == nil {
-		m.toast.Show(NewToast("grove is up to date", ToastInfo))
-		return m, nil
+	if m.updateOverlay == nil {
+		m.updateOverlay = NewUpdateOverlay()
 	}
-	m.updateOverlay.Open(version.Version, m.updateLatestVersion, m.updateLatestURL)
+	if m.updateAvailable() {
+		m.updateOverlay.Open(version.Version, m.updateLatestVersion, m.updateLatestURL)
+	} else {
+		m.updateOverlay.Open(version.Version, "", "")
+	}
 	m.pushView(ViewUpdate)
 	return m, nil
 }

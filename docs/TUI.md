@@ -28,7 +28,7 @@ The dashboard adjusts to your terminal width:
 
 ### Header
 
-Left to right: project name, worktree count, agents that need you (under herdr: `! 2 blocked · ✓ 1 done`, hidden when both are zero), and sort (`⬍ name`, with `↑` when reversed). The cursor's position among the visible rows (`3/12`) sits on the right and tracks any filter. On narrow terminals the count and the agent summary drop their words (`! 2 · ✓ 1`) and the project name truncates.
+Left to right: project name, worktree count, agents that need you (under herdr: `! 2 blocked · ✓ 1 done`, hidden when both are zero), and sort (`⬍ name`, with `↑` when reversed). The cursor's position among the visible rows (`3/12`) sits on the right and tracks any filter; when a newer grove is cached, the upgrade badge (`⭡0.12.0`) sits just before it. On narrow terminals the count and the agent summary drop their words (`! 2 · ✓ 1`) and the project name truncates; the badge and the position stay.
 
 ### Worktree List
 
@@ -71,19 +71,21 @@ Selecting a worktree updates the detail panel with:
 
 A compact hint bar at the bottom shows essential keybindings. Press `?` to open a scrollable, context-sensitive help overlay with the full reference for the current view.
 
-### Update available indicator
+### Upgrade badge
 
 When grove's update-check cache (`~/.grove/update-check.json`) shows a newer
-release, the dashboard footer renders a passive badge:
+release, the header shows a badge before the cursor position:
 
-    ↑ 0.7.0 → 0.8.0  press u
+    ⭡0.12.0  3/12
 
-Pressing `u` opens an `UpdateOverlay` modal showing all install methods
-(Brew, `go install`, binary download) and a changelog link. The modal closes
-on `esc` or `u`.
+`g u` opens the upgrade overlay: the current and latest versions, every install
+method (Brew, `go install`, binary download), and a changelog link. With nothing
+newer cached it says `grove is up to date`. It never runs an upgrade. `esc`
+closes it.
 
-The badge and modal are silenced by the same opt-outs as other grove update
-surfaces — `GROVE_NO_UPDATE_NOTIFIER=1` and friends suppress all of them.
+The opt-outs that silence other grove update notices
+(`GROVE_NO_UPDATE_NOTIFIER=1` and friends) hide the badge. `g u` still opens
+and reports the cached release.
 
 ### Toast Notifications
 
@@ -127,7 +129,6 @@ Toast levels:
 | `O` | Reverse the sort |
 | `r` | Refresh worktree list |
 | `v` | Show or hide the commit message line |
-| `u` | Open update modal (only when a newer release is cached — the footer badge indicates availability) |
 | `/` | Filter list |
 | `space` | Find: search worktrees, actions, and loaded PRs and issues (see Find below) |
 | `?` | Find, limited to actions: every dashboard action with its key. `keyboard shortcuts` there opens the full key reference. |

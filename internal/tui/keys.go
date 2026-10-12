@@ -51,9 +51,6 @@ type KeyMap struct {
 	Rename   key.Binding
 	Checkout key.Binding
 
-	// Update modal
-	Update key.Binding
-
 	// Dashboard motion, detail, pins, and goto
 	Top          key.Binding // g: g strip; g g goes to the top
 	Bottom       key.Binding
@@ -203,10 +200,6 @@ func DefaultKeyMap() KeyMap {
 		Checkout: key.NewBinding(
 			key.WithKeys("b"),
 			key.WithHelp("b", "branch"),
-		),
-		Update: key.NewBinding(
-			key.WithKeys("u"),
-			key.WithHelp("u", "update"),
 		),
 		Top:          key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "goto")),
 		Bottom:       key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "bottom")),

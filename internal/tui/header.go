@@ -18,20 +18,25 @@ type Header struct {
 	Done          int    // agents done and waiting for review
 	SortLabel     string // "name", "age", "dirty"
 	SortReversed  bool
-	Cursor        int // 1-based position of the selected row among visible rows
-	Total         int // visible rows (after any filter)
+	Upgrade       string // newer cached version, shown as a badge; "" for none
+	Cursor        int    // 1-based position of the selected row among visible rows
+	Total         int    // visible rows (after any filter)
 }
 
 // View renders the header at the given width. As space runs out the count
 // and the agent summary drop their words, then the project name truncates;
-// the cursor position stays.
+// the upgrade badge and the cursor position stay.
 func (h Header) View(width int) string {
 	inner := max(0, width-2) // HeaderBar pads one cell each side
 	sep := Styles.TextMuted.Render(" · ")
-	right := ""
-	if h.Total > 0 {
-		right = Styles.TextMuted.Render(fmt.Sprintf("%d/%d", h.Cursor, h.Total))
+	var rights []string
+	if h.Upgrade != "" {
+		rights = append(rights, Styles.WarningText.Render("⭡"+h.Upgrade))
 	}
+	if h.Total > 0 {
+		rights = append(rights, Styles.TextMuted.Render(fmt.Sprintf("%d/%d", h.Cursor, h.Total)))
+	}
+	right := strings.Join(rights, "  ")
 	sort := ""
 	if h.SortLabel != "" {
 		sort = Styles.TextMuted.Render("⬍ ") + Styles.TextNormal.Render(h.SortLabel)
@@ -64,6 +69,10 @@ func (h Header) View(width int) string {
 		over := lipgloss.Width(left) + 1 + lipgloss.Width(right) - inner
 		name := ansi.Truncate(h.ProjectName, max(1, lipgloss.Width(h.ProjectName)-over), "…")
 		left = build(name, count, words)
+	}
+	if !fits(left) {
+		// The name is at its minimum; clip the left side so the right stays.
+		left = ansi.Truncate(left, max(0, inner-1-lipgloss.Width(right)), "…")
 	}
 
 	gap := inner - lipgloss.Width(left) - lipgloss.Width(right)

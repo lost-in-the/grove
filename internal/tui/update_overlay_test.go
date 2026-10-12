@@ -85,14 +85,13 @@ func TestUpdateOverlayViewContent(t *testing.T) {
 		}
 	}
 
-	// Footer should combine both keys with a single "close" action label —
-	// rendered as "esc/u   close" (slash convention for compound keys).
+	// The key line names esc once; bare u no longer closes it (spec N9).
 	closeCount := strings.Count(plain, "close")
 	if closeCount != 1 {
 		t.Errorf("expected footer to render the word \"close\" exactly once, got %d\n--- plain ---\n%s", closeCount, plain)
 	}
-	if !strings.Contains(plain, "esc/u") {
-		t.Errorf("expected footer to render compound close keys as \"esc/u\"\n--- plain ---\n%s", plain)
+	if !strings.Contains(plain, "esc close") {
+		t.Errorf("expected footer to read \"esc close\"\n--- plain ---\n%s", plain)
 	}
 }
 

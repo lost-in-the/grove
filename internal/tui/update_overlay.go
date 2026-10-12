@@ -36,9 +36,8 @@ func NewUpdateOverlay() *UpdateOverlay {
 	return &UpdateOverlay{}
 }
 
-// Open populates the overlay from the supplied release info.
-// The caller is responsible for verifying that an update is actually available
-// (typically via updatecheck.CachedRelease) before calling Open.
+// Open populates the overlay from the supplied release info. An empty
+// latestVersion means grove is up to date.
 func (u *UpdateOverlay) Open(currentVersion, latestVersion, latestURL string) {
 	u.currentVersion = currentVersion
 	u.latestVersion = latestVersion
@@ -56,7 +55,8 @@ func (u *UpdateOverlay) View(width, height int) string {
 		textWidth = 30
 	}
 
-	title := Styles.OverlayTitle.Render("↑ Update available")
+	footerRule := updateOverlayRuleStyle.Render(strings.Repeat("─", textWidth))
+	footerKeys := "  " + Styles.HelpKey.Render("esc") + " " + Styles.HelpDesc.Render("close")
 
 	// Align all values at the same column. "Changelog:" is 10 chars; pad
 	// labels so values start at column 12 (matches the previous layout).
@@ -71,6 +71,12 @@ func (u *UpdateOverlay) View(width, height int) string {
 	}
 
 	current := pad("Current") + updateOverlayValueStyle.Render(u.currentVersion)
+	if u.latestVersion == "" {
+		title := Styles.OverlayTitle.Render("✓ grove is up to date")
+		return u.frame(w, ht, []string{title, "", current, "", footerRule, footerKeys})
+	}
+
+	title := Styles.OverlayTitle.Render("⭡ Update available")
 	latest := pad("Latest") + updateOverlayEmphStyle.Render(u.latestVersion)
 
 	// Always show all three install methods. The user picks whichever applies
@@ -84,11 +90,6 @@ func (u *UpdateOverlay) View(width, height int) string {
 	if u.latestURL != "" {
 		changelogLine = pad("Changelog") + updateOverlayURLStyle.Render(u.latestURL)
 	}
-
-	footerRule := updateOverlayRuleStyle.Render(strings.Repeat("─", textWidth))
-	// Group both keys with a single action label.
-	footerKeys := "  " +
-		Styles.HelpKey.Render("esc/u") + "   " + Styles.HelpDesc.Render("close")
 
 	parts := []string{
 		title,
@@ -104,7 +105,11 @@ func (u *UpdateOverlay) View(width, height int) string {
 		parts = append(parts, "", changelogLine)
 	}
 	parts = append(parts, "", footerRule, footerKeys)
+	return u.frame(w, ht, parts)
+}
 
+// frame draws the overlay's lines in its border, hugging the content.
+func (u *UpdateOverlay) frame(w, ht int, parts []string) string {
 	content := strings.Join(parts, "\n")
 
 	// Size Height to the actual content so the box hugs its rows instead of
