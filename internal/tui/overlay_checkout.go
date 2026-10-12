@@ -129,7 +129,7 @@ func checkoutBranchCmd(worktreePath, branch string, stash bool) tea.Cmd {
 // handleCheckoutKey handles key input for the checkout overlay.
 func (m Model) handleCheckoutKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.checkoutState == nil {
-		m.activeView = ViewDashboard
+		m.popView()
 		return m, nil
 	}
 
@@ -156,7 +156,7 @@ func (m Model) handleCheckoutBranchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 
 	switch {
 	case key.Matches(msg, m.keys.Escape):
-		m.activeView = ViewDashboard
+		m.popView()
 		m.checkoutState = nil
 		return m, nil
 
@@ -220,7 +220,7 @@ func (m Model) handleCheckoutWIPKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	switch {
 	case key.Matches(msg, m.keys.Escape):
-		m.activeView = ViewDashboard
+		m.popView()
 		m.checkoutState = nil
 		return m, nil
 
@@ -248,7 +248,7 @@ func (m Model) handleCheckoutWIPKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			s.Step = CheckoutStepConfirm
 			s.Stepper.Current = 2
 		case 1: // cancel
-			m.activeView = ViewDashboard
+			m.popView()
 			m.checkoutState = nil
 		}
 		return m, nil
@@ -262,7 +262,7 @@ func (m Model) handleCheckoutConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd
 
 	switch {
 	case key.Matches(msg, m.keys.Escape):
-		m.activeView = ViewDashboard
+		m.popView()
 		m.checkoutState = nil
 		return m, nil
 

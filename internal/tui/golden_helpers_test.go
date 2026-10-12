@@ -87,7 +87,7 @@ func goldenModelThemed(t *testing.T, size termSize, opts ...testOpt) Model {
 func withDeleteOverlay(warnings ...string) testOpt {
 	return func(m *Model) {
 		item := makeTestItems(3)[1] // non-main item
-		m.activeView = ViewDelete
+		m.setViewForTest(ViewDelete)
 		m.deleteState = &DeleteState{
 			Item:     &item,
 			Warnings: warnings,
@@ -98,7 +98,7 @@ func withDeleteOverlay(warnings ...string) testOpt {
 // withCreateStep sets up the create overlay at a specific step.
 func withCreateStep(step CreateStep) testOpt {
 	return func(m *Model) {
-		m.activeView = ViewCreate
+		m.setViewForTest(ViewCreate)
 		m.createState = &CreateState{
 			Step:              step,
 			Branches:          []string{"main", "develop", "feature/auth", "fix/login-bug", "release/v2"},
@@ -134,7 +134,7 @@ func withBulkOverlay(n int) testOpt {
 				bulkItems = append(bulkItems, item)
 			}
 		}
-		m.activeView = ViewBulk
+		m.setViewForTest(ViewBulk)
 		m.bulkState = &BulkState{
 			Items:    bulkItems,
 			Selected: make([]bool, len(bulkItems)),
@@ -152,7 +152,7 @@ func withBulkOverlay(n int) testOpt {
 // withPRData sets up the PR browser overlay with mock data.
 func withPRData() testOpt {
 	return func(m *Model) {
-		m.activeView = ViewPRs
+		m.setViewForTest(ViewPRs)
 		fi := newFilterInput("")
 		m.prState = &PRViewState{
 			FilterInput: fi,
@@ -171,7 +171,7 @@ func withPRData() testOpt {
 // withIssueData sets up the issue browser overlay with mock data.
 func withIssueData() testOpt {
 	return func(m *Model) {
-		m.activeView = ViewIssues
+		m.setViewForTest(ViewIssues)
 		ifi := newFilterInput("")
 		m.issueState = &IssueViewState{
 			FilterInput: ifi,
@@ -190,7 +190,7 @@ func withForkOverlay() testOpt {
 		source := makeTestItems(3)[1]
 		ni := newForkNameInput()
 		ni.SetValue("experiment")
-		m.activeView = ViewFork
+		m.setViewForTest(ViewFork)
 		m.forkState = &ForkState{
 			Step:      ForkStepConfirm,
 			Source:    source,
@@ -206,7 +206,7 @@ func withForkOverlay() testOpt {
 func withSyncOverlay() testOpt {
 	return func(m *Model) {
 		items := makeTestItems(5)
-		m.activeView = ViewSync
+		m.setViewForTest(ViewSync)
 		m.syncState = &SyncState{
 			Step:    SyncStepSource,
 			Target:  items[0],
@@ -223,7 +223,7 @@ func withSyncOverlay() testOpt {
 // withConfigOverlay sets up the config overlay with deterministic fields.
 func withConfigOverlay() testOpt {
 	return func(m *Model) {
-		m.activeView = ViewConfig
+		m.setViewForTest(ViewConfig)
 		cs := NewConfigState()
 		cs.Fields[ConfigTabGeneral] = []ConfigField{
 			{Key: "project_name", Label: "project_name", Value: "grove-cli", Default: "grove-cli", Type: ConfigString, Description: "Project name"},
@@ -272,7 +272,8 @@ func withToastVisible(msg string, level ToastLevel) testOpt {
 // withHelpExpanded opens the help overlay for the current view.
 func withHelpExpanded() testOpt {
 	return func(m *Model) {
-		m.helpOverlay.Open(m.activeView, m.width, m.height)
+		m.helpOverlay.Open(m.activeView(), m.width, m.height)
+		m.pushView(ViewHelp)
 	}
 }
 

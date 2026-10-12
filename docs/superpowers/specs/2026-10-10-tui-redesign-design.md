@@ -91,6 +91,8 @@ Terms are used with one meaning each throughout.
 | N18 | Pins: `m` + digit, `1`-`9` switch | none | New |
 | N19 | Action registry feeds footer, strips, and omni | none | New |
 | N20 | Dependency bumps, including glamour v2 | none | New |
+| N21 | Readability: focus label, 4.5:1 contrast, status never by color alone | none | New |
+| N22 | Message history for warnings and errors | none | New |
 
 ---
 
@@ -213,6 +215,15 @@ In the focused detail pane, `d` opens the PR review view for that worktree (same
 - With `branch`, the chip shows only when the branch's last segment differs from the alias. This reuses the existing `last_segment` derivation.
 - The worktree directory always appears in the detail pane's Git section.
 
+### 5.9 Readability and focus (N21)
+
+Added after hands-on testing of Phase 2.
+
+- **Focus has a text label.** The focused detail pane's title reads `detail · focused`. The Primary border tint stays, but focus must read without color.
+- **Contrast is at least 4.5:1** for every text and background pair, in the dark, light, and high-contrast themes. This includes text on the selected row. Testing measured dim text on the selected row at 3.4:1 (dark) and 3.9:1 (light).
+- **Status never relies on color alone.** Every status keeps a distinct glyph, and the detail pane spells it out in words (`agent: blocked`, `working tree: dirty`).
+- **Test:** a unit test computes the contrast of each theme's text tokens against `SurfaceBg` and `SelectionBg` with the existing contrast helpers, and fails below 4.5:1.
+
 ---
 
 ## 6. Keys
@@ -252,6 +263,16 @@ In the focused detail pane, `d` opens the PR review view for that worktree (same
 | `-` | Toggle to the last-active worktree. Its row shows a dim `↩`. |
 | `O` | Reverse sort |
 | `g` | Open the goto strip (6.3) |
+
+**List paging keys.** The bubbles list binds its own keys by default:
+
+| List action | Default keys |
+|---|---|
+| Previous page | `left`, `h`, `pgup`, `b`, `u` |
+| Next page | `right`, `l`, `pgdown`, `f`, `d` |
+| Top / bottom | `home`, `g` / `end`, `G` |
+
+Phase 4 rebinds the list to `pgup`/`pgdown` and `home`/`end` only. That leaves `h l b u f d g G` to grove. A test asserts the list's bindings, as `newWorktreeList`'s quit guard does.
 
 ### 6.3 The `g` strip (N11)
 
@@ -468,6 +489,7 @@ From a PR or issue row, Branch and Alias are prefilled.
 
 - **Width:** 60% of the terminal, clamped to 56 to 76 columns. Computed on open and on resize only.
 - **Height:** one constant for all modes and states. The suggestion list scrolls inside a fixed 4-row area.
+- **Short terminals:** the frame never grows past the rows available. When it would, the title, status line, and key line stay pinned, and the fields scroll between them. Testing at 80x20 found today's create dialog clips its key line.
 - **Position:** horizontally centered, **anchored at a fixed top row** under the header. Never vertically centered.
 - **Progress:** after `⏎`, the activity log replaces the fields inside the same frame.
 - **Errors** appear in the fixed status line, never as extra rows.
@@ -537,6 +559,7 @@ Tab strip anatomy: `[key] label count`, active tab raised, count dim.
 - `gh pr view <n> --json comments,reviews,reviewThreads,statusCheckRollup,commits,files` and `gh pr diff <n>`, through the existing `runGH` path.
 - A longer timeout profile than the current 15s for large diffs.
 - Cache per PR, keyed on `UpdatedAt`.
+- **PR browser list:** `p` shows the last cached list at once, marked stale, and refreshes in the background. Testing measured 2.06 to 2.28s before PRs appeared.
 - Parse the diff once into files, hunks, and lines in `internal/git`. Render each hunk to a cached slice, so large diffs do not re-render per frame.
 - Diff coloring with chroma's `diff` lexer.
 
@@ -559,6 +582,12 @@ Tab strip anatomy: `[key] label count`, active tab raised, count dim.
 - Every data surface has a labelled empty panel: no worktrees, no PRs, no issues, no search results.
 - Loading shows a spinner. Failure shows a specific message.
 - **Quit is never blocked** by a pending load.
+
+**Message history (N22).** A toast disappears after 3 seconds, which is too short to read a warning in full.
+
+- Every warning and error toast is also kept in a session message history (newest 50).
+- The omni action `messages` (synonyms: `warnings`, `errors`, `log`) opens it as an overlay frame.
+- No new top-level key.
 
 ---
 
@@ -663,8 +692,8 @@ Each phase ships on its own and passes `make lint test`.
 | 1 | Compositor and dim | M | 0 | N2, fixes #19 |
 | 2 | View stack | XL | 1 | N1 |
 | 3 | Branch form, three modes | L | 1, 2 | N7 |
-| 4 | Dashboard: rows, pins, density, width tiers, focus, floor guard, sort, chip | L | 2 | N3, N4, N5, N6, N14, N15, N18 |
-| 5 | Action registry, strips, omni, `?` as omni | L | 4 | N11, N12, N13, N19 |
+| 4 | Dashboard: rows, pins, density, width tiers, focus, floor guard, sort, chip, readability, list paging keys | L | 2 | N3, N4, N5, N6, N14, N15, N18, N21 |
+| 5 | Action registry, strips, omni, `?` as omni, message history | L | 4 | N11, N12, N13, N19, N22 |
 | 6 | Agent triage and poll | M | 4, 5 | N16, N17 |
 | 7 | Config and upgrade | M | 2, 5 | N8, N9 |
 | 8 | PR review view, in sub-phases: data, diff model, files tab, viewed marks, other tabs, editor, `g d` | XL | 2, 5 | N10 |
@@ -718,6 +747,7 @@ Each item is checked at the start of the phase named.
 | 4 | `default_branch_action` config: the TUI no longer prompts. Confirm the CLI still uses it, and update the config docs. | 3 | Document it as CLI-only |
 | 5 | Last-accessed data for omni's "recent" group exists in state | 5 | Drop the group |
 | 6 | `bubbles/tree` stability for the file rail | 8 | Keep the custom rail |
+| 7 | Screen-reader compatibility is unverified (separate from color and contrast checks) | 4 | Document the limits in `docs/TUI.md` |
 
 ---
 

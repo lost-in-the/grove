@@ -81,8 +81,8 @@ func TestHighContrastColorSchemeNotNil(t *testing.T) {
 
 // TestHighContrastEnvVar verifies GROVE_HIGH_CONTRAST triggers the high-contrast scheme.
 func TestHighContrastEnvVar(t *testing.T) {
-	_ = os.Setenv("GROVE_HIGH_CONTRAST", "1")
-	defer func() { _ = os.Unsetenv("GROVE_HIGH_CONTRAST") }()
+	unsetEnvForTest(t, "NO_COLOR", "GROVE_NO_COLOR")
+	t.Setenv("GROVE_HIGH_CONTRAST", "1")
 
 	scheme := NewColorScheme()
 	if scheme.Primary == nil {
@@ -92,9 +92,7 @@ func TestHighContrastEnvVar(t *testing.T) {
 
 // TestHighContrastNotSetUsesDefault verifies default scheme is used normally.
 func TestHighContrastNotSetUsesDefault(t *testing.T) {
-	_ = os.Unsetenv("GROVE_HIGH_CONTRAST")
-	_ = os.Unsetenv("NO_COLOR")
-	_ = os.Unsetenv("GROVE_NO_COLOR")
+	unsetEnvForTest(t, "GROVE_HIGH_CONTRAST", "NO_COLOR", "GROVE_NO_COLOR")
 
 	scheme := NewColorScheme()
 	if scheme.Primary == nil {
@@ -104,13 +102,12 @@ func TestHighContrastNotSetUsesDefault(t *testing.T) {
 
 // TestIsHighContrast checks the detection function.
 func TestIsHighContrast(t *testing.T) {
-	_ = os.Unsetenv("GROVE_HIGH_CONTRAST")
+	unsetEnvForTest(t, "GROVE_HIGH_CONTRAST")
 	if theme.IsHighContrast() {
 		t.Error("expected false when GROVE_HIGH_CONTRAST not set")
 	}
 
-	_ = os.Setenv("GROVE_HIGH_CONTRAST", "1")
-	defer func() { _ = os.Unsetenv("GROVE_HIGH_CONTRAST") }()
+	t.Setenv("GROVE_HIGH_CONTRAST", "1")
 	if !theme.IsHighContrast() {
 		t.Error("expected true when GROVE_HIGH_CONTRAST=1")
 	}
@@ -118,8 +115,7 @@ func TestIsHighContrast(t *testing.T) {
 
 // TestHighContrastModeDetection verifies high-contrast mode env var detection.
 func TestHighContrastModeDetection(t *testing.T) {
-	_ = os.Setenv("GROVE_HIGH_CONTRAST", "1")
-	defer func() { _ = os.Unsetenv("GROVE_HIGH_CONTRAST") }()
+	t.Setenv("GROVE_HIGH_CONTRAST", "1")
 
 	if !theme.IsHighContrast() {
 		t.Error("expected theme.IsHighContrast() to return true when GROVE_HIGH_CONTRAST is set")
@@ -150,5 +146,18 @@ func TestHexToRGB(t *testing.T) {
 					tt.hex, r, g, b, tt.r, tt.g, tt.b)
 			}
 		})
+	}
+}
+
+// unsetEnvForTest removes keys for the duration of the test and restores
+// their original values afterwards. Color selection checks presence with
+// os.LookupEnv, so an empty value is not the same as unset.
+func unsetEnvForTest(t *testing.T, keys ...string) {
+	t.Helper()
+	for _, k := range keys {
+		t.Setenv(k, "")
+		if err := os.Unsetenv(k); err != nil {
+			t.Fatalf("unset %s: %v", k, err)
+		}
 	}
 }

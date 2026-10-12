@@ -71,7 +71,7 @@ func TestReadCreationLog_ChannelClose(t *testing.T) {
 func TestCreationLogMsg_ChainsNext(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
 	// Set up create state with ActivityLog
-	m.activeView = ViewCreate
+	m.setViewForTest(ViewCreate)
 	m.createState = &CreateState{
 		Creating:    true,
 		ActivityLog: NewActivityLog(60, 10),
@@ -99,7 +99,7 @@ func TestCreationLogMsg_ChainsNext(t *testing.T) {
 
 func TestCreationDoneMsg_Create(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
-	m.activeView = ViewCreate
+	m.setViewForTest(ViewCreate)
 	m.createState = &CreateState{
 		Creating:    true,
 		ActivityLog: NewActivityLog(60, 10),
@@ -109,14 +109,14 @@ func TestCreationDoneMsg_Create(t *testing.T) {
 	result, _ := m.Update(msg)
 	m = result.(Model)
 
-	if m.activeView != ViewDashboard {
-		t.Errorf("activeView should be ViewDashboard after create done, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("activeView should be ViewDashboard after create done, got %d", m.activeView())
 	}
 }
 
 func TestCreationDoneMsg_PR(t *testing.T) {
 	m := newTestModel(withPRData(), withSize(80, 24))
-	m.activeView = ViewPRs
+	m.setViewForTest(ViewPRs)
 	m.prState.Creating = true
 	m.prState.ActivityLog = NewActivityLog(60, 10)
 
@@ -125,14 +125,14 @@ func TestCreationDoneMsg_PR(t *testing.T) {
 	m = result.(Model)
 
 	// Successful PR creation transitions to dashboard
-	if m.activeView != ViewDashboard {
-		t.Errorf("activeView should be ViewDashboard after PR create done, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("activeView should be ViewDashboard after PR create done, got %d", m.activeView())
 	}
 }
 
 func TestCreationDoneMsg_Error(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
-	m.activeView = ViewCreate
+	m.setViewForTest(ViewCreate)
 	m.createState = &CreateState{
 		Creating:    true,
 		ActivityLog: NewActivityLog(60, 10),

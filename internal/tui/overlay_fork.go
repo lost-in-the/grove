@@ -220,7 +220,7 @@ func forkCreateTmuxSession(mgr *worktree.Manager, name, path string) {
 // handleForkKey handles key input for the fork overlay.
 func (m Model) handleForkKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.forkState == nil {
-		m.activeView = ViewDashboard
+		m.popView()
 		return m, nil
 	}
 
@@ -230,7 +230,7 @@ func (m Model) handleForkKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	// Escape dismisses from any step
 	if key.Matches(msg, m.keys.Escape) {
-		m.activeView = ViewDashboard
+		m.popView()
 		m.forkState = nil
 		return m, nil
 	}
@@ -330,7 +330,7 @@ func (m Model) handleForkConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	switch {
 	case key.Matches(msg, m.keys.Escape):
-		m.activeView = ViewDashboard
+		m.popView()
 		m.forkState = nil
 		return m, nil
 	case key.Matches(msg, m.keys.Back):

@@ -33,8 +33,8 @@ func TestListFilterActivation(t *testing.T) {
 	if m.list.FilterState() != list.Filtering {
 		t.Fatalf("expected Filtering after typing 'f', got %d", m.list.FilterState())
 	}
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView())
 	}
 
 	// The filter cmd from list should be returned for the runtime to execute
@@ -53,8 +53,8 @@ func TestDefaultCaseForwardsToList(t *testing.T) {
 	m = result.(Model)
 
 	// Should still be in dashboard, no crash
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after unknown msg, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after unknown msg, got %d", m.activeView())
 	}
 }
 

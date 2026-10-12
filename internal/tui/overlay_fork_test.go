@@ -32,8 +32,8 @@ func TestForkOverlay_OpenClose(t *testing.T) {
 	// Move to non-main item
 	m = sendKey(m, "j")
 	m = sendKey(m, "f")
-	if m.activeView != ViewFork {
-		t.Errorf("expected ViewFork, got %d", m.activeView)
+	if m.activeView() != ViewFork {
+		t.Errorf("expected ViewFork, got %d", m.activeView())
 	}
 	if m.forkState == nil {
 		t.Fatal("expected forkState to be set")
@@ -44,8 +44,8 @@ func TestForkOverlay_OpenClose(t *testing.T) {
 
 	// Esc should close (once form is initialized it handles esc as abort)
 	m = sendKey(m, "esc")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after esc, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after esc, got %d", m.activeView())
 	}
 	if m.forkState != nil {
 		t.Error("expected forkState to be nil after close")
@@ -54,11 +54,11 @@ func TestForkOverlay_OpenClose(t *testing.T) {
 
 func TestForkOverlay_NilState(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewFork
+	m.setViewForTest(ViewFork)
 	m.forkState = nil
 	m = sendKey(m, "enter")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard for nil state, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard for nil state, got %d", m.activeView())
 	}
 }
 
@@ -73,7 +73,7 @@ func TestForkOverlay_WIPCheckNoWIPStaysOnName(t *testing.T) {
 	// Simulate WIP check with no WIP — should stay on name step,
 	// NOT skip to confirm (that was the bug in #53)
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewFork
+	m.setViewForTest(ViewFork)
 	m.forkState = s
 	m = sendMsg(m, wipCheckMsg{path: source.Path, hasWIP: false, files: nil})
 	if m.forkState.Step != ForkStepName {
@@ -95,7 +95,7 @@ func TestForkOverlay_RootWorktreeStartsOnName(t *testing.T) {
 	s := NewForkState(root)
 
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewFork
+	m.setViewForTest(ViewFork)
 	m.forkState = s
 
 	// Root worktrees are typically clean, so WIP check returns false
@@ -118,7 +118,7 @@ func TestForkOverlay_WIPCheckKeepsStep(t *testing.T) {
 	s := NewForkState(source)
 
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewFork
+	m.setViewForTest(ViewFork)
 	m.forkState = s
 	m = sendMsg(m, wipCheckMsg{path: source.Path, hasWIP: true, files: []string{"file.go", "other.go"}})
 	if m.forkState.Step != ForkStepName {
@@ -134,7 +134,7 @@ func TestForkOverlay_WIPCheckKeepsStep(t *testing.T) {
 
 func TestForkOverlay_ConfirmEsc(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewFork
+	m.setViewForTest(ViewFork)
 	m.forkState = &ForkState{
 		Step:    ForkStepConfirm,
 		Source:  WorktreeItem{ShortName: "test"},
@@ -144,14 +144,14 @@ func TestForkOverlay_ConfirmEsc(t *testing.T) {
 	m.forkState.Stepper.Current = 2
 
 	m = sendKey(m, "esc")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView())
 	}
 }
 
 func TestForkOverlay_ConfirmBackNoWIP(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewFork
+	m.setViewForTest(ViewFork)
 	m.forkState = &ForkState{
 		Step:    ForkStepConfirm,
 		Source:  WorktreeItem{ShortName: "test"},
@@ -169,7 +169,7 @@ func TestForkOverlay_ConfirmBackNoWIP(t *testing.T) {
 
 func TestForkOverlay_ConfirmBackWithWIP(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewFork
+	m.setViewForTest(ViewFork)
 	m.forkState = &ForkState{
 		Step:    ForkStepConfirm,
 		Source:  WorktreeItem{ShortName: "test"},
@@ -187,7 +187,7 @@ func TestForkOverlay_ConfirmBackWithWIP(t *testing.T) {
 
 func TestForkOverlay_ForkingIgnoresInput(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewFork
+	m.setViewForTest(ViewFork)
 	m.forkState = &ForkState{
 		Step:    ForkStepConfirm,
 		Source:  WorktreeItem{ShortName: "test"},
@@ -199,14 +199,14 @@ func TestForkOverlay_ForkingIgnoresInput(t *testing.T) {
 
 	m = sendKey(m, "esc")
 	// Should still be in fork view since forking is in progress
-	if m.activeView != ViewFork {
-		t.Errorf("expected ViewFork while forking, got %d", m.activeView)
+	if m.activeView() != ViewFork {
+		t.Errorf("expected ViewFork while forking, got %d", m.activeView())
 	}
 }
 
 func TestForkCompleteMsg_Success(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewFork
+	m.setViewForTest(ViewFork)
 	m.forkState = &ForkState{
 		Step:    ForkStepConfirm,
 		Source:  WorktreeItem{ShortName: "test"},
@@ -216,8 +216,8 @@ func TestForkCompleteMsg_Success(t *testing.T) {
 	}
 
 	m = sendMsg(m, forkCompleteMsg{name: "new-feature", path: "/tmp/new"})
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after fork complete, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after fork complete, got %d", m.activeView())
 	}
 	if m.forkState != nil {
 		t.Error("expected forkState nil after success")
@@ -229,7 +229,7 @@ func TestForkCompleteMsg_Success(t *testing.T) {
 
 func TestForkCompleteMsg_Error(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewFork
+	m.setViewForTest(ViewFork)
 	m.forkState = &ForkState{
 		Step:    ForkStepConfirm,
 		Source:  WorktreeItem{ShortName: "test"},
@@ -239,8 +239,8 @@ func TestForkCompleteMsg_Error(t *testing.T) {
 	}
 
 	m = sendMsg(m, forkCompleteMsg{err: errTest})
-	if m.activeView != ViewFork {
-		t.Errorf("expected ViewFork after fork error, got %d", m.activeView)
+	if m.activeView() != ViewFork {
+		t.Errorf("expected ViewFork after fork error, got %d", m.activeView())
 	}
 	if m.forkState.Err == nil {
 		t.Error("expected error on forkState")
@@ -252,7 +252,7 @@ func TestForkCompleteMsg_Error(t *testing.T) {
 
 func TestForkOverlay_ConfirmWithNilManagers(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewFork
+	m.setViewForTest(ViewFork)
 	m.forkState = &ForkState{
 		Step:    ForkStepConfirm,
 		Source:  WorktreeItem{ShortName: "test"},
@@ -388,7 +388,7 @@ func TestRenderFork_AllSteps(t *testing.T) {
 
 func TestForkOverlay_WIPCheckErrorDoesNotSkip(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewFork
+	m.setViewForTest(ViewFork)
 	m.forkState = NewForkState(WorktreeItem{ShortName: "test", Branch: "test"})
 
 	// WIP check fails — should NOT skip to confirm
@@ -403,7 +403,7 @@ func TestForkOverlay_WIPCheckErrorDoesNotSkip(t *testing.T) {
 
 func TestForkCompleteMsg_PartialSuccess(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewFork
+	m.setViewForTest(ViewFork)
 	m.forkState = &ForkState{
 		Step:    ForkStepConfirm,
 		Source:  WorktreeItem{ShortName: "test"},
@@ -414,8 +414,8 @@ func TestForkCompleteMsg_PartialSuccess(t *testing.T) {
 
 	// Partial success: worktree created but WIP patch failed
 	m = sendMsg(m, forkCompleteMsg{name: "new-feature", path: "/tmp/new", err: errTest})
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard for partial success, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard for partial success, got %d", m.activeView())
 	}
 	if m.forkState != nil {
 		t.Error("expected forkState nil for partial success")

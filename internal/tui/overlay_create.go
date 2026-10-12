@@ -27,8 +27,7 @@ const (
 // CreateState holds the state for the new worktree wizard.
 type CreateState struct {
 	Step           CreateStep
-	Source         string     // "" = manual, "pr" = from PR view, "issue" = from issue view
-	ReturnView     ActiveView // where to go on cancel (default ViewDashboard)
+	Source         string // "" = manual, "pr" = from PR view, "issue" = from issue view
 	Name           string
 	NameSuggestion string // derived from branch, shown as placeholder
 	ProjectName    string

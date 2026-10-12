@@ -18,8 +18,8 @@ func newConfigTestModel(t *testing.T) Model {
 	t.Helper()
 	m := newTestModel(withItems(3), withSize(80, 30))
 	m = sendKey(m, "c")
-	if m.activeView != ViewConfig {
-		t.Fatalf("expected ViewConfig, got %d", m.activeView)
+	if m.activeView() != ViewConfig {
+		t.Fatalf("expected ViewConfig, got %d", m.activeView())
 	}
 	if m.configState == nil {
 		t.Fatal("expected configState to be set")
@@ -44,16 +44,16 @@ func TestNewConfigState(t *testing.T) {
 func TestConfigOverlay_OpenClose(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
 	m = sendKey(m, "c")
-	if m.activeView != ViewConfig {
-		t.Errorf("expected ViewConfig, got %d", m.activeView)
+	if m.activeView() != ViewConfig {
+		t.Errorf("expected ViewConfig, got %d", m.activeView())
 	}
 	if m.configState == nil {
 		t.Fatal("expected configState to be set")
 	}
 
 	m = sendKey(m, "esc")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after esc, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after esc, got %d", m.activeView())
 	}
 	if m.configState != nil {
 		t.Error("expected configState to be nil after close")
@@ -62,11 +62,11 @@ func TestConfigOverlay_OpenClose(t *testing.T) {
 
 func TestConfigOverlay_NilState(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewConfig
+	m.setViewForTest(ViewConfig)
 	m.configState = nil
 	m = sendKey(m, "enter")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard for nil state, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard for nil state, got %d", m.activeView())
 	}
 }
 
@@ -83,7 +83,7 @@ func TestConfigOverlay_FormBuiltOnLoad(t *testing.T) {
 
 func TestConfigLoadedMsg(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewConfig
+	m.setViewForTest(ViewConfig)
 	m.configState = NewConfigState()
 
 	cfg := config.LoadDefaults()
@@ -106,7 +106,7 @@ func TestConfigLoadedMsg(t *testing.T) {
 
 func TestConfigLoadedMsg_Error(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewConfig
+	m.setViewForTest(ViewConfig)
 	m.configState = NewConfigState()
 
 	m = sendMsg(m, configLoadedMsg{err: errTest})
@@ -120,12 +120,12 @@ func TestConfigLoadedMsg_Error(t *testing.T) {
 
 func TestConfigSavedMsg_Success(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewConfig
+	m.setViewForTest(ViewConfig)
 	m.configState = NewConfigState()
 
 	m = sendMsg(m, configSavedMsg{})
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after save, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after save, got %d", m.activeView())
 	}
 	if m.configState != nil {
 		t.Error("expected configState nil after save")
@@ -134,12 +134,12 @@ func TestConfigSavedMsg_Success(t *testing.T) {
 
 func TestConfigSavedMsg_Error(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewConfig
+	m.setViewForTest(ViewConfig)
 	m.configState = NewConfigState()
 
 	m = sendMsg(m, configSavedMsg{err: errTest})
-	if m.activeView != ViewConfig {
-		t.Errorf("expected ViewConfig after save error, got %d", m.activeView)
+	if m.activeView() != ViewConfig {
+		t.Errorf("expected ViewConfig after save error, got %d", m.activeView())
 	}
 	if m.configState.Err == nil {
 		t.Error("expected error on configState")
@@ -149,13 +149,13 @@ func TestConfigSavedMsg_Error(t *testing.T) {
 func TestConfigSavedMsg_ErrorAfterClose(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
 	// Simulate save-on-close: configState is already nil when error arrives
-	m.activeView = ViewDashboard
+	m.setViewForTest(ViewDashboard)
 	m.configState = nil
 
 	m = sendMsg(m, configSavedMsg{err: errTest})
 	// Should show toast error even though configState is nil
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView())
 	}
 }
 
@@ -282,8 +282,8 @@ func TestConfigOverlay_EscDirtyConfirms(t *testing.T) {
 
 	m = sendKey(m, "esc")
 	// Should show confirmation prompt, not close
-	if m.activeView != ViewConfig {
-		t.Errorf("expected ViewConfig after dirty esc, got %d", m.activeView)
+	if m.activeView() != ViewConfig {
+		t.Errorf("expected ViewConfig after dirty esc, got %d", m.activeView())
 	}
 	if m.configState == nil {
 		t.Fatal("expected configState to still exist")
@@ -300,8 +300,8 @@ func TestConfigOverlay_ConfirmEnterSaves(t *testing.T) {
 
 	m = sendKey(m, "enter")
 	// Enter while confirming should save and close
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after confirm enter, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after confirm enter, got %d", m.activeView())
 	}
 	if m.configState != nil {
 		t.Error("expected configState nil after confirm enter")
@@ -315,8 +315,8 @@ func TestConfigOverlay_ConfirmEscDiscards(t *testing.T) {
 
 	m = sendKey(m, "esc")
 	// Esc while confirming should discard and close
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after confirm esc, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after confirm esc, got %d", m.activeView())
 	}
 	if m.configState != nil {
 		t.Error("expected configState nil after confirm esc")
@@ -348,7 +348,7 @@ func TestBuildConfigForm(t *testing.T) {
 
 func TestSyncConfigFormValues(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewConfig
+	m.setViewForTest(ViewConfig)
 	m.configState = NewConfigState()
 
 	cfg := config.LoadDefaults()
@@ -402,8 +402,8 @@ func TestConfigForm_EscapeClosesOverlay(t *testing.T) {
 	// Form is not dirty, so esc should close directly
 	m.configState.Dirty = false
 	m = sendKey(m, "esc")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after esc on clean form, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after esc on clean form, got %d", m.activeView())
 	}
 	if m.configState != nil {
 		t.Error("expected configState nil after esc on clean form")
@@ -426,8 +426,8 @@ func TestConfigForm_EscapeWithEditsPromptsSave(t *testing.T) {
 	if !m.configState.Confirming {
 		t.Error("expected Confirming prompt after esc with unsaved edits")
 	}
-	if m.activeView != ViewConfig {
-		t.Errorf("expected ViewConfig to remain during confirm, got %d", m.activeView)
+	if m.activeView() != ViewConfig {
+		t.Errorf("expected ViewConfig to remain during confirm, got %d", m.activeView())
 	}
 }
 
@@ -435,8 +435,8 @@ func TestConfigForm_MessageForwarding(t *testing.T) {
 	m := newConfigTestModel(t)
 	// Send a WindowSizeMsg — should not panic
 	m = sendMsg(m, tea.WindowSizeMsg{Width: 100, Height: 40})
-	if m.activeView != ViewConfig {
-		t.Errorf("expected ViewConfig after WindowSizeMsg, got %d", m.activeView)
+	if m.activeView() != ViewConfig {
+		t.Errorf("expected ViewConfig after WindowSizeMsg, got %d", m.activeView())
 	}
 }
 

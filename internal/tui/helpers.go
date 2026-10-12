@@ -236,22 +236,21 @@ func (m Model) handleExistsPromptKey(msg tea.KeyPressMsg, prompt *ExistingWorktr
 		dismiss()
 		return m, nil
 	case key.Matches(msg, m.keys.Enter):
-		m.activeView = ViewDashboard
+		m.popToRoot()
 		m.prState = nil
 		m.issueState = nil
 		m.pendingSelect = prompt.WorktreeName
 		m.toast.Show(NewToast(fmt.Sprintf("Focused worktree %q", prompt.WorktreeName), ToastInfo))
 		return m, m.fetchWorktrees
 	case msg.String() == "n" || key.Matches(msg, m.keys.New):
-		// Open the fork overlay for the existing worktree
+		// Open the fork overlay for the existing worktree, over the browser
+		// that raised the prompt, so esc from the fork returns there.
 		item := m.findWorktreeByName(prompt.WorktreeName)
+		dismiss()
 		if item == nil {
-			dismiss()
 			return m, nil
 		}
-		m.prState = nil
-		m.issueState = nil
-		m.activeView = ViewFork
+		m.pushView(ViewFork)
 		m.forkState = NewForkState(*item)
 		return m, wipCheckCmd(item.Path)
 	}
