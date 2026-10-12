@@ -15,7 +15,7 @@
 [2m          [m│   [1mU[m                                                      │[2m          [m
 [2m          [m│   └ Switch and start containers                          │[2m          [m
 [2m          [m│   [1m1-9[m                                                    │[2m          [m
-[2m          [m│   └ Quick-switch by number                               │[2m          [m
+[2m          [m│   └ Switch to the pinned worktree                        │[2m          [m
 [2m          [m│  ──────────────────────────────────────────────────────  │[2m          [m
 [2m          [m│    [1m↑↓[m scroll · [1mesc[m close                                 │[2m          [m
 [2m          [m│                                                          │[2m          [m

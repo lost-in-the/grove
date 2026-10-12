@@ -261,9 +261,11 @@ var helpSectionsDashboard = []helpSection{
 		{"ctrl+d / ctrl+u", "Half page down / up"},
 		{"enter", "Switch to selected worktree"},
 		{"U", "Switch and start containers"},
-		{"1-9", "Quick-switch by number"},
+		{"1-9", "Switch to the pinned worktree"},
+		{"m 1-9", "Pin selected to a slot (m 0 unpins)"},
+		{"-", "Switch to the previous worktree"},
 		{"/", "Filter worktrees"},
-		{"tab / l", "Focus detail panel"},
+		{"tab / l", "Detail (panel at 110+ columns, else full screen)"},
 	}},
 	{title: "Detail Panel (when focused)", items: []helpEntry{
 		{"↑/k ↓/j", "Scroll up / down"},
