@@ -173,6 +173,8 @@ func TestRowDelegate_WidthIsExact(t *testing.T) {
 		d := testRowDelegate()
 		d.TwoLine = two
 		d.AgentAware = two
+		d.Pins = two
+		d.PinOf = map[string]string{"auth": "9"}
 		for w := 44; w <= 200; w++ {
 			for i, r := range renderRows(d, rowFixture(), w, 0) {
 				for _, line := range strings.Split(r, "\n") {
@@ -268,5 +270,51 @@ func TestConfigForm_FocusedButtonUsesSurfaceText(t *testing.T) {
 	s := groveHuhTheme().Theme(true)
 	if got := s.Focused.FocusedButton.GetForeground(); got != Colors.SurfaceBg {
 		t.Errorf("focused button text = %v, want SurfaceBg %v", got, Colors.SurfaceBg)
+	}
+}
+
+func TestRowDelegate_PinColumnShowsSlot(t *testing.T) {
+	d := testRowDelegate()
+	d.Pins = true
+	d.PinOf = map[string]string{"auth": "2"}
+	rows := renderRows(d, rowFixture(), 80, 0)
+	if l := ansi.Strip(rows[1]); !strings.HasPrefix(l, "2   ○ auth") {
+		t.Errorf("pinned row: %q", l)
+	}
+	if l := ansi.Strip(rows[0]); !strings.HasPrefix(l, "  ❯ ● root") {
+		t.Errorf("unpinned row keeps a blank pin column: %q", l)
+	}
+}
+
+func TestDashboard_PinColumnOnlyWithPins(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	if m.rowDelegate().Pins {
+		t.Error("pin column drawn with no pins")
+	}
+	m.pins = pinSet{"1": "root"}
+	if d := m.rowDelegate(); !d.Pins || d.PinOf["root"] != "1" {
+		t.Errorf("delegate = %+v, want the pin column with root in slot 1", d)
+	}
+}
+
+func TestRowDelegate_LastActiveMarker(t *testing.T) {
+	d := testRowDelegate()
+	d.LastActive = "auth"
+	rows := renderRows(d, rowFixture(), 80, 0)
+	if l := ansi.Strip(rows[1]); !strings.HasPrefix(l, "↩ ○ auth") {
+		t.Errorf("last-active row: %q", l)
+	}
+	rows = renderRows(d, rowFixture(), 80, 1)
+	if l := ansi.Strip(rows[1]); !strings.HasPrefix(l, "❯ ○ auth") {
+		t.Errorf("selected last-active row shows the cursor: %q", l)
+	}
+}
+
+// ↩ marks where - goes; on the current worktree it would go nowhere.
+func TestRowDelegate_NoLastActiveMarkerOnCurrent(t *testing.T) {
+	d := testRowDelegate()
+	d.LastActive = "root"
+	if l := ansi.Strip(renderRows(d, rowFixture(), 80, 1)[0]); strings.Contains(l, "↩") {
+		t.Errorf("current worktree shows ↩: %q", l)
 	}
 }

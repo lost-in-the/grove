@@ -42,6 +42,7 @@ const (
 	ViewConfig
 	ViewRename
 	ViewUpdate
+	ViewDetailSheet // full-screen detail below 110 columns
 )
 
 // Model is the root Bubble Tea model.
@@ -86,6 +87,9 @@ type Model struct {
 	sortMode     SortMode
 	sortReversed bool // O reverses the current sort
 	pendingG     bool // g was pressed; a second g goes to the top
+	pendingM     bool // m was pressed; the pin strip is open
+	pins         pinSet
+	lastActive   string // display name of the worktree before this one (state.LastWorktree)
 
 	// Overlay state
 	deleteState *DeleteState
@@ -140,8 +144,12 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 	if cfg != nil {
 		configCompact = cfg.TUI.CompactList
 	}
+	pins := pinSet{}
 	if prefs := loadUIPrefs(projectRoot); prefs != nil {
 		prefCompact = prefs.CompactMode
+		for slot, alias := range prefs.Pins {
+			pins[slot] = alias
+		}
 	}
 	compact := startupCompact(configCompact, prefCompact)
 
@@ -178,6 +186,8 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		keys:                keys,
 		list:                l,
 		compactMode:         compact,
+		pins:                pins,
+		lastActive:          lastWorktreeName(stateMgr),
 		spinner:             s,
 		help:                h,
 		toast:               NewToastModel(),
@@ -282,7 +292,26 @@ func (m Model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	if m.activeView() == ViewHelp {
 		m.helpOverlay.Open(m.helpOverlay.ForView, m.width, m.height)
 	}
+	m.reconcileDetailWithWidth()
 	return m, nil
+}
+
+// reconcileDetailWithWidth keeps the detail mode right for the width tier:
+// pane focus exists only at 110+, the full-screen sheet only below it.
+func (m *Model) reconcileDetailWithWidth() {
+	wide := isWideLayout(m.width)
+	if !wide && m.detailFocused {
+		m.detailFocused = false
+		m.refreshDetailForFocus()
+	}
+	if m.layoutView() == ViewDetailSheet {
+		if wide && m.activeView() == ViewDetailSheet {
+			m.popView()
+			m.updateDetailContent()
+			return
+		}
+		m.refreshDetailSheet()
+	}
 }
 
 func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.Cmd) {
@@ -302,6 +331,17 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 	// Capture SetItems' cmd: with a filter applied it re-runs the filter, and
 	// dropping it left the list showing no items until the user re-filtered (B38).
 	setItemsCmd := m.list.SetItems(listItems)
+	// Prune only here, after a successful fetch: a failed fetch must never
+	// wipe pins (spec 8.3).
+	if len(m.pins) > 0 {
+		aliases := map[string]bool{}
+		for _, item := range msg.items {
+			aliases[item.ShortName] = true
+		}
+		if pruned := m.pins.prune(aliases); len(pruned) != len(m.pins) {
+			m.changePins(func(p pinSet) pinSet { return p.prune(aliases) })
+		}
+	}
 	if !m.agentAwareSet {
 		// Decided by the first successful fetch, even one that found no
 		// backend, so the column never appears mid-session.
@@ -401,6 +441,10 @@ func (m Model) handleWorktreeDeleted(msg worktreeDeletedMsg) (tea.Model, tea.Cmd
 	var cmds []tea.Cmd
 	m.popToRoot()
 	m.deleteState = nil
+	if msg.err == nil && m.pins.slotOf(msg.name) != "" {
+		name := msg.name
+		m.changePins(func(p pinSet) pinSet { return p.drop(name) })
+	}
 	if msg.err != nil {
 		m.toast.Show(NewToast(fmt.Sprintf("Delete failed: %s", msg.err), ToastError))
 	} else if msg.branchErr != nil {
@@ -621,6 +665,10 @@ func (m Model) handleRenameComplete(msg renameCompleteMsg) (tea.Model, tea.Cmd) 
 		m.toast.Show(NewToast(fmt.Sprintf("Rename failed: %s", msg.err), ToastError))
 	} else {
 		m.toast.Show(NewToast(fmt.Sprintf("Renamed %q to %q", msg.oldName, msg.newName), ToastSuccess))
+		if m.pins.slotOf(msg.oldName) != "" {
+			old, renamed := msg.oldName, msg.newName
+			m.changePins(func(p pinSet) pinSet { return p.rename(old, renamed) })
+		}
 		m.pendingSelect = msg.newName
 		cmds = append(cmds, m.spinner.Tick)
 	}
@@ -700,7 +748,7 @@ func (m *Model) updateLayout() {
 	}
 
 	headerHeight := 1 // status bar
-	footerHeight := m.helpFooter.CompactHeight(m.layoutView(), m.width-4)
+	footerHeight := m.helpFooter.CompactHeight(m.layoutView(), m.width-4) + m.pinStripHeight()
 	available := m.height - headerHeight - footerHeight
 
 	contentWidth := m.width - 2 // body padding (1 char each side)
@@ -717,25 +765,11 @@ func (m *Model) updateLayout() {
 		m.detail.SetWidth(detailWidth)
 		m.detail.SetHeight(available)
 	} else {
-		// Stacked: cap list height at item count * row height + padding
-		itemCount := len(m.list.Items())
-		rowHeight := m.delegateHeight()
-		idealListHeight := itemCount*rowHeight + 2 // +2 for padding
-		maxListHeight := (available - listHeaderHeight) * 75 / 100
-		listHeight := idealListHeight
-		if listHeight > maxListHeight {
-			listHeight = maxListHeight
-		}
-		if listHeight < 3 {
-			listHeight = 3
-		}
-		detailHeight := available - listHeaderHeight - listHeight - 1
-		if detailHeight < 3 {
-			detailHeight = 3
-		}
-		m.list.SetSize(contentWidth, listHeight)
+		// The list takes everything but the selection line. The detail
+		// viewport is sized for the full-screen sheet.
+		m.list.SetSize(contentWidth, max(1, available-1))
 		m.detail.SetWidth(contentWidth)
-		m.detail.SetHeight(detailHeight)
+		m.detail.SetHeight(max(3, available))
 	}
 
 	m.refreshDelegate()
@@ -749,18 +783,13 @@ func (m *Model) toggleCompactMode() {
 
 	// Persist preference (best-effort, don't block on errors)
 	newVal := m.compactMode
-	if err := saveUIPrefs(m.projectRoot, &UIPrefs{CompactMode: &newVal}); err != nil {
+	if err := updateUIPrefs(m.projectRoot, func(p *UIPrefs) { p.CompactMode = &newVal }); err != nil {
 		tuilog.Printf("warning: failed to save UI prefs: %v", err)
 	}
 
 	m.refreshDelegate()
 	m.updateLayout()
 	m.updateDetailContent()
-}
-
-// delegateHeight returns the row height for the current density.
-func (m *Model) delegateHeight() int {
-	return m.rowDelegate().Height()
 }
 
 // startupCompact decides the starting density: a saved preference, else the
@@ -786,8 +815,15 @@ func listSecondary(cfg *config.Config) string {
 
 // rowDelegate is the dashboard row delegate for the current settings.
 func (m *Model) rowDelegate() rowDelegate {
+	pinOf := map[string]string{}
+	for slot, alias := range m.pins {
+		pinOf[alias] = slot
+	}
 	return rowDelegate{
 		TwoLine:    !m.compactMode,
+		Pins:       len(m.pins) > 0,
+		PinOf:      pinOf,
+		LastActive: m.lastActive,
 		AgentAware: m.agentAware,
 		Secondary:  listSecondary(m.cfg),
 		Now:        m.now,
@@ -864,6 +900,21 @@ func (m Model) selectedItem() (WorktreeItem, bool) {
 }
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// A pending g or m owns the next key, before help, update, or any
+	// other dashboard key sees it.
+	if m.activeView() == ViewDashboard && !m.detailFocused {
+		if m.pendingG {
+			if updated, handled := m.handleMotionKey(msg); handled {
+				return updated, nil
+			}
+		}
+		if m.pendingM {
+			if updated, cmd, handled := m.handlePinKey(msg); handled {
+				return updated, cmd
+			}
+		}
+	}
+
 	// Help and update frames take every key; their trigger key or esc closes
 	// them and returns to the frame beneath.
 	switch m.activeView() {
@@ -915,6 +966,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleConfigKey(msg)
 	case ViewRename:
 		return m.handleRenameKey(msg)
+	case ViewDetailSheet:
+		return m.handleDetailSheetKey(msg)
 	case ViewDashboard:
 		return m.handleDashboardKey(msg)
 	}
@@ -924,6 +977,12 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.detailFocused {
 		return m.handleDashboardDetailKey(msg)
+	}
+	if updated, cmd, handled := m.handlePinKey(msg); handled {
+		return updated, cmd
+	}
+	if msg.String() == "-" {
+		return m.switchToLastActive()
 	}
 	if updated, handled := m.handleMotionKey(msg); handled {
 		return updated, nil
@@ -942,8 +1001,7 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case key.Matches(msg, m.keys.Tab):
-		m.detailFocused = true
-		m.refreshDetailForFocus()
+		m.openDetail()
 		return m, nil
 
 	case msg.String() == "B":
@@ -1011,10 +1069,6 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleDashboardCheckoutKey()
 	}
 
-	if updated, cmd, handled := m.handleQuickSwitch(msg); handled {
-		return updated, cmd
-	}
-
 	return m.routeToList(msg)
 }
 
@@ -1043,8 +1097,7 @@ func (m Model) handleMotionKey(msg tea.KeyPressMsg) (Model, bool) {
 	case "ctrl+u":
 		m.moveCursorTo(m.list.Index() - m.halfPage())
 	case "l":
-		m.detailFocused = true
-		m.refreshDetailForFocus()
+		m.openDetail()
 	default:
 		return m, false
 	}
@@ -1169,32 +1222,6 @@ func (m Model) handleDashboardCheckoutKey() (tea.Model, tea.Cmd) {
 		return m.openSwitchForm(item)
 	}
 	return m, nil
-}
-
-func (m Model) handleQuickSwitch(msg tea.KeyPressMsg) (Model, tea.Cmd, bool) {
-	runes := []rune(msg.Text)
-	if len(runes) != 1 || m.list.FilterState() != list.Unfiltered {
-		return m, nil, false
-	}
-	r := runes[0]
-	if r < '1' || r > '9' {
-		return m, nil, false
-	}
-	idx := int(r - '1')
-	items := m.list.Items()
-	if idx >= len(items) {
-		return m, nil, true
-	}
-	item, ok := items[idx].(WorktreeItem)
-	if !ok {
-		return m, nil, true
-	}
-	if item.IsCurrent {
-		return m, tea.Quit, true
-	}
-	m.switchTo = item.Path
-	m.switchToDisplayName = item.displayName()
-	return m, tea.Quit, true
 }
 
 func (m Model) routeToList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -1432,6 +1459,10 @@ func (m Model) viewContent() string {
 	if !m.ready {
 		return m.viewNotReady()
 	}
+	if LayoutBreakpoint(m.width) == LayoutGuard {
+		// Nothing else is drawn; all state is kept for when it widens.
+		return "grove needs ≥44 columns"
+	}
 	if m.loading {
 		return m.viewLoading()
 	}
@@ -1473,6 +1504,8 @@ func (m Model) renderFrame(i int) string {
 			return m.renderIssuePanel()
 		}
 		return m.renderFrame(i - 1)
+	case ViewDetailSheet:
+		return m.renderDetailSheet()
 	}
 	overlay := m.renderOverlay(v)
 	if overlay == "" {
@@ -1621,10 +1654,15 @@ func (m Model) renderDashboard() string {
 		footer = m.helpFooter.RenderCompact(ViewDashboard, m.width-4)
 	}
 	footer = m.appendUpdateBadge(footer)
+	if m.pendingM {
+		footer = m.renderPinStrip() + "\n" + footer
+	}
 
 	body = lipgloss.NewStyle().Padding(0, 1).Render(body)
 	body = m.clampBodyToHeight(body, footer)
-
+	if body == "" {
+		return lipgloss.JoinVertical(lipgloss.Left, statusBar, footer)
+	}
 	return lipgloss.JoinVertical(lipgloss.Left, statusBar, body, footer)
 }
 
@@ -1658,10 +1696,7 @@ func (m Model) renderSideBySideBody() string {
 
 func (m Model) renderStackedBody() string {
 	bodyWidth := m.width - 2
-	listView := m.list.View()
-	separator := renderNamedSeparator(m.selectedItemName(), bodyWidth)
-	detailView := m.renderDetailPanel()
-	return lipgloss.JoinVertical(lipgloss.Left, listView, separator, detailView)
+	return lipgloss.JoinVertical(lipgloss.Left, m.list.View(), m.renderSelectionLine(bodyWidth))
 }
 
 // clampBodyToHeight trims the body so statusBar + body + footer fits exactly m.height lines.
@@ -1674,16 +1709,7 @@ func (m Model) clampBodyToHeight(body, footer string) string {
 	if bodyBudget > 0 {
 		return clampLines(body, bodyBudget)
 	}
-	return body
-}
-
-// selectedItemName returns the short name of the currently selected worktree.
-func (m Model) selectedItemName() string {
-	item, ok := m.selectedItem()
-	if !ok {
-		return ""
-	}
-	return item.ShortName
+	return "" // no room: the body gives way so the screen never overflows
 }
 
 // renderVerticalDivider creates a thin column of │ characters for side-by-side layout.

@@ -20,8 +20,11 @@ GROVE_TUI=0 grove
 
 The dashboard adjusts to your terminal width:
 
-- **Wide (> 100 columns):** Side-by-side layout — worktree list on the left, detail panel on the right, separated by a vertical divider.
-- **Narrow:** Stacked layout — list on top, a named separator rule, detail panel below.
+| Width | Layout |
+|---|---|
+| 110+ columns | The list, with the detail panel docked on the right. `tab` or `l` focuses it; `esc`, `h`, or `tab` return. |
+| 44 to 109 | The list, with a one-line summary of the selected worktree above the footer (`alias · ⎇ branch · commit subject`). `tab` or `l` opens the detail as a full-screen sheet; `esc`, `h`, or `tab` return. |
+| under 44 | One line: `grove needs ≥44 columns`. Nothing is lost; widening restores the same screen. |
 
 ### Header
 
@@ -104,8 +107,10 @@ Toast levels:
 | `pgdown` / `pgup`, `home` / `end` | Page down / up, first / last page |
 | `enter` | Switch to selected worktree |
 | `U` | Switch to selected worktree and force-start its containers |
-| `1`–`9` | Quick-switch to nth worktree |
-| `tab` / `l` | Focus the detail panel for scrolling (see below) |
+| `1`–`9` | Switch to the worktree pinned to that slot |
+| `m` then `1`–`9` | Pin the selected worktree to a slot (`m 0` unpins) |
+| `-` | Switch to the previous worktree (as `grove last`); its row shows `↩` |
+| `tab` / `l` | Detail: focus the panel at 110+ columns, or open the full-screen sheet below that |
 | `B` | Open the selected worktree's associated PR in the browser |
 | `n` | Create new worktree |
 | `d` | Delete selected worktree |
@@ -311,11 +316,27 @@ Press `o` to cycle through sort modes, and `O` to reverse the current one:
 
 The main worktree always stays at the top regardless of sort mode or direction.
 
+## Pins
+
+Pin up to nine worktrees to the digit keys. Press `m` to open a strip above the footer listing every slot and the worktree in it, then:
+
+| Keys | Result |
+|---|---|
+| `m 3` | Pin the selected worktree to slot 3 |
+| `m 3` again on the same worktree | Unpin it |
+| `m 3` when slot 3 holds another worktree | Move the pin; the other worktree loses slot 3 |
+| `m 0` | Unpin the selected worktree |
+| `m esc`, or `m` and any other key | Close the strip |
+
+A worktree holds one slot at most. A bare `3` switches to slot 3's worktree; an empty slot flashes `slot 3 is empty · m 3 to pin`. Pinned rows show their digit in the first column.
+
+Pins are saved per project in `.grove/ui_prefs.json` (`pins`). Renaming or deleting a worktree in the TUI updates its pin; a pin to a worktree removed outside the TUI is dropped the next time the dashboard loads its list.
+
 ## Filtering
 
 Press `/` to activate the list filter. Type to narrow by worktree name or branch. Results update as you type. Press `esc` to clear the filter and return to normal navigation.
 
-When a filter is active, number quick-switch keys (`1`–`9`) are disabled to avoid switching to hidden items.
+Pin keys (`1`–`9`) work with a filter applied, since slots do not depend on row position. While you are typing in the filter they type.
 
 ## Accessibility
 
@@ -344,6 +365,10 @@ The TUI uses **Bubbletea v2** (Elm Architecture):
 | `internal/tui/theme_v2.go` | `StyleSet` — lipgloss styles built from the color scheme |
 | `internal/tui/row_delegate.go` | The dashboard row (`rowDelegate`); one or two lines |
 | `internal/tui/row_layout.go` | Column widths and the shed order (`layoutColumns`, `middleTruncate`) |
+| `internal/tui/responsive.go` | Width tiers: guard under 44, list with a selection line, split at 110 |
+| `internal/tui/detail_sheet.go` | The full-screen detail sheet and the selection line |
+| `internal/tui/pins.go` | Pin rules (`pinSet`): pin, unpin, move, rename, prune |
+| `internal/tui/pins_view.go` | Pin and `-` keys, and the `m` strip |
 | `internal/tui/age.go` | Commit age, rounded like git's relative dates (`shortAge`) |
 | `internal/tui/view_stack.go` | View stack: frames, push and pop, cursor restore |
 | `internal/tui/compositor.go` | Draws an overlay over a dimmed background (`composeOverlay`) and toasts on top (`composeLayerAt`) |

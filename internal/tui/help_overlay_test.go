@@ -33,6 +33,7 @@ func TestHelpSectionsForAllViews(t *testing.T) {
 		ViewSync,
 		ViewConfig,
 		ViewRename,
+		ViewDetailSheet,
 	}
 
 	for _, view := range views {

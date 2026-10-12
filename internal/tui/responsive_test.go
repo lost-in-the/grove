@@ -7,37 +7,6 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-func TestNarrowLayoutBreakpoints(t *testing.T) {
-	tests := []struct {
-		name           string
-		width          int
-		wantSideBySide bool
-		wantCompact    bool
-	}{
-		{"very narrow", 40, false, true},
-		{"narrow", 60, false, true},
-		{"medium stacked", 80, false, false},
-		{"medium stacked 100", 100, false, false},
-		{"wide side-by-side", 110, true, false},
-		{"wide side-by-side 130", 130, true, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			bp := LayoutBreakpoint(tt.width)
-			if tt.wantSideBySide && bp != LayoutWide {
-				t.Errorf("width=%d: expected LayoutWide, got %v", tt.width, bp)
-			}
-			if tt.wantCompact && bp != LayoutNarrow {
-				t.Errorf("width=%d: expected LayoutNarrow, got %v", tt.width, bp)
-			}
-			if !tt.wantSideBySide && !tt.wantCompact && bp != LayoutMedium {
-				t.Errorf("width=%d: expected LayoutMedium, got %v", tt.width, bp)
-			}
-		})
-	}
-}
-
 func TestHeaderViewNoOverflow(t *testing.T) {
 	tests := []struct {
 		name  string

@@ -10,9 +10,11 @@
 [2m               [m│   [1mctrl+d / ctrl+u[m               Half page down / up                                    │[2m               [m
 [2m               [m│   [1menter[m                         Switch to selected worktree                            │[2m               [m
 [2m               [m│   [1mU[m                             Switch and start containers                            │[2m               [m
-[2m               [m│   [1m1-9[m                           Quick-switch by number                                 │[2m               [m
+[2m               [m│   [1m1-9[m                           Switch to the pinned worktree                          │[2m               [m
+[2m               [m│   [1mm 1-9[m                         Pin selected to a slot (m 0 unpins)                    │[2m               [m
+[2m               [m│   [1m-[m                             Switch to the previous worktree                        │[2m               [m
 [2m               [m│   [1m/[m                             Filter worktrees                                       │[2m               [m
-[2m               [m│   [1mtab / l[m                       Focus detail panel                                     │[2m               [m
+[2m               [m│   [1mtab / l[m                       Detail (panel at 110+ columns, else full screen)       │[2m               [m
 [2m               [m│                                                                                        │[2m               [m
 [2m               [m│   [1mDetail Panel (when focused)[m                                                          │[2m               [m
 [2m               [m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
@@ -28,8 +30,6 @@
 [2m               [m│   [1md[m                             Delete worktree                                        │[2m               [m
 [2m               [m│   [1mR[m                             Rename worktree                                        │[2m               [m
 [2m               [m│   [1mf[m                             Copy worktree to a new branch                          │[2m               [m
-[2m               [m│   [1ma[m                             Bulk delete worktrees                                  │[2m               [m
-[2m               [m│                                                                                        │[2m               [m
 [2m               [m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
 [2m               [m│    [1m↑↓[m scroll · [1mesc[m close                                                               │[2m               [m
 [2m               [m│                                                                                        │[2m               [m

@@ -342,3 +342,43 @@ func withRichRows() testOpt {
 		m.updateLayout()
 	}
 }
+
+// The m strip docked above the footer, with one slot taken.
+func TestGolden_Dashboard_PinStrip(t *testing.T) {
+	for _, size := range []termSize{sizeStandard, sizeWide} {
+		t.Run(size.name, func(t *testing.T) {
+			m := goldenModel(t, size, withItems(5), func(m *Model) {
+				m.pins = pinSet{"1": "root"}
+				m.list.Select(2)
+				m.pendingM = true
+				m.refreshDelegate()
+				m.updateLayout()
+			})
+			golden.RequireEqual(t, []byte(m.viewString()))
+		})
+	}
+}
+
+// Pinned rows show their slot digit in the lead column.
+func TestGolden_Dashboard_Pinned(t *testing.T) {
+	m := goldenModel(t, sizeWide, withItems(5), func(m *Model) {
+		m.pins = pinSet{"1": "root", "3": "testing"}
+		m.refreshDelegate()
+	})
+	golden.RequireEqual(t, []byte(m.viewString()))
+}
+
+// The full-screen detail sheet opened with tab below 110 columns.
+func TestGolden_DetailSheet(t *testing.T) {
+	m := goldenModel(t, sizeStandard, withItems(3), func(m *Model) {
+		m.list.Select(1)
+		m.openDetail()
+	})
+	golden.RequireEqual(t, []byte(m.viewString()))
+}
+
+// Under 44 columns one line replaces the UI.
+func TestGolden_Guard(t *testing.T) {
+	m := goldenModel(t, termSize{name: "narrow_40x24", width: 40, height: 24}, withItems(3))
+	golden.RequireEqual(t, []byte(m.viewString()))
+}

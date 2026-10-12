@@ -1,10 +1,10 @@
 [2m test-project · 5 worktrees · ⬍ name                                        1/5 [m
 [2m                                                                                [m
 [2m ❯ ● root [m╭──────────────────────────────────────────────────────────╮[2m  0s      [m
-[2m          [m│                                                          │[2m          [m
-[2m   •••••  [m│   [1mNavigation[m                                             │[2m          [m
-[2m ── root ─[m│  ──────────────────────────────────────────────────────  │[2m───────── [m
-[2m          [m│   [1m↑/k ↓/j[m                                                │[2m          [m
+[2m   ○ featu[m│                                                          │[2m 60m      [m
+[2m   ○ fix-b[m│   [1mNavigation[m                                             │[2m  2h      [m
+[2m   ● testi[m│  ──────────────────────────────────────────────────────  │[2m  3h      [m
+[2m   ○ refac[m│   [1m↑/k ↓/j[m                                                │[2m  4h      [m
 [2m          [m│   └ Move up / down                                       │[2m          [m
 [2m          [m│   [1mgg / G[m                                                 │[2m          [m
 [2m          [m│   └ Top / bottom of list                                 │[2m          [m
@@ -15,10 +15,10 @@
 [2m          [m│   [1mU[m                                                      │[2m          [m
 [2m          [m│   └ Switch and start containers                          │[2m          [m
 [2m          [m│   [1m1-9[m                                                    │[2m          [m
-[2m          [m│   └ Quick-switch by number                               │[2m          [m
+[2m          [m│   └ Switch to the pinned worktree                        │[2m          [m
 [2m          [m│  ──────────────────────────────────────────────────────  │[2m          [m
 [2m          [m│    [1m↑↓[m scroll · [1mesc[m close                                 │[2m          [m
 [2m          [m│                                                          │[2m          [m
-[2m          [m╰──────────────────────────────────────────────────────────╯[2m          [m
+[2m root · te[m╰──────────────────────────────────────────────────────────╯[2m          [m
 [2m  ↑↓ navigate · enter switch · U up · n new                                     [m
 [2m  / filter · tab detail · o sort · ? help · q quit                              [m
