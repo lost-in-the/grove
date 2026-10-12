@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -39,11 +40,11 @@ func (m Model) renderMessages() string {
 		lines = append(lines, Styles.DetailDim.Render("no warnings or errors this session"))
 	}
 	now := m.now
+	if now == nil {
+		now = time.Now
+	}
 	for _, t := range history[min(m.messagesOffset, len(history)):] {
-		age := ""
-		if now != nil {
-			age = shortAge(t.CreatedAt, now())
-		}
+		age := shortAge(t.CreatedAt, now())
 		icon := t.Level.style().Render(t.Level.Icon())
 		text := ansi.Truncate(t.Message, inner-8, "…")
 		lines = append(lines, Styles.DetailDim.Render(padCells(age, 4))+" "+icon+" "+text)

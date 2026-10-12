@@ -199,6 +199,7 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		list:                l,
 		compactMode:         compact,
 		pins:                pins,
+		now:                 time.Now,
 		lastActive:          lastWorktreeName(stateMgr),
 		spinner:             s,
 		help:                h,

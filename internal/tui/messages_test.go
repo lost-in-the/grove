@@ -61,3 +61,14 @@ func TestMessages_EmptySaysSo(t *testing.T) {
 		t.Errorf("empty history:\n%s", out)
 	}
 }
+
+// The app's model has no injected clock; ages still show.
+func TestMessages_AgeWithoutInjectedClock(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.now = nil
+	m.toast.Show(&Toast{Message: "hook failed", Level: ToastWarning, Duration: time.Hour, CreatedAt: time.Now().Add(-3 * time.Minute)})
+	m.pushView(ViewMessages)
+	if out := ansi.Strip(m.viewString()); !strings.Contains(out, "3m") {
+		t.Errorf("no age without an injected clock:\n%s", out)
+	}
+}
