@@ -53,6 +53,8 @@
 | 4 | **Switch lists local branches only** | Matches today. `docs/TUI.md` wrongly says remote-only branches appear. |
 | 5 | **The config overlay drops `skip_branch_notice` and `default_branch_action`** | Phase 3a review minor: they no longer do anything. The keys still parse. |
 | 6 | **`f` is labelled "copy worktree"** in keys, help, footer, and docs | Spec N13. The CLI `grove fork` is unchanged. |
+| 7 | **The PR and issue browsers keep the "worktree exists" prompt.** `enter` focuses it; `n` now opens Copy. | The prompt offers a choice the form does not (focus vs copy). Folding it in is a design change, not a cleanup. |
+| 8 | **Phase 2 and 3a deferred minors land here** (Task 7) | They are small, they touch files this phase already edits, and the user asked that they not be dropped. |
 
 ## Review Focus
 
@@ -1060,7 +1062,37 @@ timeout --kill-after=5s 120s git -c commit.gpgsign=true commit -m "docs(tui): do
 
 ---
 
-### Task 7: Hands-on check, tmux and herdr
+### Task 7: Deferred minors from phases 2 and 3a
+
+Each item is test-first where it has behavior. Phase 0-1's three deferred minors (wide-glyph row test, `docs/TUI.md` file map, glamour comment) are already done on main.
+
+| # | Item | Source | Fix | Test |
+|---|---|---|---|---|
+| 1 | `n` opens the form with a non-blinking cursor: `newBranchForm`'s `setFocus(fieldBranch)` cmd is discarded | 3a review | `openBranchForm`, `openCopyForm`, `openSwitchForm` return the focus cmd, batched with any other cmd | `TestDashboardN_ReturnsFocusCmd`: cmd non-nil after `n` |
+| 2 | `creating…` shows on both the status line and the key line while busy | 3a review | Busy key line becomes `esc hides · working` or similar; status keeps the verb. Pick wording that reads well in the golden. | `TestBranchForm_BusyVerbShownOnce`; `creating` goldens change (expected churn) |
+| 3 | Busy at short heights: the log tail with the spinner scrolls out of view | 3a review | When `s.Log != nil`, `windowLines` keeps the last log line visible (focus on the log's last row) | `TestBranchForm_BusyLogTailVisibleAt80x20` |
+| 4 | The issue entry no longer seeds a branch name | 3a review | `openBranchForm(branchFormPrefill{Branch: "issue-N"})`; alias derives from it | `TestIssueBrowser_SeedsBranchName` |
+| 5 | `handleKey` calls `m.updateOverlay.Close()` without a nil check | Phase 2 review | `if m.updateOverlay != nil` | `TestUpdateView_KeyWithoutOverlayDoesNotPanic` (push `ViewUpdate` on `newTestModel`, press a key) |
+| 6 | `helpOverlay.Active` and `updateOverlay.Active` are write-only; an async `popToRoot` leaves them `true` | Phase 2 review | Delete both fields and their writes; tests assert on `activeView()` instead | Compiler, plus updated tests |
+| 7 | `docs/TUI.md:157` says every overlay opens "over the dimmed dashboard background" | Phase 2 review | "over the dimmed view beneath it" | Docs |
+| 8 | `TestRenderCompactHighlightsMatchedKey` fails when `NO_COLOR` is inherited | Pre-existing | Reproduce with `NO_COLOR=1`. If the highlight is invisible without color, that is a real accessibility bug: give the highlight a non-color attribute (bold or reverse) so it stays visible. Otherwise pin the env in the test. | The existing test, run with and without `NO_COLOR=1` |
+
+The other two 3a minors (`VISUAL_TESTING.md`, the dead config settings) are in Task 6.
+
+- [ ] **Step 1:** Items 1 to 6, one commit each (`fix(tui): ...`), gate between.
+- [ ] **Step 2:** Items 7 and 8, then gate, then commit.
+- [ ] **Step 3:** Ledger each item as fixed, with its test name.
+
+**Known and not in this phase** (pre-existing, recorded so they are not lost):
+- Unconditional `popToRoot` on delete, rename, and bulk errors (`model.go`).
+- Stale `prState` after create-from-PR success.
+- `updateLayout` not re-run on push and pop.
+- `ActivityLog.width` unused.
+- Paste does not reach the rename and filter inputs.
+
+---
+
+### Task 8: Hands-on check, tmux and herdr
 
 Scratch repo as in phase 3a (`$TMPDIR/grove-scratch`, worktrees `alpha` and a spare local branch `spare`). Use a private tmux socket (`tmux -L grove3b`), and a herdr tab you create. Close only what you create, including any herdr workspaces grove opens for new worktrees.
 
@@ -1082,4 +1114,5 @@ Ledger each result. A mismatch is a bug: failing test, fix, gate.
 - `make lint test` and `-tags=integration` pass.
 - No production file mentions `ForkState`, `CheckoutState`, `ViewFork`, `ViewCheckout`, `handleForkKey`, or `renderCheckout`.
 - New-mode goldens unchanged; only `TestGolden_Overlay_Fork` deleted and Copy/Switch goldens added.
-- Task 7's six paths match in tmux and herdr.
+- Task 7's eight items fixed and ledgered.
+- Task 8's six paths match in tmux and herdr.
