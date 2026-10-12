@@ -83,7 +83,8 @@ type Model struct {
 	detailFocused bool // true when dashboard detail panel has focus
 
 	// Sort
-	sortMode SortMode
+	sortMode     SortMode
+	sortReversed bool // O reverses the current sort
 
 	// Overlay state
 	deleteState *DeleteState
@@ -1565,27 +1566,14 @@ func (m Model) renderDashboard() string {
 
 // buildDashboardHeader populates the header from the current worktree list state.
 func (m Model) buildDashboardHeader() Header {
-	h := Header{
+	return Header{
 		ProjectName:   m.projectName,
 		WorktreeCount: len(m.list.Items()),
 		SortLabel:     m.sortMode.String(),
+		SortReversed:  m.sortReversed,
+		Cursor:        m.list.Index() + 1,
+		Total:         len(m.list.VisibleItems()),
 	}
-	for _, li := range m.list.Items() {
-		item, ok := li.(WorktreeItem)
-		if !ok {
-			continue
-		}
-		if item.IsCurrent {
-			h.CurrentBranch = item.Branch
-			h.CurrentName = item.ShortName
-		}
-		for _, ps := range item.PluginStatuses {
-			if strings.Contains(ps.Detail, "pointed") {
-				h.ContainerTarget = item.ShortName
-			}
-		}
-	}
-	return h
 }
 
 // renderDashboardBody renders the list and detail panels in side-by-side or stacked layout.

@@ -50,12 +50,7 @@ func TestHeaderViewNoOverflow(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := Header{
-				ProjectName:   "my-long-project-name",
-				WorktreeCount: 5,
-				CurrentBranch: "feature/very-long-branch-name-here",
-				CurrentName:   "fix/another-long-name",
-			}
+			h := Header{ProjectName: "my-long-project-name", WorktreeCount: 5, SortLabel: "dirty", SortReversed: true, Cursor: 12, Total: 15}
 			view := h.View(tt.width)
 			lines := strings.Split(view, "\n")
 			for i, line := range lines {

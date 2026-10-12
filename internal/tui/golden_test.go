@@ -146,12 +146,7 @@ func TestGolden_Component_Header(t *testing.T) {
 				goldenMu.Unlock()
 			})
 
-			h := Header{
-				ProjectName:   "grove-cli",
-				WorktreeCount: 5,
-				CurrentBranch: "main",
-				CurrentName:   "root",
-			}
+			h := Header{ProjectName: "grove-cli", WorktreeCount: 5, SortLabel: "name", Cursor: 1, Total: 5}
 			golden.RequireEqual(t, []byte(h.View(size.width)))
 		})
 	}
