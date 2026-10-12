@@ -20,7 +20,8 @@ type KeyMap struct {
 	Tab     key.Binding
 
 	// Sort
-	Sort key.Binding
+	Sort        key.Binding
+	SortReverse key.Binding
 
 	// PRs
 	PRs key.Binding
@@ -127,6 +128,10 @@ func DefaultKeyMap() KeyMap {
 		Sort: key.NewBinding(
 			key.WithKeys("o"),
 			key.WithHelp("o", "sort"),
+		),
+		SortReverse: key.NewBinding(
+			key.WithKeys("O"),
+			key.WithHelp("O", "reverse sort"),
 		),
 
 		PRs: key.NewBinding(

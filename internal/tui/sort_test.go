@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -13,7 +14,7 @@ func TestSortModeString(t *testing.T) {
 		want string
 	}{
 		{SortByName, "name"},
-		{SortByLastAccessed, "recent"},
+		{SortByAge, "age"},
 		{SortByDirtyFirst, "dirty"},
 		{SortMode(99), "name"}, // default case
 	}
@@ -27,8 +28,8 @@ func TestSortModeString(t *testing.T) {
 func TestSortModeNext(t *testing.T) {
 	mode := SortByName
 	mode = mode.Next()
-	if mode != SortByLastAccessed {
-		t.Errorf("expected SortByLastAccessed, got %d", mode)
+	if mode != SortByAge {
+		t.Errorf("expected SortByAge, got %d", mode)
 	}
 	mode = mode.Next()
 	if mode != SortByDirtyFirst {
@@ -46,7 +47,7 @@ func TestSortByName(t *testing.T) {
 		WorktreeItem{ShortName: "alpha"},
 		WorktreeItem{ShortName: "root", IsMain: true},
 	}
-	sorted := sortWorktreeItems(items, SortByName)
+	sorted := sortWorktreeItems(items, SortByName, false)
 	names := make([]string, len(sorted))
 	for i, item := range sorted {
 		names[i] = item.(WorktreeItem).ShortName
@@ -63,26 +64,66 @@ func TestSortByName(t *testing.T) {
 	}
 }
 
-func TestSortByLastAccessed(t *testing.T) {
-	now := time.Now()
+func TestSortByAge(t *testing.T) {
 	items := []list.Item{
-		WorktreeItem{ShortName: "old", LastAccessed: now.Add(-2 * time.Hour)},
-		WorktreeItem{ShortName: "new", LastAccessed: now},
-		WorktreeItem{ShortName: "root", IsMain: true, LastAccessed: now.Add(-1 * time.Hour)},
+		WorktreeItem{ShortName: "old", CommitTime: testNow.Add(-2 * time.Hour)},
+		WorktreeItem{ShortName: "new", CommitTime: testNow},
+		WorktreeItem{ShortName: "root", IsMain: true, CommitTime: testNow.Add(-1 * time.Hour)},
+		WorktreeItem{ShortName: "also-new", CommitTime: testNow},
 	}
-	sorted := sortWorktreeItems(items, SortByLastAccessed)
-	names := make([]string, len(sorted))
-	for i, item := range sorted {
-		names[i] = item.(WorktreeItem).ShortName
+	got := names(sortWorktreeItems(items, SortByAge, false))
+	want := []string{"root", "also-new", "new", "old"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("age order = %v, want %v (main first, newest commit next, ties by alias)", got, want)
 	}
-	if names[0] != "root" {
-		t.Errorf("expected root first, got %q", names[0])
+}
+
+// O reverses every mode; the main worktree stays first.
+func TestSortReverse(t *testing.T) {
+	items := []list.Item{
+		WorktreeItem{ShortName: "b", IsDirty: true, CommitTime: testNow.Add(-time.Hour)},
+		WorktreeItem{ShortName: "root", IsMain: true},
+		WorktreeItem{ShortName: "a", CommitTime: testNow},
+		WorktreeItem{ShortName: "c", CommitTime: testNow.Add(-2 * time.Hour)},
 	}
-	if names[1] != "new" {
-		t.Errorf("expected new second (most recent), got %q", names[1])
+	for mode, want := range map[SortMode][]string{
+		SortByName:       {"root", "c", "b", "a"},
+		SortByAge:        {"root", "c", "b", "a"},
+		SortByDirtyFirst: {"root", "c", "a", "b"},
+	} {
+		got := names(sortWorktreeItems(items, mode, true))
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Errorf("%s reversed = %v, want %v", mode, got, want)
+		}
 	}
-	if names[2] != "old" {
-		t.Errorf("expected old third, got %q", names[2])
+}
+
+func names(items []list.Item) []string {
+	out := make([]string, len(items))
+	for i, li := range items {
+		out[i] = li.(WorktreeItem).ShortName
+	}
+	return out
+}
+
+func TestSortCycleIsNameAgeDirty(t *testing.T) {
+	if SortByName.Next() != SortByAge || SortByAge.Next() != SortByDirtyFirst || SortByDirtyFirst.Next() != SortByName {
+		t.Error("o should cycle name, age, dirty")
+	}
+}
+
+func TestDashboard_OReversesSort(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m = sendKey(m, "O")
+	if !m.sortReversed || !strings.Contains(stripAnsi(m.buildDashboardHeader().View(120)), "⬍ name ↑") {
+		t.Errorf("O did not reverse the sort (reversed=%v)", m.sortReversed)
+	}
+	if got := names(m.list.Items())[0]; got != "root" {
+		t.Errorf("main worktree should stay first, got %q", got)
+	}
+	m = sendKey(m, "O")
+	if m.sortReversed {
+		t.Error("second O should restore the direction")
 	}
 }
 
@@ -93,7 +134,7 @@ func TestSortByDirtyFirst(t *testing.T) {
 		WorktreeItem{ShortName: "clean-a", IsDirty: false},
 		WorktreeItem{ShortName: "root", IsMain: true, IsDirty: false},
 	}
-	sorted := sortWorktreeItems(items, SortByDirtyFirst)
+	sorted := sortWorktreeItems(items, SortByDirtyFirst, false)
 	names := make([]string, len(sorted))
 	for i, item := range sorted {
 		names[i] = item.(WorktreeItem).ShortName
@@ -111,7 +152,7 @@ func TestSortPreservesOriginal(t *testing.T) {
 		WorktreeItem{ShortName: "b"},
 		WorktreeItem{ShortName: "a"},
 	}
-	sorted := sortWorktreeItems(items, SortByName)
+	sorted := sortWorktreeItems(items, SortByName, false)
 	// Original should be unchanged
 	if items[0].(WorktreeItem).ShortName != "b" {
 		t.Error("original slice was modified")

@@ -46,7 +46,7 @@ func TestGolden_Dashboard_SortModes(t *testing.T) {
 		mode SortMode
 	}{
 		{"name", SortByName},
-		{"recent", SortByLastAccessed},
+		{"age", SortByAge},
 		{"dirty", SortByDirtyFirst},
 	}
 	for _, tc := range modes {

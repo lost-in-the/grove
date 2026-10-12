@@ -68,8 +68,8 @@ func TestUpdateDashboardNavigation(t *testing.T) {
 			name: "o cycles sort mode",
 			key:  "o",
 			assert: func(t *testing.T, m Model) {
-				if m.sortMode != SortByLastAccessed {
-					t.Errorf("expected SortByLastAccessed, got %d", m.sortMode)
+				if m.sortMode != SortByAge {
+					t.Errorf("expected SortByAge, got %d", m.sortMode)
 				}
 			},
 		},
@@ -242,8 +242,8 @@ func TestSortCycling(t *testing.T) {
 	}
 
 	m = sendKey(m, "o")
-	if m.sortMode != SortByLastAccessed {
-		t.Errorf("expected SortByLastAccessed, got %d", m.sortMode)
+	if m.sortMode != SortByAge {
+		t.Errorf("expected SortByAge, got %d", m.sortMode)
 	}
 
 	m = sendKey(m, "o")
@@ -890,7 +890,7 @@ func TestSortWithMixedTypes(t *testing.T) {
 		WorktreeItem{ShortName: "alpha"},
 		WorktreeItem{ShortName: "beta"},
 	}
-	sorted := sortWorktreeItems(items, SortByName)
+	sorted := sortWorktreeItems(items, SortByName, false)
 	if len(sorted) != 2 {
 		t.Errorf("expected 2 sorted items, got %d", len(sorted))
 	}

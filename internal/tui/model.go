@@ -295,8 +295,8 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 	for i, item := range msg.items {
 		listItems[i] = item
 	}
-	if m.sortMode != SortByName {
-		listItems = sortWorktreeItems(listItems, m.sortMode)
+	if m.sortMode != SortByName || m.sortReversed {
+		listItems = sortWorktreeItems(listItems, m.sortMode, m.sortReversed)
 	}
 	// Capture SetItems' cmd: with a filter applied it re-runs the filter, and
 	// dropping it left the list showing no items until the user re-filtered (B38).
@@ -969,6 +969,11 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.sortMode = m.sortMode.Next()
 		return m, m.applySortToList()
 
+	case key.Matches(msg, m.keys.SortReverse):
+		m.helpFooter.SetHighlight("O")
+		m.sortReversed = !m.sortReversed
+		return m, m.applySortToList()
+
 	case key.Matches(msg, m.keys.All):
 		return m.enterBulkMode()
 
@@ -1235,7 +1240,7 @@ func (m Model) handleRenameKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) applySortToList() tea.Cmd {
-	sorted := sortWorktreeItems(m.list.Items(), m.sortMode)
+	sorted := sortWorktreeItems(m.list.Items(), m.sortMode, m.sortReversed)
 	cmd := m.list.SetItems(sorted)
 	m.refreshDelegate()
 	m.updateDetailContent()
