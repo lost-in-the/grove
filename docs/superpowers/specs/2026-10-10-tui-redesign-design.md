@@ -111,7 +111,7 @@ Columns, left to right:
 | Alias | flex, floor 16 | The worktree's alias | Middle-truncates last |
 | Branch chip | flex | `⎇ branch`, dim, per N4 | First |
 | Counts | 11, right-aligned | `↑n ↓n ~n` | Collapses (5.2) |
-| Age | 3 | Last-commit age (5.3) | Second |
+| Age | 4 | Last-commit age (5.3) | Second |
 | Tail | 4 | Session `⬢` active / `⬡` open; container `◆` running / `◇` stopped | Never |
 
 - The cursor and status dot are separate columns. Selection never hides status.
@@ -159,18 +159,21 @@ As width shrinks, apply these steps in order until the row fits:
 
 ### 5.3 Age format
 
-Three columns, no "ago":
+Ages follow git's relative dates (`git log --date=relative`, `date.c` `show_date_relative`): the same thresholds and rounding, written short in up to four columns, no "ago". A row then agrees with git and with the detail pane.
 
-| Elapsed | Shown |
+| Elapsed (git's rounding) | Shown |
 |---|---|
-| under 1 minute | `now` |
-| minutes | `59m` |
-| hours | `23h` |
-| days | `6d` |
-| weeks, up to 52 | `52w` |
-| years | `2y` |
+| under 90 seconds | `45s` |
+| under 90 minutes | `89m` |
+| under 36 hours | `35h` |
+| under 14 days | `13d` |
+| under 70 days | `10w` |
+| under 365 days | `11mo` |
+| a year or more | `2y` (git adds months below 5 years; the row keeps the years) |
 
-There is no month unit, so `m` always means minutes.
+`m` is minutes and `mo` is months, as git spells them out.
+
+Decided after Phase 4a hands-on testing: the first format floored each unit and disagreed with git's wording in the detail pane.
 
 ### 5.4 Density toggle
 

@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
+
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
@@ -66,8 +68,8 @@ func TestUpdateDashboardNavigation(t *testing.T) {
 			name: "o cycles sort mode",
 			key:  "o",
 			assert: func(t *testing.T, m Model) {
-				if m.sortMode != SortByLastAccessed {
-					t.Errorf("expected SortByLastAccessed, got %d", m.sortMode)
+				if m.sortMode != SortByAge {
+					t.Errorf("expected SortByAge, got %d", m.sortMode)
 				}
 			},
 		},
@@ -240,8 +242,8 @@ func TestSortCycling(t *testing.T) {
 	}
 
 	m = sendKey(m, "o")
-	if m.sortMode != SortByLastAccessed {
-		t.Errorf("expected SortByLastAccessed, got %d", m.sortMode)
+	if m.sortMode != SortByAge {
+		t.Errorf("expected SortByAge, got %d", m.sortMode)
 	}
 
 	m = sendKey(m, "o")
@@ -490,15 +492,16 @@ func TestRenderTmuxValueHerdrStatuses(t *testing.T) {
 	}
 }
 
-func TestTmuxStatusSymbolCoversHerdrStatuses(t *testing.T) {
+func TestTailGlyphsCoverHerdrStatuses(t *testing.T) {
+	same := func(s lipgloss.Style) lipgloss.Style { return s }
 	for _, status := range []string{"attached", "active"} {
-		if got := tmuxStatusSymbol(WorktreeItem{TmuxStatus: status}); !strings.Contains(got, "⬢") {
-			t.Errorf("tmuxStatusSymbol(%q) = %q, want the filled badge", status, got)
+		if got := tailGlyphs(WorktreeItem{TmuxStatus: status}, same, " "); !strings.Contains(got, "⬢") {
+			t.Errorf("tailGlyphs(%q) = %q, want the filled badge", status, got)
 		}
 	}
 	for _, status := range []string{"detached", "open"} {
-		if got := tmuxStatusSymbol(WorktreeItem{TmuxStatus: status}); !strings.Contains(got, "⬡") {
-			t.Errorf("tmuxStatusSymbol(%q) = %q, want the hollow badge", status, got)
+		if got := tailGlyphs(WorktreeItem{TmuxStatus: status}, same, " "); !strings.Contains(got, "⬡") {
+			t.Errorf("tailGlyphs(%q) = %q, want the hollow badge", status, got)
 		}
 	}
 }
@@ -887,7 +890,7 @@ func TestSortWithMixedTypes(t *testing.T) {
 		WorktreeItem{ShortName: "alpha"},
 		WorktreeItem{ShortName: "beta"},
 	}
-	sorted := sortWorktreeItems(items, SortByName)
+	sorted := sortWorktreeItems(items, SortByName, false)
 	if len(sorted) != 2 {
 		t.Errorf("expected 2 sorted items, got %d", len(sorted))
 	}

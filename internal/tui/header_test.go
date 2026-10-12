@@ -7,122 +7,62 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-func TestHeaderView(t *testing.T) {
-	tests := []struct {
-		name      string
-		header    Header
-		width     int
-		wantParts []string
-		dontWant  []string
-	}{
-		{
-			name: "shows project name and worktree count",
-			header: Header{
-				ProjectName:   "acupoll",
-				WorktreeCount: 5,
-				CurrentBranch: "main",
-				CurrentName:   "fix/diff-review",
-			},
-			width:     80,
-			wantParts: []string{"acupoll", "5 worktrees", "main"},
-		},
-		{
-			name: "shows current worktree indicator",
-			header: Header{
-				ProjectName:   "grove-cli",
-				WorktreeCount: 3,
-				CurrentBranch: "feat/tui",
-				CurrentName:   "feat/tui",
-			},
-			width:     100,
-			wantParts: []string{"grove-cli", "3 worktrees", "feat/tui"},
-		},
-		{
-			name: "singular worktree",
-			header: Header{
-				ProjectName:   "myproject",
-				WorktreeCount: 1,
-				CurrentBranch: "main",
-				CurrentName:   "main",
-			},
-			width:     80,
-			wantParts: []string{"myproject", "1 worktree"},
-			dontWant:  []string{"1 worktrees"},
-		},
-		{
-			name: "zero worktrees",
-			header: Header{
-				ProjectName:   "empty",
-				WorktreeCount: 0,
-				CurrentBranch: "",
-				CurrentName:   "",
-			},
-			width:     80,
-			wantParts: []string{"empty", "0 worktrees"},
-		},
-		{
-			name: "narrow terminal truncates gracefully",
-			header: Header{
-				ProjectName:   "acupoll",
-				WorktreeCount: 5,
-				CurrentBranch: "main",
-				CurrentName:   "fix/diff-review-cleanup-long-name",
-			},
-			width:     40,
-			wantParts: []string{"acupoll"},
-		},
+func TestHeaderView_Format(t *testing.T) {
+	h := Header{ProjectName: "grove", WorktreeCount: 5, SortLabel: "name", Cursor: 1, Total: 5}
+	view := stripAnsi(h.View(80))
+	if lipgloss.Width(view) != 80 {
+		t.Errorf("header is %d cells, want 80", lipgloss.Width(view))
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			view := tt.header.View(tt.width)
-			plain := stripAnsi(view)
-
-			for _, part := range tt.wantParts {
-				if !strings.Contains(plain, part) {
-					t.Errorf("View() missing %q in:\n%s", part, plain)
-				}
-			}
-
-			for _, part := range tt.dontWant {
-				if strings.Contains(plain, part) {
-					t.Errorf("View() should not contain %q in:\n%s", part, plain)
-				}
-			}
-
-			// View width should not exceed requested width
-			for _, line := range strings.Split(view, "\n") {
-				if lipgloss.Width(line) > tt.width {
-					t.Errorf("line exceeds width %d: width=%d line=%q",
-						tt.width, lipgloss.Width(line), line)
-				}
-			}
-		})
+	if !strings.HasPrefix(view, " grove · 5 worktrees · ⬍ name") {
+		t.Errorf("left side: %q", view)
+	}
+	if !strings.HasSuffix(view, "1/5 ") {
+		t.Errorf("right side should be the cursor position: %q", view)
+	}
+	for _, gone := range []string{"on main", "●"} {
+		if strings.Contains(view, gone) {
+			t.Errorf("header still shows %q: %q", gone, view)
+		}
 	}
 }
 
-func TestHeaderCurrentIndicator(t *testing.T) {
-	h := Header{
-		ProjectName:   "proj",
-		WorktreeCount: 2,
-		CurrentBranch: "main",
-		CurrentName:   "feature-x",
+func TestHeaderView_SortReversed(t *testing.T) {
+	h := Header{ProjectName: "grove", WorktreeCount: 5, SortLabel: "age", SortReversed: true, Cursor: 2, Total: 5}
+	if view := stripAnsi(h.View(80)); !strings.Contains(view, "⬍ age ↑") {
+		t.Errorf("reversed sort not shown: %q", view)
 	}
-	view := stripAnsi(h.View(80))
+}
 
-	// Should contain the dot indicator for current worktree
-	if !strings.Contains(view, "●") && !strings.Contains(view, "feature-x") {
-		t.Errorf("expected current worktree indicator, got:\n%s", view)
+// At 44 columns the count drops its word and the project name truncates;
+// the cursor position stays.
+func TestHeaderView_Narrow(t *testing.T) {
+	h := Header{ProjectName: "a-rather-long-project-name", WorktreeCount: 5, SortLabel: "name", Cursor: 3, Total: 5}
+	view := stripAnsi(h.View(44))
+	if lipgloss.Width(view) != 44 {
+		t.Errorf("header is %d cells, want 44", lipgloss.Width(view))
+	}
+	if strings.Contains(view, "worktrees") {
+		t.Errorf("count kept its word at 44: %q", view)
+	}
+	if !strings.Contains(view, "…") || !strings.HasSuffix(view, "3/5 ") {
+		t.Errorf("want a truncated name and 3/5: %q", view)
+	}
+}
+
+func TestDashboardHeader_TracksFilteredCursor(t *testing.T) {
+	m := newTestModel(withItems(5), withSize(80, 24))
+	m.list.Select(2)
+	if h := m.buildDashboardHeader(); h.Cursor != 3 || h.Total != 5 {
+		t.Errorf("cursor %d/%d, want 3/5", h.Cursor, h.Total)
+	}
+	m.list.SetFilterText("fix")
+	if h := m.buildDashboardHeader(); h.Total != len(m.list.VisibleItems()) || h.Total == 5 {
+		t.Errorf("total %d should track the %d filtered rows", h.Total, len(m.list.VisibleItems()))
 	}
 }
 
 func TestHeaderView_LongProjectName(t *testing.T) {
-	h := Header{
-		ProjectName:   "my-very-long-project-name-that-might-overflow",
-		WorktreeCount: 2,
-		CurrentBranch: "main",
-		CurrentName:   "main",
-	}
+	h := Header{ProjectName: "my-very-long-project-name-that-might-overflow", WorktreeCount: 2, Cursor: 1, Total: 2}
 	view := h.View(50)
 	if lipgloss.Width(view) > 50 {
 		t.Errorf("header exceeded width 50: got %d", lipgloss.Width(view))
@@ -130,12 +70,7 @@ func TestHeaderView_LongProjectName(t *testing.T) {
 }
 
 func TestHeaderView_Unicode(t *testing.T) {
-	h := Header{
-		ProjectName:   "проект",
-		WorktreeCount: 3,
-		CurrentBranch: "фича",
-		CurrentName:   "фича",
-	}
+	h := Header{ProjectName: "проект", WorktreeCount: 3, Cursor: 1, Total: 3}
 	view := h.View(80)
 	plain := stripAnsi(view)
 	if !strings.Contains(plain, "проект") {
@@ -144,12 +79,7 @@ func TestHeaderView_Unicode(t *testing.T) {
 }
 
 func TestHeaderView_MinimumWidth(t *testing.T) {
-	h := Header{
-		ProjectName:   "proj",
-		WorktreeCount: 1,
-		CurrentBranch: "main",
-		CurrentName:   "main",
-	}
+	h := Header{ProjectName: "proj", WorktreeCount: 1, Cursor: 1, Total: 1}
 	// Very narrow — should not panic
 	view := h.View(5)
 	if view == "" {

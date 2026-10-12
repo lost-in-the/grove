@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -82,7 +83,9 @@ type Model struct {
 	detailFocused bool // true when dashboard detail panel has focus
 
 	// Sort
-	sortMode SortMode
+	sortMode     SortMode
+	sortReversed bool // O reverses the current sort
+	pendingG     bool // g was pressed; a second g goes to the top
 
 	// Overlay state
 	deleteState *DeleteState
@@ -110,10 +113,15 @@ type Model struct {
 
 	// Layout
 	width, height int
-	compactMode   bool // true = V1 single-line delegate, false = V2 two-line
+	compactMode   bool // true = one-line rows, false = rows with the commit message
 
-	// List delegate (stored for header rendering in compact mode)
-	listDelegate WorktreeDelegate
+	// agentAware is true when the first fetch reported the herdr backend.
+	// It is decided once, so columns never appear or vanish mid-session.
+	agentAware    bool
+	agentAwareSet bool
+
+	// now is the clock rows use for ages; tests pin it.
+	now func() time.Time
 }
 
 // NewModel creates a new TUI model.
@@ -128,22 +136,16 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 
 	s := GroveSpinner()
 
-	// Determine compact mode: persisted preference > config > default (false)
-	compact := cfg != nil && cfg.TUI.CompactList != nil && *cfg.TUI.CompactList
-	if prefs := loadUIPrefs(projectRoot); prefs != nil && prefs.CompactMode != nil {
-		compact = *prefs.CompactMode
+	var configCompact, prefCompact *bool
+	if cfg != nil {
+		configCompact = cfg.TUI.CompactList
 	}
-
-	var delegate list.ItemDelegate
-	var v1Delegate WorktreeDelegate
-	if compact {
-		v1Delegate = NewWorktreeDelegate()
-		delegate = v1Delegate
-	} else {
-		delegate = NewWorktreeDelegateV2()
+	if prefs := loadUIPrefs(projectRoot); prefs != nil {
+		prefCompact = prefs.CompactMode
 	}
+	compact := startupCompact(configCompact, prefCompact)
 
-	l := newWorktreeList(delegate)
+	l := newWorktreeList(rowDelegate{TwoLine: !compact, Secondary: listSecondary(cfg)})
 
 	h := help.New()
 
@@ -175,7 +177,6 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		cfgLoadErr:          cfgErr,
 		keys:                keys,
 		list:                l,
-		listDelegate:        v1Delegate,
 		compactMode:         compact,
 		spinner:             s,
 		help:                h,
@@ -295,13 +296,18 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 	for i, item := range msg.items {
 		listItems[i] = item
 	}
-	if m.sortMode != SortByName {
-		listItems = sortWorktreeItems(listItems, m.sortMode)
+	if m.sortMode != SortByName || m.sortReversed {
+		listItems = sortWorktreeItems(listItems, m.sortMode, m.sortReversed)
 	}
 	// Capture SetItems' cmd: with a filter applied it re-runs the filter, and
 	// dropping it left the list showing no items until the user re-filtered (B38).
 	setItemsCmd := m.list.SetItems(listItems)
-	m.computeColumnWidths()
+	if !m.agentAwareSet {
+		// Decided by the first successful fetch, even one that found no
+		// backend, so the column never appears mid-session.
+		m.agentAware, m.agentAwareSet = msg.backend == "herdr", true
+	}
+	m.refreshDelegate()
 	m.loading = false
 
 	if m.pendingSelect != "" {
@@ -602,6 +608,7 @@ func (m Model) handleConfigSaved(msg configSavedMsg) (tea.Model, tea.Cmd) {
 		m.toast.Show(NewToast("Saved but reload failed — restart TUI to apply", ToastWarning))
 	} else {
 		m.cfg = cfg
+		m.refreshDelegate() // tui.list_secondary and density settings
 	}
 	return m, nil
 }
@@ -651,6 +658,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.list.FilterState() == list.Filtering {
+		m.pendingG = false
 		prevIdx := m.list.Index()
 		var cmd tea.Cmd
 		m.list, cmd = m.list.Update(msg)
@@ -697,11 +705,7 @@ func (m *Model) updateLayout() {
 
 	contentWidth := m.width - 2 // body padding (1 char each side)
 
-	// Column headers + separator are only shown in compact mode (2 lines).
 	listHeaderHeight := 0
-	if m.compactMode {
-		listHeaderHeight = 2
-	}
 
 	useSideBySide := isWideLayout(m.width)
 	if useSideBySide {
@@ -734,7 +738,7 @@ func (m *Model) updateLayout() {
 		m.detail.SetHeight(detailHeight)
 	}
 
-	m.computeColumnWidths()
+	m.refreshDelegate()
 
 	m.help.SetWidth(contentWidth)
 }
@@ -749,42 +753,50 @@ func (m *Model) toggleCompactMode() {
 		tuilog.Printf("warning: failed to save UI prefs: %v", err)
 	}
 
-	if m.compactMode {
-		d := ComputeDelegateWidths(m.list.Items(), m.list.Width())
-		m.listDelegate = d
-		m.list.SetDelegate(d)
-	} else {
-		d := ComputeDelegateWidthsV2(m.list.Items(), m.list.Width())
-		m.list.SetDelegate(d)
-	}
+	m.refreshDelegate()
 	m.updateLayout()
 	m.updateDetailContent()
 }
 
-// delegateHeight returns the item height for the active delegate.
+// delegateHeight returns the row height for the current density.
 func (m *Model) delegateHeight() int {
-	if m.compactMode {
-		return 1
-	}
-	return 2
+	return m.rowDelegate().Height()
 }
 
-// computeColumnWidths scans list items to find max name/branch lengths,
-// then distributes available width proportionally.
-func (m *Model) computeColumnWidths() {
-	listWidth := m.list.Width()
-	if listWidth <= 0 {
-		return
+// startupCompact decides the starting density: a saved preference, else the
+// tui.compact_list config, else one-line rows (spec 5.4).
+func startupCompact(config, pref *bool) bool {
+	switch {
+	case pref != nil:
+		return *pref
+	case config != nil:
+		return *config
 	}
+	return true
+}
 
-	if m.compactMode {
-		d := ComputeDelegateWidths(m.list.Items(), listWidth)
-		m.listDelegate = d
-		m.list.SetDelegate(d)
-	} else {
-		d := ComputeDelegateWidthsV2(m.list.Items(), listWidth)
-		m.list.SetDelegate(d)
+// listSecondary is the text after the alias: "branch" (default), "dir", or
+// "off" (tui.list_secondary).
+func listSecondary(cfg *config.Config) string {
+	if cfg == nil || cfg.TUI.ListSecondary == "" {
+		return "branch"
 	}
+	return cfg.TUI.ListSecondary
+}
+
+// rowDelegate is the dashboard row delegate for the current settings.
+func (m *Model) rowDelegate() rowDelegate {
+	return rowDelegate{
+		TwoLine:    !m.compactMode,
+		AgentAware: m.agentAware,
+		Secondary:  listSecondary(m.cfg),
+		Now:        m.now,
+	}
+}
+
+// refreshDelegate installs the row delegate for the current settings.
+func (m *Model) refreshDelegate() {
+	m.list.SetDelegate(m.rowDelegate())
 }
 
 func (m *Model) updateDetailContent() {
@@ -913,6 +925,9 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.detailFocused {
 		return m.handleDashboardDetailKey(msg)
 	}
+	if updated, handled := m.handleMotionKey(msg); handled {
+		return updated, nil
+	}
 
 	switch {
 	// With a filter applied, esc clears it (the list's own ClearFilter
@@ -962,6 +977,11 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.sortMode = m.sortMode.Next()
 		return m, m.applySortToList()
 
+	case key.Matches(msg, m.keys.SortReverse):
+		m.helpFooter.SetHighlight("O")
+		m.sortReversed = !m.sortReversed
+		return m, m.applySortToList()
+
 	case key.Matches(msg, m.keys.All):
 		return m.enterBulkMode()
 
@@ -998,8 +1018,59 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m.routeToList(msg)
 }
 
+// handleMotionKey handles the vim motions on the dashboard list: gg top,
+// G bottom, ctrl+d and ctrl+u half a page, l to open the detail pane. g
+// waits for a second key; any other key after it does nothing.
+func (m Model) handleMotionKey(msg tea.KeyPressMsg) (Model, bool) {
+	k := msg.String()
+	if m.pendingG {
+		m.pendingG = false
+		if k == "ctrl+c" {
+			return m, false // still quits
+		}
+		if k == "g" {
+			m.moveCursorTo(0)
+		}
+		return m, true
+	}
+	switch k {
+	case "g":
+		m.pendingG = true
+	case "G":
+		m.moveCursorTo(len(m.list.VisibleItems()) - 1)
+	case "ctrl+d":
+		m.moveCursorTo(m.list.Index() + m.halfPage())
+	case "ctrl+u":
+		m.moveCursorTo(m.list.Index() - m.halfPage())
+	case "l":
+		m.detailFocused = true
+		m.refreshDetailForFocus()
+	default:
+		return m, false
+	}
+	return m, true
+}
+
+// halfPage is half the rows the list shows per page, at least 1.
+func (m Model) halfPage() int {
+	return max(1, m.list.Paginator.PerPage/2)
+}
+
+// moveCursorTo selects visible row i, clamped to the list.
+func (m *Model) moveCursorTo(i int) {
+	n := len(m.list.VisibleItems())
+	if n == 0 {
+		return
+	}
+	i = max(0, min(i, n-1))
+	if i != m.list.Index() {
+		m.list.Select(i)
+		m.updateDetailContent()
+	}
+}
+
 func (m Model) handleDashboardDetailKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if key.Matches(msg, m.keys.Escape) || key.Matches(msg, m.keys.Tab) {
+	if key.Matches(msg, m.keys.Escape) || key.Matches(msg, m.keys.Tab) || msg.String() == "h" {
 		m.detailFocused = false
 		m.refreshDetailForFocus()
 		return m, nil
@@ -1228,9 +1299,9 @@ func (m Model) handleRenameKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) applySortToList() tea.Cmd {
-	sorted := sortWorktreeItems(m.list.Items(), m.sortMode)
+	sorted := sortWorktreeItems(m.list.Items(), m.sortMode, m.sortReversed)
 	cmd := m.list.SetItems(sorted)
-	m.computeColumnWidths()
+	m.refreshDelegate()
 	m.updateDetailContent()
 	return cmd
 }
@@ -1368,7 +1439,17 @@ func (m Model) viewContent() string {
 		return m.viewEmpty()
 	}
 
-	return m.renderFrame(len(m.views) - 1)
+	return m.withToast(m.renderFrame(len(m.views) - 1))
+}
+
+// withToast draws the current toast over the top-right corner of a finished
+// screen, above any overlay.
+func (m Model) withToast(screen string) string {
+	if m.toast == nil || m.toast.Current == nil {
+		return screen
+	}
+	box := m.toast.View(m.width)
+	return composeLayerAt(screen, box, m.width, m.height, m.width-lipgloss.Width(box), 0)
 }
 
 // renderFrame renders frame i of the view stack; -1 is the dashboard root.
@@ -1541,8 +1622,6 @@ func (m Model) renderDashboard() string {
 	}
 	footer = m.appendUpdateBadge(footer)
 
-	statusBar = m.applyToastToHeader(statusBar)
-
 	body = lipgloss.NewStyle().Padding(0, 1).Render(body)
 	body = m.clampBodyToHeight(body, footer)
 
@@ -1551,27 +1630,14 @@ func (m Model) renderDashboard() string {
 
 // buildDashboardHeader populates the header from the current worktree list state.
 func (m Model) buildDashboardHeader() Header {
-	h := Header{
+	return Header{
 		ProjectName:   m.projectName,
 		WorktreeCount: len(m.list.Items()),
 		SortLabel:     m.sortMode.String(),
+		SortReversed:  m.sortReversed,
+		Cursor:        m.list.Index() + 1,
+		Total:         len(m.list.VisibleItems()),
 	}
-	for _, li := range m.list.Items() {
-		item, ok := li.(WorktreeItem)
-		if !ok {
-			continue
-		}
-		if item.IsCurrent {
-			h.CurrentBranch = item.Branch
-			h.CurrentName = item.ShortName
-		}
-		for _, ps := range item.PluginStatuses {
-			if strings.Contains(ps.Detail, "pointed") {
-				h.ContainerTarget = item.ShortName
-			}
-		}
-	}
-	return h
 }
 
 // renderDashboardBody renders the list and detail panels in side-by-side or stacked layout.
@@ -1584,17 +1650,8 @@ func (m Model) renderDashboardBody() string {
 
 func (m Model) renderSideBySideBody() string {
 	listWidth := m.list.Width()
-	listContent := m.list.View()
-	if m.compactMode {
-		header := renderListHeader(m.listDelegate, listWidth)
-		listContent = lipgloss.JoinVertical(lipgloss.Left, header, listContent)
-	}
-	listContent = lipgloss.NewStyle().Width(listWidth).Render(listContent)
-	dividerHeight := m.list.Height()
-	if m.compactMode {
-		dividerHeight += 2
-	}
-	divider := renderVerticalDivider(dividerHeight, Colors.SurfaceDim)
+	listContent := lipgloss.NewStyle().Width(listWidth).Render(m.list.View())
+	divider := renderVerticalDivider(m.list.Height(), Colors.SurfaceDim)
 	detailView := m.renderDetailPanel()
 	return lipgloss.JoinHorizontal(lipgloss.Top, listContent, divider, detailView)
 }
@@ -1602,25 +1659,9 @@ func (m Model) renderSideBySideBody() string {
 func (m Model) renderStackedBody() string {
 	bodyWidth := m.width - 2
 	listView := m.list.View()
-	if m.compactMode {
-		header := renderListHeader(m.listDelegate, bodyWidth)
-		listView = lipgloss.JoinVertical(lipgloss.Left, header, listView)
-	}
 	separator := renderNamedSeparator(m.selectedItemName(), bodyWidth)
 	detailView := m.renderDetailPanel()
 	return lipgloss.JoinVertical(lipgloss.Left, listView, separator, detailView)
-}
-
-// applyToastToHeader composites a toast notification onto the header if one is active.
-func (m Model) applyToastToHeader(statusBar string) string {
-	if m.toast == nil || m.toast.Current == nil {
-		return statusBar
-	}
-	toastView := m.toast.View(m.width)
-	if toastView == "" {
-		return statusBar
-	}
-	return compositeToastOnHeader(statusBar, toastView, m.width)
 }
 
 // clampBodyToHeight trims the body so statusBar + body + footer fits exactly m.height lines.
@@ -1714,7 +1755,7 @@ func renderDetailV2Focused(item *WorktreeItem, width int) string {
 		Width(width - 2).
 		Render(body)
 
-	title := " " + Styles.DetailTitle.Render(item.ShortName) + " "
+	title := " " + Styles.DetailTitle.Render(item.ShortName) + Styles.TextMuted.Render(" · focused") + " "
 	card = injectBorderTitleWithColor(card, title, Colors.Primary)
 
 	return card
@@ -1731,28 +1772,6 @@ func (m Model) dashboardDetailFocusedHints() []Hint {
 	}
 	hints = append(hints, Hint{"tab", "list"}, Hint{"esc", "list"})
 	return hints
-}
-
-// compositeToastOnHeader overlays a right-aligned toast onto the header line,
-// avoiding layout shift in alt-screen mode.
-func compositeToastOnHeader(header, toast string, width int) string {
-	headerWidth := lipgloss.Width(header)
-	toastWidth := lipgloss.Width(toast)
-
-	// If both fit, place toast on the right side of the header line
-	if headerWidth+toastWidth+2 <= width {
-		gap := width - headerWidth - toastWidth
-		return header + strings.Repeat(" ", gap) + toast
-	}
-
-	// If toast alone fits, it takes priority (temporary notification)
-	if toastWidth < width {
-		padding := width - toastWidth
-		return strings.Repeat(" ", padding) + toast
-	}
-
-	// Fallback: just show header
-	return header
 }
 
 // clampLines pads or trims s to exactly n lines.

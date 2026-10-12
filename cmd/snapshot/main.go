@@ -29,24 +29,15 @@ func main() {
 		listItems[i] = item
 	}
 
-	// Create a bubbles/list with the delegate
-	delegate := tui.NewWorktreeDelegate()
-	l := list.New(listItems, delegate, width, len(items)+2)
+	// Create a bubbles/list with the dashboard's row delegate
+	l := list.New(listItems, tui.NewDashboardRowDelegate(false), width, len(items)+2)
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)
 	l.SetShowFilter(false)
 	l.SetShowPagination(false)
 
-	// Compute content-adaptive column widths
-	delegate = tui.ComputeDelegateWidths(listItems, width)
-	l.SetDelegate(delegate)
-
-	// Print header + rendered list
 	fmt.Printf("=== Grove TUI Snapshot (width=%d) ===\n\n", width)
-
-	header := tui.RenderListHeader(delegate, width)
-	fmt.Println(header)
 	fmt.Println(l.View())
 }
 

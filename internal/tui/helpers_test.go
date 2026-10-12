@@ -19,8 +19,7 @@ func newTestModel(opts ...testOpt) Model {
 
 	s := GroveSpinner()
 
-	delegate := NewWorktreeDelegateV2()
-	l := newWorktreeList(delegate)
+	l := newWorktreeList(rowDelegate{Secondary: "branch", Now: func() time.Time { return testNow }})
 
 	h := help.New()
 
@@ -32,6 +31,8 @@ func newTestModel(opts ...testOpt) Model {
 		spinner:     s,
 		help:        h,
 		toast:       NewToastModel(),
+		now:         func() time.Time { return testNow },
+		compactMode: true,
 		helpFooter:  NewHelpFooter(),
 		helpOverlay: NewHelpOverlay(),
 		detail:      viewport.New(viewport.WithWidth(80), viewport.WithHeight(20)),
@@ -78,6 +79,9 @@ func withLoading() testOpt {
 }
 
 // makeTestItems generates n WorktreeItem values for testing.
+// testNow is the fixed clock for tests and goldens, so ages never drift.
+var testNow = time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
+
 func makeTestItems(n int) []WorktreeItem {
 	names := []string{"root", "feature-auth", "fix-bug", "testing", "refactor", "docs", "perf", "ci", "staging", "dev"}
 	items := make([]WorktreeItem, n)
@@ -91,6 +95,7 @@ func makeTestItems(n int) []WorktreeItem {
 			Commit:        "abc1234",
 			CommitMessage: "test commit for " + name,
 			CommitAge:     "2 hours ago",
+			CommitTime:    testNow.Add(-time.Duration(i) * time.Hour),
 			IsMain:        i == 0,
 			IsCurrent:     i == 0,
 			IsDirty:       i%3 == 0,
@@ -117,6 +122,14 @@ func makeKeyMsg(keyStr string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyUp}
 	case "down":
 		return tea.KeyPressMsg{Code: tea.KeyDown}
+	case "pgdown":
+		return tea.KeyPressMsg{Code: tea.KeyPgDown}
+	case "pgup":
+		return tea.KeyPressMsg{Code: tea.KeyPgUp}
+	case "ctrl+d":
+		return tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl}
+	case "ctrl+u":
+		return tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl}
 	default:
 		// Printable character(s)
 		runes := []rune(keyStr)

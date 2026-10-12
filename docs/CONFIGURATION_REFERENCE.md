@@ -329,9 +329,17 @@ default_branch_action = "split"    # string: split | fork
 # Default: "last_segment"
 worktree_name_from_branch = "last_segment"  # string: last_segment
 
-# Use single-line compact list items in the TUI worktree list.
-# Default: false (multi-line items with detail)
-compact_list = false               # bool
+# One-line dashboard rows. false adds the commit message under each row.
+# A choice saved with `v` in the TUI takes precedence.
+# Default: true
+compact_list = true                # bool
+
+# Text after the alias on each dashboard row:
+# "branch" — `⎇ branch`, only when its last segment differs from the alias
+# "dir"    — the worktree's directory name
+# "off"    — nothing
+# Default: "branch"
+list_secondary = "branch"          # string: branch | dir | off
 ```
 
 ---

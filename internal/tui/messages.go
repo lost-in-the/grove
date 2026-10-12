@@ -6,8 +6,9 @@ import (
 
 // worktreesFetchedMsg is sent when worktree data has been loaded.
 type worktreesFetchedMsg struct {
-	items []WorktreeItem
-	err   error
+	items   []WorktreeItem
+	backend string // resolved multiplexer backend, e.g. "tmux", "herdr"
+	err     error
 }
 
 // detailMetricsLoadedMsg is sent after the deferred detail-panel metrics

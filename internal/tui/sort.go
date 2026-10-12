@@ -12,7 +12,7 @@ type SortMode int
 
 const (
 	SortByName SortMode = iota
-	SortByLastAccessed
+	SortByAge           // newest last commit first
 	SortByDirtyFirst
 	sortModeCount // sentinel for cycling
 )
@@ -22,8 +22,8 @@ func (s SortMode) String() string {
 	switch s {
 	case SortByName:
 		return "name"
-	case SortByLastAccessed:
-		return "recent"
+	case SortByAge:
+		return "age"
 	case SortByDirtyFirst:
 		return "dirty"
 	default:
@@ -38,7 +38,7 @@ func (s SortMode) Next() SortMode {
 
 // sortWorktreeItems sorts a slice of list.Item (which must be WorktreeItem)
 // according to the given mode. Returns a new sorted slice.
-func sortWorktreeItems(items []list.Item, mode SortMode) []list.Item {
+func sortWorktreeItems(items []list.Item, mode SortMode, reversed bool) []list.Item {
 	sorted := make([]list.Item, len(items))
 	copy(sorted, items)
 
@@ -47,6 +47,12 @@ func sortWorktreeItems(items []list.Item, mode SortMode) []list.Item {
 		b, bOk := sorted[j].(WorktreeItem)
 		if !aOk || !bOk {
 			return false
+		}
+		if a.IsMain != b.IsMain {
+			return a.IsMain
+		}
+		if reversed {
+			return compareWorktrees(b, a, mode)
 		}
 		return compareWorktrees(a, b, mode)
 	})
@@ -62,9 +68,9 @@ func compareWorktrees(a, b WorktreeItem, mode SortMode) bool {
 	}
 
 	switch mode {
-	case SortByLastAccessed:
-		if !a.LastAccessed.Equal(b.LastAccessed) {
-			return a.LastAccessed.After(b.LastAccessed)
+	case SortByAge:
+		if !a.CommitTime.Equal(b.CommitTime) {
+			return a.CommitTime.After(b.CommitTime)
 		}
 		return strings.ToLower(a.ShortName) < strings.ToLower(b.ShortName)
 

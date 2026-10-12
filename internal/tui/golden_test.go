@@ -46,7 +46,7 @@ func TestGolden_Dashboard_SortModes(t *testing.T) {
 		mode SortMode
 	}{
 		{"name", SortByName},
-		{"recent", SortByLastAccessed},
+		{"age", SortByAge},
 		{"dirty", SortByDirtyFirst},
 	}
 	for _, tc := range modes {
@@ -57,10 +57,10 @@ func TestGolden_Dashboard_SortModes(t *testing.T) {
 	}
 }
 
-func TestGolden_Dashboard_CompactMode(t *testing.T) {
+func TestGolden_Dashboard_TwoLine(t *testing.T) {
 	for _, size := range []termSize{sizeStandard, sizeWide} {
 		t.Run(size.name, func(t *testing.T) {
-			m := goldenModel(t, size, withItems(5), withCompactMode())
+			m := goldenModel(t, size, withItems(5), withTwoLine())
 			golden.RequireEqual(t, []byte(m.viewString()))
 		})
 	}
@@ -146,12 +146,7 @@ func TestGolden_Component_Header(t *testing.T) {
 				goldenMu.Unlock()
 			})
 
-			h := Header{
-				ProjectName:   "grove-cli",
-				WorktreeCount: 5,
-				CurrentBranch: "main",
-				CurrentName:   "root",
-			}
+			h := Header{ProjectName: "grove-cli", WorktreeCount: 5, SortLabel: "name", Cursor: 1, Total: 5}
 			golden.RequireEqual(t, []byte(h.View(size.width)))
 		})
 	}
@@ -306,6 +301,8 @@ func withHerdrItems(n int) testOpt {
 			listItems[i] = items[i]
 		}
 		m.list.SetItems(listItems)
+		m.agentAware = true
+		m.refreshDelegate()
 	}
 }
 
@@ -318,5 +315,30 @@ func TestGolden_Dashboard_Herdr(t *testing.T) {
 			m := goldenModel(t, size, withHerdrItems(5))
 			golden.RequireEqual(t, []byte(m.viewString()))
 		})
+	}
+}
+
+// Rows with a chip, counts, ages, and tail glyphs, so column alignment is
+// encoded in a golden.
+func TestGolden_Dashboard_RichRows(t *testing.T) {
+	for _, size := range []termSize{sizeStandard, sizeWide} {
+		t.Run(size.name, func(t *testing.T) {
+			m := goldenModel(t, size, withRichRows())
+			golden.RequireEqual(t, []byte(m.viewString()))
+		})
+	}
+}
+
+func withRichRows() testOpt {
+	return func(m *Model) {
+		items := rowFixture()
+		li := make([]list.Item, len(items))
+		for i, it := range items {
+			it.Path = "/tmp/test-project-" + it.ShortName
+			li[i] = it
+		}
+		m.list.SetItems(li)
+		m.refreshDelegate()
+		m.updateLayout()
 	}
 }

@@ -25,31 +25,28 @@ The dashboard adjusts to your terminal width:
 
 ### Header
 
-The top bar shows:
-
-- **Project name** and worktree count
-- **Current branch** (the branch of your active worktree)
-- **Current worktree indicator** (green dot + name, right-aligned)
+Left to right: project name, worktree count, and sort (`⬍ name`, with `↑` when reversed). The cursor's position among the visible rows (`3/12`) sits on the right and tracks any filter. On narrow terminals the count drops its word and the project name truncates.
 
 ### Worktree List
 
-Each row in the list shows:
+Each worktree is one row. Left to right:
 
 | Column | Description |
 |--------|-------------|
-| Number | Position in the list (1–N) for quick-switch |
-| Indicator | Selection/status: `❯` selected, `●` current (green) or dirty (yellow), `✗` stale (red), `○` clean (muted) |
-| Name | Short name (e.g., `testing`, not `project-testing`) |
-| Branch | Git branch name |
-| Age | Time since last commit |
-| ± | Git status symbol: `✓` clean, `●` dirty, `✗` stale |
-| ↕ | Sync status: `↑N` ahead, `↓N` behind |
-| ⬡ | Session: `⬢` attached (tmux) / active (herdr), `⬡` detached / open |
-| ◆ | Container status from plugins |
+| Agent | Only under herdr: `!` blocked, `▸` working, `✓` done, blank otherwise |
+| Cursor | `❯` on the selected row |
+| Status | `●` current (green) or dirty (yellow), `✗` stale (red), `○` clean (muted) |
+| Alias | The worktree's short name, truncated in the middle when space is short (`abc-1349-migrate-…-path`) |
+| Branch chip | `⎇ branch`, only when the branch's last segment differs from the alias. `tui.list_secondary` picks `branch`, `dir`, or `off`. |
+| Counts | `↑n` ahead, `↓n` behind, `~n` changed files |
+| Age | Last commit, rounded the way git does: `45s`, `89m`, `35h`, `13d`, `10w`, `11mo`, `2y` |
+| Tail | Session `⬢` active / `⬡` open, then container `◆` running / `◇` stopped |
 
-The selected row always shows `❯` regardless of worktree status — the indicator column prioritizes selection cursor over status symbols.
+The cursor and status are separate columns, so the selected row keeps its status. As the terminal narrows, the chip goes first, then the age, then the counts collapse to the strongest one (`↓`, then `~`, then `↑`), and only then does the alias shorten, down to 16 columns.
 
-The main worktree always sorts to the top. The current worktree is highlighted.
+`v` adds a second line under each row with the commit message. One line is the default; the choice is saved per project.
+
+The main worktree always sorts to the top.
 
 ### Detail Panel
 
@@ -87,7 +84,7 @@ surfaces — `GROVE_NO_UPDATE_NOTIFIER=1` and friends suppress all of them.
 
 ### Toast Notifications
 
-Short-lived notifications appear in the top-right corner of the header after operations complete. They auto-dismiss after 3 seconds and fade as they expire.
+Short-lived notifications appear in the top-right corner of the screen, above everything else, after operations complete. They auto-dismiss after 3 seconds and fade as they expire.
 
 Toast levels:
 - **Success** (green) — operation completed
@@ -102,10 +99,13 @@ Toast levels:
 |-----|--------|
 | `↑` / `k` | Move up |
 | `↓` / `j` | Move down |
+| `g` `g` / `G` | Top / bottom of the list |
+| `ctrl+d` / `ctrl+u` | Half a page down / up |
+| `pgdown` / `pgup`, `home` / `end` | Page down / up, first / last page |
 | `enter` | Switch to selected worktree |
 | `U` | Switch to selected worktree and force-start its containers |
 | `1`–`9` | Quick-switch to nth worktree |
-| `tab` | Focus the detail panel for scrolling (see below) |
+| `tab` / `l` | Focus the detail panel for scrolling (see below) |
 | `B` | Open the selected worktree's associated PR in the browser |
 | `n` | Create new worktree |
 | `d` | Delete selected worktree |
@@ -117,9 +117,10 @@ Toast levels:
 | `p` | Browse GitHub PRs |
 | `i` | Browse GitHub issues |
 | `a` | Bulk delete |
-| `o` | Cycle sort mode |
+| `o` | Cycle sort mode: name, age, dirty |
+| `O` | Reverse the sort |
 | `r` | Refresh worktree list |
-| `v` | Toggle view mode (compact / detailed) |
+| `v` | Show or hide the commit message line |
 | `u` | Open update modal (only when a newer release is cached — the footer badge indicates availability) |
 | `/` | Filter list |
 | `?` | Toggle expanded help |
@@ -127,7 +128,7 @@ Toast levels:
 
 #### Detail Panel (when focused)
 
-Press `tab` from the dashboard to move focus into the detail panel so you can scroll long content. While focused:
+Press `tab` or `l` from the dashboard to move focus into the detail panel so you can scroll long content. Its title adds `· focused`. While focused:
 
 | Key | Action |
 |-----|--------|
@@ -135,7 +136,7 @@ Press `tab` from the dashboard to move focus into the detail panel so you can sc
 | `g` / `G` | Jump to top / bottom |
 | `ctrl+u` / `ctrl+d` | Half page up / down |
 | `B` | Open associated PR in browser |
-| `tab` / `esc` | Return focus to the list |
+| `tab` / `esc` / `h` | Return focus to the list |
 
 ### Overlay / Wizard Keys
 
@@ -300,15 +301,15 @@ Controls:
 
 ## Sort Modes
 
-Press `o` to cycle through sort modes:
+Press `o` to cycle through sort modes, and `O` to reverse the current one:
 
 | Mode | Description |
 |------|-------------|
 | `name` | Alphabetical (default) |
-| `recent` | Most recently accessed first |
+| `age` | Most recent commit first |
 | `dirty` | Worktrees with uncommitted changes first |
 
-The main worktree always stays at the top regardless of sort mode.
+The main worktree always stays at the top regardless of sort mode or direction.
 
 ## Filtering
 
@@ -317,6 +318,8 @@ Press `/` to activate the list filter. Type to narrow by worktree name or branch
 When a filter is active, number quick-switch keys (`1`–`9`) are disabled to avoid switching to hidden items.
 
 ## Accessibility
+
+Every text color reads at 4.5:1 or better on the surface, the selected row, and the header bar, in the dark, light, and high-contrast themes (`internal/theme/palette.go`; checked by `TestPalette_TextContrast`). Status never relies on color alone: each state has its own glyph, and the detail panel spells it out.
 
 Grove checks for high-contrast mode. If the `GROVE_HIGH_CONTRAST` environment variable is set or if the terminal reports a high-contrast preference, form elements switch to an accessible rendering mode.
 
@@ -337,12 +340,14 @@ The TUI uses **Bubbletea v2** (Elm Architecture):
 | File | Purpose |
 |------|---------|
 | `internal/theme/colors.go` | Centralized `ColorScheme` with semantic colors |
+| `internal/theme/palette.go` | The palettes as hex pairs (`DefaultPalette`, `HighContrastPalette`) |
 | `internal/tui/theme_v2.go` | `StyleSet` — lipgloss styles built from the color scheme |
-| `internal/tui/list_v2.go` | **Default** two-line delegate with indicator/status columns (`NewWorktreeDelegateV2`) |
-| `internal/tui/list.go` | Compact single-line V1 delegate with column headers (`NewWorktreeDelegate`) |
+| `internal/tui/row_delegate.go` | The dashboard row (`rowDelegate`); one or two lines |
+| `internal/tui/row_layout.go` | Column widths and the shed order (`layoutColumns`, `middleTruncate`) |
+| `internal/tui/age.go` | Commit age, rounded like git's relative dates (`shortAge`) |
 | `internal/tui/view_stack.go` | View stack: frames, push and pop, cursor restore |
-| `internal/tui/compositor.go` | Draws an overlay over a dimmed background (`composeOverlay`) |
+| `internal/tui/compositor.go` | Draws an overlay over a dimmed background (`composeOverlay`) and toasts on top (`composeLayerAt`) |
 | `internal/tui/worktree_list.go` | The dashboard list constructor (`newWorktreeList`) |
 
 ### List View Modes
-The `v` key toggles between V2 (default two-line) and V1 (compact single-line) at runtime. Set permanently via `tui.compact_list = true` in config.
+The `v` key toggles the commit message line at runtime and saves the choice in `.grove/ui_prefs.json` (`compact_mode`). `tui.compact_list = false` in config starts with two lines when no choice is saved.

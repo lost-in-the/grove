@@ -1,21 +1,21 @@
-[2m test-project  ·  5 worktrees  ·  on root  ·  ↕ name                     ● root [m
+[2m test-project · 5 worktrees · ⬍ name                                        1/5 [m
 [2m                                                                                [m
-[2m 1 ❯ root [m╭──────────────────────────────────────────────────────────╮[2m── 2h ago [m
-[2m       tes[m│                                                          │[2m          [m
+[2m ❯ ● root [m╭──────────────────────────────────────────────────────────╮[2m  0s      [m
+[2m          [m│                                                          │[2m          [m
 [2m   •••••  [m│   [1mNavigation[m                                             │[2m          [m
 [2m ── root ─[m│  ──────────────────────────────────────────────────────  │[2m───────── [m
 [2m          [m│   [1m↑/k ↓/j[m                                                │[2m          [m
 [2m          [m│   └ Move up / down                                       │[2m          [m
+[2m          [m│   [1mgg / G[m                                                 │[2m          [m
+[2m          [m│   └ Top / bottom of list                                 │[2m          [m
+[2m          [m│   [1mctrl+d / ctrl+u[m                                        │[2m          [m
+[2m          [m│   └ Half page down / up                                  │[2m          [m
 [2m          [m│   [1menter[m                                                  │[2m          [m
 [2m          [m│   └ Switch to selected worktree                          │[2m          [m
 [2m          [m│   [1mU[m                                                      │[2m          [m
 [2m          [m│   └ Switch and start containers                          │[2m          [m
 [2m          [m│   [1m1-9[m                                                    │[2m          [m
 [2m          [m│   └ Quick-switch by number                               │[2m          [m
-[2m          [m│   [1m/[m                                                      │[2m          [m
-[2m          [m│   └ Filter worktrees                                     │[2m          [m
-[2m          [m│   [1mtab[m                                                    │[2m          [m
-[2m          [m│   └ Focus detail panel                                   │[2m          [m
 [2m          [m│  ──────────────────────────────────────────────────────  │[2m          [m
 [2m          [m│    [1m↑↓[m scroll · [1mesc[m close                                 │[2m          [m
 [2m          [m│                                                          │[2m          [m

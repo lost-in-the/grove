@@ -34,8 +34,8 @@ func TestSortOrderActuallyChanges(t *testing.T) {
 
 	// Toggle to recent
 	m = sendKey(m, "o")
-	if m.sortMode != SortByLastAccessed {
-		t.Fatalf("expected SortByLastAccessed, got %d", m.sortMode)
+	if m.sortMode != SortByAge {
+		t.Fatalf("expected SortByAge, got %d", m.sortMode)
 	}
 	recentOrder := getOrder()
 	visibleRecentOrder := getVisibleOrder()

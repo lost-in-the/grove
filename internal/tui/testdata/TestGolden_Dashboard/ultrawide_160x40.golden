@@ -1,19 +1,19 @@
- [1m[1mtest-project[m  ·  5 worktrees  ·  on root  ·  ↕ name                                                                                                     ● root[m 
+ [1m[1mtest-project[m · 5 worktrees · ⬍ name                                                                                                                        1/5[m 
                                                                                                 │                                                               
- 1 ❯ root ────────────────────────────────────────────────────────────────────────────── 2h ago │                                                               
-       test commit for root                                                                     │                                                               
+ ❯ ● [1mroot[m                                                                               0s      │                                                               
+   ○ feature-auth                                                                      60m      │                                                               
+   ○ fix-bug                                                                            2h      │                                                               
+   ● testing                                                                            3h      │                                                               
+   ○ refactor                                                                           4h      │                                                               
                                                                                                 │                                                               
- 2 ○ feature-a… ──────────────────────────────────────────────────────────────────────── 2h ago │                                                               
-       test commit for feature-auth                                                             │                                                               
                                                                                                 │                                                               
- 3 ○ fix-bug ─────────────────────────────────────────────────────────────────────────── 2h ago │                                                               
-       test commit for fix-bug                                                                  │                                                               
                                                                                                 │                                                               
- 4 ● testing ─────────────────────────────────────────────────────────────────────────── 2h ago │                                                               
-       test commit for testing                                                                  │                                                               
                                                                                                 │                                                               
- 5 ○ refactor ────────────────────────────────────────────────────────────────────────── 2h ago │                                                               
-       test commit for refactor                                                                 │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
                                                                                                 │                                                               
                                                                                                 │                                                               
                                                                                                 │                                                               

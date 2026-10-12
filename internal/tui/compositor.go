@@ -39,6 +39,28 @@ func composeOverlayAt(bg, overlay string, width, height, top int) string {
 	).Render()
 }
 
+// composeLayerAt draws layer over bg without dimming it, with the layer's
+// top-left corner at column x, row y. The result is exactly height lines,
+// none wider than width. Toasts use it to sit above every other layer.
+func composeLayerAt(bg, layer string, width, height, x, y int) string {
+	if width <= 0 || height <= 0 || layer == "" {
+		return bg
+	}
+	base := fitLines(bg, width, height)
+	for i, line := range base {
+		if pad := width - ansi.StringWidth(line); pad > 0 {
+			base[i] = line + strings.Repeat(" ", pad)
+		}
+	}
+	box := strings.Join(fitLines(layer, width, min(lipgloss.Height(layer), height)), "\n")
+	x = max(0, min(x, width-lipgloss.Width(box)))
+	y = max(0, min(y, height-lipgloss.Height(box)))
+	return lipgloss.NewCompositor(
+		lipgloss.NewLayer(strings.Join(base, "\n")),
+		lipgloss.NewLayer(box).X(x).Y(y).Z(2),
+	).Render()
+}
+
 // dimBackdrop strips all styling from bg and renders each line faint. Styling
 // is stripped first because an inner reset would otherwise end the dim partway
 // through a line. Lines are padded to width so the canvas is always full size.

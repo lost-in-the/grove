@@ -12,6 +12,16 @@ import (
 	"github.com/lost-in-the/grove/internal/worktree"
 )
 
+// Shared string values used across overlays.
+const (
+	checkboxUnchecked      = "[ ]"
+	checkboxChecked        = "[x]"
+	boolTrue               = "true"
+	boolFalse              = "false"
+	reviewApproved         = "APPROVED"
+	reviewChangesRequested = "CHANGES_REQUESTED"
+)
+
 // renderFilterBar writes the filter/count bar used by list views (Issues, PRs).
 // When filtering is active or a filter is set, it shows the filter input view
 // with a "N of M" count. Otherwise it shows "N open" or an empty line.
@@ -43,32 +53,6 @@ func truncate(s string, max int) string {
 		return string(runes[:max])
 	}
 	return string(runes[:max-1]) + "…"
-}
-
-func compactAge(age string) string {
-	age = strings.TrimSpace(age)
-	replacements := [][2]string{
-		{" seconds ago", "s ago"},
-		{" second ago", "s ago"},
-		{" minutes ago", "m ago"},
-		{" minute ago", "m ago"},
-		{" hours ago", "h ago"},
-		{" hour ago", "h ago"},
-		{" days ago", "d ago"},
-		{" day ago", "d ago"},
-		{" weeks ago", "w ago"},
-		{" week ago", "w ago"},
-		{" months ago", "mo ago"},
-		{" month ago", "mo ago"},
-		{" years ago", "y ago"},
-		{" year ago", "y ago"},
-	}
-	for _, r := range replacements {
-		if after, found := strings.CutSuffix(age, r[0]); found {
-			return after + r[1]
-		}
-	}
-	return age
 }
 
 func filteredBranches(branches []string, filter string) []string {

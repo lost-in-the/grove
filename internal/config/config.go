@@ -89,7 +89,8 @@ type TUIConfig struct {
 	SkipBranchNotice       *bool  `toml:"skip_branch_notice"`        // Don't show "branch exists" notice
 	DefaultBranchAction    string `toml:"default_branch_action"`     // "split" or "fork" — used when notice is skipped
 	WorktreeNameFromBranch string `toml:"worktree_name_from_branch"` // "last_segment" (default) — how to derive name from branch
-	CompactList            *bool  `toml:"compact_list"`              // Use single-line list items (V1 delegate)
+	CompactList            *bool  `toml:"compact_list"`              // One-line dashboard rows (default); false adds the commit message
+	ListSecondary          string `toml:"list_secondary"`            // Text after the alias: "branch" (default), "dir", or "off"
 }
 
 // ProtectionConfig controls worktree protection settings
@@ -568,6 +569,9 @@ func mergeTUIConfig(result, override *TUIConfig) {
 	}
 	if override.CompactList != nil {
 		result.CompactList = override.CompactList
+	}
+	if override.ListSecondary != "" {
+		result.ListSecondary = override.ListSecondary
 	}
 }
 

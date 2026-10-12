@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/lost-in-the/grove/internal/worktreeinfo"
 )
@@ -404,5 +405,22 @@ func TestStashCount_TwoStashes(t *testing.T) {
 	count := worktreeinfo.StashCount(dir)
 	if count != 2 {
 		t.Errorf("count = %d, want 2", count)
+	}
+}
+
+// HEAD's commit time comes back as a time, so the TUI can sort and format
+// age without parsing git's relative wording.
+func TestHeadAndRecentCommits_CommitTime(t *testing.T) {
+	dir := setupRepo(t)
+	cmd := exec.Command("git", "commit", "--allow-empty", "-m", "dated")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_COMMITTER_DATE=2026-01-02T03:04:05Z", "GIT_AUTHOR_DATE=2026-01-02T03:04:05Z")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("commit: %v\n%s", err, out)
+	}
+	head, _ := worktreeinfo.HeadAndRecentCommits(dir, 1)
+	want := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	if !head.Time.Equal(want) {
+		t.Errorf("Time = %v, want %v", head.Time, want)
 	}
 }

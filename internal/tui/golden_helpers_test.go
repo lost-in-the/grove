@@ -238,13 +238,11 @@ func withSortMode(mode SortMode) testOpt {
 	}
 }
 
-// withCompactMode switches the model to compact (V1) delegate.
-func withCompactMode() testOpt {
+// withTwoLine switches the model to rows with the commit message.
+func withTwoLine() testOpt {
 	return func(m *Model) {
-		m.compactMode = true
-		d := ComputeDelegateWidths(m.list.Items(), m.list.Width())
-		m.listDelegate = d
-		m.list.SetDelegate(d)
+		m.compactMode = false
+		m.refreshDelegate()
 		m.updateLayout()
 	}
 }

@@ -3,10 +3,10 @@ package tui
 import (
 	"fmt"
 	"image/color"
-	"strings"
 	"time"
 
 	lipgloss "charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // DefaultToastDuration is how long toasts display before auto-expiry.
@@ -138,8 +138,8 @@ func (tm *ToastModel) Message() string {
 	return tm.Current.Message
 }
 
-// View renders the toast right-aligned within the given width.
-// Returns empty string if no toast is active.
+// View renders the toast box, at most width cells wide. The compositor
+// places it. Returns empty string if no toast is active.
 func (tm *ToastModel) View(width int) string {
 	if tm.Current == nil {
 		return ""
@@ -147,7 +147,10 @@ func (tm *ToastModel) View(width int) string {
 
 	t := tm.Current
 	icon := t.Level.style().Render(t.Level.Icon())
-	content := fmt.Sprintf("%s %s", icon, t.Message)
+	// Border, padding, icon, and a space take 6 cells; shorten the message
+	// so the whole box fits rather than losing its right edge.
+	msg := ansi.Truncate(t.Message, max(1, width-6), "…")
+	content := fmt.Sprintf("%s %s", icon, msg)
 
 	// Apply fade-out effect as toast nears expiry
 	fadeStyle := ToastOpacity(t)
@@ -158,9 +161,5 @@ func (tm *ToastModel) View(width int) string {
 		Padding(0, 1).
 		Render(content)
 
-	boxWidth := lipgloss.Width(box)
-	padding := width - boxWidth
-	padding = max(padding, 0)
-
-	return strings.Repeat(" ", padding) + box
+	return box
 }

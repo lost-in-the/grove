@@ -495,3 +495,14 @@ func TestRenderDetailV2_SyncStatus(t *testing.T) {
 		})
 	}
 }
+
+// Focus reads without color: the focused pane's title says so (spec 5.9).
+func TestDetail_FocusedTitleSaysSo(t *testing.T) {
+	item := makeTestItems(1)[0]
+	if got := stripAnsi(renderDetailV2Focused(&item, 60)); !strings.Contains(strings.SplitN(got, "\n", 2)[0], "root · focused") {
+		t.Errorf("focused title: %q", strings.SplitN(got, "\n", 2)[0])
+	}
+	if got := stripAnsi(renderDetailV2(&item, 60)); strings.Contains(got, "focused") {
+		t.Errorf("unfocused pane says focused: %q", strings.SplitN(got, "\n", 2)[0])
+	}
+}
