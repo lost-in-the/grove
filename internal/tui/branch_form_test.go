@@ -852,3 +852,22 @@ func TestIssueBrowser_SeedsBranchName(t *testing.T) {
 		t.Errorf("alias = %q, want issue-101", got)
 	}
 }
+
+// The status line says what enter will do. In Switch mode enter takes the
+// highlighted branch, so the status names it instead of rejecting the
+// partial text.
+func TestSwitchForm_StatusNamesThePick(t *testing.T) {
+	s := newSwitchForm(testFormOptions(), testSource())
+	s.setWIP("/r/auth", false, nil, nil)
+	if msg, _ := s.status(); msg != "⏎ switches to fix/login" {
+		t.Errorf("empty: status = %q", msg)
+	}
+	typeInto(t, s, "fi")
+	if msg, _ := s.status(); msg != "⏎ switches to fix/login" {
+		t.Errorf("partial: status = %q", msg)
+	}
+	typeInto(t, s, "x/login")
+	if msg, _ := s.status(); msg != "✓ ready" {
+		t.Errorf("exact: status = %q", msg)
+	}
+}

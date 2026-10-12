@@ -9,6 +9,6 @@
 │   Now     feature/auth                               │
 │                                                      │
 │   Changes stash 1 file before switching              │
-│ type a branch name                                   │
+│ ⏎ switches to fix/login                              │
 │ ⏎ switch · ctrl+j/k pick · esc back                  │
 ╰──────────────────────────────────────────────────────╯

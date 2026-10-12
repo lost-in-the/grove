@@ -604,6 +604,13 @@ func (s *BranchFormState) status() (string, formStatusKind) {
 	if s.Status != "" {
 		return s.Status, formStatusError
 	}
+	if sg := s.suggestions(); s.Mode == formModeSwitch && s.Pick < len(sg) && sg[s.Pick].Branch != s.branchValue() {
+		// enter takes the highlighted branch, so say so.
+		if _, msg, ok := s.validateWIP(); !ok {
+			return msg, formStatusHint
+		}
+		return "⏎ switches to " + sg[s.Pick].Branch, formStatusInfo
+	}
 	if w := s.inUse[s.branchValue()]; s.Mode == formModeNew && w != nil {
 		return fmt.Sprintf("in use by %s · ⏎ switches there", w.ShortName), formStatusInfo
 	}
