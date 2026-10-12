@@ -276,8 +276,8 @@ func TestBranchForm_KeyLineNamesTheAction(t *testing.T) {
 		t.Errorf("key line = %q, want ⏎ switch for an in-use branch", s.keyLine())
 	}
 	s.Busy = true
-	if s.keyLine() != "creating…" {
-		t.Errorf("key line while busy = %q, want creating…", s.keyLine())
+	if s.keyLine() != "wait for this to finish" {
+		t.Errorf("key line while busy = %q, want the wait note (status names the work)", s.keyLine())
 	}
 }
 
@@ -795,5 +795,60 @@ func TestCopyFormSubmit_WithoutManagerReportsError(t *testing.T) {
 	m = next.(Model)
 	if m.branchForm.Busy {
 		t.Error("copy started without a worktree manager")
+	}
+}
+
+// The cursor blinks from the moment the form opens, not after the first key.
+func TestDashboardN_ReturnsFocusCmd(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	_, cmd := m.Update(makeKeyMsg("n"))
+	if cmd == nil {
+		t.Error("n returned no command; the Branch cursor will not blink")
+	}
+}
+
+// While busy the status line names the work; the key line must not repeat it.
+func TestBranchForm_BusyVerbShownOnce(t *testing.T) {
+	s := newBranchForm(testFormOptions())
+	s.Branch.SetValue("abc-12")
+	s.syncAlias()
+	s.Busy = true
+	s.Log = NewActivityLog(formLogWidth(80), 6)
+	s.Log.AddLine("Creating worktree 'abc-12'...")
+	out := ansi.Strip(renderBranchForm(s, 80, 24, "⠋"))
+	if n := strings.Count(out, "creating…"); n != 1 {
+		t.Errorf("creating… appears %d times, want 1:\n%s", n, out)
+	}
+}
+
+// On a short terminal the newest log line, which carries the spinner, stays
+// in view.
+func TestBranchForm_BusyLogTailVisibleWhenShort(t *testing.T) {
+	s := newBranchForm(testFormOptions())
+	s.Branch.SetValue("abc-12")
+	s.syncAlias()
+	s.Busy = true
+	s.Log = NewActivityLog(formLogWidth(80), 6)
+	for _, l := range []string{"one", "two", "three", "four", "newest step"} {
+		s.Log.AddLine(l)
+	}
+	out := ansi.Strip(renderBranchForm(s, 80, 10, "⠋"))
+	if !strings.Contains(out, "⠋ newest step") {
+		t.Errorf("newest log line scrolled out of view:\n%s", out)
+	}
+}
+
+func TestIssueBrowser_SeedsBranchName(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40), withIssueData())
+	next, _ := m.Update(makeKeyMsg("enter"))
+	m = next.(Model)
+	if m.branchForm == nil {
+		t.Fatal("enter on an issue did not open the form")
+	}
+	if got := m.branchForm.branchValue(); got != "issue-101" {
+		t.Errorf("branch = %q, want issue-101", got)
+	}
+	if got := m.branchForm.aliasValue(); got != "issue-101" {
+		t.Errorf("alias = %q, want issue-101", got)
 	}
 }

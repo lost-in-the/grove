@@ -148,7 +148,7 @@ func (m Model) handleIssueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) openCreateWizardForIssue(issue *tracker.Issue) (tea.Model, tea.Cmd) {
-	return m.openBranchForm(branchFormPrefill{Alias: fmt.Sprintf("issue-%d", issue.Number)})
+	return m.openBranchForm(branchFormPrefill{Branch: fmt.Sprintf("issue-%d", issue.Number)})
 }
 
 // renderIssueItemList renders a scrollable list of issue items with cursor, scroll window, and overflow indicator.

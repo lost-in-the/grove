@@ -108,7 +108,10 @@ const noField formField = -1
 // four rows that depend on the mode.
 func (s *BranchFormState) bodyLines(inner int, spinner string) ([]string, int) {
 	if s.Log != nil && (s.Busy || s.Log.IsDone()) {
-		return strings.Split(s.Log.View(spinner), "\n"), 0
+		// Keep the newest line, which carries the spinner or the result,
+		// in view when the terminal is too short for the whole log.
+		lines := strings.Split(strings.TrimRight(s.Log.View(spinner), "\n"), "\n")
+		return lines, len(lines) - 1
 	}
 	indent := strings.Repeat(" ", formLabelWidth)
 	lines := []string{s.label("Branch", fieldBranch) + s.Branch.View()}

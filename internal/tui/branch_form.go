@@ -402,6 +402,15 @@ func (s *BranchFormState) setFocus(f formField) tea.Cmd {
 	return s.input(f).Focus()
 }
 
+// focusCmd re-focuses the focused input and returns its cursor blink. The
+// constructors focus a field before a Model exists to run the command.
+func (s *BranchFormState) focusCmd() tea.Cmd {
+	if s.Focus == fieldChanges {
+		return nil
+	}
+	return s.input(s.Focus).Focus()
+}
+
 func (s *BranchFormState) moveFocus(delta int) tea.Cmd {
 	order := s.fieldOrder()
 	idx := 0
@@ -615,7 +624,7 @@ func (s *BranchFormState) status() (string, formStatusKind) {
 
 func (s *BranchFormState) keyLine() string {
 	if s.Busy {
-		return s.busyVerb()
+		return "wait for this to finish"
 	}
 	if s.Log != nil {
 		return "any key to edit · esc back"
@@ -772,6 +781,9 @@ func (m Model) openBranchForm(p branchFormPrefill) (tea.Model, tea.Cmd) {
 	s := newBranchForm(m.branchFormOptionsFor())
 	s.setWidth(m.width, m.height)
 	cmd := s.applyPrefill(p)
+	if cmd == nil {
+		cmd = s.focusCmd()
+	}
 	m.branchForm = s
 	m.pushView(ViewBranchForm)
 	return m, cmd
@@ -784,7 +796,7 @@ func (m Model) openCopyForm(source WorktreeItem) (tea.Model, tea.Cmd) {
 	s.setWidth(m.width, m.height)
 	m.branchForm = s
 	m.pushView(ViewBranchForm)
-	return m, wipCheckCmd(source.Path)
+	return m, tea.Batch(s.focusCmd(), wipCheckCmd(source.Path))
 }
 
 // openSwitchForm opens the form in Switch mode for target, and starts the
@@ -794,7 +806,7 @@ func (m Model) openSwitchForm(target WorktreeItem) (tea.Model, tea.Cmd) {
 	s.setWidth(m.width, m.height)
 	m.branchForm = s
 	m.pushView(ViewBranchForm)
-	return m, wipCheckCmd(target.Path)
+	return m, tea.Batch(s.focusCmd(), wipCheckCmd(target.Path))
 }
 
 func (m Model) handleBranchFormKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
