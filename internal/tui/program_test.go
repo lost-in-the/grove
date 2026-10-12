@@ -129,7 +129,7 @@ func TestProgram_HelpOverlay_QuestionMarkToggles(t *testing.T) {
 // that TestProgram_HelpOverlay_QuestionMarkToggles verifies the overlay's
 // open/closed state machine end-to-end.
 
-func TestProgram_UpdateOverlay_OpensOnUWhenAvailable(t *testing.T) {
+func TestProgram_UpdateOverlay_OpensOnGUWhenAvailable(t *testing.T) {
 	repo := setupRailsFixture(t)
 	mgr, stateMgr := newTestManagers(t, repo)
 	m := NewModel(mgr, stateMgr, repo)
@@ -148,7 +148,8 @@ func TestProgram_UpdateOverlay_OpensOnUWhenAvailable(t *testing.T) {
 		return regexp.MustCompile(`(?i)rails-app`).MatchString(s)
 	}, teatest.WithDuration(5*time.Second))
 
-	// Press u — modal should open with "Update available" and the latest version.
+	// g u: the modal opens with "Update available" and the latest version.
+	tm.Send(tea.KeyPressMsg{Code: 'g', Text: "g"})
 	tm.Send(tea.KeyPressMsg{Code: 'u', Text: "u"})
 
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {

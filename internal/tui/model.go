@@ -986,7 +986,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.helpOverlay, cmd = m.helpOverlay.Update(msg)
 		return m, cmd
 	case ViewUpdate:
-		if key.Matches(msg, m.keys.Update) || key.Matches(msg, m.keys.Escape) {
+		if key.Matches(msg, m.keys.Escape) {
 			m.popView()
 		}
 		return m, nil
@@ -1001,14 +1001,6 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.helpOverlay.Open(m.activeView(), m.width, m.height)
 		m.pushView(ViewHelp)
-		return m, nil
-	}
-
-	// u opens the update modal when an update is available and no text input
-	// is focused. Same gating as ?-for-help.
-	if key.Matches(msg, m.keys.Update) && !m.viewHasTextInput() && m.updateAvailable() {
-		m.updateOverlay.Open(version.Version, m.updateLatestVersion, m.updateLatestURL)
-		m.pushView(ViewUpdate)
 		return m, nil
 	}
 

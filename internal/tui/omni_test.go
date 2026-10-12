@@ -127,7 +127,7 @@ func TestOmniResults_ActionsScope(t *testing.T) {
 func TestOmniActionsFrom_RunnableOnly(t *testing.T) {
 	for _, a := range omniActionsFrom(dashboardActions()) {
 		switch a.ID {
-		case "list.navigate", "list.filter", "list.page", "goto.open", "pin.open", "pin.switch", "detail.close", "app.back", "app.help", "app.update":
+		case "list.navigate", "list.filter", "list.page", "goto.open", "pin.open", "pin.switch", "detail.close", "app.back", "app.help":
 			t.Errorf("omni offers %s", a.ID)
 		}
 		if a.Run == nil {

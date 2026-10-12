@@ -87,10 +87,9 @@ func dashboardActions() []Action {
 				m.updateLayout()
 				return m, nil
 			}},
-		// ? and u run from handleKey in every view; their entries feed the
-		// footer and keep the key map and this table in step.
+		// ? runs from handleKey in every view; its entry feeds the footer
+		// and keeps the key map and this table in step.
 		{ID: "app.help", Keys: []string{"?"}, Label: "help", Footer: 7},
-		{ID: "app.update", Keys: []string{"u"}, Label: "update", Synonyms: []string{"upgrade"}},
 		{ID: "app.messages", Label: "messages", Synonyms: []string{"warnings", "errors", "log", "history"},
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) { return m.openMessages() }},
 		{ID: "app.shortcuts", Label: "keyboard shortcuts", Synonyms: []string{"help", "keys", "cli commands"},

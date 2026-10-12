@@ -86,9 +86,7 @@ func (u *UpdateOverlay) View(width, height int) string {
 	}
 
 	footerRule := updateOverlayRuleStyle.Render(strings.Repeat("─", textWidth))
-	// Group both keys with a single action label.
-	footerKeys := "  " +
-		Styles.HelpKey.Render("esc/u") + "   " + Styles.HelpDesc.Render("close")
+	footerKeys := "  " + Styles.HelpKey.Render("esc") + " " + Styles.HelpDesc.Render("close")
 
 	parts := []string{
 		title,
