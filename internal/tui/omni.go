@@ -63,7 +63,7 @@ const omniGroupMax = 5
 // list owns, not the strip openers, not the digit slots, and not no-ops.
 func omniActionsFrom(all []Action) []Action {
 	skip := map[string]bool{
-		"goto.open": true, "pin.open": true, "pin.switch": true, "detail.close": true, "app.back": true,
+		"omni.open": true, "goto.open": true, "pin.open": true, "pin.switch": true, "detail.close": true, "app.back": true,
 	}
 	labels := map[string]bool{}
 	var out []Action

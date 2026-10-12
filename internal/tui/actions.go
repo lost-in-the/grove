@@ -17,7 +17,8 @@ type Action struct {
 	Keys     []string // the keys that run it, as key.Binding spells them
 	Display  string   // key text in the footer and strips; Keys[0] when empty
 	Layer    string   // "" for bare keys, "g" for the goto strip
-	Label    string
+	Label    string   // what the action does, as omni lists it
+	Short    string   // footer text when it differs from Label
 	Synonyms []string
 	Footer   int // position in the dashboard footer; 0 = not shown
 
@@ -59,22 +60,22 @@ func findAction(layer, k string) (Action, bool) {
 func dashboardActions() []Action {
 	return []Action{
 		{ID: "list.navigate", Keys: []string{"up", "k", "down", "j"}, Display: "↑↓", Label: "navigate", Footer: 1},
-		{ID: "worktree.switch", Keys: []string{"enter"}, Label: "switch", Footer: 2,
+		{ID: "worktree.switch", Keys: []string{"enter"}, Label: "switch to worktree", Short: "switch", Footer: 2,
 			Synonyms: []string{"go to", "open", "cd"},
 			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { return m.handleDashboardEnterKey() }},
-		{ID: "worktree.switch_up", Keys: []string{"U"}, Label: "up", Footer: 3,
+		{ID: "worktree.switch_up", Keys: []string{"U"}, Label: "switch and start containers", Short: "up", Footer: 3,
 			Synonyms: []string{"switch and start containers", "docker up"},
 			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { return m.handleDashboardSwitchUpKey() }},
-		{ID: "worktree.new", Keys: []string{"n"}, Label: "new", Footer: 4,
+		{ID: "worktree.new", Keys: []string{"n"}, Label: "new worktree", Short: "new", Footer: 4,
 			Synonyms: []string{"create", "add", "new worktree"},
 			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { return m.handleDashboardNewKey() }},
 		{ID: "omni.open", Keys: []string{"space"}, Display: "␣", Label: "find",
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) { return m.openOmni(omniScopeAll) }},
 		{ID: "list.filter", Keys: []string{"/"}, Label: "filter", Footer: 5, Synonyms: []string{"search"}},
-		{ID: "detail.open", Keys: []string{"tab", "l"}, Label: "detail", Footer: 6,
+		{ID: "detail.open", Keys: []string{"tab", "l"}, Label: "show detail", Short: "detail", Footer: 6,
 			Synonyms: []string{"details", "info"},
 			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { m.openDetail(); return m, nil }},
-		{ID: "list.sort", Keys: []string{"o"}, Label: "sort", Footer: 7,
+		{ID: "list.sort", Keys: []string{"o"}, Label: "change sort", Short: "sort", Footer: 7,
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) {
 				m.helpFooter.SetHighlight("o")
 				m.sortMode = m.sortMode.Next()
@@ -234,7 +235,11 @@ func dashboardFooterHints() []Hint {
 	slices.SortStableFunc(marked, func(x, y Action) int { return x.Footer - y.Footer })
 	hints := make([]Hint, len(marked))
 	for i, a := range marked {
-		hints[i] = Hint{a.display(), a.Label}
+		label := a.Label
+		if a.Short != "" {
+			label = a.Short
+		}
+		hints[i] = Hint{a.display(), label}
 	}
 	return hints
 }

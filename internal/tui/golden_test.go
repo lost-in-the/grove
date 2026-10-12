@@ -395,3 +395,30 @@ func TestGolden_Dashboard_GStrip(t *testing.T) {
 		})
 	}
 }
+
+// Omni over the dashboard: empty, with a query, and scoped to actions.
+func TestGolden_Omni(t *testing.T) {
+	cases := map[string]func(m *Model){
+		"empty": func(m *Model) {
+			m.pins = pinSet{"1": "root"}
+			next, _ := m.openOmni(omniScopeAll)
+			*m = next.(Model)
+		},
+		"query": func(m *Model) {
+			next, _ := m.openOmni(omniScopeAll)
+			*m = next.(Model)
+			m.omni.Input.SetValue("fix")
+			m.omni.refresh()
+		},
+		"actions": func(m *Model) {
+			next, _ := m.openOmni(omniScopeActions)
+			*m = next.(Model)
+		},
+	}
+	for name, setup := range cases {
+		t.Run(name, func(t *testing.T) {
+			m := goldenModel(t, sizeStandard, withItems(5), setup)
+			golden.RequireEqual(t, []byte(m.viewString()))
+		})
+	}
+}

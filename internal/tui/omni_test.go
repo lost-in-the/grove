@@ -156,3 +156,22 @@ func TestOmniResults_200ItemsFast(t *testing.T) {
 		t.Errorf("50 rounds over 200 worktrees took %v", d)
 	}
 }
+
+// Omni does not offer itself, and action labels read as full phrases.
+func TestOmniActionsFrom_DescriptiveAndNotItself(t *testing.T) {
+	byID := map[string]Action{}
+	for _, a := range omniActionsFrom(dashboardActions()) {
+		byID[a.ID] = a
+	}
+	if _, ok := byID["omni.open"]; ok {
+		t.Error("omni offers find, which opens omni")
+	}
+	for id, want := range map[string]string{
+		"worktree.switch": "switch to worktree", "worktree.switch_up": "switch and start containers",
+		"worktree.new": "new worktree", "detail.open": "show detail", "list.sort": "change sort",
+	} {
+		if got := byID[id].Label; got != want {
+			t.Errorf("%s label = %q, want %q", id, got, want)
+		}
+	}
+}

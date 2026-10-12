@@ -3,6 +3,9 @@ package tui
 import (
 	"testing"
 
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
@@ -146,5 +149,47 @@ func TestOmni_KeyboardShortcutsOpensHelp(t *testing.T) {
 	m = sendKey(m, "enter")
 	if m.activeView() != ViewHelp {
 		t.Errorf("keyboard shortcuts: view %v, want help", m.activeView())
+	}
+}
+
+// Typing never changes the frame: its size depends only on the terminal.
+func TestOmni_FrameSizeIsFixed(t *testing.T) {
+	for _, size := range [][2]int{{80, 24}, {120, 40}, {60, 24}, {80, 12}} {
+		m := newTestModel(withItems(8), withSize(size[0], size[1]))
+		m = sendKey(m, "space")
+		var w0, h0 int
+		for i, q := range []string{"", "e", "zzzz", "re"} {
+			if i > 0 {
+				m.omni.Input.SetValue(q)
+				m.omni.refresh()
+			}
+			out := renderOmni(m.omni, size[0], size[1])
+			w, h := lipgloss.Width(out), lipgloss.Height(out)
+			if i == 0 {
+				w0, h0 = w, h
+				continue
+			}
+			if w != w0 || h != h0 {
+				t.Errorf("%dx%d query %q: frame %dx%d, want %dx%d", size[0], size[1], q, w, h, w0, h0)
+			}
+		}
+		if h0 > size[1]-formTop {
+			t.Errorf("%dx%d: frame height %d runs off the screen", size[0], size[1], h0)
+		}
+	}
+}
+
+// Matched letters are drawn differently from the rest of the row.
+func TestOmni_HighlightsMatches(t *testing.T) {
+	if Colors.Primary == nil {
+		t.Skip("no colors")
+	}
+	plain := litRunes("rename worktree", nil, Styles.NormalItem)
+	lit := litRunes("rename worktree", []int{0, 1}, Styles.NormalItem)
+	if plain == lit {
+		t.Error("highlighted runes render the same as plain text")
+	}
+	if ansi.Strip(lit) != "rename worktree" {
+		t.Errorf("highlighting changed the text: %q", ansi.Strip(lit))
 	}
 }
