@@ -358,3 +358,12 @@ func TestGolden_Dashboard_PinStrip(t *testing.T) {
 		})
 	}
 }
+
+// Pinned rows show their slot digit in the lead column.
+func TestGolden_Dashboard_Pinned(t *testing.T) {
+	m := goldenModel(t, sizeWide, withItems(5), func(m *Model) {
+		m.pins = pinSet{"1": "root", "3": "testing"}
+		m.refreshDelegate()
+	})
+	golden.RequireEqual(t, []byte(m.viewString()))
+}

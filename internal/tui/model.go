@@ -810,8 +810,14 @@ func listSecondary(cfg *config.Config) string {
 
 // rowDelegate is the dashboard row delegate for the current settings.
 func (m *Model) rowDelegate() rowDelegate {
+	pinOf := map[string]string{}
+	for slot, alias := range m.pins {
+		pinOf[alias] = slot
+	}
 	return rowDelegate{
 		TwoLine:    !m.compactMode,
+		Pins:       len(m.pins) > 0,
+		PinOf:      pinOf,
 		AgentAware: m.agentAware,
 		Secondary:  listSecondary(m.cfg),
 		Now:        m.now,

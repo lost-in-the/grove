@@ -1,9 +1,9 @@
  [1m[1mtest-project[m · 5 worktrees · ⬍ name                                        3/5[m 
                                                                                 
-   ● root                                                               0s      
-   ○ feature-auth                                                      60m      
- ❯ ○ [1mfix-bug[m                                                            2h      
-   ● testing                                                            3h      
+ 1   ● root                                                             0s      
+     ○ feature-auth                                                    60m      
+   ❯ ○ [1mfix-bug[m                                                          2h      
+     ● testing                                                          3h      
                                                                                 
    [38;2;151;151;151m•[m[38;2;60;60;60m•[m                                                                           
  ── fix-bug ─────────────────────────────────────────────────────────────────── 

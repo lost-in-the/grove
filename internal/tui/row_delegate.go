@@ -22,8 +22,9 @@ import (
 // session and container tail. TwoLine adds the commit message below.
 type rowDelegate struct {
 	TwoLine    bool
-	Pins       bool // draw the pin column (phase 4b)
-	AgentAware bool // draw the agent column
+	Pins       bool              // draw the pin column
+	PinOf      map[string]string // alias -> slot digit
+	AgentAware bool              // draw the agent column
 	Secondary  string
 	Now        func() time.Time
 }
@@ -123,7 +124,8 @@ func (d rowDelegate) Render(w io.Writer, m list.Model, index int, listItem list.
 
 	var left strings.Builder
 	if d.Pins {
-		left.WriteString(plain.Render("  "))
+		slot := st(Styles.TextMuted).Render(d.PinOf[item.ShortName])
+		left.WriteString(pad(slot, rowLeadW))
 	}
 	if d.AgentAware {
 		left.WriteString(pad(agentGlyph(item.AgentStatus, st), rowLeadW))
