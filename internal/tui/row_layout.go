@@ -17,7 +17,7 @@ const (
 	rowAgeW        = 3
 	rowTailW       = 4 // session and container glyphs
 	rowAliasFloor  = 16
-	rowChipMin     = 6  // "⎇ " plus a few characters
+	rowChipMin     = 10 // "⎇ " plus enough of the branch to recognize
 	rowAliasCap    = 32 // longer aliases truncate rather than shed columns
 )
 

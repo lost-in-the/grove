@@ -113,3 +113,12 @@ func TestRowCounts(t *testing.T) {
 		}
 	}
 }
+
+// A chip too short to name the branch is dropped instead of shown.
+func TestLayoutColumns_ChipIsReadableOrGone(t *testing.T) {
+	for w := 44; w <= 200; w++ {
+		if l := layoutColumns(w, 0, 16, true); l.ChipW > 0 && l.ChipW < 10 {
+			t.Errorf("width %d: chip is %d cells", w, l.ChipW)
+		}
+	}
+}
