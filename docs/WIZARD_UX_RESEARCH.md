@@ -1,5 +1,7 @@
 # Wizard UX Research
 
+> Superseded by the branch form (redesign spec section 10, phase 3). Kept as research history.
+
 Research findings for three specific UX problems in the create-worktree wizard.
 
 ---

@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `esc` in the dashboard goes back exactly one level, and returns the cursor to the worktree it was on, even after the list refreshes.
 
 ### Changed
+- The New Worktree wizard is now a single form: Branch, Base, and Alias. It never moves or changes size, and its status line says what `enter` will do. A new branch now starts from the configured default branch, not from whatever the main checkout has checked out. An alias already used by another worktree is reported as an error instead of switching to that worktree.
 - Updated the terminal UI libraries: bubbletea 2.0.10, lipgloss 2.0.6, bubbles 2.1.1, and glamour v2, which removes the older lipgloss v1 from the build.
 - Building grove from source now requires Go 1.26 or newer (bubbletea 2.0.10 needs it).
 
