@@ -63,6 +63,16 @@ type ConfigState struct {
 // form is the active section's form, or nil before the config loads.
 func (s *ConfigState) form() *huh.Form { return s.Forms[s.Tab] }
 
+// focusOnInput reports whether a text input has focus, so digits and ?
+// must type rather than act.
+func (s *ConfigState) focusOnInput() bool {
+	if s.form() == nil {
+		return false
+	}
+	_, ok := s.form().GetFocusedField().(*huh.Input)
+	return ok
+}
+
 // unsaved counts the fields whose value differs from the one loaded from
 // disk. Call syncConfigFormValues first so bools are current.
 func (s *ConfigState) unsaved() int {
@@ -311,6 +321,21 @@ func (m Model) handleConfigKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	if key.Matches(msg, m.keys.Escape) {
 		return m.leaveConfig()
+	}
+
+	// Section keys (spec 11): ctrl+n / ctrl+p anywhere, before the form,
+	// whose selects would take them as down and up; digits only off text
+	// inputs, where they must type.
+	switch k := msg.String(); {
+	case k == "ctrl+n":
+		s.Tab = (s.Tab + 1) % ConfigTabCount
+		return m, nil
+	case k == "ctrl+p":
+		s.Tab = (s.Tab + ConfigTabCount - 1) % ConfigTabCount
+		return m, nil
+	case len(k) == 1 && k >= "1" && k <= "4" && !s.focusOnInput():
+		s.Tab = ConfigTab(k[0] - '1')
+		return m, nil
 	}
 
 	if s.form() != nil {

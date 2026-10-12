@@ -1566,6 +1566,8 @@ func (m Model) viewHasTextInput() bool {
 	switch m.activeView() {
 	case ViewBranchForm, ViewRename, ViewOmni:
 		return true
+	case ViewConfig:
+		return m.configState != nil && m.configState.focusOnInput()
 	case ViewPRs:
 		return m.prState != nil && m.prState.Filtering
 	case ViewIssues:
