@@ -12,35 +12,23 @@ import (
 	"github.com/lost-in-the/grove/internal/tuilog"
 )
 
-// handlePinKey handles m and the digits (spec 8.1). m opens the pin strip;
-// the next key pins (1-9), unpins (0), or closes it. A bare 1-9 switches to
-// the worktree in that slot.
-func (m Model) handlePinKey(msg tea.KeyPressMsg) (Model, tea.Cmd, bool) {
+// handlePinStripKey takes the key after m (spec 8.1): a digit pins (1-9)
+// or unpins (0) the selected worktree; any other key only closes the strip.
+// ctrl+c still quits.
+func (m Model) handlePinStripKey(msg tea.KeyPressMsg) (Model, tea.Cmd, bool) {
 	k := msg.String()
-	if m.pendingM {
-		m.pendingM = false
-		if len(k) == 1 && k[0] >= '0' && k[0] <= '9' {
-			if item, ok := m.selectedItem(); ok {
-				alias := item.ShortName
-				m.changePins(func(p pinSet) pinSet { return p.pin(k, alias) })
-			}
+	m.pendingM = false
+	if len(k) == 1 && k[0] >= '0' && k[0] <= '9' {
+		if item, ok := m.selectedItem(); ok {
+			alias := item.ShortName
+			m.changePins(func(p pinSet) pinSet { return p.pin(k, alias) })
 		}
-		m.updateLayout()
-		if k == "ctrl+c" {
-			return m, nil, false // still quits
-		}
-		return m, nil, true
 	}
-	switch {
-	case k == "m":
-		m.pendingM = true
-		m.updateLayout()
-		return m, nil, true
-	case len(k) == 1 && k[0] >= '1' && k[0] <= '9':
-		updated, cmd := m.switchToSlot(k)
-		return updated, cmd, true
+	m.updateLayout()
+	if k == "ctrl+c" {
+		return m, nil, false
 	}
-	return m, nil, false
+	return m, nil, true
 }
 
 // switchToSlot switches to the worktree pinned to slot, or flashes that the

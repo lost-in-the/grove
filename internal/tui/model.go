@@ -904,12 +904,12 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// other dashboard key sees it.
 	if m.activeView() == ViewDashboard && !m.detailFocused {
 		if m.pendingG {
-			if updated, handled := m.handleMotionKey(msg); handled {
-				return updated, nil
+			if updated, cmd, handled := m.handleGLayerKey(msg); handled {
+				return updated, cmd
 			}
 		}
 		if m.pendingM {
-			if updated, cmd, handled := m.handlePinKey(msg); handled {
+			if updated, cmd, handled := m.handlePinStripKey(msg); handled {
 				return updated, cmd
 			}
 		}
@@ -978,130 +978,33 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.detailFocused {
 		return m.handleDashboardDetailKey(msg)
 	}
-	if updated, cmd, handled := m.handlePinKey(msg); handled {
-		return updated, cmd
+	// The action table decides (spec 15.4). Keys it gives the list, and
+	// keys it does not know, go to the list.
+	k := msg.String()
+	a, ok := findAction("", k)
+	if !ok || a.Run == nil {
+		return m.routeToList(msg)
 	}
-	if msg.String() == "-" {
-		return m.switchToLastActive()
+	if a.Enabled != nil && !a.Enabled(m) {
+		return m, nil
 	}
-	if updated, handled := m.handleMotionKey(msg); handled {
-		return updated, nil
-	}
-
-	switch {
-	// With a filter applied, esc clears it (the list's own ClearFilter
-	// behavior) instead of quitting the whole dashboard, which is what the
-	// docs promise and what the un-reached list binding intended (B38). q
-	// still quits regardless.
-	case key.Matches(msg, m.keys.Escape) && m.list.FilterState() == list.FilterApplied:
-		m.list.ResetFilter()
-		return m, nil
-
-	case key.Matches(msg, m.keys.Quit), key.Matches(msg, m.keys.Escape):
-		return m, tea.Quit
-
-	case key.Matches(msg, m.keys.Tab):
-		m.openDetail()
-		return m, nil
-
-	case msg.String() == "B":
-		m.openSelectedPRURL()
-		return m, nil
-
-	case key.Matches(msg, m.keys.Refresh):
-		m.helpFooter.SetHighlight("r")
-		m.loading = true
-		return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
-
-	case key.Matches(msg, m.keys.New):
-		return m.handleDashboardNewKey()
-
-	case key.Matches(msg, m.keys.Delete):
-		return m.handleDashboardDeleteKey()
-
-	case key.Matches(msg, m.keys.SwitchUp):
-		return m.handleDashboardSwitchUpKey()
-
-	case key.Matches(msg, m.keys.Enter):
-		return m.handleDashboardEnterKey()
-
-	case key.Matches(msg, m.keys.ViewMode):
-		m.helpFooter.SetHighlight("v")
-		m.toggleCompactMode()
-		return m, nil
-
-	case key.Matches(msg, m.keys.Sort):
-		m.helpFooter.SetHighlight("o")
-		m.sortMode = m.sortMode.Next()
-		return m, m.applySortToList()
-
-	case key.Matches(msg, m.keys.SortReverse):
-		m.helpFooter.SetHighlight("O")
-		m.sortReversed = !m.sortReversed
-		return m, m.applySortToList()
-
-	case key.Matches(msg, m.keys.All):
-		return m.enterBulkMode()
-
-	case key.Matches(msg, m.keys.PRs):
-		return m.enterPRView()
-
-	case key.Matches(msg, m.keys.Issues):
-		return m.enterIssueView()
-
-	case key.Matches(msg, m.keys.Fork):
-		return m.handleDashboardForkKey()
-
-	case key.Matches(msg, m.keys.Sync):
-		m.pushView(ViewSync)
-		m.syncState = NewSyncState(m.existingWorktreeItems())
-		return m, gatherWIPInfoCmd(m.existingWorktreeItems())
-
-	case key.Matches(msg, m.keys.Config):
-		m.pushView(ViewConfig)
-		m.configState = NewConfigState()
-		return m, loadConfigCmd()
-
-	case key.Matches(msg, m.keys.Rename):
-		return m.handleDashboardRenameKey()
-
-	case key.Matches(msg, m.keys.Checkout):
-		return m.handleDashboardCheckoutKey()
-	}
-
-	return m.routeToList(msg)
+	return a.Run(m, k)
 }
 
-// handleMotionKey handles the vim motions on the dashboard list: gg top,
-// G bottom, ctrl+d and ctrl+u half a page, l to open the detail pane. g
-// waits for a second key; any other key after it does nothing.
-func (m Model) handleMotionKey(msg tea.KeyPressMsg) (Model, bool) {
+// handleGLayerKey takes the key after g (spec 6.3): an action from the g
+// strip, or anything else, which only closes the strip. ctrl+c still quits.
+func (m Model) handleGLayerKey(msg tea.KeyPressMsg) (Model, tea.Cmd, bool) {
 	k := msg.String()
-	if m.pendingG {
-		m.pendingG = false
-		if k == "ctrl+c" {
-			return m, false // still quits
-		}
-		if k == "g" {
-			m.moveCursorTo(0)
-		}
-		return m, true
+	m.pendingG = false
+	m.updateLayout()
+	if k == "ctrl+c" {
+		return m, nil, false
 	}
-	switch k {
-	case "g":
-		m.pendingG = true
-	case "G":
-		m.moveCursorTo(len(m.list.VisibleItems()) - 1)
-	case "ctrl+d":
-		m.moveCursorTo(m.list.Index() + m.halfPage())
-	case "ctrl+u":
-		m.moveCursorTo(m.list.Index() - m.halfPage())
-	case "l":
-		m.openDetail()
-	default:
-		return m, false
+	if a, ok := findAction("g", k); ok && a.Run != nil {
+		next, cmd := a.Run(m, k)
+		return next.(Model), cmd, true
 	}
-	return m, true
+	return m, nil, true
 }
 
 // halfPage is half the rows the list shows per page, at least 1.

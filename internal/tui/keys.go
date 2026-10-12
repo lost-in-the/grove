@@ -53,6 +53,19 @@ type KeyMap struct {
 
 	// Update modal
 	Update key.Binding
+
+	// Dashboard motion, detail, pins, and goto
+	Top          key.Binding // g: g strip; g g goes to the top
+	Bottom       key.Binding
+	HalfPageDown key.Binding
+	HalfPageUp   key.Binding
+	Page         key.Binding // owned by the list
+	DetailOpen   key.Binding
+	DetailClose  key.Binding
+	Pin          key.Binding
+	Slots        key.Binding
+	LastActive   key.Binding
+	OpenPR       key.Binding
 }
 
 // ShortHelp returns keybindings for the short help view (help.KeyMap interface).
@@ -194,5 +207,16 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("u"),
 			key.WithHelp("u", "update"),
 		),
+		Top:          key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "goto")),
+		Bottom:       key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "bottom")),
+		HalfPageDown: key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "half page down")),
+		HalfPageUp:   key.NewBinding(key.WithKeys("ctrl+u"), key.WithHelp("ctrl+u", "half page up")),
+		Page:         key.NewBinding(key.WithKeys("pgup", "pgdown", "home", "end"), key.WithHelp("pgup/pgdown", "page")),
+		DetailOpen:   key.NewBinding(key.WithKeys("l"), key.WithHelp("l", "detail")),
+		DetailClose:  key.NewBinding(key.WithKeys("h"), key.WithHelp("h", "list")),
+		Pin:          key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "pin")),
+		Slots:        key.NewBinding(key.WithKeys("1", "2", "3", "4", "5", "6", "7", "8", "9"), key.WithHelp("1-9", "pinned worktree")),
+		LastActive:   key.NewBinding(key.WithKeys("-"), key.WithHelp("-", "previous worktree")),
+		OpenPR:       key.NewBinding(key.WithKeys("B"), key.WithHelp("B", "open PR in browser")),
 	}
 }
