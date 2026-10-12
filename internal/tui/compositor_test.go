@@ -100,3 +100,28 @@ func TestComposeOverlay_BlanksHalfCutWideGlyph(t *testing.T) {
 		t.Errorf("got %q, want %q", got, "界 XXX界界")
 	}
 }
+
+func TestComposeOverlayAt_AnchorsAtRow(t *testing.T) {
+	bg := strings.TrimSuffix(strings.Repeat("..........\n", 6), "\n")
+	lines := strings.Split(ansi.Strip(composeOverlayAt(bg, "XX", 10, 6, 1)), "\n")
+	if lines[1] != "....XX...." {
+		t.Errorf("row 1 = %q, want the overlay at the top anchor", lines[1])
+	}
+	if lines[2] != ".........." {
+		t.Errorf("row 2 = %q, want background", lines[2])
+	}
+}
+
+func TestComposeOverlayAt_ShiftsUpWhenTooTall(t *testing.T) {
+	overlay := "A\nB\nC\nD"
+	lines := strings.Split(ansi.Strip(composeOverlayAt("", overlay, 4, 5, 3)), "\n")
+	if len(lines) != 5 || strings.TrimSpace(lines[4]) != "D" {
+		t.Errorf("got %q; want 5 rows ending with D", lines)
+	}
+}
+
+func TestComposeOverlayAt_NegativeTopCenters(t *testing.T) {
+	if composeOverlayAt("bg", "X", 10, 5, -1) != composeOverlay("bg", "X", 10, 5) {
+		t.Error("top -1 should match composeOverlay")
+	}
+}
