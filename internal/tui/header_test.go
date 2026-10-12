@@ -145,3 +145,22 @@ func TestDashboardHeader_CountsAgentsOnlyWhenAgentAware(t *testing.T) {
 		t.Errorf("tmux: blocked %d done %d, want none", h.Blocked, h.Done)
 	}
 }
+
+// The upgrade badge sits before the cursor position and never sheds, even
+// beside the heaviest left side (spec 5.5).
+func TestHeader_UpgradeBadge(t *testing.T) {
+	h := Header{ProjectName: "grove", WorktreeCount: 5, SortLabel: "name", Upgrade: "0.12.0", Cursor: 1, Total: 5}
+	if view := stripAnsi(h.View(100)); !strings.HasSuffix(view, "⭡0.12.0  1/5 ") {
+		t.Errorf("wide: %q", view)
+	}
+
+	h = Header{ProjectName: "a-rather-long-project-name", WorktreeCount: 12, Blocked: 2, Done: 1,
+		SortLabel: "attention", SortReversed: true, Upgrade: "0.12.0", Cursor: 10, Total: 10}
+	view := stripAnsi(h.View(44))
+	if lipgloss.Width(view) != 44 {
+		t.Errorf("header is %d cells, want 44: %q", lipgloss.Width(view), view)
+	}
+	if !strings.HasSuffix(view, "⭡0.12.0  10/10 ") {
+		t.Errorf("at 44 the badge and 10/10 should stay: %q", view)
+	}
+}

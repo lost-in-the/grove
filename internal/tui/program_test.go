@@ -164,9 +164,8 @@ func TestProgram_UpdateOverlay_OpensOnUWhenAvailable(t *testing.T) {
 }
 
 // TestProgram_UpdateOverlay_GateRespectsSkip verifies NewModel honors
-// updatecheck.Skip — when the env-var opt-out is set, NewModel must produce
-// a model with an empty updateLatestVersion regardless of cache contents.
-// This is the parity guarantee with the CLI box and `grove version`.
+// updatecheck.Skip for the badge, the parity guarantee with the CLI box and
+// `grove version`. The cache is still read, so `g u` can report it (spec 12).
 func TestProgram_UpdateOverlay_GateRespectsSkip(t *testing.T) {
 	t.Setenv("GROVE_NO_UPDATE_NOTIFIER", "1")
 
@@ -174,11 +173,8 @@ func TestProgram_UpdateOverlay_GateRespectsSkip(t *testing.T) {
 	mgr, stateMgr := newTestManagers(t, repo)
 	m := NewModel(mgr, stateMgr, repo)
 
-	if m.updateLatestVersion != "" {
-		t.Fatalf("expected updateLatestVersion to be empty when Skip returns true, got %q", m.updateLatestVersion)
-	}
-	if m.updateLatestURL != "" {
-		t.Fatalf("expected updateLatestURL to be empty when Skip returns true, got %q", m.updateLatestURL)
+	if m.updateNotify {
+		t.Fatal("updateNotify should be false when Skip returns true")
 	}
 }
 

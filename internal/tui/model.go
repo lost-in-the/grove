@@ -76,6 +76,7 @@ type Model struct {
 	// don't read the cache file on every render. Empty strings = no update.
 	updateLatestVersion string
 	updateLatestURL     string
+	updateNotify        bool // update notices allowed; opt-outs hide the badge only
 
 	// Keys
 	keys KeyMap
@@ -184,14 +185,11 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 	// available (which is the common case). Reading from disk here instead of
 	// on every render keeps the hot path allocation-free.
 	//
-	// Honor Skip for the in-TUI update surfaces (badge + u-keybind modal),
-	// matching the CLI box and `grove version` annotation. Users who set
-	// GROVE_NO_UPDATE_NOTIFIER, GROVE_AGENT_MODE, etc. get no update UI anywhere.
-	// Use `grove --check-update` to force a synchronous check.
-	var latest, latestURL string
-	if !updatecheck.Skip(false, version.Version) {
-		latest, latestURL, _ = updatecheck.CachedRelease(version.Version)
-	}
+	// Skip (GROVE_NO_UPDATE_NOTIFIER, GROVE_AGENT_MODE, etc.) hides the header
+	// badge, matching the CLI box and `grove version`. `g u` is an explicit
+	// request, so it still reports the cache (spec 12).
+	latest, latestURL, _ := updatecheck.CachedRelease(version.Version)
+	notify := !updatecheck.Skip(false, version.Version)
 
 	return Model{
 		worktreeMgr:         mgr,
@@ -215,6 +213,7 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		updateOverlay:       NewUpdateOverlay(),
 		updateLatestVersion: latest,
 		updateLatestURL:     latestURL,
+		updateNotify:        notify,
 		loading:             true,
 	}
 }
@@ -1573,38 +1572,6 @@ func (m Model) updateAvailable() bool {
 	return m.updateLatestVersion != "" && m.updateLatestVersion != version.Version
 }
 
-// appendUpdateBadge appends a passive update-available badge to the given
-// footer when an update is cached. Returns footer unchanged otherwise.
-// The badge is appended on the same line if it fits within the width
-// budget (m.width-4), or on a new line below otherwise.
-func (m Model) appendUpdateBadge(footer string) string {
-	if !m.updateAvailable() {
-		return footer
-	}
-	badge := RenderUpdateBadge(version.Version, m.updateLatestVersion)
-	if badge == "" {
-		return footer
-	}
-
-	// Find the longest line in the footer. If the badge fits beside it with
-	// a separator, append inline; otherwise add as a new line.
-	maxLineWidth := 0
-	for _, line := range strings.Split(footer, "\n") {
-		if w := lipgloss.Width(line); w > maxLineWidth {
-			maxLineWidth = w
-		}
-	}
-	sep := Styles.HelpSep.Render("  ·  ")
-	budget := m.width - 4
-	if maxLineWidth+lipgloss.Width(sep)+lipgloss.Width(badge) <= budget {
-		// Append to the last line of the footer.
-		lines := strings.Split(footer, "\n")
-		lines[len(lines)-1] = lines[len(lines)-1] + sep + badge
-		return strings.Join(lines, "\n")
-	}
-	return footer + "\n  " + badge
-}
-
 // viewHasTextInput returns true if the active view has a focused text input
 // that should receive ? as a character rather than triggering help.
 func (m Model) viewHasTextInput() bool {
@@ -1633,7 +1600,6 @@ func (m Model) renderDashboard() string {
 	} else {
 		footer = m.helpFooter.RenderCompact(ViewDashboard, m.width-4)
 	}
-	footer = m.appendUpdateBadge(footer)
 	if strip := m.renderOpenStrip(); strip != "" {
 		footer = strip + "\n" + footer
 	}
@@ -1655,6 +1621,9 @@ func (m Model) buildDashboardHeader() Header {
 		SortReversed:  m.sortReversed,
 		Cursor:        m.list.Index() + 1,
 		Total:         len(m.list.VisibleItems()),
+	}
+	if m.updateNotify && m.updateAvailable() {
+		h.Upgrade = m.updateLatestVersion
 	}
 	if m.agentAware {
 		for _, li := range m.list.Items() {
