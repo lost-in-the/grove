@@ -31,10 +31,13 @@ type Action struct {
 
 // display is the key text shown for the action.
 func (a Action) display() string {
-	if a.Display != "" {
+	switch {
+	case a.Display != "":
 		return a.Display
+	case len(a.Keys) > 0:
+		return a.Keys[0]
 	}
-	return a.Keys[0]
+	return ""
 }
 
 func (a Action) matches(layer, k string) bool {
