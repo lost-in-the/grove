@@ -247,23 +247,26 @@ Steps:
 
 ### Config Editor (`c`)
 
-An in-TUI editor for your grove config. Changes take effect immediately after saving.
+A full-screen editor for the project's grove config. Changes take effect immediately after saving.
 
-**Tabs** — Use `tab` / `shift+tab` to move between:
+The header reads `<project> ▸ settings`, with `● 2 unsaved` on the right while anything differs from the file on disk. Below it are the section tabs, with the active one raised:
 
-| Tab | Settings |
+| Section | Settings |
 |-----|----------|
-| General | `project_name`, `alias`, `projects_dir`, `default_branch` |
-| Behavior | `dirty_handling`, `tmux_mode`, `naming_pattern` |
-| Plugins | Docker plugin `enabled`, `auto_start`, `auto_stop` |
-| Protection | `protected` list, `immutable` list |
+| `[1] general` | `project_name`, `projects_dir`, `default_branch` |
+| `[2] behavior` | `dirty_handling`, `tmux_mode`, `naming_pattern` |
+| `[3] plugins` | Docker plugin `enabled`, `auto_start`, `auto_stop` |
+| `[4] protection` | `protected` list, `immutable` list |
 
-**Editing a field:**
-1. Navigate to the field with `↑` / `↓`.
-2. Press `enter` to open the inline editor (text input or dropdown).
-3. Confirm with `enter` or cancel with `esc`.
+| Key | Action |
+|-----|--------|
+| `tab` / `shift+tab` | Next / previous field |
+| `enter` | Next field; on a section's last field, the next section |
+| `ctrl+n` / `ctrl+p` | Next / previous section, from anywhere |
+| `1`-`4` | Jump to a section, except while typing in a text field |
+| `esc` | Close; with unsaved changes, asks first (`enter` save, `esc` discard) |
 
-Changed fields are highlighted in yellow. When you press `esc` with unsaved changes, a save confirmation prompt appears — press `enter` to save, `esc` to discard.
+Every section has the same height, so the frame never jumps. Undoing a change back to the value on disk clears it from the unsaved count. Narrow terminals show only the active tab's name.
 
 ### Bulk Delete (`a`)
 
