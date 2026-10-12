@@ -685,11 +685,7 @@ func (m Model) handleConfigLoaded(msg configLoadedMsg) (tea.Model, tea.Cmd) {
 			if overlayWidth > 80 {
 				overlayWidth = 80
 			}
-			contentWidth := overlayWidth - 6
-			form, vals := buildConfigForm(m.configState.Fields, contentWidth)
-			m.configState.Form = form
-			m.configState.FormValues = vals
-			return m, form.Init()
+			return m, m.configState.buildForms(overlayWidth-6, 0)
 		}
 	}
 	return m, nil
@@ -782,7 +778,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleDefault(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.layoutView() == ViewConfig && m.configState != nil && m.configState.Form != nil {
+	if m.layoutView() == ViewConfig && m.configState != nil && m.configState.form() != nil {
 		return m.handleConfigFormMsg(msg)
 	}
 

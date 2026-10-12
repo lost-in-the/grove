@@ -73,7 +73,7 @@ func TestConfigOverlay_NilState(t *testing.T) {
 func TestConfigOverlay_FormBuiltOnLoad(t *testing.T) {
 	m := newConfigTestModel(t)
 
-	if m.configState.Form == nil {
+	if m.configState.form() == nil {
 		t.Fatal("expected Form to be built after configLoadedMsg")
 	}
 	if m.configState.FormValues == nil {
@@ -99,7 +99,7 @@ func TestConfigLoadedMsg(t *testing.T) {
 	if len(m.configState.Fields[ConfigTabGeneral]) == 0 {
 		t.Error("expected General fields to be populated")
 	}
-	if m.configState.Form == nil {
+	if m.configState.form() == nil {
 		t.Error("expected Form to be built")
 	}
 }
@@ -113,7 +113,7 @@ func TestConfigLoadedMsg_Error(t *testing.T) {
 	if m.configState.Err == nil {
 		t.Error("expected error on configState")
 	}
-	if m.configState.Form != nil {
+	if m.configState.form() != nil {
 		t.Error("expected Form to be nil on error")
 	}
 }
@@ -239,11 +239,7 @@ func TestRenderConfig_AllStates(t *testing.T) {
 		cfg.ProjectName = "test-project"
 		s.Config = cfg
 		s.Fields = populateConfigFields(cfg)
-		form, vals := buildConfigForm(s.Fields, 60)
-		s.Form = form
-		s.FormValues = vals
-		// Initialize the form so it renders
-		s.Form.Init()
+		s.buildForms(60, 0)
 
 		v := renderConfig(s, 100)
 		plain := ansiStripRE.ReplaceAllString(v, "")
@@ -330,26 +326,14 @@ func TestConfigOverlay_ConfirmEscDiscards(t *testing.T) {
 	}
 }
 
-func TestBuildConfigForm(t *testing.T) {
-	cfg := config.LoadDefaults()
-	fields := populateConfigFields(cfg)
-
-	form, vals := buildConfigForm(fields, 60)
-	if form == nil {
+func TestBuildSectionForm_BindsBools(t *testing.T) {
+	fields := populateConfigFields(config.LoadDefaults())
+	vals := newConfigFormValues()
+	if form := buildSectionForm(fields[ConfigTabPlugins], vals, 60, 0); form == nil {
 		t.Fatal("expected form to be non-nil")
 	}
-	if vals == nil {
-		t.Fatal("expected vals to be non-nil")
-	}
-
-	// Should have bool bindings for the boolean fields
-	if len(vals.bools) == 0 {
-		t.Error("expected bool value bindings")
-	}
-
-	// Should have string bindings for string/enum/list fields
-	if len(vals.strings) == 0 {
-		t.Error("expected string value bindings")
+	if len(vals.bools) != len(fields[ConfigTabPlugins]) {
+		t.Errorf("expected a bool binding per plugins field, got %d", len(vals.bools))
 	}
 }
 
@@ -362,12 +346,10 @@ func TestSyncConfigFormValues(t *testing.T) {
 	m.configState.Config = cfg
 	m.configState.Fields = populateConfigFields(cfg)
 
-	form, vals := buildConfigForm(m.configState.Fields, 60)
-	m.configState.Form = form
-	m.configState.FormValues = vals
+	m.configState.buildForms(60, 0)
 
 	// Simulate a bool value change through the binding
-	for key, bPtr := range vals.bools {
+	for key, bPtr := range m.configState.FormValues.bools {
 		*bPtr = !*bPtr // flip the bool
 		_ = key
 		break
@@ -424,7 +406,7 @@ func TestConfigForm_EscapeWithEditsPromptsSave(t *testing.T) {
 	// differs from its default. On esc the overlay must sync and offer to save,
 	// rather than silently discarding the change.
 	f := &m.configState.Fields[ConfigTabGeneral][0]
-	f.Value = f.Default + "-edited"
+	f.Value = f.Loaded + "-edited"
 
 	m = sendKey(m, "esc")
 	if m.configState == nil {
