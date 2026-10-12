@@ -136,6 +136,12 @@ type Model struct {
 	agentAware    bool
 	agentAwareSet bool
 
+	// The agent poll (spec 7.4): polling is true once the loop starts;
+	// pollGen numbers polls so a stale result is dropped.
+	polling      bool
+	pollInFlight bool
+	pollGen      int
+
 	// now is the clock rows use for ages; tests pin it.
 	now func() time.Time
 }
@@ -244,6 +250,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleWorktreesFetched(msg)
 	case detailMetricsLoadedMsg:
 		return m.handleDetailMetricsLoaded(msg)
+	case agentPollTickMsg:
+		return m.handleAgentPollTick()
+	case agentPollMsg:
+		return m.handleAgentPoll(msg)
 	case prLookupMsg:
 		return m.handlePRLookup(msg)
 	case worktreeDeletedMsg:
@@ -367,6 +377,13 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 		// backend, so the column never appears mid-session.
 		m.agentAware, m.agentAwareSet = msg.backend == "herdr", true
 	}
+	// A poll started before this fetch would overwrite fresher sessions.
+	m.pollGen++
+	var pollCmd tea.Cmd
+	if m.agentAware && !m.polling {
+		m.polling = true
+		pollCmd = agentPollTick()
+	}
 	m.refreshDelegate()
 	m.loading = false
 
@@ -407,6 +424,7 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 	m.detailMetricsGen++
 	return m, tea.Batch(
 		setItemsCmd,
+		pollCmd,
 		lookupPRsCmd(branches),
 		fetchDetailMetricsCmd(m.detailMetricsGen, msg.items, ResolveDefaultBranch(m.cfg)),
 	)
