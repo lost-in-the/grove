@@ -382,3 +382,16 @@ func TestGolden_Guard(t *testing.T) {
 	m := goldenModel(t, termSize{name: "narrow_40x24", width: 40, height: 24}, withItems(3))
 	golden.RequireEqual(t, []byte(m.viewString()))
 }
+
+// The g strip docked above the footer.
+func TestGolden_Dashboard_GStrip(t *testing.T) {
+	for _, size := range []termSize{sizeStandard, sizeWide} {
+		t.Run(size.name, func(t *testing.T) {
+			m := goldenModel(t, size, withItems(5), func(m *Model) {
+				m.pendingG = true
+				m.updateLayout()
+			})
+			golden.RequireEqual(t, []byte(m.viewString()))
+		})
+	}
+}

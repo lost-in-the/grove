@@ -748,7 +748,7 @@ func (m *Model) updateLayout() {
 	}
 
 	headerHeight := 1 // status bar
-	footerHeight := m.helpFooter.CompactHeight(m.layoutView(), m.width-4) + m.pinStripHeight()
+	footerHeight := m.helpFooter.CompactHeight(m.layoutView(), m.width-4) + m.stripHeight()
 	available := m.height - headerHeight - footerHeight
 
 	contentWidth := m.width - 2 // body padding (1 char each side)
@@ -1557,8 +1557,8 @@ func (m Model) renderDashboard() string {
 		footer = m.helpFooter.RenderCompact(ViewDashboard, m.width-4)
 	}
 	footer = m.appendUpdateBadge(footer)
-	if m.pendingM {
-		footer = m.renderPinStrip() + "\n" + footer
+	if strip := m.renderOpenStrip(); strip != "" {
+		footer = strip + "\n" + footer
 	}
 
 	body = lipgloss.NewStyle().Padding(0, 1).Render(body)
