@@ -261,7 +261,7 @@ The header reads `<project> ▸ settings`, with `● 2 unsaved` on the right whi
 | Key | Action |
 |-----|--------|
 | `tab` / `shift+tab` | Next / previous field |
-| `enter` | Next field; on a section's last field, the next section |
+| `enter` | Next field; on a section's last field, the next section; on protection's last field, close (asking first when there are unsaved changes) |
 | `ctrl+n` / `ctrl+p` | Next / previous section, from anywhere |
 | `1`-`4` | Jump to a section, except while typing in a text field |
 | `esc` | Close; with unsaved changes, asks first (`enter` save, `esc` discard) |

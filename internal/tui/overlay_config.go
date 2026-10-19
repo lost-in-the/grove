@@ -326,6 +326,11 @@ func (m Model) handleConfigKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Section keys (spec 11): ctrl+n / ctrl+p anywhere, before the form,
 	// whose selects would take them as down and up; digits only off text
 	// inputs, where they must type.
+	//
+	// Known gap: enter on a last field finishes the form through two
+	// follow-up messages. A section key that lands between them sends the
+	// rest to the new section's form, moving its focus. It needs two keys
+	// in one event-loop turn, so it is left as is.
 	switch k := msg.String(); {
 	case k == "ctrl+n":
 		s.Tab = (s.Tab + 1) % ConfigTabCount
@@ -381,7 +386,6 @@ func (m Model) updateConfigForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch s.form().State {
 	case huh.StateCompleted:
-		m.syncConfigFormValues()
 		// A completed form ignores input; rebuild it so the section can be
 		// revisited with its current values.
 		initCmd := s.rebuildForm(s.Tab)

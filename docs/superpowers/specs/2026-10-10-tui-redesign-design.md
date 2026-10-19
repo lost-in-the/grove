@@ -520,7 +520,7 @@ From a PR or issue row, Branch and Alias are prefilled.
 
 - Pushed as a full-screen frame. The border and 60 to 80 column cap go away.
 - **One huh form per section** (General, Behavior, Plugins, Protection). Grove owns section switching, because huh 2.0.3 does not expose the active group.
-- **Header:** `grove ▸ settings`, then the section tabs `[1] general  [2] behavior  [3] plugins  [4] protection` with the active tab raised, then `● n unsaved` when dirty.
+- **Header:** `<project> ▸ settings`, with `● n unsaved` at the right edge when dirty. The next row holds the section tabs `[1] general  [2] behavior  [3] plugins  [4] protection`, with the active tab raised.
 - **Section keys:** `ctrl+n` / `ctrl+p` move between sections from anywhere. `1`-`4` jump directly only when the focused field is not a text input, since digits must stay typeable.
 - **Fixed height:** each form uses `WithHeight(h)`, `WithShowHelp(false)`, and `WithShowErrors(false)`. Grove draws the help line and `Form.Errors()` itself. Without this, huh's footer changes the height.
 - **Field descriptions** come from the existing `ConfigField.Description`.
