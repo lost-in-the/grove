@@ -1,8 +1,13 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/lost-in-the/grove/internal/config"
 )
 
 func configHeaderLine(m Model) string {
@@ -35,5 +40,48 @@ func TestConfig_SaveWritesOnlyChanged(t *testing.T) {
 	got := configUpdates(m.configState)
 	if len(got) != 1 || got["project_name"] != `"x"` {
 		t.Errorf("updates %v, want only project_name", got)
+	}
+}
+
+// A list field is written as a TOML array of strings: the comma-separated
+// text split, trimmed, and quoted, and an empty list as [].
+func TestConfigUpdates_ListsAreTOMLArrays(t *testing.T) {
+	s := NewConfigState()
+	s.Fields[ConfigTabProtection] = []ConfigField{
+		{Key: "protection.protected", Value: " main,staging , ,", Loaded: "", Type: ConfigList},
+		{Key: "protection.immutable", Value: " ", Loaded: "prod", Type: ConfigList},
+	}
+	got := configUpdates(s)
+	if want := `["main", "staging"]`; got["protection.protected"] != want {
+		t.Errorf("protected = %s, want %s", got["protection.protected"], want)
+	}
+	if want := `[]`; got["protection.immutable"] != want {
+		t.Errorf("immutable = %s, want %s", got["protection.immutable"], want)
+	}
+}
+
+// A saved protection list loads back: the written file is valid TOML.
+func TestConfig_SavedListLoadsBack(t *testing.T) {
+	home, project := t.TempDir(), t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.MkdirAll(filepath.Join(project, ".grove"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(project)
+
+	m := openConfigWith(t, 100, 30, nil)
+	m.configState.Fields[ConfigTabProtection][0].Value = "main, staging"
+	if err := config.SetProjectConfigValues(configUpdates(m.configState)); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		data, _ := os.ReadFile(filepath.Join(project, ".grove", "config.toml"))
+		t.Fatalf("load after save: %v\n%s", err, data)
+	}
+	for _, name := range []string{"main", "staging"} {
+		if !slices.Contains(cfg.Protection.Protected, name) {
+			t.Errorf("protected %v lacks %q", cfg.Protection.Protected, name)
+		}
 	}
 }

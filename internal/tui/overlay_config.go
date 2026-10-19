@@ -125,13 +125,28 @@ func configUpdates(state *ConfigState) map[string]string {
 			}
 			val := field.Value
 			// Quote string values for TOML with proper escaping
-			if field.Type == ConfigString || field.Type == ConfigEnum {
+			switch field.Type {
+			case ConfigString, ConfigEnum:
 				val = strconv.Quote(val)
+			case ConfigList:
+				val = tomlList(val)
 			}
 			updates[field.Key] = val
 		}
 	}
 	return updates
+}
+
+// tomlList turns a comma-separated list into a TOML array of strings,
+// dropping empty items.
+func tomlList(list string) string {
+	var items []string
+	for _, item := range strings.Split(list, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			items = append(items, strconv.Quote(item))
+		}
+	}
+	return "[" + strings.Join(items, ", ") + "]"
 }
 
 // saveConfigCmd saves the changed fields. The updates are worked out here,
