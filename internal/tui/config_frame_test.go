@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -9,31 +10,52 @@ import (
 	"github.com/charmbracelet/x/exp/golden"
 )
 
-// The frame fills the terminal exactly, and the form block keeps one
-// height in every section and after moving between fields (spec 11, 18).
-func TestConfig_HeightStableAcrossSections(t *testing.T) {
-	for _, size := range [][2]int{{80, 24}, {120, 40}} {
-		m := openConfigWith(t, size[0], size[1], nil)
-		check := func(label string) {
-			t.Helper()
-			lines := strings.Split(m.viewString(), "\n")
-			if len(lines) != size[1] {
-				t.Errorf("%dx%d %s: frame has %d lines, want %d", size[0], size[1], label, len(lines), size[1])
-			}
-			for i, l := range lines {
-				if w := lipgloss.Width(l); w > size[0] {
-					t.Errorf("%dx%d %s: line %d is %d cells", size[0], size[1], label, i, w)
-				}
-			}
-			if h := lipgloss.Height(m.configState.form().View()); h != m.configState.formH {
-				t.Errorf("%dx%d %s: form block is %d rows, want %d", size[0], size[1], label, h, m.configState.formH)
-			}
+// checkConfigFrame checks the frame against the terminal size alone: it
+// fills the terminal, the form block gets the rows the header, tabs, blank
+// row, status line, and footer leave, at the frame's inner width, and an
+// error sits on the status row just above the footer (spec 11, 18).
+func checkConfigFrame(t *testing.T, m Model, w, h int, label string) {
+	t.Helper()
+	const chrome = 4 // header, tabs, blank row, status line
+	footerH := lipgloss.Height(m.configFooter())
+
+	lines := strings.Split(m.viewString(), "\n")
+	if len(lines) != h {
+		t.Errorf("%s: frame has %d lines, want %d", label, len(lines), h)
+	}
+	for i, l := range lines {
+		if lw := lipgloss.Width(l); lw > w {
+			t.Errorf("%s: line %d is %d cells, wider than %d", label, i, lw, w)
 		}
+	}
+
+	form := strings.Split(m.configState.form().View(), "\n")
+	if want := h - chrome - footerH; len(form) != want {
+		t.Errorf("%s: form block is %d rows, want %d", label, len(form), want)
+	}
+	if fw := lipgloss.Width(form[0]); fw != w-2 {
+		t.Errorf("%s: form block is %d cells wide, want %d", label, fw, w-2)
+	}
+
+	m.configState.Err = errTest
+	defer func() { m.configState.Err = nil }()
+	lines = strings.Split(stripAnsi(m.viewString()), "\n")
+	if status := h - 1 - footerH; status >= len(lines) || !strings.Contains(lines[status], "test error") {
+		t.Errorf("%s: error not on the status row %d:\n%s", label, h-1-footerH, strings.Join(lines, "\n"))
+	}
+}
+
+// Every section keeps one frame, before and after moving between fields.
+func TestConfig_HeightStableAcrossSections(t *testing.T) {
+	for _, size := range [][2]int{{80, 24}, {120, 40}, {44, 24}} {
+		w, h := size[0], size[1]
+		m := openConfigWith(t, w, h, nil)
 		for tab := ConfigTab(0); tab < ConfigTabCount; tab++ {
 			m.configState.Tab = tab
-			check(tabName(tab))
+			label := fmt.Sprintf("%dx%d %s", w, h, tabName(tab))
+			checkConfigFrame(t, m, w, h, label)
 			m = sendConfigKeys(t, m, "tab")
-			check(tabName(tab) + " after tab")
+			checkConfigFrame(t, m, w, h, label+" after tab")
 		}
 	}
 }
@@ -61,11 +83,16 @@ func TestConfig_HeaderAndTabs(t *testing.T) {
 	}
 }
 
+// A resize refits every section's form, growing and shrinking.
 func TestConfig_ResizeRefitsForms(t *testing.T) {
 	m := openConfigWith(t, 80, 24, nil)
-	m = sendMsg(m, tea.WindowSizeMsg{Width: 120, Height: 40})
-	if lines := strings.Split(m.viewString(), "\n"); len(lines) != 40 {
-		t.Errorf("after resize the frame has %d lines, want 40", len(lines))
+	for _, size := range [][2]int{{120, 40}, {60, 20}} {
+		w, h := size[0], size[1]
+		m = sendMsg(m, tea.WindowSizeMsg{Width: w, Height: h})
+		for tab := ConfigTab(0); tab < ConfigTabCount; tab++ {
+			m.configState.Tab = tab
+			checkConfigFrame(t, m, w, h, fmt.Sprintf("resized to %dx%d %s", w, h, tabName(tab)))
+		}
 	}
 }
 
