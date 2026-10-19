@@ -348,14 +348,11 @@ func (m Model) handleConfigKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// in one event-loop turn, so it is left as is.
 	switch k := msg.String(); {
 	case k == "ctrl+n":
-		s.Tab = (s.Tab + 1) % ConfigTabCount
-		return m, nil
+		return m, s.switchSection((s.Tab + 1) % ConfigTabCount)
 	case k == "ctrl+p":
-		s.Tab = (s.Tab + ConfigTabCount - 1) % ConfigTabCount
-		return m, nil
+		return m, s.switchSection((s.Tab + ConfigTabCount - 1) % ConfigTabCount)
 	case len(k) == 1 && k >= "1" && k <= "4" && !s.focusOnInput():
-		s.Tab = ConfigTab(k[0] - '1')
-		return m, nil
+		return m, s.switchSection(ConfigTab(k[0] - '1'))
 	}
 
 	if s.form() != nil {
@@ -408,14 +405,25 @@ func (m Model) updateConfigForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 			next, leaveCmd := m.leaveConfig()
 			return next, tea.Batch(initCmd, leaveCmd)
 		}
-		s.Tab++
-		return m, initCmd
+		return m, tea.Batch(initCmd, s.switchSection(s.Tab+1))
 	case huh.StateAborted:
 		m.popView()
 		m.configState = nil
 		return m, nil
 	}
 	return m, cmd
+}
+
+// switchSection makes tab the active section. Only the active form gets
+// messages, so a hidden form's cursor blink stops; focusing the field
+// arrived at again restarts it. huh 2.0.3 draws a focused input's cursor
+// regardless, so this guards against a huh change rather than a visible bug.
+func (s *ConfigState) switchSection(tab ConfigTab) tea.Cmd {
+	s.Tab = tab
+	if f := s.form(); f != nil {
+		return f.GetFocusedField().Focus()
+	}
+	return nil
 }
 
 // buildForms builds every section's form at the editor's size.

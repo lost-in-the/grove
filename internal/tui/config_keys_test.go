@@ -51,3 +51,36 @@ func TestConfig_QuestionMarkTypesInInput(t *testing.T) {
 		t.Errorf("? off an input: view %v, want help", m.activeView())
 	}
 }
+
+// Only the active section's form gets messages, so its cursor blink stops
+// while another section shows. Arriving at a section refocuses its field,
+// which starts the blink again, by every way of changing section.
+func TestConfig_SectionChangeRefocuses(t *testing.T) {
+	cases := []struct {
+		name string
+		from ConfigTab
+		keys []string
+		to   ConfigTab
+	}{
+		{"ctrl+p", ConfigTabBehavior, []string{"ctrl+p"}, ConfigTabGeneral},
+		{"ctrl+n", ConfigTabPlugins, []string{"ctrl+n"}, ConfigTabProtection},
+		{"digit", ConfigTabPlugins, []string{"1"}, ConfigTabGeneral},
+		{"finishing plugins", ConfigTabPlugins, []string{"enter", "enter", "enter"}, ConfigTabProtection},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel() // each case waits out a blink interval
+			m := openConfigWith(t, 100, 30, nil)
+			m.configState.Tab = c.from
+			last := len(c.keys) - 1
+			m = sendConfigKeys(t, m, c.keys[:last]...)
+			m, slow := sendConfigKey(t, m, c.keys[last])
+			if m.configState.Tab != c.to {
+				t.Fatalf("section %s, want %s", tabName(m.configState.Tab), tabName(c.to))
+			}
+			if !startsBlink(slow) {
+				t.Errorf("arriving at %s should start its input's cursor blink", tabName(c.to))
+			}
+		})
+	}
+}
