@@ -71,20 +71,27 @@ func TestConfig_ResizeRefitsForms(t *testing.T) {
 
 func TestGolden_Config(t *testing.T) {
 	cases := map[string]struct {
-		size termSize
-		tab  ConfigTab
+		size  termSize
+		tab   ConfigTab
+		dirty bool
 	}{
-		"general_80x24":    {sizeStandard, ConfigTabGeneral},
-		"behavior_80x24":   {sizeStandard, ConfigTabBehavior},
-		"plugins_80x24":    {sizeStandard, ConfigTabPlugins},
-		"protection_80x24": {sizeStandard, ConfigTabProtection},
-		"general_120x40":   {sizeWide, ConfigTabGeneral},
-		"general_44x24":    {termSize{"narrow_44x24", 44, 24}, ConfigTabGeneral},
+		"general_80x24":       {sizeStandard, ConfigTabGeneral, false},
+		"behavior_80x24":      {sizeStandard, ConfigTabBehavior, false},
+		"plugins_80x24":       {sizeStandard, ConfigTabPlugins, false},
+		"protection_80x24":    {sizeStandard, ConfigTabProtection, false},
+		"general_120x40":      {sizeWide, ConfigTabGeneral, false},
+		"general_44x24":       {termSize{"narrow_44x24", 44, 24}, ConfigTabGeneral, false},
+		"general_dirty_80x24": {sizeStandard, ConfigTabGeneral, true},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
 			m := goldenModel(t, c.size, withItems(3), withConfigOverlay())
 			m.configState.Tab = c.tab
+			if c.dirty {
+				// A different loaded value, not a different shown one: huh
+				// keeps an input's text from when it was built.
+				m.configState.Fields[ConfigTabGeneral][0].Loaded = "grove"
+			}
 			golden.RequireEqual(t, []byte(m.viewString()))
 		})
 	}

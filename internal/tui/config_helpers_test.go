@@ -13,6 +13,11 @@ import (
 // commands they return back in: huh moves focus through commands, so
 // sendKey alone cannot tab. It stops running commands once config closes,
 // so a save command never runs in a test.
+//
+// Batches are expanded; sequences are not (bubbletea's sequenceMsg is
+// unexported), so a sequence's commands never run. huh returns one only
+// from Form.Init, which focuses the first field synchronously, so the
+// tests do not depend on what the sequence carries.
 func sendConfigKeys(t *testing.T, m Model, keys ...string) Model {
 	t.Helper()
 	for _, k := range keys {
@@ -35,7 +40,8 @@ func sendConfigKeys(t *testing.T, m Model, keys ...string) Model {
 }
 
 // runCmd runs cmd and returns its messages, expanding batches. Commands that
-// do not return promptly (cursor blinks, ticks) are skipped.
+// do not return promptly (cursor blinks, ticks) are skipped. The timeout is
+// generous so a slow runner under -race does not drop a focus move.
 func runCmd(cmd tea.Cmd) []tea.Msg {
 	if cmd == nil {
 		return nil
@@ -55,7 +61,7 @@ func runCmd(cmd tea.Cmd) []tea.Msg {
 			return out
 		}
 		return []tea.Msg{msg}
-	case <-time.After(20 * time.Millisecond):
+	case <-time.After(100 * time.Millisecond):
 		return nil
 	}
 }
