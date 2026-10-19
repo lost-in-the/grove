@@ -32,7 +32,13 @@ func (m Model) renderConfigFrame() string {
 	s := m.configState
 	footer := m.configFooter()
 
-	formBlock := Styles.DetailDim.Render("Loading configuration…") + strings.Repeat("\n", max(0, s.formH-1))
+	// Until the forms exist, a placeholder keeps the form's height; on a
+	// load error it is blank, since the status line shows the error.
+	placeholder := Styles.DetailDim.Render("Loading configuration…")
+	if s.Err != nil {
+		placeholder = ""
+	}
+	formBlock := placeholder + strings.Repeat("\n", max(0, s.formH-1))
 	if s.form() != nil {
 		formBlock = s.form().View()
 	}

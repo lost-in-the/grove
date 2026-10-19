@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/lost-in-the/grove/internal/config"
 )
@@ -221,9 +222,7 @@ func TestTabName(t *testing.T) {
 func TestRenderConfig_AllStates(t *testing.T) {
 	frame := func(edit func(m *Model)) string {
 		m := newTestModel(withItems(3), withSize(100, 30))
-		m.setViewForTest(ViewConfig)
-		m.configState = NewConfigState()
-		_, m.configState.formH = m.configFormSize()
+		m = sendKey(m, "c")
 		edit(&m)
 		return stripAnsi(m.viewString())
 	}
@@ -256,9 +255,19 @@ func TestRenderConfig_AllStates(t *testing.T) {
 		}
 	})
 
-	t.Run("error state", func(t *testing.T) {
-		if v := frame(func(m *Model) { m.configState.Err = errTest }); !strings.Contains(v, "test error") {
-			t.Errorf("expected the error in the status line:\n%s", v)
+	// Reached through the real open and load path, so the frame is sized
+	// by openConfig, not by hand.
+	t.Run("load error", func(t *testing.T) {
+		m := newTestModel(withItems(3), withSize(100, 30))
+		m = sendKey(m, "c")
+		m = sendMsg(m, configLoadedMsg{err: errTest})
+		lines := strings.Split(stripAnsi(m.viewString()), "\n")
+		status := 30 - 1 - lipgloss.Height(m.configFooter())
+		if len(lines) != 30 || !strings.Contains(lines[status], "test error") {
+			t.Errorf("expected the error on the status row %d of 30:\n%s", status, strings.Join(lines, "\n"))
+		}
+		if strings.Contains(strings.Join(lines, "\n"), "Loading configuration") {
+			t.Errorf("a load error should replace the loading message")
 		}
 	})
 }
@@ -348,31 +357,6 @@ func TestSyncConfigFormValues(t *testing.T) {
 	m.syncConfigFormValues()
 	if n := m.configState.unsaved(); n != 1 {
 		t.Errorf("expected 1 unsaved after changing a bool value, got %d", n)
-	}
-}
-
-func TestConfigEditKey_DirtyDetection(t *testing.T) {
-	// Verify that direct field value changes are detected by syncConfigFormValues
-	m := newTestModel(withItems(3), withSize(80, 30))
-	m.configState = NewConfigState()
-
-	cfg := config.LoadDefaults()
-	m.configState.Config = cfg
-	m.configState.Fields = populateConfigFields(cfg)
-
-	original := m.configState.Fields[ConfigTabGeneral][0].Value
-
-	// Simulate Huh changing the value through pointer binding
-	m.configState.Fields[ConfigTabGeneral][0].Value = "changed-value"
-
-	if m.configState.Fields[ConfigTabGeneral][0].Value == original {
-		t.Error("expected value to differ after change")
-	}
-
-	// Restore and verify
-	m.configState.Fields[ConfigTabGeneral][0].Value = original
-	if m.configState.Fields[ConfigTabGeneral][0].Value != original {
-		t.Error("expected value to match original after restore")
 	}
 }
 
