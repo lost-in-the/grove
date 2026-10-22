@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -167,4 +168,55 @@ func TestHeader_UpgradeBadge(t *testing.T) {
 	if left := strings.TrimRight(strings.TrimSuffix(view, "⭡0.12.0  10/10 "), " "); !strings.HasSuffix(left, "…") {
 		t.Errorf("the clipped left side should end in …: %q", left)
 	}
+}
+
+// Every cell of a header bar sits on the bar's background: a styled segment
+// ends in a reset, which must not drop the background for what follows.
+func TestHeaderBar_BackgroundCoversEveryCell(t *testing.T) {
+	Colors = NewColorScheme()
+	Styles = NewStyleSet(Colors)
+	t.Cleanup(func() {
+		Colors = NewColorScheme()
+		Styles = NewStyleSet(Colors)
+	})
+	h := Header{ProjectName: "grove", WorktreeCount: 3, Blocked: 1, SortLabel: "name", Upgrade: "1.2.3", Cursor: 1, Total: 3}
+	m := openConfigWith(t, 60, 24, nil)
+	m = sendConfigKeys(t, m, "x")
+	for name, bar := range map[string]string{
+		"dashboard": h.View(60),
+		"narrow":    h.View(30),
+		"config":    m.configHeader(),
+		"context":   renderContextHeader("Pull Requests", "grove", 60),
+	} {
+		if off := cellsOffBackground(bar); off != "" {
+			t.Errorf("%s header: %q is off the bar background in %q", name, off, bar)
+		}
+	}
+}
+
+var sgr = regexp.MustCompile(`\x1b\[([0-9;]*)m`)
+
+// cellsOffBackground returns the text of a rendered line drawn with no
+// background color set, or "" when every cell has one.
+func cellsOffBackground(line string) string {
+	var off strings.Builder
+	bg := false
+	at := 0
+	for _, loc := range sgr.FindAllStringSubmatchIndex(line, -1) {
+		if !bg {
+			off.WriteString(line[at:loc[0]])
+		}
+		params := line[loc[2]:loc[3]]
+		switch {
+		case params == "" || params == "0":
+			bg = false
+		case strings.Contains(";"+params, ";48;"):
+			bg = true
+		}
+		at = loc[1]
+	}
+	if !bg {
+		off.WriteString(line[at:])
+	}
+	return off.String()
 }

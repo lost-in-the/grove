@@ -65,7 +65,7 @@ func (m Model) configHeader() string {
 	left = ansi.Truncate(left, max(0, inner-lipgloss.Width(right)-1), "…")
 	gap := max(1, inner-lipgloss.Width(left)-lipgloss.Width(right))
 	content := ansi.Truncate(left+strings.Repeat(" ", gap)+right, inner, "")
-	return Styles.HeaderBar.Width(m.width).MaxHeight(1).Render(content)
+	return headerBar(content, m.width)
 }
 
 // renderConfigTabs draws the section tabs with the active one raised. When

@@ -348,5 +348,5 @@ func renderContextHeader(contextLabel, projectName string, width int) string {
 		content = left
 	}
 
-	return Styles.HeaderBar.Width(width).Render(content)
+	return headerBar(content, width)
 }
