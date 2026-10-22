@@ -3,9 +3,12 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/BurntSushi/toml"
 
 	"github.com/lost-in-the/grove/internal/config"
 )
@@ -80,6 +83,34 @@ func TestConfigUpdates_ListsAreTOMLArrays(t *testing.T) {
 	}
 	if want := `[]`; got["protection.immutable"] != want {
 		t.Errorf("immutable = %s, want %s", got["protection.immutable"], want)
+	}
+}
+
+// Strings and list items are written with escapes TOML 1.0 accepts, so any
+// typed value decodes back to itself. The decoder also takes TOML 1.1's \x
+// and \e, so the escapes are checked as well.
+func TestTOMLString_RoundTrips(t *testing.T) {
+	escape := regexp.MustCompile(`\\.`)
+	for _, s := range []string{
+		"plain", "", "bell\a", "del\x7f", "nul\x00", "vtab\v", "esc\x1b",
+		"tab\t", "line\nbreak", `quote"`, `back\slash`, `back\x`, "café ✓",
+	} {
+		quoted := tomlString(s)
+		for _, e := range escape.FindAllString(quoted, -1) {
+			if !strings.Contains(`\"btnfru`, e[1:]) {
+				t.Errorf("%q written as %s uses %s, not a TOML 1.0 escape", s, quoted, e)
+			}
+		}
+		var got struct{ K string }
+		if _, err := toml.Decode("k = "+quoted, &got); err != nil {
+			t.Errorf("%q written as %s: %v", s, quoted, err)
+		} else if got.K != s {
+			t.Errorf("%q written as %s reads back as %q", s, quoted, got.K)
+		}
+	}
+	var list struct{ K []string }
+	if _, err := toml.Decode("k = "+tomlList("a\a, b"), &list); err != nil || !slices.Equal(list.K, []string{"a\a", "b"}) {
+		t.Errorf("list reads back as %q, %v", list.K, err)
 	}
 }
 

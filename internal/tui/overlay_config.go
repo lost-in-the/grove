@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -127,7 +126,7 @@ func configUpdates(state *ConfigState) map[string]string {
 			// Quote string values for TOML with proper escaping
 			switch field.Type {
 			case ConfigString, ConfigEnum:
-				val = strconv.Quote(val)
+				val = tomlString(val)
 			case ConfigList:
 				val = tomlList(val)
 			}
@@ -137,13 +136,46 @@ func configUpdates(state *ConfigState) map[string]string {
 	return updates
 }
 
+// tomlString quotes s as a TOML basic string. strconv.Quote is close, but
+// its \a, \v, and \x escapes are not TOML: other control characters get
+// \uXXXX instead.
+func tomlString(s string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range s {
+		switch r {
+		case '"', '\\':
+			b.WriteByte('\\')
+			b.WriteRune(r)
+		case '\b':
+			b.WriteString(`\b`)
+		case '\t':
+			b.WriteString(`\t`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\f':
+			b.WriteString(`\f`)
+		case '\r':
+			b.WriteString(`\r`)
+		default:
+			if r < 0x20 || r == 0x7f {
+				fmt.Fprintf(&b, `\u%04X`, r)
+			} else {
+				b.WriteRune(r)
+			}
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
+}
+
 // tomlList turns a comma-separated list into a TOML array of strings,
 // dropping empty items.
 func tomlList(list string) string {
 	var items []string
 	for _, item := range strings.Split(list, ",") {
 		if item = strings.TrimSpace(item); item != "" {
-			items = append(items, strconv.Quote(item))
+			items = append(items, tomlString(item))
 		}
 	}
 	return "[" + strings.Join(items, ", ") + "]"
