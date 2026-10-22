@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Creating a worktree from the dashboard shows hook and Docker output in the activity log as it is printed. Before, the log froze on `Bootstrapping worktree...` for the whole bootstrap and then showed everything at once. (#143)
 
 ### Changed
+- `p` opens the PR browser at once on the last list grove fetched, marked `cached · refreshing`, and swaps in the new list when it arrives, keeping the selected PR. If the refresh fails, the saved list stays. Find's PR results use the saved list too.
 - Dashboard rows are one line: agent state (under herdr), cursor, status, alias, branch chip, counts, age, and session and container glyphs. Ages round the way `git log --date=relative` does (`35h`, `13d`, `11mo`), so a row agrees with git. The cursor no longer hides a row's status. As the terminal narrows, columns drop in a fixed order and long aliases shorten in the middle. `v` adds the commit message back; one line is the new default unless you saved a choice.
 - The header shows the sort and your position in the list (`3/12`) instead of the current branch.
 - Sort modes are name, age (last commit), and dirty; `O` reverses. Age replaces recent (last accessed).

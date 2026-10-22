@@ -277,7 +277,12 @@ func (g *GitHubAdapter) ListPRs(opts ListOptions) ([]*PullRequest, error) {
 // into the JSON the callers parse (B30). On failure, gh's stderr is still
 // available via the ExitError for the diagnostic message.
 func (g *GitHubAdapter) runGH(args ...string) ([]byte, error) {
-	output, err := cmdexec.Output(context.TODO(), "gh", args, "", cmdexec.GHCLI)
+	return g.runGHTimeout(cmdexec.GHCLI, args...)
+}
+
+// runGHTimeout is runGH with its own time limit.
+func (g *GitHubAdapter) runGHTimeout(timeout time.Duration, args ...string) ([]byte, error) {
+	output, err := cmdexec.Output(context.TODO(), "gh", args, "", timeout)
 	if err != nil {
 		var stderr string
 		var exitErr *exec.ExitError

@@ -106,6 +106,11 @@ func TestGolden_Overlay_PRs(t *testing.T) {
 		m := goldenModel(t, sizeStandard, withItems(3), withPRData())
 		golden.RequireEqual(t, []byte(m.viewString()))
 	})
+	t.Run("stale", func(t *testing.T) {
+		m := goldenModel(t, sizeStandard, withItems(3), withPRData())
+		m.prState.Stale = true
+		golden.RequireEqual(t, []byte(m.viewString()))
+	})
 }
 
 func TestGolden_Overlay_Issues(t *testing.T) {
