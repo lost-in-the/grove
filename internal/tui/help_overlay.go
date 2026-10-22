@@ -259,7 +259,7 @@ func helpSectionsFor(view ActiveView) []helpSection {
 var helpSectionsDashboard = []helpSection{
 	{title: "Navigation", items: []helpEntry{
 		{"↑/k ↓/j", "Move up / down"},
-		{"g", "Goto strip (g top, p PRs, i issues, c config, u upgrade, a agent under herdr)"},
+		{"g", "Goto strip (g top, p PRs, i issues, c config, u upgrade, d local diff, a agent under herdr)"},
 		{"gg / G", "Top / bottom of list"},
 		{"ctrl+d / ctrl+u", "Half page down / up"},
 		{"enter", "Switch to selected worktree"},
@@ -351,6 +351,7 @@ var helpSectionsPRReview = []helpSection{
 		{"v", "Mark the file viewed (kept until it changes)"},
 		{"z", "Fold runs of removed lines"},
 		{"t", "Show or hide the file rail"},
+		{"enter", "Open the file in $VISUAL / $EDITOR at the line in view"},
 	}},
 }
 
@@ -420,6 +421,7 @@ var helpSectionsDetailSheet = []helpSection{
 		{"g / G", "Jump to top / bottom"},
 		{"ctrl+u / ctrl+d", "Half page up / down"},
 		{"B", "Open associated PR in browser"},
+		{"d", "Review this worktree's changes against the default branch"},
 		{"esc / h / tab", "Back to the list"},
 	}},
 }

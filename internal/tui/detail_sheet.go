@@ -49,6 +49,8 @@ func (m Model) handleDetailSheetKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case msg.String() == "B":
 		m.openSelectedPRURL()
 		return m, nil
+	case msg.String() == "d":
+		return m.openSelectedLocalReview()
 	}
 	handleDetailFocusedKey(msg, m.keys, &m.detail)
 	return m, nil

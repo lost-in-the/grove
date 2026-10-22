@@ -23,9 +23,10 @@ var prReviewTabNames = [4]string{"conversation", "commits", "checks", "files"}
 
 // PRReviewState is the review frame for one pull request (spec 13).
 type PRReviewState struct {
-	PR  *tracker.PullRequest
-	Tab int // 1 conversation, 2 commits, 3 checks, 4 files
-	Gen int // this open's generation; results from another are dropped
+	PR    *tracker.PullRequest
+	Local *localTarget // set for a worktree's own diff (g d); PR is then a placeholder
+	Tab   int          // 1 conversation, 2 commits, 3 checks, 4 files
+	Gen   int          // this open's generation; results from another are dropped
 
 	Detail   *tracker.PRDetail
 	Files    []git.FileDiff
@@ -129,6 +130,10 @@ func (m Model) handlePRReviewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Escape):
 		m.popView()
 		m.prReview = nil
+	case s.Local != nil && (k == "1" || k == "2" || k == "3" || k == "B" || k == "a"):
+		// a local review has only its files
+	case s.Local != nil && k == "v":
+		m.toast.Show(NewToast("viewed marks are for pull requests", ToastInfo))
 	case len(k) == 1 && k >= "1" && k <= "4":
 		s.Tab = int(k[0] - '0')
 	case k == "B":
@@ -319,7 +324,11 @@ func (m Model) renderPRReviewFrame() string {
 		labels[3] = "files · " + shortSHA(s.ScopedSHA)
 	}
 	w, h := m.prReviewBodySize()
-	body := strings.Join([]string{renderTabRow(labels, s.Tab-1, w), "", m.renderPRReviewBody(w, h)}, "\n")
+	tabs := renderTabRow(labels, s.Tab-1, w)
+	if s.Local != nil {
+		tabs = Styles.TabActive.Render("[4] files " + counts[3])
+	}
+	body := strings.Join([]string{tabs, "", m.renderPRReviewBody(w, h)}, "\n")
 	body = lipgloss.NewStyle().Padding(0, 1).Render(body)
 	body = m.clampBodyToHeight(body, footer)
 	return lipgloss.JoinVertical(lipgloss.Left, m.prReviewHeader(), body, footer)
@@ -328,8 +337,11 @@ func (m Model) renderPRReviewFrame() string {
 // prReviewHeader is "<project> ▸ #<n> <title>", the title cut to fit.
 func (m Model) prReviewHeader() string {
 	inner := max(0, m.width-2) // the header bar pads one cell each side
-	left := Styles.Header.Render(m.projectName) + Styles.TextMuted.Render(" ▸ ") +
-		Styles.TextBright.Render(fmt.Sprintf("#%d %s", m.prReview.PR.Number, safeText(m.prReview.PR.Title)))
+	title := fmt.Sprintf("#%d %s", m.prReview.PR.Number, safeText(m.prReview.PR.Title))
+	if l := m.prReview.Local; l != nil {
+		title = safeText(l.Name) + " vs " + safeText(l.Base)
+	}
+	left := Styles.Header.Render(m.projectName) + Styles.TextMuted.Render(" ▸ ") + Styles.TextBright.Render(title)
 	left = ansi.Truncate(left, inner, "…")
 	return headerBar(left+strings.Repeat(" ", max(0, inner-lipgloss.Width(left))), m.width)
 }

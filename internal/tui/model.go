@@ -1151,6 +1151,9 @@ func (m Model) handleDashboardDetailKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd
 		m.openSelectedPRURL()
 		return m, nil
 	}
+	if msg.String() == "d" {
+		return m.openSelectedLocalReview()
+	}
 	handleDetailFocusedKey(msg, m.keys, &m.detail)
 	return m, nil
 }

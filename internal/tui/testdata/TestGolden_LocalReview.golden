@@ -1,0 +1,24 @@
+ [1m[1mtest-project[m ▸ [1mfeature-auth vs main[m                                           [m 
+  [1m[4] files 2[m                                                                   
+                                                                                
+ [1mcmd/grove/main.go[m  +2 -1                                                       
+ ────────────────────────────────────────────────────────────────────────────── 
+ @@ -1 +1 @@                                                                    
+   1 │+line 1                                                                   
+   2 │+line 2                                                                   
+ 1   │-gone                                                                     
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+  [1mJ/K[m file · [1mv[m viewed · [1mz[m fold · [1mt[m rail · [1m1-4[m tab · [1mesc[m back                    
