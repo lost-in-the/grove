@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
 
 	"github.com/lost-in-the/grove/internal/config"
@@ -75,4 +77,47 @@ func TestConfig_CompletingSectionMovesOn(t *testing.T) {
 	if m.activeView() != ViewConfig || !m.configState.Confirming {
 		t.Errorf("with a change, finishing the last section should prompt: view %v", m.activeView())
 	}
+}
+
+// Every form is Init'd, but only the shown one's commands run: a hidden
+// form's would ask the terminal for its size again, and refresh and blink
+// a form nobody sees. switchSection refocuses on arrival.
+func TestConfig_OneSizeRequest(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(100, 30))
+	m = sendKey(m, "c")
+	next, cmd := m.Update(configLoadedMsg{cfg: config.LoadDefaults()})
+	m = next.(Model)
+	if n := sizeRequests(cmd); n != 1 {
+		t.Errorf("opening config asks for the size %d times, want 1", n)
+	}
+
+	m = sendConfigKeys(t, m, "ctrl+n", "ctrl+n", "enter", "enter") // plugins' last field
+	n := 0
+	for q := []tea.Msg{makeKeyMsg("enter")}; len(q) > 0 && m.configState.Tab == ConfigTabPlugins; q = q[1:] {
+		next, cmd = m.Update(q[0])
+		m = next.(Model)
+		n += sizeRequests(cmd)
+		q = append(q, runCmd(cmd)...)
+	}
+	if m.configState.Tab != ConfigTabProtection || n != 0 {
+		t.Errorf("finishing plugins: section %s, %d size requests; want Protection, 0", tabName(m.configState.Tab), n)
+	}
+}
+
+// sizeRequests counts the size requests cmd makes, through batches and
+// sequences (bubbletea's sequence type is unexported).
+func sizeRequests(cmd tea.Cmd) int {
+	n := 0
+	for _, msg := range runCmd(cmd) {
+		v := reflect.ValueOf(msg)
+		switch {
+		case v.Type() == reflect.TypeOf(tea.RequestWindowSize()):
+			n++
+		case v.Kind() == reflect.Slice && v.Type().Elem() == reflect.TypeFor[tea.Cmd]():
+			for i := range v.Len() {
+				n += sizeRequests(v.Index(i).Interface().(tea.Cmd))
+			}
+		}
+	}
+	return n
 }

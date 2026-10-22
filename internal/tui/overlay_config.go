@@ -445,13 +445,13 @@ func (m Model) updateConfigForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch s.form().State {
 	case huh.StateCompleted:
 		// A completed form ignores input; rebuild it so the section can be
-		// revisited with its current values.
-		initCmd := s.rebuildForm(s.Tab)
+		// revisited with its current values. It is hidden from here on, so
+		// its commands are dropped.
+		s.rebuildForm(s.Tab)
 		if s.Tab == ConfigTabCount-1 {
-			next, leaveCmd := m.leaveConfig()
-			return next, tea.Batch(initCmd, leaveCmd)
+			return m.leaveConfig()
 		}
-		return m, tea.Batch(initCmd, s.switchSection(s.Tab+1))
+		return m, s.switchSection(s.Tab + 1)
 	case huh.StateAborted:
 		m.popView()
 		m.configState = nil
@@ -473,18 +473,25 @@ func (s *ConfigState) switchSection(tab ConfigTab) tea.Cmd {
 	return nil
 }
 
-// buildForms builds every section's form at the editor's size.
+// buildForms builds every section's form at the editor's size and returns
+// the shown form's commands.
 func (s *ConfigState) buildForms(width, height int) tea.Cmd {
 	s.formW, s.formH = width, height
 	s.FormValues = newConfigFormValues()
-	var cmds []tea.Cmd
+	var cmd tea.Cmd
 	for tab := ConfigTab(0); tab < ConfigTabCount; tab++ {
-		cmds = append(cmds, s.rebuildForm(tab))
+		if c := s.rebuildForm(tab); tab == s.Tab {
+			cmd = c
+		}
 	}
-	return tea.Batch(cmds...)
+	return cmd
 }
 
 // rebuildForm builds one section's form from the fields' current values.
+// Init focuses its first field at once; the commands it returns refresh
+// the fields, start the cursor blink, and ask the terminal for its size.
+// They are only worth running for the shown form: switchSection restarts
+// the blink when a hidden one is shown, and grove sizes the forms itself.
 func (s *ConfigState) rebuildForm(tab ConfigTab) tea.Cmd {
 	s.Forms[tab] = buildSectionForm(s.Fields[tab], s.FormValues, s.formW, s.formH)
 	return s.Forms[tab].Init()
