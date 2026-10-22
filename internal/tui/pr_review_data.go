@@ -160,7 +160,7 @@ func (m Model) handlePRComments(msg prCommentsMsg) (tea.Model, tea.Cmd) {
 // fetches have succeeded. The map is shared by every copy of the model.
 func (m *Model) cacheReviewIfComplete() {
 	s := m.prReview
-	if s.loading() || s.DetailErr != nil || s.DiffErr != nil || s.CommentsErr != nil {
+	if s.Local != nil || s.loading() || s.DetailErr != nil || s.DiffErr != nil || s.CommentsErr != nil {
 		return
 	}
 	if m.prReviewCache == nil {

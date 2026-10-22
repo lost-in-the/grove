@@ -104,7 +104,7 @@ Toast levels:
 |-----|--------|
 | `↑` / `k` | Move up |
 | `↓` / `j` | Move down |
-| `g` | Open the goto strip: `g` top of list, `p` pull requests, `i` issues, `c` config, `u` upgrade grove, and under herdr `a` the next agent needing you. Any other key closes it. |
+| `g` | Open the goto strip: `g` top of list, `p` pull requests, `i` issues, `c` config, `u` upgrade grove, `d` a local diff of the selected worktree (see PR Review), and under herdr `a` the next agent needing you. Any other key closes it. |
 | `g` `g` / `G` | Top / bottom of the list |
 | `ctrl+d` / `ctrl+u` | Half a page down / up |
 | `pgdown` / `pgup`, `home` / `end` | Page down / up, first / last page |
@@ -323,8 +323,13 @@ The files tab (`4`) shows one file at a time: its path and counts, then each hun
 | `v` | Mark the file viewed; the mark is saved in `.grove/ui_prefs.json` and dropped when the file's diff changes |
 | `z` | Fold each run of 4 or more removed lines into one line |
 | `t` | Show or hide the rail; the choice holds when the terminal is resized |
+| `enter` | Open the file in `$VISUAL` or `$EDITOR` (else `vi`) at the first line in view, in the worktree checked out on the PR's branch; grove resumes when the editor exits |
 | `B` | Open the PR in the browser |
 | `esc` | Back |
+
+The editor's line flag follows its name: `+N file` for vi, Neovim, Helix, Nano, Emacs and the like; `-g file:N` for VS Code, Cursor and VSCodium; `file:N` for Sublime Text and Zed; `--line N file` for JetBrains IDEs. A PR whose branch has no worktree here says so; `n` in the PR browser creates one.
+
+**Local diff (`g d`).** The same frame reviews a worktree's own changes, with no `gh`: `g d` on the dashboard, or `d` in the focused detail pane or the full-screen detail sheet. It diffs the worktree against its merge-base with the default branch, so commits on the branch and uncommitted edits to tracked files both show; a new file shows once it is added. Only the files tab is there; `enter` opens the editor in that worktree.
 
 ### Issue Browser (`i`)
 

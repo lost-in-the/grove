@@ -7,7 +7,7 @@
 [2m   ○ refactor  [m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
 [2m               [m│   [1m↑/k ↓/j[m                       Move up / down                                         │[2m               [m
 [2m               [m│   [1mg[m                             Goto strip (g top, p PRs, i issues, c config, u        │[2m               [m
-[2m               [m│   upgrade, a agent under herdr)                                                        │[2m               [m
+[2m               [m│   upgrade, d local diff, a agent under herdr)                                          │[2m               [m
 [2m               [m│   [1mgg / G[m                        Top / bottom of list                                   │[2m               [m
 [2m               [m│   [1mctrl+d / ctrl+u[m               Half page down / up                                    │[2m               [m
 [2m               [m│   [1menter[m                         Switch to selected worktree                            │[2m               [m

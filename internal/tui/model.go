@@ -301,6 +301,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handlePRComments(msg)
 	case prCommitDiffMsg:
 		return m.handlePRCommitDiff(msg)
+	case editorClosedMsg:
+		return m.handleEditorClosed(msg)
 	case issuesFetchedMsg:
 		return m.handleIssuesFetched(msg)
 	case bulkDeleteDoneMsg:
@@ -1148,6 +1150,9 @@ func (m Model) handleDashboardDetailKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd
 	if msg.String() == "B" {
 		m.openSelectedPRURL()
 		return m, nil
+	}
+	if msg.String() == "d" {
+		return m.openSelectedLocalReview()
 	}
 	handleDetailFocusedKey(msg, m.keys, &m.detail)
 	return m, nil
