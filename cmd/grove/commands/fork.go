@@ -217,7 +217,7 @@ Examples:
 				// Reset source worktree only after successful patch application
 				if forkMoveWIP {
 					if err := worktree.NewWIPHandler(currentTree.Path).Discard(); err != nil {
-						cli.Warning(stderr, "changes applied to fork but failed to reset source: %v", err)
+						cli.Warning(stderr, "changes applied to fork but failed to clean source: %v", err)
 					} else if !forkJSON {
 						cli.Success(w, "Moved uncommitted changes to fork")
 					}

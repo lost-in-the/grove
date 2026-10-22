@@ -35,7 +35,8 @@ func TestToast_ShowingOneStartsTheTick(t *testing.T) {
 }
 
 // startsSpinner reports whether cmd, run through its batches, yields a
-// spinner tick. A tick waits one spinner frame, so the timeout is generous.
+// spinner tick. spinner.Tick returns at once; the timeout only bounds a
+// command that blocks.
 func startsSpinner(cmd tea.Cmd) bool {
 	if cmd == nil {
 		return false
