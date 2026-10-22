@@ -301,6 +301,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handlePRComments(msg)
 	case prCommitDiffMsg:
 		return m.handlePRCommitDiff(msg)
+	case editorClosedMsg:
+		return m.handleEditorClosed(msg)
 	case issuesFetchedMsg:
 		return m.handleIssuesFetched(msg)
 	case bulkDeleteDoneMsg:

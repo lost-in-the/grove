@@ -139,6 +139,8 @@ func (m Model) handlePRReviewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case s.Tab == 4 && k == "v" && s.ScopedSHA != "":
 		m.toast.Show(NewToast("viewed marks apply to the whole PR; a shows all commits", ToastInfo))
+	case s.Tab == 4 && k == "enter" && len(s.Files) > 0 && !s.LoadingScope:
+		return m.openInEditor()
 	case s.Tab == 4 && len(s.Files) > 0 && !s.LoadingScope:
 		m.handleFilesKey(k)
 	case s.Tab == 2 && k == "enter":
