@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/lost-in-the/grove/internal/git"
+	"github.com/lost-in-the/grove/internal/tuilog"
 )
 
 // railMinWidth and railShare size the files tab's rail; railBreakpoint is
@@ -128,7 +129,9 @@ func renderRail(lines []railLine, cur, width, height int) string {
 }
 
 // fileHash identifies a file's diff for its viewed mark: the hunks'
-// headers and every line's kind and text. A changed diff changes it.
+// headers and every line's kind and text. A changed diff changes it. A
+// binary file has no hunks, and the diff does not say what changed in it,
+// so its hash never changes and its mark stays.
 func fileHash(f git.FileDiff) string {
 	h := sha256.New()
 	for _, hunk := range f.Hunks {
@@ -143,8 +146,8 @@ func fileHash(f git.FileDiff) string {
 // viewedNow is the set of files whose saved mark still matches their diff.
 func (s *PRReviewState) viewedNow() map[string]bool {
 	out := map[string]bool{}
-	for _, f := range s.Files {
-		if s.Viewed[f.Path()] == fileHash(f) {
+	for i, f := range s.Files {
+		if s.Viewed[f.Path()] == s.hashes[i] {
 			out[f.Path()] = true
 		}
 	}
@@ -159,7 +162,7 @@ func (m Model) toggleViewed() {
 	if s.Viewed == nil {
 		s.Viewed = map[string]string{}
 	}
-	if h := fileHash(f); s.Viewed[f.Path()] == h {
+	if h := s.hashes[s.FileIdx]; s.Viewed[f.Path()] == h {
 		delete(s.Viewed, f.Path())
 	} else {
 		s.Viewed[f.Path()] = h
@@ -170,7 +173,7 @@ func (m Model) toggleViewed() {
 	}
 	s.Viewed = keep
 	key := strconv.Itoa(s.PR.Number)
-	_ = updateUIPrefs(m.projectRoot, func(p *UIPrefs) {
+	err := updateUIPrefs(m.projectRoot, func(p *UIPrefs) {
 		if p.Viewed == nil {
 			p.Viewed = map[string]map[string]string{}
 		}
@@ -180,6 +183,9 @@ func (m Model) toggleViewed() {
 		}
 		p.Viewed[key] = keep
 	})
+	if err != nil {
+		tuilog.Printf("warning: failed to save viewed marks: %v", err)
+	}
 }
 
 // savedViewed is a PR's marks from the UI preferences.

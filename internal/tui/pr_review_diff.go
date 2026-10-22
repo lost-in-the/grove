@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/lost-in-the/grove/internal/git"
+	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
 // foldRun is the shortest run of removed lines that z folds (plan 8b
@@ -44,6 +45,62 @@ func safeText(s string) string {
 		col += ansi.StringWidth(string(r))
 	}
 	return b.String()
+}
+
+// safeMarkdown removes control characters from markdown, keeping its
+// newlines and tabs, before glamour renders it.
+func safeMarkdown(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' {
+			return r
+		}
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// safePRs is prs with the text gh hands over made safe to draw: titles and
+// labels through safeText. Bodies stay raw; renderMarkdown cleans them.
+// Applied where PR data enters the TUI, so every list, panel, and Find
+// result draws the clean text.
+func safePRs(prs []*tracker.PullRequest) []*tracker.PullRequest {
+	if prs == nil {
+		return nil
+	}
+	out := make([]*tracker.PullRequest, len(prs))
+	for i, pr := range prs {
+		c := *pr
+		c.Title, c.Labels = safeText(pr.Title), safeTexts(pr.Labels)
+		out[i] = &c
+	}
+	return out
+}
+
+// safeIssues is safePRs for issues.
+func safeIssues(issues []*tracker.Issue) []*tracker.Issue {
+	if issues == nil {
+		return nil
+	}
+	out := make([]*tracker.Issue, len(issues))
+	for i, is := range issues {
+		c := *is
+		c.Title, c.Labels = safeText(is.Title), safeTexts(is.Labels)
+		out[i] = &c
+	}
+	return out
+}
+
+func safeTexts(ss []string) []string {
+	if ss == nil {
+		return nil
+	}
+	out := make([]string, len(ss))
+	for i, s := range ss {
+		out[i] = safeText(s)
+	}
+	return out
 }
 
 // renderFileDiff draws one file's hunks: each @@ header, then every line as

@@ -1,10 +1,12 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/lost-in-the/grove/internal/git"
+	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
 // A diff is the PR author's text: no control character in it may reach
@@ -110,4 +112,49 @@ func TestPRReview_ViewHasNoRawEscape(t *testing.T) {
 	if !strings.Contains(stripAnsi(view), "␛]52;") {
 		t.Error("the neutralized text should still show")
 	}
+}
+
+var hostile = "a \x1b[2J \x1b]52;c;aGk=\a \u009b2J"
+
+func assertNoRawEscape(t *testing.T, label, view string) {
+	t.Helper()
+	for _, bad := range []string{"\x1b[2J", "\x1b]52;", "\u009b", "\a"} {
+		if strings.Contains(view, bad) {
+			t.Errorf("%s holds %q", label, bad)
+		}
+	}
+}
+
+// The PR's title and gh's error text reach the review's frame safely too.
+func TestPRReview_TitleAndErrorsSafe(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	next, _ := m.openPRReview(&tracker.PullRequest{Number: 42, Title: hostile})
+	m = next.(Model)
+	m = sendMsg(m, prReviewRepoMsg{gen: m.prReview.Gen, repo: "o/r"})
+	m = sendMsg(m, prDiffMsg{gen: m.prReview.Gen, err: errors.New(hostile)})
+	assertNoRawEscape(t, "review", m.viewString())
+}
+
+// Titles, labels, and bodies from gh are made safe as they enter the TUI,
+// so every list, detail panel, and Find result draws them safely.
+func TestPRAndIssueText_Safe(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	next, _ := m.enterPRView()
+	m = next.(Model)
+	m = sendMsg(m, prsFetchedMsg{prs: []*tracker.PullRequest{{Number: 1, Title: hostile, Body: "body " + hostile, Labels: []string{hostile}}}})
+	assertNoRawEscape(t, "PR browser", m.viewString())
+	m = sendKey(m, "tab") // the detail panel renders the body
+	assertNoRawEscape(t, "PR detail", m.viewString())
+
+	m = newTestModel(withItems(3), withSize(120, 40))
+	m = sendMsg(m, prCacheLoadedMsg{prs: []*tracker.PullRequest{{Number: 1, Title: hostile}}})
+	if strings.Contains(m.prCache[0].Title, "\x1b") {
+		t.Error("a cached title kept its escape")
+	}
+
+	m = newTestModel(withItems(3), withSize(120, 40))
+	next, _ = m.enterIssueView()
+	m = next.(Model)
+	m = sendMsg(m, issuesFetchedMsg{issues: []*tracker.Issue{{Number: 2, Title: hostile, Body: hostile, Labels: []string{hostile}}}})
+	assertNoRawEscape(t, "issue browser", m.viewString())
 }

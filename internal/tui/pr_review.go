@@ -42,7 +42,8 @@ type PRReviewState struct {
 	RailChoice int               // t: 0 by width, 1 shown, -1 hidden
 	Viewed     map[string]string // path -> fileHash of the saved marks
 
-	cacheKey   [3]int // file, width, folded of cacheLines
+	hashes     []string // fileHash of each file, computed once per diff
+	cacheKey   [3]int   // file, width, folded of cacheLines
 	cacheLines []string
 }
 
@@ -51,6 +52,10 @@ type PRReviewState struct {
 func (s *PRReviewState) setFiles(files []git.FileDiff) {
 	s.Files, s.FileIdx, s.Scroll = files, 0, 0
 	s.Order, _ = railLines(files, nil)
+	s.hashes = make([]string, len(files))
+	for i, f := range files {
+		s.hashes[i] = fileHash(f)
+	}
 	if len(s.Order) > 0 {
 		s.FileIdx = s.Order[0]
 	}
@@ -84,7 +89,7 @@ func (m Model) openPRReview(pr *tracker.PullRequest) (tea.Model, tea.Cmd) {
 	s := &PRReviewState{PR: pr, Tab: 4, Gen: m.prReviewGen}
 	m.prReview = s
 	s.Viewed = savedViewed(m.projectRoot, pr.Number)
-	if c := m.prReviewCache[pr.Number]; c != nil && c.updatedAt.Equal(pr.UpdatedAt) {
+	if c := m.prReviewCache[pr.Number]; c != nil && !pr.UpdatedAt.IsZero() && c.updatedAt.Equal(pr.UpdatedAt) {
 		s.Detail, s.Comments = c.detail, c.comments
 		s.setFiles(c.files)
 		return m, nil
@@ -239,7 +244,7 @@ func (m Model) renderPRReviewFrame() string {
 func (m Model) prReviewHeader() string {
 	inner := max(0, m.width-2) // the header bar pads one cell each side
 	left := Styles.Header.Render(m.projectName) + Styles.TextMuted.Render(" ▸ ") +
-		Styles.TextBright.Render(fmt.Sprintf("#%d %s", m.prReview.PR.Number, m.prReview.PR.Title))
+		Styles.TextBright.Render(fmt.Sprintf("#%d %s", m.prReview.PR.Number, safeText(m.prReview.PR.Title)))
 	left = ansi.Truncate(left, inner, "…")
 	return headerBar(left+strings.Repeat(" ", max(0, inner-lipgloss.Width(left))), m.width)
 }
@@ -253,12 +258,14 @@ func (m Model) renderPRReviewBody(width, height int) string {
 		text = Styles.WarningText.Render("gh required") + "\n" +
 			Styles.TextMuted.Render("Install the GitHub CLI and run gh auth login to review pull requests.")
 	case s.RepoErr != nil:
-		text = Styles.ErrorText.Render(s.RepoErr.Error())
+		text = Styles.ErrorText.Render(safeText(s.RepoErr.Error()))
 	case s.Tab != 4:
 		text = Styles.TextMuted.Render("arrives in the next build")
 	default:
 		text = m.renderFilesTab(width, height)
 	}
+	// Text of the frame's own wraps to the body; the files tab sizes itself.
+	text = lipgloss.NewStyle().Width(width).MaxHeight(height).Render(text)
 	return text + strings.Repeat("\n", max(0, height-lipgloss.Height(text)))
 }
 
@@ -269,7 +276,7 @@ func (m Model) renderFilesTab(width, height int) string {
 	case s.LoadingDiff:
 		return Styles.TextMuted.Render(m.spinner.View() + " loading diff")
 	case s.DiffErr != nil:
-		return Styles.ErrorText.Render("diff unavailable: " + s.DiffErr.Error())
+		return Styles.ErrorText.Render("diff unavailable: " + safeText(s.DiffErr.Error()))
 	case len(s.Files) == 0:
 		return Styles.TextMuted.Render("no files changed")
 	}

@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The header bar's background now runs behind its whole row, not just the edges.
 - Moving uncommitted changes to a copy (`f`, or `grove fork --move-wip`) now also cleans the source in a worktree that tracks no files.
 - Creating a worktree from the dashboard shows hook and Docker output in the activity log as it is printed. Before, the log froze on `Bootstrapping worktree...` for the whole bootstrap and then showed everything at once. (#143)
+- A pull request or issue whose title, labels, or body holds terminal control characters can no longer drive the terminal: titles and labels show them as symbols (`␛`), and bodies drop them before rendering.
 
 ### Changed
 - In the PR browser, `enter` now opens the PR review; `n` creates a worktree from the PR, as `enter` used to.

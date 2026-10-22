@@ -135,6 +135,17 @@ func TestPRReview_FrameFillsTerminal(t *testing.T) {
 	for _, s := range [][2]int{{44, 24}, {80, 24}, {110, 40}, {120, 40}} {
 		check(reviewWithFiles(t, s[0], s[1], railFiles), s[0], s[1], fmt.Sprintf("%dx%d", s[0], s[1]))
 	}
+	// Panels with text of their own wrap to the frame, not past it.
+	for _, s := range [][2]int{{44, 24}, {80, 24}} {
+		g := newTestModel(withItems(3), withSize(s[0], s[1]))
+		next, _ := g.openPRReview(&tracker.PullRequest{Number: 42})
+		g = next.(Model)
+		g = sendMsg(g, prReviewRepoMsg{gen: g.prReview.Gen, ghMissing: true})
+		check(g, s[0], s[1], fmt.Sprintf("gh required %dx%d", s[0], s[1]))
+		e := reviewWithFiles(t, s[0], s[1], nil)
+		e = sendMsg(e, prDiffMsg{gen: e.prReview.Gen, err: fmt.Errorf("HTTP 403: API rate limit exceeded for user ID 1608205. (https://docs.github.com/rest/overview/resources-in-the-rest-api#rate-limiting) %s", strings.Repeat("x", 120))})
+		check(e, s[0], s[1], fmt.Sprintf("long error %dx%d", s[0], s[1]))
+	}
 	m := reviewWithFiles(t, 120, 40, railFiles)
 	for _, s := range [][2]int{{80, 24}, {120, 40}} {
 		m = sendMsg(m, tea.WindowSizeMsg{Width: s[0], Height: s[1]})

@@ -133,3 +133,13 @@ func TestRepoFromPRURL(t *testing.T) {
 		}
 	}
 }
+
+// A PR with no UpdatedAt (a list entry gh left without one) is never
+// served from the cache, since every such PR would look unchanged.
+func TestPRReview_ZeroUpdatedAtNotCached(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m.prReviewCache = map[int]*prReviewData{42: {detail: &tracker.PRDetail{Number: 42}}}
+	if _, cmd := m.openPRReview(&tracker.PullRequest{Number: 42}); cmd == nil {
+		t.Error("a PR without UpdatedAt should be fetched")
+	}
+}

@@ -575,6 +575,7 @@ func (m Model) handleCreationDone(msg creationDoneMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) handlePRsFetched(msg prsFetchedMsg) (tea.Model, tea.Cmd) {
 	m.prFetching = false
+	msg.prs = safePRs(msg.prs)
 	if msg.err == nil {
 		m.prCache = msg.prs
 	}
@@ -601,6 +602,7 @@ func (m Model) handlePRsFetched(msg prsFetchedMsg) (tea.Model, tea.Cmd) {
 // handlePRCacheLoaded takes the PR list saved by an earlier session, unless
 // a fetch has already brought a newer one. Omni and the PR browser use it.
 func (m Model) handlePRCacheLoaded(msg prCacheLoadedMsg) (tea.Model, tea.Cmd) {
+	msg.prs = safePRs(msg.prs)
 	if m.prCache == nil {
 		m.prCache = msg.prs
 	}
@@ -611,6 +613,7 @@ func (m Model) handlePRCacheLoaded(msg prCacheLoadedMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleIssuesFetched(msg issuesFetchedMsg) (tea.Model, tea.Cmd) {
+	msg.issues = safeIssues(msg.issues)
 	pending := m.pendingIssue
 	m.pendingIssue = 0
 	if msg.err == nil {
