@@ -462,9 +462,11 @@ func (m Model) updateConfigForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // switchSection makes tab the active section. Only the active form gets
-// messages, so a hidden form's cursor blink stops; focusing the field
-// arrived at again restarts it. huh 2.0.3 draws a focused input's cursor
+// messages, so a hidden text input's cursor blink stops; focusing the field
+// arrived at again restarts it (huh's selects and confirms do not blink, and
+// their Focus returns nil). huh 2.0.3 draws a focused input's cursor
 // regardless, so this guards against a huh change rather than a visible bug.
+// Tests set s.focus to see the call, so they do not cover Field.Focus itself.
 func (s *ConfigState) switchSection(tab ConfigTab) tea.Cmd {
 	s.arrived = s.arrived || tab != s.Tab
 	s.Tab = tab
