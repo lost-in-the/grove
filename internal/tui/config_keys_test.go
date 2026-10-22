@@ -1,6 +1,12 @@
 package tui
 
-import "testing"
+import (
+	"slices"
+	"testing"
+
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
+)
 
 func TestConfig_CtrlNPWrap(t *testing.T) {
 	m := openConfigWith(t, 100, 30, nil)
@@ -53,8 +59,8 @@ func TestConfig_QuestionMarkTypesInInput(t *testing.T) {
 }
 
 // Only the active section's form gets messages, so its cursor blink stops
-// while another section shows. Arriving at a section refocuses its field,
-// which starts the blink again, by every way of changing section.
+// while another section shows. Arriving at a section focuses its field
+// again, which restarts the blink, by every way of changing section.
 func TestConfig_SectionChangeRefocuses(t *testing.T) {
 	cases := []struct {
 		name string
@@ -69,17 +75,19 @@ func TestConfig_SectionChangeRefocuses(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			t.Parallel() // each case waits out a blink interval
 			m := openConfigWith(t, 100, 30, nil)
 			m.configState.Tab = c.from
-			last := len(c.keys) - 1
-			m = sendConfigKeys(t, m, c.keys[:last]...)
-			m, slow := sendConfigKey(t, m, c.keys[last])
+			var focused []string
+			m.configState.focus = func(f huh.Field) tea.Cmd {
+				focused = append(focused, f.GetKey())
+				return nil
+			}
+			m = sendConfigKeys(t, m, c.keys...)
 			if m.configState.Tab != c.to {
 				t.Fatalf("section %s, want %s", tabName(m.configState.Tab), tabName(c.to))
 			}
-			if !startsBlink(slow) {
-				t.Errorf("arriving at %s should start its input's cursor blink", tabName(c.to))
+			if want := []string{focusedKey(m)}; !slices.Equal(focused, want) {
+				t.Errorf("focused %q, want %q", focused, want)
 			}
 		})
 	}
@@ -103,7 +111,7 @@ func TestConfig_SectionKeyDuringFinish(t *testing.T) {
 		}
 		m = sendConfigKeys(t, m, "ctrl+n")
 		for _, msg := range pending {
-			m, _ = sendConfigMsg(t, m, msg)
+			m = sendConfigMsg(t, m, msg)
 		}
 		if m.configState.Tab != ConfigTabBehavior || focusedKey(m) != "switch.dirty_handling" {
 			t.Errorf("after %d follow-ups: section %s, focus %q; want Behavior on its first field",

@@ -58,7 +58,8 @@ type ConfigState struct {
 	FormValues *configFormValues         // bool bindings shared by the forms
 	formW      int                       // size the forms are built at
 	formH      int
-	arrived    bool // section changed, no key sent to it yet
+	arrived    bool                    // section changed, no key sent to it yet
+	focus      func(huh.Field) tea.Cmd // nil means Field.Focus; tests record the call
 }
 
 // form is the active section's form, or nil before the config loads.
@@ -467,10 +468,14 @@ func (m Model) updateConfigForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (s *ConfigState) switchSection(tab ConfigTab) tea.Cmd {
 	s.arrived = s.arrived || tab != s.Tab
 	s.Tab = tab
-	if f := s.form(); f != nil {
-		return f.GetFocusedField().Focus()
+	f := s.form()
+	if f == nil {
+		return nil
 	}
-	return nil
+	if s.focus != nil {
+		return s.focus(f.GetFocusedField())
+	}
+	return f.GetFocusedField().Focus()
 }
 
 // buildForms builds every section's form at the editor's size and returns
