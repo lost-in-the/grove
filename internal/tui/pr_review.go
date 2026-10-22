@@ -34,6 +34,9 @@ type PRReviewState struct {
 	DetailErr, DiffErr, CommentsErr             error
 	GHMissing                                   bool
 	RepoErr                                     error
+
+	FileIdx int  // the files tab's current file
+	Folded  bool // z: runs of removed lines collapsed
 }
 
 func (s *PRReviewState) loading() bool {
@@ -163,9 +166,8 @@ func (m Model) renderFilesTab(width, height int) string {
 	case len(s.Files) == 0:
 		return Styles.TextMuted.Render("no files changed")
 	}
-	lines := make([]string, 0, len(s.Files))
-	for _, f := range s.Files {
-		lines = append(lines, f.Path())
-	}
-	return strings.Join(lines, "\n")
+	f := s.Files[s.FileIdx]
+	lines := renderFileDiff(f, width, s.Folded)
+	body := renderFileHeader(f, width) + "\n" + strings.Join(lines[:min(len(lines), max(0, height-2))], "\n")
+	return body
 }
