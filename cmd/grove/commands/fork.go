@@ -216,15 +216,10 @@ Examples:
 				}
 				// Reset source worktree only after successful patch application
 				if forkMoveWIP {
-					if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", currentTree.Path, "checkout", "--", "."}, "", cmdexec.GitLocal); err != nil {
-						cli.Warning(stderr, "changes applied to fork but failed to reset source: %v\n%s", err, output)
-					} else {
-						if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", currentTree.Path, "clean", "-fd"}, "", cmdexec.GitLocal); err != nil {
-							cli.Warning(stderr, "failed to clean untracked files in source: %v\n%s", err, output)
-						}
-						if !forkJSON {
-							cli.Success(w, "Moved uncommitted changes to fork")
-						}
+					if err := worktree.NewWIPHandler(currentTree.Path).Discard(); err != nil {
+						cli.Warning(stderr, "changes applied to fork but failed to reset source: %v", err)
+					} else if !forkJSON {
+						cli.Success(w, "Moved uncommitted changes to fork")
 					}
 				}
 			}

@@ -155,12 +155,8 @@ func forkApplyWIP(req forkRequest, newPath string, wipPatch []byte) error {
 		return nil
 	}
 
-	sourcePath := req.Source.Path
-	if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", sourcePath, "checkout", "--", "."}, "", cmdexec.GitLocal); err != nil {
-		return fmt.Errorf("forked but failed to clean source: %w\n%s", err, output)
-	}
-	if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", sourcePath, "clean", "-fd"}, "", cmdexec.GitLocal); err != nil {
-		return fmt.Errorf("forked but failed to clean untracked files: %w\n%s", err, output)
+	if err := worktree.NewWIPHandler(req.Source.Path).Discard(); err != nil {
+		return fmt.Errorf("forked but failed to clean source: %w", err)
 	}
 	return nil
 }
