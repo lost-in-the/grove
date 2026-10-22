@@ -411,6 +411,8 @@ Every text color reads at 4.5:1 or better on the surface, the selected row, and 
 
 Grove checks for high-contrast mode. If the `GROVE_HIGH_CONTRAST` environment variable is set or if the terminal reports a high-contrast preference, form elements switch to an accessible rendering mode.
 
+Screen readers are untested, and the TUI is not built for them. It is a full-screen view that redraws in place, so a screen reader meets a changing grid of characters rather than announcements, and state glyphs (`●`, `✓`, `✗`, `⭡`) are read by their character names if at all. The CLI is the dependable path when output has to be read aloud: `grove ls`, `grove here`, `grove to`, `grove new`, and most other commands print plain lines, and take `--json` for tools.
+
 ## Agent Notes
 
 Reference for AI agents working on TUI code. For design rationale behind the New Worktree wizard, see `docs/WIZARD_UX_RESEARCH.md`.

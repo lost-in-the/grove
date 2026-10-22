@@ -1,6 +1,6 @@
 # Grove TUI Redesign: Design Spec
 
-- **Status:** Draft for review, 2026-10-10
+- **Status:** Implemented, phases 0 to 8 (PRs #174 to #192), 2026-10-22. Draft for review 2026-10-10. Where the build departed from this text, the section says so.
 - **Supersedes:** the July 2026 plan `TUI_REDESIGN_IMPLEMENTATION_PLAN.md` on branch `feat/tui-rework`. Do not execute that plan.
 - **Reference mockups:** `docs/redesign/*.html` (July 2026, sample data replaced). They show the visual language. Where a mockup and this spec disagree, this spec wins.
 - **Traceability:** decisions here are `N1` to `N20`. July's decision ids (`D1` to `D15`) appear in parentheses where a decision carries one over.
@@ -559,12 +559,12 @@ Tab strip anatomy: `[key] label count`, active tab raised, count dim.
 
 ### 13.3 Data
 
-- `gh pr view <n> --json comments,reviews,reviewThreads,statusCheckRollup,commits,files` and `gh pr diff <n>`, through the existing `runGH` path.
-- A longer timeout profile than the current 15s for large diffs.
+- `gh pr view <n> --json comments,reviews,statusCheckRollup,commits,files` through the existing `runGH` path. **As built:** `gh pr view` has no `reviewThreads` field, so review threads come from the REST list `repos/{repo}/pulls/<n>/comments` (`--paginate --slurp`). The diff also comes over REST (`gh api` with the diff media type) rather than `gh pr diff`, which looks the PR up through GraphQL and failed under GraphQL's secondary rate limit while REST answered. The repository is read from the PR's URL, not `gh repo view`.
+- A longer timeout profile than the current 15s for large diffs (`GHCLISlow`, 60s).
 - Cache per PR, keyed on `UpdatedAt`.
-- **PR browser list:** `p` shows the last cached list at once, marked stale, and refreshes in the background. Testing measured 2.06 to 2.28s before PRs appeared.
+- **PR browser list:** `p` shows the last cached list at once, marked stale, and refreshes in the background. Testing measured 2.06 to 2.28s before PRs appeared. **As built:** the list is saved in the user cache directory, not `.grove/`, whose git excludes are only refreshed by init and bootstrap.
 - Parse the diff once into files, hunks, and lines in `internal/git`. Render each hunk to a cached slice, so large diffs do not re-render per frame.
-- Diff coloring with chroma's `diff` lexer.
+- Diff coloring with chroma's `diff` lexer. **As built:** lines are colored by the kind the parser already gives them, so no lexer runs. All PR-controlled text is drawn through `safeText` (control characters as symbols) and markdown output is filtered to SGR styling only.
 
 ### 13.4 Files tab details
 
@@ -714,7 +714,7 @@ Three tools, as defined in `docs/VISUAL_TESTING.md`:
 - **Golden, themed:** color-only states. Dim, focus tint, agent glyph colors, dirty `●`, active tab. Use `RequireEqualEscape`.
 - **teatest:** transitions. Push and pop, chords, omni, form modes, resize, poll.
 
-**New harness pieces:** size presets for 44x24 and 110x40, a 40x24 guard preset, and builders `withPins`, `withAgents`, `withOmni(query)`, `withBranchForm(mode)`, `withFocus`, `withStrip(prefix)`.
+**New harness pieces:** size presets for 44x24 and 110x40, a 40x24 guard preset, and builders `withPins`, `withAgents`, `withOmni(query)`, `withBranchForm(mode)`, `withFocus`, `withStrip(prefix)`. **As built:** the tests drive these states through keys instead (`sendKey(m, "g")` opens the strip, `space` opens omni, `tab` focuses), which exercises the real paths; the named presets stayed the four in `golden_helpers_test.go`, and the 44x24 and 110x40 cases use inline `termSize` values. Of the builders, only `withAgents` exists.
 
 **Required tests by area:**
 
@@ -745,12 +745,12 @@ Each item is checked at the start of the phase named.
 | # | Item | Phase | If it fails |
 |---|---|---|---|
 | 1 | huh `WithHeight` plus no footer gives an exact, stable height. Verified in phase 7b: exact in all four sections, while tabbing, and with a validation error, provided help and errors are turned off before `WithHeight` (it reserves rows for whichever footers are on). | 7 | Draw a fixed-height viewport around the form |
-| 2 | `ctrl+j` arrives distinct from `⏎` under tmux, herdr, and a plain terminal | 3 | Arrows remain; drop the `ctrl+j/k` hint |
+| 2 | `ctrl+j` arrives distinct from `⏎` under tmux, herdr, and a plain terminal. Verified under tmux 3.8 on 2026-10-22: `shift+tab`, `ctrl+d/u`, `ctrl+j/k`, and `ctrl+n/p` each arrive as themselves. Herdr and a plain terminal are still to check. | 3 | Arrows remain; drop the `ctrl+j/k` hint |
 | 3 | Herdr `List()` latency fits a 3s poll. Measured in phase 6: one `herdr workspace list` call, 113ms cold, 3ms warm (10 runs). Fits. | 6 | Raise the interval |
-| 4 | `default_branch_action` config: the TUI no longer prompts. Confirm the CLI still uses it, and update the config docs. | 3 | Document it as CLI-only |
-| 5 | Last-accessed data for omni's "recent" group exists in state | 5 | Drop the group |
-| 6 | `bubbles/tree` stability for the file rail | 8 | Keep the custom rail |
-| 7 | Screen-reader compatibility is unverified (separate from color and contrast checks) | 4 | Document the limits in `docs/TUI.md` |
+| 4 | `default_branch_action` config: the TUI no longer prompts. Confirm the CLI still uses it, and update the config docs. Resolved: no code reads it; `docs/CONFIGURATION_REFERENCE.md` documents it as no longer used. | 3 | Document it as CLI-only |
+| 5 | Last-accessed data for omni's "recent" group exists in state. Resolved: `LastAccessed` is in state and omni has its recent group. | 5 | Drop the group |
+| 6 | `bubbles/tree` stability for the file rail. Resolved: bubbles v2.1.1 has no `tree`; the rail is grove's own, drawn with indentation. | 8 | Keep the custom rail |
+| 7 | Screen-reader compatibility is unverified (separate from color and contrast checks). Documented: `docs/TUI.md` Accessibility states the limits. | 4 | Document the limits in `docs/TUI.md` |
 
 ---
 
