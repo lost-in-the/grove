@@ -83,7 +83,7 @@ func parsePRDetail(data []byte) (*PRDetail, error) {
 		if len(sha) > 7 {
 			sha = sha[:7]
 		}
-		d.Commits = append(d.Commits, PRCommit{SHA: sha, Message: c.MessageHeadline})
+		d.Commits = append(d.Commits, PRCommit{SHA: sha, OID: c.Oid, Message: c.MessageHeadline})
 	}
 	for _, f := range gh.Files {
 		d.Files = append(d.Files, PRFile{Path: f.Path, Additions: f.Additions, Deletions: f.Deletions})
@@ -174,6 +174,17 @@ func reviewCommentsArgs(repo string, number int) []string {
 	return apiArgs(repo, fmt.Sprintf("pulls/%d/comments?per_page=100", number), "--paginate", "--slurp")
 }
 
+// commitDiffArgs is the gh api call for one commit's diff, over REST.
+func commitDiffArgs(repo, sha string) []string {
+	return apiArgs(repo, "commits/"+sha, "-H", "Accept: application/vnd.github.diff")
+}
+
+// FetchCommitDiff retrieves one commit's unified diff, verbatim as
+// FetchPRDiff's is.
+func (g *GitHubAdapter) FetchCommitDiff(sha string) (string, error) {
+	return g.fetchDiff(commitDiffArgs(g.repo, sha))
+}
+
 // prDiffArgs is the gh api call for a PR's diff, over REST.
 func prDiffArgs(repo string, number int) []string {
 	return apiArgs(repo, fmt.Sprintf("pulls/%d", number), "-H", "Accept: application/vnd.github.diff")
@@ -189,7 +200,12 @@ func prDiffArgs(repo string, number int) []string {
 // before drawing any line. A gh too old to know the flag is asked again
 // without it.
 func (g *GitHubAdapter) FetchPRDiff(number int) (string, error) {
-	args := prDiffArgs(g.repo, number)
+	return g.fetchDiff(prDiffArgs(g.repo, number))
+}
+
+// fetchDiff runs a diff call with raw escapes allowed, retrying without the
+// flag on a gh that does not know it.
+func (g *GitHubAdapter) fetchDiff(args []string) (string, error) {
 	output, err := g.runGHTimeout(cmdexec.GHCLISlow, append(args, "--allow-escape-sequences")...)
 	if err != nil && strings.Contains(err.Error(), "unknown flag: --allow-escape-sequences") {
 		output, err = g.runGHTimeout(cmdexec.GHCLISlow, args...)

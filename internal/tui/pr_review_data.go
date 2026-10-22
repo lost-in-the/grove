@@ -166,5 +166,5 @@ func (m *Model) cacheReviewIfComplete() {
 	if m.prReviewCache == nil {
 		m.prReviewCache = map[int]*prReviewData{}
 	}
-	m.prReviewCache[s.PR.Number] = &prReviewData{updatedAt: s.PR.UpdatedAt, detail: s.Detail, files: s.Files, comments: s.Comments}
+	m.prReviewCache[s.PR.Number] = &prReviewData{updatedAt: s.PR.UpdatedAt, detail: s.Detail, files: s.prFiles, comments: s.Comments}
 }

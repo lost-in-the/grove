@@ -303,11 +303,20 @@ A full-screen review of one pull request, opened from the PR browser or from a P
 
 Opening a review fetches the PR's detail, diff, and review comments in the background with `gh`. Each loads on its own, so a failed diff still leaves the other tabs. A PR that has not changed since you last opened it in this session opens at once. Without `gh`, the frame shows one `gh required` panel.
 
+The review opens on the conversation (`1`): a summary of the checks, then the PR's comments, reviews, and review threads, oldest first, with replies under their thread. A thread on a line that has since changed reads `path (outdated, was line N)`. `j` / `k` move between items, and `enter` on a thread opens the files tab at its file with the line in view.
+
+The commits tab (`2`) lists the PR's commits. `enter` on one shows only that commit's files in the files tab, whose tab then reads `files · <sha>`; `a` returns to the whole PR. Viewed marks belong to the whole PR, so `v` does nothing while one commit is shown.
+
+The checks tab (`3`) lists every check with `✗` failed, `●` running, or `✓` passed, failing first. Two runs of one workflow (a push and a pull request run) both show.
+
 The files tab (`4`) shows one file at a time: its path and counts, then each hunk with old and new line numbers. At 100 columns and wider a rail on the left lists the files as a folder tree with `+/-` counts; the current file is highlighted and viewed files carry `✓`. Control characters in the diff (an escape sequence in a test fixture, say) are drawn as symbols such as `␛`, never sent to the terminal.
 
 | Key | Action |
 |---|---|
-| `1` - `4` | Conversation, commits, checks, files (the first three arrive in the next build) |
+| `1` - `4` | Conversation, commits, checks, files |
+| `j` / `k` (tabs 1-3) | Move between items |
+| `enter` | On a thread, open its line; on a commit, show its files |
+| `a` | Show all commits' files again |
 | `J` / `K`, `ctrl+n` / `ctrl+p` | Next / previous file, in the rail's order |
 | `↑/k` `↓/j`, `ctrl+u` / `ctrl+d`, `pgup` / `pgdn` | Scroll the file |
 | `g` / `G` | Top / bottom of the file |
