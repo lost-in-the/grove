@@ -101,6 +101,7 @@ func buildConfigHuhField(f *ConfigField, vals *configFormValues) huh.Field {
 			Description(f.Description).
 			Affirmative("true").
 			Negative("false").
+			WithButtonAlignment(lipgloss.Left). // huh centers under the field's text
 			Value(&b)
 
 	case ConfigEnum:

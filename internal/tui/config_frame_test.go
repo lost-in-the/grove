@@ -96,6 +96,28 @@ func TestConfig_ResizeRefitsForms(t *testing.T) {
 	}
 }
 
+// huh centers a confirm's buttons under its own title and description, so
+// fields with different text would stagger them. They line up on the left.
+func TestConfig_BoolButtonsAlign(t *testing.T) {
+	m := openConfigWith(t, 100, 30, nil)
+	m.configState.Tab = ConfigTabPlugins
+	var cols []int
+	for _, l := range strings.Split(stripAnsi(m.viewString()), "\n") {
+		if strings.Contains(l, "true") && strings.Contains(l, "false") {
+			cols = append(cols, lipgloss.Width(l[:strings.Index(l, "true")]))
+		}
+	}
+	if len(cols) != 3 {
+		t.Fatalf("found %d button rows, want 3", len(cols))
+	}
+	for _, c := range cols[1:] {
+		if c != cols[0] {
+			t.Errorf("button columns %v, want all equal", cols)
+			break
+		}
+	}
+}
+
 func TestGolden_Config(t *testing.T) {
 	cases := map[string]struct {
 		size  termSize
