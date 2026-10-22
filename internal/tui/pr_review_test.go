@@ -77,12 +77,12 @@ func TestPRReview_EscPopsToBrowser(t *testing.T) {
 	}
 }
 
-// The frame opens on the files tab; 1-4 raise a tab, and counts read "-"
-// until their data arrives.
+// The frame opens on the conversation; 1-4 raise a tab, and counts read
+// "-" until their data arrives.
 func TestPRReview_TabKeysAndCounts(t *testing.T) {
 	m := sendKey(openBrowser(t, 0), "enter")
-	if m.prReview.Tab != 4 {
-		t.Errorf("opens on tab %d, want 4 (files)", m.prReview.Tab)
+	if m.prReview.Tab != 1 {
+		t.Errorf("opens on tab %d, want 1 (conversation)", m.prReview.Tab)
 	}
 	tabs := strings.Split(stripAnsi(m.viewString()), "\n")[1]
 	for _, want := range []string{"[1] conversation -", "[2] commits -", "[3] checks -", "[4] files -"} {
@@ -94,9 +94,5 @@ func TestPRReview_TabKeysAndCounts(t *testing.T) {
 		if m = sendKey(m, k); m.prReview.Tab != int(k[0]-'0') {
 			t.Errorf("%s: tab %d", k, m.prReview.Tab)
 		}
-	}
-	m = sendKey(m, "1")
-	if body := stripAnsi(m.viewString()); !strings.Contains(body, "arrives in the next build") {
-		t.Errorf("tab 1 placeholder missing:\n%s", body)
 	}
 }

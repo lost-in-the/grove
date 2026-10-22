@@ -70,7 +70,7 @@ func reviewWithFiles(t *testing.T, w, h int, files []git.FileDiff) Model {
 	next, _ := m.openPRReview(&tracker.PullRequest{Number: 42, Title: "Answer"})
 	m = next.(Model)
 	m = sendMsg(m, prReviewRepoMsg{gen: m.prReview.Gen, repo: "o/r"})
-	return sendMsg(m, prDiffMsg{gen: m.prReview.Gen, files: files})
+	return sendKey(sendMsg(m, prDiffMsg{gen: m.prReview.Gen, files: files}), "4")
 }
 
 func currentPath(m Model) string { return m.prReview.Files[m.prReview.FileIdx].Path() }
@@ -177,7 +177,7 @@ func TestPRReview_ViewedSurvivesRestart(t *testing.T) {
 	next, _ := again.openPRReview(&tracker.PullRequest{Number: 42})
 	again = next.(Model)
 	again = sendMsg(again, prReviewRepoMsg{gen: again.prReview.Gen, repo: "o/r"})
-	again = sendMsg(again, prDiffMsg{gen: again.prReview.Gen, files: railFiles})
+	again = sendKey(sendMsg(again, prDiffMsg{gen: again.prReview.Gen, files: railFiles}), "4")
 	if !strings.Contains(stripAnsi(again.viewString()), "✓ main.go") {
 		t.Errorf("viewed mark lost after a restart:\n%s", stripAnsi(again.viewString()))
 	}
@@ -198,7 +198,7 @@ func TestPRReview_ViewedDroppedWhenFileChanges(t *testing.T) {
 	next, _ := again.openPRReview(&tracker.PullRequest{Number: 42})
 	again = next.(Model)
 	again = sendMsg(again, prReviewRepoMsg{gen: again.prReview.Gen, repo: "o/r"})
-	again = sendMsg(again, prDiffMsg{gen: again.prReview.Gen, files: changed})
+	again = sendKey(sendMsg(again, prDiffMsg{gen: again.prReview.Gen, files: changed}), "4")
 	if strings.Contains(stripAnsi(again.viewString()), "✓ main.go") {
 		t.Error("a changed file kept its viewed mark")
 	}
@@ -247,6 +247,7 @@ func TestGolden_PRReviewFiles(t *testing.T) {
 			m = next.(Model)
 			m = sendMsg(m, prReviewRepoMsg{gen: m.prReview.Gen, repo: "o/r"})
 			m = sendMsg(m, prDiffMsg{gen: m.prReview.Gen, files: append(railFiles[:3:3], diffFile("internal/tui/view.go", 2, 5))})
+			m = sendKey(m, "4")
 			if c.folded {
 				m = sendKey(sendKey(sendKey(m, "J"), "J"), "z") // view.go, 5 removed lines
 			}
@@ -262,6 +263,7 @@ func TestGolden_Themed_PRReviewFiles(t *testing.T) {
 	m = next.(Model)
 	m = sendMsg(m, prReviewRepoMsg{gen: m.prReview.Gen, repo: "o/r"})
 	m = sendMsg(m, prDiffMsg{gen: m.prReview.Gen, files: railFiles})
+	m = sendKey(m, "4")
 	golden.RequireEqual(t, []byte(m.viewString()))
 }
 

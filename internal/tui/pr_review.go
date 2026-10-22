@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -35,21 +36,38 @@ type PRReviewState struct {
 	GHMissing                                   bool
 	RepoErr                                     error
 
-	FileIdx    int               // the files tab's current file
-	Order      []int             // the files in the rail's order
-	Scroll     int               // first hunk-pane line shown
-	Folded     bool              // z: runs of removed lines collapsed
-	RailChoice int               // t: 0 by width, 1 shown, -1 hidden
-	Viewed     map[string]string // path -> fileHash of the saved marks
+	Cursor       [5]int         // the cursor of tabs 1-3, by tab number
+	FileIdx      int            // the files tab's current file
+	prFiles      []git.FileDiff // the PR's whole diff; Files may be one commit's
+	ScopedSHA    string         // the commit the files tab shows, or ""
+	LoadingScope bool
+	ScopeErr     error
+	Order        []int             // the files in the rail's order
+	Scroll       int               // first hunk-pane line shown
+	Folded       bool              // z: runs of removed lines collapsed
+	RailChoice   int               // t: 0 by width, 1 shown, -1 hidden
+	Viewed       map[string]string // path -> fileHash of the saved marks
 
-	hashes     []string // fileHash of each file, computed once per diff
-	cacheKey   [3]int   // file, width, folded of cacheLines
+	hashes     []string   // fileHash of each file, computed once per diff
+	conv       []convItem // tab 1's items, built at convW
+	convW      int
+	now        time.Time // tests pin it; zero means time.Now
+	cacheKey   [3]int    // file, width, folded of cacheLines
 	cacheLines []string
 }
 
 // setFiles takes a loaded diff: the files, their rail order, and the first
 // file in it.
 func (s *PRReviewState) setFiles(files []git.FileDiff) {
+	s.prFiles = files
+	if s.ScopedSHA == "" {
+		s.showFiles(files)
+	}
+}
+
+// showFiles makes files the files tab's: their rail order, hashes, and
+// the first file in the rail.
+func (s *PRReviewState) showFiles(files []git.FileDiff) {
 	s.Files, s.FileIdx, s.Scroll = files, 0, 0
 	s.Order, _ = railLines(files, nil)
 	s.hashes = make([]string, len(files))
@@ -80,13 +98,13 @@ func (s *PRReviewState) loading() bool {
 	return s.LoadingDetail || s.LoadingDiff || s.LoadingComments
 }
 
-// openPRReview pushes the review frame for pr. It opens on the files tab
-// until the other tabs are built (plan 8b decision 4). Unchanged PRs open
+// openPRReview pushes the review frame for pr, on its conversation tab.
+// Unchanged PRs open
 // from the session cache; others fetch their data in the background.
 func (m Model) openPRReview(pr *tracker.PullRequest) (tea.Model, tea.Cmd) {
 	m.prReviewGen++
 	m.pushView(ViewPRReview)
-	s := &PRReviewState{PR: pr, Tab: 4, Gen: m.prReviewGen}
+	s := &PRReviewState{PR: pr, Tab: 1, Gen: m.prReviewGen}
 	m.prReview = s
 	s.Viewed = savedViewed(m.projectRoot, pr.Number)
 	if c := m.prReviewCache[pr.Number]; c != nil && !pr.UpdatedAt.IsZero() && c.updatedAt.Equal(pr.UpdatedAt) {
@@ -115,8 +133,28 @@ func (m Model) handlePRReviewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		s.Tab = int(k[0] - '0')
 	case k == "B":
 		openURL(s.PR.URL)
-	case s.Tab == 4 && len(s.Files) > 0:
+	case s.Tab == 4 && k == "a":
+		if s.ScopedSHA != "" {
+			s.unscope()
+		}
+	case s.Tab == 4 && k == "v" && s.ScopedSHA != "":
+		m.toast.Show(NewToast("viewed marks apply to the whole PR; a shows all commits", ToastInfo))
+	case s.Tab == 4 && len(s.Files) > 0 && !s.LoadingScope:
 		m.handleFilesKey(k)
+	case s.Tab == 2 && k == "enter":
+		if c := s.Cursor[2]; s.Detail != nil && c < len(s.Detail.Commits) {
+			return m.scopeToCommit(s.Detail.Commits[c])
+		}
+	case s.Tab == 1 && k == "enter":
+		if c := s.Cursor[1]; c < len(s.conv) && s.conv[c].kind == convThread {
+			m.jumpToThread(s.conv[c])
+		}
+	case s.Tab != 4:
+		if s.Tab == 1 {
+			w, _ := m.prReviewBodySize()
+			m.conversation(w) // the cursor's bound is the item count
+		}
+		s.moveCursor(k)
 	}
 	return m, nil
 }
@@ -192,6 +230,35 @@ func (m Model) paneWidth() int {
 	return w
 }
 
+// itemCount is the number of items tab tab lists.
+func (s *PRReviewState) itemCount(tab int) int {
+	switch {
+	case tab == 1:
+		return len(s.conv)
+	case tab == 2 && s.Detail != nil:
+		return len(s.Detail.Commits)
+	case tab == 3 && s.Detail != nil:
+		return len(s.Detail.Checks)
+	}
+	return 0
+}
+
+// moveCursor moves the active list tab's cursor for j/k and friends.
+func (s *PRReviewState) moveCursor(k string) {
+	c := &s.Cursor[s.Tab]
+	switch k {
+	case "j", "down":
+		*c++
+	case "k", "up":
+		*c--
+	case "g":
+		*c = 0
+	case "G":
+		*c = 1 << 30
+	}
+	*c = max(0, min(*c, s.itemCount(s.Tab)-1))
+}
+
 // tabCounts is each tab's count, "-" until its data has arrived. The
 // conversation counts comments, reviews, and review threads.
 func (s *PRReviewState) tabCounts() [4]string {
@@ -208,13 +275,26 @@ func (s *PRReviewState) tabCounts() [4]string {
 		counts[2] = fmt.Sprint(len(d.Checks))
 	}
 	if !s.LoadingDiff && s.DiffErr == nil && !s.GHMissing && s.RepoErr == nil {
-		counts[3] = fmt.Sprint(len(s.Files))
+		counts[3] = fmt.Sprint(len(s.prFiles))
 	}
 	return counts
 }
 
+// prReviewFooter shows the active tab's keys.
 func (m Model) prReviewFooter() string {
-	return m.helpFooter.RenderCompact(ViewPRReview, m.width-4)
+	hints := []Hint{{"j/k", "move"}, {"1-4", "tab"}, {"B", "browser"}, {"esc", "back"}}
+	switch m.prReview.Tab {
+	case 1:
+		hints = []Hint{{"j/k", "move"}, {"enter", "go to line"}, {"1-4", "tab"}, {"B", "browser"}, {"esc", "back"}}
+	case 2:
+		hints = []Hint{{"j/k", "move"}, {"enter", "its files"}, {"1-4", "tab"}, {"B", "browser"}, {"esc", "back"}}
+	case 4:
+		hints = m.helpFooter.CompactHints(ViewPRReview)
+		if m.prReview.ScopedSHA != "" {
+			hints = append([]Hint{{"a", "all commits"}}, hints...)
+		}
+	}
+	return m.helpFooter.RenderCompactWithHints(hints, m.width-4)
 }
 
 // prReviewBodySize is the size of the frame's body: the terminal minus the
@@ -232,6 +312,9 @@ func (m Model) renderPRReviewFrame() string {
 	labels := make([]string, len(prReviewTabNames))
 	for i, name := range prReviewTabNames {
 		labels[i] = name + " " + counts[i]
+	}
+	if s.ScopedSHA != "" {
+		labels[3] = "files · " + shortSHA(s.ScopedSHA)
 	}
 	w, h := m.prReviewBodySize()
 	body := strings.Join([]string{renderTabRow(labels, s.Tab-1, w), "", m.renderPRReviewBody(w, h)}, "\n")
@@ -259,6 +342,12 @@ func (m Model) renderPRReviewBody(width, height int) string {
 			Styles.TextMuted.Render("Install the GitHub CLI and run gh auth login to review pull requests.")
 	case s.RepoErr != nil:
 		text = Styles.ErrorText.Render(safeText(s.RepoErr.Error()))
+	case s.Tab == 1:
+		text = m.renderConversationTab(width, height)
+	case s.Tab == 2:
+		text = m.renderCommitsTab(width, height)
+	case s.Tab == 3:
+		text = m.renderChecksTab(width, height)
 	case s.Tab != 4:
 		text = Styles.TextMuted.Render("arrives in the next build")
 	default:
@@ -269,13 +358,31 @@ func (m Model) renderPRReviewBody(width, height int) string {
 	return text + strings.Repeat("\n", max(0, height-lipgloss.Height(text)))
 }
 
+// renderChecksTab is tab 3: the check rollup, or why there is none.
+func (m Model) renderChecksTab(width, height int) string {
+	s := m.prReview
+	switch {
+	case s.LoadingDetail:
+		return Styles.TextMuted.Render(m.spinner.View() + " loading checks")
+	case s.DetailErr != nil:
+		return Styles.ErrorText.Render("checks unavailable: " + safeText(s.DetailErr.Error()))
+	case s.Detail == nil || len(s.Detail.Checks) == 0:
+		return Styles.TextMuted.Render("no checks")
+	}
+	return renderItems(checkItems(s.Detail.Checks), s.Cursor[3], width, height)
+}
+
 // renderFilesTab is tab 4: the diff, or why there is none.
 func (m Model) renderFilesTab(width, height int) string {
 	s := m.prReview
 	switch {
-	case s.LoadingDiff:
+	case s.LoadingScope:
+		return Styles.TextMuted.Render(m.spinner.View() + " loading " + shortSHA(s.ScopedSHA))
+	case s.ScopeErr != nil:
+		return Styles.ErrorText.Render("diff unavailable: " + safeText(s.ScopeErr.Error()))
+	case s.ScopedSHA == "" && s.LoadingDiff:
 		return Styles.TextMuted.Render(m.spinner.View() + " loading diff")
-	case s.DiffErr != nil:
+	case s.ScopedSHA == "" && s.DiffErr != nil:
 		return Styles.ErrorText.Render("diff unavailable: " + safeText(s.DiffErr.Error()))
 	case len(s.Files) == 0:
 		return Styles.TextMuted.Render("no files changed")

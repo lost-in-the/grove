@@ -28,8 +28,9 @@ type Issue struct {
 
 // PRCommit represents a single commit in a pull request.
 type PRCommit struct {
-	SHA     string `json:"sha"`     // short SHA (7 chars)
-	Message string `json:"message"` // first line of commit message
+	SHA     string `json:"sha"`           // short SHA (7 chars)
+	OID     string `json:"oid,omitempty"` // full SHA, where known
+	Message string `json:"message"`       // first line of commit message
 }
 
 // PRDetail is what the PR review view shows beyond the list entry: the

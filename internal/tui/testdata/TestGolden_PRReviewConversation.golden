@@ -1,0 +1,40 @@
+ [1m[1mtest-project[m ▸ [1m#42 Add user authentication flow[m                                                                       [m 
+  [1m[1] conversation 4[m   [2] commits 0   [3] checks 3   [4] files 0                                                       
+                                                                                                                        
+ ▌ checks: 1 passed · 1 failed · 1 running                                                                              
+ ▌                                                                                                                      
+   [1m@octocat[m · 2d                                                                                                        
+       Looks close.                                                                                                     
+                                                                                                                        
+   [1mdocs/README.md (outdated, was line 4)[m                                                                                
+     [1m@hubot[m · 30h                                                                                                       
+       Outdated now.                                                                                                    
+                                                                                                                        
+   [1mmain.go:12[m                                                                                                           
+     [1m@hubot[m · 24h                                                                                                       
+       Why this?                                                                                                        
+     [1m@octocat[m · 23h                                                                                                     
+       To keep it short.                                                                                                
+                                                                                                                        
+   [1m@hubot[m approved · 60m                                                                                                
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+  [1mj/k[m move · [1menter[m go to line · [1m1-4[m tab · [1mB[m browser · [1mesc[m back                                                          

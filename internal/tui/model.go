@@ -18,6 +18,7 @@ import (
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/git"
 	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/plugins"
 	"github.com/lost-in-the/grove/internal/state"
@@ -111,9 +112,10 @@ type Model struct {
 	bulkState      *BulkState
 	prState        *PRViewState
 	prReview       *PRReviewState
-	prReviewGen    int                   // generation of the latest review open
-	prReviewCache  map[int]*prReviewData // loaded review data by PR number
-	ghRepo         string                // the gh repository, once resolved
+	prReviewGen    int                       // generation of the latest review open
+	prReviewCache  map[int]*prReviewData     // loaded review data by PR number
+	ghRepo         string                    // the gh repository, once resolved
+	commitDiffs    map[string][]git.FileDiff // commit diffs by "number:sha"
 	issueState     *IssueViewState
 	syncState      *SyncState
 	configState    *ConfigState
@@ -297,6 +299,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handlePRDiff(msg)
 	case prCommentsMsg:
 		return m.handlePRComments(msg)
+	case prCommitDiffMsg:
+		return m.handlePRCommitDiff(msg)
 	case issuesFetchedMsg:
 		return m.handleIssuesFetched(msg)
 	case bulkDeleteDoneMsg:
@@ -976,7 +980,7 @@ func (m Model) isOperationAnimating() bool {
 // isTrackerAnimating reports whether PR or issue state is loading/creating.
 func (m Model) isTrackerAnimating() bool {
 	return (m.prState != nil && (m.prState.Loading || m.prState.Stale && m.prState.Error == "")) ||
-		(m.prReview != nil && m.prReview.loading()) ||
+		(m.prReview != nil && (m.prReview.loading() || m.prReview.LoadingScope)) ||
 		(m.issueState != nil && m.issueState.Loading)
 }
 

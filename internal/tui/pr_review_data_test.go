@@ -20,7 +20,7 @@ func openReview(t *testing.T) Model {
 	m := newTestModel(withItems(3), withSize(120, 40))
 	next, _ := m.openPRReview(&tracker.PullRequest{Number: 42, Title: "Answer", UpdatedAt: reviewUpdated})
 	m = next.(Model)
-	return sendMsg(m, prReviewRepoMsg{gen: m.prReview.Gen, repo: "o/r"})
+	return sendKey(sendMsg(m, prReviewRepoMsg{gen: m.prReview.Gen, repo: "o/r"}), "4")
 }
 
 func reviewText(m Model) string { return stripAnsi(m.viewString()) }

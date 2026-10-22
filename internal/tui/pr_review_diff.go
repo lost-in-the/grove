@@ -2,8 +2,10 @@ package tui
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -59,6 +61,43 @@ func safeMarkdown(s string) string {
 		}
 		return r
 	}, s)
+}
+
+// sgrPrefix matches an SGR (styling) sequence at the start of a string.
+var sgrPrefix = regexp.MustCompile(`^\x1b\[[0-9;:]*m`)
+
+// safeRendered is rendered terminal text made safe to draw: SGR styling
+// sequences and newlines stay, tabs expand to 4-column stops, and every
+// other control character (C0, DEL, C1, an ESC opening anything but SGR)
+// is dropped.
+func safeRendered(s string) string {
+	var b strings.Builder
+	col := 0
+	for i := 0; i < len(s); {
+		if s[i] == '\x1b' {
+			if loc := sgrPrefix.FindStringIndex(s[i:]); loc != nil {
+				b.WriteString(s[i : i+loc[1]])
+				i += loc[1]
+				continue
+			}
+		}
+		r, size := utf8.DecodeRuneInString(s[i:])
+		i += size
+		switch {
+		case r == '\n':
+			b.WriteByte('\n')
+			col = 0
+		case r == '\t':
+			n := 4 - col%4
+			b.WriteString(strings.Repeat(" ", n))
+			col += n
+		case r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f):
+		default:
+			b.WriteRune(r)
+			col += ansi.StringWidth(string(r))
+		}
+	}
+	return b.String()
 }
 
 // safePRs is prs with the text gh hands over made safe to draw: titles and

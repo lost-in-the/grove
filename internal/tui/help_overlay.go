@@ -337,6 +337,9 @@ var helpSectionsBulk = []helpSection{
 var helpSectionsPRReview = []helpSection{
 	{title: "PR Review", note: "One pull request: conversation, commits, checks, and files.", items: []helpEntry{
 		{"1-4", "Conversation, commits, checks, files"},
+		{"j / k", "Move between items (tabs 1-3)"},
+		{"enter", "On a thread, open its line; on a commit, show its files"},
+		{"a", "All commits' files again"},
 		{"B", "Open PR in browser"},
 		{"esc", "Back"},
 	}},

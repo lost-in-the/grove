@@ -43,7 +43,7 @@ func TestParsePRDetail(t *testing.T) {
 			t.Errorf("check %d = %+v, want %+v", i, d.Checks[i], want[i])
 		}
 	}
-	if len(d.Commits) != 2 || d.Commits[1] != (PRCommit{SHA: "bbbbbbb", Message: "fix: second"}) {
+	if len(d.Commits) != 2 || d.Commits[1].SHA != "bbbbbbb" || d.Commits[1].Message != "fix: second" {
 		t.Errorf("commits: %+v", d.Commits)
 	}
 	if len(d.Files) != 2 || d.Files[1] != (PRFile{Path: "docs/README.md", Additions: 10}) {
@@ -97,5 +97,23 @@ func TestPRDiffArgs(t *testing.T) {
 	}
 	if got := strings.Join(prDiffArgs("o/r", 7), " "); got != "api -H Accept: application/vnd.github.diff repos/o/r/pulls/7" {
 		t.Errorf("%s", got)
+	}
+}
+
+func TestCommitDiffArgs(t *testing.T) {
+	want := "api -H Accept: application/vnd.github.diff repos/o/r/commits/bbbbbbb2222"
+	if got := strings.Join(commitDiffArgs("o/r", "bbbbbbb2222"), " "); got != want {
+		t.Errorf("%s\nwant %s", got, want)
+	}
+}
+
+// Commits keep their full id, for fetching one commit's diff.
+func TestParsePRDetail_CommitOID(t *testing.T) {
+	d, err := parsePRDetail(readFixture(t, "pr_detail.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Commits[1].OID != "bbbbbbb2222222222222222222222222222222222" {
+		t.Errorf("OID %q", d.Commits[1].OID)
 	}
 }

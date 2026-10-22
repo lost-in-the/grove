@@ -132,7 +132,7 @@ func TestPRReview_TitleAndErrorsSafe(t *testing.T) {
 	m = next.(Model)
 	m = sendMsg(m, prReviewRepoMsg{gen: m.prReview.Gen, repo: "o/r"})
 	m = sendMsg(m, prDiffMsg{gen: m.prReview.Gen, err: errors.New(hostile)})
-	assertNoRawEscape(t, "review", m.viewString())
+	assertNoRawEscape(t, "review", sendKey(m, "4").viewString())
 }
 
 // Titles, labels, and bodies from gh are made safe as they enter the TUI,
