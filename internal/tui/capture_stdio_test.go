@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"slices"
 	"testing"
 	"time"
 )
@@ -93,5 +94,29 @@ func TestJoinCaptured(t *testing.T) {
 				t.Errorf("joinCaptured(%q, %q) = %q, want %q", tc.a, tc.b, got, tc.want)
 			}
 		})
+	}
+}
+
+// lineWriter sends whole lines, joining a line split across writes, dropping
+// a trailing \r and empty lines, flushing the partial last line on Close,
+// and ignoring writes after Close.
+func TestLineWriter(t *testing.T) {
+	var got []string
+	lw := &lineWriter{emit: func(line string) { got = append(got, line) }}
+	for _, chunk := range []string{"one\ntw", "o\r\n\n", "three"} {
+		if _, err := lw.Write([]byte(chunk)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if want := []string{"one", "two"}; !slices.Equal(got, want) {
+		t.Errorf("before Close: %q, want %q", got, want)
+	}
+	_ = lw.Close()
+	if _, err := lw.Write([]byte("late\n")); err != nil {
+		t.Fatal(err)
+	}
+	_ = lw.Close()
+	if want := []string{"one", "two", "three"}; !slices.Equal(got, want) {
+		t.Errorf("after Close: %q, want %q", got, want)
 	}
 }

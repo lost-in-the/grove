@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -903,6 +904,54 @@ working_dir = "main"
 	}
 	if dockerCalled {
 		t.Error("docker auto-up ran despite bootstrap failure (CLI skips it)")
+	}
+}
+
+// Bootstrap output reaches the activity log as it is written, not in one
+// dump when bootstrap returns (#143): a hook's first line shows while the
+// hook is still running, so it arrives well before the hook's last line.
+func TestRunPostCreateStreaming_StreamsHookOutputLive(t *testing.T) {
+	t.Setenv("HOME", t.TempDir()) // no global hooks
+	repo := setupRailsFixtureWithWorktrees(t, "live")
+	mgr, stateMgr := newTestManagers(t, repo)
+
+	hooksToml := `[hooks]
+[[hooks.post_create]]
+type = "command"
+command = "echo hook-early && sleep 2 && echo hook-late"
+working_dir = "main"
+`
+	if err := os.WriteFile(filepath.Join(repo, ".grove", "hooks.toml"), []byte(hooksToml), 0o644); err != nil {
+		t.Fatalf("write hooks.toml: %v", err)
+	}
+	wt, err := mgr.Find("live")
+	if err != nil || wt == nil {
+		t.Fatalf("Find(live): wt=%v err=%v", wt, err)
+	}
+
+	ch := make(chan creationEvent, 100)
+	go func() {
+		defer close(ch)
+		cfg := &config.Config{}
+		cfg.Session.OpenIn = config.OpenInCurrent // no session
+		runPostCreateStreaming(ch, mgr, stateMgr, cfg, repo, "live", wt)
+	}()
+	var lines []string
+	var early, late time.Time
+	for ev := range ch {
+		lines = append(lines, ev.line)
+		switch ev.line {
+		case "hook-early":
+			early = time.Now()
+		case "hook-late":
+			late = time.Now()
+		}
+	}
+	if early.IsZero() || late.IsZero() {
+		t.Fatalf("hook output missing from the log: %q", lines)
+	}
+	if gap := late.Sub(early); gap < time.Second {
+		t.Errorf("hook-early arrived %v before hook-late, want about the hook's 2s sleep: %q", gap, lines)
 	}
 }
 

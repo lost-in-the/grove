@@ -71,20 +71,28 @@ func (b *syncBuffer) String() string {
 // as well. On pipe-setup failure fn still runs (uncaptured) rather than being
 // skipped.
 func captureStdio(fn func() error) (string, error) {
+	buf := &syncBuffer{}
+	err := captureStdioTo(buf, fn)
+	return buf.String(), err
+}
+
+// captureStdioTo is captureStdio, writing the capture to out as it arrives
+// rather than returning it at the end. out is written from another
+// goroutine, possibly after captureStdioTo returns (see the drain timeout).
+func captureStdioTo(out io.Writer, fn func() error) error {
 	r, w, pipeErr := os.Pipe()
 	if pipeErr != nil {
-		return "", fn()
+		return fn()
 	}
 
 	stdioMu.Lock()
 	origOut, origErr := os.Stdout, os.Stderr
 	os.Stdout, os.Stderr = w, w
 
-	buf := &syncBuffer{}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_, _ = io.Copy(buf, r)
+		_, _ = io.Copy(out, r)
 	}()
 
 	// Restore the globals, release the lock, and close our write end via defer
@@ -120,7 +128,59 @@ func captureStdio(fn func() error) (string, error) {
 		_ = r.Close()
 	case <-time.After(captureDrainTimeout):
 	}
-	return buf.String(), fnErr
+	return fnErr
+}
+
+// lineWriter sends each complete line written to it to emit, holding a
+// partial last line until the rest arrives or Close. Close sends that
+// partial line and drops every later write: a backgrounded process can keep
+// captureStdioTo's pipe open past the drain timeout, and its output must not
+// reach a creation channel that has since closed.
+type lineWriter struct {
+	mu      sync.Mutex
+	emit    func(line string)
+	partial []byte
+	closed  bool
+}
+
+func (lw *lineWriter) Write(p []byte) (int, error) {
+	lw.mu.Lock()
+	defer lw.mu.Unlock()
+	if lw.closed {
+		return len(p), nil
+	}
+	lw.partial = append(lw.partial, p...)
+	for {
+		i := bytes.IndexByte(lw.partial, '\n')
+		if i < 0 {
+			break
+		}
+		lw.send(string(lw.partial[:i]))
+		lw.partial = lw.partial[i+1:]
+	}
+	return len(p), nil
+}
+
+// Close sends any partial last line and stops forwarding.
+func (lw *lineWriter) Close() error {
+	lw.mu.Lock()
+	defer lw.mu.Unlock()
+	if !lw.closed {
+		lw.send(string(lw.partial))
+		lw.partial, lw.closed = nil, true
+	}
+	return nil
+}
+
+func (lw *lineWriter) send(line string) {
+	if line = strings.TrimRight(line, "\r"); line != "" {
+		lw.emit(line)
+	}
+}
+
+// logLines returns a lineWriter that sends each line to ch as a log line.
+func logLines(ch chan<- creationEvent) *lineWriter {
+	return &lineWriter{emit: func(line string) { ch <- creationEvent{line: line} }}
 }
 
 // joinCaptured concatenates two captured output chunks, inserting a newline
@@ -422,25 +482,24 @@ func runPostCreateStreaming(ch chan<- creationEvent, mgr *worktree.Manager, stat
 	projectName := mgr.GetProjectName()
 
 	ch <- creationEvent{line: "Bootstrapping worktree..."}
-	// Config-hook progress goes to bootBuf via the writer; the plugin
-	// post-create hook (docker env: directive, persist warnings) writes to
-	// os.Stdout/os.Stderr, so wrap the whole call in captureStdio too — either
-	// stream would corrupt the alt screen. Both are surfaced as log lines below.
+	// Config-hook progress goes to the writer; the plugin post-create hook
+	// (docker env: directive, persist warnings) writes to os.Stdout/os.Stderr,
+	// so wrap the whole call in captureStdioTo too — either stream would
+	// corrupt the alt screen. Each becomes log lines as it is written (#143),
+	// through its own lineWriter so partial lines from the two cannot fuse.
 	var bootBuf bytes.Buffer
-	pluginOut, bootErr := captureStdio(func() error {
+	hookLog, pluginLog := logLines(ch), logLines(ch)
+	bootErr := captureStdioTo(pluginLog, func() error {
 		return worktree.BootstrapWorktree(stateMgr, cfg, worktree.BootstrapOpts{
 			Name:         name,
 			Branch:       wt.Branch,
 			WorktreePath: wt.Path,
 			MainPath:     projectRoot,
 			ProjectName:  projectName,
-		}, cli.NewWriter(&bootBuf, false))
+		}, cli.NewWriter(io.MultiWriter(&bootBuf, hookLog), false))
 	})
-	for _, line := range strings.Split(strings.TrimRight(joinCaptured(bootBuf.String(), pluginOut), "\n"), "\n") {
-		if line != "" {
-			ch <- creationEvent{line: line}
-		}
-	}
+	_ = hookLog.Close()
+	_ = pluginLog.Close()
 	if bootErr != nil {
 		// Match the CLI: setupCreatedWorktree returns before autoStartDocker
 		// when bootstrap fails (required-hook failure included), and `grove
@@ -477,8 +536,8 @@ func runPostCreateStreaming(ch chan<- creationEvent, mgr *worktree.Manager, stat
 
 // runDockerAutoUp brings the docker stack up for a dashboard-created worktree
 // when [plugins.docker] auto_up opts in, streaming progress to ch. Compose
-// output goes to os.Stderr, so the call is wrapped in captureStdio and
-// re-emitted as log lines; failures are surfaced as a log line (warn-only,
+// output goes to os.Stderr, so the call is wrapped in captureStdioTo and
+// sent as log lines as it is written; failures are surfaced as a log line (warn-only,
 // same as the CLI epilogue — the worktree itself was created fine).
 func runDockerAutoUp(ch chan<- creationEvent, cfg *config.Config, name, wtPath string) {
 	if !docker.ShouldAutoUp(cfg) {
@@ -486,16 +545,13 @@ func runDockerAutoUp(ch chan<- creationEvent, cfg *config.Config, name, wtPath s
 	}
 	ch <- creationEvent{line: "Starting Docker stack..."}
 	var started bool
-	captured, err := captureStdio(func() error {
+	composeLog := logLines(ch)
+	err := captureStdioTo(composeLog, func() error {
 		var upErr error
 		started, upErr = dockerAutoUp(cfg, wtPath)
 		return upErr
 	})
-	for _, line := range strings.Split(strings.TrimRight(captured, "\n"), "\n") {
-		if line != "" {
-			ch <- creationEvent{line: line}
-		}
-	}
+	_ = composeLog.Close()
 	if err != nil {
 		tuilog.Printf("warning: docker auto-start failed for %q: %v", name, err)
 		ch <- creationEvent{line: fmt.Sprintf("Docker auto-start failed: %v", err)}
