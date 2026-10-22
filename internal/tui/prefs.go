@@ -12,6 +12,8 @@ import (
 type UIPrefs struct {
 	CompactMode *bool             `json:"compact_mode,omitempty"`
 	Pins        map[string]string `json:"pins,omitempty"` // slot "1".."9" -> alias
+	// Viewed is the PR review's viewed marks: PR number -> path -> fileHash.
+	Viewed map[string]map[string]string `json:"viewed,omitempty"`
 }
 
 // prefsFileName is the file within .grove/ that stores UI preferences.

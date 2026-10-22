@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -46,11 +47,15 @@ type (
 )
 
 // prReviewRepoCmd checks gh once and finds the repository, so the three
-// fetches that follow need neither.
-func prReviewRepoCmd(gen int) tea.Cmd {
+// fetches that follow need neither. The PR's URL names the repository; gh
+// repo view (GraphQL, which can be rate limited) is only the fallback.
+func prReviewRepoCmd(gen int, prURL string) tea.Cmd {
 	return func() tea.Msg {
 		if !tracker.IsGHInstalled() {
 			return prReviewRepoMsg{gen: gen, ghMissing: true}
+		}
+		if repo := repoFromPRURL(prURL); repo != "" {
+			return prReviewRepoMsg{gen: gen, repo: repo}
 		}
 		repo, err := tracker.DetectRepo()
 		if err != nil {
@@ -58,6 +63,24 @@ func prReviewRepoCmd(gen int) tea.Cmd {
 		}
 		return prReviewRepoMsg{gen: gen, repo: repo}
 	}
+}
+
+// repoFromPRURL is the repository in a pull request's URL, "owner/repo" on
+// github.com and "host/owner/repo" elsewhere, as gh's --repo takes it; ""
+// when url is not a pull request's.
+func repoFromPRURL(url string) string {
+	rest, ok := strings.CutPrefix(url, "https://")
+	if !ok {
+		return ""
+	}
+	parts := strings.Split(rest, "/")
+	if len(parts) < 5 || parts[3] != "pull" {
+		return ""
+	}
+	if parts[0] == "github.com" {
+		return parts[1] + "/" + parts[2]
+	}
+	return parts[0] + "/" + parts[1] + "/" + parts[2]
 }
 
 // prReviewFetchCmds fetch a PR's detail, diff, and review comments at once;
@@ -116,7 +139,8 @@ func (m Model) handlePRDetail(msg prDetailMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) handlePRDiff(msg prDiffMsg) (tea.Model, tea.Cmd) {
 	if s := m.reviewFor(msg.gen); s != nil {
-		s.Files, s.DiffErr, s.LoadingDiff = msg.files, msg.err, false
+		s.DiffErr, s.LoadingDiff = msg.err, false
+		s.setFiles(msg.files)
 		m.cacheReviewIfComplete()
 	}
 	return m, nil

@@ -118,8 +118,11 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 		}
 	case ViewPRReview:
 		return []Hint{
+			{"J/K", "file"},
+			{"v", "viewed"},
+			{"z", "fold"},
+			{"t", "rail"},
 			{"1-4", "tab"},
-			{"B", "open in browser"},
 			{"esc", "back"},
 		}
 	case ViewConfig:

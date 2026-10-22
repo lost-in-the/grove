@@ -297,6 +297,26 @@ Controls:
 - Type to filter by title, branch, author, or number
 - `esc` — Close
 
+### PR Review (`enter` on a PR)
+
+A full-screen review of one pull request, opened from the PR browser or from a PR result in Find. The header names the PR; the tab row reads `[1] conversation  [2] commits  [3] checks  [4] files` with each tab's count once its data has loaded. `esc` goes back to where you opened it.
+
+Opening a review fetches the PR's detail, diff, and review comments in the background with `gh`. Each loads on its own, so a failed diff still leaves the other tabs. A PR that has not changed since you last opened it in this session opens at once. Without `gh`, the frame shows one `gh required` panel.
+
+The files tab (`4`) shows one file at a time: its path and counts, then each hunk with old and new line numbers. At 100 columns and wider a rail on the left lists the files as a folder tree with `+/-` counts; the current file is highlighted and viewed files carry `✓`. Control characters in the diff (an escape sequence in a test fixture, say) are drawn as symbols such as `␛`, never sent to the terminal.
+
+| Key | Action |
+|---|---|
+| `1` - `4` | Conversation, commits, checks, files (the first three arrive in the next build) |
+| `J` / `K`, `ctrl+n` / `ctrl+p` | Next / previous file, in the rail's order |
+| `↑/k` `↓/j`, `ctrl+u` / `ctrl+d`, `pgup` / `pgdn` | Scroll the file |
+| `g` / `G` | Top / bottom of the file |
+| `v` | Mark the file viewed; the mark is saved in `.grove/ui_prefs.json` and dropped when the file's diff changes |
+| `z` | Fold each run of 4 or more removed lines into one line |
+| `t` | Show or hide the rail; the choice holds when the terminal is resized |
+| `B` | Open the PR in the browser |
+| `esc` | Back |
+
 ### Issue Browser (`i`)
 
 Fetches open GitHub issues (requires `gh` CLI installed and authenticated).

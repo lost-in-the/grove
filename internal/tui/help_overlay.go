@@ -340,6 +340,15 @@ var helpSectionsPRReview = []helpSection{
 		{"B", "Open PR in browser"},
 		{"esc", "Back"},
 	}},
+	{title: "Files", items: []helpEntry{
+		{"J / K", "Next / previous file (also ctrl+n / ctrl+p)"},
+		{"↑/k ↓/j", "Scroll"},
+		{"g / G", "Top / bottom of the file"},
+		{"ctrl+u / ctrl+d", "Half page up / down"},
+		{"v", "Mark the file viewed (kept until it changes)"},
+		{"z", "Fold runs of removed lines"},
+		{"t", "Show or hide the file rail"},
+	}},
 }
 
 var helpSectionsPRs = []helpSection{

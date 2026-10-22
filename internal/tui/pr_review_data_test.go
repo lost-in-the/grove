@@ -117,3 +117,19 @@ func TestGolden_PRReview(t *testing.T) {
 		golden.RequireEqual(t, []byte(next.(Model).viewString()))
 	})
 }
+
+// The PR's own URL names its repository, so opening a review needs no gh
+// call to find it (gh repo view uses GraphQL, which can be rate limited).
+func TestRepoFromPRURL(t *testing.T) {
+	cases := map[string]string{
+		"https://github.com/lost-in-the/grove/pull/176": "lost-in-the/grove",
+		"https://ghe.example.com/team/app/pull/3":       "ghe.example.com/team/app",
+		"https://github.com/o/r/issues/1":               "",
+		"":                                              "",
+	}
+	for url, want := range cases {
+		if got := repoFromPRURL(url); got != want {
+			t.Errorf("repoFromPRURL(%q) = %q, want %q", url, got, want)
+		}
+	}
+}
