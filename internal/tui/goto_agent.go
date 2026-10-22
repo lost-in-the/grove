@@ -24,8 +24,7 @@ func (m Model) gotoAgent() (tea.Model, tea.Cmd) {
 	}
 	if target < 0 {
 		m.toast.Show(NewToast("no agents need you", ToastInfo))
-		// Toasts expire on spinner ticks; an idle dashboard has none running.
-		return m, m.spinner.Tick
+		return m, nil // Update starts the tick that expires the toast
 	}
 
 	path := items[target].(WorktreeItem).Path
