@@ -2,6 +2,7 @@ package tui
 
 import (
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 
@@ -30,10 +31,21 @@ func TestEditorArgs(t *testing.T) {
 		if got := strings.Join(append([]string{name}, args...), " "); got != c.want {
 			t.Errorf("%q: %s, want %s", c.editor, got, c.want)
 		}
+		// The path, with its space, is one argument (or one with ":12").
+		if n := strings.Count(strings.Join(args, "\x00"), "a b.go"); n != 1 || slices.Contains(args, "/w/a") {
+			t.Errorf("%q: path split across arguments: %q", c.editor, args)
+		}
 	}
-	// A path with a space stays one argument.
-	if _, args := editorArgs("nvim", "/w/a b.go", 1); args[len(args)-1] != "/w/a b.go" {
-		t.Errorf("path split: %q", args)
+}
+
+// A diff path that climbs out of the worktree is not opened.
+func TestPRReview_EditorRefusesPathOutsideWorktree(t *testing.T) {
+	got := captureEditor(t)
+	m := editorReview(t, "fix-bug", []git.FileDiff{diffFile("../../etc/passwd", 1, 0)})
+	next, cmd := m.handlePRReviewKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(Model)
+	if cmd != nil || *got != nil || !strings.Contains(m.toast.Message(), "outside") {
+		t.Errorf("cmd %v, editor %q, toast %q", cmd != nil, *got, m.toast.Message())
 	}
 }
 

@@ -43,6 +43,9 @@ func (m Model) openLocalReview(item WorktreeItem) (tea.Model, tea.Cmd) {
 // detection on whatever diff.renames says.
 func localDiffCmd(gen int, path, base string) tea.Cmd {
 	return func() tea.Msg {
+		if strings.HasPrefix(base, "-") {
+			return prDiffMsg{gen: gen, err: fmt.Errorf("the default branch %q reads as a git option", base)}
+		}
 		mb, err := cmdexec.Output(context.TODO(), "git", []string{"-C", path, "merge-base", "HEAD", base}, "", cmdexec.GitLocal)
 		if err != nil {
 			// A checkout without a local default branch (a fresh clone of a
@@ -50,7 +53,7 @@ func localDiffCmd(gen int, path, base string) tea.Cmd {
 			mb, err = cmdexec.Output(context.TODO(), "git", []string{"-C", path, "merge-base", "HEAD", "origin/" + base}, "", cmdexec.GitLocal)
 		}
 		if err != nil {
-			return prDiffMsg{gen: gen, err: fmt.Errorf("no merge-base with %s or origin/%s", base, base)}
+			return prDiffMsg{gen: gen, err: fmt.Errorf("no merge-base with %s or origin/%s: %w", base, base, err)}
 		}
 		out, err := cmdexec.Output(context.TODO(), "git", []string{"-C", path, "diff", "--no-color", "--no-ext-diff", "-M",
 			"--src-prefix=a/", "--dst-prefix=b/", strings.TrimSpace(string(mb))}, "", cmdexec.GitLocal)

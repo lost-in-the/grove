@@ -85,9 +85,14 @@ func (m Model) openInEditor() (Model, tea.Cmd) {
 		return m, nil
 	}
 	root := ""
-	for _, w := range m.existingWorktreeItems() {
-		if w.Branch == s.PR.Branch {
-			root = w.Path
+	if s.Local != nil {
+		root = s.Local.Path // the reviewed worktree, whatever its branch
+	} else {
+		for _, w := range m.existingWorktreeItems() {
+			if w.Branch == s.PR.Branch {
+				root = w.Path
+				break
+			}
 		}
 	}
 	if root == "" {
@@ -98,7 +103,12 @@ func (m Model) openInEditor() (Model, tea.Cmd) {
 	if editor == "" {
 		editor = os.Getenv("EDITOR")
 	}
-	name, args := editorArgs(editor, filepath.Join(root, f.Path()), editorLine(f, s.Scroll, s.Folded))
+	file := filepath.Join(root, f.Path())
+	if rel, err := filepath.Rel(root, file); err != nil || rel == ".." || strings.HasPrefix(rel, "../") {
+		m.toast.Show(NewToast("the file's path leads outside the worktree", ToastWarning))
+		return m, nil
+	}
+	name, args := editorArgs(editor, file, editorLine(f, s.Scroll, s.Folded))
 	return m, execEditor(exec.Command(name, args...))
 }
 

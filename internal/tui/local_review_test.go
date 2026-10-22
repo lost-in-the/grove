@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/exp/golden"
 
 	"github.com/lost-in-the/grove/internal/git"
@@ -21,6 +22,7 @@ func localFixture(t *testing.T) string {
 		t.Skip("git not available")
 	}
 	dir := t.TempDir()
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null") // no hooks or diff settings from the user
 	run := func(args ...string) {
 		t.Helper()
 		if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
@@ -174,5 +176,34 @@ func TestLocalDiff_FallsBackToOrigin(t *testing.T) {
 	msg := localDiffCmd(1, dir, "main")().(prDiffMsg)
 	if msg.err != nil || len(msg.files) != 2 {
 		t.Errorf("err %v, %d files", msg.err, len(msg.files))
+	}
+}
+
+// A local review's editor opens in that worktree, whatever its branch.
+func TestLocalReview_EnterOpensItsOwnWorktree(t *testing.T) {
+	got := captureEditor(t)
+	m := localReview(t, []git.FileDiff{jumpFile()})
+	m.prReview.PR.Branch = "fix-bug" // another worktree's branch, as two detached ones share one
+	next, _ := m.handlePRReviewKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	_ = next
+	if want := "/tmp/test-project-feature-auth/main.go"; len(*got) == 0 || (*got)[len(*got)-1] != want {
+		t.Errorf("editor %q, want the file in %s", *got, want)
+	}
+}
+
+// A default branch that reads as a git option is refused, not passed on.
+func TestLocalDiff_RejectsOptionLikeBase(t *testing.T) {
+	dir := localFixture(t)
+	if msg := localDiffCmd(1, dir, "--independent")().(prDiffMsg); msg.err == nil {
+		t.Errorf("a base of --independent diffed %d files", len(msg.files))
+	}
+}
+
+// The local review's footer offers only keys it has.
+func TestLocalReview_FooterHasNoPRKeys(t *testing.T) {
+	m := localReview(t, railFiles)
+	footer := stripAnsi(m.prReviewFooter())
+	if strings.Contains(footer, "viewed") || strings.Contains(footer, "1-4") || !strings.Contains(footer, "editor") {
+		t.Errorf("footer %q", footer)
 	}
 }

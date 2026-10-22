@@ -297,6 +297,9 @@ func (m Model) prReviewFooter() string {
 		hints = []Hint{{"j/k", "move"}, {"enter", "its files"}, {"1-4", "tab"}, {"B", "browser"}, {"esc", "back"}}
 	case 4:
 		hints = m.helpFooter.CompactHints(ViewPRReview)
+		if m.prReview.Local != nil {
+			hints = []Hint{{"J/K", "file"}, {"enter", "editor"}, {"z", "fold"}, {"t", "rail"}, {"esc", "back"}}
+		}
 		if m.prReview.ScopedSHA != "" {
 			hints = append([]Hint{{"a", "all commits"}}, hints...)
 		}
