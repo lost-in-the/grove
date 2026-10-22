@@ -149,7 +149,7 @@ func parseHunk(lines []string, i int) (Hunk, int, error) {
 			case '\\':
 				kind = LineNoNewline
 			default:
-				return Hunk{}, 0, fmt.Errorf("line %d: hunk ends early", i+1)
+				return Hunk{}, 0, fmt.Errorf("line %d: not a diff line in the hunk at line %d", j+1, i+1)
 			}
 		}
 		dl := DiffLine{Kind: kind, Text: text}
@@ -201,8 +201,10 @@ func headerPaths(s string) (string, string) {
 }
 
 // sidePath is the path on a ---/+++ line: "" for /dev/null, unquoted, with
-// its a/ or b/ prefix dropped.
+// its a/ or b/ prefix dropped. git ends a path holding a space with a tab,
+// which is not part of the name.
 func sidePath(raw, prefix string) string {
+	raw = strings.TrimSuffix(raw, "\t")
 	if raw == "/dev/null" {
 		return ""
 	}

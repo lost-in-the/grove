@@ -105,7 +105,8 @@ func TestPRView_RefreshReplacesStaleList(t *testing.T) {
 	next, _ := m.enterPRView()
 	m = next.(Model)
 	m.prState.Cursor = 1 // #9
-	fresh := []*tracker.PullRequest{{Number: 11, Title: "New eleven"}, {Number: 9, Title: "Cached nine"}, {Number: 7, Title: "Cached seven"}}
+	// #9 moves from index 1 to 2, so keeping the index would select #7.
+	fresh := []*tracker.PullRequest{{Number: 11, Title: "New eleven"}, {Number: 7, Title: "Cached seven"}, {Number: 9, Title: "Cached nine"}}
 	m = sendMsg(m, prsFetchedMsg{prs: fresh})
 	s := m.prState
 	if s.Stale || s.Error != "" || len(s.PRs) != 3 || m.prFetching {
@@ -165,5 +166,42 @@ func TestPRView_NoDoubleFetch(t *testing.T) {
 	m = sendMsg(m, prsFetchedMsg{prs: cachedPRs})
 	if m.prState == nil || len(m.prState.PRs) != 2 || m.prState.Loading {
 		t.Errorf("the in-flight fetch did not fill the reopened browser: %+v", m.prState)
+	}
+}
+
+// The stale line's spinner moves while the refresh runs, and stops once it
+// has failed.
+func TestPRView_StaleListAnimates(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 30))
+	m.prCache = cachedPRs
+	next, _ := m.enterPRView()
+	m = next.(Model)
+	if !m.isAnimating() {
+		t.Error("a stale list being refreshed should animate its spinner")
+	}
+	m = sendMsg(m, prsFetchedMsg{err: errTest})
+	if m.isTrackerAnimating() {
+		t.Error("a failed refresh has nothing left to animate")
+	}
+}
+
+// Omni opens the browser at a PR: the cached list already puts the cursor
+// there, so enter cannot act on another PR before the refresh lands.
+func TestPRView_PendingPROnCachedList(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 30))
+	m.prCache = cachedPRs
+	m.pendingPR = 9
+	next, _ := m.enterPRView()
+	m = next.(Model)
+	if n := m.prState.selectedPRNumber(); n != 9 {
+		t.Errorf("cursor on #%d, want #9", n)
+	}
+}
+
+// grove prs starts in the browser with Init's fetch in flight, so reopening
+// starts no second fetch.
+func TestConfigureForPRs_MarksFetchInFlight(t *testing.T) {
+	if m := newTestModel(withItems(3)).ConfigureForPRs(); !m.prFetching {
+		t.Error("ConfigureForPRs should record the fetch Init starts")
 	}
 }

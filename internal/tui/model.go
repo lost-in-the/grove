@@ -966,7 +966,7 @@ func (m Model) isOperationAnimating() bool {
 
 // isTrackerAnimating reports whether PR or issue state is loading/creating.
 func (m Model) isTrackerAnimating() bool {
-	return (m.prState != nil && m.prState.Loading) ||
+	return (m.prState != nil && (m.prState.Loading || m.prState.Stale && m.prState.Error == "")) ||
 		(m.issueState != nil && m.issueState.Loading)
 }
 
@@ -1341,6 +1341,11 @@ func (m Model) enterPRView() (tea.Model, tea.Cmd) {
 		Stale:            m.prCache != nil,
 		WorktreeBranches: branches,
 		FilterInput:      newFilterInput(""),
+	}
+	for i, pr := range m.prCache {
+		if m.pendingPR != 0 && pr.Number == m.pendingPR {
+			m.prState.Cursor = i // omni opened the browser at this PR
+		}
 	}
 	if m.prFetching {
 		return m, m.spinner.Tick // the fetch in flight fills this browser
@@ -1829,6 +1834,7 @@ func gatherDeleteWarnings(item *WorktreeItem) []string {
 // ConfigureForPRs configures the model to start directly in the PR browser view.
 func (m Model) ConfigureForPRs() Model {
 	m.pushView(ViewPRs)
+	m.prFetching = true // Init starts the fetch
 	m.prState = &PRViewState{
 		Loading:          true,
 		WorktreeBranches: m.worktreeBranchMap(),

@@ -181,6 +181,20 @@ func TestParseDiff_QuotedPath(t *testing.T) {
 	}
 }
 
+// git ends a ---/+++ path holding a space with a tab, so tools can tell
+// where the name stops; the tab is not part of the name.
+func TestParseDiff_PathWithSpaceTrailingTab(t *testing.T) {
+	f := parseOne(t, "diff --git a/sp ace.txt b/sp ace.txt\n"+
+		"--- a/sp ace.txt\t\n"+
+		"+++ b/sp ace.txt\t\n"+
+		"@@ -1 +1 @@\n"+
+		"-a\n"+
+		"+b\n")
+	if f.OldPath != "sp ace.txt" || f.NewPath != "sp ace.txt" {
+		t.Errorf("paths %q, %q", f.OldPath, f.NewPath)
+	}
+}
+
 func TestParseDiff_RawUTF8Path(t *testing.T) {
 	f := parseOne(t, "diff --git a/café.go b/café.go\n"+
 		"--- a/café.go\n"+
@@ -209,5 +223,10 @@ func TestParseDiff_Malformed(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "line 4") {
 			t.Errorf("%s: err = %v, want one naming line 4", name, err)
 		}
+	}
+	// A line that is not a diff line is named by its own number.
+	_, err := ParseDiff("diff --git a/m b/m\n--- a/m\n+++ b/m\n@@ -1,2 +1,2 @@\n a\n*b\n")
+	if err == nil || !strings.Contains(err.Error(), "line 6") {
+		t.Errorf("bad line in hunk: err = %v, want one naming line 6", err)
 	}
 }

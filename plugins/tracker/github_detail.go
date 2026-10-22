@@ -160,10 +160,11 @@ func (g *GitHubAdapter) FetchReviewComments(number int) ([]ReviewComment, error)
 
 // FetchPRDiff retrieves a pull request's unified diff, for git.ParseDiff.
 //
-// The diff is verbatim: gh refuses to print one holding terminal escape
-// sequences (a golden file, say) unless allowed, so the caller must
-// neutralize control characters before drawing any line. A gh too old to
-// know the flag is asked again without it.
+// The diff is verbatim: by default gh neutralizes terminal escape
+// sequences in it (and, writing to a pipe, refuses one that holds them), so
+// grove asks for the raw text and the caller must neutralize control
+// characters before drawing any line. A gh too old to know the flag is
+// asked again without it.
 func (g *GitHubAdapter) FetchPRDiff(number int) (string, error) {
 	args := []string{"pr", "diff", strconv.Itoa(number), "--color", "never"}
 	if g.repo != "" {
