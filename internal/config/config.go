@@ -699,13 +699,36 @@ func lineMatchesField(trimmed, field string) bool {
 	return strings.HasPrefix(trimmed, field+" =") || strings.HasPrefix(trimmed, field+"=")
 }
 
+// assignment returns the index of the = that ends the key on line, or -1
+// when the line assigns nothing (blank, comment, section header). A quoted
+// key may hold an = of its own.
+func assignment(line string) int {
+	var quote byte
+	for k := 0; k < len(line); k++ {
+		switch c := line[k]; {
+		case quote != 0:
+			if c == '\\' && quote == '"' {
+				k++ // an escape: skip the escaped character
+			} else if c == quote {
+				quote = 0
+			}
+		case c == '"', c == '\'':
+			quote = c
+		case c == '#', c == '[':
+			return -1
+		case c == '=':
+			return k
+		}
+	}
+	return -1
+}
+
 // valueEnd returns the index of the last line of the value assigned on line
 // i, so a multi-line array or string is read whole. A line that assigns
-// nothing (blank, comment, section header) ends where it starts.
+// nothing ends where it starts.
 func valueEnd(lines []string, i int) int {
-	trimmed := strings.TrimSpace(lines[i])
-	eq := strings.IndexByte(lines[i], '=')
-	if eq < 0 || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "[") {
+	eq := assignment(lines[i])
+	if eq < 0 {
 		return i
 	}
 	depth := 0     // open [ and {
@@ -754,16 +777,16 @@ func replaceValue(lines []string, i int, formattedLine string) []string {
 	return append(out, lines[end+1:]...)
 }
 
-// setTopLevelValue handles the section=="" case for setValueInLines.
+// setTopLevelValue handles the section=="" case for setValueInLines. Top-level
+// keys come before the first section header, so the search stops there, and
+// a new key goes just above it.
 func setTopLevelValue(lines []string, field, formattedLine string) []string {
 	for i := 0; i < len(lines); i = valueEnd(lines, i) + 1 {
-		if lineMatchesField(strings.TrimSpace(lines[i]), field) {
+		trimmed := strings.TrimSpace(lines[i])
+		if lineMatchesField(trimmed, field) {
 			return replaceValue(lines, i, formattedLine)
 		}
-	}
-	for i := 0; i < len(lines); i = valueEnd(lines, i) + 1 {
-		line := lines[i]
-		if strings.HasPrefix(strings.TrimSpace(line), "[") {
+		if strings.HasPrefix(trimmed, "[") {
 			inserted := make([]string, 0, len(lines)+1)
 			inserted = append(inserted, lines[:i]...)
 			inserted = append(inserted, formattedLine)

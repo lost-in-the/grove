@@ -492,6 +492,42 @@ immutable = ["prod"]
 				}
 			},
 		},
+		{
+			name: "an = inside a quoted key does not start the value",
+			initial: `[protection]
+"a=b" = [
+  ["x"],
+]
+immutable = ["prod"]
+`,
+			updates: map[string]string{"protection.immutable": `["dev"]`},
+			validate: func(t *testing.T, content string) {
+				if p := decodeProtection(t, content); !slices.Equal(p.Immutable, []string{"dev"}) {
+					t.Errorf("got %+v, want immutable [dev]:\n%s", p, content)
+				}
+			},
+		},
+		{
+			name: "a top-level key is not found inside a section",
+			initial: `[switch]
+project_name = "kept"
+`,
+			updates: map[string]string{"project_name": `"top"`},
+			validate: func(t *testing.T, content string) {
+				var got struct {
+					ProjectName string `toml:"project_name"`
+					Switch      struct {
+						ProjectName string `toml:"project_name"`
+					}
+				}
+				if _, err := toml.Decode(content, &got); err != nil {
+					t.Fatalf("invalid TOML: %v\n%s", err, content)
+				}
+				if got.ProjectName != "top" || got.Switch.ProjectName != "kept" {
+					t.Errorf("top %q, [switch] %q; want top, kept:\n%s", got.ProjectName, got.Switch.ProjectName, content)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
