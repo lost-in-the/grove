@@ -362,10 +362,9 @@ func (m Model) handleConfigKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 // leaveConfig closes the editor, first asking to save when anything
-// changed. Sync first: string fields bind live, bools only through their
-// bindings.
+// changed. updateConfigForm syncs the bools after every form message, so
+// the fields are already current.
 func (m Model) leaveConfig() (tea.Model, tea.Cmd) {
-	m.syncConfigFormValues()
 	if m.configState.unsaved() > 0 {
 		m.configState.Confirming = true
 		return m, nil

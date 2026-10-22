@@ -34,6 +34,29 @@ func TestConfig_UnsavedCountAgainstLoaded(t *testing.T) {
 	}
 }
 
+// A bool binds through configFormValues, not straight to its field, so
+// toggling one must still count as unsaved, prompt on esc, and be saved
+// alone.
+func TestConfig_BoolToggleIsUnsaved(t *testing.T) {
+	m := openConfigWith(t, 100, 30, nil)
+	m = sendConfigKeys(t, m, "ctrl+n", "ctrl+n")
+	if k := focusedKey(m); k != "plugins.docker.enabled" {
+		t.Fatalf("focused %q, want plugins.docker.enabled", k)
+	}
+	m = sendConfigKeys(t, m, "l")
+	if h := configHeaderLine(m); !strings.Contains(h, "● 1 unsaved") {
+		t.Errorf("after toggling: %q", h)
+	}
+	got := configUpdates(m.configState)
+	if len(got) != 1 || got["plugins.docker.enabled"] != "false" {
+		t.Errorf("updates %v, want only plugins.docker.enabled = false", got)
+	}
+	m = sendConfigKeys(t, m, "esc")
+	if m.activeView() != ViewConfig || !m.configState.Confirming {
+		t.Errorf("esc after a toggle should ask to save: view %v", m.activeView())
+	}
+}
+
 func TestConfig_SaveWritesOnlyChanged(t *testing.T) {
 	m := openConfigWith(t, 100, 30, nil)
 	m = sendConfigKeys(t, m, "x")
