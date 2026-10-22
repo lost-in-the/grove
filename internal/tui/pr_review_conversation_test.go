@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -131,4 +132,83 @@ func TestGolden_PRReviewConversation(t *testing.T) {
 	m = sendMsg(m, prCommentsMsg{gen: g, comments: convThreads})
 	m = sendMsg(m, prDiffMsg{gen: g})
 	golden.RequireEqual(t, []byte(m.viewString()))
+}
+
+// Markdown's character references (&#x1b;) become control characters
+// inside glamour, after any filter on its input; its output is filtered
+// too, keeping only SGR styling.
+func TestRenderMarkdown_NoControlsOut(t *testing.T) {
+	out := renderMarkdown("x &#x1b;]52;c;aGk=&#7; y &#27;[2J z\n\n```\na\tb\n```\n\nc\td", 80)
+	for i := 0; i < len(out); i++ {
+		c := out[i]
+		if c == '\x1b' {
+			if !sgrAt.MatchString(out[i:]) {
+				t.Fatalf("a non-SGR escape at %d: %q", i, out[i:min(len(out), i+12)])
+			}
+			continue
+		}
+		if c == '\t' || (c < 0x20 && c != '\n') || c == 0x7f {
+			t.Fatalf("control %#x at %d in %q", c, i, out)
+		}
+	}
+}
+
+var sgrAt = regexp.MustCompile(`^\x1b\[[0-9;:]*m`)
+
+// A commit's files show even while the PR's own diff is loading or failed.
+func TestPRReview_ScopedDiffShownBeforePRDiff(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	next, _ := m.openPRReview(&tracker.PullRequest{Number: 42})
+	m = next.(Model)
+	m = sendMsg(m, prReviewRepoMsg{gen: m.prReview.Gen, repo: "o/r"})
+	m = sendMsg(m, prDetailMsg{gen: m.prReview.Gen, detail: commitDetail})
+	m = sendKey(sendKey(m, "2"), "enter")
+	m = sendMsg(m, prCommitDiffMsg{gen: m.prReview.Gen, sha: "aaaaaaa111", files: []git.FileDiff{diffFile("only.go", 1, 0)}})
+	if text := stripAnsi(m.viewString()); !strings.Contains(text, "only.go") || strings.Contains(text, "loading diff") {
+		t.Errorf("scoped files hidden behind the PR diff's state:\n%s", text)
+	}
+}
+
+// Jumping to a thread shows the whole PR's files, where its line is.
+func TestPRReview_JumpWhileScopedUnscopes(t *testing.T) {
+	m := conversationReview(t, []tracker.ReviewComment{{ID: 1, Path: "main.go", Line: 41, Side: "RIGHT", Author: "a", Body: "here"}})
+	m = sendMsg(m, prDetailMsg{gen: m.prReview.Gen, detail: commitDetail})
+	m = sendKey(sendKey(m, "2"), "enter")
+	m = sendMsg(m, prCommitDiffMsg{gen: m.prReview.Gen, sha: "aaaaaaa111", files: []git.FileDiff{diffFile("other.go", 1, 0)}})
+	m = sendKey(m, "1")
+	m.viewString()
+	m = sendKey(sendKey(m, "j"), "enter") // past the summary line to the thread
+	if m.prReview.ScopedSHA != "" || m.prReview.Tab != 4 || currentPath(m) != "main.go" {
+		t.Errorf("scoped %q tab %d file %q", m.prReview.ScopedSHA, m.prReview.Tab, currentPath(m))
+	}
+}
+
+func TestPRReview_JumpToMissingPathToasts(t *testing.T) {
+	m := conversationReview(t, []tracker.ReviewComment{{ID: 1, Path: "gone.go", Line: 3, Side: "RIGHT", Author: "a", Body: "x"}})
+	m.viewString()
+	m = sendKey(m, "enter")
+	if m.prReview.Tab != 1 || m.toast.Current == nil || !strings.Contains(m.toast.Message(), "gone.go") {
+		t.Errorf("tab %d toast %q", m.prReview.Tab, m.toast.Message())
+	}
+}
+
+// One of the two conversation sources failing is said, not silent.
+func TestPRReview_ConversationPartialFailure(t *testing.T) {
+	m := openReview(t)
+	m = sendMsg(m, prDetailMsg{gen: m.prReview.Gen, detail: convDetail})
+	m = sendMsg(m, prCommentsMsg{gen: m.prReview.Gen, err: errTest})
+	if text := stripAnsi(sendKey(m, "1").viewString()); !strings.Contains(text, "review threads unavailable: test error") || !strings.Contains(text, "@octocat") {
+		t.Errorf("partial failure:\n%s", text)
+	}
+}
+
+// The fallback picks the matching hunk, not just the first.
+func TestPRReview_OutdatedThreadPicksItsHunk(t *testing.T) {
+	f := jumpFile()
+	f.Hunks = append(f.Hunks, git.Hunk{Header: "@@ -90,2 +90,2 @@ func later() {", Lines: []git.DiffLine{
+		{Kind: git.LineContext, Text: "x", OldNo: 90, NewNo: 90}, {Kind: git.LineContext, Text: "y", OldNo: 91, NewNo: 91}}})
+	row := threadRow(f, convItem{hunk: "@@ -90,2 +90,2 @@ func later() {\n x"})
+	if row != 1+len(f.Hunks[0].Lines) {
+		t.Errorf("row %d, want the second hunk's header at %d", row, 1+len(f.Hunks[0].Lines))
+	}
 }

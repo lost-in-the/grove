@@ -150,6 +150,10 @@ func (m Model) handlePRReviewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.jumpToThread(s.conv[c])
 		}
 	case s.Tab != 4:
+		if s.Tab == 1 {
+			w, _ := m.prReviewBodySize()
+			m.conversation(w) // the cursor's bound is the item count
+		}
 		s.moveCursor(k)
 	}
 	return m, nil
@@ -376,9 +380,9 @@ func (m Model) renderFilesTab(width, height int) string {
 		return Styles.TextMuted.Render(m.spinner.View() + " loading " + shortSHA(s.ScopedSHA))
 	case s.ScopeErr != nil:
 		return Styles.ErrorText.Render("diff unavailable: " + safeText(s.ScopeErr.Error()))
-	case s.LoadingDiff:
+	case s.ScopedSHA == "" && s.LoadingDiff:
 		return Styles.TextMuted.Render(m.spinner.View() + " loading diff")
-	case s.DiffErr != nil:
+	case s.ScopedSHA == "" && s.DiffErr != nil:
 		return Styles.ErrorText.Render("diff unavailable: " + safeText(s.DiffErr.Error()))
 	case len(s.Files) == 0:
 		return Styles.TextMuted.Render("no files changed")

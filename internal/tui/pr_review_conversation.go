@@ -145,9 +145,18 @@ func threadRow(f git.FileDiff, it convItem) int {
 	return max(0, hunkRow)
 }
 
-// jumpToThread opens the files tab at a thread's file and line.
+// jumpToThread opens the files tab at a thread's file and line, in the
+// whole PR's files, where its line is. A path not in the diff, or a diff
+// not yet loaded, says so.
 func (m Model) jumpToThread(it convItem) {
 	s := m.prReview
+	if s.ScopedSHA != "" {
+		s.unscope()
+	}
+	if s.LoadingDiff {
+		m.toast.Show(NewToast("the diff is still loading", ToastInfo))
+		return
+	}
 	for i, f := range s.Files {
 		if f.Path() != it.path {
 			continue
@@ -159,6 +168,7 @@ func (m Model) jumpToThread(it convItem) {
 		s.Scroll = max(0, min(threadRow(f, it)-paneH/3, len(lines)-paneH))
 		return
 	}
+	m.toast.Show(NewToast(safeText(it.path)+" is not in this diff", ToastInfo))
 }
 
 // conversation is the open review's tab 1 items at width, built on first
@@ -184,6 +194,13 @@ func (m Model) renderConversationTab(width, height int) string {
 	case s.DetailErr != nil && s.CommentsErr != nil:
 		return Styles.ErrorText.Render("conversation unavailable: " + safeText(s.DetailErr.Error()))
 	}
+	var warn []string
+	if s.DetailErr != nil {
+		warn = append(warn, Styles.ErrorText.Render("comments and reviews unavailable: "+safeText(s.DetailErr.Error())))
+	}
+	if s.CommentsErr != nil {
+		warn = append(warn, Styles.ErrorText.Render("review threads unavailable: "+safeText(s.CommentsErr.Error())))
+	}
 	items := m.conversation(width)
 	lines := make([][]string, len(items))
 	talk := 0
@@ -193,8 +210,11 @@ func (m Model) renderConversationTab(width, height int) string {
 			talk++
 		}
 	}
-	if talk == 0 {
+	if talk == 0 && len(warn) == 0 {
 		lines = append(lines, []string{Styles.TextMuted.Render("no comments yet")})
+	}
+	if len(warn) > 0 {
+		return strings.Join(warn, "\n") + "\n" + renderItems(lines, s.Cursor[1], width, max(1, height-len(warn)))
 	}
 	return renderItems(lines, s.Cursor[1], width, height)
 }
