@@ -1,7 +1,7 @@
  [1m[1mtest-project[m ▸ [1m#42 Add user authentication flow[m                               [m 
   [1m[1] conversation -[m   [2] commits -   [3] checks -   [4] files -               
                                                                                 
- arrives in the next build                                                      
+ ⠋ loading conversation                                                         
                                                                                 
                                                                                 
                                                                                 
@@ -21,4 +21,4 @@
                                                                                 
                                                                                 
                                                                                 
-  [1mJ/K[m file · [1mv[m viewed · [1mz[m fold · [1mt[m rail · [1m1-4[m tab · [1mesc[m back                    
+  [1mj/k[m move · [1menter[m go to line · [1m1-4[m tab · [1mB[m browser · [1mesc[m back                  

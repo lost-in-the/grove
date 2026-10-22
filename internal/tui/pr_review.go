@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -43,8 +44,11 @@ type PRReviewState struct {
 	RailChoice int               // t: 0 by width, 1 shown, -1 hidden
 	Viewed     map[string]string // path -> fileHash of the saved marks
 
-	hashes     []string // fileHash of each file, computed once per diff
-	cacheKey   [3]int   // file, width, folded of cacheLines
+	hashes     []string   // fileHash of each file, computed once per diff
+	conv       []convItem // tab 1's items, built at convW
+	convW      int
+	now        time.Time // tests pin it; zero means time.Now
+	cacheKey   [3]int    // file, width, folded of cacheLines
 	cacheLines []string
 }
 
@@ -118,6 +122,10 @@ func (m Model) handlePRReviewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		openURL(s.PR.URL)
 	case s.Tab == 4 && len(s.Files) > 0:
 		m.handleFilesKey(k)
+	case s.Tab == 1 && k == "enter":
+		if c := s.Cursor[1]; c < len(s.conv) && s.conv[c].kind == convThread {
+			m.jumpToThread(s.conv[c])
+		}
 	case s.Tab != 4:
 		s.moveCursor(k)
 	}
@@ -197,7 +205,10 @@ func (m Model) paneWidth() int {
 
 // itemCount is the number of items tab tab lists.
 func (s *PRReviewState) itemCount(tab int) int {
-	if tab == 3 && s.Detail != nil {
+	switch {
+	case tab == 1:
+		return len(s.conv)
+	case tab == 3 && s.Detail != nil:
 		return len(s.Detail.Checks)
 	}
 	return 0
@@ -240,8 +251,16 @@ func (s *PRReviewState) tabCounts() [4]string {
 	return counts
 }
 
+// prReviewFooter shows the active tab's keys.
 func (m Model) prReviewFooter() string {
-	return m.helpFooter.RenderCompact(ViewPRReview, m.width-4)
+	hints := []Hint{{"j/k", "move"}, {"1-4", "tab"}, {"B", "browser"}, {"esc", "back"}}
+	switch m.prReview.Tab {
+	case 1:
+		hints = []Hint{{"j/k", "move"}, {"enter", "go to line"}, {"1-4", "tab"}, {"B", "browser"}, {"esc", "back"}}
+	case 4:
+		hints = m.helpFooter.CompactHints(ViewPRReview)
+	}
+	return m.helpFooter.RenderCompactWithHints(hints, m.width-4)
 }
 
 // prReviewBodySize is the size of the frame's body: the terminal minus the
@@ -286,6 +305,8 @@ func (m Model) renderPRReviewBody(width, height int) string {
 			Styles.TextMuted.Render("Install the GitHub CLI and run gh auth login to review pull requests.")
 	case s.RepoErr != nil:
 		text = Styles.ErrorText.Render(safeText(s.RepoErr.Error()))
+	case s.Tab == 1:
+		text = m.renderConversationTab(width, height)
 	case s.Tab == 3:
 		text = m.renderChecksTab(width, height)
 	case s.Tab != 4:

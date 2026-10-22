@@ -132,6 +132,7 @@ func (m Model) handlePRReviewRepo(msg prReviewRepoMsg) (tea.Model, tea.Cmd) {
 func (m Model) handlePRDetail(msg prDetailMsg) (tea.Model, tea.Cmd) {
 	if s := m.reviewFor(msg.gen); s != nil {
 		s.Detail, s.DetailErr, s.LoadingDetail = msg.detail, msg.err, false
+		s.conv = nil
 		m.cacheReviewIfComplete()
 	}
 	return m, nil
@@ -149,6 +150,7 @@ func (m Model) handlePRDiff(msg prDiffMsg) (tea.Model, tea.Cmd) {
 func (m Model) handlePRComments(msg prCommentsMsg) (tea.Model, tea.Cmd) {
 	if s := m.reviewFor(msg.gen); s != nil {
 		s.Comments, s.CommentsErr, s.LoadingComments = msg.comments, msg.err, false
+		s.conv = nil
 		m.cacheReviewIfComplete()
 	}
 	return m, nil
