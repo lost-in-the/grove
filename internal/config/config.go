@@ -699,15 +699,70 @@ func lineMatchesField(trimmed, field string) bool {
 	return strings.HasPrefix(trimmed, field+" =") || strings.HasPrefix(trimmed, field+"=")
 }
 
+// valueEnd returns the index of the last line of the value assigned on line
+// i, so a multi-line array or string is read whole. A line that assigns
+// nothing (blank, comment, section header) ends where it starts.
+func valueEnd(lines []string, i int) int {
+	trimmed := strings.TrimSpace(lines[i])
+	eq := strings.IndexByte(lines[i], '=')
+	if eq < 0 || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "[") {
+		return i
+	}
+	depth := 0     // open [ and {
+	var str string // the open string's delimiter, if any
+	for j, line := i, lines[i][eq+1:]; ; j++ {
+		for k := 0; k < len(line); k++ {
+			rest := line[k:]
+			switch {
+			case str == "":
+				switch {
+				case rest[0] == '#':
+					k = len(line)
+				case strings.HasPrefix(rest, `"""`), strings.HasPrefix(rest, "'''"):
+					str, k = rest[:3], k+2
+				case rest[0] == '"', rest[0] == '\'':
+					str = rest[:1]
+				case rest[0] == '[', rest[0] == '{':
+					depth++
+				case rest[0] == ']', rest[0] == '}':
+					depth--
+				}
+			case rest[0] == '\\' && str[0] == '"':
+				k++ // an escape: skip the escaped character
+			case strings.HasPrefix(rest, str):
+				k += len(str) - 1
+				str = ""
+			}
+		}
+		if len(str) == 1 {
+			str = "" // a single-line string cannot run past its line
+		}
+		if (depth <= 0 && str == "") || j+1 == len(lines) {
+			return j
+		}
+		line = lines[j+1]
+	}
+}
+
+// replaceValue replaces the assignment starting on line i, every line of
+// it, with formattedLine.
+func replaceValue(lines []string, i int, formattedLine string) []string {
+	end := valueEnd(lines, i)
+	out := make([]string, 0, len(lines)-(end-i))
+	out = append(out, lines[:i]...)
+	out = append(out, formattedLine)
+	return append(out, lines[end+1:]...)
+}
+
 // setTopLevelValue handles the section=="" case for setValueInLines.
 func setTopLevelValue(lines []string, field, formattedLine string) []string {
-	for i, line := range lines {
-		if lineMatchesField(strings.TrimSpace(line), field) {
-			lines[i] = formattedLine
-			return lines
+	for i := 0; i < len(lines); i = valueEnd(lines, i) + 1 {
+		if lineMatchesField(strings.TrimSpace(lines[i]), field) {
+			return replaceValue(lines, i, formattedLine)
 		}
 	}
-	for i, line := range lines {
+	for i := 0; i < len(lines); i = valueEnd(lines, i) + 1 {
+		line := lines[i]
 		if strings.HasPrefix(strings.TrimSpace(line), "[") {
 			inserted := make([]string, 0, len(lines)+1)
 			inserted = append(inserted, lines[:i]...)
@@ -723,8 +778,8 @@ func setTopLevelValue(lines []string, field, formattedLine string) []string {
 // index (exclusive) of the section body. Returns -1, -1 if the section is not found.
 func findSectionBounds(lines []string, sectionHeader string) (start, end int) {
 	start = -1
-	for i, line := range lines {
-		if strings.TrimSpace(line) == sectionHeader {
+	for i := 0; i < len(lines); i = valueEnd(lines, i) + 1 {
+		if strings.TrimSpace(lines[i]) == sectionHeader {
 			start = i
 			break
 		}
@@ -733,7 +788,7 @@ func findSectionBounds(lines []string, sectionHeader string) (start, end int) {
 		return -1, -1
 	}
 	end = len(lines)
-	for i := start + 1; i < len(lines); i++ {
+	for i := start + 1; i < len(lines); i = valueEnd(lines, i) + 1 {
 		trimmed := strings.TrimSpace(lines[i])
 		if strings.HasPrefix(trimmed, "[") && strings.Contains(trimmed, "]") {
 			end = i
@@ -757,10 +812,9 @@ func setSectionValue(lines []string, section, field, formattedLine string) []str
 		return lines
 	}
 
-	for i := sectionStart + 1; i < sectionEnd; i++ {
+	for i := sectionStart + 1; i < sectionEnd; i = valueEnd(lines, i) + 1 {
 		if lineMatchesField(strings.TrimSpace(lines[i]), field) {
-			lines[i] = formattedLine
-			return lines
+			return replaceValue(lines, i, formattedLine)
 		}
 	}
 
