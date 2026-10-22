@@ -49,6 +49,8 @@ type StyleSet struct {
 
 	// List selection
 	SelectionRow lipgloss.Style
+	TabActive    lipgloss.Style // config section tab, raised
+	TabInactive  lipgloss.Style
 
 	// Status badges
 	StatusClean          lipgloss.Style
@@ -124,6 +126,8 @@ func NewStyleSet(cs ColorScheme) StyleSet {
 
 		// List selection
 		SelectionRow: lipgloss.NewStyle().Background(cs.SelectionBg),
+		TabActive:    lipgloss.NewStyle().Background(cs.SelectionBg).Foreground(cs.TextBright).Bold(true).Padding(0, 1),
+		TabInactive:  lipgloss.NewStyle().Foreground(cs.TextMuted).Padding(0, 1),
 
 		// Layout
 		Header: lipgloss.NewStyle().Bold(true).Foreground(cs.Info),

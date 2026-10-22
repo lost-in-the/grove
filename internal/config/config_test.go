@@ -3,8 +3,11 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/BurntSushi/toml"
 )
 
 func TestLoadDefaults(t *testing.T) {
@@ -435,6 +438,60 @@ dirty_handling = "prompt"
 				}
 			},
 		},
+		{
+			name: "replaces a multi-line array whole",
+			initial: `[protection]
+protected = [
+  "main", # the default branch ]
+  "staging",
+]
+immutable = ["prod"]
+`,
+			updates: map[string]string{"protection.protected": `["dev"]`},
+			validate: func(t *testing.T, content string) {
+				got := decodeProtection(t, content)
+				if !slices.Equal(got.Protected, []string{"dev"}) || !slices.Equal(got.Immutable, []string{"prod"}) {
+					t.Errorf("got %+v, want protected [dev], immutable [prod]:\n%s", got, content)
+				}
+			},
+		},
+		{
+			name: "a nested array line does not end the section",
+			initial: `[protection]
+groups = [
+  ["a", "b"],
+]
+immutable = ["prod"]
+`,
+			updates: map[string]string{"protection.immutable": `["dev"]`},
+			validate: func(t *testing.T, content string) {
+				if got := decodeProtection(t, content); !slices.Equal(got.Immutable, []string{"dev"}) {
+					t.Errorf("got %+v, want immutable [dev]:\n%s", got, content)
+				}
+			},
+		},
+		{
+			name: "a line inside a multi-line string is not a key",
+			initial: `[protection]
+note = """
+immutable = ["not", "a", "key"]
+"""
+immutable = ["prod"]
+`,
+			updates: map[string]string{"protection.immutable": `["dev"]`},
+			validate: func(t *testing.T, content string) {
+				var got struct{ Protection struct{ Note string } }
+				if _, err := toml.Decode(content, &got); err != nil {
+					t.Fatalf("invalid TOML: %v\n%s", err, content)
+				}
+				if want := "immutable = [\"not\", \"a\", \"key\"]\n"; got.Protection.Note != want {
+					t.Errorf("note = %q, want %q", got.Protection.Note, want)
+				}
+				if p := decodeProtection(t, content); !slices.Equal(p.Immutable, []string{"dev"}) {
+					t.Errorf("got %+v, want immutable [dev]:\n%s", p, content)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -468,6 +525,16 @@ dirty_handling = "prompt"
 			tt.validate(t, string(data))
 		})
 	}
+}
+
+// decodeProtection decodes content, failing the test if it is not TOML.
+func decodeProtection(t *testing.T, content string) ProtectionConfig {
+	t.Helper()
+	var got struct{ Protection ProtectionConfig }
+	if _, err := toml.Decode(content, &got); err != nil {
+		t.Fatalf("invalid TOML: %v\n%s", err, content)
+	}
+	return got.Protection
 }
 
 func TestValidate(t *testing.T) {

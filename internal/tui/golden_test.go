@@ -122,12 +122,7 @@ func TestGolden_Overlay_Sync(t *testing.T) {
 	})
 }
 
-func TestGolden_Overlay_Config(t *testing.T) {
-	t.Run("general_tab", func(t *testing.T) {
-		m := goldenModel(t, sizeStandard, withItems(3), withConfigOverlay())
-		golden.RequireEqual(t, []byte(m.viewString()))
-	})
-}
+// TestGolden_Config (config_frame_test.go) covers the config frame.
 
 // =============================================================================
 // Component tests (isolated render functions)

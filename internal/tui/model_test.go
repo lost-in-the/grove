@@ -835,10 +835,10 @@ func TestDownKeyOnEmptyConfigTab(t *testing.T) {
 	m := newTestModel(withSize(80, 24))
 	m.setViewForTest(ViewConfig)
 	m.configState = NewConfigState()
-	// Empty fields — Down must not panic
+	// No forms yet — Down must not panic or leave the editor
 	m = sendKey(m, "down")
-	if m.configState.Cursor != 0 {
-		t.Errorf("expected cursor 0, got %d", m.configState.Cursor)
+	if m.activeView() != ViewConfig || m.configState == nil {
+		t.Errorf("down before the config loads: view %v", m.activeView())
 	}
 }
 

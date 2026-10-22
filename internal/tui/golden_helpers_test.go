@@ -180,34 +180,22 @@ func withConfigOverlay() testOpt {
 		m.setViewForTest(ViewConfig)
 		cs := NewConfigState()
 		cs.Fields[ConfigTabGeneral] = []ConfigField{
-			{Key: "project_name", Label: "project_name", Value: "grove-cli", Default: "grove-cli", Type: ConfigString, Description: "Project name"},
-			{Key: "projects_dir", Label: "projects_dir", Value: "/home/dev/projects", Default: "/home/dev/projects", Type: ConfigString, Description: "Where worktrees are created"},
-			{Key: "default_base_branch", Label: "default_branch", Value: "main", Default: "main", Type: ConfigString, Description: "Base branch for new worktrees"},
+			{Key: "project_name", Label: "project_name", Value: "grove-cli", Loaded: "grove-cli", Type: ConfigString, Description: "Project name"},
+			{Key: "projects_dir", Label: "projects_dir", Value: "/home/dev/projects", Loaded: "/home/dev/projects", Type: ConfigString, Description: "Where worktrees are created"},
+			{Key: "default_base_branch", Label: "default_branch", Value: "main", Loaded: "main", Type: ConfigString, Description: "Base branch for new worktrees"},
 		}
 		cs.Fields[ConfigTabBehavior] = []ConfigField{
-			{Key: "switch.dirty_handling", Label: "dirty_handling", Value: "auto-stash", Default: "auto-stash", Type: ConfigEnum, Options: []string{"auto-stash", "prompt", "refuse"}, Description: "How to handle dirty worktree on switch"},
-			{Key: "tmux.mode", Label: "tmux_mode", Value: "auto", Default: "auto", Type: ConfigEnum, Options: []string{"auto", "manual", "off"}, Description: "Tmux session behavior"},
+			{Key: "switch.dirty_handling", Label: "dirty_handling", Value: "auto-stash", Loaded: "auto-stash", Type: ConfigEnum, Options: []string{"auto-stash", "prompt", "refuse"}, Description: "How to handle dirty worktree on switch"},
+			{Key: "tmux.mode", Label: "tmux_mode", Value: "auto", Loaded: "auto", Type: ConfigEnum, Options: []string{"auto", "manual", "off"}, Description: "Tmux session behavior"},
 		}
 		cs.Fields[ConfigTabPlugins] = []ConfigField{
-			{Key: "plugins.docker.enabled", Label: "docker_enabled", Value: "true", Default: "true", Type: ConfigBool, Description: "Enable Docker plugin"},
+			{Key: "plugins.docker.enabled", Label: "docker_enabled", Value: "true", Loaded: "true", Type: ConfigBool, Description: "Enable Docker plugin"},
 		}
 		cs.Fields[ConfigTabProtection] = []ConfigField{
-			{Key: "protection.protected", Label: "protected", Value: "main, staging", Default: "main, staging", Type: ConfigList, Description: "Protected worktrees (comma-separated)"},
+			{Key: "protection.protected", Label: "protected", Value: "main, staging", Loaded: "main, staging", Type: ConfigList, Description: "Protected worktrees (comma-separated)"},
 		}
-		// Build the Huh form so renderConfig shows the form view
-		overlayWidth := 80 * 60 / 100
-		if overlayWidth < 60 {
-			overlayWidth = 60
-		}
-		if overlayWidth > 80 {
-			overlayWidth = 80
-		}
-		contentWidth := overlayWidth - 6
-		form, vals := buildConfigForm(cs.Fields, contentWidth)
-		form.Init()
-		cs.Form = form
-		cs.FormValues = vals
 		m.configState = cs
+		cs.buildForms(m.configFormSize())
 	}
 }
 

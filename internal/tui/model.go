@@ -316,6 +316,9 @@ func (m Model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 		w, _ := omniFrameSize(m.width, m.height)
 		m.omni.Input.SetWidth(max(4, w-8))
 	}
+	if m.configState != nil {
+		m.configState.resize(m.configFormSize())
+	}
 	tuilog.Printf("WindowSizeMsg: %dx%d, list size: %dx%d", msg.Width, msg.Height, m.list.Width(), m.list.Height())
 	if !wasReady && m.cfgLoadErr != nil {
 		m.toast.Show(NewToast("Config load failed: "+m.cfgLoadErr.Error(), ToastWarning))
@@ -678,18 +681,7 @@ func (m Model) handleConfigLoaded(msg configLoadedMsg) (tea.Model, tea.Cmd) {
 			m.configState.Config = msg.cfg
 			m.configState.Fields = populateConfigFields(msg.cfg)
 
-			overlayWidth := m.width * 60 / 100
-			if overlayWidth < 60 {
-				overlayWidth = 60
-			}
-			if overlayWidth > 80 {
-				overlayWidth = 80
-			}
-			contentWidth := overlayWidth - 6
-			form, vals := buildConfigForm(m.configState.Fields, contentWidth)
-			m.configState.Form = form
-			m.configState.FormValues = vals
-			return m, form.Init()
+			return m, m.configState.buildForms(m.configFormSize())
 		}
 	}
 	return m, nil
@@ -782,7 +774,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleDefault(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.layoutView() == ViewConfig && m.configState != nil && m.configState.Form != nil {
+	if m.layoutView() == ViewConfig && m.configState != nil && m.configState.form() != nil {
 		return m.handleConfigFormMsg(msg)
 	}
 
@@ -1474,6 +1466,11 @@ func (m Model) renderFrame(i int) string {
 		return m.renderFrame(i - 1)
 	case ViewDetailSheet:
 		return m.renderDetailSheet()
+	case ViewConfig:
+		if m.configState != nil {
+			return m.renderConfigFrame()
+		}
+		return m.renderFrame(i - 1)
 	}
 	overlay := m.renderOverlay(v)
 	if overlay == "" {
@@ -1510,10 +1507,6 @@ func (m Model) renderOverlay(v ActiveView) string {
 	case ViewSync:
 		if m.syncState != nil {
 			return renderSync(m.syncState, m.width)
-		}
-	case ViewConfig:
-		if m.configState != nil {
-			return renderConfig(m.configState, m.width)
 		}
 	case ViewRename:
 		if m.renameState != nil {
@@ -1573,6 +1566,8 @@ func (m Model) viewHasTextInput() bool {
 	switch m.activeView() {
 	case ViewBranchForm, ViewRename, ViewOmni:
 		return true
+	case ViewConfig:
+		return m.configState != nil && m.configState.focusOnInput()
 	case ViewPRs:
 		return m.prState != nil && m.prState.Filtering
 	case ViewIssues:

@@ -2,7 +2,7 @@ package tui
 
 import (
 	"fmt"
-	"strconv"
+	"reflect"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -38,31 +38,55 @@ type ConfigField struct {
 	Key         string // TOML key path, e.g. "tmux.mode"
 	Label       string // display name
 	Value       string // current value as string
-	Default     string // default value for display
+	Loaded      string // value loaded from disk; Value differs when changed
 	Type        ConfigFieldType
 	Options     []string // for Enum type
 	Description string   // help text
 	Placeholder string   // shown when value is empty (defaults to "(empty)")
 }
 
-// ConfigState holds the state for the config overlay.
+// ConfigState holds the state for the config editor: one huh form per
+// section, of which grove shows the active one (spec 11).
 type ConfigState struct {
-	Tab               ConfigTab
-	Fields            [][]ConfigField // fields per tab
-	Cursor            int             // field cursor within current tab
-	Editing           bool            // inline edit active
-	EditBuffer        string          // current edit value (manual input)
-	EditCursorPos     int             // cursor position within EditBuffer
-	EditOptionCursor  int             // cursor for enum/bool option selection
-	EditOriginalValue string          // value before edit started
-	Err               error
-	Dirty             bool           // unsaved changes exist
-	Confirming        bool           // save confirmation prompt active
-	Config            *config.Config // loaded config
+	Tab        ConfigTab       // active section
+	Fields     [][]ConfigField // fields per section; the forms bind to their values
+	Err        error
+	Confirming bool           // save confirmation prompt active
+	Config     *config.Config // loaded config
 
-	// Huh form integration
-	Form       *huh.Form         // the embedded Huh form (nil until fields loaded)
-	FormValues *configFormValues // value bindings for the form
+	Forms      [ConfigTabCount]*huh.Form // nil until the config loads
+	FormValues *configFormValues         // bool bindings shared by the forms
+	formW      int                       // size the forms are built at
+	formH      int
+	arrived    bool                    // section changed, no key sent to it yet
+	focus      func(huh.Field) tea.Cmd // nil means Field.Focus; tests record the call
+}
+
+// form is the active section's form, or nil before the config loads.
+func (s *ConfigState) form() *huh.Form { return s.Forms[s.Tab] }
+
+// focusOnInput reports whether a text input has focus, so digits and ?
+// must type rather than act.
+func (s *ConfigState) focusOnInput() bool {
+	if s.form() == nil {
+		return false
+	}
+	_, ok := s.form().GetFocusedField().(*huh.Input)
+	return ok
+}
+
+// unsaved counts the fields whose value differs from the one loaded from
+// disk. Call syncConfigFormValues first so bools are current.
+func (s *ConfigState) unsaved() int {
+	n := 0
+	for _, fields := range s.Fields {
+		for _, f := range fields {
+			if f.Value != f.Loaded {
+				n++
+			}
+		}
+	}
+	return n
 }
 
 // NewConfigState creates an empty ConfigState.
@@ -92,30 +116,83 @@ func loadConfigCmd() tea.Cmd {
 	}
 }
 
-// saveConfigCmd saves modified config fields.
-func saveConfigCmd(state *ConfigState) tea.Cmd {
-	return func() tea.Msg {
-		updates := make(map[string]string)
-		for _, tabFields := range state.Fields {
-			for _, field := range tabFields {
-				// Only save changed fields
-				if field.Value != field.Default {
-					val := field.Value
-					// Quote string values for TOML with proper escaping
-					if field.Type == ConfigString || field.Type == ConfigEnum {
-						val = strconv.Quote(val)
-					}
-					updates[field.Key] = val
-				}
+// configUpdates is the TOML value of every changed field, keyed by its
+// config key.
+func configUpdates(state *ConfigState) map[string]string {
+	updates := make(map[string]string)
+	for _, tabFields := range state.Fields {
+		for _, field := range tabFields {
+			if field.Value == field.Loaded {
+				continue
+			}
+			val := field.Value
+			// Quote string values for TOML with proper escaping
+			switch field.Type {
+			case ConfigString, ConfigEnum:
+				val = tomlString(val)
+			case ConfigList:
+				val = tomlList(val)
+			}
+			updates[field.Key] = val
+		}
+	}
+	return updates
+}
+
+// tomlString quotes s as a TOML basic string. strconv.Quote is close, but
+// its \a, \v, and \x escapes are not TOML: other control characters get
+// \uXXXX instead.
+func tomlString(s string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range s {
+		switch r {
+		case '"', '\\':
+			b.WriteByte('\\')
+			b.WriteRune(r)
+		case '\b':
+			b.WriteString(`\b`)
+		case '\t':
+			b.WriteString(`\t`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\f':
+			b.WriteString(`\f`)
+		case '\r':
+			b.WriteString(`\r`)
+		default:
+			if r < 0x20 || r == 0x7f {
+				fmt.Fprintf(&b, `\u%04X`, r)
+			} else {
+				b.WriteRune(r)
 			}
 		}
+	}
+	b.WriteByte('"')
+	return b.String()
+}
 
+// tomlList turns a comma-separated list into a TOML array of strings,
+// dropping empty items.
+func tomlList(list string) string {
+	var items []string
+	for _, item := range strings.Split(list, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			items = append(items, tomlString(item))
+		}
+	}
+	return "[" + strings.Join(items, ", ") + "]"
+}
+
+// saveConfigCmd saves the changed fields. The updates are worked out here,
+// not in the command, which runs on another goroutine.
+func saveConfigCmd(state *ConfigState) tea.Cmd {
+	updates := configUpdates(state)
+	return func() tea.Msg {
 		if len(updates) == 0 {
 			return configSavedMsg{}
 		}
-
-		err := config.SetProjectConfigValues(updates)
-		return configSavedMsg{err: err}
+		return configSavedMsg{err: config.SetProjectConfigValues(updates)}
 	}
 }
 
@@ -129,7 +206,7 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Key:         "project_name",
 			Label:       "project_name",
 			Value:       cfg.ProjectName,
-			Default:     cfg.ProjectName,
+			Loaded:      cfg.ProjectName,
 			Type:        ConfigString,
 			Description: "Project name",
 		},
@@ -137,7 +214,7 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Key:         "projects_dir",
 			Label:       "projects_dir",
 			Value:       cfg.ProjectsDir,
-			Default:     cfg.ProjectsDir,
+			Loaded:      cfg.ProjectsDir,
 			Type:        ConfigString,
 			Description: "Where worktrees are created",
 		},
@@ -145,7 +222,7 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Key:         "default_base_branch",
 			Label:       "default_branch",
 			Value:       cfg.DefaultBranch,
-			Default:     cfg.DefaultBranch,
+			Loaded:      cfg.DefaultBranch,
 			Type:        ConfigString,
 			Description: "Base branch for new worktrees",
 		},
@@ -161,7 +238,7 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Key:         "switch.dirty_handling",
 			Label:       "dirty_handling",
 			Value:       cfg.Switch.DirtyHandling,
-			Default:     cfg.Switch.DirtyHandling,
+			Loaded:      cfg.Switch.DirtyHandling,
 			Type:        ConfigEnum,
 			Options:     []string{"auto-stash", "prompt", "refuse"},
 			Description: "How to handle dirty worktree on switch",
@@ -170,7 +247,7 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Key:         "tmux.mode",
 			Label:       "tmux_mode",
 			Value:       tmuxMode,
-			Default:     tmuxMode,
+			Loaded:      tmuxMode,
 			Type:        ConfigEnum,
 			Options:     []string{"auto", "manual", "off"},
 			Description: "Tmux session behavior: auto-attach, print instructions, or skip",
@@ -179,7 +256,7 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Key:         "naming.pattern",
 			Label:       "naming_pattern",
 			Value:       cfg.Naming.Pattern,
-			Default:     cfg.Naming.Pattern,
+			Loaded:      cfg.Naming.Pattern,
 			Type:        ConfigString,
 			Description: "Worktree directory template; {project} and {name} each exactly once",
 		},
@@ -203,7 +280,7 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Key:         "plugins.docker.enabled",
 			Label:       "docker_enabled",
 			Value:       dockerEnabled,
-			Default:     dockerEnabled,
+			Loaded:      dockerEnabled,
 			Type:        ConfigBool,
 			Description: "Enable Docker plugin",
 		},
@@ -211,7 +288,7 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Key:         "plugins.docker.auto_start",
 			Label:       "docker_auto_start",
 			Value:       dockerAutoStart,
-			Default:     dockerAutoStart,
+			Loaded:      dockerAutoStart,
 			Type:        ConfigBool,
 			Description: "Auto-start containers on switch",
 		},
@@ -219,7 +296,7 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Key:         "plugins.docker.auto_stop",
 			Label:       "docker_auto_stop",
 			Value:       dockerAutoStop,
-			Default:     dockerAutoStop,
+			Loaded:      dockerAutoStop,
 			Type:        ConfigBool,
 			Description: "Auto-stop containers on leave",
 		},
@@ -231,7 +308,7 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Key:         "protection.protected",
 			Label:       "protected",
 			Value:       strings.Join(cfg.Protection.Protected, ", "),
-			Default:     strings.Join(cfg.Protection.Protected, ", "),
+			Loaded:      strings.Join(cfg.Protection.Protected, ", "),
 			Type:        ConfigList,
 			Description: "Protected worktrees (comma-separated)",
 			Placeholder: "(none — add worktree names)",
@@ -240,7 +317,7 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Key:         "protection.immutable",
 			Label:       "immutable",
 			Value:       strings.Join(cfg.Protection.Immutable, ", "),
-			Default:     strings.Join(cfg.Protection.Immutable, ", "),
+			Loaded:      strings.Join(cfg.Protection.Immutable, ", "),
 			Type:        ConfigList,
 			Description: "Immutable worktrees (comma-separated)",
 			Placeholder: "(none — add worktree names)",
@@ -266,7 +343,7 @@ func tabName(tab ConfigTab) string {
 	}
 }
 
-// handleConfigKey handles key input for the config overlay.
+// handleConfigKey handles key input for the config editor.
 func (m Model) handleConfigKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.configState == nil {
 		m.popView()
@@ -292,79 +369,140 @@ func (m Model) handleConfigKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Escape closes the overlay (with dirty check). Sync form values first so
-	// in-progress edits are detected — the form only reaches StateCompleted on
-	// the save path, so without this Dirty would always be false on escape.
 	if key.Matches(msg, m.keys.Escape) {
-		m.syncConfigFormValues()
-		if s.Dirty {
-			s.Confirming = true
-			return m, nil
-		}
-		m.popView()
-		m.configState = nil
-		return m, nil
+		return m.leaveConfig()
 	}
 
-	// Delegate to Huh form if available
-	if s.Form != nil {
+	// Section keys (spec 11): ctrl+n / ctrl+p anywhere, before the form,
+	// whose selects would take them as down and up; digits only off text
+	// inputs, where they must type.
+	switch k := msg.String(); {
+	case k == "ctrl+n":
+		return m, s.switchSection((s.Tab + 1) % ConfigTabCount)
+	case k == "ctrl+p":
+		return m, s.switchSection((s.Tab + ConfigTabCount - 1) % ConfigTabCount)
+	case len(k) == 1 && k >= "1" && k <= "4" && !s.focusOnInput():
+		return m, s.switchSection(ConfigTab(k[0] - '1'))
+	}
+
+	if s.form() != nil {
+		s.arrived = false
 		return m.updateConfigForm(msg)
 	}
-
-	// Legacy fallback: no form yet (fields not loaded)
 	return m, nil
 }
 
-// handleConfigFormMsg forwards non-key messages to the Huh form.
-// Called from the main Update() method for cursor blink, spinner, etc.
-func (m Model) handleConfigFormMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.configState == nil || m.configState.Form == nil {
+// leaveConfig closes the editor, first asking to save when anything
+// changed. updateConfigForm syncs the bools after every form message, so
+// the fields are already current.
+func (m Model) leaveConfig() (tea.Model, tea.Cmd) {
+	if m.configState.unsaved() > 0 {
+		m.configState.Confirming = true
 		return m, nil
 	}
-
-	model, cmd := m.configState.Form.Update(msg)
-	if f, ok := model.(*huh.Form); ok {
-		m.configState.Form = f
-	}
-
-	return m, cmd
+	m.popView()
+	m.configState = nil
+	return m, nil
 }
 
-// updateConfigForm sends a message to the Huh form and checks completion.
+// handleConfigFormMsg forwards non-key messages (focus moves, cursor blink)
+// to the active section's form. huh finishes a form through one of these,
+// so it goes through the same completion check as keys.
+//
+// A form sends its own huh messages only in answer to a key. So between a
+// section change and the first key sent to the new section, a huh message
+// is the previous section's, such as the rest of a finish begun by enter;
+// passing it on would move the new form's focus or finish it too.
+func (m Model) handleConfigFormMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.configState == nil || m.configState.form() == nil {
+		return m, nil
+	}
+	if m.configState.arrived && fromHuh(msg) {
+		return m, nil
+	}
+	return m.updateConfigForm(msg)
+}
+
+// huhPkg is huh's package path; its follow-up messages are unexported.
+var huhPkg = reflect.TypeFor[huh.Form]().PkgPath()
+
+// fromHuh reports whether msg is one of huh's own messages.
+func fromHuh(msg tea.Msg) bool {
+	t := reflect.TypeOf(msg)
+	return t != nil && t.PkgPath() == huhPkg
+}
+
+// updateConfigForm sends a message to the active form. Finishing a section
+// (enter on its last field) moves to the next; finishing the last one
+// leaves as esc does.
 func (m Model) updateConfigForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 	s := m.configState
-
-	model, cmd := s.Form.Update(msg)
+	model, cmd := s.form().Update(msg)
 	if f, ok := model.(*huh.Form); ok {
-		s.Form = f
+		s.Forms[s.Tab] = f
 	}
+	m.syncConfigFormValues() // keeps the unsaved count current
 
-	// Check if form was completed (user navigated through all groups)
-	if s.Form.State == huh.StateCompleted {
-		// Sync form values back to fields and detect dirty
-		m.syncConfigFormValues()
-		if s.Dirty {
-			m.popView()
-			m.configState = nil
-			return m, saveConfigCmd(s)
+	switch s.form().State {
+	case huh.StateCompleted:
+		// A completed form ignores input; rebuild it so the section can be
+		// revisited with its current values. It is hidden from here on, so
+		// its commands are dropped.
+		s.rebuildForm(s.Tab)
+		if s.Tab == ConfigTabCount-1 {
+			return m.leaveConfig()
 		}
+		return m, s.switchSection(s.Tab + 1)
+	case huh.StateAborted:
 		m.popView()
 		m.configState = nil
 		return m, nil
 	}
-
-	// Check if form was aborted
-	if s.Form.State == huh.StateAborted {
-		m.popView()
-		m.configState = nil
-		return m, nil
-	}
-
 	return m, cmd
 }
 
-// syncConfigFormValues reads values from form bindings back into ConfigFields
-// and marks dirty if anything changed from the default.
+// switchSection makes tab the active section. Only the active form gets
+// messages, so a hidden form's cursor blink stops; focusing the field
+// arrived at again restarts it. huh 2.0.3 draws a focused input's cursor
+// regardless, so this guards against a huh change rather than a visible bug.
+func (s *ConfigState) switchSection(tab ConfigTab) tea.Cmd {
+	s.arrived = s.arrived || tab != s.Tab
+	s.Tab = tab
+	f := s.form()
+	if f == nil {
+		return nil
+	}
+	if s.focus != nil {
+		return s.focus(f.GetFocusedField())
+	}
+	return f.GetFocusedField().Focus()
+}
+
+// buildForms builds every section's form at the editor's size and returns
+// the shown form's commands.
+func (s *ConfigState) buildForms(width, height int) tea.Cmd {
+	s.formW, s.formH = width, height
+	s.FormValues = newConfigFormValues()
+	var cmd tea.Cmd
+	for tab := ConfigTab(0); tab < ConfigTabCount; tab++ {
+		if c := s.rebuildForm(tab); tab == s.Tab {
+			cmd = c
+		}
+	}
+	return cmd
+}
+
+// rebuildForm builds one section's form from the fields' current values.
+// Init focuses its first field at once; the commands it returns refresh
+// the fields, start the cursor blink, and ask the terminal for its size.
+// They are only worth running for the shown form: switchSection restarts
+// the blink when a hidden one is shown, and grove sizes the forms itself.
+func (s *ConfigState) rebuildForm(tab ConfigTab) tea.Cmd {
+	s.Forms[tab] = buildSectionForm(s.Fields[tab], s.FormValues, s.formW, s.formH)
+	return s.Forms[tab].Init()
+}
+
+// syncConfigFormValues reads the bool bindings back into their fields.
 func (m *Model) syncConfigFormValues() {
 	s := m.configState
 	if s == nil || s.FormValues == nil {
@@ -378,8 +516,8 @@ func (m *Model) syncConfigFormValues() {
 	}
 }
 
-// syncConfigField updates a single config field from form values and marks
-// the state dirty when the value differs from the default.
+// syncConfigField updates a bool field from its binding. String, enum, and
+// list fields bind straight to Value.
 func syncConfigField(f *ConfigField, s *ConfigState) {
 	if f.Type == ConfigBool {
 		if bPtr, ok := s.FormValues.bools[f.Key]; ok {
@@ -390,49 +528,4 @@ func syncConfigField(f *ConfigField, s *ConfigState) {
 			}
 		}
 	}
-	// String/Enum/List fields are bound directly via &f.Value
-
-	if f.Value != f.Default {
-		s.Dirty = true
-	}
-}
-
-// renderConfig renders the config overlay.
-func renderConfig(s *ConfigState, width int) string {
-	overlayWidth := width * 60 / 100
-	if overlayWidth < 60 {
-		overlayWidth = 60
-	}
-	if overlayWidth > 80 {
-		overlayWidth = 80
-	}
-	indent := overlayIndent
-
-	var b strings.Builder
-
-	if s.Err != nil {
-		b.WriteString(indent + Styles.ErrorText.Render("Error: "+s.Err.Error()) + "\n\n")
-	}
-
-	// If confirming save, show the confirmation prompt
-	if s.Confirming {
-		b.WriteString("\n" + indent + Styles.WarningText.Render("Save changes?") + "\n")
-		b.WriteString("\n" + Styles.Footer.Render(indent+"[enter] save  [esc] discard"))
-		return Styles.OverlayBorder.Width(overlayWidth).Render(
-			Styles.OverlayTitle.Render("Configuration") + "\n\n" + b.String(),
-		)
-	}
-
-	// Render Huh form if available
-	if s.Form != nil {
-		formView := s.Form.View()
-		b.WriteString(formView)
-		b.WriteString("\n" + Styles.Footer.Render(indent+"esc close"))
-	} else {
-		b.WriteString(indent + Styles.DetailDim.Render("Loading configuration...") + "\n")
-	}
-
-	return Styles.OverlayBorder.Width(overlayWidth).Render(
-		Styles.OverlayTitle.Render("Configuration") + "\n\n" + b.String(),
-	)
 }

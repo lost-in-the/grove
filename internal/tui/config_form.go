@@ -52,56 +52,41 @@ func groveHuhTheme() huh.Theme {
 	})
 }
 
-// configFormValues holds the mutable value pointers that the Huh form binds to.
-// This lets us extract values after form completion and detect dirty state.
+// configFormValues holds the bool bindings the forms write to; string,
+// enum, and list fields bind straight to their ConfigField.Value.
 type configFormValues struct {
-	strings map[string]*string
-	bools   map[string]*bool
+	bools map[string]*bool
 }
 
-// buildConfigForm creates a Huh form from the config fields, organized by tab.
-// Returns the form and the value bindings so values can be read back.
-func buildConfigForm(fields [][]ConfigField, width int) (*huh.Form, *configFormValues) {
-	vals := &configFormValues{
-		strings: make(map[string]*string),
-		bools:   make(map[string]*bool),
-	}
+func newConfigFormValues() *configFormValues {
+	return &configFormValues{bools: map[string]*bool{}}
+}
 
-	var groups []*huh.Group
-
-	for tab := ConfigTab(0); tab < ConfigTabCount; tab++ {
-		tabFields := fields[tab]
-		if len(tabFields) == 0 {
-			continue
-		}
-
-		var huhFields []huh.Field
-		for i := range tabFields {
-			f := &tabFields[i]
-			field := buildConfigHuhField(f, vals)
-			if field != nil {
-				huhFields = append(huhFields, field)
-			}
-		}
-
-		if len(huhFields) > 0 {
-			g := huh.NewGroup(huhFields...).Title(tabName(tab))
-			groups = append(groups, g)
+// buildSectionForm builds one section's form. Grove draws the section tabs,
+// the keys, and the errors, so huh shows neither help nor errors, and a
+// fixed height keeps every section the same size (spec 11). A height of 0
+// leaves huh's natural height.
+func buildSectionForm(fields []ConfigField, vals *configFormValues, width, height int) *huh.Form {
+	var huhFields []huh.Field
+	for i := range fields {
+		if field := buildConfigHuhField(&fields[i], vals); field != nil {
+			huhFields = append(huhFields, field)
 		}
 	}
 
-	form := huh.NewForm(groups...).
-		WithTheme(groveHuhTheme()).
-		WithWidth(width).
-		WithShowHelp(true).
-		WithShowErrors(true)
-
-	// Override quit keymap — we handle escape ourselves in the overlay
 	km := huh.NewDefaultKeyMap()
-	km.Quit.SetEnabled(false)
-	form.WithKeyMap(km)
+	km.Quit.SetEnabled(false) // grove handles esc
+	km.Select.Filter.SetEnabled(false)
 
-	return form, vals
+	// Help and errors go off before the height is set: WithHeight reserves
+	// rows for whichever footers are on at the time.
+	return huh.NewForm(huh.NewGroup(huhFields...)).
+		WithTheme(groveHuhTheme()).
+		WithKeyMap(km).
+		WithShowHelp(false).
+		WithShowErrors(false).
+		WithWidth(width).
+		WithHeight(height)
 }
 
 // buildConfigHuhField creates a Huh field from a ConfigField.
@@ -116,10 +101,10 @@ func buildConfigHuhField(f *ConfigField, vals *configFormValues) huh.Field {
 			Description(f.Description).
 			Affirmative("true").
 			Negative("false").
+			WithButtonAlignment(lipgloss.Left). // huh centers under the field's text
 			Value(&b)
 
 	case ConfigEnum:
-		vals.strings[f.Key] = &f.Value
 		return huh.NewSelect[string]().
 			Key(f.Key).
 			Title(f.Label).
@@ -128,7 +113,6 @@ func buildConfigHuhField(f *ConfigField, vals *configFormValues) huh.Field {
 			Value(&f.Value)
 
 	case ConfigList:
-		vals.strings[f.Key] = &f.Value
 		placeholder := "comma-separated values"
 		if f.Placeholder != "" {
 			placeholder = f.Placeholder
@@ -141,16 +125,11 @@ func buildConfigHuhField(f *ConfigField, vals *configFormValues) huh.Field {
 			Value(&f.Value)
 
 	case ConfigString:
-		vals.strings[f.Key] = &f.Value
-		placeholder := ""
-		if f.Placeholder != "" {
-			placeholder = f.Placeholder
-		}
 		return huh.NewInput().
 			Key(f.Key).
 			Title(f.Label).
 			Description(f.Description).
-			Placeholder(placeholder).
+			Placeholder(f.Placeholder).
 			Value(&f.Value)
 
 	default:

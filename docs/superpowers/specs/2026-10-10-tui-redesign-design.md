@@ -520,7 +520,7 @@ From a PR or issue row, Branch and Alias are prefilled.
 
 - Pushed as a full-screen frame. The border and 60 to 80 column cap go away.
 - **One huh form per section** (General, Behavior, Plugins, Protection). Grove owns section switching, because huh 2.0.3 does not expose the active group.
-- **Header:** `grove ▸ settings`, then the section tabs `[1] general  [2] behavior  [3] plugins  [4] protection` with the active tab raised, then `● n unsaved` when dirty.
+- **Header:** `<project> ▸ settings`, with `● n unsaved` at the right edge when dirty. The next row holds the section tabs `[1] general  [2] behavior  [3] plugins  [4] protection`, with the active tab raised.
 - **Section keys:** `ctrl+n` / `ctrl+p` move between sections from anywhere. `1`-`4` jump directly only when the focused field is not a text input, since digits must stay typeable.
 - **Fixed height:** each form uses `WithHeight(h)`, `WithShowHelp(false)`, and `WithShowErrors(false)`. Grove draws the help line and `Form.Errors()` itself. Without this, huh's footer changes the height.
 - **Field descriptions** come from the existing `ConfigField.Description`.
@@ -744,7 +744,7 @@ Each item is checked at the start of the phase named.
 
 | # | Item | Phase | If it fails |
 |---|---|---|---|
-| 1 | huh `WithHeight` plus no footer gives an exact, stable height | 7 | Draw a fixed-height viewport around the form |
+| 1 | huh `WithHeight` plus no footer gives an exact, stable height. Verified in phase 7b: exact in all four sections, while tabbing, and with a validation error, provided help and errors are turned off before `WithHeight` (it reserves rows for whichever footers are on). | 7 | Draw a fixed-height viewport around the form |
 | 2 | `ctrl+j` arrives distinct from `⏎` under tmux, herdr, and a plain terminal | 3 | Arrows remain; drop the `ctrl+j/k` hint |
 | 3 | Herdr `List()` latency fits a 3s poll. Measured in phase 6: one `herdr workspace list` call, 113ms cold, 3ms warm (10 runs). Fits. | 6 | Raise the interval |
 | 4 | `default_branch_action` config: the TUI no longer prompts. Confirm the CLI still uses it, and update the config docs. | 3 | Document it as CLI-only |

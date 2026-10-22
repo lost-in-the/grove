@@ -117,9 +117,8 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 		}
 	case ViewConfig:
 		return []Hint{
-			{"tab", "next tab"},
-			{"↑↓", "navigate"},
-			{"enter", "edit"},
+			{"tab", "next field"},
+			{"ctrl+n/p", "section"},
 			{"esc", "close"},
 		}
 	case ViewRename:

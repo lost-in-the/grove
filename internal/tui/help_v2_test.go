@@ -18,7 +18,7 @@ func TestHelpFooterCompactHints(t *testing.T) {
 		{"Bulk hints", ViewBulk, []string{"space", "enter", "esc"}},
 		{"PRs hints", ViewPRs, []string{"enter", "esc", "↑↓"}},
 		{"Sync hints", ViewSync, []string{"enter", "esc", "↑↓"}},
-		{"Config hints", ViewConfig, []string{"enter", "esc", "tab"}},
+		{"Config hints", ViewConfig, []string{"tab", "ctrl+n/p", "esc"}},
 	}
 
 	for _, tt := range tests {
