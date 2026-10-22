@@ -46,6 +46,7 @@ const (
 	ViewDetailSheet // full-screen detail below 110 columns
 	ViewOmni        // search over worktrees, actions, PRs, and issues
 	ViewMessages    // session history of warnings and errors
+	ViewPRReview    // full-screen review of one pull request (spec 13)
 )
 
 // Model is the root Bubble Tea model.
@@ -104,12 +105,15 @@ type Model struct {
 	// fetches, so omni can search them without calling gh (spec 9.2).
 	prCache        []*tracker.PullRequest
 	issueCache     []*tracker.Issue
-	pendingPR      int  // after the PR browser fetches, put its cursor on this PR
 	prFetching     bool // a PR list fetch is in flight
 	messagesOffset int  // first row shown in the message history
 	pendingIssue   int
 	bulkState      *BulkState
 	prState        *PRViewState
+	prReview       *PRReviewState
+	prReviewGen    int                   // generation of the latest review open
+	prReviewCache  map[int]*prReviewData // loaded review data by PR number
+	ghRepo         string                // the gh repository, once resolved
 	issueState     *IssueViewState
 	syncState      *SyncState
 	configState    *ConfigState
@@ -285,6 +289,14 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handlePRsFetched(msg)
 	case prCacheLoadedMsg:
 		return m.handlePRCacheLoaded(msg)
+	case prReviewRepoMsg:
+		return m.handlePRReviewRepo(msg)
+	case prDetailMsg:
+		return m.handlePRDetail(msg)
+	case prDiffMsg:
+		return m.handlePRDiff(msg)
+	case prCommentsMsg:
+		return m.handlePRComments(msg)
 	case issuesFetchedMsg:
 		return m.handleIssuesFetched(msg)
 	case bulkDeleteDoneMsg:
@@ -562,11 +574,8 @@ func (m Model) handleCreationDone(msg creationDoneMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handlePRsFetched(msg prsFetchedMsg) (tea.Model, tea.Cmd) {
-	// Read and clear the pending PR now, so a failed fetch or a browser
-	// closed before it returned cannot move a later, unrelated open.
-	pending := m.pendingPR
-	m.pendingPR = 0
 	m.prFetching = false
+	msg.prs = safePRs(msg.prs)
 	if msg.err == nil {
 		m.prCache = msg.prs
 	}
@@ -578,9 +587,7 @@ func (m Model) handlePRsFetched(msg prsFetchedMsg) (tea.Model, tea.Cmd) {
 		case msg.err != nil:
 			s.Error = msg.err.Error()
 		default:
-			if pending == 0 {
-				pending = s.selectedPRNumber() // keep the stale list's selection
-			}
+			pending := s.selectedPRNumber() // keep the stale list's selection
 			s.PRs, s.Stale, s.Error, s.Cursor = msg.prs, false, "", 0
 			for i, pr := range filteredPRs(msg.prs, s.FilterInput.Value()) {
 				if pending != 0 && pr.Number == pending {
@@ -595,6 +602,7 @@ func (m Model) handlePRsFetched(msg prsFetchedMsg) (tea.Model, tea.Cmd) {
 // handlePRCacheLoaded takes the PR list saved by an earlier session, unless
 // a fetch has already brought a newer one. Omni and the PR browser use it.
 func (m Model) handlePRCacheLoaded(msg prCacheLoadedMsg) (tea.Model, tea.Cmd) {
+	msg.prs = safePRs(msg.prs)
 	if m.prCache == nil {
 		m.prCache = msg.prs
 	}
@@ -605,6 +613,7 @@ func (m Model) handlePRCacheLoaded(msg prCacheLoadedMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleIssuesFetched(msg issuesFetchedMsg) (tea.Model, tea.Cmd) {
+	msg.issues = safeIssues(msg.issues)
 	pending := m.pendingIssue
 	m.pendingIssue = 0
 	if msg.err == nil {
@@ -967,6 +976,7 @@ func (m Model) isOperationAnimating() bool {
 // isTrackerAnimating reports whether PR or issue state is loading/creating.
 func (m Model) isTrackerAnimating() bool {
 	return (m.prState != nil && (m.prState.Loading || m.prState.Stale && m.prState.Error == "")) ||
+		(m.prReview != nil && m.prReview.loading()) ||
 		(m.issueState != nil && m.issueState.Loading)
 }
 
@@ -1060,6 +1070,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleMessagesKey(msg)
 	case ViewDetailSheet:
 		return m.handleDetailSheetKey(msg)
+	case ViewPRReview:
+		return m.handlePRReviewKey(msg)
 	case ViewDashboard:
 		return m.handleDashboardKey(msg)
 	}
@@ -1342,11 +1354,6 @@ func (m Model) enterPRView() (tea.Model, tea.Cmd) {
 		WorktreeBranches: branches,
 		FilterInput:      newFilterInput(""),
 	}
-	for i, pr := range m.prCache {
-		if m.pendingPR != 0 && pr.Number == m.pendingPR {
-			m.prState.Cursor = i // omni opened the browser at this PR
-		}
-	}
 	if m.prFetching {
 		return m, m.spinner.Tick // the fetch in flight fills this browser
 	}
@@ -1519,6 +1526,11 @@ func (m Model) renderFrame(i int) string {
 	case ViewConfig:
 		if m.configState != nil {
 			return m.renderConfigFrame()
+		}
+		return m.renderFrame(i - 1)
+	case ViewPRReview:
+		if m.prReview != nil {
+			return m.renderPRReviewFrame()
 		}
 		return m.renderFrame(i - 1)
 	}

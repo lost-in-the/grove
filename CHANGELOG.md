@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **PR review.** `enter` on a pull request (in the PR browser or in Find) opens a full-screen review with four tabs. The files tab shows the diff file by file with line numbers, a folder rail with `+/-` counts (`t` shows or hides it), `J` / `K` between files, `v` to mark a file viewed (kept across restarts until the file changes), and `z` to fold runs of removed lines. The conversation, commits, and checks tabs follow in the next build. Control characters in a diff are shown as symbols, never sent to the terminal.
+
 ### Fixed
 - Toast notifications show again. They had stopped appearing on the dashboard; they now draw in the top-right corner above everything else.
 - Overlays in the dashboard no longer erase the rows beside them, and the background behind them is dimmed evenly instead of stopping at the first styled word. (#19)
@@ -19,8 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The header bar's background now runs behind its whole row, not just the edges.
 - Moving uncommitted changes to a copy (`f`, or `grove fork --move-wip`) now also cleans the source in a worktree that tracks no files.
 - Creating a worktree from the dashboard shows hook and Docker output in the activity log as it is printed. Before, the log froze on `Bootstrapping worktree...` for the whole bootstrap and then showed everything at once. (#143)
+- A pull request or issue whose title, labels, or body holds terminal control characters can no longer drive the terminal: titles and labels show them as symbols (`␛`), and bodies drop them before rendering.
 
 ### Changed
+- In the PR browser, `enter` now opens the PR review; `n` creates a worktree from the PR, as `enter` used to.
 - `p` opens the PR browser at once on the last list grove fetched, marked `cached · refreshing`, and swaps in the new list when it arrives, keeping the selected PR. If the refresh fails, the saved list stays. Find's PR results use the saved list too.
 - Dashboard rows are one line: agent state (under herdr), cursor, status, alias, branch chip, counts, age, and session and container glyphs. Ages round the way `git log --date=relative` does (`35h`, `13d`, `11mo`), so a row agrees with git. The cursor no longer hides a row's status. As the terminal narrows, columns drop in a fixed order and long aliases shorten in the middle. `v` adds the commit message back; one line is the new default unless you saved a choice.
 - The header shows the sort and your position in the list (`3/12`) instead of the current branch.

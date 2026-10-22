@@ -103,7 +103,8 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 	case ViewPRs:
 		return []Hint{
 			{"↑↓", "navigate"},
-			{"enter", "create worktree"},
+			{"enter", "review"},
+			{"n", "new worktree"},
 			{"B", "open in browser"},
 			{"tab", "detail"},
 			{"/", "filter"},
@@ -114,6 +115,15 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 			{"↑↓", "navigate"},
 			{"enter", "select"},
 			{"esc", "cancel"},
+		}
+	case ViewPRReview:
+		return []Hint{
+			{"J/K", "file"},
+			{"v", "viewed"},
+			{"z", "fold"},
+			{"t", "rail"},
+			{"1-4", "tab"},
+			{"esc", "back"},
 		}
 	case ViewConfig:
 		return []Hint{

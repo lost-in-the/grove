@@ -143,13 +143,21 @@ func (m Model) handlePRNormalKey(msg tea.KeyPressMsg, filtered []*tracker.PullRe
 		return m, s.FilterInput.Focus()
 
 	case key.Matches(msg, m.keys.Enter):
-		return m.handlePREnter(s, filtered)
+		if len(filtered) > 0 && s.Cursor < len(filtered) {
+			return m.openPRReview(filtered[s.Cursor])
+		}
+		return m, nil
+
+	case msg.String() == "n":
+		return m.handlePRNew(s, filtered)
 	}
 
 	return m, nil
 }
 
-func (m Model) handlePREnter(s *PRViewState, filtered []*tracker.PullRequest) (tea.Model, tea.Cmd) {
+// handlePRNew creates a worktree from the selected PR's branch, or asks
+// first when the branch already has one.
+func (m Model) handlePRNew(s *PRViewState, filtered []*tracker.PullRequest) (tea.Model, tea.Cmd) {
 	if len(filtered) == 0 || s.Cursor >= len(filtered) {
 		return m, nil
 	}

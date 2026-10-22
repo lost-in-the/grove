@@ -185,19 +185,6 @@ func TestPRView_StaleListAnimates(t *testing.T) {
 	}
 }
 
-// Omni opens the browser at a PR: the cached list already puts the cursor
-// there, so enter cannot act on another PR before the refresh lands.
-func TestPRView_PendingPROnCachedList(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(120, 30))
-	m.prCache = cachedPRs
-	m.pendingPR = 9
-	next, _ := m.enterPRView()
-	m = next.(Model)
-	if n := m.prState.selectedPRNumber(); n != 9 {
-		t.Errorf("cursor on #%d, want #9", n)
-	}
-}
-
 // grove prs starts in the browser with Init's fetch in flight, so reopening
 // starts no second fetch.
 func TestConfigureForPRs_MarksFetchInFlight(t *testing.T) {

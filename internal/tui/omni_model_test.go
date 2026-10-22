@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"errors"
 	"strings"
 	"testing"
 
@@ -78,22 +77,6 @@ func TestOmni_EnterOnWorktreeSwitches(t *testing.T) {
 	next, cmd := pressKey(m, "enter")
 	if next.switchTo != "/tmp/test-project-fix-bug" || !isQuit(cmd) {
 		t.Errorf("switchTo %q quit %v", next.switchTo, isQuit(cmd))
-	}
-}
-
-func TestOmni_EnterOnPROpensBrowserAtIt(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(120, 40))
-	prs := []*tracker.PullRequest{{Number: 7, Title: "First"}, {Number: 42, Title: "Answer the question"}}
-	m = sendMsg(m, prsFetchedMsg{prs: prs})
-	m = sendKey(m, "space")
-	m = typeOmni(m, "#42")
-	m = sendKey(m, "enter")
-	if m.activeView() != ViewPRs || m.prState == nil {
-		t.Fatalf("view %v, want the PR browser", m.activeView())
-	}
-	m = sendMsg(m, prsFetchedMsg{prs: prs})
-	if m.prState.Cursor != 1 {
-		t.Errorf("cursor %d after the fetch, want 1 (#42)", m.prState.Cursor)
 	}
 }
 
@@ -204,36 +187,6 @@ func TestOmni_ActionWithoutSelection(t *testing.T) {
 	m = sendKey(m, "enter")
 	if m.activeView() != ViewConfig {
 		t.Errorf("config with no selection: view %v toast %q", m.activeView(), m.toast.Message())
-	}
-}
-
-// A pending PR from omni never moves a later, unrelated open.
-func TestOmni_PendingPRDoesNotGoStale(t *testing.T) {
-	prs := []*tracker.PullRequest{{Number: 7, Title: "First"}, {Number: 42, Title: "Answer"}}
-	m := newTestModel(withItems(3), withSize(120, 40))
-	m = sendMsg(m, prsFetchedMsg{prs: prs})
-	m = sendKey(m, "space")
-	m = typeOmni(m, "#42")
-	m = sendKey(m, "enter")
-	m = sendMsg(m, prsFetchedMsg{err: errors.New("gh failed")})
-	m = sendKey(m, "esc")
-	m = sendKey(m, "p")
-	m = sendMsg(m, prsFetchedMsg{prs: prs})
-	if m.prState.Cursor != 0 {
-		t.Errorf("after a failed fetch, a later p put the cursor on %d", m.prState.Cursor)
-	}
-
-	b := newTestModel(withItems(3), withSize(120, 40))
-	b = sendMsg(b, prsFetchedMsg{prs: prs})
-	b = sendKey(b, "space")
-	b = typeOmni(b, "#42")
-	b = sendKey(b, "enter")
-	b = sendKey(b, "esc")
-	b = sendMsg(b, prsFetchedMsg{prs: prs}) // lands after the browser closed
-	b = sendKey(b, "p")
-	b = sendMsg(b, prsFetchedMsg{prs: prs})
-	if b.prState.Cursor != 0 {
-		t.Errorf("after closing early, a later p put the cursor on %d", b.prState.Cursor)
 	}
 }
 

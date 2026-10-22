@@ -13,7 +13,11 @@ import (
 //
 // Uses a fixed "dark" style: glamour v2 does not detect the terminal
 // background, so the style is chosen here.
+//
+// md is someone else's text, so its control characters are removed first:
+// glamour would pass an escape sequence in it straight to the terminal.
 func renderMarkdown(md string, width int) string {
+	md = safeMarkdown(md)
 	var opts []glamour.TermRendererOption
 	opts = append(opts, glamour.WithWordWrap(width))
 	if os.Getenv("NO_COLOR") != "" || os.Getenv("GROVE_NO_COLOR") != "" {

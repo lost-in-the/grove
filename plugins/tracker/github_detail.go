@@ -146,30 +146,50 @@ func (g *GitHubAdapter) FetchPRDetail(number int) (*PRDetail, error) {
 // FetchReviewComments retrieves every inline review comment on a pull
 // request. gh pr view has no review threads, so this uses the REST API.
 func (g *GitHubAdapter) FetchReviewComments(number int) ([]ReviewComment, error) {
-	repo := g.repo
-	if repo == "" {
-		repo = "{owner}/{repo}" // gh fills these in from the current repository
-	}
-	output, err := g.runGHTimeout(cmdexec.GHCLISlow, "api", "--paginate", "--slurp",
-		fmt.Sprintf("repos/%s/pulls/%d/comments?per_page=100", repo, number))
+	output, err := g.runGHTimeout(cmdexec.GHCLISlow, reviewCommentsArgs(g.repo, number)...)
 	if err != nil {
 		return nil, err
 	}
 	return parseReviewComments(output)
 }
 
+// apiArgs is a gh api call on a path under the repository. repo is
+// "owner/repo", "host/owner/repo" for GitHub Enterprise (whose host gh
+// takes as --hostname), or "" for gh's own {owner}/{repo} placeholders.
+func apiArgs(repo, path string, flags ...string) []string {
+	args := []string{"api"}
+	if parts := strings.Split(repo, "/"); len(parts) == 3 {
+		args = append(args, "--hostname", parts[0])
+		repo = parts[1] + "/" + parts[2]
+	}
+	if repo == "" {
+		repo = "{owner}/{repo}" // gh fills these in from the current repository
+	}
+	args = append(args, flags...)
+	return append(args, "repos/"+repo+"/"+path)
+}
+
+// reviewCommentsArgs is the gh api call for a PR's review comments.
+func reviewCommentsArgs(repo string, number int) []string {
+	return apiArgs(repo, fmt.Sprintf("pulls/%d/comments?per_page=100", number), "--paginate", "--slurp")
+}
+
+// prDiffArgs is the gh api call for a PR's diff, over REST.
+func prDiffArgs(repo string, number int) []string {
+	return apiArgs(repo, fmt.Sprintf("pulls/%d", number), "-H", "Accept: application/vnd.github.diff")
+}
+
 // FetchPRDiff retrieves a pull request's unified diff, for git.ParseDiff.
 //
-// The diff is verbatim: by default gh neutralizes terminal escape
-// sequences in it (and, writing to a pipe, refuses one that holds them), so
-// grove asks for the raw text and the caller must neutralize control
-// characters before drawing any line. A gh too old to know the flag is
-// asked again without it.
+// It comes over REST, since gh pr diff looks the PR up through GraphQL,
+// which can be rate limited while REST still answers. The diff is
+// verbatim: by default gh neutralizes terminal escape sequences (and,
+// writing to a pipe, refuses a response that holds them), so grove asks
+// for the raw text and the caller must neutralize control characters
+// before drawing any line. A gh too old to know the flag is asked again
+// without it.
 func (g *GitHubAdapter) FetchPRDiff(number int) (string, error) {
-	args := []string{"pr", "diff", strconv.Itoa(number), "--color", "never"}
-	if g.repo != "" {
-		args = append(args, "--repo", g.repo)
-	}
+	args := prDiffArgs(g.repo, number)
 	output, err := g.runGHTimeout(cmdexec.GHCLISlow, append(args, "--allow-escape-sequences")...)
 	if err != nil && strings.Contains(err.Error(), "unknown flag: --allow-escape-sequences") {
 		output, err = g.runGHTimeout(cmdexec.GHCLISlow, args...)

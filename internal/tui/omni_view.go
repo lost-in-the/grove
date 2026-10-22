@@ -175,7 +175,12 @@ func (m Model) chooseOmni() (tea.Model, tea.Cmd) {
 			return a.Run(m, k)
 		}
 	case omniPR:
-		m.pendingPR, _ = strconv.Atoi(it.Ref)
+		n, _ := strconv.Atoi(it.Ref)
+		for _, pr := range m.prCache {
+			if pr.Number == n {
+				return m.openPRReview(pr)
+			}
+		}
 		return m.enterPRView()
 	case omniIssue:
 		m.pendingIssue, _ = strconv.Atoi(it.Ref)

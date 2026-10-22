@@ -247,6 +247,8 @@ func helpSectionsFor(view ActiveView) []helpSection {
 		return helpSectionsSync
 	case ViewConfig:
 		return helpSectionsConfig
+	case ViewPRReview:
+		return helpSectionsPRReview
 	case ViewRename:
 		return helpSectionsRename
 	default:
@@ -332,10 +334,28 @@ var helpSectionsBulk = []helpSection{
 	}},
 }
 
+var helpSectionsPRReview = []helpSection{
+	{title: "PR Review", note: "One pull request: conversation, commits, checks, and files.", items: []helpEntry{
+		{"1-4", "Conversation, commits, checks, files"},
+		{"B", "Open PR in browser"},
+		{"esc", "Back"},
+	}},
+	{title: "Files", items: []helpEntry{
+		{"J / K", "Next / previous file (also ctrl+n / ctrl+p)"},
+		{"↑/k ↓/j", "Scroll"},
+		{"g / G", "Top / bottom of the file"},
+		{"ctrl+u / ctrl+d", "Half page up / down"},
+		{"v", "Mark the file viewed (kept until it changes)"},
+		{"z", "Fold runs of removed lines"},
+		{"t", "Show or hide the file rail"},
+	}},
+}
+
 var helpSectionsPRs = []helpSection{
 	{title: "Pull Requests", note: "Browse and create worktrees from open pull requests.", items: []helpEntry{
 		{"↑/k ↓/j", "Navigate PRs"},
-		{"enter", "Create worktree from PR"},
+		{"enter", "Review the PR"},
+		{"n", "Create worktree from PR"},
 		{"B", "Open PR in browser"},
 		{"tab", "Focus detail panel"},
 		{"/", "Filter PRs"},
