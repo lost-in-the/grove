@@ -184,7 +184,7 @@ The status line says what `enter` will do. If the branch is already in use, `ent
 | `enter` | Create, or switch to an in-use branch's worktree |
 | `esc` | Close (does nothing while creating) |
 
-The PR browser opens this form with the PR's branch filled in. The issue browser fills in the branch `issue-N`.
+The PR browser opens this form (`n`) with the PR's branch filled in. The issue browser fills in the branch `issue-N`.
 
 ### Delete Worktree (`d`)
 
@@ -291,7 +291,8 @@ Each PR shows:
 Controls:
 - `↑` / `↓` — Navigate
 - `tab` — Toggle PR detail preview (rendered markdown body)
-- `enter` — Create a new worktree from the PR branch
+- `enter` — Open the PR review (see below)
+- `n` — Create a new worktree from the PR branch
 - `B` — Open the selected PR in your default browser
 - Type to filter by title, branch, author, or number
 - `esc` — Close

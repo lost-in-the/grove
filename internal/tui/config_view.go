@@ -68,18 +68,27 @@ func (m Model) configHeader() string {
 	return headerBar(content, m.width)
 }
 
-// renderConfigTabs draws the section tabs with the active one raised. When
-// the full row does not fit, inactive tabs shrink to their number.
+// renderConfigTabs draws the section tabs with the active one raised.
 func renderConfigTabs(active ConfigTab, width int) string {
+	labels := make([]string, ConfigTabCount)
+	for tab := range labels {
+		labels[tab] = configSectionNames[tab]
+	}
+	return renderTabRow(labels, int(active), width)
+}
+
+// renderTabRow draws "[1] label  [2] label ..." with the active tab raised.
+// When the full row does not fit, inactive tabs shrink to their number.
+func renderTabRow(labels []string, active, width int) string {
 	build := func(short bool) string {
-		parts := make([]string, 0, ConfigTabCount)
-		for tab := ConfigTab(0); tab < ConfigTabCount; tab++ {
-			label := fmt.Sprintf("[%d] %s", tab+1, configSectionNames[tab])
+		parts := make([]string, 0, len(labels))
+		for i, l := range labels {
+			label := fmt.Sprintf("[%d] %s", i+1, l)
 			style := Styles.TabInactive
-			if tab == active {
+			if i == active {
 				style = Styles.TabActive
 			} else if short {
-				label = fmt.Sprintf("[%d]", tab+1)
+				label = fmt.Sprintf("[%d]", i+1)
 			}
 			parts = append(parts, style.Render(label))
 		}
