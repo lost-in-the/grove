@@ -32,7 +32,13 @@ func sendConfigKeys(t *testing.T, m Model, keys ...string) Model {
 // what the key started.
 func sendConfigKey(t *testing.T, m Model, k string) (Model, []tea.Cmd) {
 	t.Helper()
-	next, cmd := m.Update(makeKeyMsg(k))
+	return sendConfigMsg(t, m, makeKeyMsg(k))
+}
+
+// sendConfigMsg is sendConfigKey for any message.
+func sendConfigMsg(t *testing.T, m Model, msg tea.Msg) (Model, []tea.Cmd) {
+	t.Helper()
+	next, cmd := m.Update(msg)
 	m = next.(Model)
 	var queue []tea.Msg
 	var slow []tea.Cmd

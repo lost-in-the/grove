@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -57,6 +58,7 @@ type ConfigState struct {
 	FormValues *configFormValues         // bool bindings shared by the forms
 	formW      int                       // size the forms are built at
 	formH      int
+	arrived    bool // section changed, no key sent to it yet
 }
 
 // form is the active section's form, or nil before the config loads.
@@ -373,11 +375,6 @@ func (m Model) handleConfigKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Section keys (spec 11): ctrl+n / ctrl+p anywhere, before the form,
 	// whose selects would take them as down and up; digits only off text
 	// inputs, where they must type.
-	//
-	// Known gap: enter on a last field finishes the form through two
-	// follow-up messages. A section key that lands between them sends the
-	// rest to the new section's form, moving its focus. It needs two keys
-	// in one event-loop turn, so it is left as is.
 	switch k := msg.String(); {
 	case k == "ctrl+n":
 		return m, s.switchSection((s.Tab + 1) % ConfigTabCount)
@@ -388,6 +385,7 @@ func (m Model) handleConfigKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if s.form() != nil {
+		s.arrived = false
 		return m.updateConfigForm(msg)
 	}
 	return m, nil
@@ -409,11 +407,28 @@ func (m Model) leaveConfig() (tea.Model, tea.Cmd) {
 // handleConfigFormMsg forwards non-key messages (focus moves, cursor blink)
 // to the active section's form. huh finishes a form through one of these,
 // so it goes through the same completion check as keys.
+//
+// A form sends its own huh messages only in answer to a key. So between a
+// section change and the first key sent to the new section, a huh message
+// is the previous section's, such as the rest of a finish begun by enter;
+// passing it on would move the new form's focus or finish it too.
 func (m Model) handleConfigFormMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.configState == nil || m.configState.form() == nil {
 		return m, nil
 	}
+	if m.configState.arrived && fromHuh(msg) {
+		return m, nil
+	}
 	return m.updateConfigForm(msg)
+}
+
+// huhPkg is huh's package path; its follow-up messages are unexported.
+var huhPkg = reflect.TypeFor[huh.Form]().PkgPath()
+
+// fromHuh reports whether msg is one of huh's own messages.
+func fromHuh(msg tea.Msg) bool {
+	t := reflect.TypeOf(msg)
+	return t != nil && t.PkgPath() == huhPkg
 }
 
 // updateConfigForm sends a message to the active form. Finishing a section
@@ -450,6 +465,7 @@ func (m Model) updateConfigForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 // arrived at again restarts it. huh 2.0.3 draws a focused input's cursor
 // regardless, so this guards against a huh change rather than a visible bug.
 func (s *ConfigState) switchSection(tab ConfigTab) tea.Cmd {
+	s.arrived = s.arrived || tab != s.Tab
 	s.Tab = tab
 	if f := s.form(); f != nil {
 		return f.GetFocusedField().Focus()
