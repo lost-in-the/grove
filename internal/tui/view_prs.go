@@ -20,6 +20,7 @@ type PRViewState struct {
 	PRs              []*tracker.PullRequest
 	Cursor           int
 	Loading          bool
+	Stale            bool // PRs is the saved list; a refresh is running or failed
 	Error            string
 	WorktreeBranches map[string]string // branch → worktree short name
 	ExistsPrompt     *ExistingWorktreePrompt
@@ -43,6 +44,9 @@ func (m Model) fetchPRsCmd() tea.Msg {
 
 	gh := tracker.NewGitHubAdapter(repo)
 	prs, err := gh.ListPRs(tracker.ListOptions{State: "open", Limit: 30})
+	if saveErr := savePRCacheAfterFetch(m.projectRoot, prs, err); saveErr != nil {
+		tuilog.Printf("warning: failed to save PR cache: %v", saveErr)
+	}
 	return prsFetchedMsg{prs: prs, err: err}
 }
 
@@ -166,6 +170,14 @@ func (m Model) handlePREnter(s *PRViewState, filtered []*tracker.PullRequest) (t
 
 func (m Model) openCreateWizardForPR(pr *tracker.PullRequest) (tea.Model, tea.Cmd) {
 	return m.openBranchForm(branchFormPrefill{Branch: pr.Branch, RemoteBranch: true, FocusAlias: true})
+}
+
+// selectedPRNumber is the number of the PR under the cursor, or 0.
+func (s *PRViewState) selectedPRNumber() int {
+	if prs := filteredPRs(s.PRs, s.FilterInput.Value()); s.Cursor >= 0 && s.Cursor < len(prs) {
+		return prs[s.Cursor].Number
+	}
+	return 0
 }
 
 func filteredPRs(prs []*tracker.PullRequest, filter string) []*tracker.PullRequest {

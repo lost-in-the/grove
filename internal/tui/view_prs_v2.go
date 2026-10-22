@@ -141,8 +141,11 @@ func renderPRList(s *PRViewState, width int, spinnerView string, maxHeight int) 
 		return b.String()
 	}
 
-	if s.Error != "" {
+	switch {
+	case s.Error != "":
 		b.WriteString(Styles.ErrorText.Render(s.Error) + "\n")
+	case s.Stale:
+		b.WriteString(Styles.TextMuted.Render(spinnerView+" cached · refreshing") + "\n")
 	}
 
 	filter := s.FilterInput.Value()

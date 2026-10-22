@@ -104,8 +104,9 @@ type Model struct {
 	// fetches, so omni can search them without calling gh (spec 9.2).
 	prCache        []*tracker.PullRequest
 	issueCache     []*tracker.Issue
-	pendingPR      int // after the PR browser fetches, put its cursor on this PR
-	messagesOffset int // first row shown in the message history
+	pendingPR      int  // after the PR browser fetches, put its cursor on this PR
+	prFetching     bool // a PR list fetch is in flight
+	messagesOffset int  // first row shown in the message history
 	pendingIssue   int
 	bulkState      *BulkState
 	prState        *PRViewState
@@ -234,7 +235,7 @@ func (m Model) Err() error { return m.err }
 
 func (m Model) Init() tea.Cmd {
 	tuilog.Printf("Init: loading=%v ready=%v activeView=%d", m.loading, m.ready, m.activeView())
-	cmds := []tea.Cmd{m.spinner.Tick, m.fetchWorktrees}
+	cmds := []tea.Cmd{m.spinner.Tick, m.fetchWorktrees, loadPRCacheCmd(m.projectRoot)}
 	if m.activeView() == ViewPRs {
 		cmds = append(cmds, m.fetchPRsCmd)
 	}
@@ -282,6 +283,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleCreationDone(msg)
 	case prsFetchedMsg:
 		return m.handlePRsFetched(msg)
+	case prCacheLoadedMsg:
+		return m.handlePRCacheLoaded(msg)
 	case issuesFetchedMsg:
 		return m.handleIssuesFetched(msg)
 	case bulkDeleteDoneMsg:
@@ -563,21 +566,40 @@ func (m Model) handlePRsFetched(msg prsFetchedMsg) (tea.Model, tea.Cmd) {
 	// closed before it returned cannot move a later, unrelated open.
 	pending := m.pendingPR
 	m.pendingPR = 0
+	m.prFetching = false
 	if msg.err == nil {
 		m.prCache = msg.prs
 	}
-	if m.prState != nil {
-		m.prState.Loading = false
-		if msg.err != nil {
-			m.prState.Error = msg.err.Error()
-		} else {
-			m.prState.PRs = msg.prs
-			for i, pr := range msg.prs {
+	if s := m.prState; s != nil {
+		s.Loading = false
+		switch {
+		case msg.err != nil && s.Stale:
+			s.Error = "refresh failed: " + msg.err.Error() // keep the saved list
+		case msg.err != nil:
+			s.Error = msg.err.Error()
+		default:
+			if pending == 0 {
+				pending = s.selectedPRNumber() // keep the stale list's selection
+			}
+			s.PRs, s.Stale, s.Error, s.Cursor = msg.prs, false, "", 0
+			for i, pr := range filteredPRs(msg.prs, s.FilterInput.Value()) {
 				if pending != 0 && pr.Number == pending {
-					m.prState.Cursor = i
+					s.Cursor = i
 				}
 			}
 		}
+	}
+	return m, nil
+}
+
+// handlePRCacheLoaded takes the PR list saved by an earlier session, unless
+// a fetch has already brought a newer one. Omni and the PR browser use it.
+func (m Model) handlePRCacheLoaded(msg prCacheLoadedMsg) (tea.Model, tea.Cmd) {
+	if m.prCache == nil {
+		m.prCache = msg.prs
+	}
+	if s := m.prState; s != nil && s.Loading && len(msg.prs) > 0 {
+		s.PRs, s.Loading, s.Stale = msg.prs, false, true
 	}
 	return m, nil
 }
@@ -1312,11 +1334,18 @@ func (m *Model) applySortToList() tea.Cmd {
 func (m Model) enterPRView() (tea.Model, tea.Cmd) {
 	branches := m.worktreeBranchMap()
 	m.pushView(ViewPRs)
+	// The last list shows at once, marked stale, while a refresh runs.
 	m.prState = &PRViewState{
-		Loading:          true,
+		PRs:              m.prCache,
+		Loading:          m.prCache == nil,
+		Stale:            m.prCache != nil,
 		WorktreeBranches: branches,
 		FilterInput:      newFilterInput(""),
 	}
+	if m.prFetching {
+		return m, m.spinner.Tick // the fetch in flight fills this browser
+	}
+	m.prFetching = true
 	return m, tea.Batch(m.spinner.Tick, m.fetchPRsCmd)
 }
 

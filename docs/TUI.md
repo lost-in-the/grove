@@ -281,6 +281,8 @@ Select multiple worktrees for deletion in one operation. The main worktree, prot
 
 Fetches open pull requests from GitHub (requires `gh` CLI installed and authenticated).
 
+The last list grove fetched is saved in the user cache directory (`~/.cache/grove/prs/` on Linux). `p` shows it at once with `cached · refreshing` above it, and replaces it when the new list arrives, keeping the selected PR. If the refresh fails, the saved list stays and the line reads `refresh failed:` with the reason. Find's PR results also use the saved list.
+
 Each PR shows:
 - PR number + title + branch name
 - Author, commit count, diff stats (`+N -N`)
