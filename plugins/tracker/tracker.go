@@ -32,6 +32,67 @@ type PRCommit struct {
 	Message string `json:"message"` // first line of commit message
 }
 
+// PRDetail is what the PR review view shows beyond the list entry: the
+// conversation, checks, commits, and changed files of one pull request.
+type PRDetail struct {
+	Number    int
+	UpdatedAt time.Time
+	HeadSHA   string
+	Comments  []PRComment
+	Reviews   []PRReview
+	Checks    []PRCheck
+	Commits   []PRCommit
+	Files     []PRFile
+}
+
+// PRComment is a conversation comment on a pull request.
+type PRComment struct {
+	Author    string
+	Body      string
+	CreatedAt time.Time
+}
+
+// PRReview is a submitted review. State is gh's, e.g. APPROVED.
+type PRReview struct {
+	Author      string
+	State       string
+	Body        string
+	SubmittedAt time.Time
+}
+
+// PRCheck is one check or commit status. State is a CheckRun's conclusion
+// once completed, else its status, or a StatusContext's state, upper case.
+type PRCheck struct {
+	Name  string
+	State string
+	URL   string
+}
+
+// PRFile is a file the pull request changes.
+type PRFile struct {
+	Path      string
+	Additions int
+	Deletions int
+}
+
+// ReviewComment is an inline review comment, anchored to a line of a file.
+// Line is 0 when the comment is outdated; OriginalLine keeps where it was.
+// StartLine is set on a comment spanning several lines.
+type ReviewComment struct {
+	ID           int64
+	InReplyTo    int64
+	Path         string
+	Line         int
+	StartLine    int
+	OriginalLine int
+	Side         string
+	DiffHunk     string
+	CommitID     string
+	Author       string
+	Body         string
+	CreatedAt    time.Time
+}
+
 // PullRequest represents a pull request from a tracking system.
 type PullRequest struct {
 	Number         int        `json:"number"`

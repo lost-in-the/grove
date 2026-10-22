@@ -14,6 +14,9 @@ const (
 	GitRemote = 30 * time.Second
 	Tmux      = 5 * time.Second
 	GHCLI     = 15 * time.Second
+	// GHCLISlow bounds gh calls whose output grows with the PR: a large diff,
+	// or every page of its review comments.
+	GHCLISlow = 60 * time.Second
 	Docker    = 15 * time.Second
 	// Herdr matches Tmux: every herdr CLI call is a thin client over a local
 	// socket, and a dead server fails fast with server_not_running rather than
