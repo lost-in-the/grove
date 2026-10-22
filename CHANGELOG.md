@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - With `NO_COLOR` set, the footer now shows which key you pressed (reverse video). Before, the highlight looked the same as every other key.
 - The issue browser fills in the branch `issue-N` again when it opens the New Worktree form.
 - Saving the protected or immutable list from the config editor writes a valid TOML array. Before, it wrote the bare text (`protected = main, staging`), and grove then ignored the whole config file. A value with a control character in it is now escaped the way TOML allows, for the same reason. Saving a key whose value spans several lines (an array or a `"""` string) replaces the whole value, not just its first line.
+- Saving from the config editor also handles a quoted key containing `=`, and a top-level key no longer overwrites a key of the same name under a `[section]`.
+- A toast now clears after its few seconds even when nothing else is happening on the dashboard. Before, toasts such as `slot 3 is empty` or `no previous worktree` could stay on screen indefinitely.
+- The header bar's background now runs behind its whole row, not just the edges.
+- Moving uncommitted changes to a copy (`f`, or `grove fork --move-wip`) now also cleans the source in a worktree that tracks no files.
 
 ### Changed
 - Dashboard rows are one line: agent state (under herdr), cursor, status, alias, branch chip, counts, age, and session and container glyphs. Ages round the way `git log --date=relative` does (`35h`, `13d`, `11mo`), so a row agrees with git. The cursor no longer hides a row's status. As the terminal narrows, columns drop in a fixed order and long aliases shorten in the middle. `v` adds the commit message back; one line is the new default unless you saved a choice.
