@@ -58,9 +58,10 @@ func TestConfig_QuestionMarkTypesInInput(t *testing.T) {
 	}
 }
 
-// Only the active section's form gets messages, so its cursor blink stops
-// while another section shows. Arriving at a section focuses its field
-// again, which restarts the blink, by every way of changing section.
+// Only the active section's form gets messages, so a text input's cursor
+// blink stops while another section shows. Arriving at a section focuses
+// its field again (restarting an input's blink), by every way of changing
+// section.
 func TestConfig_SectionChangeRefocuses(t *testing.T) {
 	cases := []struct {
 		name string

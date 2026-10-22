@@ -440,3 +440,51 @@ func TestPopStashRef_MissingShaErrors(t *testing.T) {
 		t.Fatal("expected error for unknown stash SHA")
 	}
 }
+
+// Discard drops staged, unstaged, and untracked changes, also in a worktree
+// whose commit tracks no files, where `git checkout -- .` fails on its
+// pathspec.
+func TestDiscard(t *testing.T) {
+	t.Run("tracked files", func(t *testing.T) {
+		dir := setupWIPTestRepo(t)
+		if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("edited"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "staged.txt"), []byte("staged"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		gitAdd(t, dir, "staged.txt")
+		if err := os.WriteFile(filepath.Join(dir, "untracked.txt"), []byte("new"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := NewWIPHandler(dir).Discard(); err != nil {
+			t.Fatalf("Discard() error = %v", err)
+		}
+		if got, _ := os.ReadFile(filepath.Join(dir, "tracked.txt")); string(got) != "original" {
+			t.Errorf("tracked.txt = %q, want original", got)
+		}
+		if has, _ := NewWIPHandler(dir).HasWIP(); has {
+			t.Error("changes remain after Discard")
+		}
+	})
+	t.Run("nothing tracked", func(t *testing.T) {
+		dir := t.TempDir()
+		for _, args := range [][]string{
+			{"init"}, {"config", "--local", "commit.gpgsign", "false"},
+			{"-c", "user.name=test", "-c", "user.email=test@test", "commit", "--allow-empty", "-m", "init"},
+		} {
+			if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
+				t.Fatalf("git %v: %v\n%s", args, err, out)
+			}
+		}
+		if err := os.WriteFile(filepath.Join(dir, "untracked.txt"), []byte("new"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if err := NewWIPHandler(dir).Discard(); err != nil {
+			t.Fatalf("Discard() error = %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "untracked.txt")); err == nil {
+			t.Error("untracked.txt remains after Discard")
+		}
+	})
+}

@@ -78,6 +78,18 @@ func (h Header) View(width int) string {
 	gap := inner - lipgloss.Width(left) - lipgloss.Width(right)
 	content := left + strings.Repeat(" ", max(1, gap)) + right
 	content = ansi.Truncate(content, inner, "")
+	return headerBar(content, width)
+}
+
+// headerBar renders content as a one-line header bar width cells wide. Each
+// styled segment in content ends in a reset, which also clears the bar's
+// background, so the background is set again after every reset. Without
+// color the background renders as nothing and content is left alone.
+func headerBar(content string, width int) string {
+	on := lipgloss.NewStyle().Background(Colors.HeaderBg).Render(" ")
+	if set, _, ok := strings.Cut(on, " "); ok && set != "" {
+		content = strings.NewReplacer("\x1b[m", "\x1b[m"+set, "\x1b[0m", "\x1b[0m"+set).Replace(content)
+	}
 	return Styles.HeaderBar.Width(width).MaxHeight(1).Render(content)
 }
 

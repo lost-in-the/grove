@@ -244,7 +244,23 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// Update handles msg. A toast expires on the spinner tick, which runs only
+// while something animates, so a message that shows a new toast also starts
+// the tick. A second tick in flight is harmless: the spinner drops ticks
+// with a stale tag.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var shown *Toast
+	if m.toast != nil {
+		shown = m.toast.Current
+	}
+	next, cmd := m.update(msg)
+	if nm, ok := next.(Model); ok && nm.toast != nil && nm.toast.Current != nil && nm.toast.Current != shown {
+		cmd = tea.Batch(cmd, nm.spinner.Tick)
+	}
+	return next, cmd
+}
+
+func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		return m.handleWindowSize(msg)
