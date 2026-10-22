@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/lost-in-the/grove/internal/git"
 	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
@@ -23,14 +24,39 @@ var prReviewTabNames = [4]string{"conversation", "commits", "checks", "files"}
 type PRReviewState struct {
 	PR  *tracker.PullRequest
 	Tab int // 1 conversation, 2 commits, 3 checks, 4 files
+	Gen int // this open's generation; results from another are dropped
+
+	Detail   *tracker.PRDetail
+	Files    []git.FileDiff
+	Comments []tracker.ReviewComment
+
+	LoadingDetail, LoadingDiff, LoadingComments bool
+	DetailErr, DiffErr, CommentsErr             error
+	GHMissing                                   bool
+	RepoErr                                     error
+}
+
+func (s *PRReviewState) loading() bool {
+	return s.LoadingDetail || s.LoadingDiff || s.LoadingComments
 }
 
 // openPRReview pushes the review frame for pr. It opens on the files tab
-// until the other tabs are built (plan 8b decision 4).
+// until the other tabs are built (plan 8b decision 4). Unchanged PRs open
+// from the session cache; others fetch their data in the background.
 func (m Model) openPRReview(pr *tracker.PullRequest) (tea.Model, tea.Cmd) {
+	m.prReviewGen++
 	m.pushView(ViewPRReview)
-	m.prReview = &PRReviewState{PR: pr, Tab: 4}
-	return m, nil
+	s := &PRReviewState{PR: pr, Tab: 4, Gen: m.prReviewGen}
+	m.prReview = s
+	if c := m.prReviewCache[pr.Number]; c != nil && c.updatedAt.Equal(pr.UpdatedAt) {
+		s.Detail, s.Files, s.Comments = c.detail, c.files, c.comments
+		return m, nil
+	}
+	s.LoadingDetail, s.LoadingDiff, s.LoadingComments = true, true, true
+	if m.ghRepo != "" {
+		return m, tea.Batch(m.spinner.Tick, prReviewFetchCmds(s.Gen, m.ghRepo, pr.Number))
+	}
+	return m, tea.Batch(m.spinner.Tick, prReviewRepoCmd(s.Gen))
 }
 
 func (m Model) handlePRReviewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -51,9 +77,25 @@ func (m Model) handlePRReviewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// tabCounts is each tab's count, "-" until its data has arrived.
+// tabCounts is each tab's count, "-" until its data has arrived. The
+// conversation counts comments, reviews, and review threads.
 func (s *PRReviewState) tabCounts() [4]string {
-	return [4]string{"-", "-", "-", "-"}
+	counts := [4]string{"-", "-", "-", "-"}
+	if d := s.Detail; d != nil {
+		threads := 0
+		for _, c := range s.Comments {
+			if c.InReplyTo == 0 {
+				threads++
+			}
+		}
+		counts[0] = fmt.Sprint(len(d.Comments) + len(d.Reviews) + threads)
+		counts[1] = fmt.Sprint(len(d.Commits))
+		counts[2] = fmt.Sprint(len(d.Checks))
+	}
+	if !s.LoadingDiff && s.DiffErr == nil && !s.GHMissing && s.RepoErr == nil {
+		counts[3] = fmt.Sprint(len(s.Files))
+	}
+	return counts
 }
 
 func (m Model) prReviewFooter() string {
@@ -94,6 +136,36 @@ func (m Model) prReviewHeader() string {
 
 // renderPRReviewBody is the active tab's content, height rows tall.
 func (m Model) renderPRReviewBody(width, height int) string {
-	text := Styles.TextMuted.Render("arrives in the next build")
-	return text + strings.Repeat("\n", max(0, height-1))
+	s := m.prReview
+	var text string
+	switch {
+	case s.GHMissing:
+		text = Styles.WarningText.Render("gh required") + "\n" +
+			Styles.TextMuted.Render("Install the GitHub CLI and run gh auth login to review pull requests.")
+	case s.RepoErr != nil:
+		text = Styles.ErrorText.Render(s.RepoErr.Error())
+	case s.Tab != 4:
+		text = Styles.TextMuted.Render("arrives in the next build")
+	default:
+		text = m.renderFilesTab(width, height)
+	}
+	return text + strings.Repeat("\n", max(0, height-lipgloss.Height(text)))
+}
+
+// renderFilesTab is tab 4: the diff, or why there is none.
+func (m Model) renderFilesTab(width, height int) string {
+	s := m.prReview
+	switch {
+	case s.LoadingDiff:
+		return Styles.TextMuted.Render(m.spinner.View() + " loading diff")
+	case s.DiffErr != nil:
+		return Styles.ErrorText.Render("diff unavailable: " + s.DiffErr.Error())
+	case len(s.Files) == 0:
+		return Styles.TextMuted.Render("no files changed")
+	}
+	lines := make([]string, 0, len(s.Files))
+	for _, f := range s.Files {
+		lines = append(lines, f.Path())
+	}
+	return strings.Join(lines, "\n")
 }
