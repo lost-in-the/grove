@@ -35,6 +35,7 @@ type PRReviewState struct {
 	GHMissing                                   bool
 	RepoErr                                     error
 
+	Cursor     [5]int            // the cursor of tabs 1-3, by tab number
 	FileIdx    int               // the files tab's current file
 	Order      []int             // the files in the rail's order
 	Scroll     int               // first hunk-pane line shown
@@ -80,13 +81,13 @@ func (s *PRReviewState) loading() bool {
 	return s.LoadingDetail || s.LoadingDiff || s.LoadingComments
 }
 
-// openPRReview pushes the review frame for pr. It opens on the files tab
-// until the other tabs are built (plan 8b decision 4). Unchanged PRs open
+// openPRReview pushes the review frame for pr, on its conversation tab.
+// Unchanged PRs open
 // from the session cache; others fetch their data in the background.
 func (m Model) openPRReview(pr *tracker.PullRequest) (tea.Model, tea.Cmd) {
 	m.prReviewGen++
 	m.pushView(ViewPRReview)
-	s := &PRReviewState{PR: pr, Tab: 4, Gen: m.prReviewGen}
+	s := &PRReviewState{PR: pr, Tab: 1, Gen: m.prReviewGen}
 	m.prReview = s
 	s.Viewed = savedViewed(m.projectRoot, pr.Number)
 	if c := m.prReviewCache[pr.Number]; c != nil && !pr.UpdatedAt.IsZero() && c.updatedAt.Equal(pr.UpdatedAt) {
@@ -117,6 +118,8 @@ func (m Model) handlePRReviewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		openURL(s.PR.URL)
 	case s.Tab == 4 && len(s.Files) > 0:
 		m.handleFilesKey(k)
+	case s.Tab != 4:
+		s.moveCursor(k)
 	}
 	return m, nil
 }
@@ -192,6 +195,30 @@ func (m Model) paneWidth() int {
 	return w
 }
 
+// itemCount is the number of items tab tab lists.
+func (s *PRReviewState) itemCount(tab int) int {
+	if tab == 3 && s.Detail != nil {
+		return len(s.Detail.Checks)
+	}
+	return 0
+}
+
+// moveCursor moves the active list tab's cursor for j/k and friends.
+func (s *PRReviewState) moveCursor(k string) {
+	c := &s.Cursor[s.Tab]
+	switch k {
+	case "j", "down":
+		*c++
+	case "k", "up":
+		*c--
+	case "g":
+		*c = 0
+	case "G":
+		*c = 1 << 30
+	}
+	*c = max(0, min(*c, s.itemCount(s.Tab)-1))
+}
+
 // tabCounts is each tab's count, "-" until its data has arrived. The
 // conversation counts comments, reviews, and review threads.
 func (s *PRReviewState) tabCounts() [4]string {
@@ -259,6 +286,8 @@ func (m Model) renderPRReviewBody(width, height int) string {
 			Styles.TextMuted.Render("Install the GitHub CLI and run gh auth login to review pull requests.")
 	case s.RepoErr != nil:
 		text = Styles.ErrorText.Render(safeText(s.RepoErr.Error()))
+	case s.Tab == 3:
+		text = m.renderChecksTab(width, height)
 	case s.Tab != 4:
 		text = Styles.TextMuted.Render("arrives in the next build")
 	default:
@@ -267,6 +296,20 @@ func (m Model) renderPRReviewBody(width, height int) string {
 	// Text of the frame's own wraps to the body; the files tab sizes itself.
 	text = lipgloss.NewStyle().Width(width).MaxHeight(height).Render(text)
 	return text + strings.Repeat("\n", max(0, height-lipgloss.Height(text)))
+}
+
+// renderChecksTab is tab 3: the check rollup, or why there is none.
+func (m Model) renderChecksTab(width, height int) string {
+	s := m.prReview
+	switch {
+	case s.LoadingDetail:
+		return Styles.TextMuted.Render(m.spinner.View() + " loading checks")
+	case s.DetailErr != nil:
+		return Styles.ErrorText.Render("checks unavailable: " + safeText(s.DetailErr.Error()))
+	case s.Detail == nil || len(s.Detail.Checks) == 0:
+		return Styles.TextMuted.Render("no checks")
+	}
+	return renderItems(checkItems(s.Detail.Checks), s.Cursor[3], width, height)
 }
 
 // renderFilesTab is tab 4: the diff, or why there is none.
