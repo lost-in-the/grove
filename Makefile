@@ -1,4 +1,4 @@
-.PHONY: build test test-integration test-integration-tui test-integration-docker test-herdr test-all lint fmt clean install help test-fixture test-update-golden demo golden-diff golden-view tui-capture tui-capture-keys
+.PHONY: build test test-integration test-integration-tui test-integration-docker test-herdr test-release-tools test-all lint fmt clean install help test-fixture test-update-golden demo golden-diff golden-view tui-capture tui-capture-keys
 
 # Variables
 BINARY_NAME=grove
@@ -77,6 +77,9 @@ test-integration-docker: ## Run Docker-aware integration tests (requires git; Do
 
 test-herdr: ## Validate the herdr backend against a running herdr server (safe against a live one)
 	@scripts/validate-herdr.sh
+
+test-release-tools: ## Test the release job's Homebrew tap update against a fake GitHub API
+	@scripts/test-update-homebrew-tap.sh
 
 test-all: test test-integration-tui test-integration-docker ## Run unit + all integration tests
 
