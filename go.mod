@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20260311145557-c83711a11ffa
+	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20261028143050-ac49f62f807e
 	github.com/spf13/cobra v1.8.0
 	golang.org/x/term v0.39.0
 )
