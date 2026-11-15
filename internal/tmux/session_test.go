@@ -3,6 +3,7 @@ package tmux
 import (
 	"os"
 	"testing"
+	"time"
 )
 
 func TestIsInsideTmux(t *testing.T) {
@@ -217,15 +218,23 @@ func TestIsCommandRunning(t *testing.T) {
 
 	// Ask tmux what the pane runs instead of guessing the shell's name: the
 	// default shell differs between machines and CI images.
-	pane, err := GetPaneInfo(session)
-	if err != nil {
-		t.Fatalf("GetPaneInfo() error = %v", err)
+	// A new pane reports "tmux" until its shell has started, so wait for the
+	// command to settle before comparing.
+	var last string
+	matched := false
+	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		pane, err := GetPaneInfo(session)
+		if err != nil {
+			t.Fatalf("GetPaneInfo() error = %v", err)
+		}
+		last = pane.CurrentCommand
+		if last != "" && last != "tmux" && IsCommandRunning(session, last) {
+			matched = true
+			break
+		}
 	}
-	if pane.CurrentCommand == "" {
-		t.Fatal("pane reports no current command")
-	}
-	if !IsCommandRunning(session, pane.CurrentCommand) {
-		t.Errorf("IsCommandRunning(%q) = false, want true", pane.CurrentCommand)
+	if !matched {
+		t.Errorf("IsCommandRunning never matched the pane command; last reported %q", last)
 	}
 
 	// Should not be running a non-existent command
