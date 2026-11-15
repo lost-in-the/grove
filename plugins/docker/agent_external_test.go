@@ -90,22 +90,131 @@ func TestAgentExternalStrategy_OnPostSwitch_EmptyPath(t *testing.T) {
 	}
 }
 
-func TestAgentExternalStrategy_OnPostSwitch_NoSlot(t *testing.T) {
+// captureStderr replaces os.Stderr with a pipe, runs f, then restores it and
+// returns everything written.
+func captureStderr(t *testing.T, f func()) string {
+	t.Helper()
+	orig := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("captureStderr: os.Pipe: %v", err)
+	}
+	os.Stderr = w
+	defer func() { os.Stderr = orig }()
+
+	f()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("captureStderr: close write end: %v", err)
+	}
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatalf("captureStderr: copy: %v", err)
+	}
+	return buf.String()
+}
+
+// switchWithNoSlot runs OnPostSwitch for a worktree with no allocated slot and
+// returns what reached stdout and stderr.
+func switchWithNoSlot(t *testing.T, s *agentExternalStrategy, wtPath string) (stdout, stderr string) {
+	t.Helper()
+	t.Setenv("GROVE_SHELL", "1")
+	stderr = captureStderr(t, func() {
+		stdout = captureStdout(t, func() {
+			ctx := &hooks.Context{Worktree: filepath.Base(wtPath), WorktreePath: wtPath}
+			if err := s.OnPostSwitch(ctx); err != nil {
+				t.Errorf("OnPostSwitch() error = %v, want nil", err)
+			}
+		})
+	})
+	return stdout, stderr
+}
+
+func TestAgentExternalStrategy_OnPostSwitch_NoSlot_WarnsSharedStackNotRepointed(t *testing.T) {
+	cfg := newTestAgentConfig(t)
+	s := newAgentExternalStrategy(cfg)
+	envPath := filepath.Join(cfg.Plugins.Docker.External.Path, ".env")
+	if err := os.WriteFile(envPath, []byte("APP_DIR=./myapp-main\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr := switchWithNoSlot(t, s, "/tmp/myapp-feature")
+
+	if stdout != "" {
+		t.Errorf("stdout = %q, want nothing (stdout may carry JSON or shell directives)", stdout)
+	}
+	for _, want := range []string{
+		"agent mode: 'myapp-feature' has no isolated stack",
+		"the shared stack was not repointed",
+		"configured for 'myapp-main'",
+		"grove up --isolated",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("stderr missing %q, got:\n%s", want, stderr)
+		}
+	}
+}
+
+func TestAgentExternalStrategy_OnPostSwitch_NoSlot_SharedStackAlreadyOnWorktree(t *testing.T) {
+	cfg := newTestAgentConfig(t)
+	s := newAgentExternalStrategy(cfg)
+	envPath := filepath.Join(cfg.Plugins.Docker.External.Path, ".env")
+	if err := os.WriteFile(envPath, []byte("APP_DIR=./myapp-feature\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	wtPath := filepath.Join(cfg.Plugins.Docker.External.Path, "myapp-feature")
+
+	stdout, stderr := switchWithNoSlot(t, s, wtPath)
+
+	if stdout != "" {
+		t.Errorf("stdout = %q, want nothing", stdout)
+	}
+	if !strings.Contains(stderr, "shared stack is already configured for 'myapp-feature'") {
+		t.Errorf("stderr should say the shared stack already serves this worktree, got:\n%s", stderr)
+	}
+	if strings.Contains(stderr, "not repointed") || strings.Contains(stderr, "grove up") {
+		t.Errorf("stderr must not warn when the shared stack already matches, got:\n%s", stderr)
+	}
+}
+
+func TestAgentExternalStrategy_OnPostSwitch_NoSlot_EnvFileUnset(t *testing.T) {
 	cfg := newTestAgentConfig(t)
 	s := newAgentExternalStrategy(cfg)
 
-	t.Setenv("GROVE_SHELL", "1")
-	out := captureStdout(t, func() {
-		ctx := &hooks.Context{
-			Worktree:     "myapp-feature",
-			WorktreePath: "/tmp/myapp-feature",
-		}
-		if err := s.OnPostSwitch(ctx); err != nil {
-			t.Errorf("OnPostSwitch() error = %v, want nil", err)
-		}
-	})
-	if out != "" {
-		t.Errorf("OnPostSwitch with no allocated slot emitted %q, want nothing", out)
+	_, stderr := switchWithNoSlot(t, s, "/tmp/myapp-feature")
+
+	if !strings.Contains(stderr, "not repointed") || !strings.Contains(stderr, "grove up --isolated") {
+		t.Errorf("stderr should still warn when the env file has no value, got:\n%s", stderr)
+	}
+	if strings.Contains(stderr, "configured for") {
+		t.Errorf("stderr should not name a configured worktree when none is known, got:\n%s", stderr)
+	}
+}
+
+func TestAgentSlotsFile_AbsoluteTemplatePath(t *testing.T) {
+	cfg := newTestAgentConfig(t)
+	tmplDir := t.TempDir()
+	cfg.Plugins.Docker.External.Agent.TemplatePath = filepath.Join(tmplDir, "template.yml")
+
+	want := filepath.Join(tmplDir, ".slots.json")
+	if got := newAgentExternalStrategy(cfg).slots.slotsFile; got != want {
+		t.Errorf("strategy slots file = %q, want %q", got, want)
+	}
+	if got := buildSlotManager(cfg).slotsFile; got != want {
+		t.Errorf("buildSlotManager slots file = %q, want %q", got, want)
+	}
+}
+
+func TestHasActiveAgentSlot_AbsoluteTemplatePath(t *testing.T) {
+	cfg := newTestAgentConfig(t)
+	tmplDir := t.TempDir()
+	cfg.Plugins.Docker.External.Agent.TemplatePath = filepath.Join(tmplDir, "template.yml")
+
+	if _, err := NewSlotManager(filepath.Join(tmplDir, ".slots.json"), 3).Allocate("myapp-feature"); err != nil {
+		t.Fatal(err)
+	}
+	if !HasActiveAgentSlot(cfg, "/tmp/myapp-feature") {
+		t.Error("HasActiveAgentSlot should read the ledger next to an absolute template_path")
 	}
 }
 
@@ -666,6 +775,21 @@ func TestIsAgentMode(t *testing.T) {
 		{
 			name:   "env set and agent enabled",
 			envVal: "1",
+			cfg: &config.Config{
+				Plugins: config.PluginsConfig{
+					Docker: config.DockerPluginConfig{
+						Mode: "external",
+						External: &config.ExternalComposeConfig{
+							Agent: &config.AgentStackConfig{Enabled: &enabled},
+						},
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name:   "any non-empty env value counts, matching config",
+			envVal: "true",
 			cfg: &config.Config{
 				Plugins: config.PluginsConfig{
 					Docker: config.DockerPluginConfig{

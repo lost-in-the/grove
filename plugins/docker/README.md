@@ -66,7 +66,7 @@ Each worktree has its own `docker-compose.yml`. Commands run in the worktree dir
 For projects whose Docker services are defined in a shared, external compose setup (e.g., a central `shared-infra` directory that orchestrates multiple apps). In this mode:
 
 - Commands run in the **external compose directory**, not the worktree
-- Grove writes an **environment variable** (e.g., `APP_DIR=/abs/path/to/worktree`) to an **env file** in the compose directory, then passes `--env-file` to every `docker compose` call so compose reads the correct worktree path
+- Grove writes an **environment variable** (e.g., `APP_DIR=./myapp-feature`, relative to the compose directory) to an **env file** in the compose directory, then passes `--env-file` to every `docker compose` call so compose reads the correct worktree path
 - Only the **configured services** are managed (shared infra like MySQL/Redis is untouched)
 - `grove down` uses `docker compose stop` (not `down`) to preserve the shared network
 - `grove new` **copies credentials** and **creates symlinks** from the main worktree

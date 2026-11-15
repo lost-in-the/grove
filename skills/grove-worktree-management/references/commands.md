@@ -14,8 +14,8 @@ Read this file when you need the complete command surface including rarely-used 
 | `grove context` | — | ✓ | — | Rich status: ahead/behind, stash count, recent commits, tracking branch |
 | `grove test <name>` | `tt` | — | — | Run tests in another worktree; args after `--` are passed to test runner |
 | `grove ps` | `agent-status` | ✓ | — | List active isolated Docker slots (slot, worktree, compose project, URL) |
-| `grove up` | `u` | — | ✓ | Start Docker stack; `--isolated` for agent stack, `--slot N` for specific slot |
-| `grove down` | `do` | — | ✓ | Stop Docker stack; `--slot N` to stop a specific isolated slot |
+| `grove up` | `u` | — | ✓ | Start Docker stack; `--isolated` for an agent stack (slot auto-allocated) |
+| `grove down` | `do` | — | ✓ | Stop Docker stack; detects and stops this worktree's isolated stack |
 | `grove rm [name]` | `remove`, `delete` | — | ✓ | Remove worktree, branch, tmux session, and Docker stack |
 | `grove doctor [worktree]` | — | — | — | Health check; without arg checks current worktree |
 | `grove adopt [path]` | — | — | ✓ | Bring a raw `git worktree add` worktree under grove management |
@@ -57,11 +57,9 @@ Read this file when you need the complete command surface including rarely-used 
 - `--all` — skip confirmation prompts and remove all stale worktrees at once. Use carefully.
 
 **`grove up` flags:**
-- `--isolated` — start a separate Docker stack for this agent session with unique port offsets
-- `--slot N` — request a specific slot number (0-based); use with `--isolated`
+- `--isolated` — start a separate Docker stack for this agent session with unique port offsets (slot is allocated automatically, numbered from 1)
 
-**`grove down` flags:**
-- `--slot N` — stop a specific isolated slot rather than the main stack
+**`grove down`:** no slot flag; it detects an isolated stack for the current worktree.
 
 **JSON output:** Commands with `--json` emit structured JSON to stdout. Pipe to `jq` or use the `probe_state.py` helper to get a normalized view across multiple commands.
 

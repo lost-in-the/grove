@@ -94,19 +94,16 @@ export GROVE_TUI=0
 # Check what slots are already in use
 grove ps --json
 
-# Find the next free slot without starting anything
-SLOT=$(python3 "${CLAUDE_PLUGIN_ROOT:-skills/grove-worktree-management}/scripts/allocate_slot.py")
-
-# Start an isolated Docker stack on that slot
-grove up --isolated --slot "$SLOT"
+# Start an isolated Docker stack (grove allocates the slot)
+grove up --isolated
 
 # Do your work...
 
 # Clean up when done
-grove down --slot "$SLOT"
+grove down
 ```
 
-Each slot gets a unique Compose project name (`{project}-{worktree}-slot-{N}`) and a unique port offset. See `references/isolated-slots.md` for the full schema and configuration options.
+Each slot gets a unique Compose project name (`{project}-agent-{N}`) and a unique port offset. See `references/isolated-slots.md` for the full schema and configuration options.
 
 ---
 
