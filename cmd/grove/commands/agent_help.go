@@ -41,10 +41,11 @@ func writeAgentHelp(cmd *cobra.Command) {
 # Binary: %s
 # Project: %s
 # Shell: set GROVE_SHELL=1 for directive output (cd:, tmux-attach:, env:)
-# Agent mode: set GROVE_AGENT_MODE=1 to suppress tmux attachment
+# Agent mode: set GROVE_AGENT_MODE=1 to suppress tmux attachment (and see Docker note below)
 
 ## Environment
-  GROVE_AGENT_MODE=1       Suppress tmux attachment
+  GROVE_AGENT_MODE=1       Suppress tmux attachment; with agent stacks enabled, grove to leaves the
+                           shared stack alone (run grove up --isolated for a stack that serves the worktree)
   GROVE_NONINTERACTIVE=1   Skip interactive prompts
   GROVE_SHELL=1            Enable directive output
 
@@ -65,6 +66,8 @@ func writeAgentHelp(cmd *cobra.Command) {
   - Call the binary directly, not the shell function
   - Use --json flag on ls/new/to for machine-readable output
   - Set GROVE_AGENT_MODE=1 to prevent tmux from taking over your terminal
+  - With agent stacks enabled, grove to does not repoint the shared stack (a human may be using it);
+    it prints an 'agent mode:' notice on stderr. Run grove up --isolated before running tests
   - grove new emits cd:/path directives — parse these to know where the worktree was created
 
 ## Full Documentation

@@ -103,7 +103,6 @@ SCRIPTS="${CLAUDE_PLUGIN_ROOT:-skills/grove-worktree-management}/scripts"
 |--------|---------|-----------|
 | `probe_state.py` | Normalized status from `grove here --json` + `grove ls --json` | `python3 "$SCRIPTS/probe_state.py"` |
 | `strip_directives.py` | Filter directive lines from grove stdout | `grove to x 2>&1 \| python3 "$SCRIPTS/strip_directives.py"` |
-| `allocate_slot.py` | Find lowest free isolated Docker slot | `python3 "$SCRIPTS/allocate_slot.py" [--dry-run]` |
 | `audit_hooks.py` | Summarize hooks that would run in this repo | `python3 "$SCRIPTS/audit_hooks.py"` |
 | `pr_review.py` | Orchestrate PR fetch + peek switch | `python3 "$SCRIPTS/pr_review.py" <PR#> [--dry-run]` |
 

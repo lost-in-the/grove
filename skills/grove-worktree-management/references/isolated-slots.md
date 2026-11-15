@@ -73,17 +73,6 @@ Attempting `grove up --isolated` when all slots are occupied returns an error.
 
 Each slot receives a unique port offset applied to all services in the stack. The exact offset values and base ports are repo-specific — see [`docs/AGENT_GUIDE.md`](https://github.com/lost-in-the/grove/blob/main/docs/AGENT_GUIDE.md) §7 for the complete port allocation pattern and how to read the offset for a given slot.
 
-## Safe Slot Selection with the Helper
-
-Use `allocate_slot.py` to preview the next free slot without starting Docker (grove allocates the slot itself on `grove up --isolated`):
-
-```bash
-python3 "${CLAUDE_PLUGIN_ROOT:-skills/grove-worktree-management}/scripts/allocate_slot.py" --dry-run
-# {"slot": 2, "available": true}
-```
-
-Without `--dry-run`, the script returns the slot number and exits. It is informational: `grove up --isolated` has no `--slot` flag.
-
 ## Recommended Agent Setup Block
 
 ```bash
