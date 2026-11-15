@@ -6,15 +6,15 @@ Read this file when you need the complete command surface including rarely-used 
 
 | Canonical | Aliases | `--json` | Mutates | Description |
 |-----------|---------|:--------:|:-------:|-------------|
-| `grove new [name]` | `spawn`, `n` | — | ✓ | Create worktree + branch + tmux session + Docker |
-| `grove to [name]` | `switch`, `t` | — | ✓ | Switch context; `--peek` skips hooks and tmux |
+| `grove new [name]` | `spawn`, `n` | — | ✓ | Create worktree + branch + tmux session; `--up` also brings the stack |
+| `grove to [name]` | `switch`, `t` | — | ✓ | Move to a worktree; never touches the stack. `--up` also brings it, `--peek` skips hooks and tmux |
 | `grove fetch <ref>` | `f` | — | ✓ | Create worktree from PR (`pr/N`) or issue (`issue/N`); requires `gh` CLI |
 | `grove ls` | `list`, `l` | ✓ | — | List all worktrees with status, branch, tmux, containers |
 | `grove here` | `h` | ✓ | — | Current worktree status (name, branch, SHA, changes, tmux, agent slot) |
 | `grove context` | — | ✓ | — | Rich status: ahead/behind, stash count, recent commits, tracking branch |
 | `grove test <name>` | `tt` | — | — | Run tests in another worktree; args after `--` are passed to test runner |
 | `grove ps` | `agent-status` | ✓ | — | List active isolated Docker slots (slot, worktree, compose project, URL) |
-| `grove up` | `u` | — | ✓ | Start Docker stack; `--isolated` for an agent stack (slot auto-allocated) |
+| `grove up` | `u` | — | ✓ | Bring the stack to the worktree you are in; `--isolated` for an agent stack (slot auto-allocated) |
 | `grove down` | `do` | — | ✓ | Stop Docker stack; detects and stops this worktree's isolated stack |
 | `grove rm [name]` | `remove`, `delete` | — | ✓ | Remove worktree, branch, tmux session, and Docker stack |
 | `grove doctor [worktree]` | — | — | — | Health check; without arg checks current worktree |
@@ -33,7 +33,7 @@ Read this file when you need the complete command surface including rarely-used 
 | `grove prs` | — | — | — | Browse open pull requests; opens in `gh` or browser |
 | `grove issues` | — | — | — | Browse open issues; opens in `gh` or browser |
 | `grove browse` | `b` | — | — | Open the current worktree's PR or issue in the browser |
-| `grove which` | `status` | ✓ | — | Show current worktree and Docker service status |
+| `grove which` | `status` | ✓ | — | Show where you are and the state of the stack |
 | `grove config` | — | — | ✓ | Show or edit grove configuration (`.grove/config.toml`) |
 | `grove init` | — | — | ✓ | Initialize the current git repository as a grove project |
 | `grove install [shell]` | — | — | — | Print shell integration code for zsh or bash |
@@ -51,7 +51,8 @@ Read this file when you need the complete command surface including rarely-used 
 - `--dirty` — preserve uncommitted changes when creating the worktree
 
 **`grove to` flags:**
-- `--peek` — read-only switch: skips pre/post_switch hooks and does not attach tmux. Safe for PR review and parallel inspection.
+- `--up` (`-u`) — also bring the stack to the worktree you move to. Same flag on `grove last` and `grove new`. Without it, `grove to` never touches Docker (unless `[switch] container_switch` is `auto` or `prompt`).
+- `--peek` — read-only move: skips pre/post_switch hooks and does not attach tmux. Safe for PR review and parallel inspection.
 
 **`grove trim` flags:**
 - `--all` — skip confirmation prompts and remove all stale worktrees at once. Use carefully.

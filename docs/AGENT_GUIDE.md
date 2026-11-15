@@ -294,18 +294,22 @@ Columns:
 
 ```bash
 grove to <name>
+grove to <name> --up      # also bring the stack to <name>
 grove to <name> --peek    # lightweight, skips hooks
 ```
 
 > **AGENT WARNING — tmux takeover.** By default, `grove to` attaches the terminal to the target tmux session. In an agent context this takes over the terminal. See §7 Agent Strategy Guide for how to prevent this.
 
-What happens (full switch):
-1. Fires `pre_switch` hooks (Docker auto-stop in external mode, custom commands)
-2. Changes directory to target worktree
-3. Fires `post_switch` hooks (Docker auto-start, env: directives, custom commands)
-4. Emits `tmux-attach:{session}` directive — shell wrapper attaches tmux
+`grove to` moves you and never touches the Docker stack. Two things can move: you, and the stack. `grove up` brings the stack to the worktree you are in. `--up` does both in one step. To make every move bring the stack, set `[switch] container_switch = "auto"` (the default is `"off"`).
 
-`--peek` skips all hooks and tmux. Use it for quick inspection or when hooks are expensive.
+What happens (full move):
+1. Fires `pre_switch` hooks (custom commands; Docker auto-stop only with `--up` or `container_switch` auto/prompt)
+2. Changes directory to target worktree
+3. Fires `post_switch` hooks (custom commands; Docker start and `env:` directives only with `--up` or `container_switch` auto/prompt)
+4. Emits `tmux-attach:{session}` directive — shell wrapper attaches tmux
+5. In external Docker mode, prints on stderr where the stack is: `Stack: on main (not here). Run `grove up` to bring it.` `--json` carries `stack_on` and `stack_here` instead.
+
+`--peek` skips all hooks and tmux. Use it for quick inspection or when hooks are expensive. It cannot combine with `--up`.
 
 Hooks fired: `pre_switch`, `post_switch`
 
@@ -315,7 +319,7 @@ Hooks fired: `pre_switch`, `post_switch`
 grove last
 ```
 
-Switches back to the previous worktree (tracked in `.grove/state.json`). Same hook/directive behavior as `grove to`.
+Moves back to the previous worktree (tracked in `.grove/state.json`). Same hook, directive, and `--up` behavior as `grove to`.
 
 ### Inspect the Current Worktree
 
@@ -484,11 +488,11 @@ Each worktree has its own `docker-compose.yml`. Grove detects it automatically.
 # .grove/config.toml
 [plugins.docker]
 enabled = true
-auto_start = true    # start on grove to
-auto_stop = false    # stop on grove to (false = keep running)
+auto_start = true    # bring the stack up when `grove to` moves it (needs --up or container_switch = "auto")
+auto_stop = false    # stop the stack when `grove to` moves it away (false = keep running)
 ```
 
-Hooks:
+Hooks (they run only with `grove to --up` or `container_switch = "auto"`):
 - `post_switch` → `docker compose up -d` in the target worktree
 - `pre_switch` → `docker compose stop` (only if `auto_stop = true`)
 
@@ -534,7 +538,7 @@ copy_files = [
 symlink_dirs = ["vendor/bundle", "node_modules"]
 ```
 
-On `grove to feature-x`:
+On `grove to feature-x --up` (or `grove up` in `feature-x`):
 1. Runs `docker compose stop app app_worker` in `~/projects/shared-infra`
 2. Writes `APP_DIR=/abs/path/myapp-feature-x` to `~/projects/shared-infra/.env.local`
 3. Runs `docker compose --env-file .env.local up -d app app_worker`
@@ -684,7 +688,7 @@ Run `grove config` to see the merged effective config for the current project.
 |----------|---------|---------|
 | `GROVE_SHELL` | unset | Set to `1` by the shell wrapper. Enables directive output (`cd:`, `tmux-attach:`, `env:`). Binary without this set prints human-readable output only. |
 | `GROVE_SHELL_VERSION` | unset | Shell integration version. Binary warns when integration is outdated. |
-| `GROVE_AGENT_MODE` | unset | Set to `1` to suppress tmux operations automatically. Recommended for all agent contexts. With `[plugins.docker.external.agent] enabled = true` it also selects the isolated Docker strategy: `grove to` leaves the shared stack alone (prints an `agent mode:` notice on stderr) and you must run `grove up --isolated` for a stack that serves the worktree. |
+| `GROVE_AGENT_MODE` | unset | Set to `1` to suppress tmux operations automatically. Recommended for all agent contexts. With `[plugins.docker.external.agent] enabled = true` it also selects the isolated Docker strategy: `grove to` never touches the stack (`grove to --up` prints an `agent mode:` notice on stderr and leaves it) and you must run `grove up --isolated` for a stack that serves the worktree. |
 | `GROVE_TUI` | `1` | Set to `0` to disable TUI. Bare `grove` with no arguments prints usage instead of launching the dashboard. |
 | `GROVE_CD_FILE` | unset | Path to temp file for TUI directory handoff. Set by the wrapper; TUI writes target path here. |
 | `GROVE_HIGH_CONTRAST` | unset | Set to `1` for high-contrast TUI form elements. |
@@ -794,7 +798,7 @@ dirty_handling = "auto-stash"
 mode = "manual"
 
 [plugins.docker]
-# Stop containers when switching away — prevents stale stacks
+# Stop the stack when `grove to --up` moves it away — prevents stale stacks
 auto_stop = true
 
 [plugins.docker.external.agent]
@@ -807,7 +811,7 @@ export GROVE_AGENT_MODE=1        # disables tmux attachment
 export GROVE_NONINTERACTIVE=1    # auto-accept all prompts
 ```
 
-`GROVE_AGENT_MODE=1` is the lowest-friction option — it suppresses tmux attachment in `grove to` and selects the isolated Docker strategy when agent stacks are enabled in config. Switching with `grove to` does not repoint the shared stack in that mode; run `grove up --isolated` to get a stack that serves the worktree. Note that `grove new` still creates tmux sessions; set `[tmux] mode = "off"` in config to fully disable tmux.
+`GROVE_AGENT_MODE=1` is the lowest-friction option — it suppresses tmux attachment in `grove to` and selects the isolated Docker strategy when agent stacks are enabled in config. `grove to` never touches the stack, and `grove to --up` leaves the shared stack where it is in that mode (it prints an `agent mode:` notice). Run `grove up --isolated` to get a stack that serves the worktree. Note that `grove new` still creates tmux sessions; set `[tmux] mode = "off"` in config to fully disable tmux.
 
 ### Security
 

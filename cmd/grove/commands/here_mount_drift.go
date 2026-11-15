@@ -123,7 +123,7 @@ func mountReportLine(r docker.MountDriftReport) (mountLineLevel, string) {
 	case docker.MountVerified:
 		return mountLineOK, fmt.Sprintf("%s ok: %s", r.Service, r.ActualSource)
 	case docker.MountDrift:
-		return mountLineWarn, fmt.Sprintf("%s drift: actual %s ≠ configured %s", r.Service, r.ActualSource, r.ConfiguredSource)
+		return mountLineWarn, fmt.Sprintf("%s drift: mounts %s, stack is on %s", r.Service, r.ActualSource, r.ConfiguredSource)
 	case docker.MountNoMount:
 		return mountLineWarn, fmt.Sprintf("%s: no bind-mount at %s; this service mounts the worktree at a different path or not at all (set mount_dests.%s if it uses another path)", r.Service, r.MountDest, r.Service)
 	case docker.MountError:

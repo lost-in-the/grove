@@ -91,11 +91,13 @@ Controls behavior when switching to a worktree that has uncommitted changes in t
 # "refuse"     — abort the switch if changes are present
 dirty_handling = "prompt"          # string: prompt | auto-stash | refuse
 
-# Controls Docker container lifecycle during worktree switches.
-# "auto"   — start/stop containers automatically (default, same as auto_start/auto_stop)
-# "prompt" — ask before starting/stopping containers (falls back to auto in non-interactive)
-# "off"    — skip container start/stop entirely (env var persistence still runs in external mode)
-container_switch = "auto"          # string: auto | prompt | off
+# Whether `grove to` and `grove last` bring the Docker stack along with you.
+# "off"    — a move never touches the stack: no env file write, no start, no stop,
+#            in every Docker mode (default). Use `grove up` or `grove to <name> --up`.
+# "auto"   — the stack follows every move (honors auto_start/auto_stop)
+# "prompt" — ask before the stack follows (falls back to auto in non-interactive)
+# `--up` on `grove to` / `grove last` forces "auto" for that one call.
+container_switch = "off"           # string: off | auto | prompt
 ```
 
 ---
@@ -354,21 +356,23 @@ Controls Docker Compose integration. Requires the docker plugin and Docker to be
 # Default: true
 enabled = true                     # bool
 
-# Automatically start services when switching to a worktree.
+# Bring the stack up when `grove to` moves you (only when container_switch is
+# "auto" or "prompt", or with `--up`).
 # Default: true
 auto_start = true                  # bool
 
-# Automatically stop services when switching away from a worktree.
+# Stop the stack when `grove to` moves you away (same gate as auto_start).
 # Default: false
 auto_stop = false                  # bool
 
-# Auto-start Docker after creating a worktree: `grove new` and the dashboard
+# Bring the stack up after creating a worktree: `grove new` and the dashboard
 # create flow run `docker compose up` once the worktree is bootstrapped.
 # Explicit opt-in — agent stacks no longer imply auto-up.
-# In external mode this is what loads a new worktree into the shared stack on
-# create (it points env_var at the worktree and starts the services). Without
-# it, the shared stack stays on the worktree it was configured for; run
-# `grove to <name>` or `grove up` in the new worktree to load it.
+# `grove new <name> --up` does the same for one create.
+# In external mode this is what puts the stack on a new worktree on create (it
+# points env_var at the worktree and starts the services). Without it, the
+# stack stays on the worktree it was on; run `grove up` in the new worktree or
+# `grove to <name> --up`.
 # Default: false
 auto_up = false                    # bool
 
@@ -1000,7 +1004,7 @@ These are read at runtime and never written to config files.
 | `GROVE_SHELL` | `1` | Set by shell integration. Enables the directive protocol (cd:, env:, tmux-attach:, tmux-attach-cc:). |
 | `GROVE_SHELL_VERSION` | integer | Set by shell integration. Binary warns if shell is outdated. |
 | `GROVE_TUI` | `0` to disable | Set to `0` to disable TUI mode. Bare `grove` shows help instead. Default: enabled. |
-| `GROVE_AGENT_MODE` | any non-empty | Forces isolated Docker strategy and suppresses tmux for AI agent workloads. In external mode with `[plugins.docker.external.agent] enabled = true`, `grove to` does not repoint the shared stack: it prints an `agent mode:` notice on stderr, and `grove up --isolated` starts a stack for the worktree. To suppress tmux alone for one invocation, use `--no-tmux` on `grove to` / `grove new` instead. |
+| `GROVE_AGENT_MODE` | any non-empty | Forces isolated Docker strategy and suppresses tmux for AI agent workloads. In external mode with `[plugins.docker.external.agent] enabled = true`, `grove to` never touches the stack, and `grove to --up` prints an `agent mode:` notice on stderr instead of moving it. `grove up --isolated` starts a stack for the worktree. To suppress tmux alone for one invocation, use `--no-tmux` on `grove to` / `grove new` instead. |
 | `GROVE_LOG` | `1` or path | Enable command-level logging. `1` writes to `~/.grove/grove.log`. |
 | `GROVE_DEBUG` | `1` or path | Enable TUI debug logging. `1` writes to `~/.grove-debug.log`. |
 | `GROVE_NO_COLOR` | any non-empty | Disable all colored output. Also respected: `NO_COLOR`. |

@@ -8,7 +8,7 @@ Isolated slots are separate Docker Compose stacks, one per agent session, runnin
 
 Slots are numbered from 1. The main (non-isolated) stack is not a slot (slot 0 means "none").
 
-In agent mode (`GROVE_AGENT_MODE=1` with agent stacks enabled), `grove to` does not repoint the shared stack. A worktree without a slot gets an `agent mode:` notice on stderr, so start an isolated stack for it with `grove up --isolated`.
+In agent mode (`GROVE_AGENT_MODE=1` with agent stacks enabled), `grove to` never moves the stack. With `--up`, a worktree without a slot gets an `agent mode:` notice on stderr, so start an isolated stack for it with `grove up --isolated`.
 
 ## Starting an Isolated Stack
 

@@ -12,7 +12,7 @@ Read this file before running `grove new`, `grove fetch`, or `grove to` in a rep
 |---------|----------------|
 | `grove new` | `post_create` |
 | `grove fetch` | `post_create` |
-| `grove to` | `pre_switch` (leaving), `post_switch` (entering) |
+| `grove to` | `pre_switch` (leaving), `post_switch` (entering). The Docker plugin joins them only with `--up` or `container_switch` auto/prompt |
 | `grove rm` | `pre_remove` |
 | `grove up` | Docker plugin may fire `post_switch`-equivalent actions |
 | `grove down` | Docker plugin may fire `pre_switch`-equivalent actions |

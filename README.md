@@ -56,7 +56,7 @@ Grove wraps the full worktree lifecycle — create, switch, fork, clean up — a
 | What | How |
 |---|---|
 | **Interactive TUI Dashboard** | Run `grove` to browse, create, and manage worktrees in a full-screen terminal UI |
-| **Fast Context Switching** | `grove to <name>` — changes directory, runs hooks, attaches tmux in <500ms |
+| **Fast Context Switching** | `grove to <name>` — changes directory, runs hooks, attaches tmux in <500ms. It moves you only; `grove up` brings the Docker stack |
 | **GitHub Integration** | `grove fetch pr/42` or browse PRs and issues interactively with `grove prs` |
 | **Lifecycle Hooks** | Auto-copy `.env`, symlink `node_modules`, run `bundle install` on worktree create |
 | **Docker Support** | Start, stop, and tail containers scoped to each worktree — automatically |
@@ -198,7 +198,7 @@ grove new feature-login
 ### 4 — Switch between worktrees
 
 ```bash
-grove to feature-login   # switch (changes directory automatically)
+grove to feature-login   # move (changes directory automatically)
 grove to main            # switch back
 grove last               # toggle to previous worktree
 ```
@@ -254,7 +254,7 @@ The detail panel updates as you navigate — branch, commit, sync status, tmux s
 | `↑` / `↓` or `k` / `j` | Navigate worktrees |
 | `1`–`9` | Quick-switch to the nth worktree |
 | `enter` | Switch to selected worktree |
-| `U` | Switch and start containers |
+| `U` | Switch and bring the stack up (`grove to --up`) |
 | `n` | Create new worktree |
 | `d` | Delete selected worktree |
 | `f` | Fork selected worktree |
@@ -280,12 +280,14 @@ See [docs/TUI.md](docs/TUI.md) for the full reference — overlays, PR browser, 
 | `grove ls` | List all worktrees — name, branch, status, tmux state |
 | `grove new <name>` | Create a worktree + branch + tmux session (`--branch`, `--from`) |
 | `grove adopt [path]` | Bootstrap a git worktree that grove doesn't know about |
-| `grove to <name>` | Switch context: directory, hooks, Docker, tmux |
-| `grove to <name> --peek` | Lightweight switch — skip hooks (no Docker side effects) |
+| `grove to <name>` | Move to a worktree: directory, hooks, tmux. Never touches the stack |
+| `grove to <name> --up` | Move and bring the stack to that worktree |
+| `grove to <name> --peek` | Lightweight move: skip hooks and tmux |
+| `grove up` / `grove down` | Bring the stack to the worktree you are in / stop the stack |
 | `grove here` | Show current worktree: branch, SHA, age, status |
-| `grove which` | Show current worktree and service status (alias: `status`) |
+| `grove which` | Show where you are and the state of the stack (alias: `status`) |
 | `grove context` | Show full worktree context details |
-| `grove last` | Toggle to previous worktree |
+| `grove last` | Toggle to previous worktree (`--up` also brings the stack) |
 | `grove rm <name>` | Remove worktree, kill tmux session, delete branch |
 | `grove rename [old] [new]` | Rename a worktree |
 | `grove open <name>` | Open a session in any worktree (create if needed) |
@@ -433,8 +435,8 @@ command = "bin/rails test"
 
 [plugins.docker]
 enabled = true
-auto_start = true    # start containers when switching to a worktree
-auto_stop = false    # stop containers when switching away
+auto_start = true    # bring the stack up when `grove to` moves it (needs container_switch = "auto" or --up)
+auto_stop = false    # stop the stack when `grove to` moves it away (same gate)
 
 [protection]
 protected = ["production"]   # requires --force --unprotect to delete
@@ -463,7 +465,7 @@ Grove's Docker plugin handles containers scoped to each worktree. Three modes:
 
 ### Local (default)
 
-Each worktree runs its own `docker-compose.yml`. Grove auto-starts and auto-stops containers on context switch.
+Each worktree runs its own `docker-compose.yml`. `grove up` brings its stack up and `grove down` stops it. `grove to` moves you only: it never touches the stack unless you pass `--up` or set `[switch] container_switch = "auto"`.
 
 ```toml
 [plugins.docker]
@@ -489,7 +491,7 @@ symlink_files = ["config/credentials/development.key"]  # files symlinked from m
 symlink_dirs = ["vendor/bundle", "node_modules"]
 ```
 
-On `grove to feature-x`: stop current stack → update `APP_DIR` → start new stack. Atomic.
+On `grove to feature-x --up` (or `grove up` from inside `feature-x`): stop the stack → update `APP_DIR` → start the stack on `feature-x`. Plain `grove to feature-x` only moves you, then prints where the stack is.
 
 ### Agent isolation
 
