@@ -1,4 +1,4 @@
-.PHONY: build test test-integration test-integration-tui test-integration-docker test-herdr test-release-tools test-all lint fmt clean install help test-fixture test-update-golden demo golden-diff golden-view tui-capture tui-capture-keys
+.PHONY: check-leaks build test test-integration test-integration-tui test-integration-docker test-herdr test-release-tools test-all lint fmt clean install help test-fixture test-update-golden demo golden-diff golden-view tui-capture tui-capture-keys
 
 # Variables
 BINARY_NAME=grove
@@ -46,6 +46,9 @@ lint: ## Run linters
 		echo "golangci-lint not installed, running go vet instead..."; \
 		go vet ./...; \
 	fi
+
+check-leaks: ## Fail on personal paths and email addresses in tracked files
+	@./scripts/check-leaks.sh
 
 fmt: ## Format code
 	@echo "Formatting code..."
