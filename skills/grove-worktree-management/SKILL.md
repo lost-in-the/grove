@@ -44,6 +44,11 @@ export GROVE_TUI=0               # disable dashboard
 
 > `GROVE_AGENT_MODE=1` suppresses tmux in `grove to` but not session creation in
 > `grove new`. To fully disable tmux, set `[tmux] mode = "off"` in config.
+>
+> **Docker effect:** in external Docker mode with `[plugins.docker.external.agent] enabled = true`,
+> `grove to` does not repoint the shared stack (a human may be using it). It prints an
+> `agent mode:` notice on stderr and the shared stack keeps serving its previous worktree.
+> Run `grove up --isolated` in the worktree before running tests.
 
 ## Command Quick Reference
 
@@ -57,8 +62,8 @@ export GROVE_TUI=0               # disable dashboard
 | `grove context` | Rich status (ahead/behind, stash, recent commits) | ✓ | — | — |
 | `grove test <name>` | Run tests in another worktree | — | — | `tt` |
 | `grove ps` | List active isolated Docker slots | ✓ | — | `agent-status` |
-| `grove up` | Start Docker; `--isolated [--slot N]` for agent stacks | — | ✓ | `u` |
-| `grove down` | Stop Docker; `--slot N` for isolated stacks | — | ✓ | `do` |
+| `grove up` | Start Docker; `--isolated` for an agent stack (slot auto-allocated) | — | ✓ | `u` |
+| `grove down` | Stop Docker; detects an isolated stack automatically | — | ✓ | `do` |
 | `grove rm [name]` | Remove worktree + branch + tmux + Docker | — | ✓ | `remove`, `delete` |
 | `grove doctor [worktree]` | Health check | — | — | — |
 | `grove adopt [path]` | Bring raw git worktree under grove management | — | ✓ | — |

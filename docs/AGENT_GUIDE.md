@@ -684,7 +684,7 @@ Run `grove config` to see the merged effective config for the current project.
 |----------|---------|---------|
 | `GROVE_SHELL` | unset | Set to `1` by the shell wrapper. Enables directive output (`cd:`, `tmux-attach:`, `env:`). Binary without this set prints human-readable output only. |
 | `GROVE_SHELL_VERSION` | unset | Shell integration version. Binary warns when integration is outdated. |
-| `GROVE_AGENT_MODE` | unset | Set to `1` to suppress tmux operations automatically. Recommended for all agent contexts. |
+| `GROVE_AGENT_MODE` | unset | Set to `1` to suppress tmux operations automatically. Recommended for all agent contexts. With `[plugins.docker.external.agent] enabled = true` it also selects the isolated Docker strategy: `grove to` leaves the shared stack alone (prints an `agent mode:` notice on stderr) and you must run `grove up --isolated` for a stack that serves the worktree. |
 | `GROVE_TUI` | `1` | Set to `0` to disable TUI. Bare `grove` with no arguments prints usage instead of launching the dashboard. |
 | `GROVE_CD_FILE` | unset | Path to temp file for TUI directory handoff. Set by the wrapper; TUI writes target path here. |
 | `GROVE_HIGH_CONTRAST` | unset | Set to `1` for high-contrast TUI form elements. |
@@ -807,7 +807,7 @@ export GROVE_AGENT_MODE=1        # disables tmux attachment
 export GROVE_NONINTERACTIVE=1    # auto-accept all prompts
 ```
 
-`GROVE_AGENT_MODE=1` is the lowest-friction option — it suppresses tmux attachment in `grove to` and activates isolated Docker without requiring config changes. Note that `grove new` still creates tmux sessions; set `[tmux] mode = "off"` in config to fully disable tmux.
+`GROVE_AGENT_MODE=1` is the lowest-friction option — it suppresses tmux attachment in `grove to` and selects the isolated Docker strategy when agent stacks are enabled in config. Switching with `grove to` does not repoint the shared stack in that mode; run `grove up --isolated` to get a stack that serves the worktree. Note that `grove new` still creates tmux sessions; set `[tmux] mode = "off"` in config to fully disable tmux.
 
 ### Security
 
