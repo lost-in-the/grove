@@ -13,39 +13,77 @@ import (
 	"github.com/lost-in-the/grove/internal/config"
 )
 
-// MountDriftReport is one drift verdict for one service. Drift = true means
-// the running container's bind-mount source at MountDest does NOT match the
-// worktree directory grove's env file currently points at. That state happens
-// when grove switched worktrees but containers weren't restarted, so dev work
-// hits the wrong source tree silently.
+// MountStatus is the outcome of checking one service's bind-mount.
+type MountStatus string
+
+const (
+	// MountVerified: the container mounts the configured worktree.
+	MountVerified MountStatus = "verified"
+	// MountDrift: the container mounts a different directory than the env file
+	// points at. Happens when grove switched worktrees but containers weren't
+	// restarted, so dev work hits the wrong source tree silently.
+	MountDrift MountStatus = "drift"
+	// MountNotRunning: compose reports no container for the service.
+	MountNotRunning MountStatus = "not_running"
+	// MountNoMount: the container runs but has no bind-mount at the probed path.
+	MountNoMount MountStatus = "no_mount"
+	// MountError: docker itself failed, so the state is unknown.
+	MountError MountStatus = "error"
+)
+
+// MountDriftReport is one verdict for one service.
 type MountDriftReport struct {
 	Service          string // configured service name
 	Container        string // container ID (12-char short) or "" if not running
 	MountDest        string // container path probed (e.g. "/app")
 	ConfiguredSource string // host-side path the env file currently points at
 	ActualSource     string // host-side path the container is actually mounting
-	Drift            bool
-	Reason           string // non-empty when status can't be determined cleanly
+	Status           MountStatus
+	Detail           string // human-readable explanation for non-verified statuses
 }
 
 // MountDriftConfig is the subset of grove config required to detect drift.
 // Extracted so callers can construct it from the resolved external config
 // without re-importing the plugin types they don't need.
 type MountDriftConfig struct {
-	ComposePath string   // resolved compose directory
-	EnvFileName string   // env file in compose dir holding the worktree pointer
-	EnvVar      string   // env-var key inside that file (e.g. "PROJECT_DIR")
-	Services    []string // services to inspect
-	MountDest   string   // container path probed (default "/app")
+	ComposePath string            // resolved compose directory
+	EnvFileName string            // env file in compose dir holding the worktree pointer
+	EnvVar      string            // env-var key inside that file (e.g. "PROJECT_DIR")
+	Services    []string          // services to inspect
+	MountDest   string            // container path probed (default "/app")
+	MountDests  map[string]string // per-service override of MountDest
 }
+
+// mountInspector is the docker-facing seam of the drift check.
+type mountInspector interface {
+	// ContainerID returns "" with a nil error when the service has no container.
+	ContainerID(composePath, envFile, service string) (string, error)
+	// MountSource returns an error wrapping errNoMount when nothing is mounted at dest.
+	MountSource(containerID, dest string) (string, error)
+}
+
+type dockerMountInspector struct{}
+
+func (dockerMountInspector) ContainerID(composePath, envFile, service string) (string, error) {
+	return containerIDForService(composePath, envFile, service)
+}
+
+func (dockerMountInspector) MountSource(containerID, dest string) (string, error) {
+	return inspectMountSource(containerID, dest)
+}
+
+var errNoMount = errors.New("no bind-mount")
 
 // CheckMountDrift queries each configured service via `docker compose ps -q`
 // and `docker inspect`, then compares the actual bind-mount source against
 // the worktree pointer currently in the env file. Returns one report per
-// service; never returns a partial set with an error — collection failures
-// are surfaced via the per-report Reason field so the caller can still show
-// what's known.
+// service; collection failures are surfaced per report as MountError so the
+// caller can still show what's known.
 func CheckMountDrift(cfg MountDriftConfig) ([]MountDriftReport, error) {
+	return checkMountDrift(cfg, dockerMountInspector{})
+}
+
+func checkMountDrift(cfg MountDriftConfig, insp mountInspector) ([]MountDriftReport, error) {
 	if len(cfg.Services) == 0 {
 		return nil, errors.New("no services configured for drift check")
 	}
@@ -58,31 +96,95 @@ func CheckMountDrift(cfg MountDriftConfig) ([]MountDriftReport, error) {
 
 	reports := make([]MountDriftReport, 0, len(cfg.Services))
 	for _, svc := range cfg.Services {
+		dest := cfg.MountDest
+		if d := cfg.MountDests[svc]; d != "" {
+			dest = d
+		}
 		report := MountDriftReport{
 			Service:          svc,
-			MountDest:        cfg.MountDest,
+			MountDest:        dest,
 			ConfiguredSource: configuredSource,
 		}
 
-		containerID, err := containerIDForService(cfg.ComposePath, cfg.EnvFileName, svc)
-		if err != nil || containerID == "" {
-			report.Reason = "container not running"
-			reports = append(reports, report)
-			continue
+		containerID, err := insp.ContainerID(cfg.ComposePath, cfg.EnvFileName, svc)
+		switch {
+		case err != nil:
+			report.Status = MountError
+			report.Detail = err.Error()
+		case containerID == "":
+			report.Status = MountNotRunning
+			report.Detail = "container not running"
+		default:
+			report.Container = shortID(containerID)
+			actual, err := insp.MountSource(containerID, dest)
+			switch {
+			case errors.Is(err, errNoMount):
+				report.Status = MountNoMount
+				report.Detail = err.Error()
+			case err != nil:
+				report.Status = MountError
+				report.Detail = err.Error()
+			case samePath(actual, configuredSource):
+				report.ActualSource = actual
+				report.Status = MountVerified
+			default:
+				report.ActualSource = actual
+				report.Status = MountDrift
+			}
 		}
-		report.Container = shortID(containerID)
-
-		actual, err := inspectMountSource(containerID, cfg.MountDest)
-		if err != nil {
-			report.Reason = err.Error()
-			reports = append(reports, report)
-			continue
-		}
-		report.ActualSource = actual
-		report.Drift = !samePath(actual, configuredSource)
 		reports = append(reports, report)
 	}
 	return reports, nil
+}
+
+// MountSummary counts reports by status.
+type MountSummary struct {
+	Total, Verified, Drift, NotRunning, NoMount, Error int
+}
+
+// SummarizeMountReports tallies reports by status.
+func SummarizeMountReports(reports []MountDriftReport) MountSummary {
+	s := MountSummary{Total: len(reports)}
+	for _, r := range reports {
+		switch r.Status {
+		case MountVerified:
+			s.Verified++
+		case MountDrift:
+			s.Drift++
+		case MountNotRunning:
+			s.NotRunning++
+		case MountNoMount:
+			s.NoMount++
+		case MountError:
+			s.Error++
+		}
+	}
+	return s
+}
+
+// Unchecked counts services whose mount could not be compared at all.
+func (s MountSummary) Unchecked() int { return s.NotRunning + s.NoMount + s.Error }
+
+// AllVerified is true only when at least one service exists and every one verified.
+func (s MountSummary) AllVerified() bool { return s.Total > 0 && s.Verified == s.Total }
+
+// Line is the one-line verdict. Zero verified services never reads as success.
+func (s MountSummary) Line() string {
+	noun := "services"
+	if s.Total == 1 {
+		noun = "service"
+	}
+	if s.AllVerified() {
+		return fmt.Sprintf("All %d %s mounted from the configured worktree.", s.Total, noun)
+	}
+	line := fmt.Sprintf("%d of %d %s verified", s.Verified, s.Total, noun)
+	if s.Drift > 0 {
+		line += fmt.Sprintf("; %d drifted", s.Drift)
+	}
+	if n := s.Unchecked(); n > 0 {
+		line += fmt.Sprintf("; %d not checked", n)
+	}
+	return line
 }
 
 // resolveEnvPath turns an env-file value (relative or absolute) into an
@@ -186,7 +288,7 @@ func parseInspectMounts(jsonBlob []byte, mountDest string) (string, error) {
 			return m.Source, nil
 		}
 	}
-	return "", fmt.Errorf("no bind-mount at %q in container", mountDest)
+	return "", fmt.Errorf("%w at %q in container", errNoMount, mountDest)
 }
 
 // FromExternalConfig builds a MountDriftConfig from a resolved
@@ -202,5 +304,6 @@ func MountDriftConfigFromExternal(ext *config.ExternalComposeConfig, composePath
 		EnvVar:      ext.EnvVar,
 		Services:    ext.Services,
 		MountDest:   ext.MountDestPath(),
+		MountDests:  ext.MountDests,
 	}
 }

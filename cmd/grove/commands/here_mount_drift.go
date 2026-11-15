@@ -75,28 +75,62 @@ func runMountDriftCheck(ctx *GroveContext, displayName string, requireCurrent bo
 		_, _ = fmt.Fprintln(w)
 	}
 
-	anyDrift := false
 	for _, r := range reports {
-		switch {
-		case r.Reason != "":
-			cli.Faint(w, "  %s: %s", r.Service, r.Reason)
-		case r.Drift:
-			anyDrift = true
-			cli.Warning(w, "  %s drift: actual %s ≠ configured %s", r.Service, r.ActualSource, r.ConfiguredSource)
+		level, text := mountReportLine(r)
+		switch level {
+		case mountLineOK:
+			cli.Success(w, "  %s", text)
+		case mountLineWarn:
+			cli.Warning(w, "  %s", text)
+		case mountLineError:
+			cli.Error(w, "  %s", text)
 		default:
-			cli.Success(w, "  %s ok: %s", r.Service, r.ActualSource)
+			cli.Faint(w, "  %s", text)
 		}
 	}
 
+	summary := docker.SummarizeMountReports(reports)
 	_, _ = fmt.Fprintln(w)
-	if code, exit := mountCheckExitCode(note != "", configuredName == "", requireCurrent, anyDrift); exit {
-		if anyDrift {
-			cli.Warning(w, "Restart needed — run `grove up` to apply.")
-		}
+	code, exit := mountCheckExitCode(note != "", configuredName == "", requireCurrent, summary)
+	if summary.AllVerified() {
+		cli.Success(w, "%s", summary.Line())
+	} else {
+		cli.Warning(w, "%s", summary.Line())
+	}
+	if summary.Drift > 0 {
+		cli.Warning(w, "Restart needed — run `grove up` to apply.")
+	}
+	if exit {
 		os.Exit(code)
 	}
-	cli.Success(w, "All services mounted from the configured worktree.")
 	return nil
+}
+
+type mountLineLevel int
+
+const (
+	mountLineOK mountLineLevel = iota
+	mountLineNote
+	mountLineWarn
+	mountLineError
+)
+
+// mountReportLine renders one service's verdict. A stopped container is a
+// quiet note; a running container with no mount at the probed path is a
+// warning, since grove cannot vouch for what that service serves.
+func mountReportLine(r docker.MountDriftReport) (mountLineLevel, string) {
+	switch r.Status {
+	case docker.MountVerified:
+		return mountLineOK, fmt.Sprintf("%s ok: %s", r.Service, r.ActualSource)
+	case docker.MountDrift:
+		return mountLineWarn, fmt.Sprintf("%s drift: actual %s ≠ configured %s", r.Service, r.ActualSource, r.ConfiguredSource)
+	case docker.MountNoMount:
+		return mountLineWarn, fmt.Sprintf("%s: no bind-mount at %s; this service mounts the worktree at a different path or not at all (set mount_dests.%s if it uses another path)", r.Service, r.MountDest, r.Service)
+	case docker.MountError:
+		return mountLineError, fmt.Sprintf("%s: %s", r.Service, r.Detail)
+	default:
+		return mountLineNote, fmt.Sprintf("%s: %s", r.Service, r.Detail)
+	}
 }
 
 // mountCheckMismatchNote flags when the worktree the user is standing in
@@ -132,19 +166,26 @@ func mountCheckUnresolvedNote(requireCurrent bool, configuredName string) string
 // mountCheckExitCode decides the process exit code for `grove here
 // --check-mount`, given the cwd-vs-configured mismatch verdict, whether the
 // configured worktree could be resolved at all, whether --require-current
-// was passed, and the env-vs-container drift verdict. A requireCurrent
+// was passed, and the per-service summary. A requireCurrent
 // mismatch — or an unresolved configured worktree, which --require-current
 // treats the same way since it can't verify anything without it — takes
 // priority over drift: if the user isn't even standing in the configured
 // worktree (or grove can't tell), the per-service drift verdict beneath it
-// isn't the actionable signal — the wrong-worktree guard is. exit=false
+// isn't the actionable signal — the wrong-worktree guard is. Then drift,
+// then a docker failure (ExternalCommandFailed). Stopped or unmounted
+// services are informational unless requireCurrent, which fails closed on
+// any service it could not verify. exit=false
 // tells the caller to fall through to the normal exit-0 success path.
-func mountCheckExitCode(mismatch, unresolved, requireCurrent, anyDrift bool) (code int, exit bool) {
-	if requireCurrent && (mismatch || unresolved) {
+func mountCheckExitCode(mismatch, unresolved, requireCurrent bool, summary docker.MountSummary) (code int, exit bool) {
+	switch {
+	case requireCurrent && (mismatch || unresolved):
 		return exitcode.MountCheckMismatch, true
-	}
-	if anyDrift {
+	case summary.Drift > 0:
 		return exitcode.MountDrift, true
+	case summary.Error > 0:
+		return exitcode.ExternalCommandFailed, true
+	case requireCurrent && summary.Unchecked() > 0:
+		return exitcode.MountCheckMismatch, true
 	}
 	return 0, false
 }
