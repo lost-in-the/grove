@@ -506,3 +506,19 @@ func TestDetail_FocusedTitleSaysSo(t *testing.T) {
 		t.Errorf("unfocused pane says focused: %q", strings.SplitN(got, "\n", 2)[0])
 	}
 }
+
+// The shared stack's "where" goes on its own dim line under the state, so the
+// Docker row never wraps under its label in the 41-column panel.
+func TestSplitStackDetail(t *testing.T) {
+	for _, tc := range []struct{ detail, state, where string }{
+		{"3 service(s) running, the stack is on this worktree", "3 service(s) running", "the stack is on this worktree"},
+		{"The stack is on this worktree; state unknown (docker did not answer)", "The stack is on this worktree; state unknown (docker did not answer)", ""},
+		{"blocking service(s) failed: db, cache", "blocking service(s) failed: db, cache", ""},
+		{"Stack #2 at http://localhost:3002", "Stack #2 at http://localhost:3002", ""},
+	} {
+		state, where := splitStackDetail(tc.detail)
+		if state != tc.state || where != tc.where {
+			t.Errorf("splitStackDetail(%q) = %q, %q; want %q, %q", tc.detail, state, where, tc.state, tc.where)
+		}
+	}
+}

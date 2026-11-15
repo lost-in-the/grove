@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/x/exp/golden"
 
 	"github.com/lost-in-the/grove/internal/mux"
+	"github.com/lost-in-the/grove/internal/plugins"
 	"github.com/lost-in-the/grove/internal/theme"
 )
 
@@ -375,6 +376,28 @@ func TestGolden_DetailSheet(t *testing.T) {
 		m.openDetail()
 	})
 	golden.RequireEqual(t, []byte(m.viewString()))
+}
+
+// A running shared stack: the state on the Docker row, where the stack is on
+// a dim line below it. 80 columns is the full sheet, 120 the side panel.
+func TestGolden_DetailSheet_Stack(t *testing.T) {
+	for _, size := range []termSize{sizeStandard, sizeWide} {
+		t.Run(size.name, func(t *testing.T) {
+			m := goldenModel(t, size, withItems(3), func(m *Model) {
+				items := m.list.Items()
+				it := items[1].(WorktreeItem)
+				it.PluginStatuses = []plugins.StatusEntry{{
+					ProviderName: "docker", Level: plugins.StatusActive, Short: "up",
+					Detail: "3 service(s) running, the stack is on this worktree",
+				}}
+				items[1] = it
+				m.list.SetItems(items)
+				m.list.Select(1)
+				m.openDetail()
+			})
+			golden.RequireEqual(t, []byte(m.viewString()))
+		})
+	}
 }
 
 // Under 44 columns one line replaces the UI.

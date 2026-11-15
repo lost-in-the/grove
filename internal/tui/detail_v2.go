@@ -131,12 +131,12 @@ func renderStatusSection(item *WorktreeItem, width int) []string {
 
 	for _, s := range item.PluginStatuses {
 		if s.Detail != "" {
-			mainDetail, pointedDetail := splitContainerDetail(s.Detail)
+			state, where := splitStackDetail(s.Detail)
 			entry := s
-			entry.Detail = mainDetail
+			entry.Detail = state
 			rows = append(rows, metadataLabel("Docker")+renderContainerValue(&entry))
-			if pointedDetail != "" {
-				rows = append(rows, metadataLabel("")+Styles.DetailDim.Render(pointedDetail))
+			if where != "" {
+				rows = append(rows, metadataLabel("")+Styles.DetailDim.Render(where))
 			}
 		}
 	}
@@ -249,11 +249,17 @@ func renderContainerValue(s *plugins.StatusEntry) string {
 	}
 }
 
-// splitContainerDetail splits a container detail string on ", pointed"
-// into a main status line and a secondary "pointed" line.
-func splitContainerDetail(detail string) (main, pointed string) {
-	if idx := strings.Index(detail, ", pointed"); idx >= 0 {
-		return detail[:idx], detail[idx+2:]
+// stackWhereMarker starts the part of the docker plugin's running-stack
+// detail that says where the stack is ("3 service(s) running, the stack is
+// on this worktree"). It must match sharedStackEntry in plugins/docker.
+const stackWhereMarker = ", the stack is on"
+
+// splitStackDetail splits a docker status detail into the state and, for a
+// running shared stack, where the stack is. where is "" when the detail has
+// no such part.
+func splitStackDetail(detail string) (state, where string) {
+	if idx := strings.Index(detail, stackWhereMarker); idx >= 0 {
+		return detail[:idx], detail[idx+len(", "):]
 	}
 	return detail, ""
 }
