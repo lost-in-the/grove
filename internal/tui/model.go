@@ -565,8 +565,13 @@ func (m Model) handleCreationDone(msg creationDoneMsg) (tea.Model, tea.Cmd) {
 		cleanup()
 	}
 	m.pendingSelect = msg.name
-	if msg.hookErr != nil {
-		m.toast.Show(NewToast(fmt.Sprintf("Created %s%q (hook failed: %s)", label, msg.name, msg.hookErr), ToastWarning))
+	if msg.bootErr != nil {
+		done := fmt.Sprintf("Created %s%s", label, msg.name)
+		if r, ok := newProvisionReport(done, msg.name, msg.path, msg.bootErr); ok {
+			m.showProvisionReport(r)
+		} else {
+			m.toast.Show(NewToast(fmt.Sprintf("%s, but setup did not finish: %s", done, msg.bootErr), ToastWarning))
+		}
 	} else {
 		m.toast.Show(NewToast(fmt.Sprintf("Created %s%q", label, msg.name), ToastSuccess))
 	}
@@ -691,7 +696,11 @@ func (m Model) handleForkComplete(msg forkCompleteMsg) (tea.Model, tea.Cmd) {
 	m.branchForm = nil
 	m.pendingSelect = msg.name
 	if msg.err != nil {
-		m.toast.Show(NewToast(fmt.Sprintf("Copied to %q (warning: %s)", msg.name, msg.err), ToastWarning))
+		if r, ok := newProvisionReport("Copied to "+msg.name, msg.name, msg.path, msg.err); ok {
+			m.showProvisionReport(r)
+		} else {
+			m.toast.Show(NewToast(fmt.Sprintf("Copied to %q (warning: %s)", msg.name, msg.err), ToastWarning))
+		}
 	} else {
 		m.toast.Show(NewToast(fmt.Sprintf("Copied to %q", msg.name), ToastSuccess))
 	}

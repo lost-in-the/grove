@@ -465,7 +465,7 @@ func deleteBranchIfRequested(deleteBranch bool, wt *worktree.Worktree, projectRo
 // postCreateResult holds the output of post-create setup (state, tmux, hooks).
 type postCreateResult struct {
 	hookOutput string
-	hookErr    error
+	bootErr    error
 }
 
 // runPostCreateStreaming runs the shared bootstrap sequence for a worktree the
@@ -500,38 +500,46 @@ func runPostCreateStreaming(ch chan<- creationEvent, mgr *worktree.Manager, stat
 	})
 	_ = hookLog.Close()
 	_ = pluginLog.Close()
+	afterCreateBootstrap(ch, cfg, projectName, projectRoot, name, wt.Path, bootErr)
+	return postCreateResult{hookOutput: bootBuf.String(), bootErr: bootErr}
+}
+
+// afterCreateBootstrap runs what follows bootstrap, as `grove new` does: the
+// stack auto-up and the session. Files not copied and a failed state
+// registration leave a usable worktree, so setup carries on; only a required
+// hook failure stops it. Problems go to the activity log here and to the
+// toast and message history in handleCreationDone.
+func afterCreateBootstrap(ch chan<- creationEvent, cfg *config.Config, projectName, projectRoot, name, path string, bootErr error) {
 	if bootErr != nil {
-		// Match the CLI: setupCreatedWorktree returns before autoStartDocker
-		// when bootstrap fails (required-hook failure included), and `grove
-		// new` never reaches its tmux epilogue on that error — skip both
-		// instead of provisioning a half-bootstrapped worktree. The error is
-		// still surfaced as a warning toast via hookErr (handleCreationDone).
-		tuilog.Printf("bootstrap failed for %q: %v", name, bootErr)
-		ch <- creationEvent{line: fmt.Sprintf("Bootstrap failed: %v", bootErr)}
-		return postCreateResult{hookOutput: bootBuf.String(), hookErr: bootErr}
+		tuilog.Printf("bootstrap for %q: %v", name, bootErr)
+		streamProvisionReport(ch, name, path, bootErr)
+		if errors.Is(bootErr, worktree.ErrRequiredHookFailed) {
+			return
+		}
 	}
 
 	// Auto-start the docker stack when auto_up opts in — the same epilogue
 	// `grove new` runs after bootstrap (autoStartDocker), so dashboard-created
 	// worktrees come up provisioned identically (#141). Runs before the tmux
 	// session exists so the stack is up by the time the user attaches.
-	runDockerAutoUp(ch, cfg, name, wt.Path)
+	runDockerAutoUp(ch, cfg, name, path)
 
-	// Create tmux session after bootstrap so hooks (docker Up, bundle
-	// install) have run by the time the user attaches — mirrors the CLI
-	// order (setupCreatedWorktree, then switch/tmux).
-	// [session] open_in = "current" suppresses creation, matching `grove new`:
-	// the worktree lands in the shell the user is already in, and answering
-	// that with a session elsewhere is not what they asked for.
+	ensureCreatedSession(ch, cfg, projectName, projectRoot, name, path)
+}
+
+// ensureCreatedSession creates the session for a dashboard-created worktree.
+// It runs after bootstrap so hooks (docker Up, bundle install) have run by the
+// time the user attaches, mirroring the CLI order. [session] open_in =
+// "current" suppresses it, matching `grove new`: the worktree lands in the
+// shell the user is already in. A variable so tests can observe it.
+var ensureCreatedSession = func(ch chan<- creationEvent, cfg *config.Config, projectName, projectRoot, name, path string) {
 	if m := muxFor(cfg); m.Available() && !sessionsSuppressed(cfg) {
 		ch <- creationEvent{line: "Creating session..."}
-		target := muxTargetFor(projectName, projectRoot, name, wt.Path)
+		target := muxTargetFor(projectName, projectRoot, name, path)
 		if err := m.Ensure(target); err != nil {
 			tuilog.Printf("warning: failed to create session %q: %v", target.Name, err)
 		}
 	}
-
-	return postCreateResult{hookOutput: bootBuf.String(), hookErr: bootErr}
 }
 
 // runDockerAutoUp brings the docker stack up for a dashboard-created worktree
@@ -578,7 +586,7 @@ func readCreationLog(ch <-chan creationEvent, source string) tea.Cmd {
 				path:       ev.path,
 				err:        ev.err,
 				hookOutput: ev.hookOutput,
-				hookErr:    ev.hookErr,
+				bootErr:    ev.bootErr,
 			}
 		}
 		return creationLogMsg{source: source, line: ev.line, ch: ch}
@@ -624,7 +632,7 @@ func streamingCreateCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *con
 			name:       name,
 			path:       wt.Path,
 			hookOutput: result.hookOutput,
-			hookErr:    result.hookErr,
+			bootErr:    result.bootErr,
 		}
 	}()
 

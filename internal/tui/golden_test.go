@@ -11,6 +11,7 @@ import (
 	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/plugins"
 	"github.com/lost-in-the/grove/internal/theme"
+	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 // =============================================================================
@@ -459,6 +460,35 @@ func TestGolden_Omni(t *testing.T) {
 	for name, setup := range cases {
 		t.Run(name, func(t *testing.T) {
 			m := goldenModel(t, sizeStandard, withItems(5), setup)
+			golden.RequireEqual(t, []byte(m.viewString()))
+		})
+	}
+}
+
+// After a create whose files were not all copied: the warning toast on the
+// dashboard, and the message history with one line per file, wrapped.
+func TestGolden_CreateReport(t *testing.T) {
+	missing := func(path string) worktree.FileResult {
+		return worktree.FileResult{Field: worktree.FieldCopyFiles, Path: path, Status: worktree.FileFailed, Err: worktree.ErrSourceMissing}
+	}
+	one, _ := newProvisionReport("Created feature", "feature", "/src/myapp-feature",
+		worktree.NewFileSetupError([]worktree.FileResult{missing("config/secret.key")}))
+	several, _ := newProvisionReport("Created feature", "feature", "/src/myapp-feature",
+		worktree.NewFileSetupError([]worktree.FileResult{missing(".env"), missing("config/master.key"), missing("config/secret.key")}))
+
+	for _, size := range []termSize{sizeStandard, sizeWide} {
+		t.Run("toast_"+size.name, func(t *testing.T) {
+			m := goldenModel(t, size, withItems(3), withToastVisible(one.toast, ToastWarning))
+			golden.RequireEqual(t, []byte(m.viewString()))
+		})
+		t.Run("messages_"+size.name, func(t *testing.T) {
+			m := goldenModel(t, size, withItems(3), func(m *Model) {
+				for i := len(several.history) - 1; i >= 0; i-- {
+					m.toast.Record(&Toast{Message: several.history[i], Level: ToastWarning, CreatedAt: testNow.Add(-time.Minute)})
+				}
+				m.toast.Record(&Toast{Message: several.toast, Level: ToastWarning, CreatedAt: testNow.Add(-time.Minute)})
+				m.pushView(ViewMessages)
+			})
 			golden.RequireEqual(t, []byte(m.viewString()))
 		})
 	}
