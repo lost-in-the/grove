@@ -132,7 +132,7 @@ type Model struct {
 	// Output
 	switchTo            string
 	switchToDisplayName string // display name for tmux session naming
-	switchForceUp       bool   // when true, signal CLI to start containers after switch
+	switchForceUp       bool   // U: the caller moves you and brings the stack (see Exit)
 	err                 error
 
 	// Layout
@@ -230,9 +230,6 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 
 // SwitchTo returns the path the user selected to switch to, if any.
 func (m Model) SwitchTo() string { return m.switchTo }
-
-// SwitchForceUp returns true if the CLI should start containers after switching.
-func (m Model) SwitchForceUp() bool { return m.switchForceUp }
 
 // Err returns any error that occurred.
 func (m Model) Err() error { return m.err }
@@ -1882,7 +1879,8 @@ func RunPRs(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, 
 
 	maybeRefreshUpdateCache()
 	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...).ConfigureForPRs()
-	return runModel(model)
+	exit, err := runModel(model, false)
+	return exit.Path, exit.Up, err
 }
 
 // RunIssues starts the TUI directly in the issue browser view.
@@ -1892,17 +1890,19 @@ func RunIssues(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot strin
 
 	maybeRefreshUpdateCache()
 	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...).ConfigureForIssues()
-	return runModel(model)
+	exit, err := runModel(model, false)
+	return exit.Path, exit.Up, err
 }
 
-// Run starts the TUI and returns the path to switch to (if any) and whether to force docker up.
-func Run(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, pluginMgr ...*plugins.Manager) (string, bool, error) {
+// Run starts the dashboard and returns what the user asked for when they
+// closed it. After U (Exit.Up) the caller must move the user: Run has not.
+func Run(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, pluginMgr ...*plugins.Manager) (Exit, error) {
 	tuilog.Init()
 	defer tuilog.Close()
 
 	maybeRefreshUpdateCache()
 	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...)
-	return runModel(model)
+	return runModel(model, true)
 }
 
 // maybeRefreshUpdateCache triggers an async refresh of the update-check cache
@@ -1990,7 +1990,10 @@ func (m *Model) handleTmuxSwitch(switchPath string) bool {
 	return true
 }
 
-func runModel(model Model) (string, bool, error) {
+// runModel runs the program, then moves the user to the worktree they picked.
+// callerMovesOnUp hands the move after U to the caller, which runs the
+// shared switch flow; without it the dashboard moves the user for U as well.
+func runModel(model Model, callerMovesOnUp bool) (Exit, error) {
 	tuilog.Printf("runModel: projectRoot=%s activeView=%d", model.projectRoot, model.activeView())
 
 	p := tea.NewProgram(model)
@@ -1998,7 +2001,7 @@ func runModel(model Model) (string, bool, error) {
 	finalModel, err := p.Run()
 	if err != nil {
 		tuilog.Printf("runModel: tea.Program error: %v", err)
-		return "", false, fmt.Errorf("tui error: %w", err)
+		return Exit{}, fmt.Errorf("tui error: %w", err)
 	}
 
 	m := finalModel.(Model)
@@ -2006,34 +2009,43 @@ func runModel(model Model) (string, bool, error) {
 		m.ready, m.loading, len(m.list.Items()), m.switchTo, m.err)
 
 	if m.Err() != nil {
-		return "", false, m.Err()
+		return Exit{}, m.Err()
 	}
 
-	switchPath := m.SwitchTo()
-	if switchPath != "" {
-		// Handle tmux session switching first — if it succeeds, skip cd
-		// to avoid changing the OLD session's directory
-		tmuxSwitched := m.handleTmuxSwitch(switchPath)
+	exit := m.Exit()
+	if exit.Path == "" {
+		return exit, nil
+	}
+	if exit.Up && callerMovesOnUp {
+		// The caller's switch flow may emit the cd: directive on stdout.
+		separateFromAltScreen()
+		return exit, nil
+	}
 
-		if !tmuxSwitched {
-			// Route through cli.CdDirective: it prefers a pre-existing
-			// GROVE_CD_FILE (never recreating a stale one — B27 hardening) and
-			// falls back to a cd: line on stdout under GROVE_SHELL; a cd-file
-			// write failure degrades to that fallback instead of failing
-			// runModel. When the stdout fallback is the channel in play, print
-			// a leading newline first so the directive lands on its own line,
-			// separated from any bubbletea alt-screen exit escape codes that
-			// may precede it on stdout.
-			if os.Getenv("GROVE_CD_FILE") == "" && cli.IsShellIntegration() {
-				fmt.Println()
-			}
-			if cli.CdDirective(switchPath) {
-				tuilog.Printf("runModel: emitted cd directive for switchTo=%q", switchPath)
-			} else {
-				tuilog.Printf("runModel: switchTo=%q but no usable GROVE_CD_FILE or GROVE_SHELL — cannot switch", switchPath)
-			}
+	// Handle tmux session switching first — if it succeeds, skip cd
+	// to avoid changing the OLD session's directory
+	if !m.handleTmuxSwitch(exit.Path) {
+		// Route through cli.CdDirective: it prefers a pre-existing
+		// GROVE_CD_FILE (never recreating a stale one — B27 hardening) and
+		// falls back to a cd: line on stdout under GROVE_SHELL; a cd-file
+		// write failure degrades to that fallback instead of failing
+		// runModel.
+		separateFromAltScreen()
+		if cli.CdDirective(exit.Path) {
+			tuilog.Printf("runModel: emitted cd directive for switchTo=%q", exit.Path)
+		} else {
+			tuilog.Printf("runModel: switchTo=%q but no usable GROVE_CD_FILE or GROVE_SHELL — cannot switch", exit.Path)
 		}
 	}
 
-	return switchPath, m.SwitchForceUp(), nil
+	return exit, nil
+}
+
+// separateFromAltScreen prints a newline when the cd: directive will go to
+// stdout, so it lands on its own line, apart from any alt-screen exit escape
+// codes bubbletea wrote before it.
+func separateFromAltScreen() {
+	if os.Getenv("GROVE_CD_FILE") == "" && cli.IsShellIntegration() {
+		fmt.Println()
+	}
 }
