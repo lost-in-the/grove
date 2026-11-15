@@ -124,7 +124,7 @@ func checkMountDrift(cfg MountDriftConfig, insp mountInspector) ([]MountDriftRep
 			case err != nil:
 				report.Status = MountError
 				report.Detail = err.Error()
-			case samePath(actual, configuredSource):
+			case mountWithinWorktree(actual, configuredSource):
 				report.ActualSource = actual
 				report.Status = MountVerified
 			default:
@@ -209,6 +209,23 @@ func samePath(a, b string) bool {
 		return false
 	}
 	return filepath.Clean(a) == filepath.Clean(b)
+}
+
+// mountWithinWorktree reports whether a container's mount source is the
+// worktree root or a directory inside it. A service may mount only a
+// subdirectory (e.g. <worktree>/app) and still serve the right worktree.
+// The boundary check is on whole path elements, so a sibling worktree whose
+// name merely starts with the same characters does not match. Symlinks are
+// not resolved, same as samePath.
+func mountWithinWorktree(source, root string) bool {
+	if source == "" || root == "" {
+		return false
+	}
+	rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(source))
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
 func shortID(id string) string {

@@ -439,8 +439,10 @@ mount_dest = "/app"                # string
 
 # Per-service override of mount_dest, for a service that mounts the worktree
 # somewhere other than mount_dest. Services not listed use mount_dest.
+# A mount of a subdirectory of the worktree (host <worktree>/app at /project/app)
+# verifies too; only a source outside the worktree counts as drift.
 # Default: {} (every service uses mount_dest)
-mount_dests = { worker = "/srv/worker" }   # table of string
+mount_dests = { web = "/project/app", worker = "/srv/worker" }   # table of string
 
 # Files to copy from the main worktree into each new worktree on create.
 # Useful for credential files, local config, etc. that are gitignored.
