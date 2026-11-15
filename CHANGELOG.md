@@ -11,7 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **PR review.** `enter` on a pull request (in the PR browser or in Find) opens a full-screen review with four tabs. The files tab shows the diff file by file with line numbers, a folder rail with `+/-` counts (`t` shows or hides it), `J` / `K` between files, `v` to mark a file viewed (kept across restarts until the file changes), and `z` to fold runs of removed lines. The review opens on the conversation: comments, reviews, and review threads in order, with a check summary; `enter` on a thread opens its file at its line. The commits tab lists the PR's commits, and `enter` shows one commit's files (`a` returns to all). The checks tab lists every check, failing first. `enter` in the files tab opens the file in your editor at the line in view.
 - **Local diff.** `g d` on the dashboard (or `d` in the focused detail pane) reviews the selected worktree's changes against its merge-base with the default branch, committed and uncommitted, in the same frame, without `gh`. Control characters in a diff are shown as symbols, never sent to the terminal.
 
+### Changed
+- `grove new`, `spawn`, `open`, `fork`, `fetch`, and `adopt` now exit 14 when a configured file was not copied or linked. The worktree is kept. Before, they exited 0.
+- A config that fails to load now stops commands that create or adopt a worktree. Before, they ran on defaults and skipped `copy_files`, symlinks, and hooks.
+- `copy_files` and `symlink_files` entries with `*`, `?`, or `[`, and any entry that is absolute or uses `..`, now fail config validation.
+
 ### Fixed
+- A missing `copy_files` or symlink source is no longer silent. Stderr names each entry (`Not copied: config/secret.key (missing in the main worktree)`) and says how to fix it. This holds with `--json` too.
+- `--json` on `new`, `spawn`, `fork`, and `open` now includes `provisioned` and `file_setup`, so a script can tell a file was not copied.
+- File setup now runs even when state registration fails, and the failure is reported. The old hint to run `grove repair` did not copy files.
+- A directory in `copy_files` no longer leaves an empty file behind, and `grove doctor` no longer reports such an empty file as ok.
+- Inside a worktree grove did not create, the drift notice now says how many configured files are missing and names them.
 - Toast notifications show again. They had stopped appearing on the dashboard; they now draw in the top-right corner above everything else.
 - `grove here --check-mount` no longer says every service is mounted when some were never checked. The summary counts them (`4 of 8 services verified; 4 not checked`), and `All N services mounted` prints only when every service was verified. A running service with no mount at the probed path is now a warning. A Docker failure exits 6 instead of reading as "container not running". With `--require-current`, any service that could not be verified fails the check. For a service that mounts the worktree somewhere other than `mount_dest`, set its path in the new `mount_dests` table under `[plugins.docker.external]`; a mount of a subdirectory of the worktree counts as verified.
 - Overlays in the dashboard no longer erase the rows beside them, and the background behind them is dimmed evenly instead of stopping at the first styled word. (#19)

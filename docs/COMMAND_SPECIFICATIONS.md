@@ -407,6 +407,26 @@ Flags:
 ✓ Docker stack started
 ```
 
+**When a configured file is not copied or linked:** the worktree is kept, and the command exits **14**. Stderr shows one line per failed entry, then one line with the remedy. This holds in every mode, `--json` included.
+```
+Not copied: config/secret.key (missing in the main worktree)
+The worktree was created, but 1 file is missing. Fix the source, then run `grove doctor feature --fix`.
+```
+Symlink entries read `Not linked:`. With `--json`, the result object is still printed on stdout, with two extra fields. `provisioned` is `false` when any entry failed or state registration failed. `file_setup` lists every entry:
+```json
+{
+  "name": "feature",
+  "created": true,
+  "provisioned": false,
+  "file_setup": {
+    "copied": ["config/database.yml"],
+    "linked": [],
+    "failed": [{"field": "copy_files", "path": "config/secret.key", "error": "missing in the main worktree"}]
+  }
+}
+```
+If state registration fails, stderr adds `Not registered: <reason>` and a `grove adopt <path>` line, and the exit code is also 14. If the config fails to load, no worktree is created and the command exits 1 with the config error.
+
 **Output (Already Exists):**
 ```
 ✗ Worktree 'testing' already exists
@@ -451,6 +471,7 @@ To remove it:    grove rm testing
 - 1: Worktree already exists
 - 2: Git error (couldn't create worktree)
 - 3: Invalid input
+- 14: Worktree created, but a configured file was not copied or linked (see above)
 
 ---
 
@@ -513,6 +534,8 @@ popup_height = "80%"
 ```
 *Popup opens or session switches*
 
+When `grove open` creates the worktree, it reports files that were not copied or linked the same way as `grove new`: stderr lines, `provisioned` and `file_setup` in `--json`, exit 14. It adds no such fields when the worktree already existed.
+
 **Edge Cases:**
 
 | Scenario | Behavior |
@@ -527,6 +550,7 @@ popup_height = "80%"
 **Exit Codes:**
 - 0: Success
 - 1: Worktree not found (with `--no-create`)
+- 14: Worktree created, but a configured file was not copied or linked
 
 ---
 
@@ -1671,9 +1695,13 @@ cd:~/projects/grove-hotfix
   "path": "~/projects/grove-hotfix",
   "parent": "main",
   "created": true,
+  "provisioned": true,
+  "file_setup": {"copied": [], "linked": [], "failed": []},
   "switch_to": "~/projects/grove-hotfix"
 }
 ```
+
+`grove fork` reports files that were not copied or linked the same way as `grove new`: the worktree is kept, stderr shows `Not copied:` lines and the remedy, `provisioned` is `false`, and the exit code is 14. A config that fails to load stops the fork before any worktree is created.
 
 **Edge Cases:**
 
@@ -1690,6 +1718,7 @@ cd:~/projects/grove-hotfix
 - 1: User canceled (WIP prompt)
 - 2: Branch already exists
 - 3: Git operation failed
+- 14: Fork created, but a configured file was not copied or linked
 
 ---
 
@@ -2244,9 +2273,17 @@ Arguments:
 2. Read the current branch via `git rev-parse --abbrev-ref HEAD`. If the directory isn't a git worktree, abort with an actionable error.
 3. Derive the short name by stripping the project prefix from the directory name (e.g., `grove-feature` → `feature`).
 4. If the worktree is already registered with the same path, print an info message and exit successfully (idempotent).
-5. Run the shared bootstrap: record grove's machine-local git excludes, register state, fire per-project and global post-create hooks. (Config needs no per-worktree files — every command resolves it from the main worktree via git's common dir.) After `grove adopt`, the stack stays on the worktree it was on. Run `grove up` in the new worktree or `grove to <name> --up`, or set `auto_up = true`.
+5. Run the shared bootstrap: record grove's machine-local git excludes, register state, copy and link the configured `copy_files` / `symlink_files` / `symlink_dirs` entries, fire per-project and global post-create hooks. (Config needs no per-worktree files — every command resolves it from the main worktree via git's common dir.) After `grove adopt`, the stack stays on the worktree it was on. Run `grove up` in the new worktree or `grove to <name> --up`, or set `auto_up = true`.
 
-**Drift detection:** Running any grove command from a drifted worktree prints a non-fatal warning suggesting `grove adopt`. `grove doctor` also reports drift in its Tier-2 project checks.
+A configured file that cannot be copied or linked is reported as in `grove new` (`Not copied:` lines, then the remedy) and the command exits 14. A config that fails to load stops `grove adopt` before it changes anything. `copy_files` entries overwrite a file already in the worktree.
+
+**Drift detection:** Running any grove command from a drifted worktree prints a non-fatal warning suggesting `grove adopt`. When the config lists `copy_files`, `symlink_files`, or `symlink_dirs` entries that are missing from that worktree, the notice says how many and names them (up to five).
+```
+⚠ this worktree (feature) wasn't created by grove and isn't registered in state
+⚠ 2 configured files are missing here: .env.local, node_modules
+run 'grove adopt' to bootstrap it (registers state, copies configured files, records excludes, runs hooks)
+```
+ `grove doctor` also reports drift in its Tier-2 project checks.
 
 **Output:**
 ```
@@ -2366,7 +2403,7 @@ Flags:
 | Status | Meaning | `--fix` action |
 |---|---|---|
 | `ok` | Entry present and matches the configured type | none |
-| `missing` | Entry not present in worktree | restore from main worktree |
+| `missing` | Entry not present in worktree, or a `copy_files` entry is an empty file while the main worktree's copy has content | restore from main worktree |
 | `override` | Entry present but wrong type (user has customized) | none — leave alone |
 
 **Two-tier design (default mode):**
@@ -2450,6 +2487,7 @@ When a worktree was created with `git worktree add` directly (bypassing `grove n
 | 2 | Operation error (git failed, docker failed) |
 | 3 | Permission error |
 | 4 | Configuration error |
+| 14 | A create command made the worktree but could not finish it: a configured file was not copied or linked, or state registration failed. The worktree is kept. |
 | 127 | Command not found |
 
 ---

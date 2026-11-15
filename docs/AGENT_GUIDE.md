@@ -447,8 +447,11 @@ Grove detects drift automatically — running any command from a drifted worktre
 
 ```
 ⚠ this worktree (project-feature) wasn't created by grove and isn't registered in state
-  run 'grove adopt' to bootstrap it (registers state, records excludes, runs hooks)
+⚠ 2 configured files are missing here: .env.local, node_modules
+  run 'grove adopt' to bootstrap it (registers state, copies configured files, records excludes, runs hooks)
 ```
+
+The second line appears only when the config lists `copy_files`, `symlink_files`, or `symlink_dirs` entries that are missing from the worktree.
 
 `grove doctor` also reports drift in its Tier-2 project checks.
 
@@ -465,6 +468,10 @@ grove adopt /path/to/other-worktree
 ```
 
 The short name is derived from the directory by stripping the project prefix (`project-feature` → `feature`), matching the convention `grove new` produces.
+
+**If your harness creates worktrees itself:** grove never ran there, so no configured files were copied. Run `grove adopt` in each such worktree.
+
+**Reading the result of a create command:** `grove new --json`, `spawn`, `fork`, and `open` (when it creates) print `provisioned` and `file_setup`. `provisioned: false` means a configured file was not copied or linked, or state was not saved. The worktree exists and the exit code is 14. `file_setup.failed` lists each entry with its `field`, `path`, and `error`. Fix the source in the main worktree, then run `grove doctor <name> --fix`.
 
 **Edge cases:**
 

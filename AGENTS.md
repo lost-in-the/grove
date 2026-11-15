@@ -178,7 +178,13 @@ then the git remote URL, then the directory name. `grove ls` shows the **short**
 
 Worktrees created by raw `git worktree add` instead of `grove new` trigger a non-fatal
 drift warning on any grove command. Run `grove adopt [path]` to bring them under grove
-management (idempotent — safe to run multiple times).
+management (idempotent — safe to run multiple times). If your harness creates worktrees
+itself, run `grove adopt` there: grove never ran, so configured files (`copy_files`,
+`symlink_files`, `symlink_dirs`) were not copied.
+
+After `grove new --json`, `spawn`, `fork`, or `open`, read `provisioned`. `false` means a
+configured file was not copied or linked. The worktree is kept, `file_setup.failed` names
+each entry, and the exit code is 14.
 
 ## PATH Gotcha (Non-Interactive Contexts)
 

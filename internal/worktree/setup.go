@@ -99,15 +99,16 @@ func (r FileResult) line() string {
 	if r.Field != FieldCopyFiles {
 		prefix = "Not linked"
 	}
-	return fmt.Sprintf("%s: %s (%s)", prefix, r.Path, r.reason())
+	return fmt.Sprintf("%s: %s (%s)", prefix, r.Path, r.Reason())
 }
 
-func (r FileResult) reason() string {
+// Reason is the short, single-line cause of a failed entry.
+func (r FileResult) Reason() string {
 	switch {
 	case errors.Is(r.Err, ErrSourceMissing):
 		return "missing in the main worktree"
 	case errors.Is(r.Err, fsutil.ErrNotRegularFile):
-		return "is a directory or special file, not a file"
+		return "is not a regular file"
 	case r.Err == nil:
 		return "unknown error"
 	}

@@ -24,7 +24,7 @@ func TestProvisioning_JSONFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"copied":["a.key"],"linked":["vendor"],"failed":[{"field":"copy_files","path":"b.key","error":"source missing in the main worktree"}]}`
+	want := `{"copied":["a.key"],"linked":["vendor"],"failed":[{"field":"copy_files","path":"b.key","error":"missing in the main worktree"}]}`
 	if string(data) != want {
 		t.Errorf("file_setup = %s\nwant        %s", data, want)
 	}

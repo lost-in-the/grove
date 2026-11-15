@@ -54,7 +54,7 @@ func (p provisioning) jsonFields() (*bool, *output.FileSetupResult) {
 		case worktree.FileLinked:
 			fs.Linked = append(fs.Linked, r.Path)
 		case worktree.FileFailed:
-			fs.Failed = append(fs.Failed, output.FileSetupFailure{Field: string(r.Field), Path: r.Path, Error: r.Err.Error()})
+			fs.Failed = append(fs.Failed, output.FileSetupFailure{Field: string(r.Field), Path: r.Path, Error: r.Reason()})
 		}
 	}
 	ok := p.complete()
@@ -77,7 +77,7 @@ func (p provisioning) reportWith(name, worktreePath, lead string) {
 	}
 	if p.stateFailed != nil {
 		_, _ = fmt.Fprintf(w, "Not registered: %v\n", p.stateFailed.Err)
-		_, _ = fmt.Fprintf(w, "%s, but grove does not know it. Run `grove adopt %s`.\n", lead, worktreePath)
+		_, _ = fmt.Fprintf(w, "The worktree exists, but grove could not register it. Run `grove adopt %s`.\n", worktreePath)
 	}
 }
 

@@ -447,12 +447,21 @@ mount_dests = { web = "/project/app", worker = "/srv/worker" }   # table of stri
 # Files to copy from the main worktree into each new worktree on create.
 # Useful for credential files, local config, etc. that are gitignored.
 # Paths are relative to the worktree root.
+# Each entry is a literal path to one file. Globs (*, ?, [) are not supported
+# and fail config validation, as do absolute paths and paths that use "..".
+# A directory is not a file: use symlink_dirs for directories.
+# If an entry is missing in the main worktree, the create command still keeps the
+# worktree, prints "Not copied: <path>", and exits 14.
+# A list in .grove/config.local.toml REPLACES the project list. It is not appended.
 # Default: [] (nothing copied)
 copy_files = [".env.local", "config/master.key"]  # string array
 
 # Files to symlink from the main worktree into each new worktree on create.
 # Symlinks (vs copies) propagate edits in real time — use for files you actively
 # rotate, like decrypted credentials. Paths are relative to the worktree root.
+# Same rules as copy_files: literal paths only, a missing source prints
+# "Not linked: <path>" and exits 14, and a list in config.local.toml replaces
+# the project list.
 # Default: [] (nothing symlinked)
 # NOTE: On Windows, symlinks require Developer Mode or administrator privileges.
 # Use copy_files instead for Windows-friendly setups.
@@ -462,6 +471,8 @@ symlink_files = ["config/credentials/development.key"]  # string array
 # Directories to symlink from the main worktree into each new worktree on create.
 # Useful for large build caches (node_modules, vendor/) that should be shared.
 # Paths are relative to the worktree root.
+# A missing source prints "Not linked: <path>" and exits 14. A list in
+# config.local.toml replaces the project list.
 # Default: [] (nothing symlinked)
 # NOTE: On Windows, symlinks require Developer Mode or administrator privileges.
 # There is no copy equivalent for directories yet, so symlink_dirs needs
