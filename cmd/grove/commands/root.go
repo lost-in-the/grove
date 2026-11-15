@@ -61,6 +61,15 @@ func switchAfterDashboard(exit tui.Exit) (string, switchOptions, bool) {
 	return exit.Name, switchOptions{Up: true}, true
 }
 
+// finishDashboard runs the switch a closed dashboard left to its caller.
+func finishDashboard(ctx *GroveContext, exit tui.Exit) error {
+	name, opts, ok := switchAfterDashboard(exit)
+	if !ok {
+		return nil
+	}
+	return performSwitch(ctx, name, opts)
+}
+
 var rootCmd = &cobra.Command{
 	Use:   "grove",
 	Short: "Zero-friction worktree management",
@@ -147,10 +156,6 @@ shorthand alias (e.g. 'w'). Use 'grove install --help' for details.`,
 			return err
 		}
 
-		name, opts, ok := switchAfterDashboard(exit)
-		if !ok {
-			return nil
-		}
 		ctx := &GroveContext{
 			GroveDir:      groveDir,
 			ProjectRoot:   projectRoot,
@@ -159,7 +164,7 @@ shorthand alias (e.g. 'w'). Use 'grove install --help' for details.`,
 			PluginManager: pluginMgr,
 			wtMgr:         mgr,
 		}
-		return performSwitch(ctx, name, opts)
+		return finishDashboard(ctx, exit)
 	},
 	PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
 		if checkUpdateFlag {

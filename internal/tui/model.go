@@ -1872,26 +1872,26 @@ func (m Model) ConfigureForIssues() Model {
 	return m
 }
 
-// RunPRs starts the TUI directly in the PR browser view.
-func RunPRs(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, pluginMgr ...*plugins.Manager) (string, bool, error) {
+// RunPRs starts the TUI directly in the PR browser view. Its Exit is the
+// same as Run's: after U the caller must move the user.
+func RunPRs(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, pluginMgr ...*plugins.Manager) (Exit, error) {
 	tuilog.Init()
 	defer tuilog.Close()
 
 	maybeRefreshUpdateCache()
 	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...).ConfigureForPRs()
-	exit, err := runModel(model, false)
-	return exit.Path, exit.Up, err
+	return runModel(model)
 }
 
-// RunIssues starts the TUI directly in the issue browser view.
-func RunIssues(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, pluginMgr ...*plugins.Manager) (string, bool, error) {
+// RunIssues starts the TUI directly in the issue browser view. Its Exit is
+// the same as Run's: after U the caller must move the user.
+func RunIssues(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, pluginMgr ...*plugins.Manager) (Exit, error) {
 	tuilog.Init()
 	defer tuilog.Close()
 
 	maybeRefreshUpdateCache()
 	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...).ConfigureForIssues()
-	exit, err := runModel(model, false)
-	return exit.Path, exit.Up, err
+	return runModel(model)
 }
 
 // Run starts the dashboard and returns what the user asked for when they
@@ -1902,7 +1902,7 @@ func Run(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, plu
 
 	maybeRefreshUpdateCache()
 	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...)
-	return runModel(model, true)
+	return runModel(model)
 }
 
 // maybeRefreshUpdateCache triggers an async refresh of the update-check cache
@@ -1991,9 +1991,8 @@ func (m *Model) handleTmuxSwitch(switchPath string) bool {
 }
 
 // runModel runs the program, then moves the user to the worktree they picked.
-// callerMovesOnUp hands the move after U to the caller, which runs the
-// shared switch flow; without it the dashboard moves the user for U as well.
-func runModel(model Model, callerMovesOnUp bool) (Exit, error) {
+// After U it leaves the move to the caller, which runs the shared switch flow.
+func runModel(model Model) (Exit, error) {
 	tuilog.Printf("runModel: projectRoot=%s activeView=%d", model.projectRoot, model.activeView())
 
 	p := tea.NewProgram(model)
@@ -2016,7 +2015,7 @@ func runModel(model Model, callerMovesOnUp bool) (Exit, error) {
 	if exit.Path == "" {
 		return exit, nil
 	}
-	if exit.Up && callerMovesOnUp {
+	if exit.Up {
 		// The caller's switch flow may emit the cd: directive on stdout.
 		separateFromAltScreen()
 		return exit, nil
