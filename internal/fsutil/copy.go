@@ -23,6 +23,10 @@ func CopyFile(src, dst string) error {
 		return fmt.Errorf("stat source: %w", err)
 	}
 
+	if !srcInfo.Mode().IsRegular() {
+		return fmt.Errorf("source is a directory or special file, not a regular file: %s", src)
+	}
+
 	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
 		return fmt.Errorf("create destination directory: %w", err)
 	}
