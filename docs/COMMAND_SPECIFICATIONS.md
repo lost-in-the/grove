@@ -386,7 +386,7 @@ Flags:
    - Session name = `{project}-{name}`
    - Start in worktree directory
 
-7. **Execute post-create hooks** (user-configured and plugin hooks).
+7. **Execute post-create hooks** (user-configured and plugin hooks). Plugin hooks are told whether the command will switch to the new worktree (`WillSwitch`). In external Docker mode the env file (`env_var`) is repointed at the new worktree only when it will: with `--no-switch` or `--json` (including `spawn`) the env file is left alone.
 
 8. **Auto-start Docker** (unless `--no-docker`):
    - Only runs when `plugins.docker.auto_up = true` — an explicit opt-in, off by default (agent stacks no longer imply it)
@@ -1580,7 +1580,7 @@ Flags:
 
 4. **Register in state** with parent worktree tracked
 
-5. **Fire `post-create` hook**
+5. **Fire `post-create` hook.** Plugin hooks are told whether the command will switch to the fork (`WillSwitch`: false with `--no-switch` or `--json`). In external Docker mode the env file is repointed at the fork only when it will switch.
 
 6. **Create tmux session** with session name `{project}-{name}`
 
@@ -2193,7 +2193,7 @@ Arguments:
 2. Read the current branch via `git rev-parse --abbrev-ref HEAD`. If the directory isn't a git worktree, abort with an actionable error.
 3. Derive the short name by stripping the project prefix from the directory name (e.g., `grove-feature` → `feature`).
 4. If the worktree is already registered with the same path, print an info message and exit successfully (idempotent).
-5. Run the shared bootstrap: record grove's machine-local git excludes, register state, fire per-project and global post-create hooks. (Config needs no per-worktree files — every command resolves it from the main worktree via git's common dir.)
+5. Run the shared bootstrap: record grove's machine-local git excludes, register state, fire per-project and global post-create hooks. (Config needs no per-worktree files — every command resolves it from the main worktree via git's common dir.) `grove adopt` does not move you, so the external Docker env file is not repointed at the adopted worktree.
 
 **Drift detection:** Running any grove command from a drifted worktree prints a non-fatal warning suggesting `grove adopt`. `grove doctor` also reports drift in its Tier-2 project checks.
 

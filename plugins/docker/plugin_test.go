@@ -1077,3 +1077,78 @@ func TestPlugin_OnPreRemove_AgentSlotReleasedWithoutAgentMode(t *testing.T) {
 			slotAfter, allocatedSlot)
 	}
 }
+
+func newPostCreateExternalPlugin(t *testing.T) (*Plugin, *config.Config, string) {
+	t.Helper()
+	composeDir := t.TempDir()
+	cfg := &config.Config{
+		Plugins: config.PluginsConfig{
+			Docker: config.DockerPluginConfig{
+				Mode: "external",
+				External: &config.ExternalComposeConfig{
+					Path:     composeDir,
+					EnvVar:   "APP_DIR",
+					EnvFile:  ".env.local",
+					Services: []string{"app"},
+				},
+			},
+		},
+	}
+	plugin := New()
+	if err := plugin.Init(cfg); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	return plugin, cfg, composeDir
+}
+
+func TestPlugin_OnPostCreate_External_NoSwitchLeavesEnvFile(t *testing.T) {
+	plugin, cfg, composeDir := newPostCreateExternalPlugin(t)
+	envFile := filepath.Join(composeDir, ".env.local")
+	if err := os.WriteFile(envFile, []byte("APP_DIR=./myapp-current\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	newPath := filepath.Join(composeDir, "myapp-feature")
+	_ = os.MkdirAll(newPath, 0o755)
+
+	err := plugin.onPostCreate(&hooks.Context{
+		Worktree:     "feature",
+		Config:       cfg,
+		WorktreePath: newPath,
+		MainPath:     filepath.Join(composeDir, "myapp"),
+		WillSwitch:   false,
+	})
+	if err != nil {
+		t.Fatalf("onPostCreate: %v", err)
+	}
+
+	got, _ := os.ReadFile(envFile)
+	if string(got) != "APP_DIR=./myapp-current\n" {
+		t.Errorf("env file = %q, want it unchanged", got)
+	}
+}
+
+func TestPlugin_OnPostCreate_External_SwitchRepointsEnvFile(t *testing.T) {
+	plugin, cfg, composeDir := newPostCreateExternalPlugin(t)
+	envFile := filepath.Join(composeDir, ".env.local")
+	if err := os.WriteFile(envFile, []byte("APP_DIR=./myapp-current\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	newPath := filepath.Join(composeDir, "myapp-feature")
+	_ = os.MkdirAll(newPath, 0o755)
+
+	err := plugin.onPostCreate(&hooks.Context{
+		Worktree:     "feature",
+		Config:       cfg,
+		WorktreePath: newPath,
+		MainPath:     filepath.Join(composeDir, "myapp"),
+		WillSwitch:   true,
+	})
+	if err != nil {
+		t.Fatalf("onPostCreate: %v", err)
+	}
+
+	got, _ := os.ReadFile(envFile)
+	if string(got) != "APP_DIR=./myapp-feature\n" {
+		t.Errorf("env file = %q, want APP_DIR=./myapp-feature", got)
+	}
+}

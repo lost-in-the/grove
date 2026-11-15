@@ -61,6 +61,12 @@ func (s *externalStrategy) OnPostCreate(ctx *hooks.Context) error {
 		return nil
 	}
 
+	// The env file follows the user: creating a worktree the caller does not
+	// move into must not repoint the shared stack.
+	if !ctx.WillSwitch {
+		return nil
+	}
+
 	if err := s.persistEnvVar(ctx.WorktreePath); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: failed to persist %s to %s: %v\n", s.ext.EnvVar, s.ext.EnvFileName(), err)
 	}

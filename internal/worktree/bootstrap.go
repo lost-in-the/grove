@@ -32,6 +32,10 @@ type BootstrapOpts struct {
 	IsEnvironment  bool   // true for environment worktrees
 	Mirror         string // mirror name when IsEnvironment is true
 	ParentWorktree string // source worktree short name when this is a fork
+
+	// WillSwitch reports whether the calling command moves the user into this
+	// worktree. It is forwarded to post-create hooks as hooks.Context.WillSwitch.
+	WillSwitch bool
 }
 
 // BootstrapWorktree runs the post-git-worktree-add bootstrap sequence:
@@ -110,6 +114,7 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 		Config:       cfg,
 		WorktreePath: opts.WorktreePath,
 		MainPath:     opts.MainPath,
+		WillSwitch:   opts.WillSwitch,
 	}
 	if err := hooks.Fire(hooks.EventPostCreate, globalHookCtx); err != nil {
 		log.Printf("hooks: global post-create plugin hook failed: %v", err)

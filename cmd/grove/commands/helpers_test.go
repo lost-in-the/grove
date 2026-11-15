@@ -9,7 +9,9 @@ import (
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/hooks"
 	"github.com/lost-in-the/grove/internal/mux"
+	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 func TestRunFileSetup_NilConfig(t *testing.T) {
@@ -130,5 +132,75 @@ func TestAttachToSessionPreparesTheTargetBeforeHinting(t *testing.T) {
 	}
 	if len(m.prepared) != 1 || m.prepared[0].Path != target.Path {
 		t.Errorf("PrepareAttach calls = %v, want exactly the target", m.prepared)
+	}
+}
+
+func TestWillSwitchAfterCreate(t *testing.T) {
+	tests := []struct {
+		name     string
+		noSwitch bool
+		json     bool
+		want     bool
+	}{
+		{"plain", false, false, true},
+		{"--no-switch", true, false, false},
+		{"--json returns without switching", false, true, false},
+		{"--json --no-switch", true, true, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := willSwitchAfterCreate(tt.noSwitch, tt.json); got != tt.want {
+				t.Errorf("willSwitchAfterCreate(noSwitch=%v, json=%v) = %v, want %v", tt.noSwitch, tt.json, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSetupCreatedWorktree_ForwardsSwitchIntentToPostCreateHook(t *testing.T) {
+	tests := []struct {
+		name string
+		opts worktreeSetupOpts
+		want bool
+	}{
+		{"default switches", worktreeSetupOpts{}, true},
+		{"--no-switch", worktreeSetupOpts{NoSwitch: true}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			repoRoot := filepath.Join(root, "myapp")
+			groveDir := filepath.Join(repoRoot, ".grove")
+			if err := os.MkdirAll(groveDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			mgr, err := worktree.NewManager(repoRoot)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wtPath := mgr.PathForName("feature")
+			if err := os.MkdirAll(wtPath, 0o755); err != nil {
+				t.Fatal(err)
+			}
+
+			var got *hooks.Context
+			hooks.Register(hooks.EventPostCreate, func(c *hooks.Context) error {
+				if c.WorktreePath == wtPath {
+					got = c
+				}
+				return nil
+			})
+
+			ctx := &GroveContext{GroveDir: groveDir, ProjectRoot: repoRoot, Config: config.LoadDefaults()}
+			w := cli.NewWriter(&bytes.Buffer{}, false)
+			if _, err := setupCreatedWorktree(ctx, mgr, "feature", "feature", tt.opts, w); err != nil {
+				t.Fatalf("setupCreatedWorktree: %v", err)
+			}
+			if got == nil {
+				t.Fatal("post-create hook did not fire")
+			}
+			if got.WillSwitch != tt.want {
+				t.Errorf("hook ctx WillSwitch = %v, want %v", got.WillSwitch, tt.want)
+			}
+		})
 	}
 }

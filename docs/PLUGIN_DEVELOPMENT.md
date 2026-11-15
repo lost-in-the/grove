@@ -60,8 +60,18 @@ type Context struct {
     Worktree     string  // Target worktree name
     PrevWorktree string  // Previous worktree (for switch operations)
     Data         map[string]interface{}  // Additional plugin data
+    WillSwitch   bool    // post-create only: the command moves the user into the new worktree
 }
 ```
+
+`WillSwitch` matters to plugins that repoint shared state (an env file, a
+symlink) at the active worktree. Act on `post-create` only when it is `true`.
+`grove new --no-switch`, `--json` (and the `spawn` alias), `grove fork` with
+the same flags, `grove adopt`, and dashboard create/fork all leave it `false`.
+The zero value is `false`, so code that builds a `Context` without setting it
+never moves shared state.
+
+`hooks.toml` hooks do not receive this field.
 
 ## Adding a Custom Action Type to hooks.toml
 

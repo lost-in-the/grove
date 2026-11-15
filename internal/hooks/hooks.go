@@ -19,6 +19,13 @@ type Context struct {
 	WorktreePath     string                 // Absolute path to current/new worktree
 	PrevWorktreePath string                 // Absolute path to previous worktree
 	MainPath         string                 // Absolute path to main worktree (project root)
+
+	// WillSwitch is set on post-create when the calling command moves the user
+	// into the new worktree. Hooks that repoint shared state at "the active
+	// worktree" (e.g. an env file) should act only when it is true. The zero
+	// value means "do not move shared state", so callers that never set it
+	// cannot repoint anything by accident.
+	WillSwitch bool
 }
 
 // Registry manages hook registration and execution

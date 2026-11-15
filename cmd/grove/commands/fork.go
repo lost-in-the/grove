@@ -242,6 +242,7 @@ Examples:
 			MainPath:       ctx.ProjectRoot,
 			ProjectName:    mgr.GetProjectName(),
 			ParentWorktree: parentName,
+			WillSwitch:     willSwitchAfterCreate(forkNoSwitch, forkJSON),
 		}, bootstrapWriter); err != nil {
 			// A required post-create hook failing fails the command (B7); other
 			// bootstrap issues (state, setup) stay recoverable — warn and point
