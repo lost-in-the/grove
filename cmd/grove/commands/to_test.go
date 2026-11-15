@@ -3,6 +3,8 @@ package commands
 import (
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/lost-in-the/grove/internal/config"
 )
 
@@ -144,5 +146,55 @@ func TestUsesSharedExternalStack_FollowsConfigAgentMode(t *testing.T) {
 	cfg.AgentMode = true
 	if usesSharedExternalStack(cfg) {
 		t.Error("cfg.AgentMode should select isolated stacks")
+	}
+}
+
+func TestSwitchConfigForStack(t *testing.T) {
+	tests := []struct {
+		name    string
+		setting string
+		up      bool
+		want    string
+	}{
+		{name: "off stays off", setting: "off", want: "off"},
+		{name: "unset stays unset", setting: "", want: ""},
+		{name: "auto stays auto", setting: "auto", want: "auto"},
+		{name: "prompt stays prompt", setting: "prompt", want: "prompt"},
+		{name: "--up forces auto over off", setting: "off", up: true, want: "auto"},
+		{name: "--up forces auto over prompt", setting: "prompt", up: true, want: "auto"},
+		{name: "--up forces auto over unset", setting: "", up: true, want: "auto"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &config.Config{Switch: config.SwitchConfig{ContainerSwitch: tt.setting}}
+			got := switchConfigForStack(cfg, tt.up)
+			if got.Switch.ContainerSwitch != tt.want {
+				t.Errorf("ContainerSwitch = %q, want %q", got.Switch.ContainerSwitch, tt.want)
+			}
+			if cfg.Switch.ContainerSwitch != tt.setting {
+				t.Errorf("the loaded config was changed to %q", cfg.Switch.ContainerSwitch)
+			}
+		})
+	}
+}
+
+func TestStackFollowsSwitch(t *testing.T) {
+	for setting, want := range map[string]bool{"": false, "off": false, "auto": true} {
+		cfg := &config.Config{Switch: config.SwitchConfig{ContainerSwitch: setting}}
+		if got := stackFollowsSwitch(cfg); got != want {
+			t.Errorf("stackFollowsSwitch(%q) = %v, want %v", setting, got, want)
+		}
+	}
+}
+
+func TestToAndLastHaveUpFlag(t *testing.T) {
+	for _, cmd := range []*cobra.Command{toCmd, lastCmd} {
+		f := cmd.Flags().Lookup("up")
+		if f == nil {
+			t.Fatalf("%s has no --up flag", cmd.Name())
+		}
+		if f.Shorthand != "u" {
+			t.Errorf("%s --up shorthand = %q, want u", cmd.Name(), f.Shorthand)
+		}
 	}
 }

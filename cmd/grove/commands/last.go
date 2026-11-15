@@ -12,13 +12,18 @@ import (
 	"github.com/lost-in-the/grove/internal/output"
 )
 
-var lastJSON bool
+var (
+	lastJSON bool
+	lastUp   bool
+)
 
 var lastCmd = &cobra.Command{
 	Use:     "last",
 	Aliases: []string{"la"},
-	Short:   "Switch to the previous worktree",
-	Long:    `Switch to the last worktree you were working in.`,
+	Short:   "Move to the previous worktree",
+	Long: `Move to the last worktree you were working in.
+
+Like 'grove to', this moves you only. Use --up to also bring the stack.`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		stderr := cli.NewStderr()
 
@@ -68,7 +73,7 @@ var lastCmd = &cobra.Command{
 		// correct --json ordering (no tmux relocation before the JSON is
 		// emitted) all included, none of which the old lightweight epilogue did
 		// (B19/B20).
-		return performSwitch(ctx, targetTree.DisplayName(), lastJSON, false, false)
+		return performSwitch(ctx, targetTree.DisplayName(), switchOptions{JSON: lastJSON, Up: lastUp})
 	}),
 }
 
@@ -94,5 +99,6 @@ func noPreviousWorktree(stderr io.Writer, jsonMode bool) error {
 
 func init() {
 	lastCmd.Flags().BoolVarP(&lastJSON, "json", "j", false, "Output as JSON with switch_to field")
+	lastCmd.Flags().BoolVarP(&lastUp, "up", "u", false, "Also bring the stack to the worktree you move to")
 	rootCmd.AddCommand(lastCmd)
 }

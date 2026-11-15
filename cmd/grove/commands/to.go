@@ -22,18 +22,52 @@ var (
 	toJSON   bool
 	toPeek   bool
 	toNoTmux bool
+	toUp     bool
 )
+
+// switchOptions are the per-invocation flags shared by `grove to` and `grove last`.
+type switchOptions struct {
+	JSON   bool
+	Peek   bool
+	NoTmux bool
+	// Up brings the stack to the target as well: it forces container_switch to
+	// "auto" for this invocation. Without it the setting decides, and its
+	// default ("off") means a switch never touches Docker.
+	Up bool
+}
+
+// switchConfigForStack returns the config the Docker switch hooks should see.
+// With --up that is a copy with container_switch forced to "auto"; the loaded
+// config is never modified.
+func switchConfigForStack(cfg *config.Config, up bool) *config.Config {
+	if !up {
+		return cfg
+	}
+	forced := *cfg
+	forced.Switch.ContainerSwitch = "auto"
+	return &forced
+}
+
+// stackFollowsSwitch reports whether container_switch lets a switch touch the
+// stack at all ("auto", or "prompt" in an interactive session).
+func stackFollowsSwitch(cfg *config.Config) bool {
+	return docker.ResolveContainerSwitch(cfg.Switch.ContainerSwitch, cli.IsInteractive()) != docker.ContainerSwitchOff
+}
 
 var toCmd = &cobra.Command{
 	Use:     "to [name]",
 	Aliases: []string{"switch", "t"},
-	Short:   "Switch to a worktree",
-	Long: `Switch to a worktree by name. If a tmux session exists for the worktree, switch to it.
+	Short:   "Move to a worktree",
+	Long: `Move to a worktree by name. If a tmux session exists for the worktree, switch to it.
 If no tmux session exists, create one.
 
-Use --peek for a lightweight switch that skips hooks and tmux entirely
-(no Docker side effects, no tmux client relocation). Useful for code review
-or quick file checks.
+This moves you only. It does not touch the Docker stack. Run 'grove up' to
+bring the stack to the worktree you are in, or use --up to move and bring the
+stack in one step. To make every move bring the stack, set
+[switch] container_switch = "auto".
+
+Use --peek for a lightweight move that skips hooks and tmux entirely
+(no tmux client relocation). Useful for code review or quick file checks.
 
 Use --no-tmux to switch without creating, switching, or attaching tmux
 sessions — hooks still fire. Useful for automation running inside an
@@ -58,7 +92,7 @@ When using shell integration, this will also change your current directory.`,
 			return fmt.Errorf("worktree name cannot be empty")
 		}
 
-		return performSwitch(ctx, name, toJSON, toPeek, toNoTmux)
+		return performSwitch(ctx, name, switchOptions{JSON: toJSON, Peek: toPeek, NoTmux: toNoTmux, Up: toUp})
 	}),
 }
 
@@ -68,9 +102,11 @@ When using shell integration, this will also change your current directory.`,
 // The JSON result is emitted before the tmux client is relocated, so a machine
 // caller (--json) never has its terminal moved (B20); sharing this flow also
 // gives `grove last` the hooks and dirty handling it previously skipped (B19).
-// jsonOut/peek/noTmux are the per-invocation flags.
-func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) error {
+// opts holds the per-invocation flags.
+func performSwitch(ctx *GroveContext, name string, opts switchOptions) error {
+	jsonOut, peek, noTmux := opts.JSON, opts.Peek, opts.NoTmux
 	stderr := cli.NewStderr()
+	hookConfig := switchConfigForStack(ctx.Config, opts.Up)
 
 	mgr, err := ctx.WorktreeManager()
 	if err != nil {
@@ -219,7 +255,7 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 	hookCtx := &hooks.Context{
 		Worktree:         targetTree.DisplayName(),
 		PrevWorktree:     prevWorktree,
-		Config:           ctx.Config,
+		Config:           hookConfig,
 		WorktreePath:     targetTree.Path,
 		PrevWorktreePath: prevWorktreePath,
 		MainPath:         ctx.ProjectRoot,
@@ -321,8 +357,8 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 	// tmux switch the old session's stderr is no longer visible.
 	// Also fire before the JSON return so machine consumers get hooks too.
 	if !peek {
-		if hooks.HasHooks(hooks.EventPostSwitch) {
-			cli.Step(stderr, "Starting services...")
+		if hooks.HasHooks(hooks.EventPostSwitch) && stackFollowsSwitch(hookConfig) {
+			cli.Step(stderr, "Bringing the stack up...")
 		}
 		if err := hooks.Fire(hooks.EventPostSwitch, hookCtx); err != nil {
 			cli.Warning(stderr, "post-switch hooks failed: %v", err)
@@ -573,7 +609,9 @@ func shellSingleQuote(s string) string {
 
 func init() {
 	toCmd.Flags().BoolVarP(&toJSON, "json", "j", false, "Output as JSON with switch_to field")
-	toCmd.Flags().BoolVar(&toPeek, "peek", false, "Lightweight switch: skip hooks and tmux (no Docker or session side effects)")
+	toCmd.Flags().BoolVar(&toPeek, "peek", false, "Lightweight move: skip hooks and tmux (no session side effects)")
+	toCmd.Flags().BoolVarP(&toUp, "up", "u", false, "Also bring the stack to the worktree you move to")
+	toCmd.MarkFlagsMutuallyExclusive("up", "peek")
 	toCmd.Flags().BoolVar(&toNoTmux, "no-tmux", false, "Skip tmux session creation/switch/attach for this invocation")
 	rootCmd.AddCommand(toCmd)
 }
