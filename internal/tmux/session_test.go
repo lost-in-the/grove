@@ -215,18 +215,17 @@ func TestIsCommandRunning(t *testing.T) {
 	}
 	defer func() { _ = KillSession(session) }()
 
-	// Session should be running a shell by default
-	shellCommands := []string{"bash", "zsh", "fish", "sh"}
-	runningAny := false
-	for _, sh := range shellCommands {
-		if IsCommandRunning(session, sh) {
-			runningAny = true
-			break
-		}
+	// Ask tmux what the pane runs instead of guessing the shell's name: the
+	// default shell differs between machines and CI images.
+	pane, err := GetPaneInfo(session)
+	if err != nil {
+		t.Fatalf("GetPaneInfo() error = %v", err)
 	}
-
-	if !runningAny {
-		t.Error("expected session to be running a shell command")
+	if pane.CurrentCommand == "" {
+		t.Fatal("pane reports no current command")
+	}
+	if !IsCommandRunning(session, pane.CurrentCommand) {
+		t.Errorf("IsCommandRunning(%q) = false, want true", pane.CurrentCommand)
 	}
 
 	// Should not be running a non-existent command
