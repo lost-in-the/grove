@@ -103,7 +103,10 @@ Examples:
 			}
 
 			// Post-create setup: find, symlink, state, hooks, docker
-			wt, err = setupCreatedWorktree(ctx, mgr, name, branchName, openSetupOpts(openNoDocker, openJSON), w)
+			wt, err = setupCreatedWorktree(ctx, mgr, name, branchName, worktreeSetupOpts{
+				NoDocker:   openNoDocker,
+				JSONOutput: openJSON,
+			}, w)
 			if err != nil {
 				return err
 			}
@@ -244,17 +247,6 @@ Examples:
 		}
 		return attachToSession(m, target, ctx.Config.Tmux.ControlMode, hasShellIntegration, stderr)
 	}),
-}
-
-// openSetupOpts builds the setup options for a worktree `grove open` just
-// created. Every non-JSON path ends with the user in the worktree (session
-// switch, attach, or a cd directive); --json only reports switch_to.
-func openSetupOpts(noDocker, jsonOutput bool) worktreeSetupOpts {
-	return worktreeSetupOpts{
-		NoDocker:   noDocker,
-		JSONOutput: jsonOutput,
-		WillSwitch: willSwitchAfterCreate(false, jsonOutput),
-	}
 }
 
 func printOpenJSON(wt *worktree.Worktree, name string, created bool) error {

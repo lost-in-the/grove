@@ -521,18 +521,6 @@ type worktreeSetupOpts struct {
 	Mirror        string
 	NoDocker      bool
 	JSONOutput    bool
-
-	// WillSwitch is true when the command ends with the user in the new
-	// worktree. Forwarded to post-create hooks; the zero value leaves shared
-	// state (such as the external Docker env file) alone.
-	WillSwitch bool
-}
-
-// willSwitchAfterCreate reports whether a create-style command ends with the
-// user in the new worktree. --json returns before the switch, whatever
-// --no-switch says: the caller reads switch_to and decides for itself.
-func willSwitchAfterCreate(noSwitch, jsonOutput bool) bool {
-	return !noSwitch && !jsonOutput
 }
 
 // setupCreatedWorktree runs the shared post-create sequence: find the worktree,
@@ -564,7 +552,6 @@ func setupCreatedWorktree(ctx *GroveContext, mgr *worktree.Manager, name, branch
 		ProjectName:   mgr.GetProjectName(),
 		IsEnvironment: opts.IsEnvironment,
 		Mirror:        opts.Mirror,
-		WillSwitch:    opts.WillSwitch,
 	}
 	var bootstrapWriter *cli.Writer
 	if !opts.JSONOutput {

@@ -12,7 +12,6 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/detect"
-	"github.com/lost-in-the/grove/internal/hooks"
 	"github.com/lost-in-the/grove/internal/state"
 )
 
@@ -616,43 +615,5 @@ func TestCreateInitialWorktrees_RegistersState(t *testing.T) {
 	}
 	if ws.Branch != "testing" {
 		t.Errorf("branch = %q, want %q", ws.Branch, "testing")
-	}
-}
-
-// grove init leaves the user in the main checkout, so the worktrees it creates
-// must not repoint shared state such as the external Docker env file.
-func TestCreateInitialWorktrees_PostCreateHookIsNonSwitching(t *testing.T) {
-	dir := t.TempDir()
-	runAdoptGit(t, dir, "init", "-b", "main")
-	runAdoptGit(t, dir, "commit", "--allow-empty", "-m", "init")
-
-	groveDir := filepath.Join(dir, ".grove")
-	if err := os.MkdirAll(groveDir, 0755); err != nil {
-		t.Fatalf("mkdir .grove: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(groveDir, "config.toml"), []byte("project_name = \"proj\"\n"), 0644); err != nil {
-		t.Fatalf("write config.toml: %v", err)
-	}
-
-	origTesting, origScratch, origFull := initWithTesting, initWithScratch, initFull
-	defer func() { initWithTesting, initWithScratch, initFull = origTesting, origScratch, origFull }()
-	initWithTesting, initWithScratch, initFull = true, false, false
-
-	wtPath := filepath.Join(filepath.Dir(dir), "proj-testing")
-	var got *hooks.Context
-	hooks.Register(hooks.EventPostCreate, func(c *hooks.Context) error {
-		if c.WorktreePath == wtPath {
-			got = c
-		}
-		return nil
-	})
-
-	createInitialWorktrees(groveDir, dir, "proj")
-
-	if got == nil {
-		t.Fatal("post-create hook did not fire for the initial worktree")
-	}
-	if got.WillSwitch {
-		t.Error("init reported WillSwitch=true, but the user stays in the main checkout")
 	}
 }

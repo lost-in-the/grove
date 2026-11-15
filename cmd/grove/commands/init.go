@@ -526,7 +526,7 @@ func createInitialWorktrees(groveDir, cwd, projectName string) {
 			fmt.Fprintf(os.Stderr, "Warning: failed to create %s worktree: %v\n", name, err)
 			continue
 		}
-		if _, err := setupCreatedWorktree(ctx, mgr, name, name, worktreeSetupOpts{WillSwitch: false}, w); err != nil {
+		if _, err := setupCreatedWorktree(ctx, mgr, name, name, worktreeSetupOpts{}, w); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to set up %s worktree: %v\n", name, err)
 			continue
 		}

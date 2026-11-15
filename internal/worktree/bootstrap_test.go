@@ -2,7 +2,6 @@ package worktree
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/config"
-	"github.com/lost-in-the/grove/internal/hooks"
 	"github.com/lost-in-the/grove/internal/state"
 )
 
@@ -256,46 +254,5 @@ working_dir = "new"
 	want := filepath.Base(wtPath)
 	if got := strings.TrimSpace(string(data)); got != want {
 		t.Errorf("{{.worktree_full}} = %q, want directory name %q", got, want)
-	}
-}
-
-func TestBootstrapWorktree_ForwardsWillSwitchToPostCreateHook(t *testing.T) {
-	for _, willSwitch := range []bool{false, true} {
-		t.Run(fmt.Sprintf("WillSwitch=%v", willSwitch), func(t *testing.T) {
-			tmpDir := t.TempDir()
-			mainDir := filepath.Join(tmpDir, "main")
-			if err := os.MkdirAll(filepath.Join(mainDir, ".grove"), 0755); err != nil {
-				t.Fatalf("mkdir: %v", err)
-			}
-			wtPath := filepath.Join(tmpDir, "feature")
-			if err := os.MkdirAll(wtPath, 0755); err != nil {
-				t.Fatalf("mkdir: %v", err)
-			}
-
-			var got *hooks.Context
-			hooks.Register(hooks.EventPostCreate, func(ctx *hooks.Context) error {
-				if ctx.WorktreePath == wtPath {
-					got = ctx
-				}
-				return nil
-			})
-
-			err := BootstrapWorktree(nil, config.LoadDefaults(), BootstrapOpts{
-				Name:         "feature",
-				Branch:       "feature",
-				WorktreePath: wtPath,
-				MainPath:     mainDir,
-				WillSwitch:   willSwitch,
-			}, nil)
-			if err != nil {
-				t.Fatalf("BootstrapWorktree: %v", err)
-			}
-			if got == nil {
-				t.Fatal("post-create hook did not fire")
-			}
-			if got.WillSwitch != willSwitch {
-				t.Errorf("hook ctx WillSwitch = %v, want %v", got.WillSwitch, willSwitch)
-			}
-		})
 	}
 }
