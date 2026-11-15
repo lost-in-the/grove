@@ -163,6 +163,17 @@ func TestMountDriftConfigFromExternal(t *testing.T) {
 			t.Errorf("MountDest = %q, want %q", got.MountDest, "/srv/app")
 		}
 	})
+	t.Run("carries per-service mount_dests through", func(t *testing.T) {
+		ext := &config.ExternalComposeConfig{
+			EnvVar:     "X",
+			Services:   []string{"app", "worker"},
+			MountDests: map[string]string{"worker": "/srv/worker"},
+		}
+		got := MountDriftConfigFromExternal(ext, "/compose")
+		if got.MountDests["worker"] != "/srv/worker" {
+			t.Errorf("MountDests = %v, want worker=/srv/worker", got.MountDests)
+		}
+	})
 	t.Run("defaults mount_dest to /app when unset", func(t *testing.T) {
 		ext := &config.ExternalComposeConfig{EnvVar: "X", Services: []string{"web"}}
 		got := MountDriftConfigFromExternal(ext, "/compose")

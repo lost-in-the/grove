@@ -629,6 +629,41 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+func TestLoadExternalDockerConfig_MountDests(t *testing.T) {
+	tmpDir := t.TempDir()
+	configData := `
+[plugins.docker]
+enabled = true
+mode = "external"
+
+[plugins.docker.external]
+path = "` + tmpDir + `"
+env_var = "APP_DIR"
+services = ["app", "worker"]
+mount_dest = "/app"
+mount_dests = { worker = "/srv/worker" }
+`
+	configPath := filepath.Join(tmpDir, "config.toml")
+	if err := os.WriteFile(configPath, []byte(configData), 0644); err != nil {
+		t.Fatalf("Failed to write config: %v", err)
+	}
+
+	cfg, err := LoadConfigFromPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfigFromPath() error = %v", err)
+	}
+	ext := cfg.Plugins.Docker.External
+	if ext == nil {
+		t.Fatal("Expected External config to be non-nil")
+	}
+	if len(ext.MountDests) != 1 || ext.MountDests["worker"] != "/srv/worker" {
+		t.Errorf("MountDests = %v, want map[worker:/srv/worker]", ext.MountDests)
+	}
+	if ext.MountDest != "/app" {
+		t.Errorf("MountDest = %q, want /app", ext.MountDest)
+	}
+}
+
 func TestLoadExternalDockerConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	composePath := filepath.Join(tmpDir, "shared-infra")
