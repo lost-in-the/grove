@@ -112,9 +112,9 @@ func (s *agentExternalStrategy) warnNoIsolatedStack(worktreePath string) {
 	fmt.Fprintln(os.Stderr, "Run `grove up --isolated` here to start an isolated stack.")
 }
 
-// OnPostCreate is a no-op — file setup runs unconditionally via
-// worktree.SetupFiles, called from the post-create paths in helpers.go
-// (grove new, grove open) and fork.go (grove fork) regardless of docker config.
+// OnPostCreate is a no-op. File setup is worktree.SetupFiles, run by
+// worktree.Bootstrap for every create and adopt path whenever the config has
+// [plugins.docker.external].
 func (s *agentExternalStrategy) OnPostCreate(_ *hooks.Context) error {
 	return nil
 }
