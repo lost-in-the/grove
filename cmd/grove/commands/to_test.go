@@ -1,11 +1,16 @@
 package commands
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 
 	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 func TestEffectiveTmuxMode(t *testing.T) {
@@ -196,5 +201,108 @@ func TestToAndLastHaveUpFlag(t *testing.T) {
 		if f.Shorthand != "u" {
 			t.Errorf("%s --up shorthand = %q, want u", cmd.Name(), f.Shorthand)
 		}
+	}
+}
+
+func externalStackConfig(t *testing.T, envValue string) *config.Config {
+	t.Helper()
+	dir := t.TempDir()
+	if envValue != "" {
+		if err := os.WriteFile(filepath.Join(dir, ".env.local"), []byte("APP_DIR="+envValue+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg := &config.Config{}
+	cfg.Plugins.Docker.Mode = "external"
+	cfg.Plugins.Docker.External = &config.ExternalComposeConfig{Path: dir, EnvVar: "APP_DIR", EnvFile: ".env.local"}
+	return cfg
+}
+
+func TestStackStatusFor(t *testing.T) {
+	name := func(p string) string { return strings.TrimPrefix(filepath.Base(p), "myapp-") }
+	const here = "/work/myapp-feature"
+
+	tests := []struct {
+		name     string
+		cfg      func(t *testing.T) *config.Config
+		tracked  bool
+		on       string
+		isHere   bool
+		wantLine string
+	}{
+		{
+			name:     "elsewhere",
+			cfg:      func(t *testing.T) *config.Config { return externalStackConfig(t, "/work/myapp-main") },
+			tracked:  true,
+			on:       "main",
+			wantLine: "Stack: on main (not here). Run `grove up` to bring it.",
+		},
+		{
+			name:     "here",
+			cfg:      func(t *testing.T) *config.Config { return externalStackConfig(t, here) },
+			tracked:  true,
+			on:       "feature",
+			isHere:   true,
+			wantLine: "Stack: on feature (here).",
+		},
+		{
+			name:     "unset",
+			cfg:      func(t *testing.T) *config.Config { return externalStackConfig(t, "") },
+			tracked:  true,
+			wantLine: "Stack: not on any worktree. Run `grove up` to bring it.",
+		},
+		{
+			name: "local mode has no shared stack",
+			cfg:  func(t *testing.T) *config.Config { return &config.Config{} },
+		},
+		{
+			name: "agent mode has isolated stacks",
+			cfg: func(t *testing.T) *config.Config {
+				cfg := externalStackConfig(t, "/work/myapp-main")
+				cfg.AgentMode = true
+				return cfg
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stackStatusFor(tt.cfg(t), here, name)
+			if got.Tracked != tt.tracked || got.On != tt.on || got.Here != tt.isHere {
+				t.Errorf("stackStatusFor() = %+v, want tracked=%v on=%q here=%v", got, tt.tracked, tt.on, tt.isHere)
+			}
+			if line := got.Line(); line != tt.wantLine {
+				t.Errorf("Line() = %q, want %q", line, tt.wantLine)
+			}
+		})
+	}
+}
+
+func TestSwitchResult_StackFields(t *testing.T) {
+	tree := &worktree.Worktree{Path: "/work/myapp-feature", Branch: "feature"}
+	marshal := func(s stackStatus) map[string]any {
+		raw, err := json.Marshal(switchResult(tree, s))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var m map[string]any
+		_ = json.Unmarshal(raw, &m)
+		return m
+	}
+
+	m := marshal(stackStatus{Tracked: true, On: "main"})
+	if m["stack_on"] != "main" || m["stack_here"] != false {
+		t.Errorf("elsewhere: got %v", m)
+	}
+	m = marshal(stackStatus{Tracked: true, On: "feature", Here: true})
+	if m["stack_on"] != "feature" || m["stack_here"] != true {
+		t.Errorf("here: got %v", m)
+	}
+	m = marshal(stackStatus{Tracked: true})
+	if _, ok := m["stack_on"]; ok || m["stack_here"] != false {
+		t.Errorf("unset: got %v", m)
+	}
+	m = marshal(stackStatus{})
+	if _, ok := m["stack_here"]; ok {
+		t.Errorf("not tracked should omit the stack fields: got %v", m)
 	}
 }

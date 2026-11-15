@@ -24,6 +24,11 @@ type SwitchResult struct {
 	Name     string `json:"name"`
 	Branch   string `json:"branch"`
 	Path     string `json:"path"`
+	// StackOn names the worktree the shared external stack is on; omitted when
+	// unset or when there is no shared stack. StackHere is nil outside shared
+	// external mode.
+	StackOn   string `json:"stack_on,omitempty"`
+	StackHere *bool  `json:"stack_here,omitempty"`
 }
 
 // NewWorktreeResult represents the result of creating a new worktree.

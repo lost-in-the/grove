@@ -48,6 +48,69 @@ func switchConfigForStack(cfg *config.Config, up bool) *config.Config {
 	return &forced
 }
 
+// stackStatus says where the shared external stack is, as the env file records
+// it. Tracked is false when there is no shared stack to report on (local mode,
+// agent mode).
+type stackStatus struct {
+	Tracked bool
+	On      string // display name of the worktree the stack is on; empty when unset
+	Here    bool
+}
+
+// stackStatusFor reads the env file only (no Docker calls) and compares it to
+// the worktree you are moving to.
+func stackStatusFor(cfg *config.Config, herePath string, nameFor func(string) string) stackStatus {
+	if !usesSharedExternalStack(cfg) {
+		return stackStatus{}
+	}
+	configured, ok := docker.ConfiguredWorktreePath(cfg)
+	if !ok {
+		return stackStatus{Tracked: true}
+	}
+	return stackStatus{
+		Tracked: true,
+		On:      nameFor(configured),
+		Here:    filepath.Clean(configured) == filepath.Clean(herePath),
+	}
+}
+
+// Line is the one-line report printed on stderr, or "" when not tracked.
+func (s stackStatus) Line() string {
+	switch {
+	case !s.Tracked:
+		return ""
+	case s.On == "":
+		return "Stack: not on any worktree. Run `grove up` to bring it."
+	case s.Here:
+		return fmt.Sprintf("Stack: on %s (here).", s.On)
+	default:
+		return fmt.Sprintf("Stack: on %s (not here). Run `grove up` to bring it.", s.On)
+	}
+}
+
+// switchResult builds the --json payload, adding the stack fields when tracked.
+func switchResult(tree *worktree.Worktree, stack stackStatus) output.SwitchResult {
+	result := output.SwitchResult{
+		SwitchTo: tree.Path,
+		Name:     tree.DisplayName(),
+		Branch:   tree.Branch,
+		Path:     tree.Path,
+	}
+	if stack.Tracked {
+		here := stack.Here
+		result.StackOn = stack.On
+		result.StackHere = &here
+	}
+	return result
+}
+
+// reportStack prints the stack line on stderr, never in --json mode.
+func reportStack(stderr *cli.Writer, stack stackStatus, jsonOut bool) {
+	if line := stack.Line(); line != "" && !jsonOut {
+		cli.Faint(stderr, "%s", line)
+	}
+}
+
 // stackFollowsSwitch reports whether container_switch lets a switch touch the
 // stack at all ("auto", or "prompt" in an interactive session).
 func stackFollowsSwitch(cfg *config.Config) bool {
@@ -144,17 +207,14 @@ func performSwitch(ctx *GroveContext, name string, opts switchOptions) error {
 			repointSharedStack(ctx, mgr, targetTree, configured, jsonOut, stderr)
 		}
 
+		stack := stackStatusFor(ctx.Config, targetTree.Path, mgr.DisplayNameForPath)
 		if jsonOut {
-			return output.PrintJSON(output.SwitchResult{
-				SwitchTo: targetTree.Path,
-				Name:     targetTree.DisplayName(),
-				Branch:   targetTree.Branch,
-				Path:     targetTree.Path,
-			})
+			return output.PrintJSON(switchResult(targetTree, stack))
 		}
 		if !peek {
 			cli.Info(stderr, "Already in '%s'", targetTree.DisplayName())
 		}
+		reportStack(stderr, stack, jsonOut)
 		// Skipping the dirty gate, hooks, and state recording (B18) doesn't
 		// mean skipping the epilogue: from a subdirectory the shell should
 		// still return to the worktree root, and outside the multiplexer the
@@ -373,6 +433,9 @@ func performSwitch(ctx *GroveContext, name string, opts switchOptions) error {
 		}
 	}
 
+	stack := stackStatusFor(ctx.Config, targetTree.Path, mgr.DisplayNameForPath)
+	reportStack(stderr, stack, jsonOut)
+
 	// Commit the switch: record state and mark it committed so the deferred
 	// rollback keeps the auto-stash instead of restoring it. Called only at
 	// the point the user is actually moved — right before the terminal
@@ -396,12 +459,7 @@ func performSwitch(ctx *GroveContext, name string, opts switchOptions) error {
 	// JSON output mode: PrintJSON is the success terminal — the machine
 	// caller performs the cd — so the switch commits here.
 	if jsonOut {
-		result := output.SwitchResult{
-			SwitchTo: targetTree.Path,
-			Name:     targetTree.DisplayName(),
-			Branch:   targetTree.Branch,
-			Path:     targetTree.Path,
-		}
+		result := switchResult(targetTree, stack)
 		commitSwitch()
 		return output.PrintJSON(result)
 	}
