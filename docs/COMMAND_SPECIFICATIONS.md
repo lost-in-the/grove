@@ -1425,7 +1425,7 @@ Flags:
 
 ### grove down
 
-**Purpose:** Stop the stack: the current worktree's containers (local mode) or the one shared stack (external mode).
+**Purpose:** Stop the stack: this worktree's own stack (local mode) or the one shared stack (external mode).
 
 **Usage:**
 ```
@@ -1451,7 +1451,7 @@ With the env var unset, or the stack on here, no notice is printed. A worktree w
 
 ### grove logs
 
-**Purpose:** View Docker container logs.
+**Purpose:** Tail the stack's logs.
 
 **Usage:**
 ```
@@ -1472,7 +1472,7 @@ Pass through to `docker compose logs` with appropriate project name.
 
 ### grove kick
 
-**Purpose:** Kick (restart) Docker containers. Aliases: `restart`, `k`.
+**Purpose:** Restart the stack's services. Aliases: `restart`, `k`.
 
 **Usage:**
 ```

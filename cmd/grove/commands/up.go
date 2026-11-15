@@ -23,8 +23,8 @@ func init() {
 var upCmd = &cobra.Command{
 	Use:     "up",
 	Aliases: []string{"u"},
-	Short:   "Bring the stack up here",
-	Long: `Bring the stack up here: the worktree you are in.
+	Short:   "Bring the stack to this worktree",
+	Long: `Bring the stack to this worktree: the one you are in.
 
 Local mode: looks for a docker-compose.yml file in the current directory and
 starts all services defined in it.
