@@ -335,7 +335,7 @@ func TestMountReportLine(t *testing.T) {
 			name:      "drift",
 			report:    docker.MountDriftReport{Service: "app", Status: docker.MountDrift, ActualSource: "/a", ConfiguredSource: "/b"},
 			wantLevel: mountLineWarn,
-			wantText:  []string{"app drift: actual /a", "configured /b"},
+			wantText:  []string{"app drift: mounts /a", "stack is on /b"},
 		},
 	}
 	for _, tt := range tests {
