@@ -112,3 +112,37 @@ func TestShouldRepointStack(t *testing.T) {
 		})
 	}
 }
+
+func TestRepointSucceeded(t *testing.T) {
+	const target = "/work/myapp-feature"
+	tests := []struct {
+		name       string
+		configured string
+		ok         bool
+		want       bool
+	}{
+		{name: "env file now names the target", configured: target, ok: true, want: true},
+		{name: "trailing slash", configured: target + "/", ok: true, want: true},
+		{name: "env file still names another worktree", configured: "/work/myapp-main", ok: true, want: false},
+		{name: "env var unset after hooks", ok: false, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := repointSucceeded(tt.configured, tt.ok, target); got != tt.want {
+				t.Errorf("repointSucceeded() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestUsesSharedExternalStack_FollowsConfigAgentMode(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Plugins.Docker.Mode = "external"
+	if !usesSharedExternalStack(cfg) {
+		t.Error("external mode should use the shared stack")
+	}
+	cfg.AgentMode = true
+	if usesSharedExternalStack(cfg) {
+		t.Error("cfg.AgentMode should select isolated stacks")
+	}
+}

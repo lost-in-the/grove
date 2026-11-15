@@ -104,7 +104,7 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 		// The shared external stack follows the env file, not the shell. When
 		// it names another worktree, a self-switch is the one way to repoint it.
 		configured, configuredOK := docker.ConfiguredWorktreePath(ctx.Config)
-		if shouldRepointStack(usesSharedExternalStack(ctx.Config), configured, configuredOK, targetTree.Path, peek) {
+		if shouldRepointStack(ctx.Config.IsExternalDockerMode(), configured, configuredOK, targetTree.Path, peek) {
 			repointSharedStack(ctx, mgr, targetTree, configured, jsonOut, stderr)
 		}
 
@@ -413,10 +413,17 @@ func shouldRepointStack(external bool, configured string, configuredOK bool, tar
 	return filepath.Clean(configured) != filepath.Clean(target)
 }
 
+// repointSucceeded reports whether the env file, re-read after the hooks ran,
+// names the target. It keeps the "Repointed" line true in every mode: in agent
+// mode the plugin may decline to repoint the shared stack and says so itself.
+func repointSucceeded(configured string, configuredOK bool, target string) bool {
+	return configuredOK && filepath.Clean(configured) == filepath.Clean(target)
+}
+
 // usesSharedExternalStack is true in external mode unless agent mode selects
 // isolated stacks, where the env file is not what a switch repoints.
 func usesSharedExternalStack(cfg *config.Config) bool {
-	return cfg.IsExternalDockerMode() && !cfg.AgentMode && os.Getenv("GROVE_AGENT_MODE") != "1"
+	return cfg.IsExternalDockerMode() && !cfg.AgentMode
 }
 
 // repointSharedStack runs only the Docker plugin's pre/post-switch hooks for the
@@ -445,14 +452,12 @@ func repointSharedStack(ctx *GroveContext, mgr *worktree.Manager, targetTree *wo
 		MainPath:         ctx.ProjectRoot,
 	}
 
-	failed := false
 	for _, event := range []string{hooks.EventPreSwitch, hooks.EventPostSwitch} {
 		if err := registry.Fire(event, hookCtx); err != nil {
 			cli.Warning(stderr, "%s hooks failed: %v", event, err)
-			failed = true
 		}
 	}
-	if !failed && !jsonOut {
+	if after, ok := docker.ConfiguredWorktreePath(ctx.Config); !jsonOut && repointSucceeded(after, ok, targetTree.Path) {
 		cli.Info(stderr, "Repointed the shared stack from '%s' to '%s'", from, targetTree.DisplayName())
 	}
 }
