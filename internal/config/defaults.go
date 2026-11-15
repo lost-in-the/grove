@@ -21,7 +21,7 @@ func LoadDefaults() *Config {
 		DefaultBranch: "main",
 		Switch: SwitchConfig{
 			DirtyHandling:   "prompt",
-			ContainerSwitch: "auto",
+			ContainerSwitch: "off",
 		},
 		Naming: NamingConfig{
 			Pattern: "{project}-{name}",

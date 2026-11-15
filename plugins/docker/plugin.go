@@ -132,7 +132,7 @@ func (p *Plugin) Enabled() bool {
 
 // onPostSwitch handles the post-switch hook
 func (p *Plugin) onPostSwitch(ctx *hooks.Context) error {
-	if p.strategy == nil {
+	if p.strategy == nil || switchHooksOff(ctx) {
 		return nil
 	}
 	return p.strategy.OnPostSwitch(ctx)
@@ -140,7 +140,7 @@ func (p *Plugin) onPostSwitch(ctx *hooks.Context) error {
 
 // onPreSwitch handles the pre-switch hook
 func (p *Plugin) onPreSwitch(ctx *hooks.Context) error {
-	if p.strategy == nil {
+	if p.strategy == nil || switchHooksOff(ctx) {
 		return nil
 	}
 	return p.strategy.OnPreSwitch(ctx)
