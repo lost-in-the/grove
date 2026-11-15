@@ -109,7 +109,7 @@ Toast levels:
 | `ctrl+d` / `ctrl+u` | Half a page down / up |
 | `pgdown` / `pgup`, `home` / `end` | Page down / up, first / last page |
 | `enter` | Switch to selected worktree |
-| `U` | Switch to selected worktree and force-start its containers |
+| `U` | Switch to selected worktree and bring the stack, exactly `grove to <name> --up`: the old stack goes down per `auto_stop`, and the stack comes up per `auto_start` before you move |
 | `1`–`9` | Switch to the worktree pinned to that slot |
 | `m` then `1`–`9` | Pin the selected worktree to a slot (`m 0` unpins) |
 | `-` | Switch to the previous worktree (as `grove last`); its row shows `↩` |
@@ -254,7 +254,7 @@ The header reads `<project> ▸ settings`, with `● 2 unsaved` on the right whi
 | Section | Settings |
 |-----|----------|
 | `[1] general` | `project_name`, `projects_dir`, `default_branch` |
-| `[2] behavior` | `dirty_handling`, `tmux_mode`, `naming_pattern` |
+| `[2] behavior` | `dirty_handling`, `container_switch` (stack follows every move: `off`, `prompt`, `auto`), `tmux_mode`, `naming_pattern` |
 | `[3] plugins` | Docker plugin `enabled`, `auto_start`, `auto_stop` |
 | `[4] protection` | `protected` list, `immutable` list |
 

@@ -118,8 +118,8 @@ func TestConfig_SectionKeyDuringFinish(t *testing.T) {
 			t.Errorf("after %d follow-ups: section %s, focus %q; want Behavior on its first field",
 				steps, tabName(m.configState.Tab), focusedKey(m))
 		}
-		if m = sendConfigKeys(t, m, "tab"); focusedKey(m) != "tmux.mode" {
-			t.Errorf("after %d follow-ups, tab in Behavior: focus %q, want tmux.mode", steps, focusedKey(m))
+		if m = sendConfigKeys(t, m, "tab"); focusedKey(m) != "switch.container_switch" {
+			t.Errorf("after %d follow-ups, tab in Behavior: focus %q, want switch.container_switch", steps, focusedKey(m))
 		}
 	}
 }

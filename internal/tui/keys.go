@@ -41,7 +41,7 @@ type KeyMap struct {
 	// View mode
 	ViewMode key.Binding
 
-	// Switch + start containers
+	// Switch and bring the stack
 	SwitchUp key.Binding
 
 	// Fork/Sync/Config/Rename/Checkout

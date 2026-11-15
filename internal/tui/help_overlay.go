@@ -263,7 +263,7 @@ var helpSectionsDashboard = []helpSection{
 		{"gg / G", "Top / bottom of list"},
 		{"ctrl+d / ctrl+u", "Half page down / up"},
 		{"enter", "Switch to selected worktree"},
-		{"U", "Switch and start containers"},
+		{"U", "Switch and bring the stack"},
 		{"1-9", "Switch to the pinned worktree"},
 		{"m 1-9", "Pin selected to a slot (m 0 unpins)"},
 		{"-", "Switch to the previous worktree"},
