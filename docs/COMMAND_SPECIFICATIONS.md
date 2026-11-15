@@ -671,7 +671,7 @@ Please be more specific.
 | Scenario | Behavior |
 |----------|----------|
 | Already in target worktree | Message: "Already in 'testing'" (exit 0). Skips the dirty gate, hooks, and state recording, but still cd's back to the worktree root from a subdirectory and — outside tmux — creates/attaches the session like a real switch |
-| Already in target worktree, external Docker mode, env file names another worktree | The shared stack is repointed: the Docker plugin's pre-switch and post-switch hooks run for the target (`container_switch` and `auto_start` apply), and one line is printed: "Repointed the shared stack from 'main' to 'testing'". The dirty gate, other hooks, and `last_worktree` recording stay skipped, so the A↔B toggle still holds. With `--peek`, or when the env file already names the target, nothing is repointed. `--json` output is unchanged (the line is not printed) |
+| Already in target worktree, external Docker mode, env file names another worktree | The shared stack is repointed: the Docker plugin's pre-switch and post-switch hooks run for the target (`container_switch` and `auto_start` apply), and one line is printed: "Repointed the shared stack from 'main' to 'testing'". The line is printed only when the env file, re-read after the hooks, names the target. In agent mode the plugin picks its own strategy and may decline to repoint the shared stack, in which case it prints its own notice and no "Repointed" line appears. The dirty gate, other hooks, and `last_worktree` recording stay skipped, so the A↔B toggle still holds. With `--peek`, or when the env file already names the target, nothing is repointed. `--json` output is unchanged (the line is not printed) |
 | Worktree directory missing | Error: "Worktree directory missing. Run: grove repair testing" |
 | Tmux not running | Start tmux server, create session, attach |
 | Partial name matches one | Switch to it (e.g., `grove to test` → `testing` if unambiguous) |
@@ -1278,7 +1278,8 @@ Flags:
 2. Query Docker service status via `CurrentServiceInfo()`:
    - **Local mode**: Check for compose file and running containers in the worktree directory
    - **External mode**: A worktree that owns an agent slot (when `[plugins.docker.external.agent]` is enabled) reports its agent stack. Any other worktree reports the shared stack: read the env file to find the worktree it is **configured for**, then probe Docker once.
-     - The env file says what grove configured, not what the container has mounted. `grove here --check-mount` shows the real mount.
+     - The env file says what grove configured, not what the container has mounted. When the state is running, degraded, or unknown, a hint line points to `grove here --check-mount` for the real mount. It is omitted when nothing runs or nothing is configured.
+   - **Local mode**: a Docker probe that errors or times out also prints "state unknown (docker did not answer)", not "not running".
      - Run state is judged on the configured `services` only (all services when none are listed). Shared infrastructure does not make the stack "running", and an unrelated failing container does not make it "not running". `non_blocking_services` are still honored.
      - A Docker probe that times out or errors prints "state unknown". It is never reported as "not running".
      - With the env var unset, the output says "not configured for any worktree".
@@ -1290,7 +1291,7 @@ Flags:
 Worktree:  testing
 Branch:    feat/testing
 Services:  ● running, configured for testing
-           configured is not mounted: run 'grove here --check-mount' to see what the container has mounted
+           This is the env file setting. Run 'grove here --check-mount' to see what the containers have mounted.
 ```
 
 **Output (formatted, shared stack configured for a different worktree):**

@@ -43,7 +43,6 @@ func TestDescribeServices(t *testing.T) {
 			wantText:  "not running, configured for myapp-feature",
 			wantLevel: cli.StatusError,
 			wantState: "stopped",
-			wantHint:  true,
 		},
 		{
 			name:      "unknown is not reported as not running",
@@ -83,6 +82,13 @@ func TestDescribeServices(t *testing.T) {
 			wantState: "running",
 		},
 		{
+			name:      "local compose unknown",
+			info:      docker.ServiceInfo{ConfiguredPath: feature, State: docker.StackUnknown, MatchesCurrent: true},
+			wantText:  "state unknown (docker did not answer)",
+			wantLevel: cli.StatusWarning,
+			wantState: "unknown",
+		},
+		{
 			name:      "local compose stopped",
 			info:      docker.ServiceInfo{ConfiguredPath: feature, State: docker.StackStopped, MatchesCurrent: true},
 			wantText:  "not running",
@@ -106,5 +112,12 @@ func TestDescribeServices(t *testing.T) {
 				t.Errorf("hint = %q, wantHint %v", got.Hint, tt.wantHint)
 			}
 		})
+	}
+}
+
+func TestMountCheckHintWording(t *testing.T) {
+	want := "This is the env file setting. Run 'grove here --check-mount' to see what the containers have mounted."
+	if mountCheckHint != want {
+		t.Errorf("hint = %q", mountCheckHint)
 	}
 }

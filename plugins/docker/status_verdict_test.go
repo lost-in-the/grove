@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -229,5 +230,57 @@ func TestExternalStatuses_ProbeErrorReportsConfiguredUnknown(t *testing.T) {
 	}
 	if e.Detail == "" {
 		t.Error("detail should say the state is unknown")
+	}
+}
+
+func stubLocalProbe(t *testing.T, count int, err error) {
+	t.Helper()
+	orig := localPsCount
+	localPsCount = func(string) (int, error) { return count, err }
+	t.Cleanup(func() { localPsCount = orig })
+}
+
+func localComposeDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "docker-compose.yml"), []byte("services: {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func TestLocalServiceInfo_ProbeErrorIsUnknown(t *testing.T) {
+	dir := localComposeDir(t)
+	stubLocalProbe(t, 0, errors.New("timeout"))
+
+	info := localServiceInfo(dir)
+	if info == nil || info.State != StackUnknown || info.IsRunning {
+		t.Fatalf("want unknown, got %+v", info)
+	}
+}
+
+func TestLocalServiceInfo_CountsDecideRunning(t *testing.T) {
+	dir := localComposeDir(t)
+	stubLocalProbe(t, 2, nil)
+	if info := localServiceInfo(dir); info.State != StackRunning || !info.IsRunning {
+		t.Errorf("want running, got %+v", info)
+	}
+	stubLocalProbe(t, 0, nil)
+	if info := localServiceInfo(dir); info.State != StackStopped {
+		t.Errorf("want stopped, got %+v", info)
+	}
+}
+
+func TestLocalStatuses_ProbeErrorSaysUnknown(t *testing.T) {
+	dir := localComposeDir(t)
+	stubLocalProbe(t, 0, errors.New("timeout"))
+
+	got := localStatuses(nil, []string{dir})
+	e := got[dir]
+	if e.Short != "compose" || e.Level != plugins.StatusInfo {
+		t.Fatalf("want compose/info, got %+v", e)
+	}
+	if !strings.Contains(e.Detail, "unknown") {
+		t.Errorf("detail should say unknown, got %q", e.Detail)
 	}
 }

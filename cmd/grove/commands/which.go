@@ -37,7 +37,7 @@ type servicesDescription struct {
 	Hint  string
 }
 
-const mountCheckHint = "configured is not mounted: run 'grove here --check-mount' to see what the container has mounted"
+const mountCheckHint = "This is the env file setting. Run 'grove here --check-mount' to see what the containers have mounted."
 
 // describeServices turns a service snapshot into the text, color level, JSON
 // state, and optional hint `grove which` prints. displayName maps a worktree
@@ -54,6 +54,9 @@ func describeServices(info *docker.ServiceInfo, displayName func(string) string)
 	if !info.Shared {
 		if info.IsRunning {
 			return servicesDescription{Text: "running", Level: cli.StatusActive, State: "running"}
+		}
+		if info.State == docker.StackUnknown {
+			return servicesDescription{Text: "state unknown (docker did not answer)", Level: cli.StatusWarning, State: "unknown"}
 		}
 		return servicesDescription{Text: "not running", Level: cli.StatusError, State: "stopped"}
 	}
@@ -74,7 +77,9 @@ func describeServices(info *docker.ServiceInfo, displayName func(string) string)
 		d.State, d.Level = "unknown", cli.StatusWarning
 		d.Text = "state unknown (docker did not answer), " + configured
 	}
-	d.Hint = mountCheckHint
+	if info.State != docker.StackStopped {
+		d.Hint = mountCheckHint
+	}
 	return d
 }
 

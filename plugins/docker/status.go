@@ -61,7 +61,11 @@ func localStatuses(_ *localStrategy, paths []string) map[string]plugins.StatusEn
 				Detail:       "Compose file found",
 			}
 
-			if running, count := composeRunningCount(path); running {
+			count, err := localPsCount(path)
+			switch {
+			case err != nil:
+				entry.Detail = "Compose file found; state unknown (docker did not answer)"
+			case count > 0:
 				entry.Level = plugins.StatusActive
 				entry.Short = fmt.Sprintf("up (%d)", count)
 				entry.Detail = fmt.Sprintf("%d container(s) running", count)
@@ -340,7 +344,11 @@ func localServiceInfo(currentPath string) *ServiceInfo {
 		State:          StackStopped,
 		MatchesCurrent: true, // local always matches
 	}
-	if running, _ := composeRunningCount(currentPath); running {
+	count, err := localPsCount(currentPath)
+	switch {
+	case err != nil:
+		info.State = StackUnknown
+	case count > 0:
 		info.State = StackRunning
 		info.IsRunning = true
 	}
@@ -385,8 +393,12 @@ func externalServiceInfo(cfg *config.Config, currentPath string) *ServiceInfo {
 	}
 }
 
-// composeRunningCount runs docker compose ps -q with a timeout to count running containers.
-func composeRunningCount(composePath string) (bool, int) {
+// localPsCount is the local-mode docker probe; tests replace it.
+var localPsCount = composePsCount
+
+// composePsCount runs docker compose ps -q with a timeout and counts containers.
+// An error means docker did not answer, which is not the same as zero containers.
+func composePsCount(composePath string) (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), statusTimeout)
 	defer cancel()
 
@@ -394,7 +406,7 @@ func composeRunningCount(composePath string) (bool, int) {
 	cmd.Dir = composePath
 	out, err := cmd.Output()
 	if err != nil {
-		return false, 0
+		return 0, err
 	}
 
 	count := 0
@@ -402,6 +414,16 @@ func composeRunningCount(composePath string) (bool, int) {
 		if line != "" {
 			count++
 		}
+	}
+	return count, nil
+}
+
+// composeRunningCount reports whether any container runs, treating a docker
+// error as none.
+func composeRunningCount(composePath string) (bool, int) {
+	count, err := composePsCount(composePath)
+	if err != nil {
+		return false, 0
 	}
 	return count > 0, count
 }
