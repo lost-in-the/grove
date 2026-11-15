@@ -97,6 +97,55 @@ func TestSamePath(t *testing.T) {
 	}
 }
 
+func TestMountWithinWorktree(t *testing.T) {
+	tests := []struct {
+		name         string
+		source, root string
+		want         bool
+	}{
+		{"equal", "/code/myapp-feature", "/code/myapp-feature", true},
+		{"equal with trailing slash", "/code/myapp-feature/", "/code/myapp-feature", true},
+		{"inside", "/code/myapp-feature/app", "/code/myapp-feature", true},
+		{"inside nested deeper", "/code/myapp-feature/app/web/src", "/code/myapp-feature", true},
+		{"sibling sharing a name prefix", "/code/myapp-feature-2/app", "/code/myapp-feature", false},
+		{"parent of the worktree", "/code", "/code/myapp-feature", false},
+		{"dot-dot escapes the worktree", "/code/myapp-feature/../myapp-main", "/code/myapp-feature", false},
+		{"unrelated", "/srv/other", "/code/myapp-feature", false},
+		{"empty source", "", "/code/myapp-feature", false},
+		{"empty root", "/code/myapp-feature", "", false},
+		{"both empty", "", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := mountWithinWorktree(tt.source, tt.root); got != tt.want {
+				t.Errorf("mountWithinWorktree(%q, %q) = %v, want %v", tt.source, tt.root, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCheckMountDrift_SubdirectoryMountVerifies(t *testing.T) {
+	cfg := driftTestConfig(t, "web", "worker")
+	cfg.MountDests = map[string]string{"web": "/project/app"}
+	insp := &fakeMountInspector{
+		ids: map[string]string{"web": "aaa", "worker": "bbb"},
+		sources: map[string]string{
+			"aaa": "/work/myapp-feature/app",
+			"bbb": "/work/myapp-feature-2/app",
+		},
+	}
+	reports, _ := checkMountDrift(cfg, insp)
+	if reports[0].Status != MountVerified {
+		t.Errorf("web status = %q, want verified", reports[0].Status)
+	}
+	if reports[0].ActualSource != "/work/myapp-feature/app" {
+		t.Errorf("web ActualSource = %q, want the real subdirectory source", reports[0].ActualSource)
+	}
+	if reports[1].Status != MountDrift {
+		t.Errorf("worker (sibling worktree with shared prefix) status = %q, want drift", reports[1].Status)
+	}
+}
+
 func TestResolveEnvPath(t *testing.T) {
 	tests := []struct {
 		name        string

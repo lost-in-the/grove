@@ -909,7 +909,7 @@ When passed, `grove here` short-circuits the default info display and instead:
 
 1. Reads `[plugins.docker.external].env_var` from the configured `env_file` — this is the worktree path grove last wrote ("configured source").
 2. For each configured service, runs `docker compose ps -q <service>` to get the running container, then `docker inspect` to find the mount whose `Destination` matches `[plugins.docker.external].mount_dest` (default `/app`). A service listed in `[plugins.docker.external].mount_dests` (e.g. `{ worker = "/srv/worker" }`) is probed at its own path instead.
-3. Compares the container's actual `Source` against the configured source.
+3. Compares the container's actual `Source` against the configured source. A source that is the worktree root or a directory inside it verifies, so a service that mounts only a subdirectory (for example `web = "/project/app"` in `mount_dests`, with host `<worktree>/app` mounted there) is not reported as drift.
 
 **Per-service status**
 
