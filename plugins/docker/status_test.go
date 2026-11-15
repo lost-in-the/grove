@@ -265,7 +265,7 @@ func TestExternalStatuses_NonBlockingExitedDoesNotDowngrade(t *testing.T) {
 		{Name: "app", Status: ServiceRunning},
 		{Name: "asset_precompile", Status: ServiceExitedClean},
 	}
-	level, _ := classifyExternalStatusFromHealth(statuses, []string{"asset_precompile"})
+	level, _ := classifyExternalStatusFromHealth(statuses, nil, nil, []string{"asset_precompile"})
 	if level != "active" {
 		t.Errorf("expected active, got %s", level)
 	}
@@ -275,7 +275,7 @@ func TestExternalStatuses_BlockingFailedDowngrades(t *testing.T) {
 	statuses := []ServiceStatus{
 		{Name: "app", Status: ServiceExitedError},
 	}
-	level, detail := classifyExternalStatusFromHealth(statuses, nil)
+	level, detail := classifyExternalStatusFromHealth(statuses, nil, nil, nil)
 	if level != "warning" {
 		t.Errorf("expected warning, got %s", level)
 	}
@@ -296,17 +296,9 @@ func TestExternalNonBlockingVerdictAgreement(t *testing.T) {
 	nonBlocking := []string{"asset_precompile"}
 
 	// externalStatuses path: classifyExternalStatusFromHealth → calls classifyHealth internally.
-	level, _ := classifyExternalStatusFromHealth(statuses, nonBlocking)
+	level, _ := classifyExternalStatusFromHealth(statuses, nil, nil, nonBlocking)
 
-	// externalServiceInfo path: classifyHealth + runningCount guard (same logic as production code).
-	healthy, _ := classifyHealth(statuses, nonBlocking)
-	runningCount := 0
-	for _, s := range statuses {
-		if s.Status == ServiceRunning {
-			runningCount++
-		}
-	}
-	running := healthy && runningCount > 0
+	running := classifyStack(statuses, nil, nil, nonBlocking).State == StackRunning
 
 	// Both paths must agree: "active" ↔ running=true.
 	if running != (level == "active") {
@@ -324,25 +316,16 @@ func TestExternalServiceInfo_AllExitedCleanReportsNotRunning(t *testing.T) {
 		{Name: "seed", Status: ServiceExitedClean},
 	}
 
-	// Replicate the externalServiceInfo verdict logic.
-	healthy, _ := classifyHealth(statuses, nil)
-	runningCount := 0
-	for _, s := range statuses {
-		if s.Status == ServiceRunning {
-			runningCount++
-		}
-	}
-	running := healthy && runningCount > 0
-
-	if running {
+	v := classifyStack(statuses, nil, nil, nil)
+	if v.State == StackRunning {
 		t.Error("all-exited-clean stack should not be reported as running")
 	}
-	if runningCount != 0 {
-		t.Errorf("expected runningCount=0 for all-exited-clean stack, got %d", runningCount)
+	if v.Running != 0 {
+		t.Errorf("expected Running=0 for all-exited-clean stack, got %d", v.Running)
 	}
 
 	// Confirm classifyExternalStatusFromHealth (the externalStatuses path) also returns "info".
-	level, _ := classifyExternalStatusFromHealth(statuses, nil)
+	level, _ := classifyExternalStatusFromHealth(statuses, nil, nil, nil)
 	if level != "info" {
 		t.Errorf("expected classifyExternalStatusFromHealth to return \"info\" for all-exited-clean, got %q", level)
 	}

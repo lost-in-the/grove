@@ -1276,30 +1276,34 @@ Flags:
 1. Find the current worktree (same as `grove here`)
 2. Query Docker service status via `CurrentServiceInfo()`:
    - **Local mode**: Check for compose file and running containers in the worktree directory
-   - **External mode**: Read the env file to determine which worktree services are pointed to, check if services are running, and whether they match the current worktree
-   - **Agent mode**: Check slot allocation for the current worktree
+   - **External mode**: A worktree that owns an agent slot (when `[plugins.docker.external.agent]` is enabled) reports its agent stack. Any other worktree reports the shared stack: read the env file to find the worktree it is **configured for**, then probe Docker once.
+     - The env file says what grove configured, not what the container has mounted. `grove here --check-mount` shows the real mount.
+     - Run state is judged on the configured `services` only (all services when none are listed). Shared infrastructure does not make the stack "running", and an unrelated failing container does not make it "not running". `non_blocking_services` are still honored.
+     - A Docker probe that times out or errors prints "state unknown". It is never reported as "not running".
+     - With the env var unset, the output says "not configured for any worktree".
    - **No Docker**: Services section is omitted
-3. Display worktree name, branch, and service status
+3. Display worktree name, branch, and service status. Names are short display names, the same as the Worktree line.
 
-**Output (formatted, services running for current worktree):**
+**Output (formatted, shared stack configured for the current worktree and running):**
 ```
 Worktree:  testing
 Branch:    feat/testing
-Services:  ● running for testing
+Services:  ● running, configured for testing
+           configured is not mounted: run 'grove here --check-mount' to see what the container has mounted
 ```
 
-**Output (formatted, services running for a different worktree):**
+**Output (formatted, shared stack configured for a different worktree):**
 ```
-Worktree:  testing
-Branch:    feat/testing
-Services:  ⚠ running for feature-auth (not this worktree)
+Services:  ⚠ running, configured for feature-auth (not this worktree)
 ```
 
-**Output (formatted, no services running):**
+**Other `Services:` values:**
 ```
-Worktree:  testing
-Branch:    feat/testing
-Services:  ○ not running
+Services:  ○ not running, configured for testing
+Services:  ⚠ degraded (app failed), configured for testing
+Services:  ⚠ state unknown (docker did not answer), configured for testing
+Services:  ⚠ not configured for any worktree
+Services:  ● agent stack #2
 ```
 
 **Output (JSON, `--json`):**
@@ -1309,13 +1313,18 @@ Services:  ○ not running
   "branch": "feat/testing",
   "path": "/path/to/grove-testing",
   "services": {
-    "running_for": "testing",
+    "state": "running",
+    "configured_for": "testing",
     "matches_current": true
   }
 }
 ```
 
+`state` is one of `running`, `stopped`, `degraded`, `unknown`, `agent`, `not_configured`. `configured_for` appears for the shared stack when set. `slot` appears for an agent stack. These replace the earlier `running_for` field.
+
 When no Docker is configured, the `services` field is `null`/omitted.
+
+`grove ls` and the TUI use the same verdict, so they cannot disagree with `grove which`.
 
 **Exit Codes:**
 - 0: Success

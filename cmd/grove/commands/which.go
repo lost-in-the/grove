@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -19,9 +20,62 @@ type whichOutput struct {
 	Services *whichServiceOutput `json:"services,omitempty"`
 }
 
+// whichServiceOutput.State is one of running, stopped, degraded, unknown,
+// agent, or not_configured. ConfiguredFor is what the env file says the shared
+// stack is configured for, not what the container has mounted.
 type whichServiceOutput struct {
-	RunningFor     string `json:"running_for"`
+	State          string `json:"state"`
+	ConfiguredFor  string `json:"configured_for,omitempty"`
 	MatchesCurrent bool   `json:"matches_current"`
+	Slot           int    `json:"slot,omitempty"`
+}
+
+type servicesDescription struct {
+	Text  string
+	Level cli.StatusLevel
+	State string
+	Hint  string
+}
+
+const mountCheckHint = "configured is not mounted: run 'grove here --check-mount' to see what the container has mounted"
+
+// describeServices turns a service snapshot into the text, color level, JSON
+// state, and optional hint `grove which` prints. displayName maps a worktree
+// path to its short name.
+func describeServices(info *docker.ServiceInfo, displayName func(string) string) servicesDescription {
+	if info.Slot > 0 {
+		return servicesDescription{Text: fmt.Sprintf("agent stack #%d", info.Slot), Level: cli.StatusActive, State: "agent"}
+	}
+	if info.Shared && info.ConfiguredPath == "" {
+		return servicesDescription{Text: "not configured for any worktree", Level: cli.StatusWarning, State: "not_configured"}
+	}
+
+	d := servicesDescription{}
+	if !info.Shared {
+		if info.IsRunning {
+			return servicesDescription{Text: "running", Level: cli.StatusActive, State: "running"}
+		}
+		return servicesDescription{Text: "not running", Level: cli.StatusError, State: "stopped"}
+	}
+
+	configured := fmt.Sprintf("configured for %s", displayName(info.ConfiguredPath))
+	switch info.State {
+	case docker.StackRunning:
+		d.State, d.Level, d.Text = "running", cli.StatusActive, "running, "+configured
+		if !info.MatchesCurrent {
+			d.Level, d.Text = cli.StatusWarning, d.Text+" (not this worktree)"
+		}
+	case docker.StackDegraded:
+		d.State, d.Level = "degraded", cli.StatusWarning
+		d.Text = fmt.Sprintf("degraded (%s failed), %s", strings.Join(info.Blockers, ", "), configured)
+	case docker.StackStopped:
+		d.State, d.Level, d.Text = "stopped", cli.StatusError, "not running, "+configured
+	default:
+		d.State, d.Level = "unknown", cli.StatusWarning
+		d.Text = "state unknown (docker did not answer), " + configured
+	}
+	d.Hint = mountCheckHint
+	return d
 }
 
 var whichCmd = &cobra.Command{
@@ -51,6 +105,10 @@ Examples:
 
 		// Get service info from Docker plugin
 		svcInfo := docker.CurrentServiceInfo(ctx.Config, tree.Path)
+		var desc servicesDescription
+		if svcInfo != nil {
+			desc = describeServices(svcInfo, mgr.DisplayNameForPath)
+		}
 
 		if whichJSON {
 			result := whichOutput{
@@ -60,8 +118,12 @@ Examples:
 			}
 			if svcInfo != nil {
 				result.Services = &whichServiceOutput{
-					RunningFor:     svcInfo.RunningFor,
+					State:          desc.State,
 					MatchesCurrent: svcInfo.MatchesCurrent,
+					Slot:           svcInfo.Slot,
+				}
+				if svcInfo.Shared && svcInfo.ConfiguredPath != "" {
+					result.Services.ConfiguredFor = mgr.DisplayNameForPath(svcInfo.ConfiguredPath)
 				}
 			}
 			return output.PrintJSON(result)
@@ -73,12 +135,9 @@ Examples:
 		cli.Label(w, "Branch:   ", tree.Branch)
 
 		if svcInfo != nil {
-			if svcInfo.IsRunning && svcInfo.MatchesCurrent {
-				cli.Label(w, "Services: ", cli.StatusText(w, cli.StatusActive, fmt.Sprintf("running for %s", svcInfo.RunningFor)))
-			} else if svcInfo.IsRunning {
-				cli.Label(w, "Services: ", cli.StatusText(w, cli.StatusWarning, fmt.Sprintf("running for %s (not this worktree)", svcInfo.RunningFor)))
-			} else {
-				cli.Label(w, "Services: ", cli.StatusText(w, cli.StatusError, "not running"))
+			cli.Label(w, "Services: ", cli.StatusText(w, desc.Level, desc.Text))
+			if desc.Hint != "" {
+				cli.Faint(w, "          %s", desc.Hint)
 			}
 		}
 

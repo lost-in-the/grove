@@ -77,51 +77,85 @@ func localStatuses(_ *localStrategy, paths []string) map[string]plugins.StatusEn
 	return result
 }
 
-// externalStatuses reads the .env to find which worktree is pointed and checks if running.
+// probeHealth is the docker probe used by the display paths; tests replace it.
+var probeHealth = probeServiceHealth
+
+// externalStatuses reads the .env to find which worktree the shared stack is
+// configured for and reports its state. A worktree that owns an agent slot
+// reports its agent stack instead.
 func externalStatuses(s *externalStrategy, paths []string) map[string]plugins.StatusEntry {
 	result := make(map[string]plugins.StatusEntry)
 
 	composePath := s.composePath()
 	activeWorktree := readEnvVar(composePath, s.ext.EnvFileName(), s.ext.EnvVar)
 
-	// Probe service health once for the whole stack. Probe errors are intentionally
-	// ignored here: status display is informational and a nil result downgrades to
-	// "configured" via classifyExternalStatusFromHealth, which is correct for
-	// "stack not running yet" — surfacing the error would just be noise on the dashboard.
-	// statusTimeout (not probeTimeout) keeps grove ls within the <500ms budget.
-	statuses, _ := probeServiceHealth(composePath, s.ext.EnvFileName(), nil, statusTimeout)
+	var verdict stackVerdict
+	probed := false
 
 	for _, path := range paths {
-		matches := pathMatchesEnv(path, activeWorktree, composePath)
-		if !matches {
+		if slot := agentSlotFor(s.cfg, path); slot > 0 {
+			result[path] = agentEntry(slot, s.ext.Agent)
+			continue
+		}
+		if !pathMatchesEnv(path, activeWorktree, composePath) {
 			continue
 		}
 
-		level, detail := classifyExternalStatusFromHealth(statuses, s.ext.NonBlockingServices)
-
-		var statusLevel plugins.StatusLevel
-		var short string
-		switch level {
-		case "active":
-			statusLevel = plugins.StatusActive
-			short = "up"
-		case "warning":
-			statusLevel = plugins.StatusWarning
-			short = "degraded"
-		default:
-			statusLevel = plugins.StatusInfo
-			short = "configured"
+		// Probe once for the whole stack. statusTimeout (not probeTimeout)
+		// keeps grove ls within the <500ms budget.
+		if !probed {
+			statuses, err := probeHealth(composePath, s.ext.EnvFileName(), nil, statusTimeout)
+			verdict = classifyStack(statuses, err, s.ext.Services, s.ext.NonBlockingServices)
+			probed = true
 		}
 
-		result[path] = plugins.StatusEntry{
-			ProviderName: "docker",
-			Level:        statusLevel,
-			Short:        short,
-			Detail:       detail,
-		}
+		result[path] = sharedStackEntry(verdict)
 	}
 
 	return result
+}
+
+// agentSlotFor returns the agent slot a worktree owns, or 0 when agent stacks
+// are not enabled or the worktree has none.
+func agentSlotFor(cfg *config.Config, path string) int {
+	if cfg == nil {
+		return 0
+	}
+	return FindWorktreeSlot(cfg, path)
+}
+
+func agentEntry(slot int, agent *config.AgentStackConfig) plugins.StatusEntry {
+	detail := fmt.Sprintf("Stack #%d", slot)
+	if agent != nil {
+		if url := formatAgentURL(agent.URLPattern, slot); url != "" {
+			detail += " at " + url
+		}
+	}
+	return plugins.StatusEntry{
+		ProviderName: "docker",
+		Level:        plugins.StatusActive,
+		Short:        fmt.Sprintf("#%d", slot),
+		Detail:       detail,
+	}
+}
+
+func sharedStackEntry(v stackVerdict) plugins.StatusEntry {
+	entry := plugins.StatusEntry{ProviderName: "docker", Level: plugins.StatusInfo, Short: "configured"}
+	switch v.State {
+	case StackRunning:
+		entry.Level = plugins.StatusActive
+		entry.Short = "up"
+		entry.Detail = fmt.Sprintf("%d service(s) running, configured for this worktree", v.Running)
+	case StackDegraded:
+		entry.Level = plugins.StatusWarning
+		entry.Short = "degraded"
+		entry.Detail = fmt.Sprintf("blocking service(s) failed: %s", strings.Join(v.Blockers, ", "))
+	case StackUnknown:
+		entry.Detail = "Configured as active worktree; state unknown (docker did not answer)"
+	default:
+		entry.Detail = "Configured as active worktree but no services running"
+	}
+	return entry
 }
 
 // agentStatuses checks slot allocations (file read, no docker calls).
@@ -145,17 +179,7 @@ func agentStatuses(s *agentExternalStrategy, paths []string) map[string]plugins.
 			continue
 		}
 
-		detail := fmt.Sprintf("Stack #%d", slot)
-		if url := formatAgentURL(s.agent.URLPattern, slot); url != "" {
-			detail += " at " + url
-		}
-
-		result[path] = plugins.StatusEntry{
-			ProviderName: "docker",
-			Level:        plugins.StatusActive,
-			Short:        fmt.Sprintf("#%d", slot),
-			Detail:       detail,
-		}
+		result[path] = agentEntry(slot, s.agent)
 	}
 
 	return result
@@ -205,11 +229,77 @@ func pathMatchesEnv(worktreePath, envValue, composePath string) bool {
 	return filepath.Clean(worktreePath) == resolved
 }
 
+// StackState is the run state of the configured services.
+type StackState int
+
+const (
+	// StackUnknown means docker did not answer; it is not the same as stopped.
+	StackUnknown StackState = iota
+	StackStopped
+	StackRunning
+	StackDegraded
+)
+
 // ServiceInfo describes the current Docker service state for a single worktree.
 type ServiceInfo struct {
-	RunningFor     string // worktree name services are running for
+	// ConfiguredPath is the worktree the stack is configured for (what the env
+	// file says, not what the container has mounted). Empty when the shared
+	// stack is not configured for any worktree.
+	ConfiguredPath string
+	State          StackState
+	Blockers       []string // configured services that failed (StackDegraded)
+	Slot           int      // agent slot owned by the queried worktree, 0 if none
+	MatchesCurrent bool     // whether ConfiguredPath is the queried worktree
 	IsRunning      bool
-	MatchesCurrent bool // whether services are running for the queried worktree
+	Shared         bool // reported from the shared external stack, not a local or agent stack
+}
+
+// stackVerdict is the run state judged from a service-health snapshot.
+type stackVerdict struct {
+	State    StackState
+	Blockers []string
+	Running  int
+}
+
+// classifyStack is the single source of the run-state verdict for grove ls and
+// grove which. Only the configured services count (all services when none are
+// configured), so shared infrastructure cannot make the stack look up and an
+// unrelated failing container cannot make it look down. A probe error yields
+// StackUnknown rather than StackStopped.
+func classifyStack(statuses []ServiceStatus, probeErr error, services, nonBlocking []string) stackVerdict {
+	if probeErr != nil {
+		return stackVerdict{State: StackUnknown}
+	}
+
+	if len(services) > 0 {
+		wanted := make(map[string]struct{}, len(services))
+		for _, name := range services {
+			wanted[name] = struct{}{}
+		}
+		filtered := make([]ServiceStatus, 0, len(statuses))
+		for _, st := range statuses {
+			if _, ok := wanted[st.Name]; ok {
+				filtered = append(filtered, st)
+			}
+		}
+		statuses = filtered
+	}
+
+	running := 0
+	for _, st := range statuses {
+		if st.Status == ServiceRunning {
+			running++
+		}
+	}
+	healthy, blockers := classifyHealth(statuses, nonBlocking)
+	switch {
+	case !healthy:
+		return stackVerdict{State: StackDegraded, Blockers: blockers, Running: running}
+	case running == 0:
+		return stackVerdict{State: StackStopped}
+	default:
+		return stackVerdict{State: StackRunning, Running: running}
+	}
 }
 
 // CurrentServiceInfo returns Docker service status for the given worktree path.
@@ -245,69 +335,53 @@ func localServiceInfo(currentPath string) *ServiceInfo {
 		return nil
 	}
 
-	running, _ := composeRunningCount(currentPath)
-	return &ServiceInfo{
-		RunningFor:     filepath.Base(currentPath),
-		IsRunning:      running,
+	info := &ServiceInfo{
+		ConfiguredPath: currentPath,
+		State:          StackStopped,
 		MatchesCurrent: true, // local always matches
 	}
+	if running, _ := composeRunningCount(currentPath); running {
+		info.State = StackRunning
+		info.IsRunning = true
+	}
+	return info
 }
 
-// externalServiceInfo checks docker compose status for an external compose setup.
+// externalServiceInfo reports the stack for an external compose setup: the
+// agent stack when the worktree owns a slot, otherwise the shared stack.
 func externalServiceInfo(cfg *config.Config, currentPath string) *ServiceInfo {
 	ext := cfg.Plugins.Docker.External
 	if ext == nil {
 		return nil
 	}
 
-	// Check agent mode first
-	if ext.Agent != nil && ext.Agent.Enabled != nil && *ext.Agent.Enabled {
-		return agentServiceInfo(cfg, currentPath)
+	if slot := agentSlotFor(cfg, currentPath); slot > 0 {
+		return &ServiceInfo{
+			ConfiguredPath: currentPath,
+			State:          StackRunning,
+			Slot:           slot,
+			MatchesCurrent: true,
+			IsRunning:      true,
+		}
+	}
+
+	configured, ok := ConfiguredWorktreePath(cfg)
+	if !ok {
+		return &ServiceInfo{Shared: true}
 	}
 
 	composePath := resolveComposePath(ext.Path)
-	activeWorktree := readEnvVar(composePath, ext.EnvFileName(), ext.EnvVar)
-	matches := pathMatchesEnv(currentPath, activeWorktree, composePath)
-
-	// Use the same probeServiceHealth + classifyHealth path as externalStatuses so
-	// that non_blocking_services is honored and both code paths agree on verdict.
 	// statusTimeout (not probeTimeout) keeps grove which within the <500ms budget.
-	statuses, _ := probeServiceHealth(composePath, ext.EnvFileName(), nil, statusTimeout)
-	healthy, _ := classifyHealth(statuses, ext.NonBlockingServices)
-	runningCount := 0
-	for _, s := range statuses {
-		if s.Status == ServiceRunning {
-			runningCount++
-		}
-	}
-	running := healthy && runningCount > 0
-
-	runningFor := filepath.Base(activeWorktree)
-	if activeWorktree == "" {
-		runningFor = ""
-	}
+	statuses, err := probeHealth(composePath, ext.EnvFileName(), nil, statusTimeout)
+	v := classifyStack(statuses, err, ext.Services, ext.NonBlockingServices)
 
 	return &ServiceInfo{
-		RunningFor:     runningFor,
-		IsRunning:      running,
-		MatchesCurrent: matches,
-	}
-}
-
-// agentServiceInfo checks agent slot allocation for the given worktree path.
-func agentServiceInfo(cfg *config.Config, currentPath string) *ServiceInfo {
-	slot := FindWorktreeSlot(cfg, currentPath)
-	if slot == 0 {
-		return &ServiceInfo{
-			IsRunning:      false,
-			MatchesCurrent: false,
-		}
-	}
-
-	return &ServiceInfo{
-		RunningFor:     filepath.Base(currentPath),
-		IsRunning:      true,
-		MatchesCurrent: true,
+		ConfiguredPath: configured,
+		State:          v.State,
+		Blockers:       v.Blockers,
+		MatchesCurrent: filepath.Clean(currentPath) == configured,
+		IsRunning:      v.State == StackRunning,
+		Shared:         true,
 	}
 }
 
@@ -335,27 +409,16 @@ func composeRunningCount(composePath string) (bool, int) {
 // classifyExternalStatusFromHealth maps a service-health snapshot to the
 // status entry level + detail surfaced via WorktreeStatuses.
 //
-// Returns ("active", detail) when all non-skipped services are healthy,
-// ("warning", detail) when blockers exist, ("info", detail) when nothing
-// is running but no failures either.
-func classifyExternalStatusFromHealth(statuses []ServiceStatus, nonBlocking []string) (string, string) {
-	if len(statuses) == 0 {
-		return "info", "Configured as active worktree but no services reported"
+// Returns ("active", detail) when the configured services are running,
+// ("warning", detail) when blockers exist, ("info", detail) otherwise.
+func classifyExternalStatusFromHealth(statuses []ServiceStatus, probeErr error, services, nonBlocking []string) (string, string) {
+	entry := sharedStackEntry(classifyStack(statuses, probeErr, services, nonBlocking))
+	switch entry.Level {
+	case plugins.StatusActive:
+		return "active", entry.Detail
+	case plugins.StatusWarning:
+		return "warning", entry.Detail
+	default:
+		return "info", entry.Detail
 	}
-
-	healthy, blockers := classifyHealth(statuses, nonBlocking)
-	runningCount := 0
-	for _, s := range statuses {
-		if s.Status == ServiceRunning {
-			runningCount++
-		}
-	}
-
-	if healthy {
-		if runningCount == 0 {
-			return "info", "Configured as active worktree but no services running"
-		}
-		return "active", fmt.Sprintf("%d service(s) running, pointed to this worktree", runningCount)
-	}
-	return "warning", fmt.Sprintf("blocking service(s) failed: %s", strings.Join(blockers, ", "))
 }
