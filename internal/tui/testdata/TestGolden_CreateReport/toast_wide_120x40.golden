@@ -1,6 +1,6 @@
- [1mtest-project[m · 3 worktrees · ⬍ name            ╭──────────────────────────────────────────────────────────────────────╮
-                                                │ ⚠ Created feature. 1 file not copied. Run grove doctor feature --fix │
- ❯ ● [1mroot[m                                       ╰──────────────────────────────────────────────────────────────────────╯
+ [1mtest-project[m · 3 worktrees · ⬍ name                           ╭───────────────────────────────────────────────────────╮
+                                                               │ ⚠ Created feature. 1 file not copied. See ␣ messages. │
+ ❯ ● [1mroot[m                                                      ╰───────────────────────────────────────────────────────╯
    ○ feature-auth                                              60m      │
    ○ fix-bug                                                    2h      │
                                                                         │

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
@@ -20,6 +22,15 @@ var (
 	errStateFailed = &worktree.StateRegistrationError{Err: errors.New("state.json is read-only")}
 	errHookFailed  = fmt.Errorf("%w: %v", worktree.ErrRequiredHookFailed, errors.New("exit status 1"))
 )
+
+// remedy is the CLI's remedy line for n missing files in worktree "feature".
+func remedy(n int) string {
+	noun := "1 file is"
+	if n != 1 {
+		noun = fmt.Sprintf("%d files are", n)
+	}
+	return "The worktree was created, but " + noun + " missing. Fix the source, then run `grove doctor feature --fix`."
+}
 
 // history returns the message history texts, newest first.
 func history(m Model) []string {
@@ -38,29 +49,32 @@ func TestHandleCreationDone_ReportsProvisioningFailures(t *testing.T) {
 		history []string // after the toast, in display order
 	}{
 		{"one file", fileErr(failed(worktree.FieldCopyFiles, "config/secret.key")),
-			"Created feature. 1 file not copied. Run grove doctor feature --fix",
-			[]string{"Not copied: config/secret.key (missing in the main worktree)"}},
+			"Created feature. 1 file not copied. See ␣\u00a0messages.",
+			[]string{"Not copied: config/secret.key (missing in the main worktree)", remedy(1)}},
 		{"several files", fileErr(failed(worktree.FieldCopyFiles, ".env"), failed(worktree.FieldCopyFiles, "config/master.key"), failed(worktree.FieldCopyFiles, "config/secret.key")),
-			"Created feature. 3 files not copied. Run grove doctor feature --fix",
+			"Created feature. 3 files not copied. See ␣\u00a0messages.",
 			[]string{
 				"Not copied: .env (missing in the main worktree)",
 				"Not copied: config/master.key (missing in the main worktree)",
 				"Not copied: config/secret.key (missing in the main worktree)",
+				remedy(3),
 			}},
 		{"links only", fileErr(failed(worktree.FieldSymlinkFiles, ".tool-versions"), failed(worktree.FieldSymlinkDirs, "node_modules")),
-			"Created feature. 2 files not linked. Run grove doctor feature --fix",
+			"Created feature. 2 files not linked. See ␣\u00a0messages.",
 			[]string{
 				"Not linked: .tool-versions (missing in the main worktree)",
 				"Not linked: node_modules (missing in the main worktree)",
+				remedy(2),
 			}},
 		{"copied and linked", fileErr(failed(worktree.FieldCopyFiles, ".env"), failed(worktree.FieldSymlinkDirs, "node_modules")),
-			"Created feature. 2 files not set up. Run grove doctor feature --fix",
+			"Created feature. 2 files not set up. See ␣\u00a0messages.",
 			[]string{
 				"Not copied: .env (missing in the main worktree)",
 				"Not linked: node_modules (missing in the main worktree)",
+				remedy(2),
 			}},
 		{"state", errStateFailed,
-			"Created feature, but grove could not register it. Run grove adopt",
+			"Created feature, but grove could not register it. See ␣\u00a0messages.",
 			[]string{
 				"Not registered: state.json is read-only",
 				"The worktree exists, but grove could not register it. Run `grove adopt /src/myapp-feature`.",
@@ -70,6 +84,7 @@ func TestHandleCreationDone_ReportsProvisioningFailures(t *testing.T) {
 			[]string{
 				"Required post-create hook failed: exit status 1",
 				"Not copied: .env (missing in the main worktree)",
+				remedy(1),
 			}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -96,11 +111,11 @@ func TestHandleForkComplete_ReportsFileFailuresAsCopy(t *testing.T) {
 
 	m = sendMsg(m, forkCompleteMsg{name: "feature", path: "/src/myapp-feature", err: fileErr(failed(worktree.FieldCopyFiles, "config/secret.key"))})
 
-	if got, want := m.toast.Message(), "Copied to feature. 1 file not copied. Run grove doctor feature --fix"; got != want {
+	if got, want := m.toast.Message(), "Copied to feature. 1 file not copied. See ␣\u00a0messages."; got != want {
 		t.Errorf("toast = %q, want %q", got, want)
 	}
-	if h := history(m); len(h) != 2 || h[1] != "Not copied: config/secret.key (missing in the main worktree)" {
-		t.Errorf("message history = %q, want the toast then the file line", h)
+	if h := history(m); len(h) != 3 || h[1] != "Not copied: config/secret.key (missing in the main worktree)" || h[2] != remedy(1) {
+		t.Errorf("message history = %q, want the toast, the file line, then the remedy", h)
 	}
 }
 
@@ -199,5 +214,48 @@ func TestRenderMessages_WrapsLongEntries(t *testing.T) {
 	}
 	if joined := strings.Join(text, " "); !strings.Contains(joined, "Not copied: config/secret.key (missing in the main worktree)") {
 		t.Errorf("the whole message is not in the view:\n%s", view)
+	}
+}
+
+// The toast fits an 80-column terminal whatever the worktree is called: when
+// the name cannot fit whole, it is shortened in the middle, never the
+// instruction. The history keeps the full name.
+func TestProvisionToast_FitsAt80Columns(t *testing.T) {
+	const long = "feature-checkout-redesign-v2-x" // 30 characters
+	for _, tc := range []struct {
+		name, worktree string
+		err            error
+		instruction    string
+		wholeName      bool
+	}{
+		{"files, short name", "feature", fileErr(failed(worktree.FieldCopyFiles, "config/secret.key")),
+			". 1 file not copied. See ␣\u00a0messages.", true},
+		{"files, 30-character name", long, fileErr(failed(worktree.FieldCopyFiles, "config/secret.key")),
+			". 1 file not copied. See ␣\u00a0messages.", true},
+		{"state, 30-character name", long, errStateFailed,
+			", but grove could not register it. See ␣\u00a0messages.", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newTestModel(withItems(1), withSize(80, 24))
+
+			m = sendMsg(m, creationDoneMsg{source: "create", name: tc.worktree, path: "/src/myapp-" + tc.worktree, bootErr: tc.err})
+
+			got := m.toast.Message()
+			if w := lipgloss.Width(got); w > 80-6 {
+				t.Errorf("toast is %d cells, more than the %d an 80-column toast shows: %q", w, 80-6, got)
+			}
+			if view := ansiStripRE.ReplaceAllString(m.toast.View(80), ""); !strings.Contains(view, tc.instruction) || strings.Contains(view, tc.instruction+"…") {
+				t.Errorf("the instruction was cut:\n%s", view)
+			}
+			if whole := strings.HasPrefix(got, "Created "+tc.worktree+tc.instruction); whole != tc.wholeName {
+				t.Errorf("toast = %q; whole name = %v, want %v", got, whole, tc.wholeName)
+			}
+			if !tc.wholeName && (!strings.HasPrefix(got, "Created feature-") || !strings.Contains(got, "…")) {
+				t.Errorf("toast = %q, want the name shortened in the middle", got)
+			}
+			if h := history(m); !strings.Contains(strings.Join(h[1:], "\n"), tc.worktree) {
+				t.Errorf("history lost the full name: %q", h)
+			}
+		})
 	}
 }

@@ -471,14 +471,20 @@ func TestGolden_CreateReport(t *testing.T) {
 	missing := func(path string) worktree.FileResult {
 		return worktree.FileResult{Field: worktree.FieldCopyFiles, Path: path, Status: worktree.FileFailed, Err: worktree.ErrSourceMissing}
 	}
-	one, _ := newProvisionReport("Created feature", "feature", "/src/myapp-feature",
+	one, _ := newProvisionReport("Created", "feature", "/src/myapp-feature",
 		worktree.NewFileSetupError([]worktree.FileResult{missing("config/secret.key")}))
-	several, _ := newProvisionReport("Created feature", "feature", "/src/myapp-feature",
+	long, _ := newProvisionReport("Created", "feature-checkout-redesign-v2-x", "/src/myapp-feature-checkout-redesign-v2-x",
+		worktree.NewFileSetupError([]worktree.FileResult{missing("config/secret.key")}))
+	several, _ := newProvisionReport("Created", "feature", "/src/myapp-feature",
 		worktree.NewFileSetupError([]worktree.FileResult{missing(".env"), missing("config/master.key"), missing("config/secret.key")}))
 
 	for _, size := range []termSize{sizeStandard, sizeWide} {
 		t.Run("toast_"+size.name, func(t *testing.T) {
-			m := goldenModel(t, size, withItems(3), withToastVisible(one.toast, ToastWarning))
+			m := goldenModel(t, size, withItems(3), withToastVisible(one.toastText(size.width-6), ToastWarning))
+			golden.RequireEqual(t, []byte(m.viewString()))
+		})
+		t.Run("toast_long_name_"+size.name, func(t *testing.T) {
+			m := goldenModel(t, size, withItems(3), withToastVisible(long.toastText(size.width-6), ToastWarning))
 			golden.RequireEqual(t, []byte(m.viewString()))
 		})
 		t.Run("messages_"+size.name, func(t *testing.T) {
@@ -486,7 +492,7 @@ func TestGolden_CreateReport(t *testing.T) {
 				for i := len(several.history) - 1; i >= 0; i-- {
 					m.toast.Record(&Toast{Message: several.history[i], Level: ToastWarning, CreatedAt: testNow.Add(-time.Minute)})
 				}
-				m.toast.Record(&Toast{Message: several.toast, Level: ToastWarning, CreatedAt: testNow.Add(-time.Minute)})
+				m.toast.Record(&Toast{Message: several.toastText(size.width - 6), Level: ToastWarning, CreatedAt: testNow.Add(-time.Minute)})
 				m.pushView(ViewMessages)
 			})
 			golden.RequireEqual(t, []byte(m.viewString()))

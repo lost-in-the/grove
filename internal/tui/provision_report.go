@@ -7,21 +7,33 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 // provisionReport is what the dashboard shows when bootstrapping a worktree it
-// created or copied returned an error: one warning toast, and detail lines for
-// the message history, in the CLI's wording.
+// created or copied returned an error: one short warning toast that names the
+// worktree once and points to the message history, and the detail lines for
+// that history in the CLI's wording, remedy included.
 type provisionReport struct {
-	toast   string
+	verb    string // "Created" or "Copied to"
+	name    string
+	rest    string   // the toast after the name
 	history []string // display order
 }
 
-// newProvisionReport builds the report for err. done opens the toast
-// ("Created feature"); name and path are the new worktree's. ok is false for
-// an error that is not a file, state, or required hook failure.
-func newProvisionReport(done, name, path string, err error) (r provisionReport, ok bool) {
+// seeMessages points to the message history the way the footer writes a key
+// and its action ("␣ find"): Find (␣), then its "messages" action. The
+// history has no key of its own. The no-break space keeps the key and its
+// action on one line when the message history wraps.
+const seeMessages = "See ␣\u00a0messages."
+
+// newProvisionReport builds the report for err. verb opens the toast
+// ("Created"); name and path are the new worktree's. ok is false for an error
+// that is not a file, state, or required hook failure.
+func newProvisionReport(verb, name, path string, err error) (r provisionReport, ok bool) {
+	r.verb, r.name = verb, name
 	var fe *worktree.FileSetupError
 	hasFiles := errors.As(err, &fe)
 	var se *worktree.StateRegistrationError
@@ -30,12 +42,12 @@ func newProvisionReport(done, name, path string, err error) (r provisionReport, 
 
 	switch {
 	case hookErr != nil:
-		r.toast = done + ", but a required hook failed. Setup stopped."
+		r.rest = ", but a required hook failed. Setup stopped."
 		r.history = append(r.history, capitalize(hookErr.Error()))
 	case hasState:
-		r.toast = done + ", but grove could not register it. Run grove adopt"
+		r.rest = ", but grove could not register it. " + seeMessages
 	case hasFiles:
-		r.toast = fmt.Sprintf("%s. %s. Run grove doctor %s --fix", done, filesNotSetUp(fe.Failed), name)
+		r.rest = ". " + filesNotSetUp(fe.Failed) + ". " + seeMessages
 	default:
 		return r, false
 	}
@@ -45,10 +57,20 @@ func newProvisionReport(done, name, path string, err error) (r provisionReport, 
 			fmt.Sprintf("The worktree exists, but grove could not register it. Run `grove adopt %s`.", path))
 	}
 	if hasFiles {
-		// Lines ends with the CLI's remedy line; the toast already says it.
-		r.history = append(r.history, fe.Lines(name, "")[:len(fe.Failed)]...)
+		r.history = append(r.history, fe.Lines(name, "The worktree was created")...)
 	}
 	return r, true
+}
+
+// toastText is the toast in at most maxCells cells. Only the name gives way,
+// shortened in the middle, so the instruction is never cut.
+func (r provisionReport) toastText(maxCells int) string {
+	name := r.name
+	budget := maxCells - lipgloss.Width(r.verb+" "+r.rest)
+	if maxCells > 0 && lipgloss.Width(name) > budget {
+		name = middleTruncate(name, max(1, budget))
+	}
+	return r.verb + " " + name + r.rest
 }
 
 // filesNotSetUp counts the failed entries: "1 file not copied", "2 files not
@@ -102,18 +124,23 @@ func capitalize(s string) string {
 }
 
 // showProvisionReport records the detail lines in the message history, then
-// shows the toast, so the history reads toast first, then the details.
+// shows the toast, so the history reads toast first, then the details. The
+// toast box takes 6 cells of the terminal width (ToastModel.View).
 func (m *Model) showProvisionReport(r provisionReport) {
 	for i := len(r.history) - 1; i >= 0; i-- {
 		m.toast.Record(NewToast(r.history[i], ToastWarning))
 	}
-	m.toast.Show(NewToast(r.toast, ToastWarning))
+	maxCells := 0
+	if m.width > 0 {
+		maxCells = m.width - 6
+	}
+	m.toast.Show(NewToast(r.toastText(maxCells), ToastWarning))
 }
 
 // streamProvisionReport sends the report's detail lines to the creation
 // activity log.
 func streamProvisionReport(ch chan<- creationEvent, name, path string, err error) {
-	r, ok := newProvisionReport("Created "+name, name, path, err)
+	r, ok := newProvisionReport("Created", name, path, err)
 	if !ok {
 		ch <- creationEvent{line: fmt.Sprintf("Bootstrap failed: %v", err)}
 		return
