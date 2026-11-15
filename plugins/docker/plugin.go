@@ -400,9 +400,10 @@ func buildSlotManager(cfg *config.Config) *SlotManager {
 }
 
 // isAgentMode returns true when the agent mode env var is set and the config
-// has an enabled agent section.
+// has an enabled agent section. Any non-empty GROVE_AGENT_MODE counts, as in
+// config.Load; the env check covers configs built without it.
 func isAgentMode(cfg *config.Config) bool {
-	if cfg.AgentMode || os.Getenv("GROVE_AGENT_MODE") == "1" {
+	if cfg.AgentMode || os.Getenv("GROVE_AGENT_MODE") != "" {
 		ext := cfg.Plugins.Docker.External
 		if ext == nil || ext.Agent == nil {
 			return false

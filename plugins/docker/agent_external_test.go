@@ -706,6 +706,21 @@ func TestIsAgentMode(t *testing.T) {
 			want: true,
 		},
 		{
+			name:   "any non-empty env value counts, matching config",
+			envVal: "true",
+			cfg: &config.Config{
+				Plugins: config.PluginsConfig{
+					Docker: config.DockerPluginConfig{
+						Mode: "external",
+						External: &config.ExternalComposeConfig{
+							Agent: &config.AgentStackConfig{Enabled: &enabled},
+						},
+					},
+				},
+			},
+			want: true,
+		},
+		{
 			name:   "env set but agent disabled",
 			envVal: "1",
 			cfg: &config.Config{
