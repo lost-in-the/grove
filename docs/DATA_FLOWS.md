@@ -153,6 +153,7 @@ WorktreeItem
   BehindCount    int
   LastAccessed   time.Time
   PluginStatuses []plugins.StatusEntry
+  StackOn        string                  # display name of the worktree the shared stack is on
 ```
 
 **View model** that joins data from four sources in `FetchWorktrees()`:
@@ -225,9 +226,15 @@ StatusProvider interface (optional)
 StatusEntry
   ProviderName string       # e.g., "docker"
   Level        StatusLevel  # None | Info | Active | Warning | Error
-  Short        string       # compact label for tables
+  Short        string       # compact label for tables; empty = list views skip the entry
   Detail       string       # longer description for TUI detail pane
+  Stack        *SharedStack # shared stack only: OnPath, Here, State, Running, Blockers
 ```
+
+The docker plugin in external mode returns an entry for every worktree. Only
+the worktree the stack is on gets a `Short`; the others carry just `Stack`
+(where the stack is), so `grove ls` is unchanged and the detail pane can say
+"the stack is on root".
 
 **Plugin lifecycle:** `Manager.Register()` calls `Init()` on the plugin. `Manager.RegisterHooks()` calls `RegisterHooks()` on enabled plugins. `Manager.CollectStatuses()` calls `WorktreeStatuses()` on enabled `StatusProvider` plugins in parallel.
 

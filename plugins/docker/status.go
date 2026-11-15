@@ -93,6 +93,8 @@ func externalStatuses(s *externalStrategy, paths []string) map[string]plugins.St
 	composePath := s.composePath()
 	activeWorktree := readEnvVar(composePath, s.ext.EnvFileName(), s.ext.EnvVar)
 
+	onPath := stackOnPath(paths, activeWorktree, composePath)
+
 	var verdict stackVerdict
 	probed := false
 
@@ -101,7 +103,10 @@ func externalStatuses(s *externalStrategy, paths []string) map[string]plugins.St
 			result[path] = agentEntry(slot, s.ext.Agent)
 			continue
 		}
-		if !pathMatchesEnv(path, activeWorktree, composePath) {
+		if path != onPath {
+			// Short stays empty, so grove ls and the row glyph skip it; the
+			// detail pane uses it to say where the stack is.
+			result[path] = plugins.StatusEntry{ProviderName: "docker", Stack: &plugins.SharedStack{OnPath: onPath}}
 			continue
 		}
 
@@ -113,10 +118,29 @@ func externalStatuses(s *externalStrategy, paths []string) map[string]plugins.St
 			probed = true
 		}
 
-		result[path] = sharedStackEntry(verdict)
+		result[path] = sharedStackEntry(verdict, path)
 	}
 
 	return result
+}
+
+// stackOnPath returns the worktree the env file puts the stack on: the listed
+// path that matches it, else the resolved env value, else "" when unset.
+func stackOnPath(paths []string, envValue, composePath string) string {
+	for _, path := range paths {
+		if pathMatchesEnv(path, envValue, composePath) {
+			return path
+		}
+	}
+	return resolveEnvPath(composePath, envValue)
+}
+
+// sharedStackStates maps the verdict to the state views render.
+var sharedStackStates = map[StackState]plugins.StackState{
+	StackUnknown:  plugins.StackUnknown,
+	StackStopped:  plugins.StackStopped,
+	StackRunning:  plugins.StackRunning,
+	StackDegraded: plugins.StackDegraded,
 }
 
 // agentSlotFor returns the agent slot a worktree owns, or 0 when agent stacks
@@ -143,8 +167,16 @@ func agentEntry(slot int, agent *config.AgentStackConfig) plugins.StatusEntry {
 	}
 }
 
-func sharedStackEntry(v stackVerdict) plugins.StatusEntry {
+// sharedStackEntry is the entry for onPath, the worktree the stack is on.
+func sharedStackEntry(v stackVerdict, onPath string) plugins.StatusEntry {
 	entry := plugins.StatusEntry{ProviderName: "docker", Level: plugins.StatusInfo, Short: "configured"}
+	entry.Stack = &plugins.SharedStack{
+		OnPath:   onPath,
+		Here:     true,
+		State:    sharedStackStates[v.State],
+		Running:  v.Running,
+		Blockers: v.Blockers,
+	}
 	switch v.State {
 	case StackRunning:
 		entry.Level = plugins.StatusActive
@@ -434,7 +466,7 @@ func composeRunningCount(composePath string) (bool, int) {
 // Returns ("active", detail) when the configured services are running,
 // ("warning", detail) when blockers exist, ("info", detail) otherwise.
 func classifyExternalStatusFromHealth(statuses []ServiceStatus, probeErr error, services, nonBlocking []string) (string, string) {
-	entry := sharedStackEntry(classifyStack(statuses, probeErr, services, nonBlocking))
+	entry := sharedStackEntry(classifyStack(statuses, probeErr, services, nonBlocking), "")
 	switch entry.Level {
 	case plugins.StatusActive:
 		return "active", entry.Detail

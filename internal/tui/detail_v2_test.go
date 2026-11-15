@@ -7,6 +7,7 @@ import (
 
 	"charm.land/bubbles/v2/viewport"
 
+	"github.com/lost-in-the/grove/internal/plugins"
 	"github.com/lost-in-the/grove/internal/worktreeinfo"
 )
 
@@ -507,18 +508,84 @@ func TestDetail_FocusedTitleSaysSo(t *testing.T) {
 	}
 }
 
-// The shared stack's "where" goes on its own dim line under the state, so the
-// Docker row never wraps under its label in the 41-column panel.
-func TestSplitStackDetail(t *testing.T) {
-	for _, tc := range []struct{ detail, state, where string }{
-		{"3 service(s) running, the stack is on this worktree", "3 service(s) running", "the stack is on this worktree"},
-		{"The stack is on this worktree; state unknown (docker did not answer)", "The stack is on this worktree; state unknown (docker did not answer)", ""},
-		{"blocking service(s) failed: db, cache", "blocking service(s) failed: db, cache", ""},
-		{"Stack #2 at http://localhost:3002", "Stack #2 at http://localhost:3002", ""},
+// stackRows renders the Status section's Docker rows as plain text.
+func stackRows(t *testing.T, item *WorktreeItem, width int) []string {
+	t.Helper()
+	var rows []string
+	for _, r := range renderStatusSection(item, width) {
+		r = ansiStripRE.ReplaceAllString(r, "")
+		if strings.HasPrefix(r, "Docker") || (len(rows) > 0 && strings.HasPrefix(r, "          ")) {
+			rows = append(rows, strings.TrimRight(r, " "))
+		}
+	}
+	return rows
+}
+
+func stackItem(stack plugins.SharedStack, level plugins.StatusLevel, stackOn string) *WorktreeItem {
+	return &WorktreeItem{
+		ShortName: "feature",
+		StackOn:   stackOn,
+		PluginStatuses: []plugins.StatusEntry{{
+			ProviderName: "docker", Level: level, Short: "up",
+			Detail: "prose the detail pane must not parse", Stack: &stack,
+		}},
+	}
+}
+
+func TestRenderStatusSection_SharedStack(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		item *WorktreeItem
+		want []string
+	}{
+		{"on this worktree, running",
+			stackItem(plugins.SharedStack{OnPath: "/src/myapp-feature", Here: true, State: plugins.StackRunning, Running: 3}, plugins.StatusActive, "feature"),
+			[]string{"Docker    ◆ 3 service(s) running", "          the stack is on this worktree"}},
+		{"on this worktree, stopped",
+			stackItem(plugins.SharedStack{OnPath: "/src/myapp-feature", Here: true, State: plugins.StackStopped}, plugins.StatusInfo, "feature"),
+			[]string{"Docker    ◇ no services running", "          the stack is on this worktree"}},
+		{"on this worktree, degraded",
+			stackItem(plugins.SharedStack{OnPath: "/src/myapp-feature", Here: true, State: plugins.StackDegraded, Blockers: []string{"app", "db"}}, plugins.StatusWarning, "feature"),
+			[]string{"Docker    ◆ blocking service(s) failed", "          app, db", "          the stack is on this worktree"}},
+		{"on this worktree, unknown",
+			stackItem(plugins.SharedStack{OnPath: "/src/myapp-feature", Here: true, State: plugins.StackUnknown}, plugins.StatusInfo, "feature"),
+			[]string{"Docker    ◇ state unknown", "          docker did not answer", "          the stack is on this worktree"}},
+		{"on another worktree",
+			stackItem(plugins.SharedStack{OnPath: "/src/myapp"}, plugins.StatusNone, "main"),
+			[]string{"Docker    the stack is on main"}},
+		{"not on any worktree",
+			stackItem(plugins.SharedStack{}, plugins.StatusNone, ""),
+			[]string{"Docker    the stack is on no worktree"}},
 	} {
-		state, where := splitStackDetail(tc.detail)
-		if state != tc.state || where != tc.where {
-			t.Errorf("splitStackDetail(%q) = %q, %q; want %q, %q", tc.detail, state, where, tc.state, tc.where)
+		// 39 is the side panel's content width at 120 columns: every line
+		// must fit there without being cut.
+		for _, width := range []int{80, 39} {
+			t.Run(fmt.Sprintf("%s at %d", tc.name, width), func(t *testing.T) {
+				got := stackRows(t, tc.item, width)
+				if strings.Join(got, "\n") != strings.Join(tc.want, "\n") {
+					t.Errorf("rows:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(tc.want, "\n"))
+				}
+			})
+		}
+	}
+}
+
+func TestResolveStackOn_NamesTheWorktreeTheStackIsOn(t *testing.T) {
+	stackOn := func(path string) []plugins.StatusEntry {
+		return []plugins.StatusEntry{{ProviderName: "docker", Stack: &plugins.SharedStack{OnPath: path}}}
+	}
+	items := []WorktreeItem{
+		{ShortName: "myapp", Path: "/src/myapp", IsMain: true, PluginStatuses: stackOn("/src/myapp")},
+		{ShortName: "feature", Path: "/src/myapp-feature", PluginStatuses: stackOn("/src/myapp")},
+		{ShortName: "fix", Path: "/src/myapp-fix", PluginStatuses: stackOn("/src/myapp-gone")},
+		{ShortName: "plain", Path: "/src/myapp-plain"},
+	}
+
+	resolveStackOn(items)
+
+	for i, want := range []string{"root", "root", "myapp-gone", ""} {
+		if items[i].StackOn != want {
+			t.Errorf("%s: StackOn = %q, want %q", items[i].ShortName, items[i].StackOn, want)
 		}
 	}
 }

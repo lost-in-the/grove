@@ -378,25 +378,43 @@ func TestGolden_DetailSheet(t *testing.T) {
 	golden.RequireEqual(t, []byte(m.viewString()))
 }
 
-// A running shared stack: the state on the Docker row, where the stack is on
-// a dim line below it. 80 columns is the full sheet, 120 the side panel.
+// The shared stack in the detail pane, for feature-auth: on it and running,
+// on it with docker not answering, and on root instead. 80 columns is the
+// full sheet, 120 the side panel.
 func TestGolden_DetailSheet_Stack(t *testing.T) {
-	for _, size := range []termSize{sizeStandard, sizeWide} {
-		t.Run(size.name, func(t *testing.T) {
-			m := goldenModel(t, size, withItems(3), func(m *Model) {
-				items := m.list.Items()
-				it := items[1].(WorktreeItem)
-				it.PluginStatuses = []plugins.StatusEntry{{
-					ProviderName: "docker", Level: plugins.StatusActive, Short: "up",
-					Detail: "3 service(s) running, the stack is on this worktree",
-				}}
-				items[1] = it
-				m.list.SetItems(items)
-				m.list.Select(1)
-				m.openDetail()
+	const here, root = "/tmp/test-project-feature-auth", "/tmp/test-project-root"
+	cases := []struct {
+		name  string
+		level plugins.StatusLevel
+		short string // what the plugin sets; empty keeps the row glyph off
+		stack plugins.SharedStack
+	}{
+		{"here_running", plugins.StatusActive, "up", plugins.SharedStack{OnPath: here, Here: true, State: plugins.StackRunning, Running: 3}},
+		{"here_unknown", plugins.StatusInfo, "configured", plugins.SharedStack{OnPath: here, Here: true, State: plugins.StackUnknown}},
+		{"on_another", plugins.StatusNone, "", plugins.SharedStack{OnPath: root}},
+	}
+	for _, tc := range cases {
+		for _, size := range []termSize{sizeStandard, sizeWide} {
+			t.Run(tc.name+"_"+size.name, func(t *testing.T) {
+				m := goldenModel(t, size, withItems(3), func(m *Model) {
+					items := m.list.Items()
+					wts := make([]WorktreeItem, len(items))
+					for i, it := range items {
+						wts[i] = it.(WorktreeItem)
+					}
+					stack := tc.stack
+					wts[1].PluginStatuses = []plugins.StatusEntry{{ProviderName: "docker", Level: tc.level, Short: tc.short, Stack: &stack}}
+					resolveStackOn(wts)
+					for i := range wts {
+						items[i] = wts[i]
+					}
+					m.list.SetItems(items)
+					m.list.Select(1)
+					m.openDetail()
+				})
+				golden.RequireEqual(t, []byte(m.viewString()))
 			})
-			golden.RequireEqual(t, []byte(m.viewString()))
-		})
+		}
 	}
 }
 
