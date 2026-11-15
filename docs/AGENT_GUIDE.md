@@ -914,7 +914,7 @@ grove init
 
 **`not a grove project — main worktree has no .grove directory` when inside a worktree**
 
-You're in a secondary worktree (e.g., `admin-feature-x`) but the main worktree (e.g., `admin`) was never initialized with `grove init`:
+You're in a secondary worktree (e.g., `app-feature-x`) but the main worktree (e.g., `app`) was never initialized with `grove init`:
 ```bash
 # Check where the main worktree is
 git worktree list | head -1
