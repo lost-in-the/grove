@@ -178,7 +178,7 @@ func TestRunDockerAutoUp_StartsWhenOptedIn(t *testing.T) {
 	cfg.Plugins.Docker.AutoUp = &autoUp
 
 	lines := collectDockerAutoUpLines(t, cfg, "wt", "/tmp/wt")
-	want := []string{"Starting Docker stack...", "container app-1 started", "Docker stack started"}
+	want := []string{"Bringing the stack up...", "container app-1 started", "Stack is up"}
 	if len(lines) != len(want) {
 		t.Fatalf("lines = %v, want %v", lines, want)
 	}
@@ -203,7 +203,7 @@ func TestRunDockerAutoUp_SurfacesFailure(t *testing.T) {
 	if len(lines) != 2 {
 		t.Fatalf("expected start + failure lines, got %v", lines)
 	}
-	if lines[1] != "Docker auto-start failed: compose exploded" {
+	if lines[1] != "Could not bring the stack up: compose exploded" {
 		t.Errorf("failure line = %q", lines[1])
 	}
 }
