@@ -223,7 +223,7 @@ Examples:
 			Mirror:        mirror,
 			NoDocker:      newNoDocker,
 			JSONOutput:    newJSON,
-			NoSwitch:      !willSwitchAfterCreate(newNoSwitch, newJSON),
+			WillSwitch:    willSwitchAfterCreate(newNoSwitch, newJSON),
 		}, w)
 		if err != nil {
 			return err

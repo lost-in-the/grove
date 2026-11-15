@@ -475,7 +475,7 @@ Flags:
 
 1. **Ensure worktree exists:**
    - If worktree found: proceed
-   - If not found and `--no-create` not set: create worktree (same as `grove new`)
+   - If not found and `--no-create` not set: create worktree (same as `grove new`). Post-create hooks see `WillSwitch = true`, except with `--json`, where the command only reports `switch_to` and the external Docker env file is left alone.
    - If not found and `--no-create` set: error
 
 2. **Ensure tmux session exists:**
@@ -2098,7 +2098,7 @@ Flags:
    - **No flag, TTY**: prompt the user to pick `auto` or `walkthrough`.
    - **No flag, non-TTY**: defaults to `auto` (silent — no preview).
 6. **Docker-aware routing:** when a `docker-compose.yml` is present alongside a Rails/Node/Python marker, install commands (`bundle install`, `npm install`, `pip install`) are auto-generated as `docker:compose` hooks instead of host commands. Service name inferred from the compose file (single service used as-is, or first non-infra service when multiple). Dockerfile-only projects (no compose file) keep host commands and emit a manual-setup note.
-7. Optionally create starter worktrees with `--with-testing`, `--with-scratch`, or `--full`.
+7. Optionally create starter worktrees with `--with-testing`, `--with-scratch`, or `--full`. You stay in the main checkout, so post-create hooks see `WillSwitch = false` and the external Docker env file is not repointed at them.
 
 **Mode selection precedence:**
 

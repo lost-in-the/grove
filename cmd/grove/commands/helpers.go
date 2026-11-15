@@ -522,10 +522,10 @@ type worktreeSetupOpts struct {
 	NoDocker      bool
 	JSONOutput    bool
 
-	// NoSwitch is true when the command will not move the user into the new
-	// worktree. Phrased negatively so the zero value keeps the historical
-	// behavior of the commands (open, fetch, init) that do move the user.
-	NoSwitch bool
+	// WillSwitch is true when the command ends with the user in the new
+	// worktree. Forwarded to post-create hooks; the zero value leaves shared
+	// state (such as the external Docker env file) alone.
+	WillSwitch bool
 }
 
 // willSwitchAfterCreate reports whether a create-style command ends with the
@@ -564,7 +564,7 @@ func setupCreatedWorktree(ctx *GroveContext, mgr *worktree.Manager, name, branch
 		ProjectName:   mgr.GetProjectName(),
 		IsEnvironment: opts.IsEnvironment,
 		Mirror:        opts.Mirror,
-		WillSwitch:    !opts.NoSwitch,
+		WillSwitch:    opts.WillSwitch,
 	}
 	var bootstrapWriter *cli.Writer
 	if !opts.JSONOutput {

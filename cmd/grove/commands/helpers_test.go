@@ -156,14 +156,23 @@ func TestWillSwitchAfterCreate(t *testing.T) {
 	}
 }
 
+func TestOpenSetupOpts_JSONDoesNotSwitch(t *testing.T) {
+	if openSetupOpts(false, true).WillSwitch {
+		t.Error("open --json must reach post-create hooks as non-switching")
+	}
+	if !openSetupOpts(false, false).WillSwitch {
+		t.Error("plain open ends in the worktree, so it must be switching")
+	}
+}
+
 func TestSetupCreatedWorktree_ForwardsSwitchIntentToPostCreateHook(t *testing.T) {
 	tests := []struct {
 		name string
 		opts worktreeSetupOpts
 		want bool
 	}{
-		{"default switches", worktreeSetupOpts{}, true},
-		{"--no-switch", worktreeSetupOpts{NoSwitch: true}, false},
+		{"zero value does not switch", worktreeSetupOpts{}, false},
+		{"switching", worktreeSetupOpts{WillSwitch: true}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -64,7 +64,7 @@ func setupFetchedWorktree(ctx *GroveContext, mgr *worktree.Manager, w *cli.Write
 	// state registration, file setup, post-create hooks, docker auto-start.
 	// Fetched worktrees previously only registered state, leaving them
 	// silently unprovisioned (#112).
-	wt, err := setupCreatedWorktree(ctx, mgr, worktreeName, branchName, worktreeSetupOpts{}, w)
+	wt, err := setupCreatedWorktree(ctx, mgr, worktreeName, branchName, worktreeSetupOpts{WillSwitch: true}, w)
 	if err != nil {
 		return err
 	}
