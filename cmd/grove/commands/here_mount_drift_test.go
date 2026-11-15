@@ -80,6 +80,8 @@ func TestMountCheckExitCode(t *testing.T) {
 		unresolved     bool
 		requireCurrent bool
 		anyDrift       bool
+		anyError       bool // docker failed for a service
+		anyUnchecked   bool // a service was stopped or has no mount at dest
 		wantCode       int
 		wantExit       bool
 	}{
@@ -145,14 +147,57 @@ func TestMountCheckExitCode(t *testing.T) {
 			wantCode:       exitcode.MountCheckMismatch,
 			wantExit:       true,
 		},
+		{
+			name:     "docker error without require-current: ExternalCommandFailed",
+			anyError: true,
+			wantCode: exitcode.ExternalCommandFailed,
+			wantExit: true,
+		},
+		{
+			name:         "stopped or no-mount services stay informational",
+			anyUnchecked: true,
+			wantCode:     0,
+			wantExit:     false,
+		},
+		{
+			name:           "unchecked service with require-current fails closed",
+			anyUnchecked:   true,
+			requireCurrent: true,
+			wantCode:       exitcode.MountCheckMismatch,
+			wantExit:       true,
+		},
+		{
+			name:           "docker error with require-current still reports ExternalCommandFailed",
+			anyError:       true,
+			requireCurrent: true,
+			wantCode:       exitcode.ExternalCommandFailed,
+			wantExit:       true,
+		},
+		{
+			name:     "drift beats docker error",
+			anyDrift: true,
+			anyError: true,
+			wantCode: exitcode.MountDrift,
+			wantExit: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotCode, gotExit := mountCheckExitCode(tt.mismatch, tt.unresolved, tt.requireCurrent, tt.anyDrift)
+			var s docker.MountSummary
+			if tt.anyDrift {
+				s.Drift = 1
+			}
+			if tt.anyError {
+				s.Error = 1
+			}
+			if tt.anyUnchecked {
+				s.NotRunning = 1
+			}
+			gotCode, gotExit := mountCheckExitCode(tt.mismatch, tt.unresolved, tt.requireCurrent, s)
 			if gotCode != tt.wantCode || gotExit != tt.wantExit {
-				t.Errorf("mountCheckExitCode(%v, %v, %v, %v) = (%d, %v), want (%d, %v)",
-					tt.mismatch, tt.unresolved, tt.requireCurrent, tt.anyDrift, gotCode, gotExit, tt.wantCode, tt.wantExit)
+				t.Errorf("mountCheckExitCode(%v, %v, %v, %+v) = (%d, %v), want (%d, %v)",
+					tt.mismatch, tt.unresolved, tt.requireCurrent, s, gotCode, gotExit, tt.wantCode, tt.wantExit)
 			}
 		})
 	}
@@ -253,4 +298,57 @@ func TestDisplayPath(t *testing.T) {
 			t.Errorf("displayPath = %q, want %q", got, "/work/proj-feature-a")
 		}
 	})
+}
+
+func TestMountReportLine(t *testing.T) {
+	tests := []struct {
+		name      string
+		report    docker.MountDriftReport
+		wantLevel mountLineLevel
+		wantText  []string
+	}{
+		{
+			name:      "verified",
+			report:    docker.MountDriftReport{Service: "app", Status: docker.MountVerified, ActualSource: "/work/myapp-feature"},
+			wantLevel: mountLineOK,
+			wantText:  []string{"app ok: /work/myapp-feature"},
+		},
+		{
+			name:      "stopped is a quiet note",
+			report:    docker.MountDriftReport{Service: "db", Status: docker.MountNotRunning, Detail: "container not running"},
+			wantLevel: mountLineNote,
+			wantText:  []string{"db: container not running"},
+		},
+		{
+			name:      "no mount is a warning with a hint",
+			report:    docker.MountDriftReport{Service: "worker", Status: docker.MountNoMount, MountDest: "/app"},
+			wantLevel: mountLineWarn,
+			wantText:  []string{"worker: no bind-mount at /app", "different path or not at all", "mount_dests"},
+		},
+		{
+			name:      "docker error",
+			report:    docker.MountDriftReport{Service: "app", Status: docker.MountError, Detail: "docker compose ps: boom"},
+			wantLevel: mountLineError,
+			wantText:  []string{"app: docker compose ps: boom"},
+		},
+		{
+			name:      "drift",
+			report:    docker.MountDriftReport{Service: "app", Status: docker.MountDrift, ActualSource: "/a", ConfiguredSource: "/b"},
+			wantLevel: mountLineWarn,
+			wantText:  []string{"app drift: actual /a", "configured /b"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			level, text := mountReportLine(tt.report)
+			if level != tt.wantLevel {
+				t.Errorf("level = %v, want %v", level, tt.wantLevel)
+			}
+			for _, w := range tt.wantText {
+				if !strings.Contains(text, w) {
+					t.Errorf("text %q missing %q", text, w)
+				}
+			}
+		})
+	}
 }

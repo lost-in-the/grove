@@ -2,6 +2,34 @@ package config
 
 import "testing"
 
+func TestMergeConfigs_MountDests(t *testing.T) {
+	base := LoadDefaults()
+	base.Plugins.Docker.External = &ExternalComposeConfig{
+		Path:       "/shared",
+		MountDests: map[string]string{"worker": "/srv/worker"},
+	}
+	t.Run("kept when override omits it, and detached from base", func(t *testing.T) {
+		override := LoadDefaults()
+		override.Plugins.Docker.External = &ExternalComposeConfig{Path: "/shared"}
+		got := mergeConfigs(base, override).Plugins.Docker.External.MountDests
+		if got["worker"] != "/srv/worker" {
+			t.Fatalf("MountDests = %v, want worker=/srv/worker", got)
+		}
+		got["worker"] = "/changed"
+		if base.Plugins.Docker.External.MountDests["worker"] != "/srv/worker" {
+			t.Error("merged MountDests aliases the base's map")
+		}
+	})
+	t.Run("override replaces", func(t *testing.T) {
+		override := LoadDefaults()
+		override.Plugins.Docker.External = &ExternalComposeConfig{MountDests: map[string]string{"app": "/code"}}
+		got := mergeConfigs(base, override).Plugins.Docker.External.MountDests
+		if len(got) != 1 || got["app"] != "/code" {
+			t.Errorf("MountDests = %v, want only app=/code", got)
+		}
+	})
+}
+
 // TestMergeConfigs_DoesNotMutateInputs guards mergeExternalComposeConfig
 // against pointer aliasing: mergeConfigs shallow-copies Config, so
 // result.Plugins.Docker.External is the SAME pointer as the base's — the old

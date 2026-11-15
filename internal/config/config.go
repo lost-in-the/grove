@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -163,6 +164,7 @@ type ExternalComposeConfig struct {
 	SymlinkFiles        []string          `toml:"symlink_files"`         // Files to symlink from main on create
 	SymlinkDirs         []string          `toml:"symlink_dirs"`          // Directories to symlink from main on create
 	MountDest           string            `toml:"mount_dest"`            // Container path where worktree source is bind-mounted (default "/app")
+	MountDests          map[string]string `toml:"mount_dests"`           // Per-service override of mount_dest
 	Agent               *AgentStackConfig `toml:"agent"`                 // Optional agent stack configuration
 }
 
@@ -490,6 +492,9 @@ func mergeExternalComposeConfig(result **ExternalComposeConfig, override *Extern
 	if override.MountDest != "" {
 		merged.MountDest = override.MountDest
 	}
+	if len(override.MountDests) > 0 {
+		merged.MountDests = override.MountDests
+	}
 	merged.Agent = mergeAgentStackConfig(merged.Agent, override.Agent)
 
 	// Detach all shared backing, wherever each field came from.
@@ -498,6 +503,7 @@ func mergeExternalComposeConfig(result **ExternalComposeConfig, override *Extern
 	merged.CopyFiles = slices.Clone(merged.CopyFiles)
 	merged.SymlinkFiles = slices.Clone(merged.SymlinkFiles)
 	merged.SymlinkDirs = slices.Clone(merged.SymlinkDirs)
+	merged.MountDests = maps.Clone(merged.MountDests)
 	if merged.Agent != nil {
 		agent := *merged.Agent
 		agent.Services = slices.Clone(agent.Services)
