@@ -109,6 +109,33 @@ func TestAgentExternalStrategy_OnPostSwitch_NoSlot(t *testing.T) {
 	}
 }
 
+func TestAgentSlotsFile_AbsoluteTemplatePath(t *testing.T) {
+	cfg := newTestAgentConfig(t)
+	tmplDir := t.TempDir()
+	cfg.Plugins.Docker.External.Agent.TemplatePath = filepath.Join(tmplDir, "template.yml")
+
+	want := filepath.Join(tmplDir, ".slots.json")
+	if got := newAgentExternalStrategy(cfg).slots.slotsFile; got != want {
+		t.Errorf("strategy slots file = %q, want %q", got, want)
+	}
+	if got := buildSlotManager(cfg).slotsFile; got != want {
+		t.Errorf("buildSlotManager slots file = %q, want %q", got, want)
+	}
+}
+
+func TestHasActiveAgentSlot_AbsoluteTemplatePath(t *testing.T) {
+	cfg := newTestAgentConfig(t)
+	tmplDir := t.TempDir()
+	cfg.Plugins.Docker.External.Agent.TemplatePath = filepath.Join(tmplDir, "template.yml")
+
+	if _, err := NewSlotManager(filepath.Join(tmplDir, ".slots.json"), 3).Allocate("myapp-feature"); err != nil {
+		t.Fatal(err)
+	}
+	if !HasActiveAgentSlot(cfg, "/tmp/myapp-feature") {
+		t.Error("HasActiveAgentSlot should read the ledger next to an absolute template_path")
+	}
+}
+
 func TestAgentExternalStrategy_OnPostSwitch_CorruptedSlotsFile(t *testing.T) {
 	cfg := newTestAgentConfig(t)
 	s := newAgentExternalStrategy(cfg)

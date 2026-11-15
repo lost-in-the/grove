@@ -35,20 +35,22 @@ func newAgentExternalStrategy(cfg *config.Config) *agentExternalStrategy {
 		maxSlots = 5
 	}
 
-	templateDir := filepath.Dir(agent.TemplatePath)
-	var slotsFile string
-	if filepath.IsAbs(agent.TemplatePath) {
-		slotsFile = filepath.Join(templateDir, ".slots.json")
-	} else {
-		slotsFile = filepath.Join(resolveComposePath(ext.Path), templateDir, ".slots.json")
-	}
-
 	return &agentExternalStrategy{
 		cfg:   cfg,
 		ext:   ext,
 		agent: agent,
-		slots: NewSlotManager(slotsFile, maxSlots),
+		slots: NewSlotManager(agentSlotsFile(ext), maxSlots),
 	}
+}
+
+// agentSlotsFile returns the slot ledger path: next to the agent template,
+// which is relative to the compose directory unless template_path is absolute.
+func agentSlotsFile(ext *config.ExternalComposeConfig) string {
+	templateDir := filepath.Dir(ext.Agent.TemplatePath)
+	if filepath.IsAbs(ext.Agent.TemplatePath) {
+		return filepath.Join(templateDir, ".slots.json")
+	}
+	return filepath.Join(resolveComposePath(ext.Path), templateDir, ".slots.json")
 }
 
 // OnPreSwitch is a no-op for agent mode — agent stacks are independent.

@@ -396,8 +396,7 @@ func buildSlotManager(cfg *config.Config) *SlotManager {
 	if maxSlots <= 0 {
 		maxSlots = 5
 	}
-	slotsFile := filepath.Join(resolveComposePath(ext.Path), filepath.Dir(ext.Agent.TemplatePath), ".slots.json")
-	return NewSlotManager(slotsFile, maxSlots)
+	return NewSlotManager(agentSlotsFile(ext), maxSlots)
 }
 
 // isAgentMode returns true when the agent mode env var is set and the config
