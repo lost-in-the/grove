@@ -53,6 +53,7 @@ type WorktreeItem struct {
 	AssociatedPR   *PRInfo                     // PR linked to this branch (nil if none)
 	LastAccessed   time.Time
 	PluginStatuses []plugins.StatusEntry // status entries from plugins
+	StackOn        string                // display name of the worktree the shared stack is on (see resolveStackOn)
 }
 
 // sessionBadgeWord names the multiplexer behind an item's session badge and
@@ -367,7 +368,30 @@ func fetchWorktreesAndBackend(mgr *worktree.Manager, stateMgr *state.Manager, pl
 				items[i].PluginStatuses = entries
 			}
 		}
+		resolveStackOn(items)
 	}
 
 	return items, fc.backend, nil
+}
+
+// resolveStackOn sets StackOn on every item whose plugin statuses report a
+// shared stack: the display name of the worktree the stack is on, or the
+// directory name of that path when it is not a listed worktree.
+func resolveStackOn(items []WorktreeItem) {
+	names := make(map[string]string, len(items))
+	for _, it := range items {
+		names[filepath.Clean(it.Path)] = it.displayName()
+	}
+	for i := range items {
+		for _, e := range items[i].PluginStatuses {
+			if e.Stack == nil || e.Stack.OnPath == "" {
+				continue
+			}
+			name, ok := names[filepath.Clean(e.Stack.OnPath)]
+			if !ok {
+				name = filepath.Base(e.Stack.OnPath)
+			}
+			items[i].StackOn = name
+		}
+	}
 }

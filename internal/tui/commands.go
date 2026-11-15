@@ -543,7 +543,7 @@ func runDockerAutoUp(ch chan<- creationEvent, cfg *config.Config, name, wtPath s
 	if !docker.ShouldAutoUp(cfg) {
 		return
 	}
-	ch <- creationEvent{line: "Starting Docker stack..."}
+	ch <- creationEvent{line: "Bringing the stack up..."}
 	var started bool
 	composeLog := logLines(ch)
 	err := captureStdioTo(composeLog, func() error {
@@ -554,11 +554,11 @@ func runDockerAutoUp(ch chan<- creationEvent, cfg *config.Config, name, wtPath s
 	_ = composeLog.Close()
 	if err != nil {
 		tuilog.Printf("warning: docker auto-start failed for %q: %v", name, err)
-		ch <- creationEvent{line: fmt.Sprintf("Docker auto-start failed: %v", err)}
+		ch <- creationEvent{line: fmt.Sprintf("Could not bring the stack up: %v", err)}
 		return
 	}
 	if started {
-		ch <- creationEvent{line: "Docker stack started"}
+		ch <- creationEvent{line: "Stack is up"}
 	}
 }
 

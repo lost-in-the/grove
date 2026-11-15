@@ -16,14 +16,14 @@ func init() {
 var restartCmd = &cobra.Command{
 	Use:     "kick [services...]",
 	Aliases: []string{"restart", "k"},
-	Short:   "Kick (restart) container services",
-	Long: `Kick (restart) Docker container services for the current worktree.
+	Short:   "Restart the stack's services",
+	Long: `Kick (restart) the stack's services.
 
 If no service is specified, restarts all services. Multiple services may be
 listed and are each restarted.
 
 If the worktree has an isolated stack running, the restart targets
-that stack's containers automatically.
+that stack instead.
 
 Examples:
   grove kick           # Restart all services

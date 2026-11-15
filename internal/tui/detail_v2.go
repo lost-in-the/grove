@@ -130,14 +130,11 @@ func renderStatusSection(item *WorktreeItem, width int) []string {
 	}
 
 	for _, s := range item.PluginStatuses {
-		if s.Detail != "" {
-			mainDetail, pointedDetail := splitContainerDetail(s.Detail)
-			entry := s
-			entry.Detail = mainDetail
-			rows = append(rows, metadataLabel("Docker")+renderContainerValue(&entry))
-			if pointedDetail != "" {
-				rows = append(rows, metadataLabel("")+Styles.DetailDim.Render(pointedDetail))
-			}
+		switch {
+		case s.Stack != nil:
+			rows = append(rows, sharedStackRows(s, item.StackOn, width)...)
+		case s.Detail != "":
+			rows = append(rows, metadataLabel("Docker")+renderContainerValue(&s))
 		}
 	}
 
@@ -249,13 +246,45 @@ func renderContainerValue(s *plugins.StatusEntry) string {
 	}
 }
 
-// splitContainerDetail splits a container detail string on ", pointed"
-// into a main status line and a secondary "pointed" line.
-func splitContainerDetail(detail string) (main, pointed string) {
-	if idx := strings.Index(detail, ", pointed"); idx >= 0 {
-		return detail[:idx], detail[idx+2:]
+// sharedStackRows are the Docker rows for a shared stack, built from its
+// structured fields: how it runs (only on the worktree it is on), then where
+// it is. Every line is cut to the value column so none wraps under the label.
+func sharedStackRows(s plugins.StatusEntry, stackOn string, width int) []string {
+	const labelWidth = 10
+	valueWidth := width - labelWidth
+	dim := func(text string) string {
+		return metadataLabel("") + Styles.DetailDim.Render(truncate(text, valueWidth))
 	}
-	return detail, ""
+	st := s.Stack
+	if !st.Here {
+		where := "the stack is on no worktree"
+		if st.OnPath != "" {
+			where = "the stack is on " + stackOn
+		}
+		return []string{metadataLabel("Docker") + Styles.DetailDim.Render(truncate(where, valueWidth))}
+	}
+
+	var state string
+	var more []string
+	switch st.State {
+	case plugins.StackRunning:
+		state = fmt.Sprintf("%d service(s) running", st.Running)
+	case plugins.StackDegraded:
+		state = "blocking service(s) failed"
+		more = []string{strings.Join(st.Blockers, ", ")}
+	case plugins.StackUnknown:
+		state = "state unknown"
+		more = []string{"docker did not answer"}
+	default:
+		state = "no services running"
+	}
+	entry := s
+	entry.Detail = truncate(state, valueWidth-lipgloss.Width("◆ "))
+	rows := []string{metadataLabel("Docker") + renderContainerValue(&entry)}
+	for _, line := range more {
+		rows = append(rows, dim(line))
+	}
+	return append(rows, dim("the stack is on this worktree"))
 }
 
 // renderTmuxValue returns the styled session indicator. herdr reports

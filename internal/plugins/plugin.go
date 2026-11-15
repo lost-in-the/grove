@@ -42,10 +42,43 @@ type StatusEntry struct {
 	Level StatusLevel
 
 	// Short is a compact label for CLI table columns (e.g. "up", "down", "slot 3").
+	// List views (grove ls, the dashboard row glyph) skip an entry whose Short
+	// is empty.
 	Short string
 
 	// Detail is a longer description for the TUI detail pane.
 	Detail string
+
+	// Stack is set by a provider that reports a shared stack, so a view can
+	// render where it is and how it runs without parsing Detail. Nil otherwise.
+	Stack *SharedStack
+}
+
+// StackState is how a shared stack runs, as its provider judged it.
+type StackState string
+
+const (
+	// StackNotProbed: the provider did not check how the stack runs, because
+	// the stack is not on this worktree.
+	StackNotProbed StackState = ""
+	StackRunning   StackState = "running"
+	StackStopped   StackState = "stopped"
+	StackDegraded  StackState = "degraded"
+	// StackUnknown: docker did not answer.
+	StackUnknown StackState = "unknown"
+)
+
+// SharedStack says where a shared stack is and, on the worktree it is on,
+// how it runs.
+type SharedStack struct {
+	// OnPath is the worktree the stack is on. Empty when it is not on any.
+	OnPath string
+	// Here is true on the entry for the worktree the stack is on.
+	Here bool
+	// State, Running, and Blockers are set only when Here.
+	State    StackState
+	Running  int      // services running (StackRunning)
+	Blockers []string // services that failed (StackDegraded)
 }
 
 // StatusProvider is an optional interface that plugins can implement
@@ -53,7 +86,8 @@ type StatusEntry struct {
 type StatusProvider interface {
 	// WorktreeStatuses returns status entries keyed by absolute worktree path.
 	// Accepts all worktree paths at once so implementations can batch queries.
-	// Only return entries for worktrees the plugin has information about.
+	// Only return entries for worktrees the plugin has information about. An
+	// entry that only says where a shared stack is leaves Short empty.
 	WorktreeStatuses(worktreePaths []string) map[string]StatusEntry
 }
 

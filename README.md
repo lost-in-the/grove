@@ -59,7 +59,7 @@ Grove wraps the full worktree lifecycle — create, switch, fork, clean up — a
 | **Fast Context Switching** | `grove to <name>` — changes directory, runs hooks, attaches tmux in <500ms. It moves you only; `grove up` brings the Docker stack |
 | **GitHub Integration** | `grove fetch pr/42` or browse PRs and issues interactively with `grove prs` |
 | **Lifecycle Hooks** | Auto-copy `.env`, symlink `node_modules`, run `bundle install` on worktree create |
-| **Docker Support** | Start, stop, and tail containers scoped to each worktree — automatically |
+| **Docker Support** | `grove up` brings the stack to the worktree you are in, `grove down` stops it, and `grove logs` tails it |
 | **Tmux Integration** | Every worktree gets its own tmux session; attach, detach, switch without losing context |
 | **Herdr Support** | Prefer [herdr](https://herdr.dev)? Set `[mux] backend = "herdr"` and every worktree gets a herdr workspace instead — plus a live agent-status column (`idle` / `working` / `blocked`) in `grove ls` and the dashboard |
 | **Shell Integration** | `grove to` actually changes your directory; tab completion included |
@@ -320,10 +320,10 @@ Requires `gh` CLI (installed and authenticated to your repo).
 
 | Command | What it does |
 |---------|-------------|
-| `grove up` | Start Docker containers for the current worktree |
-| `grove down` | Stop Docker containers |
-| `grove logs [service]` | Tail container logs |
-| `grove kick [service]` | Kick (restart) containers |
+| `grove up` | Bring the stack to this worktree |
+| `grove down` | Stop the stack |
+| `grove logs [service]` | Tail the stack's logs (one service, or all) |
+| `grove kick [service]` | Kick (restart) the stack's services |
 | `grove up --isolated` | Start an isolated Docker stack (for parallel agent use) |
 | `grove ps` | Show active stacks with ports and reference IDs |
 
@@ -461,7 +461,7 @@ Run `grove config` to see the merged effective config for the current project.
 
 ## Docker Integration
 
-Grove's Docker plugin handles containers scoped to each worktree. Three modes:
+Grove's Docker plugin runs the stack for your worktrees. Three modes:
 
 ### Local (default)
 
@@ -476,7 +476,7 @@ auto_stop = false   # keep stacks running side-by-side (mind port conflicts)
 
 ### External
 
-One shared compose directory orchestrates services for all worktrees. Grove writes the active worktree path to an env file and injects it into every compose command — so containers mount the right code automatically.
+One shared compose directory orchestrates services for all worktrees. Grove writes the active worktree path to an env file and injects it into every compose command, so the stack mounts the right worktree's code.
 
 ```toml
 [plugins.docker]

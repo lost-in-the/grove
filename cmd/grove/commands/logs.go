@@ -20,14 +20,14 @@ func init() {
 var logsCmd = &cobra.Command{
 	Use:     "logs [service]",
 	Aliases: []string{"lo"},
-	Short:   "View container logs",
-	Long: `View logs from Docker containers for the current worktree.
+	Short:   "Tail the stack's logs",
+	Long: `Tail the stack's logs.
 
 If no service is specified, shows logs from all services.
 By default, follows log output (like tail -f).
 
-If the worktree has an isolated stack running, logs are automatically
-shown from that stack's containers.
+If the worktree has an isolated stack running, the logs come from that
+stack instead.
 
 Examples:
   grove logs           # Show logs from all services
