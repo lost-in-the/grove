@@ -20,9 +20,9 @@ func TestParseInspectMounts(t *testing.T) {
 	}{
 		{
 			name:      "single bind-mount matches dest",
-			blob:      `[{"Type":"bind","Source":"/Users/leah/work/proj-foo","Destination":"/app"}]`,
+			blob:      `[{"Type":"bind","Source":"/home/dev/projects/myapp-foo","Destination":"/app"}]`,
 			mountDest: "/app",
-			wantSrc:   "/Users/leah/work/proj-foo",
+			wantSrc:   "/home/dev/projects/myapp-foo",
 		},
 		{
 			name:      "trailing slash on Destination still matches",
@@ -177,14 +177,14 @@ func TestMountDriftConfigFromExternal(t *testing.T) {
 // actually emits, including extra fields the struct doesn't model.
 func TestParseInspectMounts_RealisticOutput(t *testing.T) {
 	blob := []byte(`[
-		{"Type":"bind","Source":"/Users/leah/work/proj-feature-x","Destination":"/app","Mode":"","RW":true,"Propagation":"rprivate"},
+		{"Type":"bind","Source":"/home/dev/projects/myapp-feature","Destination":"/app","Mode":"","RW":true,"Propagation":"rprivate"},
 		{"Type":"volume","Name":"node_modules","Source":"/var/lib/docker/volumes/node_modules/_data","Destination":"/app/node_modules","Driver":"local","Mode":"z","RW":true,"Propagation":""}
 	]`)
 	got, err := parseInspectMounts(blob, "/app")
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	want := filepath.Clean("/Users/leah/work/proj-feature-x")
+	want := filepath.Clean("/home/dev/projects/myapp-feature")
 	if got != want {
 		t.Errorf("source = %q, want %q", got, want)
 	}
