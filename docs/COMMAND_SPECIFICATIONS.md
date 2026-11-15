@@ -2377,7 +2377,7 @@ grove doctor
   ✓ Config (loaded)
   ✓ Config symlinks (4 worktrees checked)
   ✓ Worktree registration (4 worktrees registered)
-  ✓ External compose path (/path/to/compose-dev)
+  ✓ External compose path (/path/to/orchestrator)
   ✓ Env file target (.env.local)
 
   ✓ All checks passed
