@@ -2,6 +2,7 @@ package tui
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -181,8 +182,8 @@ func TestPopulateConfigFields(t *testing.T) {
 
 	// Behavior tab
 	behavior := fields[ConfigTabBehavior]
-	if len(behavior) != 3 {
-		t.Errorf("expected 3 Behavior fields, got %d", len(behavior))
+	if len(behavior) != 4 {
+		t.Errorf("expected 4 Behavior fields, got %d", len(behavior))
 	}
 	// The branch form replaced the branch-exists notice, so these settings
 	// no longer do anything and must not be offered.
@@ -202,6 +203,52 @@ func TestPopulateConfigFields(t *testing.T) {
 	protection := fields[ConfigTabProtection]
 	if len(protection) != 2 {
 		t.Errorf("expected 2 Protection fields, got %d", len(protection))
+	}
+}
+
+func TestPopulateConfigFields_ContainerSwitch(t *testing.T) {
+	for _, tc := range []struct{ configured, want string }{
+		{"", "off"},
+		{"off", "off"},
+		{"prompt", "prompt"},
+		{"auto", "auto"},
+	} {
+		cfg := config.LoadDefaults()
+		cfg.Switch.ContainerSwitch = tc.configured
+
+		var field *ConfigField
+		behavior := populateConfigFields(cfg)[ConfigTabBehavior]
+		for i := range behavior {
+			if behavior[i].Key == "switch.container_switch" {
+				field = &behavior[i]
+			}
+		}
+		if field == nil {
+			t.Fatal("the Behavior tab does not offer switch.container_switch")
+		}
+		if field.Value != tc.want || field.Loaded != tc.want {
+			t.Errorf("configured %q: Value/Loaded = %q/%q, want %q", tc.configured, field.Value, field.Loaded, tc.want)
+		}
+		if field.Type != ConfigEnum || !slices.Equal(field.Options, []string{"off", "prompt", "auto"}) {
+			t.Errorf("container_switch = %v %v, want an enum of off, prompt, auto", field.Type, field.Options)
+		}
+		if !strings.Contains(field.Description, "Stack follows every move") {
+			t.Errorf("description %q does not say what the setting does in the stack vocabulary", field.Description)
+		}
+	}
+}
+
+func TestConfigUpdates_ContainerSwitchSavesAsTOMLString(t *testing.T) {
+	cs := NewConfigState()
+	cs.Fields = populateConfigFields(config.LoadDefaults())
+	for i, f := range cs.Fields[ConfigTabBehavior] {
+		if f.Key == "switch.container_switch" {
+			cs.Fields[ConfigTabBehavior][i].Value = "auto"
+		}
+	}
+
+	if got := configUpdates(cs)["switch.container_switch"]; got != `"auto"` {
+		t.Errorf("update = %q, want %q", got, `"auto"`)
 	}
 }
 
