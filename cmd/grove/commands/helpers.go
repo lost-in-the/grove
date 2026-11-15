@@ -520,6 +520,7 @@ type worktreeSetupOpts struct {
 	IsEnvironment bool
 	Mirror        string
 	NoDocker      bool
+	Up            bool // bring the stack up for this worktree even without auto_up
 	JSONOutput    bool
 }
 
@@ -570,7 +571,7 @@ func setupCreatedWorktree(ctx *GroveContext, mgr *worktree.Manager, name, branch
 		}
 	}
 
-	autoStartDocker(w, ctx.Config, wt.Path, opts.NoDocker, opts.JSONOutput)
+	autoStartDocker(w, ctx.Config, wt.Path, opts.Up, opts.NoDocker, opts.JSONOutput)
 	return wt, nil
 }
 
@@ -588,11 +589,17 @@ func runFileSetup(cfg *config.Config, newPath, mainPath string, w *cli.Writer, j
 	}
 }
 
+// wantsStackUp is true when create should bring the stack: --up for this
+// invocation, or [plugins.docker] auto_up as the standing form. --no-docker wins.
+func wantsStackUp(cfg *config.Config, up, noDocker bool) bool {
+	return !noDocker && (up || docker.ShouldAutoUp(cfg))
+}
+
 // autoStartDocker starts the Docker stack for a new worktree if configured.
 // The decision (docker.ShouldAutoUp) and the stack start (docker.AutoUp) are
 // shared with the TUI create path so both surfaces provision identically.
-func autoStartDocker(w *cli.Writer, cfg *config.Config, wtPath string, noDocker, jsonOutput bool) {
-	if noDocker || !docker.ShouldAutoUp(cfg) {
+func autoStartDocker(w *cli.Writer, cfg *config.Config, wtPath string, up, noDocker, jsonOutput bool) {
+	if !wantsStackUp(cfg, up, noDocker) {
 		return
 	}
 	if !jsonOutput {

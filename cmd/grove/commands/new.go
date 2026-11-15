@@ -20,6 +20,7 @@ var (
 	newJSON       bool
 	newMirror     string // Remote branch to mirror (e.g., "origin/main")
 	newNoDocker   bool   // Skip auto-starting Docker
+	newUp         bool   // Bring the stack up for the new worktree
 	newBranch     string // Override branch name
 	newFrom       string // Create branch from this ref
 	newFromBranch string // Check out an existing branch in the new worktree
@@ -39,8 +40,9 @@ A new branch with the same name will be created automatically.
 Use --branch to override the branch name.
 Use --from to specify the base ref for the new branch (default: HEAD).
 
-When Docker agent stacks are configured, containers start automatically.
-Use --no-docker to skip Docker auto-start.
+Creating a worktree never moves the stack by itself. Use --up to bring the
+stack to the new worktree, or set auto_up = true under [plugins.docker] to do
+it every time. --no-docker skips it even when auto_up is set.
 
 Use --no-tmux to skip tmux entirely for this invocation: no session is
 created and your tmux client is not switched. Docker and hooks still run.
@@ -55,10 +57,10 @@ worktree. Useful when promoting an in-progress branch from your main checkout
 into its own worktree.
 
 Examples:
-  grove new feature-auth                          # Create worktree + tmux + Docker
+  grove new feature-auth                          # Create worktree + tmux session
   grove new feature-auth --branch custom-branch   # Use custom branch name
   grove new feature-auth --from develop            # Branch from develop
-  grove new feature-auth --no-docker               # Skip Docker auto-start
+  grove new feature-auth --up                      # Also bring the stack
   grove spawn feature-x                            # Alias (implies --json output)
   grove new staging --mirror origin/main           # Environment worktree tracking origin/main
   grove new payments --from-branch feature/payments         # Adopt existing branch as worktree
@@ -222,6 +224,7 @@ Examples:
 			IsEnvironment: isEnvironment,
 			Mirror:        mirror,
 			NoDocker:      newNoDocker,
+			Up:            newUp,
 			JSONOutput:    newJSON,
 		}, w)
 		if err != nil {
@@ -362,6 +365,8 @@ func init() {
 	newCmd.Flags().BoolVar(&newDirty, "dirty", false, "Carry over `git diff HEAD` from the current worktree (requires --from-branch)")
 	newCmd.Flags().StringVar(&newMirror, "mirror", "", "Create environment worktree tracking a remote branch (e.g., origin/main)")
 	newCmd.Flags().BoolVar(&newNoDocker, "no-docker", false, "Skip Docker auto-start")
+	newCmd.Flags().BoolVarP(&newUp, "up", "u", false, "Also bring the stack to the new worktree (per-invocation auto_up)")
+	newCmd.MarkFlagsMutuallyExclusive("up", "no-docker")
 	newCmd.Flags().BoolVar(&newNoTmux, "no-tmux", false, "Skip tmux session creation/switch for this invocation")
 	newCmd.Flags().BoolVarP(&newNoSwitch, "no-switch", "n", false, "Stay in current worktree after creation")
 	newCmd.MarkFlagsMutuallyExclusive("mirror", "from")
