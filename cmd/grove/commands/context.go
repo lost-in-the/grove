@@ -74,13 +74,27 @@ func (c *GroveContext) WorktreeManager() (*worktree.Manager, error) {
 	return mgr, nil
 }
 
+// createsWorktreesAnnotation marks a command that creates or adopts worktrees.
+// Its config-load failure is reported once, as the RequireConfig error, instead
+// of also as a "using defaults" warning for a fallback the command refuses.
+const createsWorktreesAnnotation = "grove.creates-worktrees"
+
+// warnConfigFallback prints the "using defaults" warning for a config that
+// failed to load. Read-only commands get it from RequireGroveContext; a command
+// that only sometimes creates (open) calls it on its read-only path.
+func (c *GroveContext) warnConfigFallback() {
+	if c.ConfigErr != nil {
+		cli.Warning(cli.NewStderr(), "Failed to load config, using defaults: %v", c.ConfigErr)
+	}
+}
+
 // RequireConfig returns an error when the config failed to load. Commands that
 // create or adopt worktrees call it first: running them on defaults would skip
 // copy_files, symlinks, and hooks without saying so. Read-only commands keep
 // the fallback to defaults.
 func (c *GroveContext) RequireConfig(action string) error {
 	if c.ConfigErr != nil {
-		return fmt.Errorf("config failed to load, so grove did not %s: %w", action, c.ConfigErr)
+		return fmt.Errorf("grove did not %s: the config failed to load: %w", action, c.ConfigErr)
 	}
 	return nil
 }
@@ -116,11 +130,10 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 
 		// Load config from the resolved .grove directory (not cwd)
 		// so that secondary worktrees use the main worktree's config
+		creates := cmd.Annotations[createsWorktreesAnnotation] != ""
 		cfg, cfgErr := config.LoadFromGroveDir(groveDir)
 		if cfgErr != nil {
 			log.Printf("config load failed, using defaults: %v", cfgErr)
-			stderr := cli.NewStderr()
-			cli.Warning(stderr, "Failed to load config, using defaults: %v", cfgErr)
 			cfg = config.LoadDefaults()
 		} else {
 			log.Printf("config loaded, docker mode: %v", cfg.IsExternalDockerMode())
@@ -137,6 +150,9 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 			Config:        cfg,
 			PluginManager: pluginMgr,
 			ConfigErr:     cfgErr,
+		}
+		if !creates {
+			ctx.warnConfigFallback()
 		}
 
 		// Drift detection: warn if cwd is inside a worktree that isn't in

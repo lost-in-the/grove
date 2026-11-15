@@ -39,9 +39,10 @@ type ForkResult struct {
 }
 
 var forkCmd = &cobra.Command{
-	Use:     "fork [name]",
-	Aliases: []string{"split", "fo"},
-	Short:   "Fork current worktree into a new one",
+	Annotations: map[string]string{createsWorktreesAnnotation: "true"},
+	Use:         "fork [name]",
+	Aliases:     []string{"split", "fo"},
+	Short:       "Fork current worktree into a new one",
 	Long: `Fork the current worktree, creating a new worktree branching from the current HEAD.
 
 The new branch name will be {current-branch}-{name} unless --branch-name is specified.

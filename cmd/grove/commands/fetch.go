@@ -141,9 +141,10 @@ func fetchItem(ctx *GroveContext, itemType string, number int) error {
 }
 
 var fetchCmd = &cobra.Command{
-	Use:     "fetch <pr|issue>/<number>",
-	Aliases: []string{"f"},
-	Short:   "Create worktree from issue or PR",
+	Annotations: map[string]string{createsWorktreesAnnotation: "true"},
+	Use:         "fetch <pr|issue>/<number>",
+	Aliases:     []string{"f"},
+	Short:       "Create worktree from issue or PR",
 	Long: `Create a new worktree from a GitHub issue or pull request.
 
 Examples:

@@ -31,6 +31,7 @@ func init() {
 }
 
 var openCmd = &cobra.Command{
+	Annotations:       map[string]string{createsWorktreesAnnotation: "true"},
 	Use:               "open [name]",
 	Aliases:           []string{"o"},
 	Short:             "Open a worktree session (create if needed)",
@@ -133,6 +134,9 @@ Examples:
 		// matches by branch or full directory name, and the canonical tmux
 		// session name and state key are both keyed on the short name (B21).
 		displayName := wt.DisplayName()
+		if created == nil {
+			ctx.warnConfigFallback()
+		}
 
 		// Record the access before any tmux branching: agent-mode and
 		// tmux-off users reach worktrees through `grove open` too, and

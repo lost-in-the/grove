@@ -21,8 +21,9 @@ func init() {
 }
 
 var adoptCmd = &cobra.Command{
-	Use:   "adopt [path]",
-	Short: "Bootstrap a git worktree that grove doesn't know about",
+	Annotations: map[string]string{createsWorktreesAnnotation: "true"},
+	Use:         "adopt [path]",
+	Short:       "Bootstrap a git worktree that grove doesn't know about",
 	Long: `Adopts an existing git worktree into grove's state.
 
 Use when a worktree was created with 'git worktree add' instead of 'grove new':

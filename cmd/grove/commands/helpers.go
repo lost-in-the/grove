@@ -594,16 +594,16 @@ func autoStartDocker(w *cli.Writer, cfg *config.Config, wtPath string, up, noDoc
 		return
 	}
 	if !jsonOutput {
-		cli.Step(w, "Starting Docker stack...")
+		cli.Step(w, "Bringing the stack up...")
 	}
 	started, err := docker.AutoUp(cfg, wtPath)
 	if err != nil {
 		if !jsonOutput {
-			cli.Warning(w, "Docker auto-start failed: %v", err)
+			cli.Warning(w, "Could not bring the stack up: %v", err)
 		}
 		return
 	}
 	if started && !jsonOutput {
-		cli.Success(w, "Docker stack started")
+		cli.Success(w, "Stack is up")
 	}
 }

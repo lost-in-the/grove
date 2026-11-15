@@ -404,7 +404,7 @@ Flags:
 ```
 ✓ Created worktree 'testing'
 ✓ Created tmux session 'grove-testing'
-✓ Docker stack started
+✓ Stack is up
 ```
 
 **When a configured file is not copied or linked:** the worktree is kept, and the command exits **14**. Stderr shows one line per failed entry, then one line with the remedy. This holds in every mode, `--json` included.

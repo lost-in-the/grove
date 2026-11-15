@@ -150,6 +150,15 @@ func TestNew_ConfigThatFailsToLoadCreatesNoWorktree(t *testing.T) {
 	if res.stdout != "" {
 		t.Errorf("stdout = %q, want empty (no worktree, no result)", res.stdout)
 	}
+	if n := strings.Count(res.stderr, `"config/*.key" has a glob character`); n != 1 {
+		t.Errorf("the reason appears %d times on stderr, want once:\n%s", n, res.stderr)
+	}
+	if strings.Contains(res.stderr, "using defaults") {
+		t.Errorf("stderr says it is using defaults, but the command refused to:\n%s", res.stderr)
+	}
+	if !strings.Contains(res.stderr, "Error: grove did not create the worktree: the config failed to load: plugins.docker.external.copy_files[0]") {
+		t.Errorf("stderr lacks the single error line:\n%s", res.stderr)
+	}
 	if _, err := os.Stat(filepath.Join(filepath.Dir(repo), "myapp-newwork")); !os.IsNotExist(err) {
 		t.Errorf("a worktree directory exists after a failed config load (stat err = %v)", err)
 	}

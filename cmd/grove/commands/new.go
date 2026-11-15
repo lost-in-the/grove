@@ -30,9 +30,10 @@ var (
 )
 
 var newCmd = &cobra.Command{
-	Use:     "new [name]",
-	Aliases: []string{"spawn", "n"},
-	Short:   "Create a new worktree and tmux session",
+	Annotations: map[string]string{createsWorktreesAnnotation: "true"},
+	Use:         "new [name]",
+	Aliases:     []string{"spawn", "n"},
+	Short:       "Create a new worktree and tmux session",
 	Long: `Create a new git worktree with the specified name and create a tmux session for it.
 
 The worktree will be created in the parent directory of the current repository.
