@@ -160,34 +160,34 @@ a{color:#4D597A;text-decoration:none}a:hover{color:#E66747}
 <div style="break-inside:avoid;margin:10pt 0 4pt">
 <div style="background:#1E1E2E;border-radius:4pt;padding:4px 0;font-family:'Fira Code',monospace;font-size:9px;line-height:1.5;width:fit-content">
 <div style="background:#181825;padding:1px 1ch;display:flex;justify-content:space-between;white-space:pre;width:118ch"><span><span style="color:#9399B2">‹ PRs · </span><span style="color:#FFFFFF;font-weight:700">#23964</span></span><span style="color:#7F849C">esc returns to PRs</span></div>
-<div style="white-space:pre;padding:0 1ch"><span style="color:#FFFFFF;font-weight:700">[ABC-1837] fix(orders): guard ShipmentUpdate against a phantom parcel_id</span></div>
-<div style="white-space:pre;padding:0 1ch"><span style="color:#34D399">● Open</span><span style="color:#9399B2"> · AlexDeveloper · 5 commits into </span><span style="color:#CDD6F4">main</span><span style="color:#9399B2"> from </span><span style="color:#7F849C">abc-1837-guard-…-parcel-id</span></div>
+<div style="white-space:pre;padding:0 1ch"><span style="color:#FFFFFF;font-weight:700">[ABC-1837] fix(api): guard the retry loop against an empty queue</span></div>
+<div style="white-space:pre;padding:0 1ch"><span style="color:#34D399">● Open</span><span style="color:#9399B2"> · AlexDeveloper · 5 commits into </span><span style="color:#CDD6F4">main</span><span style="color:#9399B2"> from </span><span style="color:#7F849C">abc-1837-guard-…-empty-queue</span></div>
 <div style="white-space:pre;padding:1px 1ch;border-bottom:1px solid #45475A"><span style="color:#9399B2"> [1] conversation 1   [2] commits 5   [3] checks </span><span style="color:#FBBF24">1/2</span><span style="color:#9399B2">   </span><span style="background:#313244;color:#FFFFFF;font-weight:700"> [4] files <span style="color:#9399B2;font-weight:400">4</span> </span><span style="color:#9399B2">      </span><span style="color:#34D399">+248</span> <span style="color:#F87171">−23</span><span style="color:#7F849C"> · 0/4 viewed</span></div>
 <div style="display:flex">
 <div style="width:32ch;flex:none;padding:2px 0 0;border-right:1px solid #45475A">
 <div style="white-space:pre;color:#9399B2;padding:0 1ch">▾ app/</div>
-<div style="white-space:pre;color:#9399B2;padding:0 1ch">  ▾ graphql/…/shipment/</div>
+<div style="white-space:pre;color:#9399B2;padding:0 1ch">  ▾ workers/…/queue/</div>
 <div style="white-space:pre;color:#CDD6F4;background:#313244;padding:0 1ch">      <span style="color:#FBBF24">M</span> <span style="color:#FFFFFF;font-weight:700">update.rb</span></div>
-<div style="white-space:pre;color:#9399B2;padding:0 1ch">  ▾ models/order/</div>
-<div style="white-space:pre;color:#CDD6F4;padding:0 1ch">      <span style="color:#FBBF24">M</span> shipment_update.rb</div>
+<div style="white-space:pre;color:#9399B2;padding:0 1ch">  ▾ models/queue/</div>
+<div style="white-space:pre;color:#CDD6F4;padding:0 1ch">      <span style="color:#FBBF24">M</span> retry_loop.rb</div>
 <div style="white-space:pre;color:#9399B2;padding:0 1ch">▾ spec/</div>
-<div style="white-space:pre;color:#9399B2;padding:0 1ch">  ▾ graphql/…/shipment/</div>
+<div style="white-space:pre;color:#9399B2;padding:0 1ch">  ▾ workers/…/queue/</div>
 <div style="white-space:pre;color:#7F849C;padding:0 1ch">      <span style="color:#FBBF24">M</span> update_spec.rb <span style="color:#34D399">✓</span></div>
-<div style="white-space:pre;color:#9399B2;padding:0 1ch">  ▾ models/order/</div>
-<div style="white-space:pre;color:#CDD6F4;padding:0 1ch">      <span style="color:#FBBF24">M</span> shipment_update_…rb</div>
+<div style="white-space:pre;color:#9399B2;padding:0 1ch">  ▾ models/queue/</div>
+<div style="white-space:pre;color:#CDD6F4;padding:0 1ch">      <span style="color:#FBBF24">M</span> retry_loop_…rb</div>
 </div>
 <div style="flex:1;min-width:0;padding:2px 0 0">
-<div style="white-space:pre;padding:0 1ch"><span style="color:#FFFFFF;font-weight:700">app/graphql/resolvers/order/shipment/update.rb</span><span style="color:#9399B2">  </span><span style="color:#34D399">+6</span> <span style="color:#F87171">−9</span><span style="color:#9399B2"> · </span><span style="color:#7F849C">v mark viewed</span></div>
+<div style="white-space:pre;padding:0 1ch"><span style="color:#FFFFFF;font-weight:700">app/graphql/workers/queue/retry_loop.rb</span><span style="color:#9399B2">  </span><span style="color:#34D399">+6</span> <span style="color:#F87171">−9</span><span style="color:#9399B2"> · </span><span style="color:#7F849C">v mark viewed</span></div>
 <div style="white-space:pre;color:#38BDF8;background:#181825;padding:0 1ch">@@ -19,15 +19,12 @@ def call</div>
-<div style="white-space:pre;color:#9399B2;padding:0 1ch"> 20 20    attr_reader :shipment_attrs</div>
+<div style="white-space:pre;color:#9399B2;padding:0 1ch"> 20 20    attr_reader :retry_opts</div>
 <div style="white-space:pre;color:#34D399;background:#16281F;padding:0 1ch">    22  + # Forward only the keys the client actually sent —</div>
 <div style="white-space:pre;color:#34D399;background:#16281F;padding:0 1ch">    23  + # slicing preserves the partial-update signal (ABC-1837).</div>
 <div style="white-space:pre;color:#9399B2;padding:0 1ch"> 22 27    def update_params</div>
 <div style="white-space:pre;color:#F87171;background:#2D1A1D;padding:0 1ch"> 23     −   {</div>
-<div style="white-space:pre;color:#F87171;background:#2D1A1D;padding:0 1ch"> 24     −     carrier: shipment_attrs[:carrier],</div>
-<div style="white-space:pre;color:#F87171;background:#2D1A1D;padding:0 1ch"> 25     −     tracking_number: shipment_attrs[:tracking_number],</div>
+<div style="white-space:pre;color:#F87171;background:#2D1A1D;padding:0 1ch"> 24     −     delay: retry_opts[:delay],</div>
+<div style="white-space:pre;color:#F87171;background:#2D1A1D;padding:0 1ch"> 25     −     max_attempts: retry_opts[:max_attempts],</div>
 <div style="white-space:pre;color:#7F849C;background:#2D1A1D;padding:0 1ch">  ⋮     − 6 more removed lines <span style="color:#F87171">(z folds)</span></div>
-<div style="white-space:pre;color:#34D399;background:#16281F;padding:0 1ch">    28  + shipment_attrs.slice(:carrier, :tracking_number, :tracking_url,…</div>
+<div style="white-space:pre;color:#34D399;background:#16281F;padding:0 1ch">    28  + retry_opts.slice(:delay, :max_attempts, :backoff,…</div>
 <div style="white-space:pre;color:#9399B2;padding:0 1ch"> 32 29    end</div>
 </div>
 </div>

@@ -2,7 +2,7 @@
 
 **Status**: Approved (brainstormed 2026-05-07)
 **Closes**: [#35](https://github.com/lost-in-the/grove/issues/35)
-**Author**: Leah Armstrong (synthesized via AI brainstorming)
+**Author**: Leah Armstrong
 
 ## Overview
 
