@@ -671,6 +671,7 @@ Please be more specific.
 | Scenario | Behavior |
 |----------|----------|
 | Already in target worktree | Message: "Already in 'testing'" (exit 0). Skips the dirty gate, hooks, and state recording, but still cd's back to the worktree root from a subdirectory and — outside tmux — creates/attaches the session like a real switch |
+| Already in target worktree, external Docker mode, env file names another worktree | The shared stack is repointed: the Docker plugin's pre-switch and post-switch hooks run for the target (`container_switch` and `auto_start` apply), and one line is printed: "Repointed the shared stack from 'main' to 'testing'". The line is printed only when the env file, re-read after the hooks, names the target. In agent mode the plugin picks its own strategy and may decline to repoint the shared stack, in which case it prints its own notice and no "Repointed" line appears. The dirty gate, other hooks, and `last_worktree` recording stay skipped, so the A↔B toggle still holds. With `--peek`, or when the env file already names the target, nothing is repointed. `--json` output is unchanged (the line is not printed) |
 | Worktree directory missing | Error: "Worktree directory missing. Run: grove repair testing" |
 | Tmux not running | Start tmux server, create session, attach |
 | Partial name matches one | Switch to it (e.g., `grove to test` → `testing` if unambiguous) |
@@ -1301,30 +1302,35 @@ Flags:
 1. Find the current worktree (same as `grove here`)
 2. Query Docker service status via `CurrentServiceInfo()`:
    - **Local mode**: Check for compose file and running containers in the worktree directory
-   - **External mode**: Read the env file to determine which worktree services are pointed to, check if services are running, and whether they match the current worktree
-   - **Agent mode**: Check slot allocation for the current worktree
+   - **External mode**: A worktree that owns an agent slot (when `[plugins.docker.external.agent]` is enabled) reports its agent stack. Any other worktree reports the shared stack: read the env file to find the worktree it is **configured for**, then probe Docker once.
+     - The env file says what grove configured, not what the container has mounted. When the state is running, degraded, or unknown, a hint line points to `grove here --check-mount` for the real mount. It is omitted when nothing runs or nothing is configured.
+   - **Local mode**: a Docker probe that errors or times out also prints "state unknown (docker did not answer)", not "not running".
+     - Run state is judged on the configured `services` only (all services when none are listed). Shared infrastructure does not make the stack "running", and an unrelated failing container does not make it "not running". `non_blocking_services` are still honored.
+     - A Docker probe that times out or errors prints "state unknown". It is never reported as "not running".
+     - With the env var unset, the output says "not configured for any worktree".
    - **No Docker**: Services section is omitted
-3. Display worktree name, branch, and service status
+3. Display worktree name, branch, and service status. Names are short display names, the same as the Worktree line.
 
-**Output (formatted, services running for current worktree):**
+**Output (formatted, shared stack configured for the current worktree and running):**
 ```
 Worktree:  testing
 Branch:    feat/testing
-Services:  ● running for testing
+Services:  ● running, configured for testing
+           This is the env file setting. Run 'grove here --check-mount' to see what the containers have mounted.
 ```
 
-**Output (formatted, services running for a different worktree):**
+**Output (formatted, shared stack configured for a different worktree):**
 ```
-Worktree:  testing
-Branch:    feat/testing
-Services:  ⚠ running for feature-auth (not this worktree)
+Services:  ⚠ running, configured for feature-auth (not this worktree)
 ```
 
-**Output (formatted, no services running):**
+**Other `Services:` values:**
 ```
-Worktree:  testing
-Branch:    feat/testing
-Services:  ○ not running
+Services:  ○ not running, configured for testing
+Services:  ⚠ degraded (app failed), configured for testing
+Services:  ⚠ state unknown (docker did not answer), configured for testing
+Services:  ⚠ not configured for any worktree
+Services:  ● agent stack #2
 ```
 
 **Output (JSON, `--json`):**
@@ -1334,13 +1340,18 @@ Services:  ○ not running
   "branch": "feat/testing",
   "path": "/path/to/grove-testing",
   "services": {
-    "running_for": "testing",
+    "state": "running",
+    "configured_for": "testing",
     "matches_current": true
   }
 }
 ```
 
+`state` is one of `running`, `stopped`, `degraded`, `unknown`, `agent`, `not_configured`. `configured_for` appears for the shared stack when set. `slot` appears for an agent stack. These replace the earlier `running_for` field.
+
 When no Docker is configured, the `services` field is `null`/omitted.
+
+`grove ls` and the TUI use the same verdict, so they cannot disagree with `grove which`.
 
 **Exit Codes:**
 - 0: Success
@@ -1401,7 +1412,7 @@ All containers running. Web available at http://localhost:3001
 
 ### grove down
 
-**Purpose:** Stop Docker containers for the current worktree.
+**Purpose:** Stop Docker containers for the current worktree (local mode) or the shared stack (external mode).
 
 **Usage:**
 ```
@@ -1410,6 +1421,12 @@ grove down
 (no flags — if the worktree has an isolated stack running, it is
 auto-detected and torn down)
 ```
+
+**External mode:** There is one shared stack, so `grove down` stops its configured services whichever worktree it is configured for. It never does this silently: when the env file names a different worktree than the current one, grove prints this before stopping:
+```
+Stopping the shared stack, currently configured for 'main'
+```
+With the env var unset, or configured for the current worktree, no notice is printed. A worktree with an isolated agent stack tears down that stack instead.
 
 **Output:**
 ```
@@ -2385,7 +2402,7 @@ grove doctor
   ✓ Config (loaded)
   ✓ Config symlinks (4 worktrees checked)
   ✓ Worktree registration (4 worktrees registered)
-  ✓ External compose path (/path/to/compose-dev)
+  ✓ External compose path (/path/to/orchestrator)
   ✓ Env file target (.env.local)
 
   ✓ All checks passed

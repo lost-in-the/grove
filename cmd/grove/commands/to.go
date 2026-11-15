@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -14,6 +15,7 @@ import (
 	"github.com/lost-in-the/grove/internal/mux"
 	"github.com/lost-in-the/grove/internal/output"
 	"github.com/lost-in-the/grove/internal/worktree"
+	"github.com/lost-in-the/grove/plugins/docker"
 )
 
 var (
@@ -99,6 +101,13 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 	// and mis-records last_worktree as the current one, breaking the A↔B
 	// toggle (B18).
 	if currentPath != "" && currentPath == targetTree.Path {
+		// The shared external stack follows the env file, not the shell. When
+		// it names another worktree, a self-switch is the one way to repoint it.
+		configured, configuredOK := docker.ConfiguredWorktreePath(ctx.Config)
+		if shouldRepointStack(ctx.Config.IsExternalDockerMode(), configured, configuredOK, targetTree.Path, peek) {
+			repointSharedStack(ctx, mgr, targetTree, configured, jsonOut, stderr)
+		}
+
 		if jsonOut {
 			return output.PrintJSON(output.SwitchResult{
 				SwitchTo: targetTree.Path,
@@ -391,6 +400,66 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 	}
 
 	return nil
+}
+
+// shouldRepointStack reports whether a self-switch (`grove to <current>`) must
+// still run the Docker switch hooks: only when the shared external stack is
+// configured for a different worktree than the target. --peek never has side
+// effects.
+func shouldRepointStack(external bool, configured string, configuredOK bool, target string, peek bool) bool {
+	if !external || !configuredOK || peek {
+		return false
+	}
+	return filepath.Clean(configured) != filepath.Clean(target)
+}
+
+// repointSucceeded reports whether the env file, re-read after the hooks ran,
+// names the target. It keeps the "Repointed" line true in every mode: in agent
+// mode the plugin may decline to repoint the shared stack and says so itself.
+func repointSucceeded(configured string, configuredOK bool, target string) bool {
+	return configuredOK && filepath.Clean(configured) == filepath.Clean(target)
+}
+
+// usesSharedExternalStack is true in external mode unless agent mode selects
+// isolated stacks, where the env file is not what a switch repoints.
+func usesSharedExternalStack(cfg *config.Config) bool {
+	return cfg.IsExternalDockerMode() && !cfg.AgentMode
+}
+
+// repointSharedStack runs only the Docker plugin's pre/post-switch hooks for the
+// target, exactly as a real switch would (container_switch and auto_start still
+// apply). It deliberately skips the dirty gate, other plugins' hooks, and state
+// recording so the A<->B toggle (B18) is unaffected.
+func repointSharedStack(ctx *GroveContext, mgr *worktree.Manager, targetTree *worktree.Worktree, configuredPath string, jsonOut bool, stderr *cli.Writer) {
+	plugin := docker.New()
+	if err := plugin.Init(ctx.Config); err != nil {
+		cli.Warning(stderr, "could not repoint the shared stack: %v", err)
+		return
+	}
+	registry := hooks.NewRegistry()
+	if err := plugin.RegisterHooks(registry); err != nil {
+		cli.Warning(stderr, "could not repoint the shared stack: %v", err)
+		return
+	}
+
+	from := mgr.DisplayNameForPath(configuredPath)
+	hookCtx := &hooks.Context{
+		Worktree:         targetTree.DisplayName(),
+		PrevWorktree:     from,
+		Config:           ctx.Config,
+		WorktreePath:     targetTree.Path,
+		PrevWorktreePath: configuredPath,
+		MainPath:         ctx.ProjectRoot,
+	}
+
+	for _, event := range []string{hooks.EventPreSwitch, hooks.EventPostSwitch} {
+		if err := registry.Fire(event, hookCtx); err != nil {
+			cli.Warning(stderr, "%s hooks failed: %v", event, err)
+		}
+	}
+	if after, ok := docker.ConfiguredWorktreePath(ctx.Config); !jsonOut && repointSucceeded(after, ok, targetTree.Path) {
+		cli.Info(stderr, "Repointed the shared stack from '%s' to '%s'", from, targetTree.DisplayName())
+	}
 }
 
 // selfSwitchTmuxEpilogue ensures the target worktree's tmux session exists and
