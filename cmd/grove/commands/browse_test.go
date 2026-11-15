@@ -1,9 +1,13 @@
 package commands
 
 import (
+	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 
 	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/plugins"
@@ -298,5 +302,71 @@ func TestRunBrowseTUI_UpRunsGroveToWithUp(t *testing.T) {
 func TestRunBrowseTUI_EnterLeavesTheMoveToTheTUI(t *testing.T) {
 	if err := runBrowseTUI(browseTestContext(t), fakeBrowseTUI(tui.Exit{Path: "/src/myapp-missing", Name: "missing"})); err != nil {
 		t.Errorf("runBrowseTUI() error = %v, want nil: the TUI already moved you", err)
+	}
+}
+
+// groveRepoWithBadConfig is a grove project whose config fails to load (a
+// glob in copy_files), with cwd moved into it.
+func groveRepoWithBadConfig(t *testing.T) {
+	t.Helper()
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := filepath.Join(root, "myapp")
+	testhelper.WriteFile(t, filepath.Join(repo, "README.md"), "myapp\n")
+	testhelper.RunGit(t, repo, "init", "-q")
+	testhelper.RunGit(t, repo, "add", ".")
+	testhelper.RunGit(t, repo, "commit", "-q", "-m", "init")
+	testhelper.WriteFile(t, filepath.Join(repo, ".grove", "config.toml"), `project_name = "myapp"
+
+[plugins.docker]
+mode = "external"
+
+[plugins.docker.external]
+path = "`+filepath.Join(root, "shared-compose")+`"
+env_var = "APP_DIR"
+copy_files = ["config/*.key"]
+`)
+	t.Chdir(repo)
+}
+
+// captureStderr returns what fn wrote to os.Stderr.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	orig := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	fn()
+	_ = w.Close()
+	os.Stderr = orig
+	data, _ := io.ReadAll(r)
+	return string(data)
+}
+
+// grove prs and grove issues create worktrees, so a config that fails to load
+// is reported once, as the create error (or the dashboard's own warning),
+// never also as "using defaults". A read-only command still warns.
+func TestBrowseCommands_ConfigLoadFailureIsNotAlsoAFallbackWarning(t *testing.T) {
+	for _, tc := range []struct {
+		cmd       *cobra.Command
+		wantWarns bool
+	}{
+		{prsCmd, false},
+		{issuesCmd, false},
+		{lsCmd, true},
+	} {
+		t.Run(tc.cmd.Name(), func(t *testing.T) {
+			groveRepoWithBadConfig(t)
+			stderr := captureStderr(t, func() {
+				_ = RequireGroveContext(func(*cobra.Command, []string, *GroveContext) error { return nil })(tc.cmd, nil)
+			})
+			if warns := strings.Contains(stderr, "using defaults"); warns != tc.wantWarns {
+				t.Errorf("grove %s: \"using defaults\" warning = %v, want %v; stderr:\n%s", tc.cmd.Name(), warns, tc.wantWarns, stderr)
+			}
+		})
 	}
 }
