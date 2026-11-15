@@ -124,7 +124,7 @@ func TestResolveProjectPaths_TildeTemplatePath(t *testing.T) {
 				External: &ExternalComposeConfig{
 					Path: "/abs/orchestrator",
 					Agent: &AgentStackConfig{
-						TemplatePath: "~/work/agent.yml",
+						TemplatePath: "~/code/agent.yml",
 					},
 				},
 			},
@@ -136,7 +136,7 @@ func TestResolveProjectPaths_TildeTemplatePath(t *testing.T) {
 	}
 
 	got := cfg.Plugins.Docker.External.Agent.TemplatePath
-	want := filepath.Join(home, "work", "agent.yml")
+	want := filepath.Join(home, "code", "agent.yml")
 	if got != want {
 		t.Errorf("Agent.TemplatePath = %q, want %q", got, want)
 	}
@@ -156,7 +156,7 @@ func TestResolveProjectPaths_TildeTemplateOverlays(t *testing.T) {
 					Agent: &AgentStackConfig{
 						TemplatePath: "agent-stacks/template.yml",
 						TemplateOverlays: []string{
-							"~/work/overlay-a.yml",
+							"~/code/overlay-a.yml",
 							"overlay-b.yml",
 							"/abs/overlay-c.yml",
 						},
@@ -172,7 +172,7 @@ func TestResolveProjectPaths_TildeTemplateOverlays(t *testing.T) {
 
 	overlays := cfg.Plugins.Docker.External.Agent.TemplateOverlays
 	want := []string{
-		filepath.Join(home, "work", "overlay-a.yml"),
+		filepath.Join(home, "code", "overlay-a.yml"),
 		"overlay-b.yml",
 		"/abs/overlay-c.yml",
 	}
