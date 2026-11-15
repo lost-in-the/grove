@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 const dockerModeExternal = "external"
@@ -100,6 +102,14 @@ func validateDockerPlugin(cfg *Config) error {
 		return fmt.Errorf("plugins.docker.mode must be one of: local, external (got %q)", mode)
 	}
 
+	// Worktree file setup runs whenever [plugins.docker.external] exists,
+	// whatever the mode, so its entries are checked here too.
+	if ext := cfg.Plugins.Docker.External; ext != nil {
+		if err := validateExternalFileEntries(ext); err != nil {
+			return err
+		}
+	}
+
 	if mode != dockerModeExternal {
 		return nil
 	}
@@ -167,6 +177,38 @@ func validateExternalAgent(ext *ExternalComposeConfig) error {
 	for i, overlay := range ext.Agent.TemplateOverlays {
 		if overlay == "" {
 			return fmt.Errorf("plugins.docker.external.agent.template_overlays[%d] must be a non-empty path", i)
+		}
+	}
+	return nil
+}
+
+// validateExternalFileEntries rejects copy_files, symlink_files, and
+// symlink_dirs entries that file setup would only fail on later: empty,
+// absolute, or escaping paths, and (for the two file lists) glob patterns,
+// which are treated as literal names and never expanded.
+func validateExternalFileEntries(ext *ExternalComposeConfig) error {
+	lists := []struct {
+		key     string
+		entries []string
+		globs   bool
+	}{
+		{"copy_files", ext.CopyFiles, true},
+		{"symlink_files", ext.SymlinkFiles, true},
+		{"symlink_dirs", ext.SymlinkDirs, false},
+	}
+	for _, l := range lists {
+		for i, entry := range l.entries {
+			where := fmt.Sprintf("plugins.docker.external.%s[%d]", l.key, i)
+			switch {
+			case entry == "":
+				return fmt.Errorf("%s must not be empty", where)
+			case filepath.IsAbs(entry):
+				return fmt.Errorf("%s: %q must be a relative path", where, entry)
+			case strings.HasPrefix(filepath.Clean(entry), ".."):
+				return fmt.Errorf("%s: %q must stay inside the worktree", where, entry)
+			case l.globs && strings.ContainsAny(entry, "*?["):
+				return fmt.Errorf("%s: %q has a glob character; globs are not supported, list each file", where, entry)
+			}
 		}
 	}
 	return nil
