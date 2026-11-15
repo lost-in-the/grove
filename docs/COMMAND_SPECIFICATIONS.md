@@ -671,6 +671,7 @@ Please be more specific.
 | Scenario | Behavior |
 |----------|----------|
 | Already in target worktree | Message: "Already in 'testing'" (exit 0). Skips the dirty gate, hooks, and state recording, but still cd's back to the worktree root from a subdirectory and — outside tmux — creates/attaches the session like a real switch |
+| Already in target worktree, external Docker mode, env file names another worktree | The shared stack is repointed: the Docker plugin's pre-switch and post-switch hooks run for the target (`container_switch` and `auto_start` apply), and one line is printed: "Repointed the shared stack from 'main' to 'testing'". The dirty gate, other hooks, and `last_worktree` recording stay skipped, so the A↔B toggle still holds. With `--peek`, or when the env file already names the target, nothing is repointed. `--json` output is unchanged (the line is not printed) |
 | Worktree directory missing | Error: "Worktree directory missing. Run: grove repair testing" |
 | Tmux not running | Start tmux server, create session, attach |
 | Partial name matches one | Switch to it (e.g., `grove to test` → `testing` if unambiguous) |
