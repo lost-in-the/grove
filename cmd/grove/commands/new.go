@@ -72,6 +72,10 @@ Examples:
 			newJSON = true
 		}
 
+		if err := ctx.RequireConfig("create the worktree"); err != nil {
+			return err
+		}
+
 		w := cli.NewStdout()
 		stderr := cli.NewStderr()
 
@@ -220,7 +224,7 @@ Examples:
 		}
 
 		// Post-create setup: find, symlink, state, hooks, docker
-		wt, err := setupCreatedWorktree(ctx, mgr, name, branchName, worktreeSetupOpts{
+		wt, prov, err := setupCreatedWorktree(ctx, mgr, name, branchName, worktreeSetupOpts{
 			IsEnvironment: isEnvironment,
 			Mirror:        mirror,
 			NoDocker:      newNoDocker,
@@ -279,12 +283,14 @@ Examples:
 				Path:    wt.Path,
 				Created: true,
 			}
+			result.Provisioned, result.FileSetup = prov.jsonFields()
 			if !newNoSwitch {
 				result.SwitchTo = wt.Path
 			}
 			if err := output.PrintJSON(result); err != nil {
 				return err
 			}
+			prov.exitIfIncomplete()
 			return nil
 		}
 
@@ -308,6 +314,7 @@ Examples:
 			cli.Info(w, "To switch to the new worktree: grove to %s", name)
 		}
 
+		prov.exitIfIncomplete()
 		return nil
 	}),
 }

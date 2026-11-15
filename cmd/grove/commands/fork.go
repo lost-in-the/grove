@@ -32,6 +32,10 @@ type ForkResult struct {
 	Path     string `json:"path"`
 	Parent   string `json:"parent"`
 	Created  bool   `json:"created"`
+	// Provisioned is false when a configured file was not copied or linked, or
+	// state registration failed. See output.NewWorktreeResult.
+	Provisioned *bool                   `json:"provisioned,omitempty"`
+	FileSetup   *output.FileSetupResult `json:"file_setup,omitempty"`
 }
 
 var forkCmd = &cobra.Command{
@@ -75,6 +79,10 @@ Examples:
 		// and tmux keys, and separators like "/" escape the projects dir.
 		if msg := worktree.ValidateWorktreeName(name); msg != "" {
 			return fmt.Errorf("invalid worktree name '%s': %s", name, msg)
+		}
+
+		if err := ctx.RequireConfig("create the worktree"); err != nil {
+			return err
 		}
 
 		mgr, err := ctx.WorktreeManager()
@@ -235,22 +243,19 @@ Examples:
 		if !forkJSON {
 			bootstrapWriter = w
 		}
-		if err := worktree.BootstrapWorktree(ctx.State, ctx.Config, worktree.BootstrapOpts{
+		res, bootErr := worktree.Bootstrap(ctx.State, ctx.Config, worktree.BootstrapOpts{
 			Name:           name,
 			Branch:         newBranchName,
 			WorktreePath:   newTree.Path,
 			MainPath:       ctx.ProjectRoot,
 			ProjectName:    mgr.GetProjectName(),
 			ParentWorktree: parentName,
-		}, bootstrapWriter); err != nil {
-			// A required post-create hook failing fails the command (B7); other
-			// bootstrap issues (state, setup) stay recoverable — warn and point
-			// at `grove repair`, preserving fork's prior leniency.
-			if errors.Is(err, worktree.ErrRequiredHookFailed) {
-				return err
-			}
-			cli.Warning(stderr, "worktree created but provisioning had issues: %v", err)
-			cli.Info(stderr, "run 'grove repair' to fix")
+		}, bootstrapWriter)
+		prov := newProvisioning(res, bootErr)
+		prov.report(name, newTree.Path)
+		// A required post-create hook failing fails the command (B7).
+		if errors.Is(bootErr, worktree.ErrRequiredHookFailed) {
+			return bootErr
 		}
 
 		projectName := mgr.GetProjectName()
@@ -275,10 +280,15 @@ Examples:
 				Parent:  parentName,
 				Created: true,
 			}
+			result.Provisioned, result.FileSetup = prov.jsonFields()
 			if !forkNoSwitch {
 				result.SwitchTo = newTree.Path
 			}
-			return output.PrintJSON(result)
+			if err := output.PrintJSON(result); err != nil {
+				return err
+			}
+			prov.exitIfIncomplete()
+			return nil
 		}
 
 		// Switch to new worktree unless --no-switch. Agent mode and tmux mode
@@ -294,6 +304,7 @@ Examples:
 			cli.Info(w, "To switch to the new worktree: grove to %s", name)
 		}
 
+		prov.exitIfIncomplete()
 		return nil
 	}),
 }

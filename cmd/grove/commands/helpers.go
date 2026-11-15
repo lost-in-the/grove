@@ -525,14 +525,19 @@ type worktreeSetupOpts struct {
 }
 
 // setupCreatedWorktree runs the shared post-create sequence: find the worktree,
-// record git excludes, register state, execute hooks, and auto-start Docker.
-func setupCreatedWorktree(ctx *GroveContext, mgr *worktree.Manager, name, branchName string, opts worktreeSetupOpts, w *cli.Writer) (*worktree.Worktree, error) {
+// record git excludes, register state, copy files, execute hooks, and
+// auto-start Docker.
+//
+// File and state problems are printed to stderr here (in every mode, JSON
+// included) and returned as provisioning. The caller prints its result and then
+// calls prov.exitIfIncomplete(). Only a failed required hook comes back as err.
+func setupCreatedWorktree(ctx *GroveContext, mgr *worktree.Manager, name, branchName string, opts worktreeSetupOpts, w *cli.Writer) (*worktree.Worktree, provisioning, error) {
 	// Compute the canonical path directly. The worktree was just created by
 	// the caller at the standard location, so re-running List() to find it
 	// would only burn another N parallel git status calls.
 	wtPath := mgr.PathForName(name)
 	if _, err := os.Stat(wtPath); err != nil {
-		return nil, fmt.Errorf("created worktree not found at %s: %w", wtPath, err)
+		return nil, provisioning{}, fmt.Errorf("created worktree not found at %s: %w", wtPath, err)
 	}
 	wt := &worktree.Worktree{
 		Name:      filepath.Base(wtPath),
@@ -558,35 +563,21 @@ func setupCreatedWorktree(ctx *GroveContext, mgr *worktree.Manager, name, branch
 	if !opts.JSONOutput {
 		bootstrapWriter = w
 	}
-	if err := worktree.BootstrapWorktree(ctx.State, ctx.Config, bootstrapOpts, bootstrapWriter); err != nil {
-		// A required post-create hook failing fails the command (B7). Other
-		// bootstrap failures (symlink, state) are recoverable — warn and point
-		// at `grove repair` rather than aborting, preserving prior behavior.
-		if errors.Is(err, worktree.ErrRequiredHookFailed) {
-			return wt, err
-		}
-		if !opts.JSONOutput {
-			cli.Warning(w, "Bootstrap failed: %v", err)
-			cli.Faint(w, "run 'grove repair' to fix")
-		}
+	res, err := worktree.Bootstrap(ctx.State, ctx.Config, bootstrapOpts, bootstrapWriter)
+	prov := newProvisioning(res, err)
+	prov.report(name, wt.Path)
+	// A required post-create hook failing fails the command (B7).
+	if errors.Is(err, worktree.ErrRequiredHookFailed) {
+		return wt, prov, err
+	}
+	if err != nil && prov.complete() {
+		// Neither files nor state: nothing else bootstrap returns today, but
+		// say so rather than swallow it.
+		cli.Warning(cli.NewStderr(), "Bootstrap failed: %v", err)
 	}
 
 	autoStartDocker(w, ctx.Config, wt.Path, opts.Up, opts.NoDocker, opts.JSONOutput)
-	return wt, nil
-}
-
-// runFileSetup runs worktree.SetupFiles when an external docker config is
-// present. Kept as a separate helper so callers like `grove fork` (which
-// don't go through BootstrapWorktree) can reuse it.
-func runFileSetup(cfg *config.Config, newPath, mainPath string, w *cli.Writer, jsonOutput bool) {
-	if cfg == nil || cfg.Plugins.Docker.External == nil {
-		return
-	}
-	if err := worktree.SetupFiles(cfg.Plugins.Docker.External, newPath, mainPath); err != nil {
-		if !jsonOutput {
-			cli.Warning(w, "File setup had issues: %v", err)
-		}
-	}
+	return wt, prov, nil
 }
 
 // wantsStackUp is true when create should bring the stack: --up for this

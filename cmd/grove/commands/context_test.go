@@ -17,7 +17,7 @@ func TestEmitDriftNotice_PrintsAdoptHint(t *testing.T) {
 	var buf bytes.Buffer
 	w := cli.NewWriter(&buf, false)
 
-	emitDriftNotice(w, "drifted-wt", grove.ReasonDriftedWorktree)
+	emitDriftNotice(w, "drifted-wt", grove.ReasonDriftedWorktree, nil)
 
 	out := buf.String()
 	if !strings.Contains(out, "grove adopt") {
@@ -32,7 +32,7 @@ func TestEmitDriftNotice_SilentWhenRegistered(t *testing.T) {
 	var buf bytes.Buffer
 	w := cli.NewWriter(&buf, false)
 
-	emitDriftNotice(w, "ok-wt", grove.ReasonRegistered)
+	emitDriftNotice(w, "ok-wt", grove.ReasonRegistered, nil)
 
 	if buf.Len() != 0 {
 		t.Errorf("expected no output for registered worktree, got: %s", buf.String())

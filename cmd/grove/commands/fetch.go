@@ -64,7 +64,7 @@ func setupFetchedWorktree(ctx *GroveContext, mgr *worktree.Manager, w *cli.Write
 	// state registration, file setup, post-create hooks, docker auto-start.
 	// Fetched worktrees previously only registered state, leaving them
 	// silently unprovisioned (#112).
-	wt, err := setupCreatedWorktree(ctx, mgr, worktreeName, branchName, worktreeSetupOpts{}, w)
+	wt, prov, err := setupCreatedWorktree(ctx, mgr, worktreeName, branchName, worktreeSetupOpts{}, w)
 	if err != nil {
 		return err
 	}
@@ -94,12 +94,16 @@ func setupFetchedWorktree(ctx *GroveContext, mgr *worktree.Manager, w *cli.Write
 	if !cli.CdDirective(wt.Path) {
 		fmt.Printf("\nTo switch to this worktree:\n  grove to %s\n", worktreeName)
 	}
+	prov.exitIfIncomplete()
 	return nil
 }
 
 // fetchItem creates a worktree from a GitHub PR or issue.
 // itemType must be "pr" or "issue". Called by both `grove fetch` and `grove prs`/`grove issues`.
 func fetchItem(ctx *GroveContext, itemType string, number int) error {
+	if err := ctx.RequireConfig("create the worktree"); err != nil {
+		return err
+	}
 	w := cli.NewStdout()
 
 	if !tracker.IsGHInstalled() {

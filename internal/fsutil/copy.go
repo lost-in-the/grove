@@ -2,11 +2,16 @@
 package fsutil
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 )
+
+// ErrNotRegularFile is returned by CopyFile when the source is a directory or
+// another non-regular file.
+var ErrNotRegularFile = errors.New("source is not a regular file")
 
 // CopyFile copies a single file from src to dst, preserving permissions.
 // Creates parent directories as needed. Checks Close() errors to catch
@@ -24,7 +29,7 @@ func CopyFile(src, dst string) error {
 	}
 
 	if !srcInfo.Mode().IsRegular() {
-		return fmt.Errorf("source is a directory or special file, not a regular file: %s", src)
+		return fmt.Errorf("%w: %s", ErrNotRegularFile, src)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
