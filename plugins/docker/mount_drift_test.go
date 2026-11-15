@@ -318,8 +318,8 @@ func TestSummarizeMountReports(t *testing.T) {
 		wantLine     string
 		wantAllClear bool
 	}{
-		{"all verified", mk(MountVerified, MountVerified, MountVerified), "All 3 services mounted from the configured worktree.", true},
-		{"single verified", mk(MountVerified), "All 1 service mounted from the configured worktree.", true},
+		{"all verified", mk(MountVerified, MountVerified, MountVerified), "All 3 services mounted from the worktree the stack is on.", true},
+		{"single verified", mk(MountVerified), "All 1 service mounted from the worktree the stack is on.", true},
 		{"mixed", mk(MountVerified, MountVerified, MountVerified, MountVerified, MountNoMount, MountNoMount, MountNotRunning, MountNotRunning), "4 of 8 services verified; 4 not checked", false},
 		{"all stopped", mk(MountNotRunning, MountNotRunning), "0 of 2 services verified; 2 not checked", false},
 		{"drift is checked, not unchecked", mk(MountVerified, MountDrift), "1 of 2 services verified; 1 drifted", false},

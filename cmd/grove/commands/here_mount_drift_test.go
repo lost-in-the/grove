@@ -47,7 +47,7 @@ func TestMountCheckMismatchNote(t *testing.T) {
 			name:           "mismatch names note cwd and configured worktree",
 			currentName:    "feature-b",
 			configuredName: "feature-a",
-			want:           "note: you are in 'feature-b'; the stack is configured for 'feature-a'",
+			want:           "note: you are in 'feature-b'; the stack is on 'feature-a'",
 		},
 	}
 
@@ -234,7 +234,7 @@ func TestMountCheckUnresolvedNote(t *testing.T) {
 			name:           "unresolved with require-current: fail-closed warning",
 			requireCurrent: true,
 			configuredName: "",
-			want:           "could not determine the configured worktree — failing --require-current",
+			want:           "could not tell which worktree the stack is on, failing --require-current",
 		},
 	}
 

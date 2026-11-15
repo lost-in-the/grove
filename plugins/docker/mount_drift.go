@@ -175,7 +175,7 @@ func (s MountSummary) Line() string {
 		noun = "service"
 	}
 	if s.AllVerified() {
-		return fmt.Sprintf("All %d %s mounted from the configured worktree.", s.Total, noun)
+		return fmt.Sprintf("All %d %s mounted from the worktree the stack is on.", s.Total, noun)
 	}
 	line := fmt.Sprintf("%d of %d %s verified", s.Verified, s.Total, noun)
 	if s.Drift > 0 {

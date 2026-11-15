@@ -15,34 +15,33 @@ func init() {
 }
 
 // sharedStackDownNotice returns the line grove down prints before stopping the
-// shared external stack when it is configured for a worktree other than the
-// current one, or "" when no notice is needed. The command still stops the
+// shared external stack when it is on a worktree other than here, or "" when
+// no notice is needed. The command still stops the
 // stack: there is only one.
 func sharedStackDownNotice(shared bool, configured string, configuredOK bool, current string, displayName func(string) string) string {
 	if !shared || !configuredOK || filepath.Clean(configured) == filepath.Clean(current) {
 		return ""
 	}
-	return fmt.Sprintf("Stopping the shared stack, currently configured for '%s'", displayName(configured))
+	return fmt.Sprintf("Stopping the stack. It is on '%s', not here.", displayName(configured))
 }
 
 var downCmd = &cobra.Command{
 	Use:     "down",
 	Aliases: []string{"do"},
-	Short:   "Stop containers for current worktree",
-	Long: `Stop Docker containers for the current worktree.
+	Short:   "Stop the stack",
+	Long: `Stop the stack.
 
 Local mode: looks for a docker-compose.yml file in the current directory
 and stops all services defined in it.
 
-External mode: stops the configured services of the one shared stack, whichever
-worktree it is configured for. When that is not the current worktree, grove
-says so before stopping it.
+External mode: stops the one shared stack, whichever worktree it is on. When
+that is not here, grove says so before stopping it.
 
 If the worktree has an isolated stack running (started with grove up --isolated),
 it is automatically detected and torn down instead.
 
 Examples:
-  grove down   # Stop all containers
+  grove down   # Stop the stack
   w down       # Using alias`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		w := cli.NewStdout()
@@ -76,12 +75,12 @@ Examples:
 				}
 			}
 		}
-		cli.Step(stderr, "Stopping containers...")
+		cli.Step(stderr, "Stopping the stack...")
 		if err := plugin.Down(root); err != nil {
-			return fmt.Errorf("failed to stop containers: %w", err)
+			return fmt.Errorf("failed to stop the stack: %w", err)
 		}
 
-		cli.Success(w, "Containers stopped")
+		cli.Success(w, "Stack stopped")
 		return nil
 	}),
 }

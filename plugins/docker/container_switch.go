@@ -39,8 +39,8 @@ func resolveFromConfig(containerSwitch string) ContainerSwitchAction {
 
 // Prompt strings shared by the local and external switch hooks.
 const (
-	promptStopContainers  = "Stop containers in previous worktree?"
-	promptStartContainers = "Start containers for this worktree?"
+	promptStopContainers  = "Stop the stack on the previous worktree?"
+	promptStartContainers = "Bring the stack up here?"
 )
 
 // containerSwitchSetting reads the container_switch config value from the hook context.

@@ -149,15 +149,15 @@ func sharedStackEntry(v stackVerdict) plugins.StatusEntry {
 	case StackRunning:
 		entry.Level = plugins.StatusActive
 		entry.Short = "up"
-		entry.Detail = fmt.Sprintf("%d service(s) running, configured for this worktree", v.Running)
+		entry.Detail = fmt.Sprintf("%d service(s) running, the stack is on this worktree", v.Running)
 	case StackDegraded:
 		entry.Level = plugins.StatusWarning
 		entry.Short = "degraded"
 		entry.Detail = fmt.Sprintf("blocking service(s) failed: %s", strings.Join(v.Blockers, ", "))
 	case StackUnknown:
-		entry.Detail = "Configured as active worktree; state unknown (docker did not answer)"
+		entry.Detail = "The stack is on this worktree; state unknown (docker did not answer)"
 	default:
-		entry.Detail = "Configured as active worktree but no services running"
+		entry.Detail = "The stack is on this worktree but no services are running"
 	}
 	return entry
 }

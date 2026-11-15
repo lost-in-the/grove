@@ -56,7 +56,7 @@ func runMountDriftCheck(ctx *GroveContext, displayName string, requireCurrent bo
 
 	cli.Header(w, mountCheckHeaderTemplate, displayName)
 	cli.Label(w, "Env file:        ", filepath.Join(composePath, driftCfg.EnvFileName))
-	cli.Label(w, "Configured src:  ", displayPath(reports))
+	cli.Label(w, "Stack on:        ", displayPath(reports))
 	cli.Label(w, "Mount dest:      ", driftCfg.MountDest)
 	_, _ = fmt.Fprintln(w)
 
@@ -145,7 +145,7 @@ func mountCheckMismatchNote(currentName, configuredName string) string {
 	if configuredName == "" || configuredName == currentName {
 		return ""
 	}
-	return fmt.Sprintf("note: you are in '%s'; the stack is configured for '%s'", currentName, configuredName)
+	return fmt.Sprintf("note: you are in '%s'; the stack is on '%s'", currentName, configuredName)
 }
 
 // mountCheckUnresolvedNote flags when --require-current can't do its job
@@ -160,7 +160,7 @@ func mountCheckUnresolvedNote(requireCurrent bool, configuredName string) string
 	if configuredName != "" || !requireCurrent {
 		return ""
 	}
-	return "could not determine the configured worktree — failing --require-current"
+	return "could not tell which worktree the stack is on, failing --require-current"
 }
 
 // mountCheckExitCode decides the process exit code for `grove here

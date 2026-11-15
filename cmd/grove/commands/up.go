@@ -23,19 +23,23 @@ func init() {
 var upCmd = &cobra.Command{
 	Use:     "up",
 	Aliases: []string{"u"},
-	Short:   "Start containers for current worktree",
-	Long: `Start Docker containers for the current worktree.
+	Short:   "Bring the stack up here",
+	Long: `Bring the stack up here: the worktree you are in.
 
-This command looks for a docker-compose.yml file in the current directory
-and starts all services defined in it. By default, containers run in detached
-mode (background).
+Local mode: looks for a docker-compose.yml file in the current directory and
+starts all services defined in it.
+
+External mode: puts the one shared stack on this worktree (it writes the env
+file) and starts it. By default the stack runs in the background.
+
+'grove to <name>' only moves you. Use 'grove up' after it, or 'grove to <name> --up'.
 
 Use --isolated to start a fully independent stack with its own containers,
 database, and routing. Useful when you need multiple stacks running simultaneously.
 
 Examples:
-  grove up                 # Start containers in detached mode
-  grove up --detach=false  # Start containers in foreground
+  grove up                 # Bring the stack up in the background
+  grove up --detach=false  # Bring the stack up in the foreground
   grove up --isolated      # Start an independent stack (allocates a slot)
   w up                     # Using alias`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
@@ -66,12 +70,12 @@ Examples:
 
 		// Start containers — no spinner here: docker compose writes its own
 		// progress to stderr, and wrapping it in Bubbletea causes flashing.
-		cli.Step(stderr, "Starting containers...")
+		cli.Step(stderr, "Bringing the stack up...")
 		if err := plugin.Up(root, upDetach); err != nil {
-			return fmt.Errorf("failed to start containers: %w", err)
+			return fmt.Errorf("failed to bring the stack up: %w", err)
 		}
 		if upDetach && !upIsolated {
-			cli.Success(w, "Containers started")
+			cli.Success(w, "Stack is up")
 		}
 
 		return nil

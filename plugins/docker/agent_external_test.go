@@ -130,7 +130,7 @@ func switchWithNoSlot(t *testing.T, s *agentExternalStrategy, wtPath string) (st
 	return stdout, stderr
 }
 
-func TestAgentExternalStrategy_OnPostSwitch_NoSlot_WarnsSharedStackNotRepointed(t *testing.T) {
+func TestAgentExternalStrategy_OnPostSwitch_NoSlot_WarnsStackNotBroughtHere(t *testing.T) {
 	cfg := newTestAgentConfig(t)
 	s := newAgentExternalStrategy(cfg)
 	envPath := filepath.Join(cfg.Plugins.Docker.External.Path, ".env")
@@ -145,8 +145,7 @@ func TestAgentExternalStrategy_OnPostSwitch_NoSlot_WarnsSharedStackNotRepointed(
 	}
 	for _, want := range []string{
 		"agent mode: 'myapp-feature' has no isolated stack",
-		"the shared stack was not repointed",
-		"configured for 'myapp-main'",
+		"The stack was not brought here (it is on 'myapp-main')",
 		"grove up --isolated",
 	} {
 		if !strings.Contains(stderr, want) {
@@ -169,10 +168,10 @@ func TestAgentExternalStrategy_OnPostSwitch_NoSlot_SharedStackAlreadyOnWorktree(
 	if stdout != "" {
 		t.Errorf("stdout = %q, want nothing", stdout)
 	}
-	if !strings.Contains(stderr, "shared stack is already configured for 'myapp-feature'") {
+	if !strings.Contains(stderr, "the stack is already on 'myapp-feature'") {
 		t.Errorf("stderr should say the shared stack already serves this worktree, got:\n%s", stderr)
 	}
-	if strings.Contains(stderr, "not repointed") || strings.Contains(stderr, "grove up") {
+	if strings.Contains(stderr, "not brought here") || strings.Contains(stderr, "grove up") {
 		t.Errorf("stderr must not warn when the shared stack already matches, got:\n%s", stderr)
 	}
 }
@@ -183,10 +182,10 @@ func TestAgentExternalStrategy_OnPostSwitch_NoSlot_EnvFileUnset(t *testing.T) {
 
 	_, stderr := switchWithNoSlot(t, s, "/tmp/myapp-feature")
 
-	if !strings.Contains(stderr, "not repointed") || !strings.Contains(stderr, "grove up --isolated") {
+	if !strings.Contains(stderr, "not brought here") || !strings.Contains(stderr, "grove up --isolated") {
 		t.Errorf("stderr should still warn when the env file has no value, got:\n%s", stderr)
 	}
-	if strings.Contains(stderr, "configured for") {
+	if strings.Contains(stderr, "(it is on") {
 		t.Errorf("stderr should not name a configured worktree when none is known, got:\n%s", stderr)
 	}
 }

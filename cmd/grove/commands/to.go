@@ -509,8 +509,8 @@ func shouldRepointStack(external, follows bool, configured string, configuredOK 
 }
 
 // repointSucceeded reports whether the env file, re-read after the hooks ran,
-// names the target. It keeps the "Repointed" line true in every mode: in agent
-// mode the plugin may decline to repoint the shared stack and says so itself.
+// names the target. It keeps the "Stack is now on" line true in every mode: in agent
+// mode the plugin may decline to bring the shared stack and says so itself.
 func repointSucceeded(configured string, configuredOK bool, target string) bool {
 	return configuredOK && filepath.Clean(configured) == filepath.Clean(target)
 }
@@ -528,12 +528,12 @@ func usesSharedExternalStack(cfg *config.Config) bool {
 func repointSharedStack(ctx *GroveContext, hookConfig *config.Config, mgr *worktree.Manager, targetTree *worktree.Worktree, configuredPath string, jsonOut bool, stderr *cli.Writer) {
 	plugin := docker.New()
 	if err := plugin.Init(ctx.Config); err != nil {
-		cli.Warning(stderr, "could not repoint the shared stack: %v", err)
+		cli.Warning(stderr, "could not bring the stack: %v", err)
 		return
 	}
 	registry := hooks.NewRegistry()
 	if err := plugin.RegisterHooks(registry); err != nil {
-		cli.Warning(stderr, "could not repoint the shared stack: %v", err)
+		cli.Warning(stderr, "could not bring the stack: %v", err)
 		return
 	}
 
@@ -553,7 +553,11 @@ func repointSharedStack(ctx *GroveContext, hookConfig *config.Config, mgr *workt
 		}
 	}
 	if after, ok := docker.ConfiguredWorktreePath(ctx.Config); !jsonOut && repointSucceeded(after, ok, targetTree.Path) {
-		cli.Info(stderr, "Repointed the shared stack from '%s' to '%s'", from, targetTree.DisplayName())
+		if from == "" {
+			cli.Info(stderr, "Stack is now on '%s'", targetTree.DisplayName())
+		} else {
+			cli.Info(stderr, "Stack is now on '%s' (was on '%s')", targetTree.DisplayName(), from)
+		}
 	}
 }
 
