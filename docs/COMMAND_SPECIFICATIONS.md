@@ -1386,7 +1386,7 @@ All containers running. Web available at http://localhost:3001
 
 ### grove down
 
-**Purpose:** Stop Docker containers for the current worktree.
+**Purpose:** Stop Docker containers for the current worktree (local mode) or the shared stack (external mode).
 
 **Usage:**
 ```
@@ -1395,6 +1395,12 @@ grove down
 (no flags — if the worktree has an isolated stack running, it is
 auto-detected and torn down)
 ```
+
+**External mode:** There is one shared stack, so `grove down` stops its configured services whichever worktree it is configured for. It never does this silently: when the env file names a different worktree than the current one, grove prints this before stopping:
+```
+Stopping the shared stack, currently configured for 'main'
+```
+With the env var unset, or configured for the current worktree, no notice is printed. A worktree with an isolated agent stack tears down that stack instead.
 
 **Output:**
 ```
