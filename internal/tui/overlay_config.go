@@ -290,7 +290,7 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Value:       dockerAutoStart,
 			Loaded:      dockerAutoStart,
 			Type:        ConfigBool,
-			Description: "Auto-start containers on switch",
+			Description: "Bring the stack up when it follows a move",
 		},
 		{
 			Key:         "plugins.docker.auto_stop",
@@ -298,7 +298,7 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Value:       dockerAutoStop,
 			Loaded:      dockerAutoStop,
 			Type:        ConfigBool,
-			Description: "Auto-stop containers on leave",
+			Description: "Take the stack down when it follows a move away",
 		},
 	}
 
