@@ -201,10 +201,11 @@ func performSwitch(ctx *GroveContext, name string, opts switchOptions) error {
 	// toggle (B18).
 	if currentPath != "" && currentPath == targetTree.Path {
 		// The shared external stack follows the env file, not the shell. When
-		// it names another worktree, a self-switch is the one way to repoint it.
+		// the stack is on another worktree, a self-switch with --up (or a
+		// container_switch of auto/prompt) is the way to bring it here.
 		configured, configuredOK := docker.ConfiguredWorktreePath(ctx.Config)
-		if shouldRepointStack(ctx.Config.IsExternalDockerMode(), configured, configuredOK, targetTree.Path, peek) {
-			repointSharedStack(ctx, mgr, targetTree, configured, jsonOut, stderr)
+		if shouldRepointStack(ctx.Config.IsExternalDockerMode(), stackFollowsSwitch(hookConfig), configured, configuredOK, targetTree.Path, peek) {
+			repointSharedStack(ctx, hookConfig, mgr, targetTree, configured, jsonOut, stderr)
 		}
 
 		stack := stackStatusFor(ctx.Config, targetTree.Path, mgr.DisplayNameForPath)
@@ -496,15 +497,15 @@ func performSwitch(ctx *GroveContext, name string, opts switchOptions) error {
 	return nil
 }
 
-// shouldRepointStack reports whether a self-switch (`grove to <current>`) must
-// still run the Docker switch hooks: only when the shared external stack is
-// configured for a different worktree than the target. --peek never has side
-// effects.
-func shouldRepointStack(external bool, configured string, configuredOK bool, target string, peek bool) bool {
-	if !external || !configuredOK || peek {
+// shouldRepointStack reports whether a self-switch (`grove to <current>`) runs
+// the Docker switch hooks. It needs three things: external mode, a stack that
+// follows a move (--up, or container_switch auto/prompt), and a stack that is
+// not already on the target (unset counts). --peek never has side effects.
+func shouldRepointStack(external, follows bool, configured string, configuredOK bool, target string, peek bool) bool {
+	if !external || !follows || peek {
 		return false
 	}
-	return filepath.Clean(configured) != filepath.Clean(target)
+	return !configuredOK || filepath.Clean(configured) != filepath.Clean(target)
 }
 
 // repointSucceeded reports whether the env file, re-read after the hooks ran,
@@ -521,10 +522,10 @@ func usesSharedExternalStack(cfg *config.Config) bool {
 }
 
 // repointSharedStack runs only the Docker plugin's pre/post-switch hooks for the
-// target, exactly as a real switch would (container_switch and auto_start still
-// apply). It deliberately skips the dirty gate, other plugins' hooks, and state
+// target, exactly as a real switch would (hookConfig carries --up, and
+// container_switch and auto_start still apply). It deliberately skips the dirty gate, other plugins' hooks, and state
 // recording so the A<->B toggle (B18) is unaffected.
-func repointSharedStack(ctx *GroveContext, mgr *worktree.Manager, targetTree *worktree.Worktree, configuredPath string, jsonOut bool, stderr *cli.Writer) {
+func repointSharedStack(ctx *GroveContext, hookConfig *config.Config, mgr *worktree.Manager, targetTree *worktree.Worktree, configuredPath string, jsonOut bool, stderr *cli.Writer) {
 	plugin := docker.New()
 	if err := plugin.Init(ctx.Config); err != nil {
 		cli.Warning(stderr, "could not repoint the shared stack: %v", err)
@@ -540,7 +541,7 @@ func repointSharedStack(ctx *GroveContext, mgr *worktree.Manager, targetTree *wo
 	hookCtx := &hooks.Context{
 		Worktree:         targetTree.DisplayName(),
 		PrevWorktree:     from,
-		Config:           ctx.Config,
+		Config:           hookConfig,
 		WorktreePath:     targetTree.Path,
 		PrevWorktreePath: configuredPath,
 		MainPath:         ctx.ProjectRoot,
