@@ -111,7 +111,7 @@ func (m Model) renderPRPanel() string {
 		contextLabel: "Pull Requests",
 		footer:       m.renderPRFooter(),
 		renderList: func(width int, spinnerView string, maxHeight int) string {
-			return renderPRList(s, width, spinnerView, maxHeight)
+			return renderPRList(s, width, spinnerView, maxHeight, 3)
 		},
 		renderDetail: func(width, height int) string {
 			if s.Loading {
@@ -133,7 +133,9 @@ func (m Model) renderPRPanel() string {
 
 // renderPRList renders the PR list content for the panel layout.
 // It handles loading/creating states, the filter bar, and the scrollable item list.
-func renderPRList(s *PRViewState, width int, spinnerView string, maxHeight int) string {
+// It shows at least minSlots PRs; the docked branch form passes 1 so a short
+// list still fits its rows.
+func renderPRList(s *PRViewState, width int, spinnerView string, maxHeight, minSlots int) string {
 	var b strings.Builder
 
 	if s.Loading {
@@ -155,7 +157,7 @@ func renderPRList(s *PRViewState, width int, spinnerView string, maxHeight int) 
 	// Filter/count bar
 	renderFilterBar(&b, s.FilterInput.View(), s.Filtering, filter, len(filtered), total)
 
-	displaySlots, contentWidth := calcDisplaySlots(strings.Count(b.String(), "\n"), maxHeight, width)
+	displaySlots, contentWidth := calcDisplaySlots(strings.Count(b.String(), "\n"), maxHeight, width, minSlots)
 	b.WriteString(renderPRItemList(filtered, s.Cursor, displaySlots, contentWidth, s.WorktreeBranches))
 
 	return b.String()
@@ -278,6 +280,9 @@ type contextPanelConfig struct {
 	separatorName string
 }
 
+// contextListWidth is the PR and issue list column at split widths.
+func contextListWidth(termW int) int { return (termW - 2) * 40 / 100 }
+
 // renderContextPanel renders a full-screen panel layout shared by Issues and PRs.
 // Both views use identical layout logic (header, side-by-side vs stacked, toast,
 // padding, clamping) — only the list/detail content differs.
@@ -292,7 +297,7 @@ func (m Model) renderContextPanel(cfg contextPanelConfig) string {
 
 	var body string
 	if useSideBySide {
-		listWidth := bodyWidth * 40 / 100
+		listWidth := contextListWidth(m.width)
 		dividerWidth := 3
 		detailWidth := bodyWidth - listWidth - dividerWidth
 

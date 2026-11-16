@@ -369,7 +369,7 @@ func (s *BranchFormState) suggestions() []formSuggestion {
 		q := s.branchValue()
 		out := s.matchBranches(q)
 		if q != "" && !s.known(q) {
-			out = append(out, formSuggestion{Branch: q, Note: "new from " + s.baseValue(), New: true})
+			out = append(out, formSuggestion{Branch: q, Note: "from " + s.baseValue(), New: true})
 		}
 		return out
 	case fieldBase:
@@ -468,11 +468,10 @@ func (s *BranchFormState) defaultPick() int {
 	return 0
 }
 
-// setWidth sizes the text inputs to the frame, so a long value scrolls to
-// keep the cursor visible instead of running past the border.
-func (s *BranchFormState) setWidth(termW, termH int) {
-	w, _ := branchFormSize(termW, termH)
-	iw := max(4, w-4-formLabelWidth-1)
+// setWidth sizes the text inputs to the form's line width, so a long value
+// scrolls to keep the cursor visible instead of running past the edge.
+func (s *BranchFormState) setWidth(inner int) {
+	iw := max(4, inner-formLabelWidth-1)
 	s.Branch.SetWidth(iw)
 	s.Base.SetWidth(iw)
 	s.Alias.SetWidth(iw)
@@ -535,13 +534,13 @@ func (s *BranchFormState) validate() (formField, string, bool) {
 func (s *BranchFormState) validateAlias() (formField, string, bool) {
 	a := s.aliasValue()
 	if a == "" {
-		return fieldAlias, "type an alias", false
+		return fieldAlias, "type a name", false
 	}
 	if msg := ValidateWorktreeName(a); msg != "" {
 		return fieldAlias, msg, false
 	}
 	if dup := checkDuplicateWorktree(a, s.opts.Worktrees); dup != nil {
-		return fieldAlias, fmt.Sprintf("alias %q is taken by %s", a, dup.ShortName), false
+		return fieldAlias, fmt.Sprintf("name %q is taken by %s", a, dup.ShortName), false
 	}
 	return fieldBranch, "", true
 }
@@ -645,30 +644,42 @@ func (s *BranchFormState) status() (string, formStatusKind) {
 	return "✓ ready", formStatusReady
 }
 
-func (s *BranchFormState) keyLine() string {
+// keyHints are the form's keys for its state. ctrl+j and ctrl+k also move
+// the pick, but only the arrows are shown.
+func (s *BranchFormState) keyHints() []Hint {
 	if s.Busy {
-		return "wait for this to finish"
+		return []Hint{{"", "wait for this to finish"}}
 	}
 	if s.Log != nil {
-		return "any key to edit · esc back"
+		return []Hint{{"", "any key to edit"}, {"esc", "back"}}
 	}
-	act := "⏎ create"
+	verb := "create"
 	switch {
 	case s.Mode == formModeCopy:
-		act = "⏎ copy"
+		verb = "copy"
 	case s.Mode == formModeSwitch, s.inUse[s.branchValue()] != nil:
-		act = "⏎ switch"
+		verb = "switch"
 	}
-	parts := []string{act}
-	if len(s.fieldOrder()) > 1 {
-		parts = append(parts, "tab field")
+	var hints []Hint
+	if s.hasSuggestions(s.Focus) {
+		hints = append(hints, Hint{"↑↓", "pick"})
 	}
 	if s.Focus == fieldChanges {
-		parts = append(parts, "←/→ changes")
-	} else if s.Mode != formModeCopy {
-		parts = append(parts, "ctrl+j/k pick")
+		hints = append(hints, Hint{"←→", "change"})
 	}
-	return strings.Join(append(parts, "esc back"), " · ")
+	if len(s.fieldOrder()) > 1 {
+		hints = append(hints, Hint{"tab", "next"})
+	}
+	return append(hints, Hint{"enter", verb}, Hint{"esc", "back"})
+}
+
+// keyLine is the key line as plain text.
+func (s *BranchFormState) keyLine() string {
+	parts := make([]string, 0, 5)
+	for _, h := range s.keyHints() {
+		parts = append(parts, strings.TrimSpace(h.Key+" "+h.Description))
+	}
+	return strings.Join(parts, " · ")
 }
 
 // handleKey applies one key. Navigation keys are explicit strings, never the
@@ -800,10 +811,10 @@ func (m Model) branchFormOptionsFor() branchFormOptions {
 	}
 }
 
-// openBranchForm opens the form in New mode over the current view.
+// openBranchForm opens the form in New mode, docked into the current view.
 func (m Model) openBranchForm(p branchFormPrefill) (tea.Model, tea.Cmd) {
 	s := newBranchForm(m.branchFormOptionsFor())
-	s.setWidth(m.width, m.height)
+	s.setWidth(m.branchFormLayout().innerWidth())
 	cmd := s.applyPrefill(p)
 	if cmd == nil {
 		cmd = s.focusCmd()
@@ -817,7 +828,7 @@ func (m Model) openBranchForm(p branchFormPrefill) (tea.Model, tea.Cmd) {
 // uncommitted-changes check that enter waits for.
 func (m Model) openCopyForm(source WorktreeItem) (tea.Model, tea.Cmd) {
 	s := newCopyForm(m.branchFormOptionsFor(), source)
-	s.setWidth(m.width, m.height)
+	s.setWidth(m.branchFormLayout().innerWidth())
 	m.branchForm = s
 	m.pushView(ViewBranchForm)
 	return m, tea.Batch(s.focusCmd(), wipCheckCmd(source.Path))
@@ -827,7 +838,7 @@ func (m Model) openCopyForm(source WorktreeItem) (tea.Model, tea.Cmd) {
 // uncommitted-changes check that enter waits for.
 func (m Model) openSwitchForm(target WorktreeItem) (tea.Model, tea.Cmd) {
 	s := newSwitchForm(m.branchFormOptionsFor(), target)
-	s.setWidth(m.width, m.height)
+	s.setWidth(m.branchFormLayout().innerWidth())
 	m.branchForm = s
 	m.pushView(ViewBranchForm)
 	return m, tea.Batch(s.focusCmd(), wipCheckCmd(target.Path))
@@ -867,7 +878,7 @@ func (m Model) submitBranchForm(s *BranchFormState) (tea.Model, tea.Cmd) {
 		}
 		s.Busy = true
 		s.Status = ""
-		s.Log = NewActivityLog(formLogWidth(m.width), 6)
+		s.Log = NewActivityLog(m.branchFormLayout().innerWidth(), 6)
 		existing, newBranch := "", ""
 		if in.Kind == intentCreateExisting {
 			existing = in.Branch
@@ -882,13 +893,13 @@ func (m Model) submitBranchForm(s *BranchFormState) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		s.Busy, s.Status = true, ""
-		s.Log = NewActivityLog(formLogWidth(m.width), 6)
+		s.Log = NewActivityLog(m.branchFormLayout().innerWidth(), 6)
 		s.Log.AddLine(fmt.Sprintf("Copying %s to %s on branch %s...", in.Target.ShortName, in.Alias, in.Branch))
 		return m, tea.Batch(m.spinner.Tick, forkWorktreeCmd(m.worktreeMgr, m.stateMgr, m.cfg, m.projectRoot,
 			forkRequest{Source: *in.Target, Name: in.Alias, Branch: in.Branch, HasWIP: s.HasWIP, WIP: in.WIP}))
 	case intentSwitchBranch:
 		s.Busy, s.Status = true, ""
-		s.Log = NewActivityLog(formLogWidth(m.width), 6)
+		s.Log = NewActivityLog(m.branchFormLayout().innerWidth(), 6)
 		s.Log.AddLine(fmt.Sprintf("Switching %s to branch %s...", in.Target.ShortName, in.Branch))
 		return m, tea.Batch(m.spinner.Tick, checkoutBranchCmd(in.Target.Path, in.Branch, in.Stash))
 	}

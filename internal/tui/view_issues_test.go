@@ -75,7 +75,7 @@ func issueStateWithFilter(issues []*tracker.Issue, filter string) *IssueViewStat
 
 func TestRenderIssueList_Loading(t *testing.T) {
 	s := &IssueViewState{Loading: true}
-	got := renderIssueList(s, 80, "⠋", 20)
+	got := renderIssueList(s, 80, "⠋", 20, 3)
 	if !strings.Contains(got, "Loading issues") {
 		t.Errorf("expected 'Loading issues' in output, got:\n%s", got)
 	}
@@ -90,7 +90,7 @@ func TestRenderIssueList_WithItems(t *testing.T) {
 		},
 		FilterInput: newFilterInput(""),
 	}
-	got := renderIssueList(s, 80, "⠋", 20)
+	got := renderIssueList(s, 80, "⠋", 20, 3)
 	if !strings.Contains(got, "#10") {
 		t.Errorf("expected '#10' in output, got:\n%s", got)
 	}

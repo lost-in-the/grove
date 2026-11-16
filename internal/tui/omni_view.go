@@ -12,6 +12,9 @@ import (
 )
 
 const (
+	omniTop       = 2 // top-anchored under the header, never centered
+	omniMinWidth  = 56
+	omniMaxWidth  = 76
 	omniMaxHeight = 20
 	omniGroupW    = 15 // group name column; fits "pull requests" plus a gap
 )
@@ -189,11 +192,12 @@ func (m Model) chooseOmni() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// omniFrameSize is omni's frame size. Like the branch form, it depends only
-// on the terminal, so typing never changes it.
+// omniFrameSize is omni's frame size. It depends only on the terminal, so
+// typing never changes it.
 func omniFrameSize(termW, termH int) (int, int) {
-	w, _ := branchFormSize(termW, termH)
-	h := min(omniMaxHeight, termH-formTop-1)
+	w := min(max(termW*60/100, omniMinWidth), omniMaxWidth)
+	w = max(min(w, termW-2), 24)
+	h := min(omniMaxHeight, termH-omniTop-1)
 	return w, max(h, 7)
 }
 

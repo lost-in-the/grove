@@ -442,6 +442,8 @@ Each registry action carries plain-language synonyms, so a remembered nearby wor
 
 ## 10. Branch form (N7)
 
+> **2026-11-16:** the form is docked, not floating. It sits in the detail pane's place at 110+ columns and at the bottom of the screen below that, so the list stays in view; it takes the whole screen when fewer than 3 list rows would remain. Suggestions open under the focused field, Base shows only for a new branch, "Alias" is now "Name", and the key line reads `↑↓ pick · tab next · enter create · esc back`. This supersedes the width, position, and anchoring rules in 10.4, and the frame in 10.2. See `docs/TUI.md`.
+
 ### 10.1 Why
 
 Today's three flows (`overlay_create*.go`, `overlay_fork.go`, `overlay_checkout.go`) have these faults:

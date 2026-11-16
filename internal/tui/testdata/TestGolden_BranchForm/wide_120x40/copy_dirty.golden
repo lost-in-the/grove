@@ -1,14 +1,40 @@
-╭──────────────────────────────────────────────────────────────────────╮
-│ [1mCopy auth[m                                                            │
-│ ❯ Branch  [37m[mfeature/auth-copy[7;37m [m                                         │
-│           new branch from auth's HEAD                                │
-│                                                                      │
-│                                                                      │
-│                                                                      │
-│   From    auth · feature/auth                                        │
-│   Alias   [37m[m[37mauth-copy[m [37m                                                [m │
-│           → grove-auth-copy · session grove-auth-copy                │
-│   Changes ● copy  ○ move  ○ leave · 2 files                          │
-│ ✓ ready · 2 files changed, will be copied                            │
-│ ⏎ copy · tab field · esc back                                        │
-╰──────────────────────────────────────────────────────────────────────╯
+ [1m[1mtest-project[m · 5 worktrees · ⬍ name                                                                                1/5[m 
+                                                                        │ ──[1m Copy auth [m──────────────────────────────── 
+ ❯ ● [1mroot[m                                                       0s      │ ❯ Branch  [37m[mfeature/auth-copy[7;37m [m                  
+   ○ feature-auth                                              60m      │           new branch from auth's HEAD         
+   ○ fix-bug                                                    2h      │   From    auth · feature/auth                 
+   ● testing                                                    3h      │   Name    [37m[m[37mauth-copy[m [37m                         [m 
+   ○ refactor                                                   4h      │           folder grove-auth-copy              
+                                                                        │           session grove-auth-copy             
+                                                                        │   Changes ● copy  ○ move  ○ leave · 2 files   
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │ ✓ ready · 2 files changed, will be copied     
+                                                                        │ [1mtab[m next · [1menter[m copy · [1mesc[m back              
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               

@@ -261,7 +261,7 @@ func (m Model) renderIssuePanel() string {
 		contextLabel: "Issues",
 		footer:       m.renderIssueFooter(),
 		renderList: func(width int, spinnerView string, maxHeight int) string {
-			return renderIssueList(s, width, spinnerView, maxHeight)
+			return renderIssueList(s, width, spinnerView, maxHeight, 3)
 		},
 		renderDetail: func(width, height int) string {
 			if s.Loading {
@@ -282,7 +282,8 @@ func (m Model) renderIssuePanel() string {
 }
 
 // renderIssueList renders the issue list content for the panel layout.
-func renderIssueList(s *IssueViewState, width int, spinnerView string, maxHeight int) string {
+// It shows at least minSlots issues, as renderPRList does.
+func renderIssueList(s *IssueViewState, width int, spinnerView string, maxHeight, minSlots int) string {
 	var b strings.Builder
 
 	if s.Loading {
@@ -301,7 +302,7 @@ func renderIssueList(s *IssueViewState, width int, spinnerView string, maxHeight
 	// Filter/count bar
 	renderFilterBar(&b, s.FilterInput.View(), s.Filtering, filter, len(filtered), total)
 
-	displaySlots, contentWidth := calcDisplaySlots(strings.Count(b.String(), "\n"), maxHeight, width)
+	displaySlots, contentWidth := calcDisplaySlots(strings.Count(b.String(), "\n"), maxHeight, width, minSlots)
 	b.WriteString(renderIssueItemList(filtered, s.Cursor, displaySlots, contentWidth))
 
 	return b.String()

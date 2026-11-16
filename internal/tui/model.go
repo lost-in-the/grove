@@ -344,7 +344,7 @@ func (m Model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.ready = true
 	m.updateLayout()
 	if m.branchForm != nil {
-		m.branchForm.setWidth(m.width, m.height)
+		m.branchForm.setWidth(m.branchFormLayout().innerWidth())
 	}
 	if m.omni != nil {
 		w, _ := omniFrameSize(m.width, m.height)
@@ -1475,7 +1475,8 @@ func (m Model) withToast(screen string) string {
 
 // renderFrame renders frame i of the view stack; -1 is the dashboard root.
 // Overlay frames draw over the frame beneath them, so an overlay opened
-// from the PR browser shows the PR browser behind it.
+// from the PR browser shows the PR browser behind it. The branch form docks
+// into the frame beneath it instead, so that frame's list stays in view.
 func (m Model) renderFrame(i int) string {
 	v := ViewDashboard
 	if i >= 0 {
@@ -1506,13 +1507,18 @@ func (m Model) renderFrame(i int) string {
 			return m.renderPRReviewFrame()
 		}
 		return m.renderFrame(i - 1)
+	case ViewBranchForm:
+		if m.branchForm != nil {
+			return m.renderDockedForm(i - 1)
+		}
+		return m.renderFrame(i - 1)
 	}
 	overlay := m.renderOverlay(v)
 	if overlay == "" {
 		return m.renderFrame(i - 1)
 	}
-	if v == ViewBranchForm || v == ViewOmni {
-		return composeOverlayAt(m.renderFrame(i-1), overlay, m.width, m.height, formTop)
+	if v == ViewOmni {
+		return composeOverlayAt(m.renderFrame(i-1), overlay, m.width, m.height, omniTop)
 	}
 	return composeOverlay(m.renderFrame(i-1), overlay, m.width, m.height)
 }
@@ -1524,10 +1530,6 @@ func (m Model) renderOverlay(v ActiveView) string {
 	case ViewDelete:
 		if m.deleteState != nil {
 			return renderDeleteV2(m.deleteState, m.width)
-		}
-	case ViewBranchForm:
-		if m.branchForm != nil {
-			return renderBranchForm(m.branchForm, m.width, m.height, m.spinner.View())
 		}
 	case ViewOmni:
 		if m.omni != nil {

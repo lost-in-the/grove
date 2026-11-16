@@ -82,9 +82,9 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 		}
 	case ViewBranchForm:
 		return []Hint{
+			{"↑↓", "pick"},
+			{"tab", "next"},
 			{"enter", "create"},
-			{"tab", "field"},
-			{"ctrl+j/k", "pick"},
 			{"esc", "back"},
 		}
 	case ViewDelete:

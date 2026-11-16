@@ -1,14 +1,40 @@
-╭──────────────────────────────────────────────────────────────────────╮
-│ [1mNew worktree[m                                                         │
-│ ⠋ Creating worktree 'abc-12'...                                      │
-│                                                                      │
-│                                                                      │
-│                                                                      │
-│                                                                      │
-│                                                                      │
-│                                                                      │
-│                                                                      │
-│                                                                      │
-│ creating…                                                            │
-│ wait for this to finish                                              │
-╰──────────────────────────────────────────────────────────────────────╯
+ [1m[1mtest-project[m · 5 worktrees · ⬍ name                                                                                1/5[m 
+                                                                        │ ──[1m New worktree [m───────────────────────────── 
+ ❯ ● [1mroot[m                                                       0s      │ ⠋ Creating worktree 'abc-12'...               
+   ○ feature-auth                                              60m      │                                               
+   ○ fix-bug                                                    2h      │                                               
+   ● testing                                                    3h      │                                               
+   ○ refactor                                                   4h      │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │ creating…                                     
+                                                                        │ wait for this to finish                       
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               

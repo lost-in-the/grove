@@ -134,16 +134,14 @@ func padRight(s string, n int) string {
 
 // calcDisplaySlots computes how many 3-line item slots fit in the remaining
 // height after headerLines have been rendered, and a clamped content width.
+// It shows at least minSlots items, even when they overflow maxHeight.
 // Used by both renderPRList and renderIssueList.
-func calcDisplaySlots(headerLines, maxHeight, width int) (slots, contentWidth int) {
+func calcDisplaySlots(headerLines, maxHeight, width, minSlots int) (slots, contentWidth int) {
 	availableLines := maxHeight - headerLines
 	if availableLines < 3 {
 		availableLines = 3
 	}
-	slots = (availableLines + 1) / 3
-	if slots < 3 {
-		slots = 3
-	}
+	slots = max((availableLines+1)/3, minSlots)
 	contentWidth = width - 2
 	if contentWidth < 40 {
 		contentWidth = 40

@@ -316,9 +316,9 @@ var helpSectionsDelete = []helpSection{
 }
 
 var helpSectionsBranchForm = []helpSection{
-	{title: "Branch Form", note: "New (n), copy (f), and switch branch (b) share this form. It shows what enter will do.", items: []helpEntry{
-		{"tab / shift+tab", "Next / previous field"},
-		{"ctrl+j / ctrl+k", "Move through suggestions"},
+	{title: "Branch Form", note: "New (n), copy (f), and switch branch (b) share this form. Name is the worktree's short name; the form shows the folder and session it makes, and what enter will do.", items: []helpEntry{
+		{"tab / shift+tab", "Next / previous field (tab on Branch takes the highlighted row)"},
+		{"↑/↓", "Move through the focused field's suggestions"},
 		{"←/→ / space", "Choose what happens to uncommitted changes (copy)"},
 		{"enter", "Create, copy, or switch"},
 		{"esc", "Close"},

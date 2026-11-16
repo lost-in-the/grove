@@ -1,0 +1,24 @@
+ [1m[1mtest-project[m · 5 worktrees · ⬍ name                                        1/5[m 
+                                                                                
+ ❯ ● [1mroot[m                                                               0s      
+   ○ feature-auth                                                      60m      
+   ○ fix-bug                                                            2h      
+   ● testing                                                            3h      
+   ○ refactor                                                           4h      
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ ──[1m New worktree [m────────────────────────────────────────────────────────────── 
+   Branch  [37m[m[37mfix/auth[m [37m                                                           [m 
+   Base    [37m[m[37mmain[m [37m                                                               [m 
+ ❯ Name    [37m[mauth[7;37m [m                                                                
+           folder grove-auth                                                    
+           session grove-auth                                                   
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ name "auth" is taken by auth                                                   
+ [1mtab[m next · [1menter[m create · [1mesc[m back                                             

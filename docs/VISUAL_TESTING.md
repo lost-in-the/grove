@@ -76,9 +76,13 @@ internal/tui/testdata/
     default.golden
     with_warnings.golden
   TestGolden_BranchForm/
-    standard_80x24/  (one per case: empty, new_branch, in_use,
-                      copy_dirty, switch_dirty, …; also at
-                      short_80x20/, narrow_60x24/, wide_120x40/)
+    standard_80x24/  (the form docked under the list, one per case:
+                      empty, new_branch, base_focused, in_use,
+                      copy_dirty, switch_dirty, …; the right-pane dock at
+                      wide_120x40/ and ultrawide_160x50/; narrow_44x24/,
+                      short_80x20/, and cramped_80x15/ for small screens)
+  TestGolden_BranchForm_OverPRBrowser/
+    standard_80x24.golden  wide_120x40.golden
   TestGolden_Overlay_Bulk/
     with_items.golden
     empty.golden

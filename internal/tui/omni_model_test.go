@@ -157,7 +157,7 @@ func TestOmni_FrameSizeIsFixed(t *testing.T) {
 				t.Errorf("%dx%d query %q: frame %dx%d, want %dx%d", size[0], size[1], q, w, h, w0, h0)
 			}
 		}
-		if h0 > size[1]-formTop {
+		if h0 > size[1]-omniTop {
 			t.Errorf("%dx%d: frame height %d runs off the screen", size[0], size[1], h0)
 		}
 	}

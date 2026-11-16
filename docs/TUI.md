@@ -163,28 +163,53 @@ The New Worktree form uses its own keys, listed in its section below.
 
 ## Overlays
 
-Each overlay opens over the dimmed view beneath it. Press `esc` to close or cancel.
+Each overlay opens over the dimmed view beneath it, except the New Worktree form, which docks beside or under the list. Press `esc` to close or cancel.
 
 `esc` goes back exactly one level. An overlay opened from the PR or issue browser returns there, and the dashboard cursor returns to the worktree it was on.
 
 ### New Worktree (`n`)
 
-One form, three fields. It stays the same size and position while you use it.
+One form, three fields. It docks into the screen, so the list you opened it from stays in view, with its cursor row:
 
-- **Branch:** type to search local and remote branches. Each row says whether the branch exists, is remote, or is already in use by a worktree. A name that matches nothing is created as a new branch.
-- **Base:** for a new branch only. Defaults to the configured default branch (`default_base_branch`).
-- **Alias:** the worktree's short name, derived from the branch until you edit it. The line below shows the folder and session name.
+| Terminal | Where the form sits |
+|---|---|
+| 110+ columns | The right pane, in the detail panel's place. The list keeps its width. |
+| Under 110 columns | The bottom of the screen, full width. The list is shorter and scrolls to keep the cursor row. |
+| Under 110 columns and under 17 rows (too short to keep 3 list rows) | The whole screen. |
 
-The status line says what `enter` will do. If the branch is already in use, `enter` switches to that worktree instead of creating one. An alias already used by another worktree is an error.
+The form's key line replaces the footer. The form keeps one size for a given terminal size: typing, suggestions, and errors never change its height.
+
+```
+ ── New worktree ──────────────────────────────
+ ❯ Branch  leaks
+             ci/check-leaks            existing
+           ❯ + new "leaks"            from main
+
+   Base    main
+   Name    leaks
+           folder myapp-leaks
+           session myapp-leaks
+
+ ✓ ready
+ ↑↓ pick · tab next · enter create · esc back
+```
+
+- **Branch:** type to search local and remote branches. Each row says whether the branch exists, is remote, or is already in use by a worktree. A name that matches nothing is created as a new branch, from the base the `+ new` row names.
+- **Base:** shown only for a new branch, and skipped by `tab` otherwise. Defaults to the configured default branch (`default_base_branch`).
+- **Name:** the worktree's short name (`grove new [name]`), derived from the branch until you edit it. The lines below show the folder and the session it makes.
+
+Suggestions open under the field you are in: Branch or Base. The status line says what `enter` will do. If the branch is already in use, `enter` switches to that worktree instead of creating one. A name already used by another worktree is an error.
 
 | Key | Action |
 |---|---|
 | `tab` / `shift+tab` | Next / previous field (`tab` on Branch accepts the highlighted row) |
-| `ctrl+j` / `ctrl+k`, `↓` / `↑` | Move through suggestions |
+| `↓` / `↑` | Move through the focused field's suggestions |
 | `enter` | Create, or switch to an in-use branch's worktree |
 | `esc` | Close (does nothing while creating) |
 
-The PR browser opens this form (`n`) with the PR's branch filled in. The issue browser fills in the branch `issue-N`.
+The key line drops `tab next`, then `↑↓ pick`, when the form is too narrow for all of it.
+
+The PR browser opens this form (`n`) with the PR's branch filled in. The issue browser fills in the branch `issue-N`. From either browser the form docks beside or under that browser's list, the same way.
 
 ### Delete Worktree (`d`)
 
@@ -215,7 +240,7 @@ Renaming moves the git worktree directory, updates the state entry, and renames 
 Opens the New Worktree form in Copy mode for the selected worktree. Use it to try a different approach without losing your current work.
 
 - **Branch:** starts as `<branch>-copy`. It must be a new branch; it is cut from the selected worktree's HEAD.
-- **Alias:** follows the branch until you edit it.
+- **Name:** follows the branch until you edit it.
 - **Changes:** appears only when the worktree has uncommitted changes. Use `←` / `→` or `space` on this row:
   - **copy** (default): apply the changes to both worktrees.
   - **move:** apply them to the copy and clean the source.
@@ -486,6 +511,8 @@ Every dashboard key is an `Action` in `internal/tui/actions.go`: its keys, label
 | `internal/tui/pins_view.go` | Pin and `-` keys, and the `m` strip |
 | `internal/tui/age.go` | Commit age, rounded like git's relative dates (`shortAge`) |
 | `internal/tui/view_stack.go` | View stack: frames, push and pop, cursor restore |
+| `internal/tui/branch_form.go` | The New, Copy, and Switch form: fields, suggestions, validation, keys |
+| `internal/tui/branch_form_view.go` | The form's docked layout (`branchFormLayout`), its rows, and docking it beside or under the list (`renderDockedForm`) |
 | `internal/tui/compositor.go` | Draws an overlay over a dimmed background (`composeOverlay`) and toasts on top (`composeLayerAt`) |
 | `internal/tui/worktree_list.go` | The dashboard list constructor (`newWorktreeList`) |
 | `internal/tui/config_fields.go` | The settings fields: label, key, description, choices and their meanings, default, validation |
