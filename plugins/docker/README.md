@@ -27,7 +27,7 @@ grove up --detach=false  # Start containers in foreground
 
 ### `grove down`
 
-Stop containers for the current worktree.
+Stop containers for the current worktree. In external mode this stops the one shared stack and, when it is configured for another worktree, says so first.
 
 ```bash
 grove down   # Stop all containers

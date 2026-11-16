@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -13,17 +14,32 @@ func init() {
 	rootCmd.AddCommand(downCmd)
 }
 
+// sharedStackDownNotice returns the line grove down prints before stopping the
+// shared external stack when it is configured for a worktree other than the
+// current one, or "" when no notice is needed. The command still stops the
+// stack: there is only one.
+func sharedStackDownNotice(shared bool, configured string, configuredOK bool, current string, displayName func(string) string) string {
+	if !shared || !configuredOK || filepath.Clean(configured) == filepath.Clean(current) {
+		return ""
+	}
+	return fmt.Sprintf("Stopping the shared stack, currently configured for '%s'", displayName(configured))
+}
+
 var downCmd = &cobra.Command{
 	Use:     "down",
 	Aliases: []string{"do"},
 	Short:   "Stop containers for current worktree",
 	Long: `Stop Docker containers for the current worktree.
 
-This command looks for a docker-compose.yml file in the current directory
+Local mode: looks for a docker-compose.yml file in the current directory
 and stops all services defined in it.
 
+External mode: stops the configured services of the one shared stack, whichever
+worktree it is configured for. When that is not the current worktree, grove
+says so before stopping it.
+
 If the worktree has an isolated stack running (started with grove up --isolated),
-it is automatically detected and torn down.
+it is automatically detected and torn down instead.
 
 Examples:
   grove down   # Stop all containers
@@ -41,7 +57,8 @@ Examples:
 
 		// Create docker plugin — auto-detect isolated stacks
 		plugin := docker.New()
-		if docker.HasActiveAgentSlot(ctx.Config, root) {
+		isolated := docker.HasActiveAgentSlot(ctx.Config, root)
+		if isolated {
 			plugin.SetIsolated(true)
 		}
 		if err := plugin.Init(ctx.Config); err != nil {
@@ -50,6 +67,15 @@ Examples:
 
 		// Stop containers — no spinner: docker compose writes its own progress
 		stderr := cli.NewStderr()
+		if !isolated {
+			configured, configuredOK := docker.ConfiguredWorktreePath(ctx.Config)
+			mgr, mgrErr := ctx.WorktreeManager()
+			if mgrErr == nil {
+				if notice := sharedStackDownNotice(usesSharedExternalStack(ctx.Config), configured, configuredOK, root, mgr.DisplayNameForPath); notice != "" {
+					cli.Warning(stderr, "%s", notice)
+				}
+			}
+		}
 		cli.Step(stderr, "Stopping containers...")
 		if err := plugin.Down(root); err != nil {
 			return fmt.Errorf("failed to stop containers: %w", err)
