@@ -333,7 +333,8 @@ All three use Go 1.26 with module cache keyed by `go.sum`. All three must pass f
   renders the formula from `.github/formula.rb.tmpl`, opens a `grove <version>` pull request on
   the tap, and stops. The job never merges it. After a release, merge that pull request by
   hand: the link is in the job's notice and step summary. Until you do, the tap still serves
-  the old version. `TAP_GITHUB_TOKEN` needs Contents and Pull requests write on the tap, to push
+  the old version. The script accepts only `vX.Y.Z` and `vX.Y.Z-prerelease` tags; any other
+  form (such as `+build` metadata) fails before the tap is touched. `TAP_GITHUB_TOKEN` needs Contents and Pull requests write on the tap, to push
   the branch and open the pull request. `make test-release-tools` runs the script against a fake
   GitHub API; CI runs it on every PR, since the real job only fires on a tag push. On macOS it
   needs GNU coreutils first on `PATH` (`base64 -w` and `sha256sum`): `brew install coreutils`,

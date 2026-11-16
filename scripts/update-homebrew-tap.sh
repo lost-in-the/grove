@@ -24,6 +24,14 @@ set -euo pipefail
 TAG="${1:?usage: update-homebrew-tap.sh <tag>}"
 : "${TAP_GITHUB_TOKEN:?TAP_GITHUB_TOKEN is required}"
 
+# The tag becomes a branch name, query values, and a sed replacement. Only
+# plain vX.Y.Z and vX.Y.Z-prerelease are safe in all three, so anything else
+# (such as +build metadata) is refused before the tap is read or written.
+if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+  echo "::error::unsupported release tag '${TAG}': expected vX.Y.Z or vX.Y.Z-prerelease"
+  exit 1
+fi
+
 VERSION="${TAG#v}"
 TAP_REPO="${TAP_REPO:-lost-in-the/homebrew-tap}"
 SOURCE_REPO="${SOURCE_REPO:-lost-in-the/grove}"

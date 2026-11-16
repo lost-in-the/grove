@@ -112,6 +112,13 @@ TAP_GITHUB_TOKEN=t GITHUB_API="$API" TARBALL_URL="file://$WORK/nope.tar.gz" "$SC
 [ "$rc" != 0 ] && grep -q "could not download the source tarball" "$WORK/out.txt" && ok "fails before touching the tap" || bad "tarball failure" "$(out)"
 [ "$(st '.calls | length')" = 0 ] && ok "no API calls" || bad "calls: $(st '.calls')"
 
+echo "8. a tag with build metadata is refused before anything is read or written"
+reset "$(cfg "$WORK/old.rb" '{}')"
+TAP_GITHUB_TOKEN=t GITHUB_API="$API" TARBALL_URL="file://$WORK/source.tar.gz" "$SCRIPT" v0.11.0+build.1 >"$WORK/out.txt" 2>&1; rc=$?
+[ "$rc" != 0 ] && ok "fails" || bad "should fail" "$(out)"
+grep -q "::error::unsupported release tag 'v0.11.0+build.1'" "$WORK/out.txt" && ok "names the tag" || bad "error" "$(out)"
+[ "$(st '.calls | length')" = 0 ] && ok "no API calls" || bad "calls: $(st '.calls')"
+
 echo
 echo "passed: $PASS  failed: $FAIL"
 [ "$FAIL" = 0 ]
