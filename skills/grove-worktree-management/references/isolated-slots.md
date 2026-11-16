@@ -6,7 +6,9 @@ Read this file when running multiple agents in the same repository simultaneousl
 
 Isolated slots are separate Docker Compose stacks, one per agent session, running in parallel within the same repository. Each slot gets a unique port offset so services don't conflict. This lets N agents each run their own database, web server, and worker without colliding.
 
-Slots are numbered from 0. The main (non-isolated) stack is not counted as a slot.
+Slots are numbered from 1. The main (non-isolated) stack is not a slot (slot 0 means "none").
+
+In agent mode (`GROVE_AGENT_MODE=1` with agent stacks enabled), `grove to` does not repoint the shared stack. A worktree without a slot gets an `agent mode:` notice on stderr, so start an isolated stack for it with `grove up --isolated`.
 
 ## Starting an Isolated Stack
 
@@ -16,23 +18,15 @@ Slots are numbered from 0. The main (non-isolated) stack is not counted as a slo
 grove up --isolated
 ```
 
-Grove finds the lowest free slot via `grove ps --json`, starts the stack, and prints the slot number.
-
-**Request a specific slot:**
-
-```bash
-grove up --isolated --slot 2
-```
-
-Use this when you need a deterministic slot (e.g., pre-configured port mappings). Fails if the slot is already occupied.
+Grove picks the lowest free slot, starts the stack, and prints the slot number. There is no flag to request a specific slot.
 
 ## Stopping an Isolated Stack
 
 ```bash
-grove down --slot 2
+grove down
 ```
 
-Omitting `--slot` stops the main (non-isolated) stack for the current worktree.
+Run it from the worktree. Grove detects that the worktree has an isolated stack and stops that one; with no slot it stops the shared stack.
 
 ## Inspecting Active Slots
 
@@ -45,23 +39,23 @@ Output schema (one object per active slot):
 ```json
 [
   {
-    "slot": 0,
+    "slot": 1,
     "worktree": "project-feature",
-    "compose_project": "project-feature-slot-0",
+    "compose_project": "project-agent-1",
     "url": "http://localhost:3100"
   },
   {
-    "slot": 1,
+    "slot": 2,
     "worktree": "project-other",
-    "compose_project": "project-other-slot-1",
+    "compose_project": "project-agent-2",
     "url": "http://localhost:3200"
   }
 ]
 ```
 
-- `slot` — 0-based slot index
+- `slot` — 1-based slot number
 - `worktree` — full worktree name (`{project}-{name}`)
-- `compose_project` — Docker Compose project name (`{project}-{worktree}-slot-{N}`)
+- `compose_project` — Docker Compose project name (`{project}-agent-{N}`)
 - `url` — service URL if configured; omitted if not applicable
 
 ## Configuration
@@ -79,17 +73,6 @@ Attempting `grove up --isolated` when all slots are occupied returns an error.
 
 Each slot receives a unique port offset applied to all services in the stack. The exact offset values and base ports are repo-specific — see [`docs/AGENT_GUIDE.md`](https://github.com/lost-in-the/grove/blob/main/docs/AGENT_GUIDE.md) §7 for the complete port allocation pattern and how to read the offset for a given slot.
 
-## Safe Slot Selection with the Helper
-
-Use `allocate_slot.py` to find the next free slot without actually starting Docker:
-
-```bash
-python3 "${CLAUDE_PLUGIN_ROOT:-skills/grove-worktree-management}/scripts/allocate_slot.py" --dry-run
-# {"slot": 2, "available": true}
-```
-
-Without `--dry-run`, the script returns the slot number and exits — suitable for use in a setup script before calling `grove up --isolated --slot N`.
-
 ## Recommended Agent Setup Block
 
 ```bash
@@ -97,16 +80,13 @@ export GROVE_AGENT_MODE=1
 export GROVE_NONINTERACTIVE=1
 export GROVE_TUI=0
 
-# Find the next free slot
-SLOT=$(python3 "${CLAUDE_PLUGIN_ROOT:-skills/grove-worktree-management}/scripts/allocate_slot.py")
-
-# Start the isolated stack
-grove up --isolated --slot "$SLOT"
+# Start the isolated stack (grove allocates the slot)
+grove up --isolated
 
 # ... do work ...
 
 # Tear down when done
-grove down --slot "$SLOT"
+grove down
 ```
 
 ## Further Reading

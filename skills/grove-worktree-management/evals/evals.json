@@ -16,7 +16,7 @@
     {
       "id": 3,
       "prompt": "Start the dev environment for this feature in an isolated stack so it doesn't conflict with what's running on main.",
-      "expected_output": "Agent checks `grove ps --json` for free slots, then runs `grove up --isolated --slot N` to start a port-offset Docker stack for the current worktree.",
+      "expected_output": "Agent runs `grove up --isolated` (no `--slot` flag; grove allocates the slot) to start a port-offset Docker stack for the current worktree. It may check `grove ps --json` first to see active slots.",
       "files": []
     }
   ]

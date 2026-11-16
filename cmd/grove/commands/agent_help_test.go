@@ -30,6 +30,8 @@ func TestAgentHelpOutput(t *testing.T) {
 		"grove fetch pr/",
 		"grove rm <name>",
 		"Agent Tips",
+		"shared stack",
+		"grove up --isolated",
 		"Full Documentation",
 	}
 

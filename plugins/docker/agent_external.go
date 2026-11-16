@@ -35,20 +35,22 @@ func newAgentExternalStrategy(cfg *config.Config) *agentExternalStrategy {
 		maxSlots = 5
 	}
 
-	templateDir := filepath.Dir(agent.TemplatePath)
-	var slotsFile string
-	if filepath.IsAbs(agent.TemplatePath) {
-		slotsFile = filepath.Join(templateDir, ".slots.json")
-	} else {
-		slotsFile = filepath.Join(resolveComposePath(ext.Path), templateDir, ".slots.json")
-	}
-
 	return &agentExternalStrategy{
 		cfg:   cfg,
 		ext:   ext,
 		agent: agent,
-		slots: NewSlotManager(slotsFile, maxSlots),
+		slots: NewSlotManager(agentSlotsFile(ext), maxSlots),
 	}
+}
+
+// agentSlotsFile returns the slot ledger path: next to the agent template,
+// which is relative to the compose directory unless template_path is absolute.
+func agentSlotsFile(ext *config.ExternalComposeConfig) string {
+	templateDir := filepath.Dir(ext.Agent.TemplatePath)
+	if filepath.IsAbs(ext.Agent.TemplatePath) {
+		return filepath.Join(templateDir, ".slots.json")
+	}
+	return filepath.Join(resolveComposePath(ext.Path), templateDir, ".slots.json")
 }
 
 // OnPreSwitch is a no-op for agent mode — agent stacks are independent.
@@ -73,7 +75,10 @@ func (s *agentExternalStrategy) OnPostSwitch(ctx *hooks.Context) error {
 		return nil
 	}
 	if slot == 0 {
-		// No allocated slot — worktree has never had 'grove up --isolated' run.
+		// Agent mode must not repoint the stack a human is using, so there is
+		// nothing to load here. Say so: otherwise the switch looks successful
+		// while the shared stack still serves another worktree.
+		s.warnNoIsolatedStack(ctx.WorktreePath)
 		return nil
 	}
 	cli.EnvDirective("COMPOSE_PROJECT_NAME", s.composeProjectName(slot))
@@ -81,6 +86,30 @@ func (s *agentExternalStrategy) OnPostSwitch(ctx *hooks.Context) error {
 		cli.EnvDirective(s.ext.EnvVar, ctx.WorktreePath)
 	}
 	return nil
+}
+
+// warnNoIsolatedStack reports on stderr (stdout carries JSON and shell
+// directives) that a switch in agent mode left the shared stack untouched.
+func (s *agentExternalStrategy) warnNoIsolatedStack(worktreePath string) {
+	wtName := filepath.Base(worktreePath)
+	composePath := s.composePath()
+	envValue := readEnvVar(composePath, s.ext.EnvFileName(), s.ext.EnvVar)
+
+	if pathMatchesEnv(worktreePath, envValue, composePath) {
+		fmt.Fprintf(os.Stderr, "agent mode: '%s' has no isolated stack, but the shared stack is already configured for '%s'.\n", wtName, wtName)
+		return
+	}
+
+	configured := ""
+	if envValue != "" {
+		resolved := envValue
+		if !filepath.IsAbs(resolved) {
+			resolved = filepath.Join(composePath, resolved)
+		}
+		configured = fmt.Sprintf(" (it is configured for '%s')", filepath.Base(filepath.Clean(resolved)))
+	}
+	fmt.Fprintf(os.Stderr, "agent mode: '%s' has no isolated stack, and the shared stack was not repointed%s.\n", wtName, configured)
+	fmt.Fprintln(os.Stderr, "Run `grove up --isolated` here to start an isolated stack for this worktree.")
 }
 
 // OnPostCreate is a no-op — file setup runs unconditionally via
