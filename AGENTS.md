@@ -34,8 +34,9 @@ export GROVE_TUI=0               # disable dashboard; bare `grove` prints usage
 > `GROVE_AGENT_MODE=1` suppresses tmux attachment in `grove to` but **not** session
 > creation in `grove new` — and it also forces the isolated Docker strategy. In
 > external Docker mode with `[plugins.docker.external.agent] enabled = true`, `grove to`
-> never moves the stack (a human may be using it). `grove to <name> --up` prints an
-> `agent mode:` notice on stderr: the stack stays on its previous worktree.
+> never moves the stack (a human may be using it). `grove to <name> --up` leaves the
+> stack on its previous worktree. If the target has no isolated stack yet, it also prints an
+> `agent mode:` notice on stderr.
 > Run `grove up --isolated` in the worktree before running tests. For
 > per-invocation tmux suppression without the Docker coupling, pass `--no-tmux` to
 > `grove to` / `grove new` (on `new` it also skips session creation). To fully
