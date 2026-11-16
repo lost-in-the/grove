@@ -17,8 +17,7 @@ var (
 	openNoCreate bool
 	openCommand  string
 	openNoPopup  bool
-	openJSON     bool
-	openNoDocker bool
+	openFlags    createFlags
 	openHere     bool
 )
 
@@ -26,8 +25,8 @@ func init() {
 	openCmd.Flags().BoolVar(&openNoCreate, "no-create", false, "Only attach to existing worktree, error if not found")
 	openCmd.Flags().StringVar(&openCommand, "command", "", "Override session command")
 	openCmd.Flags().BoolVar(&openNoPopup, "no-popup", false, "Skip popup, switch or attach to the session instead")
-	openCmd.Flags().BoolVarP(&openJSON, "json", "j", false, "Output as JSON")
-	openCmd.Flags().BoolVar(&openNoDocker, "no-docker", false, "Skip Docker auto-start")
+	openFlags.registerJSON(openCmd)
+	openFlags.registerStack(openCmd)
 	addHereFlag(openCmd, &openHere)
 	rootCmd.AddCommand(openCmd)
 }
@@ -124,15 +123,16 @@ Examples:
 			// Post-create setup: find, symlink, state, hooks, docker
 			var prov provisioning
 			wt, prov, err = setupCreatedWorktree(ctx, mgr, name, branchName, worktreeSetupOpts{
-				NoDocker:   openNoDocker,
-				JSONOutput: openJSON,
+				NoDocker:   openFlags.noDocker,
+				Up:         openFlags.up,
+				JSONOutput: openFlags.json,
 			}, w)
 			if err != nil {
 				return err
 			}
 			created = &prov
 
-			if !openJSON {
+			if !openFlags.json {
 				cli.Success(w, "Created worktree '%s'", name)
 			}
 		}
@@ -143,6 +143,11 @@ Examples:
 		displayName := wt.DisplayName()
 		if created == nil {
 			ctx.warnConfigFallback()
+			// auto_up is about new worktrees. On one that exists, only an
+			// explicit --up brings the stack.
+			if openFlags.up {
+				autoStartDocker(w, ctx.Config, wt.Path, true, false, openFlags.json)
+			}
 		}
 
 		// Record the access before any tmux branching: agent-mode and
@@ -161,7 +166,7 @@ Examples:
 
 		m := ctx.Mux()
 		if tmuxMode == tmuxModeOff || !m.Available() {
-			if openJSON {
+			if openFlags.json {
 				return printOpenJSON(wt, displayName, created)
 			}
 			if !m.Available() {
@@ -196,12 +201,12 @@ Examples:
 				// (herdr's named sessions) and left its panes alone: that is
 				// an existing session, so the command goes through the
 				// existing-session path below rather than being claimed here.
-				if !openJSON {
+				if !openFlags.json {
 					reportEnsured(w, m, target)
 				}
 				sessionExists = true
 			case err == nil:
-				if !openJSON {
+				if !openFlags.json {
 					if sessionCmd != "" {
 						cli.Success(w, "Created session '%s' running '%s'", sessionName, sessionCmd)
 					} else {
@@ -224,17 +229,17 @@ Examples:
 			pane, pErr := m.PaneInfo(target)
 			if pErr == nil && pane.IsShell() && pane.CurrentCommand != sessionCmd {
 				if err := m.SendCommand(target, sessionCmd); err != nil {
-					if !openJSON {
+					if !openFlags.json {
 						cli.Warning(w, "Session exists but failed to launch '%s': %v", sessionCmd, err)
 					}
-				} else if !openJSON {
+				} else if !openFlags.json {
 					cli.Success(w, "Launched '%s' in existing session", sessionCmd)
 				}
 			}
 		}
 
 		// JSON output mode
-		if openJSON {
+		if openFlags.json {
 			return printOpenJSON(wt, displayName, created)
 		}
 

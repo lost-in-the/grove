@@ -11,17 +11,20 @@ import (
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/log"
+	"github.com/lost-in-the/grove/internal/output"
 	"github.com/lost-in-the/grove/internal/worktree"
 	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
-func fetchItemMetadata(gh *tracker.GitHubAdapter, w *cli.Writer, itemType string, number int) (worktreeName, branchName string, err error) {
+func fetchItemMetadata(gh *tracker.GitHubAdapter, w *cli.Writer, itemType string, number int, quiet bool) (worktreeName, branchName string, err error) {
 	if itemType == "pr" {
 		pr, ferr := gh.FetchPR(number)
 		if ferr != nil {
 			return "", "", fmt.Errorf("failed to fetch PR #%d: %w", number, ferr)
 		}
-		cli.Step(w, "Fetching PR #%d: %s", pr.Number, pr.Title)
+		if !quiet {
+			cli.Step(w, "Fetching PR #%d: %s", pr.Number, pr.Title)
+		}
 		return tracker.GenerateWorktreeName("pr", pr.Number, pr.Title), pr.Branch, nil
 	}
 
@@ -29,7 +32,9 @@ func fetchItemMetadata(gh *tracker.GitHubAdapter, w *cli.Writer, itemType string
 	if err != nil {
 		return "", "", fmt.Errorf("failed to fetch issue #%d: %w", number, err)
 	}
-	cli.Step(w, "Fetching issue #%d: %s", issue.Number, issue.Title)
+	if !quiet {
+		cli.Step(w, "Fetching issue #%d: %s", issue.Number, issue.Title)
+	}
 	name := tracker.GenerateWorktreeName("issue", issue.Number, issue.Title)
 	return name, name, nil
 }
@@ -59,12 +64,12 @@ func createFetchedWorktree(mgr *worktree.Manager, itemType, worktreeName, branch
 	return mgr.Create(worktreeName, branchName)
 }
 
-func setupFetchedWorktree(ctx *GroveContext, mgr *worktree.Manager, w *cli.Writer, worktreeName, branchName string, here bool) error {
-	// Run the same bootstrap as `grove new`/`grove open`: git excludes,
-	// state registration, file setup, post-create hooks, docker auto-start.
-	// Fetched worktrees previously only registered state, leaving them
-	// silently unprovisioned (#112).
-	wt, prov, err := setupCreatedWorktree(ctx, mgr, worktreeName, branchName, worktreeSetupOpts{}, w)
+func setupFetchedWorktree(ctx *GroveContext, mgr *worktree.Manager, w *cli.Writer, worktreeName, branchName string, here bool, flags createFlags) error {
+	wt, prov, err := setupCreatedWorktree(ctx, mgr, worktreeName, branchName, worktreeSetupOpts{
+		NoDocker:   flags.noDocker,
+		Up:         flags.up,
+		JSONOutput: flags.json,
+	}, w)
 	if err != nil {
 		return err
 	}
@@ -72,10 +77,36 @@ func setupFetchedWorktree(ctx *GroveContext, mgr *worktree.Manager, w *cli.Write
 	if m := ctx.Mux(); m.Available() && !landsHere(ctx.Config, here) {
 		target := muxTarget(mgr, worktreeName, wt.Path)
 		if managed, err := ensureSession(m, target, w); err != nil {
-			cli.Warning(w, "Failed to create session: %v", err)
-		} else if managed {
+			if !flags.json {
+				cli.Warning(w, "Failed to create session: %v", err)
+			}
+		} else if managed && !flags.json {
 			reportEnsured(w, m, target)
 		}
+	}
+
+	if flags.json {
+		result := output.NewWorktreeResult{
+			Name:    worktreeName,
+			Branch:  branchName,
+			Path:    wt.Path,
+			Created: true,
+		}
+		result.Provisioned, result.FileSetup = prov.jsonFields()
+		if !flags.noSwitch {
+			result.SwitchTo = wt.Path
+		}
+		if err := output.PrintJSON(result); err != nil {
+			return err
+		}
+		prov.exitIfIncomplete()
+		return nil
+	}
+
+	if flags.noSwitch {
+		cli.Info(w, "To switch to the new worktree: grove to %s", worktreeName)
+		prov.exitIfIncomplete()
+		return nil
 	}
 
 	// Display-name-only path: skips the GetCurrent enrichment.
@@ -101,7 +132,7 @@ func setupFetchedWorktree(ctx *GroveContext, mgr *worktree.Manager, w *cli.Write
 // fetchItem creates a worktree from a GitHub PR or issue.
 // itemType must be "pr" or "issue". Called by both `grove fetch` and `grove prs`/`grove issues`.
 // here is the --here flag: no session is created for the new worktree.
-func fetchItem(ctx *GroveContext, itemType string, number int, here bool) error {
+func fetchItem(ctx *GroveContext, itemType string, number int, here bool, flags createFlags) error {
 	if err := ctx.RequireConfig("create the worktree"); err != nil {
 		return err
 	}
@@ -123,7 +154,7 @@ func fetchItem(ctx *GroveContext, itemType string, number int, here bool) error 
 		return err
 	}
 
-	worktreeName, branchName, err := fetchItemMetadata(gh, w, itemType, number)
+	worktreeName, branchName, err := fetchItemMetadata(gh, w, itemType, number, flags.json)
 	if err != nil {
 		return err
 	}
@@ -132,13 +163,15 @@ func fetchItem(ctx *GroveContext, itemType string, number int, here bool) error 
 		return fmt.Errorf("failed to create worktree: %w", err)
 	}
 
-	if itemType == "pr" {
-		cli.Success(w, "Created worktree '%s' from branch '%s'", worktreeName, branchName)
-	} else {
-		cli.Success(w, "Created worktree '%s' with new branch '%s'", worktreeName, branchName)
+	if !flags.json {
+		if itemType == "pr" {
+			cli.Success(w, "Created worktree '%s' from branch '%s'", worktreeName, branchName)
+		} else {
+			cli.Success(w, "Created worktree '%s' with new branch '%s'", worktreeName, branchName)
+		}
 	}
 
-	return setupFetchedWorktree(ctx, mgr, w, worktreeName, branchName, here)
+	return setupFetchedWorktree(ctx, mgr, w, worktreeName, branchName, here, flags)
 }
 
 var fetchCmd = &cobra.Command{
@@ -158,7 +191,10 @@ For PRs, the remote branch will be checked out.
 
 The worktree gets its own session. Use --here to skip the session: grove
 only changes directory. To do that every time, set
-[session] open_in = "here".`,
+[session] open_in = "here".
+
+Use --up to bring the stack to the new worktree. Use --no-switch to stay
+where you are.`,
 	Args: cobra.ExactArgs(1),
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		// Parse argument: pr/123 or issue/456
@@ -186,13 +222,17 @@ only changes directory. To do that every time, set
 			return fmt.Errorf("invalid number %q: %w", numberStr, err)
 		}
 
-		return fetchItem(ctx, itemType, number, fetchHere)
+		return fetchItem(ctx, itemType, number, fetchHere, fetchFlags)
 	}),
 }
 
-var fetchHere bool
+var (
+	fetchHere  bool
+	fetchFlags createFlags
+)
 
 func init() {
+	fetchFlags.registerAll(fetchCmd)
 	addHereFlag(fetchCmd, &fetchHere)
 	rootCmd.AddCommand(fetchCmd)
 }

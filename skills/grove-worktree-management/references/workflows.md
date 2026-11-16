@@ -157,23 +157,26 @@ grove fork feature-b
 grove graft feature-a   # now in feature-b, pulling changes from feature-a
 ```
 
-`grove graft` (aliases: `apply`, `g`) copies the diff of uncommitted changes from the source worktree and applies it to the current one. The source worktree is not modified.
+`grove graft` (aliases: `apply`, `g`) applies the commits and the uncommitted changes of the source worktree to the current one. Use `--commits` or `--wip` for only one of the two. The source worktree is not modified.
 
 ---
 
 ## 8. Batch Cleanup
 
-**Goal:** Remove stale or merged worktrees without manually listing and deleting each one.
+**Goal:** Remove worktrees you have not used for a while without listing and deleting each one.
 
 ```bash
-# Interactive: prompts before removing each stale worktree
+# See what would be removed, change nothing
+grove trim --dry-run
+
+# Remove worktrees not accessed in 30 days (asks you to type "yes")
 grove trim
 
-# Non-interactive: removes all stale worktrees without confirmation
-grove trim --all
+# A shorter threshold
+grove trim --older-than 7
 ```
 
-`grove trim` (aliases: `prune`, `clean`, `tm`) identifies worktrees whose branches have been merged or deleted from the remote and offers to remove them. Use `--all` carefully in automated scripts.
+`grove trim` (aliases: `prune`, `clean`, `tm`) selects worktrees by last access age. It does not look at whether a branch is merged. It always asks you to type `yes`: no flag skips that. In a script, pipe the answer (`echo yes | grove trim`). The main, current, protected, and environment worktrees are never removed.
 
 ---
 

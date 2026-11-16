@@ -14,6 +14,7 @@ import (
 	"github.com/lost-in-the/grove/internal/exitcode"
 	"github.com/lost-in-the/grove/internal/grove"
 	"github.com/lost-in-the/grove/internal/log"
+	"github.com/lost-in-the/grove/internal/output"
 	"github.com/lost-in-the/grove/internal/state"
 	"github.com/lost-in-the/grove/internal/tui"
 	"github.com/lost-in-the/grove/internal/updatecheck"
@@ -188,12 +189,37 @@ shorthand alias (e.g. 'w'). Use 'grove install --help' for details.`,
 	},
 }
 
-// Execute runs the root command with the given context.
-func Execute(ctx context.Context) error {
-	return rootCmd.ExecuteContext(ctx)
+// Run runs the root command, reports a returned error once, and returns the
+// process exit code. It is the one place a returned error is printed: as the
+// JSON error object when the invoked command was asked for --json, as
+// "Error: ..." text otherwise.
+func Run(ctx context.Context) int {
+	cmd, err := rootCmd.ExecuteContextC(ctx)
+	if err == nil {
+		return 0
+	}
+	code := exitcode.From(err)
+	if jsonRequested(cmd) {
+		output.PrintJSONError(code, err.Error())
+	} else {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	}
+	return code
+}
+
+// jsonRequested reports whether cmd has a --json flag that is on. It reads
+// the value, not Changed: `grove spawn` turns JSON on without the flag.
+func jsonRequested(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	f := cmd.Flags().Lookup("json")
+	return f != nil && f.Value.String() == "true"
 }
 
 func init() {
+	rootCmd.Version = version.GetVersion()
+	rootCmd.SetVersionTemplate("{{.Version}}\n")
 	rootCmd.PersistentFlags().BoolVar(&noUpdateNotifierFlag, "no-update-notifier", false,
 		"suppress the new-release notification on this run")
 	rootCmd.PersistentFlags().BoolVar(&checkUpdateFlag, "check-update", false,

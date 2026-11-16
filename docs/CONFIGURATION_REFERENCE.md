@@ -182,7 +182,7 @@ predates herdr support.
 [tmux]
 # When to attach/create sessions.
 # "auto"   — create and attach sessions automatically (default)
-# "manual" — never auto-attach; use `grove attach` explicitly
+# "manual": never auto-attach; use `grove join` explicitly
 # "off"    — disable session management entirely (also forces [mux] backend off)
 mode = "auto"                      # string: auto | manual | off
 
@@ -603,7 +603,23 @@ Hooks are defined in a separate file from main config.
 ### Global vs Project Hook Override
 
 By default, global and project hooks **merge** (global runs first, project appends). Use
-`override_<event> = true` to replace global hooks for a specific event:
+`override_<event> = true` to replace global hooks for a specific event.
+
+There is one key per event. Each is a boolean under `[hooks]` in the project
+`.grove/hooks.toml`, and defaults to `false`. In the global file the keys have no effect.
+
+| Key | Global hooks it drops |
+|-----|-----------------------|
+| `override_pre_create` | `[[hooks.pre_create]]` |
+| `override_post_create` | `[[hooks.post_create]]` |
+| `override_pre_switch` | `[[hooks.pre_switch]]` |
+| `override_post_switch` | `[[hooks.post_switch]]` |
+| `override_pre_remove` | `[[hooks.pre_remove]]` |
+| `override_post_remove` | `[[hooks.post_remove]]` |
+
+A key set to `true` with no project hooks for that event means no hooks run for it.
+
+Example:
 
 ```toml
 # ~/.config/grove/hooks.toml (global — applies to all projects)

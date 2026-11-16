@@ -4,7 +4,7 @@ Read this file when grove is emitting raw `cd:` or `tmux-attach:` lines, when yo
 
 ## Why Directives Exist
 
-A subprocess cannot change its parent shell's working directory or attach to tmux on its behalf. Grove solves this with a shell wrapper (`GROVE_SHELL=1`) that intercepts directive lines from the binary's stdout and acts on them. Without the wrapper active, these lines appear raw in output.
+A subprocess cannot change its parent shell's working directory or attach to tmux on its behalf. Grove solves this with a shell wrapper that sets `GROVE_SHELL=1`, intercepts directive lines from the binary's stdout, and acts on them. The binary prints directive lines only when `GROVE_SHELL=1` is set. Called directly, it prints none.
 
 ## Directive Types
 
@@ -20,7 +20,7 @@ A subprocess cannot change its parent shell's working directory or attach to tmu
 ```
 cd:/Users/you/project-feature
 tmux-attach:project-feature
-env:GROVE_CURRENT=feature
+env:APP_DIR=../project-feature
 ```
 
 ## Which Commands Emit Directives
@@ -45,7 +45,7 @@ Commands that are read-only or operate on other worktrees emit no directives:
 
 ## Agent Context: Filtering Directives
 
-Without `GROVE_SHELL=1`, directive lines appear as plain stdout. Agents must filter them to avoid treating them as command output:
+An agent that calls the binary directly, without `GROVE_SHELL=1`, gets no directive lines. Use `--json` and read `switch_to` for the path. If `GROVE_SHELL=1` is set in your environment but no wrapper is reading the output, the lines appear as plain stdout. Filter them:
 
 ```bash
 grove to feature 2>&1 | grep -vE '^(cd:|tmux-attach(-cc)?:|env:)'

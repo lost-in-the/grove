@@ -57,7 +57,8 @@ Examples:
   grove graft feature-auth --wip     # Graft only uncommitted changes
   grove graft feature-auth --pick abc123,def456  # Graft specific commits
   grove graft feature-auth --dry-run # Show what would be grafted`,
-	Args: cobra.ExactArgs(1),
+	Args:              cobra.ExactArgs(1),
+	ValidArgsFunction: completeWorktreeNames,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		sourceName := args[0]
 		w := cli.NewStdout()
@@ -149,6 +150,7 @@ Examples:
 				if applyJSON {
 					result.Commits = commits
 					printApplyResult(result)
+					printApplyJSONError(exitcode.GitOperationFailed, err.Error())
 				}
 				os.Exit(exitcode.GitOperationFailed)
 			}
@@ -165,6 +167,7 @@ Examples:
 				if applyJSON {
 					result.WIPFiles = wipFiles
 					printApplyResult(result)
+					printApplyJSONError(exitcode.GitOperationFailed, err.Error())
 				}
 				os.Exit(exitcode.GitOperationFailed)
 			}

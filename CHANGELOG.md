@@ -13,11 +13,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`--here`** on `grove to`, `last`, `new`, `fork`, `open`, and `fetch`: stay in the shell or pane you are in for this run. Grove only changes directory and creates no session. Hooks still run.
 - **`--no-hooks`** on `grove to` and `grove last`: skip hooks and the dirty check for this run. `--peek` is now short for `--here --no-hooks` and behaves as before. `grove last` gains `--peek` too.
 - The config panel in the dashboard has an `open_in` field.
+- **`grove --version`** prints the same line as `grove version`.
+- **`--up` (`-u`) and `--no-docker`** on `grove fork` and `grove fetch`, and `--up` on `grove open`: the same flags as `grove new`, through the same code. `grove open <name> --up` brings the stack even when the worktree already exists.
+- **`--no-switch` (`-n`) and `--json` (`-j`)** on `grove fetch`. `grove fork --no-switch` gains the short form `-n`, and `grove browse --json` gains `-j`.
+- Shell completion offers worktree names for `grove join`, `graft`, `sync`, and `test`, and the values of `--state` for `grove prs` and `grove issues`.
 
 ### Changed
 - **One vocabulary for where you land.** The placement is `session` (the worktree's own session: a tmux session or a herdr workspace) or `here` (the shell or pane you are in). `[session] open_in` now takes `"session"` (default) or `"here"`. The old values `"new"` and `"current"` still work; `grove doctor` and `grove config` name the value to change to. The full table is in `docs/COMMAND_SPECIFICATIONS.md`.
 - `--no-tmux` is now a hidden alias of `--here` on `grove to` and `grove new`. It still works and prints a deprecation line on stderr.
 - `--up` cannot be combined with `--no-hooks`, as it already could not with `--peek`.
+- `grove new` now exits 2 when the worktree already exists, the same code `grove fork` uses for a branch that exists. Before, it exited 1.
+- **Errors under `--json` have one shape.** Any command run with `--json` that fails prints one object on stderr: `{"error": true, "code": <exit code>, "message": "..."}`. Before, `to`, `diff`, `join`, `open`, `new`, and `fork` printed `Error: ...` text. `grove sync --json` and `grove graft --json` still print their result document on stdout, and now add the error object on stderr.
+- `grove fork` now honors `[plugins.docker] auto_up = true`, as `grove new`, `open`, and `fetch` already did. Pass `--no-docker` to skip it for one run.
+- `--quiet` cannot be combined with `--json` on `grove here` and `grove ls`. Before, grove accepted both.
+- `make build` and `make install` stamp the version from `git describe`. A build from source no longer reports a stale version.
 - Help text for `to`, `last`, `new`, `fork`, `open`, `fetch`, `join`, `rm`, `rename`, and `trim` no longer says "tmux" where it means the active multiplexer. The config panel field `tmux_mode` is now labeled `session_mode`.
 - `grove new`, `spawn`, `open`, `fork`, `fetch`, and `adopt` now exit 14 when a configured file was not copied or linked. The worktree is kept. Before, they exited 0.
 - A config that fails to load now stops commands that create or adopt a worktree. Before, they ran on defaults and skipped `copy_files`, symlinks, and hooks.
@@ -25,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - `grove fetch` no longer creates a session when `[session] open_in = "here"`.
+- `grove ps --json` prints `[]` when there are no agent stacks or they are not configured. Before, it printed nothing on stdout and an error object on stderr, and exited 0. A real failure to list stacks now exits 6.
+- `grove new --help` no longer shows `--dirty git diff HEAD` as if the flag took a value.
+- The docs no longer describe `grove freeze`, `grove resume`, `grove trim --all`, or `grove open --popup`, none of which exist. The exit code tables match the code.
 - A missing `copy_files` or symlink source is no longer silent. Stderr names each entry (`Not copied: config/secret.key (missing in the main worktree)`) and says how to fix it. This holds with `--json` too.
 - `--json` on `new`, `spawn`, `fork`, and `open` now includes `provisioned` and `file_setup`, so a script can tell a file was not copied.
 - File setup now runs even when state registration fails, and the failure is reported. The old hint to run `grove repair` did not copy files.

@@ -17,15 +17,12 @@ import (
 )
 
 var (
-	newJSON       bool
+	newFlags      createFlags
 	newMirror     string // Remote branch to mirror (e.g., "origin/main")
-	newNoDocker   bool   // Skip auto-starting Docker
-	newUp         bool   // Bring the stack up for the new worktree
 	newBranch     string // Override branch name
 	newFrom       string // Create branch from this ref
 	newFromBranch string // Check out an existing branch in the new worktree
 	newDirty      bool   // Carry over `git diff HEAD` from the current worktree
-	newNoSwitch   bool   // Skip auto-switching to the new worktree
 	newHere       bool   // Placement "here": no session is created or switched to
 )
 
@@ -72,7 +69,7 @@ Examples:
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		// spawn alias implies JSON output
 		if cmd.CalledAs() == "spawn" {
-			newJSON = true
+			newFlags.json = true
 		}
 
 		if err := ctx.RequireConfig("create the worktree"); err != nil {
@@ -133,8 +130,8 @@ Examples:
 		// dirty checks. If a non-standard or prunable worktree owns the name,
 		// the eventual git worktree add will surface it.
 		if mgr.PathExists(name) {
-			return fmt.Errorf("worktree '%s' already exists\n\nOptions:\n  • Switch to it: grove to %s\n  • Remove it first: grove rm %s\n  • Use different name: grove new %s-v2",
-				name, name, name, name)
+			return exitcode.With(exitcode.ResourceExists, fmt.Errorf("worktree '%s' already exists\n\nOptions:\n  • Switch to it: grove to %s\n  • Remove it first: grove rm %s\n  • Use different name: grove new %s-v2",
+				name, name, name, name))
 		}
 
 		// Resolve the branch the worktree will actually be created on up front,
@@ -175,9 +172,8 @@ Examples:
 
 			// Verify the remote branch exists
 			if err := cmdexec.Run(context.TODO(), "git", []string{"-C", ctx.ProjectRoot, "rev-parse", "--verify", mirror}, "", cmdexec.GitLocal); err != nil {
-				cli.Error(stderr, "remote branch '%s' not found", mirror)
-				cli.Faint(stderr, "Run 'git fetch' and verify the branch exists")
-				os.Exit(exitcode.ResourceNotFound)
+				return exitcode.With(exitcode.ResourceNotFound,
+					fmt.Errorf("remote branch '%s' not found\nRun 'git fetch' and verify the branch exists", mirror))
 			}
 
 			// branchName is env/{name} (resolveNewBranch). Must actually create
@@ -191,7 +187,7 @@ Examples:
 				return fmt.Errorf("failed to create environment worktree: %w", err)
 			}
 
-			if !newJSON {
+			if !newFlags.json {
 				cli.Success(w, "Created environment worktree '%s' tracking %s", name, mirror)
 			}
 		} else if newFromBranch != "" {
@@ -205,7 +201,7 @@ Examples:
 				return fmt.Errorf("failed to create worktree from branch %q: %w", newFromBranch, err)
 			}
 
-			if !newJSON {
+			if !newFlags.json {
 				cli.Success(w, "Created worktree '%s' from branch '%s'", name, newFromBranch)
 			}
 		} else {
@@ -221,7 +217,7 @@ Examples:
 				}
 			}
 
-			if !newJSON {
+			if !newFlags.json {
 				cli.Success(w, "Created worktree '%s'", name)
 			}
 		}
@@ -230,9 +226,9 @@ Examples:
 		wt, prov, err := setupCreatedWorktree(ctx, mgr, name, branchName, worktreeSetupOpts{
 			IsEnvironment: isEnvironment,
 			Mirror:        mirror,
-			NoDocker:      newNoDocker,
-			Up:            newUp,
-			JSONOutput:    newJSON,
+			NoDocker:      newFlags.noDocker,
+			Up:            newFlags.up,
+			JSONOutput:    newFlags.json,
 		}, w)
 		if err != nil {
 			return err
@@ -245,13 +241,13 @@ Examples:
 		// inspect and re-apply manually.
 		if newDirty {
 			if len(dirtyPatch) == 0 {
-				if !newJSON {
+				if !newFlags.json {
 					cli.Info(w, "--dirty: no uncommitted changes to transfer")
 				}
 			} else if err := applyDirtyPatch(wt.Path, dirtyPatch); err != nil {
 				cli.Warning(stderr, "--dirty: failed to apply patch to new worktree: %v", err)
 				cli.Faint(stderr, "The patch is intact in your current worktree; resolve manually and re-apply.")
-			} else if !newJSON {
+			} else if !newFlags.json {
 				cli.Success(w, "Transferred uncommitted changes (--dirty)")
 			}
 		}
@@ -269,16 +265,16 @@ Examples:
 		if m := ctx.Mux(); m.Available() && !landsHere(ctx.Config, newHere) {
 			target := muxTarget(mgr, name, wt.Path)
 			if managed, err := ensureSession(m, target, w); err != nil {
-				if !newJSON {
+				if !newFlags.json {
 					cli.Warning(w, "Failed to create session: %v", err)
 				}
-			} else if managed && !newJSON {
+			} else if managed && !newFlags.json {
 				reportEnsured(w, m, target)
 			}
 		}
 
 		// JSON output mode — return early to avoid cd: directive collision
-		if newJSON {
+		if newFlags.json {
 			result := output.NewWorktreeResult{
 				Name:    name,
 				Branch:  branchName,
@@ -286,7 +282,7 @@ Examples:
 				Created: true,
 			}
 			result.Provisioned, result.FileSetup = prov.jsonFields()
-			if !newNoSwitch {
+			if !newFlags.noSwitch {
 				result.SwitchTo = wt.Path
 			}
 			if err := output.PrintJSON(result); err != nil {
@@ -306,7 +302,7 @@ Examples:
 
 		// Switch to new worktree unless --no-switch. Agent mode, a "here"
 		// placement, and mode "off" suppress the client switch.
-		if !newNoSwitch {
+		if !newFlags.noSwitch {
 			suppressTmux := resolveTmuxMode(ctx.Config, newHere) == tmuxModeOff
 			sessionName := worktree.TmuxSessionName(projectName, name)
 			if !switchToWorktree(ctx, stderr, currentWorktreeName, name, sessionName, wt.Path, suppressTmux) {
@@ -367,18 +363,14 @@ func resolveNewBranch(name, mirror, fromBranch, branch string) string {
 }
 
 func init() {
-	newCmd.Flags().BoolVarP(&newJSON, "json", "j", false, "Output as JSON with switch_to field")
+	newFlags.registerAll(newCmd)
 	newCmd.Flags().StringVarP(&newBranch, "branch", "b", "", "Branch name to create (default: worktree name)")
 	newCmd.Flags().StringVarP(&newFrom, "from", "f", "", "Create branch from this ref (default: HEAD)")
 	newCmd.Flags().StringVar(&newFromBranch, "from-branch", "", "Check out an existing branch in the new worktree (no new branch created)")
-	newCmd.Flags().BoolVar(&newDirty, "dirty", false, "Carry over `git diff HEAD` from the current worktree (requires --from-branch)")
+	newCmd.Flags().BoolVar(&newDirty, "dirty", false, "Carry over 'git diff HEAD' from the current worktree (requires --from-branch)")
 	newCmd.Flags().StringVar(&newMirror, "mirror", "", "Create environment worktree tracking a remote branch (e.g., origin/main)")
-	newCmd.Flags().BoolVar(&newNoDocker, "no-docker", false, "Skip Docker auto-start")
-	newCmd.Flags().BoolVarP(&newUp, "up", "u", false, "Also bring the stack to the new worktree (per-invocation auto_up)")
-	newCmd.MarkFlagsMutuallyExclusive("up", "no-docker")
 	addHereFlag(newCmd, &newHere)
 	addDeprecatedNoTmuxFlag(newCmd, &newHere)
-	newCmd.Flags().BoolVarP(&newNoSwitch, "no-switch", "n", false, "Stay in current worktree after creation")
 	newCmd.MarkFlagsMutuallyExclusive("mirror", "from")
 	newCmd.MarkFlagsMutuallyExclusive("mirror", "branch")
 	newCmd.MarkFlagsMutuallyExclusive("mirror", "from-branch")

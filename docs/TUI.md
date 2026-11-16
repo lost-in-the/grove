@@ -206,7 +206,7 @@ A text input overlay for renaming the selected worktree:
 
 Press `enter` to rename, `esc` to cancel.
 
-Renaming moves the git worktree directory, updates the state entry, and renames the associated tmux session.
+Renaming moves the git worktree directory, updates the state entry, and renames the worktree's session.
 
 > The main worktree and protected worktrees cannot be renamed.
 

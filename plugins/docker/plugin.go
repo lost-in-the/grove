@@ -280,6 +280,10 @@ type StackSlotStatus struct {
 	Running  bool   // true when Project has at least one running container right now; false means held only by stopped/exited containers (or occupancy couldn't be determined and this is a local-only fallback, which is optimistically reported as running)
 }
 
+// ErrAgentStackNotConfigured is what ListStackSlots returns when the project
+// has no agent stacks to list. It is a state, not a failure.
+var ErrAgentStackNotConfigured = errors.New("agent stack not configured")
+
 // ListStackSlots returns the resolved state of every occupied agent slot for
 // the shared compose stack, merging this project's local .slots.json against
 // docker container occupancy so callers (`grove ps`) don't misattribute a
@@ -289,7 +293,7 @@ type StackSlotStatus struct {
 func ListStackSlots(cfg *config.Config) ([]StackSlotStatus, error) {
 	sm := buildSlotManager(cfg)
 	if sm == nil {
-		return nil, fmt.Errorf("agent stack not configured")
+		return nil, ErrAgentStackNotConfigured
 	}
 	local, err := sm.ListActive()
 	if err != nil {

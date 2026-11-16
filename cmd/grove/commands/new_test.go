@@ -106,9 +106,9 @@ func TestNewCmd_NoSwitchFlag(t *testing.T) {
 }
 
 func TestNewAutoSwitchDefault(t *testing.T) {
-	// Verify newNoSwitch defaults to false, meaning auto-switch is on by default
-	if newNoSwitch {
-		t.Error("newNoSwitch should default to false (auto-switch enabled)")
+	// Verify newFlags.noSwitch defaults to false, meaning auto-switch is on by default
+	if newFlags.noSwitch {
+		t.Error("newFlags.noSwitch should default to false (auto-switch enabled)")
 	}
 }
 

@@ -64,3 +64,34 @@ func TestAgentHelp_StackCommandsMatchTheirShortHelp(t *testing.T) {
 		}
 	}
 }
+
+func TestAgentHelp_ListsEveryCommandWithAJSONFlag(t *testing.T) {
+	buf := new(bytes.Buffer)
+	cmd := &cobra.Command{}
+	cmd.SetOut(buf)
+	writeAgentHelp(cmd)
+
+	var line string
+	for _, l := range strings.Split(buf.String(), "\n") {
+		if strings.Contains(l, "--json works on:") {
+			line = l
+		}
+	}
+	if line == "" {
+		t.Fatal("agent help has no '--json works on:' line")
+	}
+	_, list, _ := strings.Cut(line, "--json works on:")
+	listed := strings.Fields(strings.ReplaceAll(list, ",", " "))
+	for _, c := range rootCmd.Commands() {
+		if c.Flags().Lookup("json") == nil {
+			continue
+		}
+		found := false
+		for _, name := range listed {
+			found = found || name == c.Name()
+		}
+		if !found {
+			t.Errorf("agent help does not list %q among the --json commands: %v", c.Name(), listed)
+		}
+	}
+}

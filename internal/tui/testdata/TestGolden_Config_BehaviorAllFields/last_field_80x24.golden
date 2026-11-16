@@ -1,0 +1,24 @@
+ [1m[1mtest-project[m ▸ [1msettings[m                                                       [m 
+  [1] general   [1m[2] behavior[m   [3] plugins   [4] protection                     
+                                                                                
+   Stack follows every move: off, prompt (ask first), auto (always)             
+   > off                                                                        
+     prompt                                                                     
+     auto                                                                       
+                                                                                
+   [1mopen_in[m                                                                      
+   Where you land: session (the worktree's own) or here (this shell)            
+   > session                                                                    
+     here                                                                       
+                                                                                
+   [1msession_mode[m                                                                 
+   Sessions: auto (attach), manual (print the command), off (none)              
+   > auto                                                                       
+     manual                                                                     
+     off                                                                        
+                                                                                
+ ┃ [1mnaming_pattern[m                                                               
+ ┃ Worktree directory template; {project} and {name} each exactly once          
+ ┃ > {project}-{name}[7m [m                                                          
+                                                                                
+  [1mtab[m next field · [1mctrl+n/p[m section · [1mesc[m close                                 

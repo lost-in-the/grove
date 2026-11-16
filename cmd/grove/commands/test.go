@@ -46,7 +46,8 @@ Extra arguments are appended to the configured command:
 
   grove test my-feature spec/models/     # runs: bin/rails test spec/models/
   grove test my-feature 'spec/**/**.rb'  # globs expand in the target worktree`,
-	Args: cobra.MinimumNArgs(1),
+	Args:              cobra.MinimumNArgs(1),
+	ValidArgsFunction: completeWorktreeNamesFirstArg,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		name := args[0]
 		extraArgs := args[1:]

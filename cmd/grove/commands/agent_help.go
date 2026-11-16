@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -68,7 +69,8 @@ func writeAgentHelp(cmd *cobra.Command) {
 
 ## Agent Tips
   - Call the binary directly, not the shell function
-  - Use --json flag on ls/new/to for machine-readable output
+  - Use --json (-j) for machine-readable output. Errors are then JSON on stderr.
+    --json works on: %s
   - Set GROVE_AGENT_MODE=1 to prevent a session from taking over your terminal
   - By default grove to does not touch the stack ([switch] container_switch = "auto" or "prompt"
     changes that). With agent stacks enabled, grove to --up leaves the stack where
@@ -80,7 +82,19 @@ func writeAgentHelp(cmd *cobra.Command) {
 ## Full Documentation
   grove --help              All commands
   docs/AGENT_GUIDE.md       Comprehensive agent reference
-`, binPath, project)
+`, binPath, project, strings.Join(jsonCommandNames(), ", "))
+}
+
+// jsonCommandNames lists every command that takes --json, read from the
+// commands themselves so the reference cannot go stale.
+func jsonCommandNames() []string {
+	var names []string
+	for _, c := range rootCmd.Commands() {
+		if c.Flags().Lookup("json") != nil {
+			names = append(names, c.Name())
+		}
+	}
+	return names
 }
 
 func init() {

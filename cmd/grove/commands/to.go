@@ -32,7 +32,7 @@ type switchFlags struct {
 }
 
 func (f *switchFlags) register(cmd *cobra.Command) {
-	cmd.Flags().BoolVarP(&f.json, "json", "j", false, "Output as JSON with switch_to field")
+	cmd.Flags().BoolVarP(&f.json, "json", "j", false, jsonSwitchHelp)
 	addHereFlag(cmd, &f.here)
 	cmd.Flags().BoolVar(&f.noHooks, "no-hooks", false, "Skip hooks and the dirty check for this run")
 	cmd.Flags().BoolVar(&f.peek, "peek", false, "Look without side effects: short for --here --no-hooks")

@@ -8,6 +8,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/exp/golden"
+
+	"github.com/lost-in-the/grove/internal/config"
 )
 
 // checkConfigFrame checks the frame against the terminal size alone: it
@@ -140,6 +142,31 @@ func TestGolden_Config(t *testing.T) {
 				// A different loaded value, not a different shown one: huh
 				// keeps an input's text from when it was built.
 				m.configState.Fields[ConfigTabGeneral][0].Loaded = "grove"
+			}
+			golden.RequireEqual(t, []byte(m.viewString()))
+		})
+	}
+}
+
+// The fixture above keeps most tabs short. This one opens the panel the way
+// the dashboard does, on the default config, so the Behavior tab shows every
+// field it really has and a new field cannot be cut off unnoticed.
+func TestGolden_Config_BehaviorAllFields(t *testing.T) {
+	behavior := populateConfigFields(config.LoadDefaults())[ConfigTabBehavior]
+	for name, tabs := range map[string]int{
+		"first_field_80x24": 0,
+		"last_field_80x24":  len(behavior) - 1,
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := goldenModel(t, sizeStandard, withItems(3))
+			m = sendKey(m, "c")
+			m = sendConfigMsg(t, m, configLoadedMsg{cfg: config.LoadDefaults()})
+			m = sendConfigKeys(t, m, "ctrl+n")
+			for range tabs {
+				m = sendConfigKeys(t, m, "tab")
+			}
+			if want := behavior[tabs].Key; focusedKey(m) != want {
+				t.Fatalf("focus is on %q, want %q", focusedKey(m), want)
 			}
 			golden.RequireEqual(t, []byte(m.viewString()))
 		})

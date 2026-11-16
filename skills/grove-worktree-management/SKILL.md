@@ -55,35 +55,38 @@ export GROVE_TUI=0               # disable dashboard
 
 | Command | Purpose | `--json` | Mutates | Aliases |
 |---------|---------|:--------:|:-------:|---------|
-| `grove new [name]` | Create worktree + branch + its session; `--up` also brings the stack, `--here` skips the session | — | ✓ | `spawn`, `n` |
-| `grove to [name]` | Move to a worktree; does not touch the stack by default (`[switch] container_switch` set to `auto` or `prompt` changes that). `--up` also brings it, `--here` stays in this shell, `--no-hooks` skips hooks, `--peek` is short for `--here --no-hooks` | — | ✓ | `switch`, `t` |
-| `grove fetch <pr\|issue>/<n>` | Worktree from GitHub PR/issue (needs `gh`) | — | ✓ | `f` |
+| `grove new [name]` | Create worktree + branch + its session; `--up` also brings the stack, `--here` skips the session, `--no-switch` stays where you are | ✓ | ✓ | `spawn`, `n` |
+| `grove to [name]` | Move to a worktree; does not touch the stack by default (`[switch] container_switch` set to `auto` or `prompt` changes that). `--up` also brings it, `--here` stays in this shell, `--no-hooks` skips hooks, `--peek` is short for `--here --no-hooks` | ✓ | ✓ | `switch`, `t` |
+| `grove fetch <pr\|issue>/<n>` | Worktree from GitHub PR/issue (needs `gh`); takes `--up`, `--here`, `--no-switch` like `new` | ✓ | ✓ | `f` |
 | `grove ls` | List all worktrees | ✓ | — | `list`, `l` |
 | `grove here` | Current worktree status | ✓ | — | `h` |
 | `grove context` | Rich status (ahead/behind, stash, recent commits) | ✓ | — | — |
+| `grove which` | Where you are and the state of the stack | ✓ | — | `status` |
 | `grove test <name>` | Run tests in another worktree | — | — | `tt` |
-| `grove ps` | List active isolated Docker slots | ✓ | — | `agent-status` |
+| `grove ps` | List active isolated Docker slots (`[]` when there are none) | ✓ | — | `agent-status` |
 | `grove up` | Bring the stack to the worktree you are in; `--isolated` for an agent stack (slot auto-allocated) | — | ✓ | `u` |
-| `grove down` | Stop Docker; detects an isolated stack automatically | — | ✓ | `do` |
-| `grove rm [name]` | Remove worktree + branch + tmux + Docker | — | ✓ | `remove`, `delete` |
+| `grove down` | Stop the stack; detects an isolated stack automatically | — | ✓ | `do` |
+| `grove rm [name]` | Remove worktree + branch + session + Docker | — | ✓ | `remove`, `delete` |
 | `grove doctor [worktree]` | Health check | — | — | — |
 | `grove adopt [path]` | Bring raw git worktree under grove management | — | ✓ | — |
-| `grove sync [name]` | Sync branch with upstream | — | ✓ | `s` |
-| `grove last` | Move to previous worktree; `--up` also brings the stack | — | ✓ | `la` |
-| `grove diff [name]` | Compare branches | — | — | `compare`, `d` |
-| `grove graft <name>` | Apply changes from another worktree | — | ✓ | `apply`, `g` |
-| `grove trim` | Remove stale/merged worktrees | — | ✓ | `prune`, `clean`, `tm` |
-| `grove join [name]` | Attach to tmux session | — | — | `attach`, `a`, `j` |
-| `grove fork [name]` | Fork current worktree into a new one | — | ✓ | `split`, `fo` |
-| `grove open [name]` | Open a worktree session (create if needed) | ✓ | ✓ | `o` |
+| `grove sync [name]` | Fast-forward an environment worktree (made with `new --mirror`) to its remote branch; other worktrees exit 8 | ✓ | ✓ | `s` |
+| `grove last` | Move to previous worktree; `--up` also brings the stack | ✓ | ✓ | `la` |
+| `grove diff [name]` | Compare this worktree against another | ✓ | — | `compare`, `d` |
+| `grove graft <name>` | Apply commits and uncommitted changes from another worktree | ✓ | ✓ | `apply`, `g` |
+| `grove trim` | Remove worktrees not accessed in 30 days (`--older-than N`); always asks you to type `yes` | — | ✓ | `prune`, `clean`, `tm` |
+| `grove join [name]` | Join a worktree's session | ✓ | — | `attach`, `a`, `j` |
+| `grove fork [name]` | Fork current worktree into a new one; takes `--up`, `--here`, `--no-switch` like `new` | ✓ | ✓ | `split`, `fo` |
+| `grove open [name]` | Open a worktree session (create if needed); `--up` also brings the stack | ✓ | ✓ | `o` |
 | `grove logs [service]` | View container logs | — | — | `lo` |
-| `grove browse` | Open current worktree's PR/issue in the browser | — | — | `b` |
+| `grove browse` | Open current worktree's PR/issue in the browser; `--json` prints the URL only | ✓ | — | `b` |
+
+With `--json` (`-j`), a failed command prints one JSON object on stderr: `{"error": true, "code": <exit code>, "message": "..."}`.
 
 ## Critical Rules
 
 - **Worktree naming:** directories default to `{project}-{name}`; projects can override via `[naming] pattern` in `.grove/config.toml`. `grove ls` shows short names; tmux sessions always use canonical `{project}-{name}`.
 - **Read-only switching:** `grove to <name> --peek` is short for `--here --no-hooks`: it stays in this shell and skips hooks. Safe for PR review.
-- **Shell directives:** Without `GROVE_SHELL=1`, grove emits `cd:`, `tmux-attach:`, `env:` lines raw. Filter them: `grove to x 2>&1 | grep -vE '^(cd:|tmux-attach(-cc)?:|env:)'`
+- **Shell directives:** grove prints `cd:`, `tmux-attach:`, and `env:` lines only when `GROVE_SHELL=1` is set (the shell wrapper sets it). An agent that calls the binary directly gets none. To learn the path, use `--json` and read `switch_to`. If `GROVE_SHELL=1` is in your environment, filter the lines: `grove to x 2>&1 | grep -vE '^(cd:|tmux-attach(-cc)?:|env:)'`
 - **`grove new` and sessions:** `GROVE_AGENT_MODE=1` does NOT suppress session creation in `grove new`. Pass `--here` for that, or set `[session] open_in = "here"` in config.
 - **herdr:** grove may drive [herdr](https://herdr.dev) instead of tmux (`[mux] backend` in `.grove/config.toml`, or automatically inside a herdr pane). Commands work the same. Never run `herdr worktree create` / `herdr worktree remove` on grove's behalf — they bypass grove's naming and protection rules; use `grove new` / `grove rm`.
 - **Session state in JSON:** `grove ls --json` (`.worktrees[].session`) and `grove here --json` (`.session.status`) report `attached` / `detached` / `none` under tmux and `active` / `open` / `none` under herdr. Grove before 0.11.0 named this field `tmux`. Under herdr, `grove ls --json` also gives an `agent` field (`idle` / `working` / `blocked` / `done`) — the quickest way to find a worktree whose agent is waiting on input.

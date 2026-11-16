@@ -11,7 +11,7 @@ This document provides exhaustive specifications for each grove command. Every b
 1. [Global Behaviors](#global-behaviors)
 2. [Multiplexer Backends](#multiplexer-backends)
 3. [Naming Conventions](#naming-conventions)
-3. [Core Commands](#core-commands)
+4. [Core Commands](#core-commands)
    - [grove ls](#grove-ls)
    - [grove new](#grove-new)
    - [grove open](#grove-open)
@@ -23,7 +23,6 @@ This document provides exhaustive specifications for each grove command. Every b
    - [grove last](#grove-last)
    - [grove join](#grove-join)
    - [grove which](#grove-which)
-4. [State Commands](#state-commands)
 5. [Docker Commands](#docker-commands)
    - [grove up](#grove-up)
    - [grove down](#grove-down)
@@ -44,7 +43,7 @@ This document provides exhaustive specifications for each grove command. Every b
    - [grove doctor](#grove-doctor)
 8. [Exit Codes](#exit-codes)
 9. [Output Formatting](#output-formatting)
-10. [Commands Not Speced](#commands-not-speced)
+10. [Other Commands](#other-commands)
 
 ---
 
@@ -176,7 +175,7 @@ These behaviors differ by backend:
 |---|---|---|
 | Session identity | session name | checkout path (label is cosmetic) |
 | Session status values | `attached` / `detached` / `none` | `active` (the server's focused workspace) / `open` / `none` |
-| `grove open --popup` | `display-popup` overlay | full-window switch |
+| `grove open` with `[session] popup = true` | `display-popup` overlay | full-window switch |
 | `control_mode` (iTerm2 `tmux -CC`) | honored | ignored |
 | Agent status in `grove ls` / dashboard | not reported | `idle` / `working` / `blocked` / `done` |
 | Several independent servers | n/a | a worktree open in another named session is adopted there (outside herdr: focus + `herdr --session NAME`; inside another session: warning + `cd` only), never duplicated; `grove rm` closes it in every running session |
@@ -314,7 +313,6 @@ Flags:
    - Git status (clean/dirty/conflict)
    - Tmux session status (attached/detached/none)
    - Docker status (if docker plugin enabled)
-   - Frozen status
 4. Display in table format
 
 **Output Format (default):**
@@ -324,7 +322,6 @@ NAME            BRANCH          STATUS     TMUX        PATH
 • main          main            clean      attached    ~/projects/grove
   testing       testing         clean      detached    ~/projects/grove-testing
   feature-auth  feature/auth    dirty      none        ~/projects/grove-feature-auth
-  hotfix        main            clean      frozen      ~/projects/grove-hotfix
 ```
 
 **Column Definitions:**
@@ -332,7 +329,7 @@ NAME            BRANCH          STATUS     TMUX        PATH
 - `NAME` = short name (without project prefix)
 - `BRANCH` = current branch
 - `STATUS` = git status: `clean`, `dirty` (uncommitted changes), `conflict`, `detached`
-- `TMUX` = session status: `attached` (you're in it), `detached` (exists, not attached), `none` (no session), `frozen`. Under herdr the values are `active` (the server's focused workspace), `open` (the workspace exists), and `none`. **The header is named after the active backend** — `TMUX` under tmux, `HERDR` under herdr, `SESSION` when none is being driven. The values follow the backend (above).
+- `TMUX` = session status: `attached` (you're in it), `detached` (exists, not attached), `none` (no session). Under herdr the values are `active` (the server's focused workspace), `open` (the workspace exists), and `none`. **The header is named after the active backend**: `TMUX` under tmux, `HERDR` under herdr, `SESSION` when none is being driven. The values follow the backend (above).
 - `PATH` = absolute path
 
 **Output Format (--paths):**
@@ -355,7 +352,6 @@ NAME            BRANCH          STATUS     TMUX        PATH
       "path": "~/projects/grove",
       "status": "clean",
       "session": "attached",
-      "frozen": false,
       "current": true
     }
   ]
@@ -370,10 +366,12 @@ NAME            BRANCH          STATUS     TMUX        PATH
 | Worktree dir missing | Show with status: `missing` and path in red |
 | Git worktree corrupted | Show with status: `corrupted` |
 
+`--quiet` and `--json` cannot be combined.
+
 **Exit Codes:**
 - 0: Success
-- 1: Not in a git repository
-- 2: Other error
+- 1: Error
+- 10: Not a grove project
 
 ---
 
@@ -385,23 +383,25 @@ NAME            BRANCH          STATUS     TMUX        PATH
 
 **Usage:**
 ```
-grove new <name> [flags]
+grove new [name] [flags]
 
 Arguments:
-  name    Name for the new worktree (required)
+  name    Name for the new worktree (asked for when left out in a terminal; required otherwise)
 
 Flags:
   -b, --branch <branch>      Branch name to create (default: worktree name)
   -f, --from <ref>           Create branch from this ref (default: HEAD)
       --from-branch <branch> Check out an existing local or remote branch (no new branch created)
-      --dirty                Carry over `git diff HEAD` from the current worktree (requires --from-branch)
+      --dirty                Carry over 'git diff HEAD' from the current worktree (requires --from-branch)
   -j, --json                 Output as JSON with switch_to field
       --mirror <ref>         Create environment worktree tracking a remote branch (e.g., origin/main)
-  -u, --up                   Also bring the stack to the new worktree (per-invocation auto_up)
-      --no-docker            Skip bringing the stack, even with auto_up (cannot combine with --up)
+  -u, --up                   Also bring the stack to the worktree
+      --no-docker            Do not bring the stack, even with auto_up
       --here                 Stay in the shell or pane you are in: change directory only, no session
-  -n, --no-switch            Stay in current worktree after creation
+  -n, --no-switch            Stay where you are after the worktree is created
 ```
+
+`--up` and `--no-docker` are the per-run forms of `auto_up = true` and `false`. They cannot be combined. `grove new`, `grove fork`, `grove fetch`, and `grove open` share these two flags, `--json`, and (except `open`) `--no-switch`, with the same help text.
 
 `--here` sets the [placement](#placement) for this run. No session is created. Docker and hooks still run.
 
@@ -430,7 +430,7 @@ Flags:
 
 5. **Copy / symlink worktree files** from `plugins.docker.external.{copy_files, symlink_files, symlink_dirs}`. Runs unconditionally — `--no-docker` does not skip this step.
 
-6. **Create tmux session:**
+6. **Create the session:**
    - Session name = `{project}-{name}`
    - Start in worktree directory
 
@@ -453,6 +453,7 @@ Flags:
 ✓ Created tmux session 'grove-testing'
 ✓ Stack is up
 ```
+The session line names the backend: `tmux` or `herdr`.
 
 **When a configured file is not copied or linked:** the worktree is kept, and the command exits **14**. Stderr shows one line per failed entry, then one line with the remedy. This holds in every mode, `--json` included.
 ```
@@ -485,7 +486,7 @@ If state registration fails, stderr adds `Not registered: <reason>` and a `grove
 To switch to it: grove to testing
 To remove it:    grove rm testing
 ```
-**Exit code: 1**
+**Exit code: 2** (`ResourceExists`, the same code `grove fork` uses)
 
 **Output (Branch Exists, No Worktree):**
 ```
@@ -510,14 +511,14 @@ To remove it:    grove rm testing
 | No write permission | Error: "Cannot create worktree: permission denied at {path}" |
 | Inside a worktree (not main) | Still works, creates sibling |
 | Parent directory doesn't exist | Create parent directories |
-| Tmux not installed | Warning, skip tmux session creation |
+| No multiplexer installed | Skip session creation |
 | Already have session with name | Attach to existing session |
 
 **Exit Codes:**
 - 0: Success (worktree created)
-- 1: Worktree already exists
-- 2: Git error (couldn't create worktree)
-- 3: Invalid input
+- 1: Error: git could not create the worktree, the name is invalid, the config did not load, or the `--mirror` branch was not found
+- 2: Worktree already exists
+- 10: Not a grove project
 - 14: Worktree created, but a configured file was not copied or linked (see above)
 
 ---
@@ -528,18 +529,22 @@ To remove it:    grove rm testing
 
 **Usage:**
 ```
-grove open <name> [flags]
+grove open [name] [flags]
 
 Arguments:
-  name    Name of worktree to open (required)
+  name    Name of worktree to open (a picker opens when left out)
 
 Flags:
-      --no-create     Only attach to existing worktree, error if not found
+      --no-create      Only attach to existing worktree, error if not found
       --command <cmd>  Override session command
       --no-popup       Skip popup, switch or attach to the session instead
       --here           Stay in the shell or pane you are in: change directory only, no session
-  -j, --json           Output as JSON
+  -u, --up             Also bring the stack to the worktree
+      --no-docker      Do not bring the stack, even with auto_up
+  -j, --json           Output as JSON with switch_to field
 ```
+
+`--up` brings the stack to the worktree whether `grove open` created it or it already existed. `auto_up` and `--no-docker` only apply when `grove open` creates the worktree. `--up` and `--no-docker` cannot be combined.
 
 `--here` sets the [placement](#placement) for this run. The worktree is created if needed. No session is created and the session command does not run.
 
@@ -547,7 +552,7 @@ Flags:
 
 1. **Ensure worktree exists:**
    - If worktree found: proceed
-   - If not found and `--no-create` not set: create worktree (same as `grove new`). After `grove open`, the stack stays on the worktree it was on. Run `grove up` in the new worktree or `grove to <name> --up`, or set `auto_up = true`.
+   - If not found and `--no-create` not set: create worktree (same as `grove new`). After `grove open`, the stack stays on the worktree it was on. Use `grove open <name> --up`, run `grove up` in the worktree, or set `auto_up = true`.
    - If not found and `--no-create` set: error
 
 2. **Ensure tmux session exists:**
@@ -599,7 +604,8 @@ When `grove open` creates the worktree, it reports files that were not copied or
 
 **Exit Codes:**
 - 0: Success
-- 1: Worktree not found (with `--no-create`)
+- 1: Error, including worktree not found with `--no-create`
+- 10: Not a grove project
 - 14: Worktree created, but a configured file was not copied or linked
 
 ---
@@ -612,10 +618,10 @@ Two things can move: you, and the stack. `grove to` moves you. `grove up` brings
 
 **Usage:**
 ```
-grove to <name> [flags]
+grove to [name] [flags]
 
 Arguments:
-  name    Name of worktree to switch to (required)
+  name    Name of worktree to move to (a picker opens when left out)
 
 Flags:
   -j, --json      Output as JSON with switch_to field
@@ -797,14 +803,14 @@ Drift is only corrected when the pane is a shell (not running a program).
 
 **Exit Codes:**
 - 0: Success
-- 1: Worktree not found, or switch refused due to dirty worktree
-- 2: Other error
+- 1: Error: worktree not found, switch refused due to dirty worktree, or a required hook failed
+- 10: Not a grove project
 
 ---
 
 ### grove rm
 
-**Purpose:** Remove a worktree and its associated tmux session.
+**Purpose:** Remove a worktree and its session.
 
 **Usage:**
 ```
@@ -831,7 +837,7 @@ Flags:
    - Cannot remove current worktree (must switch away first)
    - Cannot remove if dirty (unless `--force`)
 
-3. **Kill tmux session** (if exists)
+3. **Kill the session** (if exists)
 
 4. **Remove worktree:**
    ```bash
@@ -850,7 +856,7 @@ Flags:
 
 **Output (Success):**
 ```
-✓ Killed tmux session 'grove-testing'
+✓ Killed session 'grove-testing'
 ✓ Removed worktree 'testing'
 ✓ Deleted branch 'testing'
 ```
@@ -907,12 +913,13 @@ Delete branch anyway? [y/N]:
 - 0: Success
 - 1: Worktree not found
 - 7: Cannot remove (main, protected, current, or dirty without --force)
+- 10: Not a grove project
 
 ---
 
 ### grove rename
 
-**Purpose:** Rename a worktree, updating its directory, state entry, and tmux session.
+**Purpose:** Rename a worktree, updating its directory, state entry, and session.
 
 **Usage:**
 ```
@@ -942,15 +949,16 @@ Arguments:
 
 5. **Update path in state:** Update the stored path to reflect the new directory
 
-6. **Rename tmux session** (if exists):
+6. **Rename the session** (if exists). Under tmux:
    ```bash
    tmux rename-session -t <old-session> <new-session>
    ```
+   Under herdr the workspace label is renamed.
 
 **Output (Success):**
 ```
 ✓ Renamed worktree 'old-name' to 'new-name'
-✓ Renamed tmux session 'project-old-name' to 'project-new-name'
+✓ Renamed session 'project-old-name' to 'project-new-name'
 ```
 
 **Output (Protected):**
@@ -967,12 +975,13 @@ Arguments:
 | New name already taken | Error: "a worktree named 'X' already exists" |
 | Is the main worktree | Error: "cannot rename the main worktree" |
 | Is the current worktree | Error: must switch away first |
-| Tmux session doesn't exist | Skip tmux rename, succeed |
+| Session doesn't exist | Skip the session rename, succeed |
 
 **Exit Codes:**
 - 0: Success
 - 1: Worktree not found
 - 7: Cannot rename (main, protected, or current)
+- 10: Not a grove project
 
 ---
 
@@ -990,6 +999,8 @@ Flags:
       --check-mount       Compare the worktree the stack is on with what the running containers mount
       --require-current   With --check-mount, also exit non-zero if you are not in the worktree the stack is on
 ```
+
+`--quiet` and `--json` cannot be combined.
 
 **Behavior:**
 
@@ -1148,6 +1159,9 @@ To create a new worktree: grove new <name>
 **Exit Codes:**
 - 0: Success (in a worktree)
 - 1: Not in a worktree
+- 4: Invalid input (`--require-current` without `--check-mount`)
+- 6, 12, 13: Only with `--check-mount` (see the table above)
+- 10: Not a grove project
 
 ---
 
@@ -1332,12 +1346,13 @@ With `--json`:
 **Exit Codes:**
 - 0: Success — including the graceful "no previous worktree yet" no-op (behavior note 4 above; the JSON form carries an empty `switch_to`)
 - 1: The recorded previous worktree no longer exists
+- 10: Not a grove project
 
 ---
 
 ### grove join
 
-**Purpose:** Attach to (or create) a tmux session for a worktree without changing the shell's current directory.
+**Purpose:** Attach to (or create) a worktree's session without changing the shell's current directory.
 
 **Aliases:** `attach`, `a`, `j`
 
@@ -1377,7 +1392,8 @@ Does **not** emit a `cd:` directive. Use `grove to` if you want a directory chan
 
 **Exit Codes:**
 - 0: Success
-- 1: Worktree not found, tmux unavailable, or tmux disabled
+- 1: Worktree not found, no multiplexer available, or sessions turned off
+- 10: Not a grove project
 
 ---
 
@@ -1453,18 +1469,13 @@ When no Docker is configured, the `services` field is `null`/omitted.
 **Exit Codes:**
 - 0: Success
 - 1: Not in a grove worktree
-
----
-
-## State Commands
-
-> No user-facing state commands are currently registered, and no freeze/resume logic is implemented — the `internal/state` package only tracks worktree metadata. See the [Planned Commands](#planned-not-yet-implemented) section for the freeze/resume design.
+- 10: Not a grove project
 
 ---
 
 ## Docker Commands
 
-**Note:** Docker commands are part of the Docker plugin (Phase 1). They should not be in the core binary for Phase 0.
+**Note:** Docker commands are provided by the Docker plugin.
 
 ### grove up
 
@@ -1666,8 +1677,12 @@ way) but not a live stack.
 | Slot held by a different grove project's stack at the same `external.path` | Shown as `held by <compose-project>`, not attributed to a worktree here |
 | Slot held by a different grove project's stack, but its containers have all exited | Shown as `held by <compose-project> (stopped)`; still excluded from allocation |
 
+With `--json` and no agent stacks (none active, or not configured), stdout is `[]` and the exit code is 0.
+
 **Exit Codes:**
-- 0: Success
+- 0: Success, including "no stacks" and "not configured"
+- 6: The stacks could not be listed (`ExternalCommandFailed`)
+- 10: Not a grove project
 
 ---
 
@@ -1681,20 +1696,24 @@ way) but not a live stack.
 
 **Usage:**
 ```
-grove fork <name> [flags]
+grove fork [name] [flags]
 
 Arguments:
-  name    Name for the new forked worktree (required)
+  name    Name for the new forked worktree (asked for when left out in a terminal; required otherwise)
 
 Flags:
       --branch-name <name>    Override the generated branch name
       --move-wip              Move uncommitted changes to fork (current becomes clean)
       --copy-wip              Copy uncommitted changes to both worktrees
       --no-wip                Fork starts clean (leave changes in current)
-  -n, --no-switch             Stay in current worktree after forking
+  -n, --no-switch             Stay where you are after the worktree is created
+  -u, --up                    Also bring the stack to the worktree
+      --no-docker             Do not bring the stack, even with auto_up
       --here                  Stay in the shell or pane you are in: change directory only, no session
-  -j, --json                  Output as JSON
+  -j, --json                  Output as JSON with switch_to field
 ```
+
+`--up` and `--no-docker` work as on `grove new`: the same flags, through the same code. `grove fork` honors `auto_up = true` the same way.
 
 `--here` sets the [placement](#placement) for this run. No session is created for the fork.
 
@@ -1716,11 +1735,13 @@ Flags:
 
 4. **Register in state** with parent worktree tracked
 
-5. **Fire `post-create` hook**. In external Docker mode this never moves the stack: the env file is not written. After `grove fork`, the stack stays on the worktree it was on. Run `grove up` in the new worktree or `grove to <name> --up`, or set `auto_up = true`.
+5. **Fire `post-create` hook**. In external Docker mode this never moves the stack: the env file is not written. After `grove fork`, the stack stays on the worktree it was on. Use `grove fork <name> --up`, run `grove up` in the new worktree, or set `auto_up = true`.
 
-6. **Create tmux session** with session name `{project}-{name}`
+6. **Bring the stack up** with `--up` or `auto_up = true`, unless `--no-docker`.
 
-7. **Switch to fork** (unless `--no-switch`):
+7. **Create the session** with session name `{project}-{name}`
+
+8. **Switch to fork** (unless `--no-switch`):
    - Update last_worktree before switching
    - Output `cd:` directive if shell integration present
 
@@ -1776,9 +1797,11 @@ cd:~/projects/grove-hotfix
 
 **Exit Codes:**
 - 0: Success
-- 1: User canceled (WIP prompt)
+- 1: Other error (invalid name, uncommitted changes with no WIP flag in non-interactive mode)
 - 2: Branch already exists
 - 3: Git operation failed
+- 5: User canceled (WIP prompt)
+- 10: Not a grove project
 - 14: Fork created, but a configured file was not copied or linked
 
 ---
@@ -1853,10 +1876,15 @@ Flags:
 | Fetch fails (network error) | Skip with warning, continue with other targets |
 | No environment worktrees with `--all` | Message: "No environment worktrees found." |
 
+A fetch or fast-forward that fails is reported as skipped. It does not change the exit code.
+
+With `--json`, the result document is printed on stdout even on a non-zero exit, and the JSON error object is printed on stderr.
+
 **Exit Codes:**
-- 0: Success
-- 1: Not an environment worktree (ConstraintViolated)
-- 2: Git operation failed
+- 0: Success, including targets skipped because git failed
+- 1: Named worktree not found (`ResourceNotFound`)
+- 8: Not an environment worktree (`ConstraintViolated`)
+- 10: Not a grove project
 
 ---
 
@@ -1950,6 +1978,7 @@ No differences found
 **Exit Codes:**
 - 0: Success (differences found or not)
 - 1: Worktree not found or error
+- 10: Not a grove project
 
 ---
 
@@ -2046,7 +2075,7 @@ To resolve:
 Or to abort:
   git cherry-pick --abort
 ```
-**Exit code: GitOperationFailed**
+**Exit code: 3** (`GitOperationFailed`)
 
 **Edge Cases:**
 
@@ -2057,13 +2086,14 @@ Or to abort:
 | No commits to apply | Message: "No commits to apply" |
 | No WIP in source | Message: "No uncommitted changes to apply" |
 | `--commits` and `--wip` together | Error: flags are mutually exclusive |
-| Cherry-pick conflict | Error with instructions; exit GitOperationFailed |
+| Cherry-pick conflict | Error with instructions; exit 3 |
 
 **Exit Codes:**
 - 0: Success
-- 1: Target is immutable (ConstraintViolated)
-- 2: Source worktree not found (ResourceNotFound)
-- 3: Git operation failed (cherry-pick conflict, patch failure)
+- 1: Source worktree not found (`ResourceNotFound`)
+- 3: Git operation failed (cherry-pick conflict, patch failure) (`GitOperationFailed`)
+- 8: Target is immutable (`ConstraintViolated`)
+- 10: Not a grove project
 
 ---
 
@@ -2159,6 +2189,7 @@ Add a [test] section to .grove/config.toml:
 - 0: Tests pass
 - N: Same exit code as the test command
 - 1: Configuration or worktree not found error
+- 10: Not a grove project
 
 ---
 
@@ -2391,7 +2422,7 @@ Flags:
 4. **Always prompt** for confirmation (type `yes` to proceed — required even in non-interactive mode)
 5. For each cleanable worktree:
    - Run `grove rm`-equivalent (removes worktree + state entry)
-   - Kill tmux session if exists
+   - Kill the session if exists
 6. After removal: prompt to delete associated branches
    - `--delete-branches`: delete without prompting
    - `--keep-branches`: skip branch deletion
@@ -2431,6 +2462,12 @@ Excluded worktrees:
   testing - accessed 5 days ago (threshold: 30)
   production - environment worktree
 ```
+
+**Exit Codes:**
+- 0: Success, including nothing eligible and `--dry-run`
+- 1: Error
+- 5: User canceled (did not type `yes`)
+- 10: Not a grove project
 
 ---
 
@@ -2541,15 +2578,44 @@ When a worktree was created with `git worktree add` directly (bypassing `grove n
 
 ## Exit Codes
 
-| Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 1 | User error (not found, invalid input) |
-| 2 | Operation error (git failed, docker failed) |
-| 3 | Permission error |
-| 4 | Configuration error |
-| 14 | A create command made the worktree but could not finish it: a configured file was not copied or linked, or state registration failed. The worktree is kept. |
-| 127 | Command not found |
+The constants live in `internal/exitcode/exitcode.go`. The same condition has the same code in every command.
+
+| Code | Constant | Meaning | Used by |
+|------|----------|---------|---------|
+| 0 | | Success | all |
+| 1 | `ResourceNotFound` | A worktree or branch was not found. Also the code for any error that has no code of its own. | all |
+| 2 | `ResourceExists` | The thing to create already exists | `new`, `fork`, `init` |
+| 3 | `GitOperationFailed` | A git command failed | `fork`, `graft` |
+| 4 | `InvalidInput` | Invalid arguments or flags | `here`, `init` |
+| 5 | `UserCancelled` | You canceled a prompt | `fork`, `trim`, `repair` |
+| 6 | `ExternalCommandFailed` | An external command (docker) failed | `here --check-mount`, `ps` |
+| 7 | `CannotRemove` | The worktree cannot be removed or renamed (main, protected, current, dirty) | `rm`, `rename` |
+| 8 | `ConstraintViolated` | A rule was broken: not an environment worktree, or the target is immutable | `sync`, `graft` |
+| 10 | `NotGroveProject` | Not in a grove project | every command that needs a project |
+| 11 | `WorktreeMissing` | A worktree directory is missing from disk | `repair` |
+| 12 | `MountDrift` | A running service mounts a different worktree than the stack is on | `here --check-mount` |
+| 13 | `MountCheckMismatch` | You are not in the worktree the stack is on | `here --check-mount --require-current` |
+| 14 | `CreatedNotProvisioned` | A create command made the worktree but could not finish it: a configured file was not copied or linked, or state registration failed. The worktree is kept. | `new`, `fork`, `open`, `fetch`, `adopt` |
+
+Code 9 is not used. `grove test` exits with the code of the test command. A flag that Cobra rejects (unknown flag, flags that cannot be combined) exits 1.
+
+### Errors with `--json`
+
+When a command is run with `--json` and fails, stderr holds one JSON object and nothing else:
+
+```json
+{
+  "error": true,
+  "code": 2,
+  "message": "worktree 'feature' already exists"
+}
+```
+
+- `code` is the exit code.
+- `suggestions` (a list of strings) is present on some errors.
+- stdout is empty, with two exceptions. `grove sync --json` and `grove graft --json` still print their result document on stdout first.
+- Create commands that exit 14 print the result object on stdout and plain `Not copied:` lines on stderr (see `grove new`).
+- "Not a grove project" (exit 10) is plain text on stderr in every mode.
 
 ---
 
@@ -2641,33 +2707,95 @@ func hasShellIntegration() bool {
 
 ## Other Commands
 
-These commands are fully implemented and available in the CLI. Full flag details are available via `--help`.
+These commands are fully implemented and available in the CLI.
+
+### grove fetch
+
+**Aliases:** `f`
+
+Creates a worktree from a GitHub pull request or issue. Requires `gh` to be installed and authenticated.
+
+```
+grove fetch <pr|issue>/<number> [flags]
+
+Flags:
+      --here        Stay in the shell or pane you are in: change directory only, no session
+  -j, --json        Output as JSON with switch_to field
+  -n, --no-switch   Stay where you are after the worktree is created
+  -u, --up          Also bring the stack to the worktree
+      --no-docker   Do not bring the stack, even with auto_up
+```
+
+- `is/<number>` is short for `issue/<number>`.
+- For a PR the PR branch is checked out. For an issue a new branch is created.
+- The worktree gets its own session, but grove does not switch you to that session. It changes directory (the `cd:` directive). `--no-switch` skips the directory change.
+- `--json` prints the same result object as `grove new --json`.
+- Exit codes: 0 success, 1 error, 10 not a grove project, 14 created but a configured file was not copied or linked.
 
 ### grove prs
 
-Opens the TUI's PR browser directly (same as pressing `p` from the dashboard). Fetches open pull requests from GitHub via the `gh` CLI. Requires `gh` to be installed and authenticated. See `grove prs --help`.
+Opens the TUI's PR browser directly (same as pressing `p` from the dashboard). Fetches pull requests from GitHub via the `gh` CLI. Requires `gh` to be installed and authenticated. Selecting a PR creates a worktree for it, the same as `grove fetch pr/<number>`.
+
+```
+grove prs [flags]
+
+Flags:
+      --fzf               Use fzf for selection instead of the TUI
+      --state <state>     Filter by state: open, closed, all (default: open)
+      --label <labels>    Filter by labels
+      --assignee <user>   Filter by assignee
+      --author <user>     Filter by author
+      --limit <n>         Maximum number of PRs to fetch (default: 30)
+```
+
+Shell completion offers the three `--state` values.
 
 ### grove issues
 
-Opens the TUI's issue browser directly (same as pressing `i` from the dashboard). Fetches open GitHub issues via the `gh` CLI. Requires `gh` to be installed and authenticated. See `grove issues --help`.
+Opens the TUI's issue browser directly (same as pressing `i` from the dashboard). Fetches GitHub issues via the `gh` CLI. Requires `gh` to be installed and authenticated. Selecting an issue creates a worktree for it, the same as `grove fetch issue/<number>`.
+
+`grove issues` takes the same flags as `grove prs`. `--limit` is the maximum number of issues.
 
 ### grove browse
 
 **Aliases:** `b`
 
-Opens the current worktree's PR or issue in the browser. See `grove browse --help`.
+Opens the current worktree's PR or issue in the browser. With no PR or issue, it opens the compare page for the branch.
+
+```
+grove browse [flags]
+
+Flags:
+  -j, --json    Output the URL as JSON without opening the browser
+```
+
+`--json` prints `{"url": "...", "source": "pr" | "issue" | "compare"}`.
 
 ### grove agent-help
 
-Prints a quick-reference guide for AI agent workflows — worktree lifecycle, Docker strategies, and multi-agent patterns. Intended for agents that need context about grove's conventions without reading the full docs. See `grove agent-help --help`.
+Prints a quick-reference guide for AI agent workflows: environment variables, common commands, and the commands that take `--json`. It takes no flags.
 
 ### grove setup
 
-Interactive shell integration setup. Detects your shell, prints the `eval` line to add to your shell profile, and optionally writes it for you. See `grove setup --help`.
+Interactive shell integration setup. Detects your shell, prints the `eval` line to add to your shell profile, and optionally writes it for you.
+
+```
+grove setup [flags]
+
+Flags:
+      --alias[=<name>]   Define a shell alias for grove (bare --alias means 'w')
+```
 
 ### grove install
 
-Generates the shell integration snippet for a given shell (`grove install zsh`, `grove install bash`). The output is designed for `eval "$(grove install <shell>)"` in your shell profile. See `grove install --help`.
+Generates the shell integration snippet for a given shell. The output is designed for `eval "$(grove install <shell>)"` in your shell profile.
+
+```
+grove install <zsh|bash> [flags]
+
+Flags:
+      --alias[=<name>]   Define a shell alias for grove (bare --alias means 'w')
+```
 
 ### grove version
 
@@ -2676,6 +2804,9 @@ Print version information.
 **Usage:**
 
     grove version [flags]
+    grove --version
+
+`grove --version` prints the same line as `grove version`, without the update annotation.
 
 **Flags:**
 
@@ -2687,107 +2818,10 @@ Print version information.
 
 Default:
 
-    grove 0.7.0 darwin/arm64
+    grove 0.12.0 darwin/arm64
 
 When the update-check cache shows a newer release and stdout is a TTY:
 
-    grove 0.7.0 darwin/arm64 (update available: 0.8.0)
+    grove 0.12.0 darwin/arm64 (update available: 0.13.0)
 
 The annotation honors the same opt-outs as `grove`'s other update surfaces (env vars, non-TTY stdout, dev/unknown versions). Use `grove --check-update` for a synchronous check that bypasses these opt-outs.
-
----
-
-## Planned (not yet implemented)
-
-These commands are not implemented — no freeze/resume logic exists in code (a future-API sketch lives in `internal/state/README.md`). The spec is preserved here so the design is recoverable when implementation lands.
-
-### grove freeze
-
-**Purpose:** Freeze a worktree to conserve resources (stop containers, mark session).
-
-**Usage:**
-```
-grove freeze [name] [flags]
-
-Arguments:
-  name    Worktree to freeze (default: current)
-
-Flags:
-      --all    Freeze all worktrees except current
-```
-
-**Behavior:**
-
-1. Stop Docker containers (if docker plugin enabled)
-2. Mark tmux session as frozen (custom variable)
-3. Optionally detach from session
-4. Record freeze state
-
-**Output (Success):**
-```
-✓ Stopped 3 Docker containers
-✓ Froze worktree 'testing'
-
-To resume: grove resume testing
-```
-
-**Output (Already frozen):**
-```
-Worktree 'testing' is already frozen
-
-To resume: grove resume testing
-```
-
-**Exit Codes:**
-- 0: Success or already frozen
-- 1: Worktree not found
-
----
-
-### grove resume
-
-**Purpose:** Resume a frozen worktree.
-
-**Usage:**
-```
-grove resume <name> [flags]
-
-Arguments:
-  name    Worktree to resume (required)
-```
-
-**Behavior:**
-
-1. Clear frozen state
-2. Start Docker containers (if docker plugin)
-3. Switch to worktree (equivalent to `grove to`)
-
-**Output (Success):**
-```
-✓ Resumed worktree 'testing'
-✓ Started 3 Docker containers
-✓ Switched to 'testing'
-```
-
-**Output (Not frozen):**
-```
-Worktree 'testing' is not frozen
-
-To switch to it: grove to testing
-```
-
-**Exit Codes:**
-- 0: Success
-- 1: Worktree not found or not frozen
-
----
-
-## Commands Not Speced
-
-One command name surfaced during a documentation audit but was confirmed to already be documented elsewhere:
-
-### `grove context` (implemented in v0.8.0)
-
-`cmd/grove/commands/context.go` contains the `GroveContext` struct and `RequireGroveContext` middleware helper — shared infrastructure used by nearly every command.
-
-The user-facing `grove context` command lives in `cmd/grove/commands/context_cmd.go` and is documented in [grove context](#grove-context) above.

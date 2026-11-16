@@ -195,7 +195,7 @@ If you installed grove via Homebrew, ensure `eval "$(brew shellenv)"` is in `~/.
 
 ```bash
 grove version
-# grove v1.x.x
+# grove 0.12.0 darwin/arm64   (version, then OS/architecture)
 
 type grove
 # grove is a shell function
