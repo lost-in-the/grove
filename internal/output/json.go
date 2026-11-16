@@ -38,6 +38,26 @@ type NewWorktreeResult struct {
 	Branch   string `json:"branch"`
 	Path     string `json:"path"`
 	Created  bool   `json:"created"`
+	// Provisioned and FileSetup are set only when this command created the
+	// worktree. Provisioned is false when any configured file was not copied
+	// or linked, or when state registration failed.
+	Provisioned *bool            `json:"provisioned,omitempty"`
+	FileSetup   *FileSetupResult `json:"file_setup,omitempty"`
+}
+
+// FileSetupResult lists what file setup did for a new worktree. Every list is
+// present (possibly empty) so scripts need no nil checks.
+type FileSetupResult struct {
+	Copied []string           `json:"copied"`
+	Linked []string           `json:"linked"`
+	Failed []FileSetupFailure `json:"failed"`
+}
+
+// FileSetupFailure is one entry that was not copied or linked.
+type FileSetupFailure struct {
+	Field string `json:"field"` // copy_files | symlink_files | symlink_dirs
+	Path  string `json:"path"`
+	Error string `json:"error"`
 }
 
 // ForkResult represents the result of forking a worktree.

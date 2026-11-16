@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -206,5 +207,42 @@ func mustWriteFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+// A zero-byte file left behind by a failed copy must not read as ok while the
+// main worktree's source has content. It is reported as missing so --fix
+// copies it again.
+func TestClassifyEntry_EmptyCopyIsNotOK(t *testing.T) {
+	projectRoot := t.TempDir()
+	wt := t.TempDir()
+	mustWriteFile(t, filepath.Join(projectRoot, "secret.key"), "content")
+	mustWriteFile(t, filepath.Join(wt, "secret.key"), "")
+
+	got := classifyEntry("copy_files", projectRoot, wt, "secret.key")
+	if got.Status != provisioningMissing {
+		t.Fatalf("status = %s (%s), want missing", got.Status, got.Detail)
+	}
+	if got.Detail != "empty file, the main worktree's copy has content" {
+		t.Errorf("detail = %q", got.Detail)
+	}
+
+	fixed, err := repairMissing(cli.NewWriter(&bytes.Buffer{}, false), []provisioningResult{got}, wt)
+	if err != nil || fixed != 1 {
+		t.Fatalf("repairMissing = %d, %v", fixed, err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(wt, "secret.key")); string(data) != "content" {
+		t.Errorf("file after --fix = %q, want %q", data, "content")
+	}
+}
+
+func TestClassifyEntry_EmptyCopyIsOKWhenSourceIsEmpty(t *testing.T) {
+	projectRoot := t.TempDir()
+	wt := t.TempDir()
+	mustWriteFile(t, filepath.Join(projectRoot, ".keep"), "")
+	mustWriteFile(t, filepath.Join(wt, ".keep"), "")
+
+	if got := classifyEntry("copy_files", projectRoot, wt, ".keep"); got.Status != provisioningOK {
+		t.Errorf("status = %s (%s), want ok", got.Status, got.Detail)
 	}
 }

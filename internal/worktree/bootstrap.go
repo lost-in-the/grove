@@ -17,8 +17,8 @@ import (
 
 // ErrRequiredHookFailed is returned by BootstrapWorktree when a required
 // (on_failure="fail") post-create hook fails. Callers treat it as fatal (fail
-// the command) while other bootstrap failures — a symlink or state write — stay
-// recoverable via `grove repair` and are surfaced as warnings.
+// the command). File setup and state write failures are reported separately
+// (ErrFileSetupIncomplete, ErrStateRegistration).
 var ErrRequiredHookFailed = errors.New("required post-create hook failed")
 
 // BootstrapOpts holds the inputs needed to bootstrap a worktree (whether
@@ -48,16 +48,47 @@ type BootstrapOpts struct {
 // containers are up by the time user setup commands (which may target them
 // via docker:compose handlers) run.
 //
-// Returns an error only if state registration fails irrecoverably.
-// Hook and SetupFiles failures are non-fatal; they are reported via w so the
-// user sees them on stderr. Pass a non-nil w for interactive callers (grove new,
-// grove adopt). Pass nil for JSON-mode callers where stderr would corrupt
-// machine-readable output, or for tests that don't assert on warning output.
-// With nil, hook failures are still written to grove.log when GROVE_LOG=1 is
-// set, but are otherwise invisible.
+// The returned error joins every problem, so callers tell them apart with
+// errors.Is / errors.As: ErrStateRegistration (state write failed; file setup
+// still ran), ErrFileSetupIncomplete (a *FileSetupError lists the entries not
+// copied or linked), and ErrRequiredHookFailed. None of them roll the
+// worktree back. File setup problems are not printed here: the caller reports
+// them. Hook warnings go to w; pass nil for JSON-mode callers where stderr
+// would corrupt machine-readable output, or for tests that don't assert on
+// warning output. With nil, hook failures are still written to grove.log when
+// GROVE_LOG=1 is set, but are otherwise invisible.
 func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts BootstrapOpts, w *cli.Writer) error {
+	_, err := Bootstrap(stateMgr, cfg, opts, w)
+	return err
+}
+
+// BootstrapResult reports what bootstrap did that callers may need to show.
+type BootstrapResult struct {
+	// Files has one entry per configured copy_files, symlink_files, or
+	// symlink_dirs entry; empty when there is no external config.
+	Files []FileResult
+	// StateRegistered is false when state registration failed.
+	StateRegistered bool
+}
+
+// ErrStateRegistration is matched (errors.Is) by the error Bootstrap returns
+// when the worktree could not be registered in state.json.
+var ErrStateRegistration = errors.New("register worktree")
+
+// StateRegistrationError wraps the state write failure.
+type StateRegistrationError struct{ Err error }
+
+func (e *StateRegistrationError) Error() string { return "register worktree: " + e.Err.Error() }
+func (e *StateRegistrationError) Unwrap() error { return e.Err }
+
+// Is lets errors.Is(err, ErrStateRegistration) match.
+func (e *StateRegistrationError) Is(target error) bool { return target == ErrStateRegistration }
+
+// Bootstrap is BootstrapWorktree plus a report of the file setup results.
+func Bootstrap(stateMgr *state.Manager, cfg *config.Config, opts BootstrapOpts, w *cli.Writer) (BootstrapResult, error) {
+	var res BootstrapResult
 	if opts.WorktreePath == "" || opts.MainPath == "" {
-		return fmt.Errorf("WorktreePath and MainPath are required")
+		return res, fmt.Errorf("WorktreePath and MainPath are required")
 	}
 
 	// Best-effort: worktrees function without the excludes, they just show
@@ -72,6 +103,8 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 		}
 	}
 
+	res.StateRegistered = true
+	var stateErr error
 	if stateMgr != nil {
 		now := time.Now()
 		wsState := &state.WorktreeState{
@@ -88,19 +121,27 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 			wsState.LastSyncedAt = &now
 		}
 		if err := stateMgr.AddWorktree(opts.Name, wsState); err != nil {
-			return fmt.Errorf("register worktree: %w", err)
+			res.StateRegistered = false
+			stateErr = &StateRegistrationError{Err: err}
 		}
 	}
 
 	// File setup (copy/symlink external compose artifacts) — must precede
-	// plugin hooks so symlinked dirs exist before any container mount.
+	// plugin hooks so symlinked dirs exist before any container mount. It runs
+	// even when state registration failed: the files are the part a seller
+	// cannot work without, and `grove adopt` does not recopy them.
+	var fileErr error
 	if cfg != nil && cfg.Plugins.Docker.External != nil {
-		if err := SetupFiles(cfg.Plugins.Docker.External, opts.WorktreePath, opts.MainPath); err != nil {
-			log.Printf("file setup: %v", err)
-			if w != nil {
-				cli.Warning(w, "file setup: %v", err)
-			}
+		res.Files = SetupFiles(cfg.Plugins.Docker.External, opts.WorktreePath, opts.MainPath)
+		fileErr = NewFileSetupError(res.Files)
+		if fileErr != nil {
+			log.Printf("file setup: %v", fileErr)
 		}
+	}
+
+	// Hooks assume a registered worktree, so a failed registration stops here.
+	if stateErr != nil {
+		return res, errors.Join(stateErr, fileErr)
 	}
 
 	// Global plugin post-create hook (e.g., docker external) — runs before
@@ -163,9 +204,9 @@ func BootstrapWorktree(stateMgr *state.Manager, cfg *config.Config, opts Bootstr
 			if w != nil {
 				cli.Warning(w, "required post-create hook failed (worktree kept): %v", err)
 			}
-			return fmt.Errorf("%w: %v", ErrRequiredHookFailed, err)
+			return res, errors.Join(fileErr, fmt.Errorf("%w: %v", ErrRequiredHookFailed, err))
 		}
 	}
 
-	return nil
+	return res, fileErr
 }

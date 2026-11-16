@@ -48,4 +48,11 @@ const (
 	// MountDrift reports, so a script can tell "wrong worktree" apart from
 	// "containers weren't restarted."
 	MountCheckMismatch = 13
+
+	// CreatedNotProvisioned indicates a create command made the worktree but
+	// could not finish provisioning it: a copy_files / symlink_files /
+	// symlink_dirs entry was not copied or linked, or state registration
+	// failed. The worktree is kept. With --json the result object is still
+	// printed, with "provisioned": false, so a script learns the path.
+	CreatedNotProvisioned = 14
 )

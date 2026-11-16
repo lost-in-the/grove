@@ -21,8 +21,9 @@ func init() {
 }
 
 var adoptCmd = &cobra.Command{
-	Use:   "adopt [path]",
-	Short: "Bootstrap a git worktree that grove doesn't know about",
+	Annotations: map[string]string{createsWorktreesAnnotation: "true"},
+	Use:         "adopt [path]",
+	Short:       "Bootstrap a git worktree that grove doesn't know about",
 	Long: `Adopts an existing git worktree into grove's state.
 
 Use when a worktree was created with 'git worktree add' instead of 'grove new':
@@ -37,6 +38,10 @@ Examples:
 	Args: cobra.MaximumNArgs(1),
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		w := cli.NewStdout()
+
+		if err := ctx.RequireConfig("adopt the worktree"); err != nil {
+			return err
+		}
 
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -123,12 +128,17 @@ Examples:
 			MainPath:     ctx.ProjectRoot,
 			ProjectName:  mgr.GetProjectName(),
 		}
-		if err := worktree.BootstrapWorktree(ctx.State, ctx.Config, bootstrapOpts, w); err != nil {
-			return fmt.Errorf("bootstrap: %w", err)
+		res, bootErr := worktree.Bootstrap(ctx.State, ctx.Config, bootstrapOpts, w)
+		prov := newProvisioning(res, bootErr)
+		prov.reportWith(name, target, "The worktree is adopted")
+		if bootErr != nil && prov.complete() {
+			return fmt.Errorf("bootstrap: %w", bootErr)
 		}
 
-		cli.Success(w, "adopted %q (branch: %s)", name, branch)
-		cli.Faint(w, "state registered, excludes recorded, post-create hooks fired")
+		if prov.complete() {
+			cli.Success(w, "adopted %q (branch: %s)", name, branch)
+			cli.Faint(w, "state registered, excludes recorded, post-create hooks fired, configured files copied")
+		}
 
 		// A worktree made in herdr's UI has a workspace labeled with the
 		// branch and carrying the plugin's "untracked" marker; now that grove
@@ -140,6 +150,7 @@ Examples:
 				}
 			}
 		}
+		prov.exitIfIncomplete()
 		return nil
 	}),
 }

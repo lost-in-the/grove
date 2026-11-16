@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -27,7 +28,8 @@ type GroveContext struct {
 	GroveDir      string           // Path to .grove directory
 	ProjectRoot   string           // Path to project root (parent of .grove)
 	State         *state.Manager   // State manager instance
-	Config        *config.Config   // Loaded configuration
+	Config        *config.Config   // Loaded configuration (defaults when ConfigErr is set)
+	ConfigErr     error            // Why config failed to load; nil when it loaded
 	PluginManager *plugins.Manager // Plugin manager for status queries
 
 	wtMgr *worktree.Manager // Memoized worktree manager (via WorktreeManager)
@@ -72,6 +74,31 @@ func (c *GroveContext) WorktreeManager() (*worktree.Manager, error) {
 	return mgr, nil
 }
 
+// createsWorktreesAnnotation marks a command that creates or adopts worktrees.
+// Its config-load failure is reported once, as the RequireConfig error, instead
+// of also as a "using defaults" warning for a fallback the command refuses.
+const createsWorktreesAnnotation = "grove.creates-worktrees"
+
+// warnConfigFallback prints the "using defaults" warning for a config that
+// failed to load. Read-only commands get it from RequireGroveContext; a command
+// that only sometimes creates (open) calls it on its read-only path.
+func (c *GroveContext) warnConfigFallback() {
+	if c.ConfigErr != nil {
+		cli.Warning(cli.NewStderr(), "Failed to load config, using defaults: %v", c.ConfigErr)
+	}
+}
+
+// RequireConfig returns an error when the config failed to load. Commands that
+// create or adopt worktrees call it first: running them on defaults would skip
+// copy_files, symlinks, and hooks without saying so. Read-only commands keep
+// the fallback to defaults.
+func (c *GroveContext) RequireConfig(action string) error {
+	if c.ConfigErr != nil {
+		return fmt.Errorf("grove did not %s: the config failed to load: %w", action, c.ConfigErr)
+	}
+	return nil
+}
+
 // RequireGroveContext wraps a command function to require grove project context.
 // If not in a grove project, prints an error and exits with code 10.
 func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveContext) error) func(cmd *cobra.Command, args []string) error {
@@ -103,11 +130,10 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 
 		// Load config from the resolved .grove directory (not cwd)
 		// so that secondary worktrees use the main worktree's config
-		cfg, err := config.LoadFromGroveDir(groveDir)
-		if err != nil {
-			log.Printf("config load failed, using defaults: %v", err)
-			stderr := cli.NewStderr()
-			cli.Warning(stderr, "Failed to load config, using defaults: %v", err)
+		creates := cmd.Annotations[createsWorktreesAnnotation] != ""
+		cfg, cfgErr := config.LoadFromGroveDir(groveDir)
+		if cfgErr != nil {
+			log.Printf("config load failed, using defaults: %v", cfgErr)
 			cfg = config.LoadDefaults()
 		} else {
 			log.Printf("config loaded, docker mode: %v", cfg.IsExternalDockerMode())
@@ -123,6 +149,10 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 			State:         stateMgr,
 			Config:        cfg,
 			PluginManager: pluginMgr,
+			ConfigErr:     cfgErr,
+		}
+		if !creates {
+			ctx.warnConfigFallback()
 		}
 
 		// Drift detection: warn if cwd is inside a worktree that isn't in
@@ -131,7 +161,7 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 			if cwd, err := os.Getwd(); err == nil {
 				dir := driftProbeDir(cwd)
 				if reason := grove.DiagnoseDrift(dir, ctx.ProjectRoot); reason == grove.ReasonDriftedWorktree {
-					emitDriftNotice(cli.NewStderr(), filepath.Base(dir), reason)
+					emitDriftNotice(cli.NewStderr(), filepath.Base(dir), reason, missingConfiguredFiles(cfg, ctx.ProjectRoot, dir))
 				}
 			}
 		}
@@ -226,15 +256,33 @@ func printNoGroveDiagnosis(cwd string) {
 	}
 }
 
+// driftNoticeNameLimit caps how many missing file names the drift notice
+// spells out.
+const driftNoticeNameLimit = 5
+
 // emitDriftNotice prints a non-fatal warning when the cwd is a git worktree
 // that grove doesn't have in its state. The user can ignore the message;
-// it's intended to nudge them toward `grove adopt`.
-func emitDriftNotice(w *cli.Writer, name string, reason grove.DriftReason) {
+// it's intended to nudge them toward `grove adopt`. missing lists configured
+// files that are absent from the worktree (see missingConfiguredFiles).
+func emitDriftNotice(w *cli.Writer, name string, reason grove.DriftReason, missing []string) {
 	if reason != grove.ReasonDriftedWorktree {
 		return
 	}
 	cli.Warning(w, "this worktree (%s) wasn't created by grove and isn't registered in state", name)
-	cli.Faint(w, "run 'grove adopt' to bootstrap it (registers state, records excludes, runs hooks)")
+	if n := len(missing); n > 0 {
+		shown := missing
+		tail := ""
+		if n > driftNoticeNameLimit {
+			shown = missing[:driftNoticeNameLimit]
+			tail = fmt.Sprintf(", and %d more", n-driftNoticeNameLimit)
+		}
+		noun, verb := "file", "is"
+		if n != 1 {
+			noun, verb = "files", "are"
+		}
+		cli.Warning(w, "%d configured %s %s missing here: %s%s", n, noun, verb, strings.Join(shown, ", "), tail)
+	}
+	cli.Faint(w, "run 'grove adopt' to bootstrap it (registers state, copies configured files, records excludes, runs hooks)")
 }
 
 var pluginsRegistered bool
@@ -279,4 +327,20 @@ func PrintError(format string, args ...interface{}) {
 // PrintSuggestion prints a styled suggestion to stderr.
 func PrintSuggestion(format string, args ...interface{}) {
 	cli.Info(cli.NewStderr(), format, args...)
+}
+
+// missingConfiguredFiles lists the copy_files / symlink_files / symlink_dirs
+// entries that are absent from worktreePath. It is a handful of Lstat calls and
+// returns nil when the config has no external entries.
+func missingConfiguredFiles(cfg *config.Config, mainPath, worktreePath string) []string {
+	if cfg == nil {
+		return nil
+	}
+	var missing []string
+	for _, r := range auditWorktreeProvisioning(cfg.Plugins.Docker.External, mainPath, worktreePath) {
+		if r.Status == provisioningMissing {
+			missing = append(missing, r.Path)
+		}
+	}
+	return missing
 }

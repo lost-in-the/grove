@@ -1,0 +1,24 @@
+[2m test-project ·[m╭────────────────────────────────────────────────╮[2m           1/3 [m
+[2m               [m│                                                │[2m               [m
+[2m ❯ ● root      [m│  [1mMessages[m                                      │[2m       0s      [m
+[2m   ○ feature-au[m│                                                │[2m      60m      [m
+[2m   ○ fix-bug   [m│  60s  ⚠ Created feature. 3 files not copied.   │[2m       2h      [m
+[2m               [m│         See ␣ messages.                        │[2m               [m
+[2m               [m│  60s  ⚠ Not copied: .env (missing in the main  │[2m               [m
+[2m               [m│         worktree)                              │[2m               [m
+[2m               [m│  60s  ⚠ Not copied: config/master.key          │[2m               [m
+[2m               [m│         (missing in the main worktree)         │[2m               [m
+[2m               [m│  60s  ⚠ Not copied: config/secret.key          │[2m               [m
+[2m               [m│         (missing in the main worktree)         │[2m               [m
+[2m               [m│  60s  ⚠ The worktree was created, but 3 files  │[2m               [m
+[2m               [m│         are missing. Fix the source, then run  │[2m               [m
+[2m               [m│         `grove doctor feature --fix`.          │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m               [m│                                                │[2m               [m
+[2m root · test co[m│  ↑↓ scroll · esc close                         │[2m               [m
+[2m  ↑↓ navigate ·[m│                                                │[2m               [m
+[2m  tab detail · [m╰────────────────────────────────────────────────╯[2m               [m

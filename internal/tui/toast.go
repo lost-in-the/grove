@@ -120,11 +120,17 @@ func NewToastModel() *ToastModel {
 // Show displays a new toast, replacing any existing one.
 func (tm *ToastModel) Show(toast *Toast) {
 	tm.Current = toast
-	if toast != nil && (toast.Level == ToastWarning || toast.Level == ToastError) {
-		tm.history = append([]*Toast{toast}, tm.history...)
-		if len(tm.history) > historyMax {
-			tm.history = tm.history[:historyMax]
-		}
+	tm.Record(toast)
+}
+
+// Record adds a warning or error to the history without showing it.
+func (tm *ToastModel) Record(toast *Toast) {
+	if toast == nil || (toast.Level != ToastWarning && toast.Level != ToastError) {
+		return
+	}
+	tm.history = append([]*Toast{toast}, tm.history...)
+	if len(tm.history) > historyMax {
+		tm.history = tm.history[:historyMax]
 	}
 }
 

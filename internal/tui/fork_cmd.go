@@ -3,6 +3,7 @@ package tui
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -90,22 +91,26 @@ func forkWorktreeCmd(mgr *worktree.Manager, stateMgr *state.Manager, cfg *config
 		if trimmed := strings.TrimSpace(joinCaptured(bootBuf.String(), pluginOut)); trimmed != "" {
 			tuilog.Printf("fork bootstrap output for %q: %s", name, trimmed)
 		}
-		if bootErr != nil {
-			// The worktree exists but bootstrap (e.g. a required post_create
-			// hook) failed — surface it as a warning, not silent success.
-			// Setting name marks it worktree-created-but-provisioning-failed,
-			// which handleForkComplete shows as a warning toast, mirroring how
-			// dashboard create threads hookErr. Skip the tmux session like the
-			// create path does on bootstrap failure.
-			tuilog.Printf("fork bootstrap failed for %q: %v", name, bootErr)
-			return forkCompleteMsg{name: name, path: newTree.Path, err: fmt.Errorf("bootstrap failed: %w", bootErr)}
-		}
-
-		forkCreateTmuxSession(mgr, name, newTree.Path)
-
-		return forkCompleteMsg{name: name, path: newTree.Path}
+		return afterForkBootstrap(mgr, name, newTree.Path, bootErr)
 	}
 }
+
+// afterForkBootstrap creates the copy's session unless a required hook
+// failed, as the create path does. The bootstrap error rides along with the
+// worktree name, so handleForkComplete reports it as a warning and keeps the
+// worktree.
+func afterForkBootstrap(mgr *worktree.Manager, name, path string, bootErr error) forkCompleteMsg {
+	if bootErr != nil {
+		tuilog.Printf("fork bootstrap for %q: %v", name, bootErr)
+	}
+	if !errors.Is(bootErr, worktree.ErrRequiredHookFailed) {
+		forkSession(mgr, name, path)
+	}
+	return forkCompleteMsg{name: name, path: path, err: bootErr}
+}
+
+// forkSession is forkCreateTmuxSession, a variable so tests can observe it.
+var forkSession = forkCreateTmuxSession
 
 // forkCaptureWIP captures a WIP patch from the source worktree if needed.
 func forkCaptureWIP(req forkRequest) ([]byte, error) {

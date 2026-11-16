@@ -31,6 +31,7 @@ func init() {
 }
 
 var openCmd = &cobra.Command{
+	Annotations:       map[string]string{createsWorktreesAnnotation: "true"},
 	Use:               "open [name]",
 	Aliases:           []string{"o"},
 	Short:             "Open a worktree session (create if needed)",
@@ -54,9 +55,18 @@ Examples:
   grove open feature-x --no-create  # Attach only, error if doesn't exist
   grove open feature-x --command sh # Override the session command`,
 	Args: cobra.MaximumNArgs(1),
-	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
+	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) (retErr error) {
 		w := cli.NewStdout()
 		stderr := cli.NewStderr()
+
+		// Set only when this command creates the worktree. The exit waits for
+		// the end so the session and result are not cut short.
+		var created *provisioning
+		defer func() {
+			if retErr == nil && created != nil {
+				created.exitIfIncomplete()
+			}
+		}()
 
 		var name string
 		if len(args) == 0 {
@@ -83,9 +93,11 @@ Examples:
 		if err != nil {
 			return fmt.Errorf("failed to find worktree '%s': %w", name, err)
 		}
-		created := false
 
 		if wt == nil {
+			if err := ctx.RequireConfig("create the worktree"); err != nil {
+				return err
+			}
 			if openNoCreate {
 				return fmt.Errorf("worktree '%s' not found (use 'grove open %s' without --no-create to create it)", name, name)
 			}
@@ -103,15 +115,16 @@ Examples:
 			}
 
 			// Post-create setup: find, symlink, state, hooks, docker
-			wt, err = setupCreatedWorktree(ctx, mgr, name, branchName, worktreeSetupOpts{
+			var prov provisioning
+			wt, prov, err = setupCreatedWorktree(ctx, mgr, name, branchName, worktreeSetupOpts{
 				NoDocker:   openNoDocker,
 				JSONOutput: openJSON,
 			}, w)
 			if err != nil {
 				return err
 			}
+			created = &prov
 
-			created = true
 			if !openJSON {
 				cli.Success(w, "Created worktree '%s'", name)
 			}
@@ -121,6 +134,9 @@ Examples:
 		// matches by branch or full directory name, and the canonical tmux
 		// session name and state key are both keyed on the short name (B21).
 		displayName := wt.DisplayName()
+		if created == nil {
+			ctx.warnConfigFallback()
+		}
 
 		// Record the access before any tmux branching: agent-mode and
 		// tmux-off users reach worktrees through `grove open` too, and
@@ -249,13 +265,18 @@ Examples:
 	}),
 }
 
-func printOpenJSON(wt *worktree.Worktree, name string, created bool) error {
+// printOpenJSON prints the result object. created is nil when the worktree
+// already existed.
+func printOpenJSON(wt *worktree.Worktree, name string, created *provisioning) error {
 	result := output.NewWorktreeResult{
 		SwitchTo: wt.Path,
 		Name:     name,
 		Branch:   wt.Branch,
 		Path:     wt.Path,
-		Created:  created,
+		Created:  created != nil,
+	}
+	if created != nil {
+		result.Provisioned, result.FileSetup = created.jsonFields()
 	}
 	return output.PrintJSON(result)
 }

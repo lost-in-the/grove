@@ -72,7 +72,7 @@ type creationDoneMsg struct {
 	path       string
 	err        error
 	hookOutput string
-	hookErr    error
+	bootErr    error
 }
 
 // creationEvent is sent over the channel from the creation goroutine.
@@ -85,7 +85,7 @@ type creationEvent struct {
 	path       string
 	err        error
 	hookOutput string
-	hookErr    error
+	bootErr    error
 }
 
 // prLookupMsg is sent when lazy PR lookup for worktree branches completes.

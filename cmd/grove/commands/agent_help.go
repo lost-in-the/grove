@@ -57,7 +57,7 @@ func writeAgentHelp(cmd *cobra.Command) {
   grove to <name> --up      Move and bring the stack
   grove to <name> --peek    Move without hooks or tmux (lightweight)
   grove to <name> --no-tmux Move with hooks but without tmux
-  grove up                  Bring the stack to the worktree you are in
+  grove up                  Bring the stack to this worktree
   grove down                Stop the stack
   grove fetch pr/<N>        Create worktree from GitHub PR
   grove fetch issue/<N>     Create worktree from GitHub issue

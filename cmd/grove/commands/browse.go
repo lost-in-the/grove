@@ -63,7 +63,10 @@ Examples:
   grove issues --fzf        # Use fzf for selection
   grove issues --state all  # Include closed issues
   grove issues --label bug  # Filter by label`,
-	RunE: browseRunE(tui.RunIssues, browseIssuesFzf),
+	// Creates a worktree for the selected item: a config that fails to load
+	// is reported once, as the create error, not also as "using defaults".
+	Annotations: map[string]string{createsWorktreesAnnotation: "true"},
+	RunE:        browseRunE(tui.RunIssues, browseIssuesFzf),
 }
 
 var prsCmd = &cobra.Command{
@@ -79,7 +82,10 @@ Examples:
   grove prs --fzf          # Use fzf for selection
   grove prs --state all    # Include closed PRs
   grove prs --label feature  # Filter by label`,
-	RunE: browseRunE(tui.RunPRs, browsePRsFzf),
+	// Creates a worktree for the selected item: a config that fails to load
+	// is reported once, as the create error, not also as "using defaults".
+	Annotations: map[string]string{createsWorktreesAnnotation: "true"},
+	RunE:        browseRunE(tui.RunPRs, browsePRsFzf),
 }
 
 func truncate(s string, maxLen int) string {
@@ -203,6 +209,7 @@ func browseIssuesFzf(cmd *cobra.Command, ctx *GroveContext) error {
 
 	if len(issues) == 0 {
 		fmt.Println("No issues found")
+		ctx.warnConfigFallback()
 		return nil
 	}
 
@@ -221,6 +228,7 @@ func browseIssuesFzf(cmd *cobra.Command, ctx *GroveContext) error {
 		return err
 	}
 	if number < 0 {
+		ctx.warnConfigFallback()
 		return nil
 	}
 
@@ -247,6 +255,7 @@ func browsePRsFzf(cmd *cobra.Command, ctx *GroveContext) error {
 
 	if len(prs) == 0 {
 		fmt.Println("No PRs found")
+		ctx.warnConfigFallback()
 		return nil
 	}
 
@@ -266,6 +275,7 @@ func browsePRsFzf(cmd *cobra.Command, ctx *GroveContext) error {
 		return err
 	}
 	if number < 0 {
+		ctx.warnConfigFallback()
 		return nil
 	}
 

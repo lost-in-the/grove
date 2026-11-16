@@ -1,0 +1,40 @@
+[2m test-project · 3 worktrees · ⬍ name                                                                                1/3 [m
+[2m                                                                        │                                               [m
+[2m ❯ ● root                                                       0s      │                                               [m
+[2m   ○ feature-auth                                              60m      │                                               [m
+[2m   ○ fix-bug                                                    2h      │                                               [m
+[2m                                                                        │                                               [m
+[2m                              [m╭──────────────────────────────────────────────────────────╮[2m                              [m
+[2m                              [m│                                                          │[2m                              [m
+[2m                              [m│  [1mMessages[m                                                │[2m                              [m
+[2m                              [m│                                                          │[2m                              [m
+[2m                              [m│  60s  ⚠ Created feature. 3 files not copied. See         │[2m                              [m
+[2m                              [m│         ␣ messages.                                      │[2m                              [m
+[2m                              [m│  60s  ⚠ Not copied: .env (missing in the main worktree)  │[2m                              [m
+[2m                              [m│  60s  ⚠ Not copied: config/master.key (missing in the    │[2m                              [m
+[2m                              [m│         main worktree)                                   │[2m                              [m
+[2m                              [m│  60s  ⚠ Not copied: config/secret.key (missing in the    │[2m                              [m
+[2m                              [m│         main worktree)                                   │[2m                              [m
+[2m                              [m│  60s  ⚠ The worktree was created, but 3 files are        │[2m                              [m
+[2m                              [m│         missing. Fix the source, then run `grove doctor  │[2m                              [m
+[2m                              [m│         feature --fix`.                                  │[2m                              [m
+[2m                              [m│                                                          │[2m                              [m
+[2m                              [m│                                                          │[2m                              [m
+[2m                              [m│                                                          │[2m                              [m
+[2m                              [m│                                                          │[2m                              [m
+[2m                              [m│                                                          │[2m                              [m
+[2m                              [m│                                                          │[2m                              [m
+[2m                              [m│                                                          │[2m                              [m
+[2m                              [m│                                                          │[2m                              [m
+[2m                              [m│                                                          │[2m                              [m
+[2m                              [m│                                                          │[2m                              [m
+[2m                              [m│                                                          │[2m                              [m
+[2m                              [m│  ↑↓ scroll · esc close                                   │[2m                              [m
+[2m                              [m│                                                          │[2m                              [m
+[2m                              [m╰──────────────────────────────────────────────────────────╯[2m                              [m
+[2m                                                                        │                                               [m
+[2m                                                                        │                                               [m
+[2m                                                                        │                                               [m
+[2m                                                                        │                                               [m
+[2m                                                                        │                                               [m
+[2m  ↑↓ navigate · enter switch · ␣ find · tab detail · / filter · g goto · ? help                                         [m

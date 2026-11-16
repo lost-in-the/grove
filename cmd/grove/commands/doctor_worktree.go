@@ -77,6 +77,15 @@ func classifyEntry(field, projectRoot, worktreePath, rel string) provisioningRes
 			res.Detail = "expected regular file, found directory"
 			return res
 		}
+		// A failed copy used to leave a zero-byte file behind. Report it as
+		// missing so --fix copies it again, unless the source is empty too.
+		if info.Size() == 0 {
+			if src, err := os.Stat(res.Sources); err == nil && src.Mode().IsRegular() && src.Size() > 0 {
+				res.Status = provisioningMissing
+				res.Detail = "empty file, the main worktree's copy has content"
+				return res
+			}
+		}
 	case "symlink_files", "symlink_dirs":
 		if !isSymlink {
 			res.Status = provisioningOverride

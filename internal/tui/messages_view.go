@@ -43,13 +43,25 @@ func (m Model) renderMessages() string {
 	if now == nil {
 		now = time.Now
 	}
+	// Each entry is "age(4) icon text": 7 cells before the text. The content
+	// area is inner-2 wide (border and padding), and long text wraps under
+	// itself so a whole message stays readable.
+	const lead = 7
+	textWidth := max(10, inner-2-lead)
+entries:
 	for _, t := range history[min(m.messagesOffset, len(history)):] {
 		age := shortAge(t.CreatedAt, now())
 		icon := t.Level.style().Render(t.Level.Icon())
-		text := ansi.Truncate(t.Message, inner-8, "…")
-		lines = append(lines, Styles.DetailDim.Render(padCells(age, 4))+" "+icon+" "+text)
-		if len(lines) == rows {
-			break
+		wrapped := strings.Split(ansi.Wrap(t.Message, textWidth, ""), "\n")
+		for i, text := range wrapped {
+			prefix := Styles.DetailDim.Render(padCells(age, 4)) + " " + icon + " "
+			if i > 0 {
+				prefix = strings.Repeat(" ", lead)
+			}
+			lines = append(lines, prefix+text)
+			if len(lines) == rows {
+				break entries
+			}
 		}
 	}
 	for len(lines) < rows {

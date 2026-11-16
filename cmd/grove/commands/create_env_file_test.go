@@ -79,7 +79,7 @@ func TestSetupCreatedWorktree_LeavesExternalEnvFile(t *testing.T) {
 
 	ctx := &GroveContext{GroveDir: groveDir, ProjectRoot: repoRoot, Config: cfg}
 	w := cli.NewWriter(&bytes.Buffer{}, false)
-	if _, err := setupCreatedWorktree(ctx, mgr, "feature", "feature", worktreeSetupOpts{}, w); err != nil {
+	if _, _, err := setupCreatedWorktree(ctx, mgr, "feature", "feature", worktreeSetupOpts{}, w); err != nil {
 		t.Fatalf("setupCreatedWorktree: %v", err)
 	}
 	assertEnvFileUnchanged(t, envFile)

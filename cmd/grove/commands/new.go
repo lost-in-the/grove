@@ -30,9 +30,10 @@ var (
 )
 
 var newCmd = &cobra.Command{
-	Use:     "new [name]",
-	Aliases: []string{"spawn", "n"},
-	Short:   "Create a new worktree and tmux session",
+	Annotations: map[string]string{createsWorktreesAnnotation: "true"},
+	Use:         "new [name]",
+	Aliases:     []string{"spawn", "n"},
+	Short:       "Create a new worktree and tmux session",
 	Long: `Create a new git worktree with the specified name and create a tmux session for it.
 
 The worktree will be created in the parent directory of the current repository.
@@ -70,6 +71,10 @@ Examples:
 		// spawn alias implies JSON output
 		if cmd.CalledAs() == "spawn" {
 			newJSON = true
+		}
+
+		if err := ctx.RequireConfig("create the worktree"); err != nil {
+			return err
 		}
 
 		w := cli.NewStdout()
@@ -220,7 +225,7 @@ Examples:
 		}
 
 		// Post-create setup: find, symlink, state, hooks, docker
-		wt, err := setupCreatedWorktree(ctx, mgr, name, branchName, worktreeSetupOpts{
+		wt, prov, err := setupCreatedWorktree(ctx, mgr, name, branchName, worktreeSetupOpts{
 			IsEnvironment: isEnvironment,
 			Mirror:        mirror,
 			NoDocker:      newNoDocker,
@@ -279,12 +284,14 @@ Examples:
 				Path:    wt.Path,
 				Created: true,
 			}
+			result.Provisioned, result.FileSetup = prov.jsonFields()
 			if !newNoSwitch {
 				result.SwitchTo = wt.Path
 			}
 			if err := output.PrintJSON(result); err != nil {
 				return err
 			}
+			prov.exitIfIncomplete()
 			return nil
 		}
 
@@ -308,6 +315,7 @@ Examples:
 			cli.Info(w, "To switch to the new worktree: grove to %s", name)
 		}
 
+		prov.exitIfIncomplete()
 		return nil
 	}),
 }

@@ -441,7 +441,8 @@ Every dashboard key is an `Action` in `internal/tui/actions.go`: its keys, label
 | `internal/tui/detail_sheet.go` | The full-screen detail sheet and the selection line |
 | `internal/tui/omni.go` | Find: sources, fuzzy matching, result groups (`omniResults`) |
 | `internal/tui/omni_view.go` | The Find overlay: state, keys, fixed frame |
-| `internal/tui/messages_view.go` | Session message history overlay |
+| `internal/tui/messages_view.go` | Session message history overlay; long entries wrap under their text |
+| `internal/tui/provision_report.go` | After create or copy: the warning toast and message history lines for files not copied, a failed registration, or a required hook |
 | `internal/tui/actions.go` | The dashboard action table (keys, labels, synonyms, footer order) |
 | `internal/tui/strip.go` | Docked strips (`g` goto, `m` pin) drawn above the footer |
 | `internal/tui/goto_agent.go` | `g a`: the next agent needing you |

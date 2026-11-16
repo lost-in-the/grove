@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -852,7 +853,7 @@ working_dir = "main"
 // TestRunPostCreateStreaming_BootstrapFailureSkipsDocker pins CLI parity for
 // the TUI create epilogue: when bootstrap fails (required post_create hook),
 // docker auto-up must be skipped — setupCreatedWorktree returns before
-// autoStartDocker on the CLI path — and the error threaded out as hookErr so
+// autoStartDocker on the CLI path — and the error threaded out as bootErr so
 // the dashboard shows the warning toast.
 func TestRunPostCreateStreaming_BootstrapFailureSkipsDocker(t *testing.T) {
 	repo := setupRailsFixtureWithWorktrees(t, "halfway")
@@ -896,14 +897,64 @@ working_dir = "main"
 	close(ch)
 	<-drained
 
-	if result.hookErr == nil {
-		t.Fatal("expected hookErr for a failing required post_create hook")
+	if result.bootErr == nil {
+		t.Fatal("expected bootErr for a failing required post_create hook")
 	}
-	if !errors.Is(result.hookErr, worktree.ErrRequiredHookFailed) {
-		t.Errorf("hookErr = %v, want wrapped worktree.ErrRequiredHookFailed", result.hookErr)
+	if !errors.Is(result.bootErr, worktree.ErrRequiredHookFailed) {
+		t.Errorf("bootErr = %v, want wrapped worktree.ErrRequiredHookFailed", result.bootErr)
 	}
 	if dockerCalled {
 		t.Error("docker auto-up ran despite bootstrap failure (CLI skips it)")
+	}
+}
+
+// A copy_files entry missing in the main worktree leaves a usable worktree:
+// unlike a required hook failure, setup carries on to the stack auto-up, and
+// the error says which file, for the toast and the message history.
+func TestRunPostCreateStreaming_MissingFileStillBringsTheStack(t *testing.T) {
+	t.Setenv("HOME", t.TempDir()) // no global hooks
+	repo := setupRailsFixtureWithWorktrees(t, "partial")
+	mgr, stateMgr := newTestManagers(t, repo)
+
+	dockerCalled := false
+	restore := stubDockerAutoUp(t, func(cfg *config.Config, wtPath string) (bool, error) {
+		dockerCalled = true
+		return true, nil
+	})
+	defer restore()
+
+	autoUp := true
+	cfg := &config.Config{}
+	cfg.Plugins.Docker.AutoUp = &autoUp
+	cfg.Plugins.Docker.External = &config.ExternalComposeConfig{CopyFiles: []string{"config/missing.key"}}
+
+	wt, err := mgr.Find("partial")
+	if err != nil || wt == nil {
+		t.Fatalf("Find(partial): wt=%v err=%v", wt, err)
+	}
+
+	ch := make(chan creationEvent, 100)
+	var lines []string
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		for ev := range ch {
+			lines = append(lines, ev.line)
+		}
+	}()
+	result := runPostCreateStreaming(ch, mgr, stateMgr, cfg, repo, "partial", wt)
+	close(ch)
+	<-drained
+
+	if !errors.Is(result.bootErr, worktree.ErrFileSetupIncomplete) {
+		t.Fatalf("bootErr = %v, want ErrFileSetupIncomplete", result.bootErr)
+	}
+	if !dockerCalled {
+		t.Error("docker auto-up was skipped for a missing file; only a required hook stops setup")
+	}
+	want := "Not copied: config/missing.key (missing in the main worktree)"
+	if !slices.Contains(lines, want) {
+		t.Errorf("activity log = %q, want the line %q", lines, want)
 	}
 }
 
