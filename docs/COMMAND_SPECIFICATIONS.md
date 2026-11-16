@@ -386,11 +386,11 @@ Flags:
    - Session name = `{project}-{name}`
    - Start in worktree directory
 
-7. **Execute post-create hooks** (user-configured and plugin hooks).
+7. **Execute post-create hooks** (user-configured and plugin hooks). In external Docker mode this never repoints the shared stack's env file. After `grove new`, the shared stack stays on the worktree it was configured for; run `grove to <name>` or `grove up` in the new worktree to load it, or set `auto_up = true`.
 
 8. **Auto-start Docker** (unless `--no-docker`):
    - Only runs when `plugins.docker.auto_up = true` — an explicit opt-in, off by default (agent stacks no longer imply it)
-   - Calls `docker.Up()` for the new worktree path
+   - Calls `docker.Up()` for the new worktree path. In external mode this is the only create-time step that loads the new worktree into the shared stack: it writes `env_var` to the env file and starts the services. It runs even with `--no-switch` or `--json`
    - The dashboard create flow runs the same epilogue, so CLI- and TUI-created worktrees provision identically
 
 9. **(If `--dirty`) Apply the captured patch** via `git -C <new-worktree> apply <tempfile>`:
@@ -475,7 +475,7 @@ Flags:
 
 1. **Ensure worktree exists:**
    - If worktree found: proceed
-   - If not found and `--no-create` not set: create worktree (same as `grove new`)
+   - If not found and `--no-create` not set: create worktree (same as `grove new`). After `grove open`, the shared stack stays on the worktree it was configured for; run `grove to <name>` or `grove up` in the new worktree to load it, or set `auto_up = true`.
    - If not found and `--no-create` set: error
 
 2. **Ensure tmux session exists:**
@@ -1622,7 +1622,7 @@ Flags:
 
 4. **Register in state** with parent worktree tracked
 
-5. **Fire `post-create` hook**
+5. **Fire `post-create` hook**. In external Docker mode this never repoints the shared stack's env file. After `grove fork`, the shared stack stays on the worktree it was configured for; run `grove to <name>` or `grove up` in the new worktree to load it, or set `auto_up = true`.
 
 6. **Create tmux session** with session name `{project}-{name}`
 
@@ -2140,7 +2140,7 @@ Flags:
    - **No flag, TTY**: prompt the user to pick `auto` or `walkthrough`.
    - **No flag, non-TTY**: defaults to `auto` (silent — no preview).
 6. **Docker-aware routing:** when a `docker-compose.yml` is present alongside a Rails/Node/Python marker, install commands (`bundle install`, `npm install`, `pip install`) are auto-generated as `docker:compose` hooks instead of host commands. Service name inferred from the compose file (single service used as-is, or first non-infra service when multiple). Dockerfile-only projects (no compose file) keep host commands and emit a manual-setup note.
-7. Optionally create starter worktrees with `--with-testing`, `--with-scratch`, or `--full`.
+7. Optionally create starter worktrees with `--with-testing`, `--with-scratch`, or `--full`. After `grove init`, the shared stack stays on the worktree it was configured for; run `grove to <name>` or `grove up` in the new worktree to load it, or set `auto_up = true`.
 
 **Mode selection precedence:**
 
@@ -2235,7 +2235,7 @@ Arguments:
 2. Read the current branch via `git rev-parse --abbrev-ref HEAD`. If the directory isn't a git worktree, abort with an actionable error.
 3. Derive the short name by stripping the project prefix from the directory name (e.g., `grove-feature` → `feature`).
 4. If the worktree is already registered with the same path, print an info message and exit successfully (idempotent).
-5. Run the shared bootstrap: record grove's machine-local git excludes, register state, fire per-project and global post-create hooks. (Config needs no per-worktree files — every command resolves it from the main worktree via git's common dir.)
+5. Run the shared bootstrap: record grove's machine-local git excludes, register state, fire per-project and global post-create hooks. (Config needs no per-worktree files — every command resolves it from the main worktree via git's common dir.) After `grove adopt`, the shared stack stays on the worktree it was configured for; run `grove to <name>` or `grove up` in the new worktree to load it, or set `auto_up = true`.
 
 **Drift detection:** Running any grove command from a drifted worktree prints a non-fatal warning suggesting `grove adopt`. `grove doctor` also reports drift in its Tier-2 project checks.
 

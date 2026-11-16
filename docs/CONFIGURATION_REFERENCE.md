@@ -24,7 +24,7 @@ later entries are unioned with earlier ones (earlier protections always apply).
 
 **`GROVE_CONFIG`** overrides the global config file path at runtime:
 ```sh
-GROVE_CONFIG=~/work/shared-grove.toml grove ls
+GROVE_CONFIG=~/code/shared-grove.toml grove ls
 ```
 
 ### Per-developer overlay (`.grove/config.local.toml`)
@@ -365,6 +365,10 @@ auto_stop = false                  # bool
 # Auto-start Docker after creating a worktree: `grove new` and the dashboard
 # create flow run `docker compose up` once the worktree is bootstrapped.
 # Explicit opt-in — agent stacks no longer imply auto-up.
+# In external mode this is what loads a new worktree into the shared stack on
+# create (it points env_var at the worktree and starts the services). Without
+# it, the shared stack stays on the worktree it was configured for; run
+# `grove to <name>` or `grove up` in the new worktree to load it.
 # Default: false
 auto_up = false                    # bool
 
@@ -384,14 +388,14 @@ Required when `mode = "external"`. Configures the shared compose setup.
 # Path to the external Docker Compose directory (the one with docker-compose.yml).
 # Accepts:
 #   - absolute paths (`/home/user/code/orchestrator`)
-#   - ~ expansion (`~/work/compose-dev`)
+#   - ~ expansion (`~/code/orchestrator`)
 #   - relative paths, resolved against the project root — i.e., the directory
 #     containing `.grove/`. For example, `path = "../"` in
 #     `~/code/orchestrator/app/.grove/config.toml` resolves to
 #     `~/code/orchestrator/`. This makes a committed config portable across
 #     teammates with different parent directory layouts.
 # Required.
-path = "~/work/compose-dev"        # string (required)
+path = "~/code/orchestrator"        # string (required)
 
 # Environment variable name that grove sets to the worktree path.
 # The external compose file reads this to know which codebase to mount.
@@ -482,7 +486,7 @@ services = ["web", "worker"]       # string array (required when enabled)
 
 # Path to the agent compose template file.
 # Required when enabled = true.
-template_path = "~/work/compose-dev/agent-compose.yml"  # string (required when enabled)
+template_path = "~/code/orchestrator/agent-compose.yml"  # string (required when enabled)
 
 # Optional overlay compose files merged on top of template_path in declared
 # order. Each becomes an extra `-f` flag on `docker compose` invocations.
@@ -1071,7 +1075,7 @@ auto_stop  = true
 mode       = "external"
 
 [plugins.docker.external]
-path     = "~/work/compose-dev"
+path     = "~/code/orchestrator"
 env_var  = "APP_DIR"
 env_file = ".env.local"
 services = ["web", "worker", "jobs"]
@@ -1100,7 +1104,7 @@ auto_stop  = true
 mode       = "external"
 
 [plugins.docker.external]
-path     = "~/work/compose-dev"
+path     = "~/code/orchestrator"
 env_var  = "APP_DIR"
 services = ["web", "worker"]
 
@@ -1108,7 +1112,7 @@ services = ["web", "worker"]
 enabled       = true
 max_slots     = 8
 services      = ["web", "worker"]
-template_path = "~/work/compose-dev/agent-compose.yml"
+template_path = "~/code/orchestrator/agent-compose.yml"
 url_pattern   = "http://localhost:{slot}"
 network       = "shared"
 ```

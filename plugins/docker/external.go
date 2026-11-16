@@ -56,16 +56,11 @@ func (s *externalStrategy) OnPostSwitch(ctx *hooks.Context) error {
 	return s.startServices(worktreePath)
 }
 
-func (s *externalStrategy) OnPostCreate(ctx *hooks.Context) error {
-	if ctx.WorktreePath == "" || ctx.MainPath == "" {
-		return nil
-	}
-
-	if err := s.persistEnvVar(ctx.WorktreePath); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to persist %s to %s: %v\n", s.ext.EnvVar, s.ext.EnvFileName(), err)
-	}
-	s.emitEnvDirective(ctx.WorktreePath)
-
+// OnPostCreate is a no-op. Creating a worktree must not move the shared stack
+// on its own: the env file would point at a worktree whose containers were
+// never started. The stack follows a worktree on switch, up, or an explicit
+// auto_up (docker.AutoUp calls Up).
+func (s *externalStrategy) OnPostCreate(_ *hooks.Context) error {
 	return nil
 }
 

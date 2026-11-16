@@ -70,11 +70,11 @@ These commands (and their aliases) can emit `cd:`, `tmux-attach:`, `tmux-attach-
 
 ```bash
 # The binary outputs this internally:
-env:ADMIN_DIR=./admin-feature
+env:APP_DIR=./app-feature
 cd:/Users/you/work/myproject-feature
 
 # The shell wrapper intercepts it and runs:
-export ADMIN_DIR=./admin-feature
+export APP_DIR=./app-feature
 cd /Users/you/work/myproject-feature
 ```
 
@@ -119,7 +119,7 @@ The grove binary communicates with the shell wrapper through directive lines —
 | `cd:` | `cd:/path/to/dir` | Change directory |
 | `tmux-attach:` | `tmux-attach:myproject-feature` | Attach to named tmux session |
 | `tmux-attach-cc:` | `tmux-attach-cc:myproject-feature` | Attach using `tmux -CC` (iTerm2 control mode) |
-| `env:` | `env:ADMIN_DIR=./admin-feature` | Export environment variable in shell |
+| `env:` | `env:APP_DIR=./app-feature` | Export environment variable in shell |
 
 > **Note:** `GROVE_CD:` appeared in older documentation but is not used by the current shell templates. The active directive is `cd:`. If you have scripts or tooling that rely on `GROVE_CD:`, update them to use `cd:` instead.
 

@@ -163,7 +163,7 @@ The Docker plugin integrates with Grove's hook system to automatically manage co
 
 **Local mode**: No-op.
 
-**External mode**: Copies configured credential files and creates symlinks from the main worktree into the new worktree.
+**External mode**: Copies configured credential files and creates symlinks from the main worktree into the new worktree. It does not touch the env file: after `grove new`, the shared stack stays on the worktree it was configured for; run `grove to <name>` or `grove up` in the new worktree to load it, or set `auto_up = true`.
 
 ### Config-Driven Action Types
 
