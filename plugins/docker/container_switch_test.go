@@ -159,10 +159,16 @@ func TestPlugin_SwitchHooks_ContainerSwitchGate(t *testing.T) {
 			_ = plugin.onPreSwitch(ctx)
 			_ = plugin.onPostSwitch(ctx)
 
-			got, _ := os.ReadFile(envFile)
-			wrote := string(got) == "APP_DIR=./myapp-feature\n"
-			if wrote != tt.wantEnvWrite {
-				t.Errorf("env file = %q, wrote = %v, want %v", got, wrote, tt.wantEnvWrite)
+			got, err := os.ReadFile(envFile)
+			if err != nil {
+				t.Fatalf("read env file: %v", err)
+			}
+			want := "APP_DIR=./myapp-current\n"
+			if tt.wantEnvWrite {
+				want = "APP_DIR=./myapp-feature\n"
+			}
+			if string(got) != want {
+				t.Errorf("env file = %q, want %q", got, want)
 			}
 		})
 	}

@@ -55,7 +55,7 @@ export GROVE_TUI=0               # disable dashboard
 | Command | Purpose | `--json` | Mutates | Aliases |
 |---------|---------|:--------:|:-------:|---------|
 | `grove new [name]` | Create worktree + branch + tmux; `--up` also brings the stack | — | ✓ | `spawn`, `n` |
-| `grove to [name]` | Move to a worktree, never touches the stack; `--up` also brings it, `--peek` skips hooks/tmux | — | ✓ | `switch`, `t` |
+| `grove to [name]` | Move to a worktree; does not touch the stack by default (`[switch] container_switch` set to `auto` or `prompt` changes that). `--up` also brings it, `--peek` skips hooks/tmux | — | ✓ | `switch`, `t` |
 | `grove fetch <pr\|issue>/<n>` | Worktree from GitHub PR/issue (needs `gh`) | — | ✓ | `f` |
 | `grove ls` | List all worktrees | ✓ | — | `list`, `l` |
 | `grove here` | Current worktree status | ✓ | — | `h` |

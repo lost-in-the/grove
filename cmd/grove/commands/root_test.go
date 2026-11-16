@@ -15,8 +15,10 @@ func TestSwitchAfterDashboard_UpRunsGroveToWithUp(t *testing.T) {
 	if name != "feature" {
 		t.Errorf("name = %q, want %q", name, "feature")
 	}
-	if opts != (switchOptions{Up: true}) {
-		t.Errorf("opts = %+v, want exactly grove to --up", opts)
+	// Path pins the row the user picked: a name alone is ambiguous when two
+	// worktrees in different directories share a basename.
+	if opts != (switchOptions{Up: true, Path: "/src/myapp-feature"}) {
+		t.Errorf("opts = %+v, want grove to --up on the selected path", opts)
 	}
 }
 

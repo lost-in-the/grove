@@ -53,7 +53,7 @@ func writeAgentHelp(cmd *cobra.Command) {
   grove new <name>          Create worktree + branch + tmux session
   grove ls                  List worktrees (table)
   grove ls --json           List worktrees (JSON, machine-readable)
-  grove to <name>           Move to worktree (never touches the stack)
+  grove to <name>           Move to worktree (does not touch the stack by default)
   grove to <name> --up      Move and bring the stack
   grove to <name> --peek    Move without hooks or tmux (lightweight)
   grove to <name> --no-tmux Move with hooks but without tmux
@@ -69,7 +69,8 @@ func writeAgentHelp(cmd *cobra.Command) {
   - Call the binary directly, not the shell function
   - Use --json flag on ls/new/to for machine-readable output
   - Set GROVE_AGENT_MODE=1 to prevent tmux from taking over your terminal
-  - grove to never touches the stack. With agent stacks enabled, grove to --up leaves the stack where
+  - By default grove to does not touch the stack ([switch] container_switch = "auto" or "prompt"
+    changes that). With agent stacks enabled, grove to --up leaves the stack where
     it is (a human may be using it) and prints an 'agent mode:' notice on stderr.
     Run grove up --isolated before running tests
   - grove new emits cd:/path directives — parse these to know where the worktree was created
