@@ -1,6 +1,8 @@
 package docker
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,9 +20,9 @@ func TestParseInspectMounts(t *testing.T) {
 	}{
 		{
 			name:      "single bind-mount matches dest",
-			blob:      `[{"Type":"bind","Source":"/Users/leah/work/proj-foo","Destination":"/app"}]`,
+			blob:      `[{"Type":"bind","Source":"/home/dev/projects/myapp-foo","Destination":"/app"}]`,
 			mountDest: "/app",
-			wantSrc:   "/Users/leah/work/proj-foo",
+			wantSrc:   "/home/dev/projects/myapp-foo",
 		},
 		{
 			name:      "trailing slash on Destination still matches",
@@ -36,7 +38,7 @@ func TestParseInspectMounts(t *testing.T) {
 		},
 		{
 			name:      "multiple mounts — first match wins",
-			blob:      `[{"Source":"/vendor","Destination":"/vendor"},{"Source":"/work/proj","Destination":"/app"},{"Source":"/cache","Destination":"/cache"}]`,
+			blob:      `[{"Type":"bind","Source":"/vendor","Destination":"/vendor"},{"Type":"bind","Source":"/work/proj","Destination":"/app"},{"Type":"bind","Source":"/cache","Destination":"/cache"}]`,
 			mountDest: "/app",
 			wantSrc:   "/work/proj",
 		},
@@ -92,6 +94,55 @@ func TestSamePath(t *testing.T) {
 		if got := samePath(tt.a, tt.b); got != tt.want {
 			t.Errorf("samePath(%q, %q) = %v, want %v", tt.a, tt.b, got, tt.want)
 		}
+	}
+}
+
+func TestMountWithinWorktree(t *testing.T) {
+	tests := []struct {
+		name         string
+		source, root string
+		want         bool
+	}{
+		{"equal", "/code/myapp-feature", "/code/myapp-feature", true},
+		{"equal with trailing slash", "/code/myapp-feature/", "/code/myapp-feature", true},
+		{"inside", "/code/myapp-feature/app", "/code/myapp-feature", true},
+		{"inside nested deeper", "/code/myapp-feature/app/web/src", "/code/myapp-feature", true},
+		{"sibling sharing a name prefix", "/code/myapp-feature-2/app", "/code/myapp-feature", false},
+		{"parent of the worktree", "/code", "/code/myapp-feature", false},
+		{"dot-dot escapes the worktree", "/code/myapp-feature/../myapp-main", "/code/myapp-feature", false},
+		{"unrelated", "/srv/other", "/code/myapp-feature", false},
+		{"empty source", "", "/code/myapp-feature", false},
+		{"empty root", "/code/myapp-feature", "", false},
+		{"both empty", "", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := mountWithinWorktree(tt.source, tt.root); got != tt.want {
+				t.Errorf("mountWithinWorktree(%q, %q) = %v, want %v", tt.source, tt.root, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCheckMountDrift_SubdirectoryMountVerifies(t *testing.T) {
+	cfg := driftTestConfig(t, "web", "worker")
+	cfg.MountDests = map[string]string{"web": "/project/app"}
+	insp := &fakeMountInspector{
+		ids: map[string]string{"web": "aaa", "worker": "bbb"},
+		sources: map[string]string{
+			"aaa": "/work/myapp-feature/app",
+			"bbb": "/work/myapp-feature-2/app",
+		},
+	}
+	reports, _ := checkMountDrift(cfg, insp)
+	if reports[0].Status != MountVerified {
+		t.Errorf("web status = %q, want verified", reports[0].Status)
+	}
+	if reports[0].ActualSource != "/work/myapp-feature/app" {
+		t.Errorf("web ActualSource = %q, want the real subdirectory source", reports[0].ActualSource)
+	}
+	if reports[1].Status != MountDrift {
+		t.Errorf("worker (sibling worktree with shared prefix) status = %q, want drift", reports[1].Status)
 	}
 }
 
@@ -161,6 +212,17 @@ func TestMountDriftConfigFromExternal(t *testing.T) {
 			t.Errorf("MountDest = %q, want %q", got.MountDest, "/srv/app")
 		}
 	})
+	t.Run("carries per-service mount_dests through", func(t *testing.T) {
+		ext := &config.ExternalComposeConfig{
+			EnvVar:     "X",
+			Services:   []string{"app", "worker"},
+			MountDests: map[string]string{"worker": "/srv/worker"},
+		}
+		got := MountDriftConfigFromExternal(ext, "/compose")
+		if got.MountDests["worker"] != "/srv/worker" {
+			t.Errorf("MountDests = %v, want worker=/srv/worker", got.MountDests)
+		}
+	})
 	t.Run("defaults mount_dest to /app when unset", func(t *testing.T) {
 		ext := &config.ExternalComposeConfig{EnvVar: "X", Services: []string{"web"}}
 		got := MountDriftConfigFromExternal(ext, "/compose")
@@ -175,16 +237,155 @@ func TestMountDriftConfigFromExternal(t *testing.T) {
 // actually emits, including extra fields the struct doesn't model.
 func TestParseInspectMounts_RealisticOutput(t *testing.T) {
 	blob := []byte(`[
-		{"Type":"bind","Source":"/Users/leah/work/proj-feature-x","Destination":"/app","Mode":"","RW":true,"Propagation":"rprivate"},
+		{"Type":"bind","Source":"/home/dev/projects/myapp-feature","Destination":"/app","Mode":"","RW":true,"Propagation":"rprivate"},
 		{"Type":"volume","Name":"node_modules","Source":"/var/lib/docker/volumes/node_modules/_data","Destination":"/app/node_modules","Driver":"local","Mode":"z","RW":true,"Propagation":""}
 	]`)
 	got, err := parseInspectMounts(blob, "/app")
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	want := filepath.Clean("/Users/leah/work/proj-feature-x")
+	want := filepath.Clean("/home/dev/projects/myapp-feature")
 	if got != want {
 		t.Errorf("source = %q, want %q", got, want)
+	}
+}
+
+// fakeMountInspector stands in for the docker CLI, the same way fakeStrategy
+// stands in for the compose strategy in hook_compose_test.go.
+type fakeMountInspector struct {
+	ids       map[string]string // service -> container ID ("" = not running)
+	idErr     map[string]error  // service -> compose ps failure
+	sources   map[string]string // container ID -> mount source
+	mountErr  map[string]error  // container ID -> inspect failure
+	probed    map[string]string // service -> dest probed
+	serviceOf map[string]string // container ID -> service, filled as ids are handed out
+}
+
+func (f *fakeMountInspector) ContainerID(_, _, service string) (string, error) {
+	if err := f.idErr[service]; err != nil {
+		return "", err
+	}
+	id := f.ids[service]
+	if f.serviceOf == nil {
+		f.serviceOf = map[string]string{}
+	}
+	f.serviceOf[id] = service
+	return id, nil
+}
+
+func (f *fakeMountInspector) MountSource(containerID, dest string) (string, error) {
+	if f.probed == nil {
+		f.probed = map[string]string{}
+	}
+	f.probed[f.serviceOf[containerID]] = dest
+	if err := f.mountErr[containerID]; err != nil {
+		return "", err
+	}
+	return f.sources[containerID], nil
+}
+
+func driftTestConfig(t *testing.T, services ...string) MountDriftConfig {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("APP_DIR=/work/myapp-feature\n"), 0o644); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+	return MountDriftConfig{ComposePath: dir, EnvFileName: ".env", EnvVar: "APP_DIR", Services: services}
+}
+
+func TestCheckMountDrift_Statuses(t *testing.T) {
+	cfg := driftTestConfig(t, "app", "worker", "db", "cache", "web")
+	insp := &fakeMountInspector{
+		ids: map[string]string{"app": "aaa", "worker": "bbb", "db": "", "cache": "ddd", "web": "eee"},
+		idErr: map[string]error{
+			"cache": errors.New("docker compose ps: daemon down"),
+		},
+		sources: map[string]string{"aaa": "/work/myapp-feature", "bbb": "/work/myapp-main"},
+		mountErr: map[string]error{
+			"eee": fmt.Errorf("%w: no bind-mount at %q in container", errNoMount, "/app"),
+		},
+	}
+
+	reports, err := checkMountDrift(cfg, insp)
+	if err != nil {
+		t.Fatalf("checkMountDrift: %v", err)
+	}
+	want := map[string]MountStatus{
+		"app":    MountVerified,
+		"worker": MountDrift,
+		"db":     MountNotRunning,
+		"cache":  MountError,
+		"web":    MountNoMount,
+	}
+	for _, r := range reports {
+		if r.Status != want[r.Service] {
+			t.Errorf("%s: status = %q, want %q (detail %q)", r.Service, r.Status, want[r.Service], r.Detail)
+		}
+	}
+}
+
+func TestCheckMountDrift_InspectFailureIsErrorNotNoMount(t *testing.T) {
+	cfg := driftTestConfig(t, "app")
+	insp := &fakeMountInspector{
+		ids:      map[string]string{"app": "aaa"},
+		mountErr: map[string]error{"aaa": errors.New("docker inspect: exit status 1")},
+	}
+	reports, _ := checkMountDrift(cfg, insp)
+	if reports[0].Status != MountError {
+		t.Errorf("status = %q, want %q", reports[0].Status, MountError)
+	}
+}
+
+func TestCheckMountDrift_PerServiceMountDest(t *testing.T) {
+	cfg := driftTestConfig(t, "app", "worker")
+	cfg.MountDest = "/app"
+	cfg.MountDests = map[string]string{"worker": "/srv/worker"}
+	insp := &fakeMountInspector{
+		ids:     map[string]string{"app": "aaa", "worker": "bbb"},
+		sources: map[string]string{"aaa": "/work/myapp-feature", "bbb": "/work/myapp-feature"},
+	}
+	reports, _ := checkMountDrift(cfg, insp)
+	if insp.probed["app"] != "/app" || insp.probed["worker"] != "/srv/worker" {
+		t.Errorf("probed = %v, want app=/app worker=/srv/worker", insp.probed)
+	}
+	if reports[1].MountDest != "/srv/worker" || reports[1].Status != MountVerified {
+		t.Errorf("worker report = %+v", reports[1])
+	}
+}
+
+func TestSummarizeMountReports(t *testing.T) {
+	mk := func(statuses ...MountStatus) []MountDriftReport {
+		var rs []MountDriftReport
+		for _, s := range statuses {
+			rs = append(rs, MountDriftReport{Status: s})
+		}
+		return rs
+	}
+	tests := []struct {
+		name         string
+		reports      []MountDriftReport
+		wantLine     string
+		wantAllClear bool
+	}{
+		{"all verified", mk(MountVerified, MountVerified, MountVerified), "All 3 services mounted from the configured worktree.", true},
+		{"single verified", mk(MountVerified), "All 1 service mounted from the configured worktree.", true},
+		{"mixed", mk(MountVerified, MountVerified, MountVerified, MountVerified, MountNoMount, MountNoMount, MountNotRunning, MountNotRunning), "4 of 8 services verified; 4 not checked", false},
+		{"all stopped", mk(MountNotRunning, MountNotRunning), "0 of 2 services verified; 2 not checked", false},
+		{"drift is checked, not unchecked", mk(MountVerified, MountDrift), "1 of 2 services verified; 1 drifted", false},
+		{"drift and unchecked", mk(MountVerified, MountDrift, MountError), "1 of 3 services verified; 1 drifted; 1 not checked", false},
+		{"docker error", mk(MountError), "0 of 1 service verified; 1 not checked", false},
+		{"no reports", nil, "0 of 0 services verified", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := SummarizeMountReports(tt.reports)
+			if got := s.Line(); got != tt.wantLine {
+				t.Errorf("Line() = %q, want %q", got, tt.wantLine)
+			}
+			if s.AllVerified() != tt.wantAllClear {
+				t.Errorf("AllVerified() = %v, want %v", s.AllVerified(), tt.wantAllClear)
+			}
+		})
 	}
 }
 
@@ -221,5 +422,20 @@ func TestComposePsQArgs_DefaultEnvFileOmitsFlag(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("args[%d] = %q, want %q (full: %v)", i, got[i], want[i], got)
 		}
+	}
+}
+
+func TestParseInspectMounts_NonBindMountAtDestIsNoMount(t *testing.T) {
+	blob := []byte(`[
+		{"Type":"bind","Source":"/home/dev/projects/myapp-feature","Destination":"/app"},
+		{"Type":"volume","Name":"node_modules","Source":"/var/lib/docker/volumes/node_modules/_data","Destination":"/app/node_modules"}
+	]`)
+
+	got, err := parseInspectMounts(blob, "/app/node_modules")
+	if !errors.Is(err, errNoMount) {
+		t.Fatalf("parseInspectMounts() = %q, %v; want an error wrapping errNoMount", got, err)
+	}
+	if got != "" {
+		t.Errorf("source = %q, want empty: a named volume has no worktree source", got)
 	}
 }

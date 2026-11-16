@@ -908,8 +908,31 @@ Flags:
 When passed, `grove here` short-circuits the default info display and instead:
 
 1. Reads `[plugins.docker.external].env_var` from the configured `env_file` — this is the worktree path grove last wrote ("configured source").
-2. For each configured service, runs `docker compose ps -q <service>` to get the running container, then `docker inspect` to find the mount whose `Destination` matches `[plugins.docker.external].mount_dest` (default `/app`).
-3. Compares the container's actual `Source` against the configured source.
+2. For each configured service, runs `docker compose ps -q <service>` to get the running container, then `docker inspect` to find the mount whose `Destination` matches `[plugins.docker.external].mount_dest` (default `/app`). A service listed in `[plugins.docker.external].mount_dests` (e.g. `{ worker = "/srv/worker" }`) is probed at its own path instead.
+3. Compares the container's actual `Source` against the configured source. A source that is the worktree root or a directory inside it verifies, so a service that mounts only a subdirectory (for example `web = "/project/app"` in `mount_dests`, with host `<worktree>/app` mounted there) is not reported as drift.
+
+**Per-service status**
+
+Every service gets exactly one status:
+
+| Status | Meaning | Printed as |
+|---|---|---|
+| `verified` | Mount source equals the configured worktree | `✓ app ok: <path>` |
+| `drift` | Mount source differs from the configured worktree | warning, with actual and configured paths |
+| `not_running` | `docker compose ps -q` returned no container | faint note: `container not running` |
+| `no_mount` | Container runs, but no bind mount is at the probed path (nothing is mounted there, or a named volume or tmpfs is) | warning: the service mounts the worktree at a different path or not at all (set `mount_dests`) |
+| `error` | A docker call failed (daemon down, `docker inspect` failed, unparseable output) | error line with the docker message |
+
+**Summary line**
+
+The last line is computed from the statuses and never reads as success unless every service was verified:
+
+| Situation | Line |
+|---|---|
+| Every service `verified` | `All N services mounted from the configured worktree.` |
+| Anything else | `N of M services verified; D drifted; K not checked` (`D` omitted when 0; `K` counts `not_running`, `no_mount`, `error`, and is omitted when 0) |
+
+With every service stopped the line is `0 of M services verified; M not checked`.
 
 The header reads `Mount check — '<worktree>'` — deliberately outcome-neutral, since it prints before any comparison has run. It used to read `Mount drift — '<worktree>'`, which looked like a verdict even when the report below it came back clean.
 
@@ -937,12 +960,14 @@ and exits `13` (`MountCheckMismatch`), the same code as an actual cwd-vs-configu
 
 | Code | Meaning |
 |---|---|
-| `0` | All services mounted from the configured worktree (or no external mode configured / no services running) |
-| `6` (`ExternalCommandFailed`) | docker invocation itself failed (daemon down, command not found, etc.) |
+| `0` | No drift and no docker error. Stopped (`not_running`) and unmounted (`no_mount`) services are informational: they exit `0`, but the summary line says how many were not checked. Also `0` when external mode isn't configured. |
+| `6` (`ExternalCommandFailed`) | A docker call failed for at least one service (`error` status: daemon down, command not found, etc.) and no drift was found |
 | `12` (`MountDrift`) | At least one running service has a bind-mount source different from the configured worktree |
-| `13` (`MountCheckMismatch`) | Only with `--require-current`: the current worktree is not the one the env file is configured for, **or** the configured worktree couldn't be resolved at all (env var unset, or the worktree manager errored) — the guard fails closed rather than passing on an unknown state. Takes priority over `MountDrift` if both conditions hold. |
+| `13` (`MountCheckMismatch`) | Only with `--require-current`: the current worktree is not the one the env file is configured for, **or** the configured worktree couldn't be resolved at all (env var unset, or the worktree manager errored), **or** any service is unverified (`not_running`, `no_mount`) and nothing more specific applies. The guard fails closed rather than passing on an unknown state. Takes priority over `MountDrift` and `6` if both conditions hold. |
 
-When drift is detected, the output names each affected service and points at `grove up` as the remediation. Services whose container isn't running are reported as `container not running` (informational, not drift).
+Priority when several apply: `13` (cwd mismatch or unresolved, `--require-current` only), then `12`, then `6`, then `13` (unverified, `--require-current` only).
+
+When drift is detected, the output names each affected service and points at `grove up` as the remediation.
 
 **`--require-current`**
 

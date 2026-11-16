@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Toast notifications show again. They had stopped appearing on the dashboard; they now draw in the top-right corner above everything else.
+- `grove here --check-mount` no longer says every service is mounted when some were never checked. The summary counts them (`4 of 8 services verified; 4 not checked`), and `All N services mounted` prints only when every service was verified. A running service with no mount at the probed path is now a warning. A Docker failure exits 6 instead of reading as "container not running". With `--require-current`, any service that could not be verified fails the check. For a service that mounts the worktree somewhere other than `mount_dest`, set its path in the new `mount_dests` table under `[plugins.docker.external]`; a mount of a subdirectory of the worktree counts as verified.
 - Overlays in the dashboard no longer erase the rows beside them, and the background behind them is dimmed evenly instead of stopping at the first styled word. (#19)
 - `esc` in the dashboard goes back exactly one level, and returns the cursor to the worktree it was on, even after the list refreshes.
 - With `NO_COLOR` set, the footer now shows which key you pressed (reverse video). Before, the highlight looked the same as every other key.
