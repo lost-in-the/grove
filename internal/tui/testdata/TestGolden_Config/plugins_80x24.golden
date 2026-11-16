@@ -1,24 +1,24 @@
  [1m[1mtest-project[m ▸ [1msettings[m                                                       [m 
   [1] general   [2] behavior   [1m[3] plugins[m   [4] protection                     
                                                                                 
- ┃ [1mdocker_enabled[m                                                               
- ┃ Enable Docker plugin                                                         
- ┃                                                                              
- ┃   true     false                                                             
+   Docker plugin          true                                                  
+ ❯ [1mStack up on arrival  [m  true                                                  
+   Stack down on leaving  false                                                 
                                                                                 
                                                                                 
                                                                                 
                                                                                 
                                                                                 
+ ────────────────────────────────────────────────────────────────────────────── 
+  [1mStack up on arrival[m                                 plugins.docker.auto_start 
+  Whether the stack comes up on the worktree you arrive at. Only when the stack 
+  follows a move: Docker stack is prompt or auto, or --up.                      
+                                                                                
+   ● [1mtrue [m   Bring the stack up on the worktree you move to (default)           
+   ○ false   Leave it down                                                      
                                                                                 
                                                                                 
                                                                                 
                                                                                 
                                                                                 
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-  [1mtab[m next field · [1mctrl+n/p[m section · [1mesc[m close                                 
+  [1m↑↓[m field · [1m←→[m change · saves as you go · [1mesc[m close                            

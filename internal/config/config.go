@@ -709,10 +709,11 @@ func SetProjectConfigValues(updates map[string]string) error {
 	return fsutil.AtomicWriteFile(projectPath, []byte(content), 0o644)
 }
 
-// splitKey splits "section.field" into ("section", "field").
+// splitKey splits "section.field" into ("section", "field"), at the last
+// dot, so "plugins.docker.enabled" is enabled under [plugins.docker].
 // A key without a dot returns ("", key) for top-level fields.
 func splitKey(key string) (string, string) {
-	if i := strings.IndexByte(key, '.'); i >= 0 {
+	if i := strings.LastIndexByte(key, '.'); i >= 0 {
 		return key[:i], key[i+1:]
 	}
 	return "", key

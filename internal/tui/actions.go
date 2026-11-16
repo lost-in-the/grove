@@ -215,11 +215,10 @@ func dashboardActions() []Action {
 	}
 }
 
-// openConfig opens the config editor.
+// openConfig opens the settings panel.
 func (m Model) openConfig() (tea.Model, tea.Cmd) {
 	m.pushView(ViewConfig)
 	m.configState = NewConfigState()
-	m.configState.resize(m.configFormSize())
 	return m, loadConfigCmd()
 }
 

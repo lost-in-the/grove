@@ -399,12 +399,21 @@ var helpSectionsSync = []helpSection{
 }
 
 var helpSectionsConfig = []helpSection{
-	{title: "Configuration", note: "Edit grove settings. Changes saved to .grove/config.toml.", items: []helpEntry{
+	{title: "Settings", note: "Each change is written to .grove/config.toml at once. The panel under the list explains the focused field.", items: []helpEntry{
+		{"↑/k ↓/j", "Previous / next field"},
 		{"tab / shift+tab", "Next / previous field"},
-		{"enter", "Next field; next section from the last field; closes from protection"},
+		{"←/h →/l", "Change a choice or a true/false field"},
+		{"space", "Switch a true/false field"},
+		{"enter", "Edit a text or list field"},
+		{"u", "Undo the last change"},
+		{"1-4", "Go to a section"},
 		{"ctrl+n / ctrl+p", "Next / previous section"},
-		{"1-4", "Jump to a section (not while typing in a text field)"},
-		{"esc", "Close; asks to save unsaved changes"},
+		{"esc", "Close"},
+	}},
+	{title: "While editing a field", items: []helpEntry{
+		{"enter", "Save the value"},
+		{"esc", "Cancel the edit"},
+		{"other keys", "Type, digits too"},
 	}},
 }
 

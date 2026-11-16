@@ -314,8 +314,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleSyncComplete(msg)
 	case configLoadedMsg:
 		return m.handleConfigLoaded(msg)
-	case configSavedMsg:
-		return m.handleConfigSaved(msg)
+	case configFlashDoneMsg:
+		return m.handleConfigFlashDone(msg)
 	case renameCompleteMsg:
 		return m.handleRenameComplete(msg)
 	case checkoutCompleteMsg:
@@ -349,9 +349,6 @@ func (m Model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	if m.omni != nil {
 		w, _ := omniFrameSize(m.width, m.height)
 		m.omni.Input.SetWidth(max(4, w-8))
-	}
-	if m.configState != nil {
-		m.configState.resize(m.configFormSize())
 	}
 	tuilog.Printf("WindowSizeMsg: %dx%d, list size: %dx%d", msg.Width, msg.Height, m.list.Width(), m.list.Height())
 	if !wasReady && m.cfgLoadErr != nil {
@@ -731,44 +728,6 @@ func (m Model) handleSyncComplete(msg syncCompleteMsg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
 }
 
-func (m Model) handleConfigLoaded(msg configLoadedMsg) (tea.Model, tea.Cmd) {
-	if m.configState != nil {
-		if msg.err != nil {
-			m.configState.Err = msg.err
-		} else {
-			m.configState.Config = msg.cfg
-			m.configState.Fields = populateConfigFields(msg.cfg)
-
-			return m, m.configState.buildForms(m.configFormSize())
-		}
-	}
-	return m, nil
-}
-
-func (m Model) handleConfigSaved(msg configSavedMsg) (tea.Model, tea.Cmd) {
-	if msg.err != nil {
-		if m.configState != nil {
-			m.configState.Err = msg.err
-		} else {
-			m.toast.Show(NewToast("Config save failed: "+msg.err.Error(), ToastError))
-		}
-		return m, nil
-	}
-	if m.configState != nil {
-		m.popToRoot()
-		m.configState = nil
-	}
-	m.toast.Show(NewToast("Configuration saved", ToastSuccess))
-	if cfg, err := config.Load(); err != nil {
-		tuilog.Printf("error: config reload after save failed: %v", err)
-		m.toast.Show(NewToast("Saved but reload failed — restart TUI to apply", ToastWarning))
-	} else {
-		m.cfg = cfg
-		m.refreshDelegate() // tui.list_secondary and density settings
-	}
-	return m, nil
-}
-
 func (m Model) handleRenameComplete(msg renameCompleteMsg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	m.popToRoot()
@@ -832,8 +791,8 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleDefault(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.layoutView() == ViewConfig && m.configState != nil && m.configState.form() != nil {
-		return m.handleConfigFormMsg(msg)
+	if m.layoutView() == ViewConfig && m.configState != nil && m.configState.editing {
+		return m.handleConfigInputMsg(msg)
 	}
 
 	var cmd tea.Cmd
@@ -1643,7 +1602,7 @@ func (m Model) viewHasTextInput() bool {
 	case ViewBranchForm, ViewRename, ViewOmni:
 		return true
 	case ViewConfig:
-		return m.configState != nil && m.configState.focusOnInput()
+		return m.configState != nil && m.configState.editing
 	case ViewPRs:
 		return m.prState != nil && m.prState.Filtering
 	case ViewIssues:

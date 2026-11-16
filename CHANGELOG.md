@@ -13,7 +13,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`--here`** on `grove to`, `last`, `new`, `fork`, `open`, and `fetch`: stay in the shell or pane you are in for this run. Grove only changes directory and creates no session. Hooks still run.
 - **`--no-hooks`** on `grove to` and `grove last`: skip hooks and the dirty check for this run. `--peek` is now short for `--here --no-hooks` and behaves as before. `grove last` gains `--peek` too.
 - The config panel in the dashboard has an `open_in` field.
-- The config panel shows `↓ more below` or `↑ more above` when a section has fields scrolled out of view.
 - **`grove --version`** prints the same line as `grove version`.
 - **`--up` (`-u`) and `--no-docker`** on `grove fork` and `grove fetch`, and `--up` on `grove open`: the same flags as `grove new`, through the same code. `grove open <name> --up` brings the stack even when the worktree already exists.
 - **`--no-switch` (`-n`) and `--json` (`-j`)** on `grove fetch`. `grove fork --no-switch` gains the short form `-n`, and `grove browse --json` gains `-j`.
@@ -21,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `grove doctor` warns when herdr is older than 0.8.0, and when the running herdr server is a different version than the installed herdr CLI (herdr's `server_binary_stale`).
 
 ### Changed
+- **The settings panel (`c`) is rebuilt.** Each field is one row: a plain label and its value as the file spells it. Under the list, a panel explains the focused field: what it does, its key in the file, every choice with what it means, and the default. A change is written at once, so there is no save step, and `u` undoes it. A value config loading would refuse is never written. `enter` edits a text field in place; `esc` closes the panel at any time. Every section fits at 80x24.
 - **`[switch] dirty_handling` now defaults to `warn`.** When the worktree you leave has uncommitted changes, `grove to` and `grove last` print one line on stderr (`feature has 3 uncommitted files`) and move. They no longer ask, and they no longer refuse when there is no terminal. Set `dirty_handling = "prompt"` to get the old behavior. A new value, `ignore`, moves and prints nothing. A config that already sets `dirty_handling` is not affected, and `grove init` used to write `dirty_handling = "prompt"`, so projects it created keep asking until you change that line. With `auto-stash`, the stash stays parked after the move, and git stashes are shared across all worktrees.
 - **One vocabulary for where you land.** The placement is `session` (the worktree's own session: a tmux session or a herdr workspace) or `here` (the shell or pane you are in). `[session] open_in` now takes `"session"` (default) or `"here"`. The old values `"new"` and `"current"` still work; `grove doctor` and `grove config` name the value to change to. The full table is in `docs/COMMAND_SPECIFICATIONS.md`.
 - `--no-tmux` is now a hidden alias of `--here` on `grove to` and `grove new`. It still works and prints a deprecation line on stderr.
@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `grove fork` now honors `[plugins.docker] auto_up = true`, as `grove new`, `open`, and `fetch` already did. Pass `--no-docker` to skip it for one run.
 - `--quiet` cannot be combined with `--json` on `grove here` and `grove ls`. Before, grove accepted both.
 - `make build` and `make install` stamp the version from `git describe`. A build from source no longer reports a stale version.
-- Help text for `to`, `last`, `new`, `fork`, `open`, `fetch`, `join`, `rm`, `rename`, and `trim` no longer says "tmux" where it means the active multiplexer. The config panel field `tmux_mode` is now labeled `session_mode`.
+- Help text for `to`, `last`, `new`, `fork`, `open`, `fetch`, `join`, `rm`, `rename`, and `trim` no longer says "tmux" where it means the active multiplexer.
 - `grove new`, `spawn`, `open`, `fork`, `fetch`, and `adopt` now exit 14 when a configured file was not copied or linked. The worktree is kept. Before, they exited 0.
 - A config that fails to load now stops commands that create or adopt a worktree. Before, they ran on defaults and skipped `copy_files`, symlinks, and hooks.
 - `copy_files` and `symlink_files` entries with `*`, `?`, or `[`, and any entry that is absolute or uses `..`, now fail config validation.
@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The herdr backend is verified against herdr 0.9.5, and CI runs the live suite on it.
 
 ### Fixed
+- Changing a Docker plugin field in the settings panel wrote a second `docker.enabled` (or `auto_start`, `auto_stop`) under `[plugins]`, which broke a config that already had a `[plugins.docker]` section. The value is now replaced in `[plugins.docker]`.
 - Outside a grove project, a command run with `--json` now prints the JSON error object on stderr. Before, it printed plain text. The exit code is still 10. In text mode the message now starts with `Error:`.
 - A session whose pane is in the worktree by another spelling of the path (a symlink) is no longer treated as drifted, so `grove to` does not send it a `cd`.
 - `grove fetch` no longer creates a session when `[session] open_in = "here"`.

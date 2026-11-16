@@ -264,15 +264,6 @@ func TestAgentAware_SetByFirstFetchWithoutBackend(t *testing.T) {
 	}
 }
 
-// The focused config button draws surface-colored text on Primary, the pair
-// TestPalette_ButtonContrast checks (TextBright on Primary is under 3:1).
-func TestConfigForm_FocusedButtonUsesSurfaceText(t *testing.T) {
-	s := groveHuhTheme().Theme(true)
-	if got := s.Focused.FocusedButton.GetForeground(); got != Colors.SurfaceBg {
-		t.Errorf("focused button text = %v, want SurfaceBg %v", got, Colors.SurfaceBg)
-	}
-}
-
 func TestRowDelegate_PinColumnShowsSlot(t *testing.T) {
 	d := testRowDelegate()
 	d.Pins = true

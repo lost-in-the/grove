@@ -125,10 +125,9 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 			{"1-4", "tab"},
 			{"esc", "back"},
 		}
-	case ViewConfig:
+	case ViewConfig: // the panel builds its own line: configHints
 		return []Hint{
-			{"tab", "next field"},
-			{"ctrl+n/p", "section"},
+			{"↑↓", "field"},
 			{"esc", "close"},
 		}
 	case ViewRename:
@@ -167,6 +166,9 @@ func (h *HelpFooter) RenderCompactWithHints(hints []Hint, width int) string {
 			keyStyle = Styles.HelpKeyHighlight
 		}
 		part := keyStyle.Render(hint.Key) + " " + Styles.HelpDesc.Render(hint.Description)
+		if hint.Key == "" { // a note, such as "saves as you go"
+			part = Styles.HelpDesc.Render(hint.Description)
+		}
 		parts = append(parts, part)
 	}
 

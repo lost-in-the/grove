@@ -373,6 +373,28 @@ skip_branch_notice = true
 			},
 		},
 		{
+			// The section is everything before the last dot: a key under
+			// [plugins.docker] is replaced there, not added as a second,
+			// conflicting docker.enabled under [plugins].
+			name: "update a key in a nested section",
+			initial: `[plugins.docker]
+enabled = true
+`,
+			updates: map[string]string{"plugins.docker.enabled": "false"},
+			validate: func(t *testing.T, content string) {
+				var got struct{ Plugins PluginsConfig }
+				if _, err := toml.Decode(content, &got); err != nil {
+					t.Fatalf("invalid TOML: %v\n%s", err, content)
+				}
+				if e := got.Plugins.Docker.Enabled; e == nil || *e {
+					t.Errorf("enabled should read back false:\n%s", content)
+				}
+				if strings.Contains(content, "[plugins]") {
+					t.Errorf("no [plugins] section should be added:\n%s", content)
+				}
+			},
+		},
+		{
 			name: "create new section and key",
 			initial: `project_name = "myproject"
 `,

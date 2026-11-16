@@ -121,7 +121,7 @@ Toast levels:
 | `f` | Copy selected worktree (new branch from its HEAD) |
 | `b` | Switch the selected worktree to another local branch |
 | `s` | Sync changes from another worktree |
-| `c` | Open config editor |
+| `c` | Open settings |
 | `p` | Browse GitHub PRs |
 | `i` | Browse GitHub issues |
 | `a` | Bulk delete |
@@ -155,7 +155,7 @@ The New Worktree form uses its own keys, listed in its section below.
 | `enter` | Confirm / advance step |
 | `esc` | Cancel / close overlay |
 | `backspace` | Go back one step |
-| `tab` / `shift+tab` | Next / previous tab (config editor) |
+| `tab` / `shift+tab` | Next / previous field (settings) |
 | `↑` / `↓` | Navigate list |
 | `space` | Toggle selection / checkbox |
 | `y` | Confirm (delete overlay) |
@@ -245,30 +245,61 @@ Steps:
 
 > Source changes are preserved (sync copies, it does not move).
 
-### Config Editor (`c`)
+### Settings (`c`)
 
-A full-screen editor for the project's grove config. Changes take effect immediately after saving.
+A full-screen panel for the project's grove config. Every change is written to `.grove/config.toml` at once, so there is no save step and nothing unsaved.
 
-The header reads `<project> ▸ settings`, with `● 2 unsaved` on the right while anything differs from the file on disk. Below it are the section tabs, with the active one raised:
+```
+ myapp ▸ settings                                              ✓ saved · u undo
+  [1] general   [2] behavior   [3] plugins   [4] protection
 
-| Section | Settings |
+  Moving between worktrees
+ ❯ Uncommitted files      ignore
+   Docker stack           off
+   Where you land         session
+   Sessions               auto
+
+  Names
+   Folder pattern         {project}-{name}
+ ──────────────────────────────────────────────────────────────────────────────
+  Uncommitted files                                       switch.dirty_handling
+  What grove does when the worktree you leave has uncommitted files.
+
+   ○ warn         Tell you, then move (default)
+   ● ignore       Move, say nothing
+   ○ prompt       Ask first
+   ○ refuse       Do not move
+   ○ auto-stash   Stash the files, then move
+
+  ↑↓ field · ←→ change · saves as you go · u undo · esc close
+```
+
+- **The list** has one row per field: a plain label, then the value exactly as the file spells it. Behavior groups its fields under two headings.
+- **The context panel** under the rule explains the focused field: its label, its key in the file, what it does, and every choice with its meaning. The current choice has `●`, the default says `(default)`. A text or list field shows its value, its default, and what to type.
+- **The header** says `✓ saved` for a few seconds after a write, and `✗ not saved` when a write fails. A failed write changes nothing on disk, and the panel shows the error under the field.
+
+| Section | Fields (key) |
 |-----|----------|
-| `[1] general` | `project_name`, `projects_dir`, `default_branch` |
-| `[2] behavior` | `dirty_handling` (uncommitted changes in the worktree you leave: `warn`, `ignore`, `prompt`, `refuse`, `auto-stash`), `container_switch` (stack follows every move: `off`, `prompt`, `auto`), `open_in` (placement: `session` or `here`), `session_mode`, `naming_pattern` |
-| `[3] plugins` | Docker plugin `enabled`, `auto_start`, `auto_stop` |
-| `[4] protection` | `protected` list, `immutable` list |
-
-A section with more fields than fit scrolls as you move through it. The line above the footer then reads `↓ more below` or `↑ more above`.
+| `[1] general` | Project name (`project_name`), Projects folder (`projects_dir`), Default branch (`default_base_branch`) |
+| `[2] behavior` | Uncommitted files (`switch.dirty_handling`), Docker stack (`switch.container_switch`), Where you land (`session.open_in`), Sessions (`tmux.mode`), Folder pattern (`naming.pattern`) |
+| `[3] plugins` | Docker plugin (`plugins.docker.enabled`), Stack up on arrival (`plugins.docker.auto_start`), Stack down on leaving (`plugins.docker.auto_stop`) |
+| `[4] protection` | Protected worktrees (`protection.protected`), No incoming changes (`protection.immutable`) |
 
 | Key | Action |
 |-----|--------|
-| `tab` / `shift+tab` | Next / previous field |
-| `enter` | Next field; on a section's last field, the next section; on protection's last field, close (asking first when there are unsaved changes) |
-| `ctrl+n` / `ctrl+p` | Next / previous section, from anywhere |
-| `1`-`4` | Jump to a section, except while typing in a text field |
-| `esc` | Close; with unsaved changes, asks first (`enter` save, `esc` discard) |
+| `↑` / `↓`, `k` / `j` | Previous / next field |
+| `tab` / `shift+tab` | Next / previous field, wrapping |
+| `←` / `→`, `h` / `l` | Change a choice or a true/false field, and write it |
+| `space` | Switch a true/false field |
+| `enter` | Edit a text or list field |
+| `u` | Undo the last change: writes the value before it, and moves to that field |
+| `1`-`4`, `ctrl+n` / `ctrl+p` | Go to a section; each section keeps its own cursor |
+| `?` | Key reference |
+| `esc` | Close |
 
-Every section has the same height, so the frame never jumps. Undoing a change back to the value on disk clears it from the unsaved count. Narrow terminals show only the active tab's name.
+**Editing a text or list field.** `enter` opens the value for typing in the context panel. Every key types, digits and letters too, so the tabs drop their numbers and the footer shows only `enter save · esc cancel`. `enter` checks the value with the same rules config loading uses (a folder pattern needs `{project}` and `{name}` once each, the default branch cannot be empty) and writes it only when it passes; otherwise the reason shows under the value. `esc` drops the edit. A list is typed as names separated by commas.
+
+The frame has one layout at a given size: every section and every field put the rule on the same row. Narrow terminals show only the active tab's name and wrap the context panel's text.
 
 ### Bulk Delete (`a`)
 
@@ -455,6 +486,9 @@ Every dashboard key is an `Action` in `internal/tui/actions.go`: its keys, label
 | `internal/tui/view_stack.go` | View stack: frames, push and pop, cursor restore |
 | `internal/tui/compositor.go` | Draws an overlay over a dimmed background (`composeOverlay`) and toasts on top (`composeLayerAt`) |
 | `internal/tui/worktree_list.go` | The dashboard list constructor (`newWorktreeList`) |
+| `internal/tui/config_fields.go` | The settings fields: label, key, description, choices and their meanings, default, validation |
+| `internal/tui/overlay_config.go` | The settings panel's state and keys: writes each change at once (`saveProjectConfig`), undo, text edits |
+| `internal/tui/config_view.go` | The settings frame: list, rule, context panel, footer, one layout per size (`configLayout`) |
 
 ### List View Modes
 The `v` key toggles the commit message line at runtime and saves the choice in `.grove/ui_prefs.json` (`compact_mode`). `tui.compact_list = false` in config starts with two lines when no choice is saved.
