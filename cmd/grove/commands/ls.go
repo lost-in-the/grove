@@ -173,14 +173,7 @@ var lsCmd = &cobra.Command{
 
 				if entries, ok := pluginStatuses[tree.Path]; ok {
 					wo.Containers = containersSummary(entries)
-					for _, e := range entries {
-						wo.Services = append(wo.Services, lsServiceStatus{
-							Provider: e.ProviderName,
-							Status:   e.Short,
-							Level:    statusLevelString(e.Level),
-							Detail:   e.Detail,
-						})
-					}
+					wo.Services = lsServices(entries)
 				}
 
 				result.Worktrees = append(result.Worktrees, wo)
@@ -300,6 +293,25 @@ func containersSummary(entries []plugins.StatusEntry) string {
 		}
 	}
 	return strings.Join(parts, ",")
+}
+
+// lsServices builds the --json services list from plugin status entries. An
+// entry with no Short is not a service: it only carries metadata for the
+// dashboard detail pane, the same entries containersSummary skips.
+func lsServices(entries []plugins.StatusEntry) []lsServiceStatus {
+	var services []lsServiceStatus
+	for _, e := range entries {
+		if e.Short == "" {
+			continue
+		}
+		services = append(services, lsServiceStatus{
+			Provider: e.ProviderName,
+			Status:   e.Short,
+			Level:    statusLevelString(e.Level),
+			Detail:   e.Detail,
+		})
+	}
+	return services
 }
 
 // tmuxStatusFor returns "attached", "detached", or "none" for a worktree.

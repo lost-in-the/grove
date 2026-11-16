@@ -17,7 +17,7 @@ func TestSharedStackDownNotice(t *testing.T) {
 		want       string
 	}{
 		{name: "configured for another worktree", shared: true, configured: "/work/myapp-main", ok: true,
-			want: "Stopping the shared stack, currently configured for 'myapp-main'"},
+			want: "Stopping the stack. It is on 'myapp-main', not here."},
 		{name: "configured for the current worktree", shared: true, configured: current, ok: true, want: ""},
 		{name: "env var unset", shared: true, want: ""},
 		{name: "not the shared stack", shared: false, configured: "/work/myapp-main", ok: true, want: ""},

@@ -36,11 +36,16 @@ grove rm pr-42
 **Goal:** Develop a new feature in an isolated worktree with its own Docker stack.
 
 ```bash
-# Create worktree + branch + tmux session + Docker (if configured)
+# Create worktree + branch + tmux session (add --up to bring the stack)
 grove new my-feature
 
-# Switch to it (or grove will prompt; GROVE_AGENT_MODE=1 skips tmux takeover)
+# Move to it (or grove will prompt; GROVE_AGENT_MODE=1 skips tmux takeover)
 grove to my-feature
+
+# Bring the stack here (or do both at once: grove to my-feature --up)
+# With GROVE_AGENT_MODE=1 and agent stacks enabled, `to --up` only prints a
+# notice and starts nothing: run `grove up --isolated` here instead
+grove up
 
 # Work, commit as normal
 git add . && git commit -m "feat: implement thing"

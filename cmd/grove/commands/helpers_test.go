@@ -132,3 +132,39 @@ func TestAttachToSessionPreparesTheTargetBeforeHinting(t *testing.T) {
 		t.Errorf("PrepareAttach calls = %v, want exactly the target", m.prepared)
 	}
 }
+
+func TestWantsStackUp(t *testing.T) {
+	yes, no := true, false
+	withAutoUp := func(v *bool) *config.Config {
+		cfg := &config.Config{}
+		cfg.Plugins.Docker.AutoUp = v
+		return cfg
+	}
+	tests := []struct {
+		name     string
+		cfg      *config.Config
+		up       bool
+		noDocker bool
+		want     bool
+	}{
+		{name: "nothing set", cfg: withAutoUp(nil), want: false},
+		{name: "auto_up", cfg: withAutoUp(&yes), want: true},
+		{name: "auto_up false", cfg: withAutoUp(&no), want: false},
+		{name: "--up", cfg: withAutoUp(nil), up: true, want: true},
+		{name: "--up beats auto_up false", cfg: withAutoUp(&no), up: true, want: true},
+		{name: "--no-docker beats auto_up", cfg: withAutoUp(&yes), noDocker: true, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := wantsStackUp(tt.cfg, tt.up, tt.noDocker); got != tt.want {
+				t.Errorf("wantsStackUp() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNewCmdUpFlag(t *testing.T) {
+	if newCmd.Flags().Lookup("up") == nil {
+		t.Fatal("grove new has no --up flag")
+	}
+}

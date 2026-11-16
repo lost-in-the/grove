@@ -154,9 +154,12 @@ func TestExternalStatuses_NoMatch(t *testing.T) {
 		},
 	}
 
-	result := externalStatuses(s, []string{"/my/worktree"})
-	if len(result) != 0 {
-		t.Errorf("expected no matches for unrelated path, got %v", result)
+	entry := externalStatuses(s, []string{"/my/worktree"})["/my/worktree"]
+	if entry.Short != "" || entry.Detail != "" {
+		t.Errorf("unrelated path: Short/Detail = %q / %q, want both empty so list views skip it", entry.Short, entry.Detail)
+	}
+	if entry.Stack == nil || entry.Stack.Here || entry.Stack.OnPath != "/other/path" {
+		t.Errorf("unrelated path: Stack = %+v, want the stack on /other/path, not here", entry.Stack)
 	}
 }
 

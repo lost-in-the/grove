@@ -11,7 +11,7 @@
 [2m               [m│   [1mgg / G[m                        Top / bottom of list                                   │[2m               [m
 [2m               [m│   [1mctrl+d / ctrl+u[m               Half page down / up                                    │[2m               [m
 [2m               [m│   [1menter[m                         Switch to selected worktree                            │[2m               [m
-[2m               [m│   [1mU[m                             Switch and start containers                            │[2m               [m
+[2m               [m│   [1mU[m                             Switch and bring the stack                             │[2m               [m
 [2m               [m│   [1m1-9[m                           Switch to the pinned worktree                          │[2m               [m
 [2m               [m│   [1mm 1-9[m                         Pin selected to a slot (m 0 unpins)                    │[2m               [m
 [2m               [m│   [1m-[m                             Switch to the previous worktree                        │[2m               [m

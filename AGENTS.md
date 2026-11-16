@@ -34,8 +34,9 @@ export GROVE_TUI=0               # disable dashboard; bare `grove` prints usage
 > `GROVE_AGENT_MODE=1` suppresses tmux attachment in `grove to` but **not** session
 > creation in `grove new` — and it also forces the isolated Docker strategy. In
 > external Docker mode with `[plugins.docker.external.agent] enabled = true`, `grove to`
-> then leaves the shared stack alone (a human may be using it) and prints an
-> `agent mode:` notice on stderr: the shared stack still serves its previous worktree.
+> never moves the stack (a human may be using it). `grove to <name> --up` leaves the
+> stack on its previous worktree. If the target has no isolated stack yet, it also prints an
+> `agent mode:` notice on stderr.
 > Run `grove up --isolated` in the worktree before running tests. For
 > per-invocation tmux suppression without the Docker coupling, pass `--no-tmux` to
 > `grove to` / `grove new` (on `new` it also skips session creation). To fully
@@ -59,15 +60,15 @@ export GROVE_TUI=0               # disable dashboard; bare `grove` prints usage
 
 | Command | Purpose | `--json` | Mutates |
 |---------|---------|:--------:|:-------:|
-| `grove new [name]` | Create worktree + branch + Docker + tmux (aliases: `spawn`, `n`) | — | ✓ |
-| `grove to [name]` | Switch context atomically; `--peek` skips hooks/tmux, `--no-tmux` skips tmux only (aliases: `switch`, `t`) | — | ✓ |
+| `grove new [name]` | Create worktree + branch + tmux; `--up` also brings the stack (aliases: `spawn`, `n`) | — | ✓ |
+| `grove to [name]` | Move to a worktree; does not touch Docker by default (`[switch] container_switch` set to `auto` or `prompt` changes that). `--up` also brings the stack, `--peek` skips hooks/tmux, `--no-tmux` skips tmux only (aliases: `switch`, `t`) | — | ✓ |
 | `grove fetch <pr\|issue>/<n>` | Create worktree from GitHub PR/issue; needs `gh` (aliases: `f`) | — | ✓ |
 | `grove ls` | List all worktrees in this project (aliases: `list`, `l`) | ✓ | — |
 | `grove here` | Current worktree status (aliases: `h`) | ✓ | — |
 | `grove context` | Rich status: ahead/behind, stash count, recent commits | ✓ | — |
 | `grove test <name>` | Run configured tests in another worktree without switching (aliases: `tt`) | — | — |
 | `grove ps` | List active isolated Docker slots (aliases: `agent-status`) | ✓ | — |
-| `grove up` | Start Docker stack; `--isolated` for per-agent stacks (aliases: `u`) | — | ✓ |
+| `grove up` | Bring the stack to the worktree you are in; `--isolated` for per-agent stacks (aliases: `u`) | — | ✓ |
 | `grove down` | Stop Docker stack; isolated stacks are auto-detected | — | ✓ |
 | `grove rm [name]` | Remove worktree + branch + tmux + Docker (aliases: `remove`, `delete`) | — | ✓ |
 | `grove doctor [worktree]` | Health check; inspect output before `grove new` in unknown repos | — | — |

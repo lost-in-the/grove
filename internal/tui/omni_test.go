@@ -168,7 +168,7 @@ func TestOmniActionsFrom_DescriptiveAndNotItself(t *testing.T) {
 		t.Error("omni offers find, which opens omni")
 	}
 	for id, want := range map[string]string{
-		"worktree.switch": "switch to worktree", "worktree.switch_up": "switch and start containers",
+		"worktree.switch": "switch to worktree", "worktree.switch_up": "switch and bring the stack",
 		"worktree.new": "new worktree", "detail.open": "show detail", "list.sort": "change sort",
 	} {
 		if got := byID[id].Label; got != want {

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"testing"
 
@@ -24,7 +25,7 @@ func TestDescribeServices(t *testing.T) {
 		{
 			name:      "shared stack running for this worktree",
 			info:      docker.ServiceInfo{Shared: true, ConfiguredPath: feature, State: docker.StackRunning, IsRunning: true, MatchesCurrent: true},
-			wantText:  "running, configured for myapp-feature",
+			wantText:  "running, on myapp-feature",
 			wantLevel: cli.StatusActive,
 			wantState: "running",
 			wantHint:  true,
@@ -32,7 +33,7 @@ func TestDescribeServices(t *testing.T) {
 		{
 			name:      "shared stack running for another worktree",
 			info:      docker.ServiceInfo{Shared: true, ConfiguredPath: main, State: docker.StackRunning, IsRunning: true},
-			wantText:  "running, configured for myapp-main (not this worktree)",
+			wantText:  "running, on myapp-main (not here)",
 			wantLevel: cli.StatusWarning,
 			wantState: "running",
 			wantHint:  true,
@@ -40,14 +41,14 @@ func TestDescribeServices(t *testing.T) {
 		{
 			name:      "stopped",
 			info:      docker.ServiceInfo{Shared: true, ConfiguredPath: feature, State: docker.StackStopped, MatchesCurrent: true},
-			wantText:  "not running, configured for myapp-feature",
+			wantText:  "not running, on myapp-feature",
 			wantLevel: cli.StatusError,
 			wantState: "stopped",
 		},
 		{
 			name:      "unknown is not reported as not running",
 			info:      docker.ServiceInfo{Shared: true, ConfiguredPath: feature, State: docker.StackUnknown, MatchesCurrent: true},
-			wantText:  "state unknown (docker did not answer), configured for myapp-feature",
+			wantText:  "state unknown (docker did not answer), on myapp-feature",
 			wantLevel: cli.StatusWarning,
 			wantState: "unknown",
 			wantHint:  true,
@@ -55,7 +56,7 @@ func TestDescribeServices(t *testing.T) {
 		{
 			name:      "degraded names the failing services",
 			info:      docker.ServiceInfo{Shared: true, ConfiguredPath: feature, State: docker.StackDegraded, Blockers: []string{"app", "worker"}, MatchesCurrent: true},
-			wantText:  "degraded (app, worker failed), configured for myapp-feature",
+			wantText:  "degraded (app, worker failed), on myapp-feature",
 			wantLevel: cli.StatusWarning,
 			wantState: "degraded",
 			wantHint:  true,
@@ -63,7 +64,7 @@ func TestDescribeServices(t *testing.T) {
 		{
 			name:      "unset env var prints no empty name",
 			info:      docker.ServiceInfo{Shared: true},
-			wantText:  "not configured for any worktree",
+			wantText:  "not on any worktree",
 			wantLevel: cli.StatusWarning,
 			wantState: "not_configured",
 		},
@@ -119,5 +120,20 @@ func TestMountCheckHintWording(t *testing.T) {
 	want := "This is the env file setting. Run 'grove here --check-mount' to see what the containers have mounted."
 	if mountCheckHint != want {
 		t.Errorf("hint = %q", mountCheckHint)
+	}
+}
+
+func TestWhichServiceOutput_JSONFieldNames(t *testing.T) {
+	raw, err := json.Marshal(whichServiceOutput{State: "running", StackOn: "feature", MatchesCurrent: true, Slot: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	_ = json.Unmarshal(raw, &m)
+	if m["stack_on"] != "feature" {
+		t.Errorf("stack_on = %v, want feature (got %s)", m["stack_on"], raw)
+	}
+	if _, old := m["configured_for"]; old {
+		t.Errorf("configured_for should be gone, got %s", raw)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/hooks"
 )
 
 func TestLocalStrategy_GetAutoStart_ExplicitValues(t *testing.T) {
@@ -204,5 +205,59 @@ func TestComposeEnvFileArgs(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Two worktrees can share a name when one lives outside projects_dir. The
+// switch hooks must act on the exact paths they are given, and a switch must
+// not wait on a foreground `docker compose up`.
+func TestLocalStrategy_SwitchHooksUseExactPathsAndDetach(t *testing.T) {
+	inProjects := filepath.Join(t.TempDir(), "feature")
+	elsewhere := filepath.Join(t.TempDir(), "feature")
+	for _, dir := range []string{inProjects, elsewhere} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "compose.yml"), []byte("services: {}\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	yes := true
+	cfg := &config.Config{ProjectsDir: filepath.Dir(inProjects)}
+	cfg.Switch.ContainerSwitch = "auto"
+	cfg.Plugins.Docker.AutoStart = &yes
+	cfg.Plugins.Docker.AutoStop = &yes
+
+	var upPath, downPath string
+	var upDetach bool
+	s := &localStrategy{
+		cfg:    cfg,
+		upFn:   func(path string, detach bool) error { upPath, upDetach = path, detach; return nil },
+		downFn: func(path string) error { downPath = path; return nil },
+	}
+
+	ctx := &hooks.Context{
+		Worktree:         "feature",
+		WorktreePath:     elsewhere,
+		PrevWorktree:     "feature",
+		PrevWorktreePath: elsewhere,
+		Config:           cfg,
+	}
+	if err := s.OnPreSwitch(ctx); err != nil {
+		t.Fatalf("OnPreSwitch: %v", err)
+	}
+	if err := s.OnPostSwitch(ctx); err != nil {
+		t.Fatalf("OnPostSwitch: %v", err)
+	}
+
+	if downPath != elsewhere {
+		t.Errorf("stopped %q, want the exact previous path %q", downPath, elsewhere)
+	}
+	if upPath != elsewhere {
+		t.Errorf("started %q, want the exact target path %q", upPath, elsewhere)
+	}
+	if !upDetach {
+		t.Error("a switch started the stack in the foreground, want detached")
 	}
 }

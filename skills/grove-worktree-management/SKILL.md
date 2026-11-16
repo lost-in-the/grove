@@ -46,29 +46,30 @@ export GROVE_TUI=0               # disable dashboard
 > `grove new`. To fully disable tmux, set `[tmux] mode = "off"` in config.
 >
 > **Docker effect:** in external Docker mode with `[plugins.docker.external.agent] enabled = true`,
-> `grove to` does not repoint the shared stack (a human may be using it). It prints an
-> `agent mode:` notice on stderr and the shared stack keeps serving its previous worktree.
+> `grove to` never moves the stack (a human may be using it). `grove to --up` leaves the
+> stack on its previous worktree. If the target has no isolated stack yet, it also prints an
+> `agent mode:` notice on stderr.
 > Run `grove up --isolated` in the worktree before running tests.
 
 ## Command Quick Reference
 
 | Command | Purpose | `--json` | Mutates | Aliases |
 |---------|---------|:--------:|:-------:|---------|
-| `grove new [name]` | Create worktree + branch + Docker + tmux | — | ✓ | `spawn`, `n` |
-| `grove to [name]` | Switch context; `--peek` skips hooks/tmux | — | ✓ | `switch`, `t` |
+| `grove new [name]` | Create worktree + branch + tmux; `--up` also brings the stack | — | ✓ | `spawn`, `n` |
+| `grove to [name]` | Move to a worktree; does not touch the stack by default (`[switch] container_switch` set to `auto` or `prompt` changes that). `--up` also brings it, `--peek` skips hooks/tmux | — | ✓ | `switch`, `t` |
 | `grove fetch <pr\|issue>/<n>` | Worktree from GitHub PR/issue (needs `gh`) | — | ✓ | `f` |
 | `grove ls` | List all worktrees | ✓ | — | `list`, `l` |
 | `grove here` | Current worktree status | ✓ | — | `h` |
 | `grove context` | Rich status (ahead/behind, stash, recent commits) | ✓ | — | — |
 | `grove test <name>` | Run tests in another worktree | — | — | `tt` |
 | `grove ps` | List active isolated Docker slots | ✓ | — | `agent-status` |
-| `grove up` | Start Docker; `--isolated` for an agent stack (slot auto-allocated) | — | ✓ | `u` |
+| `grove up` | Bring the stack to the worktree you are in; `--isolated` for an agent stack (slot auto-allocated) | — | ✓ | `u` |
 | `grove down` | Stop Docker; detects an isolated stack automatically | — | ✓ | `do` |
 | `grove rm [name]` | Remove worktree + branch + tmux + Docker | — | ✓ | `remove`, `delete` |
 | `grove doctor [worktree]` | Health check | — | — | — |
 | `grove adopt [path]` | Bring raw git worktree under grove management | — | ✓ | — |
 | `grove sync [name]` | Sync branch with upstream | — | ✓ | `s` |
-| `grove last` | Switch to previous worktree | — | ✓ | `la` |
+| `grove last` | Move to previous worktree; `--up` also brings the stack | — | ✓ | `la` |
 | `grove diff [name]` | Compare branches | — | — | `compare`, `d` |
 | `grove graft <name>` | Apply changes from another worktree | — | ✓ | `apply`, `g` |
 | `grove trim` | Remove stale/merged worktrees | — | ✓ | `prune`, `clean`, `tm` |

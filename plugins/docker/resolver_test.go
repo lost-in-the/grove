@@ -45,6 +45,23 @@ func TestConfiguredWorktreePath(t *testing.T) {
 			wantOK:   true,
 		},
 		{
+			name:     "double-quoted absolute value",
+			envBody:  "APP_DIR=\"/work/myapp-feature\"\n",
+			wantPath: func(string) string { return "/work/myapp-feature" },
+			wantOK:   true,
+		},
+		{
+			name:     "single-quoted relative value",
+			envBody:  "APP_DIR='./myapp-feature'\n",
+			wantPath: func(dir string) string { return filepath.Join(dir, "myapp-feature") },
+			wantOK:   true,
+		},
+		{
+			name:    "quoted empty value",
+			envBody: "APP_DIR=\"\"\n",
+			wantOK:  false,
+		},
+		{
 			name:    "var unset",
 			envBody: "OTHER=1\n",
 			wantOK:  false,

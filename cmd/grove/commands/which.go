@@ -21,11 +21,11 @@ type whichOutput struct {
 }
 
 // whichServiceOutput.State is one of running, stopped, degraded, unknown,
-// agent, or not_configured. ConfiguredFor is what the env file says the shared
-// stack is configured for, not what the container has mounted.
+// agent, or not_configured. StackOn is the worktree the env file puts the shared
+// stack on, not what the container has mounted.
 type whichServiceOutput struct {
 	State          string `json:"state"`
-	ConfiguredFor  string `json:"configured_for,omitempty"`
+	StackOn        string `json:"stack_on,omitempty"`
 	MatchesCurrent bool   `json:"matches_current"`
 	Slot           int    `json:"slot,omitempty"`
 }
@@ -47,7 +47,7 @@ func describeServices(info *docker.ServiceInfo, displayName func(string) string)
 		return servicesDescription{Text: fmt.Sprintf("agent stack #%d", info.Slot), Level: cli.StatusActive, State: "agent"}
 	}
 	if info.Shared && info.ConfiguredPath == "" {
-		return servicesDescription{Text: "not configured for any worktree", Level: cli.StatusWarning, State: "not_configured"}
+		return servicesDescription{Text: "not on any worktree", Level: cli.StatusWarning, State: "not_configured"}
 	}
 
 	d := servicesDescription{}
@@ -61,21 +61,21 @@ func describeServices(info *docker.ServiceInfo, displayName func(string) string)
 		return servicesDescription{Text: "not running", Level: cli.StatusError, State: "stopped"}
 	}
 
-	configured := fmt.Sprintf("configured for %s", displayName(info.ConfiguredPath))
+	on := "on " + displayName(info.ConfiguredPath)
 	switch info.State {
 	case docker.StackRunning:
-		d.State, d.Level, d.Text = "running", cli.StatusActive, "running, "+configured
+		d.State, d.Level, d.Text = "running", cli.StatusActive, "running, "+on
 		if !info.MatchesCurrent {
-			d.Level, d.Text = cli.StatusWarning, d.Text+" (not this worktree)"
+			d.Level, d.Text = cli.StatusWarning, d.Text+" (not here)"
 		}
 	case docker.StackDegraded:
 		d.State, d.Level = "degraded", cli.StatusWarning
-		d.Text = fmt.Sprintf("degraded (%s failed), %s", strings.Join(info.Blockers, ", "), configured)
+		d.Text = fmt.Sprintf("degraded (%s failed), %s", strings.Join(info.Blockers, ", "), on)
 	case docker.StackStopped:
-		d.State, d.Level, d.Text = "stopped", cli.StatusError, "not running, "+configured
+		d.State, d.Level, d.Text = "stopped", cli.StatusError, "not running, "+on
 	default:
 		d.State, d.Level = "unknown", cli.StatusWarning
-		d.Text = "state unknown (docker did not answer), " + configured
+		d.Text = "state unknown (docker did not answer), " + on
 	}
 	if info.State != docker.StackStopped {
 		d.Hint = mountCheckHint
@@ -86,12 +86,12 @@ func describeServices(info *docker.ServiceInfo, displayName func(string) string)
 var whichCmd = &cobra.Command{
 	Use:     "which",
 	Aliases: []string{"status"},
-	Short:   "Show current worktree and service status",
-	Long: `Display a quick overview of the current worktree and whether Docker services
-are running for it. Lighter than 'grove here' — focused on operational context.
+	Short:   "Show where you are and the state of the stack",
+	Long: `Show the worktree you are in and the state of the stack: running or not, and
+which worktree it is on. Lighter than 'grove here'.
 
 Examples:
-  grove which        # Show worktree + service status
+  grove which        # Show worktree + stack state
   grove which -j     # JSON output for scripts
   grove status       # Alias`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
@@ -128,7 +128,7 @@ Examples:
 					Slot:           svcInfo.Slot,
 				}
 				if svcInfo.Shared && svcInfo.ConfiguredPath != "" {
-					result.Services.ConfiguredFor = mgr.DisplayNameForPath(svcInfo.ConfiguredPath)
+					result.Services.StackOn = mgr.DisplayNameForPath(svcInfo.ConfiguredPath)
 				}
 			}
 			return output.PrintJSON(result)
@@ -140,7 +140,7 @@ Examples:
 		cli.Label(w, "Branch:   ", tree.Branch)
 
 		if svcInfo != nil {
-			cli.Label(w, "Services: ", cli.StatusText(w, desc.Level, desc.Text))
+			cli.Label(w, "Stack:    ", cli.StatusText(w, desc.Level, desc.Text))
 			if desc.Hint != "" {
 				cli.Faint(w, "          %s", desc.Hint)
 			}

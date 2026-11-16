@@ -1,6 +1,8 @@
 package docker
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/lost-in-the/grove/internal/config"
@@ -21,10 +23,10 @@ func TestResolveContainerSwitch(t *testing.T) {
 			want:          ContainerSwitchAuto,
 		},
 		{
-			name:          "empty string defaults to Auto",
+			name:          "empty string defaults to Off",
 			configValue:   "",
 			isInteractive: true,
-			want:          ContainerSwitchAuto,
+			want:          ContainerSwitchOff,
 		},
 		{
 			name:          "prompt interactive returns Prompt",
@@ -85,21 +87,9 @@ func TestConfirmSwitchAction(t *testing.T) {
 			want:        false,
 		},
 		{
-			name:        "container_switch off returns false",
-			autoEnabled: true,
-			ctx:         ctxWithSwitch("off"),
-			want:        false,
-		},
-		{
 			name:        "auto proceeds",
 			autoEnabled: true,
 			ctx:         ctxWithSwitch("auto"),
-			want:        true,
-		},
-		{
-			name:        "nil hook config defaults to auto",
-			autoEnabled: true,
-			ctx:         &hooks.Context{},
 			want:        true,
 		},
 		{
@@ -138,5 +128,48 @@ func TestDockerAutoFlagDefaults(t *testing.T) {
 	}
 	if got := dockerAutoStop(cfg, false); !got {
 		t.Error("dockerAutoStop with explicit true = false, want true")
+	}
+}
+
+// The container_switch gate lives in the plugin's switch hooks, so under "off"
+// (the default) no strategy runs: no env file write, no env directive, no stop.
+func TestPlugin_SwitchHooks_ContainerSwitchGate(t *testing.T) {
+	tests := []struct {
+		name         string
+		setting      string
+		wantEnvWrite bool
+	}{
+		{"off leaves the env file alone", "off", false},
+		{"unset counts as off", "", false},
+		{"auto writes the env file", "auto", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plugin, cfg, composeDir := newPostCreateExternalPlugin(t)
+			cfg.Switch.ContainerSwitch = tt.setting
+			envFile := filepath.Join(composeDir, ".env.local")
+			if err := os.WriteFile(envFile, []byte("APP_DIR=./myapp-current\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			newPath := filepath.Join(composeDir, "myapp-feature")
+			_ = os.MkdirAll(newPath, 0o755)
+
+			ctx := &hooks.Context{Worktree: "feature", Config: cfg, WorktreePath: newPath}
+			// compose is not runnable here, so a start error under "auto" is fine.
+			_ = plugin.onPreSwitch(ctx)
+			_ = plugin.onPostSwitch(ctx)
+
+			got, err := os.ReadFile(envFile)
+			if err != nil {
+				t.Fatalf("read env file: %v", err)
+			}
+			want := "APP_DIR=./myapp-current\n"
+			if tt.wantEnvWrite {
+				want = "APP_DIR=./myapp-feature\n"
+			}
+			if string(got) != want {
+				t.Errorf("env file = %q, want %q", got, want)
+			}
+		})
 	}
 }

@@ -4,7 +4,7 @@
 [2m   ○ feature[m│ [1mActions[m                                              │[2m   60m      [m
 [2m   ○ fix-bug[m│ [1m␣ ▏[37;22;7mt[38;5;240;27mype an action                                   [m │[2m    2h      [m
 [2m   ● testing[m│ actions        ❯ switch to worktree            enter │[2m    3h      [m
-[2m   ○ refacto[m│                  switch and start containers       U │[2m    4h      [m
+[2m   ○ refacto[m│                  switch and bring the stack        U │[2m    4h      [m
 [2m            [m│                  new worktree                      n │[2m            [m
 [2m            [m│                  show detail                     tab │[2m            [m
 [2m            [m│                  change sort                       o │[2m            [m

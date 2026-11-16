@@ -233,6 +233,10 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 	if tmuxMode == "" {
 		tmuxMode = "auto"
 	}
+	containerSwitch := cfg.Switch.ContainerSwitch
+	if containerSwitch == "" {
+		containerSwitch = "off"
+	}
 	fields[ConfigTabBehavior] = []ConfigField{
 		{
 			Key:         "switch.dirty_handling",
@@ -242,6 +246,15 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Type:        ConfigEnum,
 			Options:     []string{"auto-stash", "prompt", "refuse"},
 			Description: "How to handle dirty worktree on switch",
+		},
+		{
+			Key:         "switch.container_switch",
+			Label:       "container_switch",
+			Value:       containerSwitch,
+			Loaded:      containerSwitch,
+			Type:        ConfigEnum,
+			Options:     []string{"off", "prompt", "auto"},
+			Description: "Stack follows every move: off, prompt (ask first), auto (always)",
 		},
 		{
 			Key:         "tmux.mode",
@@ -290,7 +303,7 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Value:       dockerAutoStart,
 			Loaded:      dockerAutoStart,
 			Type:        ConfigBool,
-			Description: "Auto-start containers on switch",
+			Description: "Bring the stack up when it follows a move",
 		},
 		{
 			Key:         "plugins.docker.auto_stop",
@@ -298,7 +311,7 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Value:       dockerAutoStop,
 			Loaded:      dockerAutoStop,
 			Type:        ConfigBool,
-			Description: "Auto-stop containers on leave",
+			Description: "Take the stack down when it follows a move away",
 		},
 	}
 

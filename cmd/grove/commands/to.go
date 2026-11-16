@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -22,18 +23,118 @@ var (
 	toJSON   bool
 	toPeek   bool
 	toNoTmux bool
+	toUp     bool
 )
+
+// switchOptions are the per-invocation flags shared by `grove to` and `grove last`.
+type switchOptions struct {
+	JSON   bool
+	Peek   bool
+	NoTmux bool
+	// Up brings the stack to the target as well: it forces container_switch to
+	// "auto" for this invocation. Without it the setting decides, and its
+	// default ("off") means a switch never touches Docker.
+	Up bool
+	// Path, when set, is the worktree to switch to and wins over the name. The
+	// dashboard sets it: it knows the exact row, and a name can be ambiguous.
+	Path string
+}
+
+// switchConfigForStack returns the config the Docker switch hooks should see.
+// With --up that is a copy with container_switch forced to "auto"; the loaded
+// config is never modified.
+func switchConfigForStack(cfg *config.Config, up bool) *config.Config {
+	if !up {
+		return cfg
+	}
+	forced := *cfg
+	forced.Switch.ContainerSwitch = "auto"
+	return &forced
+}
+
+// stackStatus says where the shared external stack is, as the env file records
+// it. Tracked is false when there is no shared stack to report on (local mode,
+// agent mode).
+type stackStatus struct {
+	Tracked bool
+	On      string // display name of the worktree the stack is on; empty when unset
+	Here    bool
+}
+
+// stackStatusFor reads the env file only (no Docker calls) and compares it to
+// the worktree you are moving to.
+func stackStatusFor(cfg *config.Config, herePath string, nameFor func(string) string) stackStatus {
+	if !usesSharedExternalStack(cfg) {
+		return stackStatus{}
+	}
+	configured, ok := docker.ConfiguredWorktreePath(cfg)
+	if !ok {
+		return stackStatus{Tracked: true}
+	}
+	return stackStatus{
+		Tracked: true,
+		On:      nameFor(configured),
+		Here:    filepath.Clean(configured) == filepath.Clean(herePath),
+	}
+}
+
+// Line is the one-line report printed on stderr, or "" when not tracked.
+func (s stackStatus) Line() string {
+	switch {
+	case !s.Tracked:
+		return ""
+	case s.On == "":
+		return "Stack: not on any worktree. Run `grove up` to bring it."
+	case s.Here:
+		return fmt.Sprintf("Stack: on %s (here).", s.On)
+	default:
+		return fmt.Sprintf("Stack: on %s (not here). Run `grove up` to bring it.", s.On)
+	}
+}
+
+// switchResult builds the --json payload, adding the stack fields when tracked.
+func switchResult(tree *worktree.Worktree, stack stackStatus) output.SwitchResult {
+	result := output.SwitchResult{
+		SwitchTo: tree.Path,
+		Name:     tree.DisplayName(),
+		Branch:   tree.Branch,
+		Path:     tree.Path,
+	}
+	if stack.Tracked {
+		here := stack.Here
+		result.StackOn = stack.On
+		result.StackHere = &here
+	}
+	return result
+}
+
+// reportStack prints the stack line on stderr, never in --json mode.
+func reportStack(stderr *cli.Writer, stack stackStatus, jsonOut bool) {
+	if line := stack.Line(); line != "" && !jsonOut {
+		cli.Faint(stderr, "%s", line)
+	}
+}
+
+// stackFollowsSwitch reports whether container_switch lets a switch touch the
+// stack at all ("auto", or "prompt" in an interactive session).
+func stackFollowsSwitch(cfg *config.Config) bool {
+	return docker.ResolveContainerSwitch(cfg.Switch.ContainerSwitch, cli.IsInteractive()) != docker.ContainerSwitchOff
+}
 
 var toCmd = &cobra.Command{
 	Use:     "to [name]",
 	Aliases: []string{"switch", "t"},
-	Short:   "Switch to a worktree",
-	Long: `Switch to a worktree by name. If a tmux session exists for the worktree, switch to it.
+	Short:   "Move to a worktree",
+	Long: `Move to a worktree by name. If a tmux session exists for the worktree, switch to it.
 If no tmux session exists, create one.
 
-Use --peek for a lightweight switch that skips hooks and tmux entirely
-(no Docker side effects, no tmux client relocation). Useful for code review
-or quick file checks.
+This moves you only. It does not touch the Docker stack. Run 'grove up' to
+bring the stack to the worktree you are in, or use --up to move and bring the
+stack in one step. To make every move bring the stack, set
+[switch] container_switch = "auto".
+
+Use --peek for a lightweight move that skips hooks and tmux entirely
+(no tmux client relocation). Useful for code review or quick file checks.
 
 Use --no-tmux to switch without creating, switching, or attaching tmux
 sessions — hooks still fire. Useful for automation running inside an
@@ -58,8 +159,17 @@ When using shell integration, this will also change your current directory.`,
 			return fmt.Errorf("worktree name cannot be empty")
 		}
 
-		return performSwitch(ctx, name, toJSON, toPeek, toNoTmux)
+		return performSwitch(ctx, name, switchOptions{JSON: toJSON, Peek: toPeek, NoTmux: toNoTmux, Up: toUp})
 	}),
+}
+
+// findSwitchTarget resolves the worktree a switch goes to: by path when one is
+// given, otherwise by name.
+func findSwitchTarget(mgr *worktree.Manager, name, path string) (*worktree.Worktree, error) {
+	if path != "" {
+		return mgr.FindByPath(path)
+	}
+	return mgr.Find(name)
 }
 
 // performSwitch executes the full switch-to-worktree flow shared by `grove to`
@@ -68,17 +178,20 @@ When using shell integration, this will also change your current directory.`,
 // The JSON result is emitted before the tmux client is relocated, so a machine
 // caller (--json) never has its terminal moved (B20); sharing this flow also
 // gives `grove last` the hooks and dirty handling it previously skipped (B19).
-// jsonOut/peek/noTmux are the per-invocation flags.
-func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) error {
+// opts holds the per-invocation flags.
+func performSwitch(ctx *GroveContext, name string, opts switchOptions) error {
+	jsonOut, peek, noTmux := opts.JSON, opts.Peek, opts.NoTmux
 	stderr := cli.NewStderr()
+	hookConfig := switchConfigForStack(ctx.Config, opts.Up)
 
 	mgr, err := ctx.WorktreeManager()
 	if err != nil {
 		return err
 	}
 
-	// Find worktree by short name or full name
-	targetTree, err := mgr.Find(name)
+	// Find worktree by short name or full name, or by the exact path when the
+	// caller already knows which one it means.
+	targetTree, err := findSwitchTarget(mgr, name, opts.Path)
 	if err != nil {
 		return fmt.Errorf("failed to find worktree: %w", err)
 	}
@@ -102,23 +215,22 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 	// toggle (B18).
 	if currentPath != "" && currentPath == targetTree.Path {
 		// The shared external stack follows the env file, not the shell. When
-		// it names another worktree, a self-switch is the one way to repoint it.
+		// the stack is on another worktree, a self-switch with --up (or a
+		// container_switch of auto/prompt) is the way to bring it here. --up
+		// also starts a stack that is already here but down.
 		configured, configuredOK := docker.ConfiguredWorktreePath(ctx.Config)
-		if shouldRepointStack(ctx.Config.IsExternalDockerMode(), configured, configuredOK, targetTree.Path, peek) {
-			repointSharedStack(ctx, mgr, targetTree, configured, jsonOut, stderr)
+		if events := selfSwitchStackEvents(ctx.Config.IsExternalDockerMode(), stackFollowsSwitch(hookConfig), opts.Up, configured, configuredOK, targetTree.Path, peek); len(events) > 0 {
+			runStackSwitchHooks(ctx, hookConfig, mgr, targetTree, configured, events, jsonOut, stderr)
 		}
 
+		stack := stackStatusFor(ctx.Config, targetTree.Path, mgr.DisplayNameForPath)
 		if jsonOut {
-			return output.PrintJSON(output.SwitchResult{
-				SwitchTo: targetTree.Path,
-				Name:     targetTree.DisplayName(),
-				Branch:   targetTree.Branch,
-				Path:     targetTree.Path,
-			})
+			return output.PrintJSON(switchResult(targetTree, stack))
 		}
 		if !peek {
 			cli.Info(stderr, "Already in '%s'", targetTree.DisplayName())
 		}
+		reportStack(stderr, stack, jsonOut)
 		// Skipping the dirty gate, hooks, and state recording (B18) doesn't
 		// mean skipping the epilogue: from a subdirectory the shell should
 		// still return to the worktree root, and outside the multiplexer the
@@ -219,7 +331,7 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 	hookCtx := &hooks.Context{
 		Worktree:         targetTree.DisplayName(),
 		PrevWorktree:     prevWorktree,
-		Config:           ctx.Config,
+		Config:           hookConfig,
 		WorktreePath:     targetTree.Path,
 		PrevWorktreePath: prevWorktreePath,
 		MainPath:         ctx.ProjectRoot,
@@ -321,8 +433,8 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 	// tmux switch the old session's stderr is no longer visible.
 	// Also fire before the JSON return so machine consumers get hooks too.
 	if !peek {
-		if hooks.HasHooks(hooks.EventPostSwitch) {
-			cli.Step(stderr, "Starting services...")
+		if hooks.HasHooks(hooks.EventPostSwitch) && stackFollowsSwitch(hookConfig) {
+			cli.Step(stderr, "Bringing the stack up...")
 		}
 		if err := hooks.Fire(hooks.EventPostSwitch, hookCtx); err != nil {
 			cli.Warning(stderr, "post-switch hooks failed: %v", err)
@@ -336,6 +448,9 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 			return err
 		}
 	}
+
+	stack := stackStatusFor(ctx.Config, targetTree.Path, mgr.DisplayNameForPath)
+	reportStack(stderr, stack, jsonOut)
 
 	// Commit the switch: record state and mark it committed so the deferred
 	// rollback keeps the auto-stash instead of restoring it. Called only at
@@ -360,12 +475,7 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 	// JSON output mode: PrintJSON is the success terminal — the machine
 	// caller performs the cd — so the switch commits here.
 	if jsonOut {
-		result := output.SwitchResult{
-			SwitchTo: targetTree.Path,
-			Name:     targetTree.DisplayName(),
-			Branch:   targetTree.Branch,
-			Path:     targetTree.Path,
-		}
+		result := switchResult(targetTree, stack)
 		commitSwitch()
 		return output.PrintJSON(result)
 	}
@@ -402,20 +512,37 @@ func performSwitch(ctx *GroveContext, name string, jsonOut, peek, noTmux bool) e
 	return nil
 }
 
-// shouldRepointStack reports whether a self-switch (`grove to <current>`) must
-// still run the Docker switch hooks: only when the shared external stack is
-// configured for a different worktree than the target. --peek never has side
-// effects.
-func shouldRepointStack(external bool, configured string, configuredOK bool, target string, peek bool) bool {
-	if !external || !configuredOK || peek {
+// shouldRepointStack reports whether a self-switch (`grove to <current>`) runs
+// the Docker switch hooks. It needs three things: external mode, a stack that
+// follows a move (--up, or container_switch auto/prompt), and a stack that is
+// not already on the target (unset counts). --peek never has side effects.
+func shouldRepointStack(external, follows bool, configured string, configuredOK bool, target string, peek bool) bool {
+	if !external || !follows || peek {
 		return false
 	}
-	return filepath.Clean(configured) != filepath.Clean(target)
+	return !configuredOK || filepath.Clean(configured) != filepath.Clean(target)
+}
+
+// selfSwitchStackEvents returns the Docker switch events a self-switch
+// (`grove to <current>`) fires, or nil when it leaves the stack alone.
+//
+// A stack on another worktree gets both events, as a real switch would. With
+// --up and nothing to repoint (the stack is already here, or local mode has no
+// env file) only post-switch fires: it starts a stack that is down, and
+// pre-switch would stop one that is up. Without --up that case stays a no-op.
+func selfSwitchStackEvents(external, follows, up bool, configured string, configuredOK bool, target string, peek bool) []string {
+	if shouldRepointStack(external, follows, configured, configuredOK, target, peek) {
+		return []string{hooks.EventPreSwitch, hooks.EventPostSwitch}
+	}
+	if up && !peek {
+		return []string{hooks.EventPostSwitch}
+	}
+	return nil
 }
 
 // repointSucceeded reports whether the env file, re-read after the hooks ran,
-// names the target. It keeps the "Repointed" line true in every mode: in agent
-// mode the plugin may decline to repoint the shared stack and says so itself.
+// names the target. It keeps the "Stack is now on" line true in every mode: in agent
+// mode the plugin may decline to bring the shared stack and says so itself.
 func repointSucceeded(configured string, configuredOK bool, target string) bool {
 	return configuredOK && filepath.Clean(configured) == filepath.Clean(target)
 }
@@ -426,19 +553,20 @@ func usesSharedExternalStack(cfg *config.Config) bool {
 	return cfg.IsExternalDockerMode() && !cfg.AgentMode
 }
 
-// repointSharedStack runs only the Docker plugin's pre/post-switch hooks for the
-// target, exactly as a real switch would (container_switch and auto_start still
-// apply). It deliberately skips the dirty gate, other plugins' hooks, and state
-// recording so the A<->B toggle (B18) is unaffected.
-func repointSharedStack(ctx *GroveContext, mgr *worktree.Manager, targetTree *worktree.Worktree, configuredPath string, jsonOut bool, stderr *cli.Writer) {
+// runStackSwitchHooks runs only the Docker plugin's switch hooks for the given
+// events on the target, exactly as a real switch would (hookConfig carries
+// --up, and container_switch and auto_start still apply). It deliberately
+// skips the dirty gate, other plugins' hooks, and state recording so the
+// A<->B toggle (B18) is unaffected.
+func runStackSwitchHooks(ctx *GroveContext, hookConfig *config.Config, mgr *worktree.Manager, targetTree *worktree.Worktree, configuredPath string, events []string, jsonOut bool, stderr *cli.Writer) {
 	plugin := docker.New()
 	if err := plugin.Init(ctx.Config); err != nil {
-		cli.Warning(stderr, "could not repoint the shared stack: %v", err)
+		cli.Warning(stderr, "could not bring the stack: %v", err)
 		return
 	}
 	registry := hooks.NewRegistry()
 	if err := plugin.RegisterHooks(registry); err != nil {
-		cli.Warning(stderr, "could not repoint the shared stack: %v", err)
+		cli.Warning(stderr, "could not bring the stack: %v", err)
 		return
 	}
 
@@ -446,19 +574,25 @@ func repointSharedStack(ctx *GroveContext, mgr *worktree.Manager, targetTree *wo
 	hookCtx := &hooks.Context{
 		Worktree:         targetTree.DisplayName(),
 		PrevWorktree:     from,
-		Config:           ctx.Config,
+		Config:           hookConfig,
 		WorktreePath:     targetTree.Path,
 		PrevWorktreePath: configuredPath,
 		MainPath:         ctx.ProjectRoot,
 	}
 
-	for _, event := range []string{hooks.EventPreSwitch, hooks.EventPostSwitch} {
+	for _, event := range events {
 		if err := registry.Fire(event, hookCtx); err != nil {
 			cli.Warning(stderr, "%s hooks failed: %v", event, err)
 		}
 	}
-	if after, ok := docker.ConfiguredWorktreePath(ctx.Config); !jsonOut && repointSucceeded(after, ok, targetTree.Path) {
-		cli.Info(stderr, "Repointed the shared stack from '%s' to '%s'", from, targetTree.DisplayName())
+	// Only a repoint moved the stack; a start-only run found it already here.
+	moved := slices.Contains(events, hooks.EventPreSwitch)
+	if after, ok := docker.ConfiguredWorktreePath(ctx.Config); moved && !jsonOut && repointSucceeded(after, ok, targetTree.Path) {
+		if from == "" {
+			cli.Info(stderr, "Stack is now on '%s'", targetTree.DisplayName())
+		} else {
+			cli.Info(stderr, "Stack is now on '%s' (was on '%s')", targetTree.DisplayName(), from)
+		}
 	}
 }
 
@@ -573,7 +707,9 @@ func shellSingleQuote(s string) string {
 
 func init() {
 	toCmd.Flags().BoolVarP(&toJSON, "json", "j", false, "Output as JSON with switch_to field")
-	toCmd.Flags().BoolVar(&toPeek, "peek", false, "Lightweight switch: skip hooks and tmux (no Docker or session side effects)")
+	toCmd.Flags().BoolVar(&toPeek, "peek", false, "Lightweight move: skip hooks and tmux (no session side effects)")
+	toCmd.Flags().BoolVarP(&toUp, "up", "u", false, "Also bring the stack to the worktree you move to")
+	toCmd.MarkFlagsMutuallyExclusive("up", "peek")
 	toCmd.Flags().BoolVar(&toNoTmux, "no-tmux", false, "Skip tmux session creation/switch/attach for this invocation")
 	rootCmd.AddCommand(toCmd)
 }

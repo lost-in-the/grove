@@ -21,24 +21,33 @@ import (
 	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
-func browseRunE(
-	runTUI func(*worktree.Manager, *state.Manager, string, ...*plugins.Manager) (string, bool, error),
-	fzfFallback func(*cobra.Command, *GroveContext) error,
-) func(*cobra.Command, []string) error {
+// tuiRunner starts a TUI (tui.RunPRs, tui.RunIssues) and returns its Exit.
+type tuiRunner func(*worktree.Manager, *state.Manager, string, ...*plugins.Manager) (tui.Exit, error)
+
+func browseRunE(runTUI tuiRunner, fzfFallback func(*cobra.Command, *GroveContext) error) func(*cobra.Command, []string) error {
 	return RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		useFzf, _ := cmd.Flags().GetBool("fzf")
 
 		if !useFzf && term.IsTerminal(int(os.Stdin.Fd())) && os.Getenv("GROVE_TUI") != "0" {
-			mgr, err := ctx.WorktreeManager()
-			if err != nil {
-				return err
-			}
-			_, _, err = runTUI(mgr, ctx.State, ctx.ProjectRoot, ctx.PluginManager)
-			return err
+			return runBrowseTUI(ctx, runTUI)
 		}
 
 		return fzfFallback(cmd, ctx)
 	})
+}
+
+// runBrowseTUI runs a browser TUI, then whatever its Exit leaves to the
+// caller, exactly as bare grove does.
+func runBrowseTUI(ctx *GroveContext, runTUI tuiRunner) error {
+	mgr, err := ctx.WorktreeManager()
+	if err != nil {
+		return err
+	}
+	exit, err := runTUI(mgr, ctx.State, ctx.ProjectRoot, ctx.PluginManager)
+	if err != nil {
+		return err
+	}
+	return finishDashboard(ctx, exit)
 }
 
 var issuesCmd = &cobra.Command{

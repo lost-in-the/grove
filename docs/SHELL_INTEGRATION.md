@@ -78,6 +78,8 @@ export APP_DIR=./app-feature
 cd /Users/you/work/myproject-feature
 ```
 
+`grove to` emits the `env:` line only when the stack follows the move (`--up`, or `container_switch` set to `auto` or `prompt`). By default it moves you and nothing else. `grove up` emits it when it brings the stack to the worktree you are in.
+
 ### TUI / Browser Mode (`grove` with no arguments, `grove issues`, `grove prs`)
 
 The TUI and the interactive issue/PR browsers use a different mechanism because they render to the terminal (alt-screen) and their stdout is not captured — a raw `cd:` line would print literally instead of changing directory:

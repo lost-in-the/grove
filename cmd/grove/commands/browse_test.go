@@ -1,7 +1,16 @@
 package commands
 
 import (
+	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/plugins"
+	"github.com/lost-in-the/grove/internal/state"
+	"github.com/lost-in-the/grove/internal/testhelper"
+	"github.com/lost-in-the/grove/internal/tui"
+	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 func TestIssuesCmd(t *testing.T) {
@@ -256,5 +265,38 @@ func TestParseIssueNumberFromWorktreeName(t *testing.T) {
 				t.Errorf("parseIssueNumberFromWorktreeName(%q) = %d, want %d", tt.shortName, got, tt.want)
 			}
 		})
+	}
+}
+
+// browseTestContext is a GroveContext on an empty git repo: no worktree named
+// "missing" exists, so performSwitch fails with "not found" when it runs.
+func browseTestContext(t *testing.T) *GroveContext {
+	t.Helper()
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	testhelper.RunGit(t, root, "init", "-q")
+	testhelper.RunGit(t, root, "commit", "-q", "--allow-empty", "-m", "init")
+	return &GroveContext{ProjectRoot: root, GroveDir: filepath.Join(root, ".grove"), Config: config.LoadDefaults()}
+}
+
+func fakeBrowseTUI(exit tui.Exit) tuiRunner {
+	return func(*worktree.Manager, *state.Manager, string, ...*plugins.Manager) (tui.Exit, error) {
+		return exit, nil
+	}
+}
+
+func TestRunBrowseTUI_UpRunsGroveToWithUp(t *testing.T) {
+	err := runBrowseTUI(browseTestContext(t), fakeBrowseTUI(tui.Exit{Path: "/src/myapp-missing", Name: "missing", Up: true}))
+
+	if err == nil || !strings.Contains(err.Error(), "worktree 'missing' not found") {
+		t.Errorf("runBrowseTUI() error = %v, want the shared switch flow to run for U and report the missing worktree", err)
+	}
+}
+
+func TestRunBrowseTUI_EnterLeavesTheMoveToTheTUI(t *testing.T) {
+	if err := runBrowseTUI(browseTestContext(t), fakeBrowseTUI(tui.Exit{Path: "/src/myapp-missing", Name: "missing"})); err != nil {
+		t.Errorf("runBrowseTUI() error = %v, want nil: the TUI already moved you", err)
 	}
 }

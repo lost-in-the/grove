@@ -4,7 +4,7 @@ The Docker plugin provides automatic container lifecycle management for Grove wo
 
 ## Features
 
-- **Automatic container management**: Start/stop containers when switching worktrees
+- **Stack management**: `grove up` and `grove down` bring the stack to the worktree you are in and stop it. `grove to` moves you only; add `--up` (or set `container_switch = "auto"`) to bring the stack as you move
 - **Multi-compose file support**: Supports docker-compose.yml, docker-compose.yaml, compose.yml, compose.yaml
 - **Service-level control**: Manage individual services or all at once
 - **Log streaming**: Tail logs from running containers
@@ -15,11 +15,11 @@ The Docker plugin provides automatic container lifecycle management for Grove wo
 
 ### `grove up`
 
-Start containers for the current worktree.
+Bring the stack to the worktree you are in, and start it. In external mode this writes `env_var` to the env file first.
 
 ```bash
-grove up              # Start containers in detached mode (default)
-grove up --detach=false  # Start containers in foreground
+grove up              # Bring the stack up in the background (default)
+grove up --detach=false  # Bring the stack up in the foreground
 ```
 
 **Options:**
@@ -27,7 +27,7 @@ grove up --detach=false  # Start containers in foreground
 
 ### `grove down`
 
-Stop containers for the current worktree. In external mode this stops the one shared stack and, when it is configured for another worktree, says so first.
+Stop the stack. In external mode this stops the one shared stack and, when it is on another worktree, says so first.
 
 ```bash
 grove down   # Stop all containers
@@ -145,7 +145,7 @@ grove down
 
 ## Hook Integration
 
-The Docker plugin integrates with Grove's hook system to automatically manage containers:
+The Docker plugin integrates with Grove's hook system. The switch hooks below run only when the stack follows a move: `grove to --up` (or `grove last --up`), or `[switch] container_switch` set to `auto` or `prompt`. With the default `container_switch = "off"` they do not run at all, so a plain `grove to` writes no env file, emits no `env:` directive, and starts or stops nothing.
 
 ### Post-Switch Hook (Auto-Start)
 
@@ -163,7 +163,7 @@ The Docker plugin integrates with Grove's hook system to automatically manage co
 
 **Local mode**: No-op.
 
-**External mode**: Copies configured credential files and creates symlinks from the main worktree into the new worktree. It does not touch the env file: after `grove new`, the shared stack stays on the worktree it was configured for; run `grove to <name>` or `grove up` in the new worktree to load it, or set `auto_up = true`.
+**External mode**: Copies configured credential files and creates symlinks from the main worktree into the new worktree. It does not touch the env file: after `grove new`, the stack stays on the worktree it was on. Run `grove up` in the new worktree or `grove to <name> --up`, create with `grove new <name> --up`, or set `auto_up = true`.
 
 ### Config-Driven Action Types
 
@@ -374,8 +374,9 @@ In external mode, the compose file is expected to exist in the external compose 
 # Create a new worktree with a docker-compose.yml
 grove new feature-api
 
-# Switch to it (containers auto-start if docker-compose.yml exists)
+# Move to it, then bring its stack up (or: grove to feature-api --up)
 grove to feature-api
+grove up
 
 # Check logs
 grove logs
@@ -383,7 +384,7 @@ grove logs
 # Restart a specific service
 grove restart api
 
-# Switch away (containers keep running by default)
+# Move back (the stack keeps running)
 grove last
 
 # Manually stop containers in a worktree
@@ -401,17 +402,18 @@ grove new feature-x
 #   symlinked vendor/bundle
 #   symlinked node_modules
 
-# Switch to it:
+# Move to it and bring the stack:
 #   1. grove stops app services (auto_stop)
 #   2. grove writes APP_DIR=/home/user/myapp-feature-x to .env.local
 #   3. grove runs: docker compose --env-file .env.local up -d app app_worker
-grove to feature-x
+# Plain `grove to feature-x` only moves you and prints "Stack: on main (not here)".
+grove to feature-x --up
 
 # Check app logs from the external compose
 grove logs app
 
-# Switch back to main — same process, now APP_DIR=/home/user/myapp
-grove to main
+# Move back to main and bring the stack: now APP_DIR=/home/user/myapp
+grove to main --up
 
 # Manually stop app services
 grove down
@@ -421,10 +423,10 @@ grove down
 
 ```bash
 # Start working on a feature
-grove new feature-auth
+grove new feature-auth --up
 grove to feature-auth
 
-# Containers start automatically
+# The stack is already up (from --up)
 # Make code changes...
 
 # Check logs for your service
@@ -433,12 +435,12 @@ grove logs auth-service
 # Restart after configuration changes
 grove restart auth-service
 
-# Switch to a different task (containers keep running)
+# Move to a different task (the stack keeps running)
 grove to bugfix-login
 
 # Come back later
 grove to feature-auth
-# Containers are still running, ready to go
+# The stack is still running, ready to go
 ```
 
 ## Troubleshooting
@@ -476,7 +478,7 @@ auto_start = true
 When working with multiple worktrees that run containers, you may encounter port conflicts. Best practices:
 
 1. **Use unique ports per worktree**: Modify your docker-compose.yml to use different ports
-2. **Stop containers when not in use**: Use `grove down` when switching away
+2. **Stop the stack when not in use**: Use `grove down` before you move away
 3. **Enable auto-stop**: Set `auto_stop = true` in your config:
    ```toml
    [plugins.docker]
@@ -485,9 +487,9 @@ When working with multiple worktrees that run containers, you may encounter port
 
 ## Multi-Container Troubleshooting
 
-### Services fail to start after switching worktrees
+### Services fail to start after `grove to --up`
 
-If containers fail to come up after `grove to`, check:
+If the stack fails to come up after `grove to --up`, check:
 
 1. **`auto_stop` is enabled** — without it, stale containers from the previous worktree may hold ports or volumes. Set `auto_stop = true` in `[plugins.docker]`.
 2. **Orphan containers** — run `docker compose down --remove-orphans` in the compose directory to clean up containers from renamed or removed services.

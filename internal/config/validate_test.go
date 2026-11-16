@@ -15,6 +15,9 @@ func TestLoadDefaults_AllFields(t *testing.T) {
 	if cfg.Switch.DirtyHandling != "prompt" {
 		t.Errorf("DirtyHandling = %q, want %q", cfg.Switch.DirtyHandling, "prompt")
 	}
+	if cfg.Switch.ContainerSwitch != "off" {
+		t.Errorf("ContainerSwitch = %q, want %q", cfg.Switch.ContainerSwitch, "off")
+	}
 	if cfg.Tmux.Mode != "auto" {
 		t.Errorf("Tmux.Mode = %q, want %q", cfg.Tmux.Mode, "auto")
 	}

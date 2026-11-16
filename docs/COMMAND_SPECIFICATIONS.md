@@ -353,7 +353,8 @@ Flags:
       --dirty                Carry over `git diff HEAD` from the current worktree (requires --from-branch)
   -j, --json                 Output as JSON with switch_to field
       --mirror <ref>         Create environment worktree tracking a remote branch (e.g., origin/main)
-      --no-docker            Skip Docker auto-start
+  -u, --up                   Also bring the stack to the new worktree (per-invocation auto_up)
+      --no-docker            Skip bringing the stack, even with auto_up (cannot combine with --up)
   -n, --no-switch            Stay in current worktree after creation
 ```
 
@@ -386,11 +387,11 @@ Flags:
    - Session name = `{project}-{name}`
    - Start in worktree directory
 
-7. **Execute post-create hooks** (user-configured and plugin hooks). In external Docker mode this never repoints the shared stack's env file. After `grove new`, the shared stack stays on the worktree it was configured for; run `grove to <name>` or `grove up` in the new worktree to load it, or set `auto_up = true`.
+7. **Execute post-create hooks** (user-configured and plugin hooks). In external Docker mode this never moves the stack: the env file is not written. After `grove new`, the stack stays on the worktree it was on. Run `grove up` in the new worktree or `grove to <name> --up`, create with `grove new <name> --up`, or set `auto_up = true`.
 
-8. **Auto-start Docker** (unless `--no-docker`):
-   - Only runs when `plugins.docker.auto_up = true` — an explicit opt-in, off by default (agent stacks no longer imply it)
-   - Calls `docker.Up()` for the new worktree path. In external mode this is the only create-time step that loads the new worktree into the shared stack: it writes `env_var` to the env file and starts the services. It runs even with `--no-switch` or `--json`
+8. **Bring the stack up** (unless `--no-docker`):
+   - Only runs with `--up` for this invocation, or `plugins.docker.auto_up = true` as the standing form. Off by default (agent stacks no longer imply it)
+   - Calls `docker.Up()` for the new worktree path. In external mode this is the only create-time step that puts the stack on the new worktree: it writes `env_var` to the env file and starts the services. It runs even with `--no-switch` or `--json`
    - The dashboard create flow runs the same epilogue, so CLI- and TUI-created worktrees provision identically
 
 9. **(If `--dirty`) Apply the captured patch** via `git -C <new-worktree> apply <tempfile>`:
@@ -475,7 +476,7 @@ Flags:
 
 1. **Ensure worktree exists:**
    - If worktree found: proceed
-   - If not found and `--no-create` not set: create worktree (same as `grove new`). After `grove open`, the shared stack stays on the worktree it was configured for; run `grove to <name>` or `grove up` in the new worktree to load it, or set `auto_up = true`.
+   - If not found and `--no-create` not set: create worktree (same as `grove new`). After `grove open`, the stack stays on the worktree it was on. Run `grove up` in the new worktree or `grove to <name> --up`, or set `auto_up = true`.
    - If not found and `--no-create` set: error
 
 2. **Ensure tmux session exists:**
@@ -531,7 +532,9 @@ popup_height = "80%"
 
 ### grove to
 
-**Purpose:** Switch to an existing worktree, activating its tmux session.
+**Purpose:** Move to an existing worktree, activating its tmux session. `grove to` moves you only. It never touches the Docker stack unless you ask (`--up`, or `container_switch` set to `auto` or `prompt`). `switch` is an alias of `to`.
+
+Two things can move: you, and the stack. `grove to` moves you. `grove up` brings the stack to the worktree you are in. `grove to <name> --up` does both.
 
 **Usage:**
 ```
@@ -542,7 +545,8 @@ Arguments:
 
 Flags:
   -j, --json      Output as JSON with switch_to field
-      --peek      Lightweight switch: skip hooks and tmux (no Docker or session side effects)
+  -u, --up        Also bring the stack to the worktree you move to (forces container_switch = "auto" for this call)
+      --peek      Lightweight move: skip hooks and tmux (no session side effects). Cannot combine with --up
       --no-tmux   Skip tmux session creation/switch/attach for this invocation
 ```
 
@@ -568,14 +572,14 @@ Flags:
    - If session doesn't exist: Create it, then attach/switch
 
 4. **Fire pre-switch hooks** (unless `--peek`):
-   - Docker container lifecycle is controlled by `switch.container_switch`:
-     - `"auto"` (default): Start/stop containers as normal (respects `auto_start`/`auto_stop`)
-     - `"prompt"`: Ask user before starting/stopping containers. Falls back to `auto` in non-interactive sessions.
-     - `"off"`: Skip container start/stop entirely. In external mode, env var persistence and env directives still run — only `stopServices()` and `startServices()` are skipped.
+   - Whether the stack follows the move is controlled by `switch.container_switch`. `--up` forces `"auto"` for one call:
+     - `"off"` (default): The Docker plugin's switch hooks do not run. No env file write, no env directive, no stop or start, in every Docker mode. Other plugins' hooks and `hooks.toml` hooks still fire.
+     - `"auto"`: The stack follows every move (respects `auto_start`/`auto_stop`).
+     - `"prompt"`: Ask before the stack follows. Falls back to `auto` in non-interactive sessions.
 
 5. **Switch tmux session** (if inside tmux, and neither `--peek` nor `--no-tmux` nor `GROVE_AGENT_MODE` is set): `tmux switch-client -t {session}`
 
-6. **Fire post-switch hooks** (Docker start, etc.) before tmux switch so progress is visible in current session (unless `--peek`). Container lifecycle gating from step 4 applies here too.
+6. **Fire post-switch hooks** (bring the stack up, etc.) before tmux switch so progress is visible in current session (unless `--peek`). The `container_switch` gate from step 4 applies here too.
 
 7. **Change directory:**
    - If inside tmux: session switch handles navigation
@@ -584,6 +588,12 @@ Flags:
 
 8. **Update "last" tracking:**
    - Store current worktree as "last" for `grove last` command
+
+9. **Report where the stack is** (shared external stack only, every time, stderr only). It reads the env file and makes no Docker call:
+   - Stack on another worktree: `Stack: on main (not here). Run `grove up` to bring it.`
+   - Stack on the target: `Stack: on feature (here).`
+   - Env var unset: `Stack: not on any worktree. Run `grove up` to bring it.`
+   - Not printed in local mode or agent mode. `--json` adds `stack_on` (worktree name, omitted when unset) and `stack_here` (bool) to stdout instead of the line.
 
 **Output (Inside tmux, via shell wrapper):**
 ```
@@ -670,8 +680,10 @@ Please be more specific.
 
 | Scenario | Behavior |
 |----------|----------|
-| Already in target worktree | Message: "Already in 'testing'" (exit 0). Skips the dirty gate, hooks, and state recording, but still cd's back to the worktree root from a subdirectory and — outside tmux — creates/attaches the session like a real switch |
-| Already in target worktree, external Docker mode, env file names another worktree | The shared stack is repointed: the Docker plugin's pre-switch and post-switch hooks run for the target (`container_switch` and `auto_start` apply), and one line is printed: "Repointed the shared stack from 'main' to 'testing'". The line is printed only when the env file, re-read after the hooks, names the target. In agent mode the plugin picks its own strategy and may decline to repoint the shared stack, in which case it prints its own notice and no "Repointed" line appears. The dirty gate, other hooks, and `last_worktree` recording stay skipped, so the A↔B toggle still holds. With `--peek`, or when the env file already names the target, nothing is repointed. `--json` output is unchanged (the line is not printed) |
+| Already in target worktree | Message: "Already in 'testing'" plus the Stack line (exit 0). Skips the dirty gate, hooks, and state recording, but still cd's back to the worktree root from a subdirectory and — outside tmux — creates/attaches the session like a real switch. The stack is not touched without `--up` |
+| Already in target worktree, `--up`, stack already on the target (or local mode) | The stack is started here: only the Docker plugin's post-switch hook runs for the target (`auto_start` applies), so a stack that is down (after `grove down`) comes up and a stack that is up is left running. No "Stack is now on" line is printed, because the stack did not move. With `--peek` nothing runs |
+| Already in target worktree, external Docker mode, `--up` (or `container_switch` auto/prompt), stack not on the target | The stack is brought here: the Docker plugin's pre-switch and post-switch hooks run for the target (`auto_start` applies), and one line is printed: "Stack is now on 'testing' (was on 'main')". The line is printed only when the env file, re-read after the hooks, names the target. In agent mode the plugin picks its own strategy and may decline, in which case it prints its own notice and no "Stack is now on" line appears. The dirty gate, other hooks, and `last_worktree` recording stay skipped, so the A↔B toggle still holds. With `--peek` nothing runs. When the env file already names the target, see the row above. `--json` output only gains the stack fields |
+| Agent mode, `--up`, no isolated stack for the target | The agent strategy leaves the stack alone and prints on stderr: "agent mode: 'testing' has no isolated stack. The stack was not brought here (it is on 'main')." then "Run `grove up --isolated` here to start an isolated stack." Plain `grove to` never reaches the Docker plugin, so it prints no such notice |
 | Worktree directory missing | Error: "Worktree directory missing. Run: grove repair testing" |
 | Tmux not running | Start tmux server, create session, attach |
 | Partial name matches one | Switch to it (e.g., `grove to test` → `testing` if unambiguous) |
@@ -685,9 +697,12 @@ Please be more specific.
 | Dirty worktree with `--peek` | Bypass dirty check entirely, proceed with switch |
 | `--peek` or `--no-tmux` | No tmux session is created, switched, or attached; cd directive still emitted |
 | Dirty check fails (git error) | Treat as clean, proceed with switch |
-| container_switch = "off" | Skip Docker start/stop; env var persistence still runs in external mode |
-| container_switch = "prompt" (TTY) | Ask before start/stop; user can decline |
+| container_switch = "off" (default) | `to` does nothing to Docker, including the env file in external mode |
+| container_switch = "auto" | The stack follows every `to`, as before this setting defaulted to "off" |
+| container_switch = "prompt" (TTY) | Ask before the stack follows; user can decline |
 | container_switch = "prompt" (non-TTY) | Fall back to auto behavior |
+| `--up` | Forces `auto` for this call, whatever the setting |
+| `--up` with `--peek` | Error: the flags cannot be combined |
 | iTerm2 + control_mode enabled | Use `tmux -CC attach` for native window integration |
 
 **Directory Drift Detection:**
@@ -894,8 +909,8 @@ grove here [flags]
 Flags:
   -q, --quiet             Just print the worktree name
   -j, --json              Output as JSON
-      --check-mount       Compare env-configured worktree against running container's bind-mount source
-      --require-current   With --check-mount, also exit non-zero if the current worktree isn't the one the stack is configured for
+      --check-mount       Compare the worktree the stack is on with what the running containers mount
+      --require-current   With --check-mount, also exit non-zero if you are not in the worktree the stack is on
 ```
 
 **Behavior:**
@@ -908,9 +923,9 @@ Flags:
 
 When passed, `grove here` short-circuits the default info display and instead:
 
-1. Reads `[plugins.docker.external].env_var` from the configured `env_file` — this is the worktree path grove last wrote ("configured source").
+1. Reads `[plugins.docker.external].env_var` from the configured `env_file` — this is the worktree path grove last wrote (the worktree the stack is on).
 2. For each configured service, runs `docker compose ps -q <service>` to get the running container, then `docker inspect` to find the mount whose `Destination` matches `[plugins.docker.external].mount_dest` (default `/app`). A service listed in `[plugins.docker.external].mount_dests` (e.g. `{ worker = "/srv/worker" }`) is probed at its own path instead.
-3. Compares the container's actual `Source` against the configured source. A source that is the worktree root or a directory inside it verifies, so a service that mounts only a subdirectory (for example `web = "/project/app"` in `mount_dests`, with host `<worktree>/app` mounted there) is not reported as drift.
+3. Compares the container's actual `Source` against the worktree the stack is on. A source that is the worktree root or a directory inside it verifies, so a service that mounts only a subdirectory (for example `web = "/project/app"` in `mount_dests`, with host `<worktree>/app` mounted there) is not reported as drift.
 
 **Per-service status**
 
@@ -918,8 +933,8 @@ Every service gets exactly one status:
 
 | Status | Meaning | Printed as |
 |---|---|---|
-| `verified` | Mount source equals the configured worktree | `✓ app ok: <path>` |
-| `drift` | Mount source differs from the configured worktree | warning, with actual and configured paths |
+| `verified` | Mount source equals the worktree the stack is on | `✓ app ok: <path>` |
+| `drift` | Mount source differs from the worktree the stack is on | warning: `<service> drift: mounts <path>, stack is on <path>` |
 | `not_running` | `docker compose ps -q` returned no container | faint note: `container not running` |
 | `no_mount` | Container runs, but no bind mount is at the probed path (nothing is mounted there, or a named volume or tmpfs is) | warning: the service mounts the worktree at a different path or not at all (set `mount_dests`) |
 | `error` | A docker call failed (daemon down, `docker inspect` failed, unparseable output) | error line with the docker message |
@@ -930,32 +945,32 @@ The last line is computed from the statuses and never reads as success unless ev
 
 | Situation | Line |
 |---|---|
-| Every service `verified` | `All N services mounted from the configured worktree.` |
+| Every service `verified` | `All N services mounted from the worktree the stack is on.` |
 | Anything else | `N of M services verified; D drifted; K not checked` (`D` omitted when 0; `K` counts `not_running`, `no_mount`, `error`, and is omitted when 0) |
 
 With every service stopped the line is `0 of M services verified; M not checked`.
 
 The header reads `Mount check — '<worktree>'` — deliberately outcome-neutral, since it prints before any comparison has run. It used to read `Mount drift — '<worktree>'`, which looked like a verdict even when the report below it came back clean.
 
-**Cwd-vs-configured mismatch**
+**Here-vs-stack mismatch**
 
-Separately from env-vs-container drift, `--check-mount` also compares the worktree you're currently standing in against the worktree the env file is configured for — these can differ (e.g. you're in `feature-b` but the stack was last pointed at `feature-a`). When they differ, the output includes:
+Separately from env-vs-container drift, `--check-mount` also compares the worktree you are in against the worktree the stack is on. These can differ (for example you are in `feature-b` but the stack is on `feature-a`). When they differ, the output includes:
 
 ```
-note: you are in 'feature-b'; the stack is configured for 'feature-a'
+note: you are in 'feature-b'; the stack is on 'feature-a'
 ```
 
 This note is informational only by default — it does not change the exit code, since env-vs-container parity is the documented contract for `--check-mount`'s exit code. Pass `--require-current` to gate on it too (see below).
 
-**Unresolvable configured worktree**
+**Stack not on any worktree**
 
-The comparison above needs to know which worktree the env file is configured for. That can fail — the env var is unset (nothing has run `grove up` for this stack yet), or the worktree manager itself errored. Without `--require-current` this is silent, same as today: nothing to compare against, so nothing is reported. With `--require-current`, silence would mean the guard can't tell whether you're in the right worktree and passes anyway — so instead it fails closed:
+The comparison above needs to know which worktree the stack is on. That can fail — the env var is unset (nothing has run `grove up` for this stack yet), or the worktree manager itself errored. Without `--require-current` this is silent, same as today: nothing to compare against, so nothing is reported. With `--require-current`, silence would mean the guard can't tell whether you're in the right worktree and passes anyway — so instead it fails closed:
 
 ```
-could not determine the configured worktree — failing --require-current
+could not tell which worktree the stack is on, failing --require-current
 ```
 
-and exits `13` (`MountCheckMismatch`), the same code as an actual cwd-vs-configured mismatch.
+and exits `13` (`MountCheckMismatch`), the same code as an actual here-vs-stack mismatch.
 
 **Exit codes:**
 
@@ -963,16 +978,16 @@ and exits `13` (`MountCheckMismatch`), the same code as an actual cwd-vs-configu
 |---|---|
 | `0` | No drift and no docker error. Stopped (`not_running`) and unmounted (`no_mount`) services are informational: they exit `0`, but the summary line says how many were not checked. Also `0` when external mode isn't configured. |
 | `6` (`ExternalCommandFailed`) | A docker call failed for at least one service (`error` status: daemon down, command not found, etc.) and no drift was found |
-| `12` (`MountDrift`) | At least one running service has a bind-mount source different from the configured worktree |
-| `13` (`MountCheckMismatch`) | Only with `--require-current`: the current worktree is not the one the env file is configured for, **or** the configured worktree couldn't be resolved at all (env var unset, or the worktree manager errored), **or** any service is unverified (`not_running`, `no_mount`) and nothing more specific applies. The guard fails closed rather than passing on an unknown state. Takes priority over `MountDrift` and `6` if both conditions hold. |
+| `12` (`MountDrift`) | At least one running service has a bind-mount source different from the worktree the stack is on |
+| `13` (`MountCheckMismatch`) | Only with `--require-current`: you are not in the worktree the stack is on, **or** the worktree the stack is on couldn't be resolved at all (env var unset, or the worktree manager errored), **or** any service is unverified (`not_running`, `no_mount`) and nothing more specific applies. The guard fails closed rather than passing on an unknown state. Takes priority over `MountDrift` and `6` if both conditions hold. |
 
-Priority when several apply: `13` (cwd mismatch or unresolved, `--require-current` only), then `12`, then `6`, then `13` (unverified, `--require-current` only).
+Priority when several apply: `13` (here-vs-stack mismatch or unresolved, `--require-current` only), then `12`, then `6`, then `13` (unverified, `--require-current` only).
 
 When drift is detected, the output names each affected service and points at `grove up` as the remediation.
 
 **`--require-current`**
 
-Pre-test-guard use case: "am I in the worktree the stack actually serves?" Requires `--check-mount`; passing it alone is an error (exit `4`, `InvalidInput`). When the cwd-vs-configured note above would print, `--require-current` turns that into exit `13` (`MountCheckMismatch`) instead of leaving the process at exit `0`. It fails closed the same way when the configured worktree can't be resolved at all — see "Unresolvable configured worktree" above.
+Pre-test-guard use case: "am I in the worktree the stack actually serves?" Requires `--check-mount`; passing it alone is an error (exit `4`, `InvalidInput`). When the here-vs-stack note above would print, `--require-current` turns that into exit `13` (`MountCheckMismatch`) instead of leaving the process at exit `0`. It fails closed the same way when the stack's worktree can't be resolved at all — see "Stack not on any worktree" above.
 
 **Output (Default):**
 ```
@@ -1173,7 +1188,7 @@ Recent:
 
 ### grove last
 
-**Purpose:** Switch to the previously active worktree (like `cd -`).
+**Purpose:** Move to the previously active worktree (like `cd -`). Same rule as `grove to`: it moves you only, and `--up` also brings the stack.
 
 **Usage:**
 ```
@@ -1181,6 +1196,7 @@ grove last [flags]
 
 Flags:
   -j, --json   Output as JSON with a switch_to field
+  -u, --up     Also bring the stack to the worktree you move to (forces container_switch = "auto")
 ```
 
 **Behavior:**
@@ -1189,7 +1205,7 @@ Flags:
 2. If empty, fall back to the legacy global session file (`~/.config/grove/last_session`)
    as a *hint only* — it is cross-project, so the resolved name is validated against this
    project's worktrees before use.
-3. If a worktree is resolved: equivalent to `grove to <last>`.
+3. If a worktree is resolved: equivalent to `grove to <last>`, including the Stack line, the `--up` flag, and the `container_switch` gate.
 4. If nothing is recorded, or the legacy hint doesn't resolve to a worktree in this project:
    graceful no-op — print a hint and exit 0 (running `grove last` before any in-project switch
    is not an error, and it must never chase another project's session).
@@ -1286,7 +1302,7 @@ Does **not** emit a `cd:` directive. Use `grove to` if you want a directory chan
 
 ### grove which
 
-**Purpose:** Show current worktree and Docker service status — a quick operational context check.
+**Purpose:** Show where you are and the state of the stack: a quick operational context check.
 
 **Usage:**
 ```
@@ -1302,35 +1318,35 @@ Flags:
 1. Find the current worktree (same as `grove here`)
 2. Query Docker service status via `CurrentServiceInfo()`:
    - **Local mode**: Check for compose file and running containers in the worktree directory
-   - **External mode**: A worktree that owns an agent slot (when `[plugins.docker.external.agent]` is enabled) reports its agent stack. Any other worktree reports the shared stack: read the env file to find the worktree it is **configured for**, then probe Docker once.
-     - The env file says what grove configured, not what the container has mounted. When the state is running, degraded, or unknown, a hint line points to `grove here --check-mount` for the real mount. It is omitted when nothing runs or nothing is configured.
+   - **External mode**: A worktree that owns an agent slot (when `[plugins.docker.external.agent]` is enabled) reports its agent stack. Any other worktree reports the shared stack: read the env file to find the worktree the stack is **on**, then probe Docker once.
+     - The env file says where grove put the stack, not what the container has mounted. When the state is running, degraded, or unknown, a hint line points to `grove here --check-mount` for the real mount. It is omitted when nothing runs or the stack is on no worktree.
    - **Local mode**: a Docker probe that errors or times out also prints "state unknown (docker did not answer)", not "not running".
      - Run state is judged on the configured `services` only (all services when none are listed). Shared infrastructure does not make the stack "running", and an unrelated failing container does not make it "not running". `non_blocking_services` are still honored.
      - A Docker probe that times out or errors prints "state unknown". It is never reported as "not running".
-     - With the env var unset, the output says "not configured for any worktree".
-   - **No Docker**: Services section is omitted
-3. Display worktree name, branch, and service status. Names are short display names, the same as the Worktree line.
+     - With the env var unset, the output says "not on any worktree".
+   - **No Docker**: The Stack line is omitted
+3. Display worktree name, branch, and the stack state. Names are short display names, the same as the Worktree line.
 
-**Output (formatted, shared stack configured for the current worktree and running):**
+**Output (formatted, stack on the worktree you are in, running):**
 ```
 Worktree:  testing
 Branch:    feat/testing
-Services:  ● running, configured for testing
+Stack:     ● running, on testing
            This is the env file setting. Run 'grove here --check-mount' to see what the containers have mounted.
 ```
 
-**Output (formatted, shared stack configured for a different worktree):**
+**Output (formatted, stack on a different worktree):**
 ```
-Services:  ⚠ running, configured for feature-auth (not this worktree)
+Stack:     ⚠ running, on feature-auth (not here)
 ```
 
-**Other `Services:` values:**
+**Other `Stack:` values:**
 ```
-Services:  ○ not running, configured for testing
-Services:  ⚠ degraded (app failed), configured for testing
-Services:  ⚠ state unknown (docker did not answer), configured for testing
-Services:  ⚠ not configured for any worktree
-Services:  ● agent stack #2
+Stack:     ○ not running, on testing
+Stack:     ⚠ degraded (app failed), on testing
+Stack:     ⚠ state unknown (docker did not answer), on testing
+Stack:     ⚠ not on any worktree
+Stack:     ● agent stack #2
 ```
 
 **Output (JSON, `--json`):**
@@ -1341,13 +1357,13 @@ Services:  ● agent stack #2
   "path": "/path/to/grove-testing",
   "services": {
     "state": "running",
-    "configured_for": "testing",
+    "stack_on": "testing",
     "matches_current": true
   }
 }
 ```
 
-`state` is one of `running`, `stopped`, `degraded`, `unknown`, `agent`, `not_configured`. `configured_for` appears for the shared stack when set. `slot` appears for an agent stack. These replace the earlier `running_for` field.
+`state` is one of `running`, `stopped`, `degraded`, `unknown`, `agent`, `not_configured`. `stack_on` appears for the shared stack when it is on a worktree. `slot` appears for an agent stack. These replace the earlier `running_for` field.
 
 When no Docker is configured, the `services` field is `null`/omitted.
 
@@ -1371,7 +1387,9 @@ When no Docker is configured, the `services` field is `null`/omitted.
 
 ### grove up
 
-**Purpose:** Start Docker containers for the current worktree.
+**Purpose:** Bring the stack to the worktree you are in, and start it.
+
+Two things can move: you, and the stack. `grove to` moves you. `grove up` brings the stack here. `grove to <name> --up` does both. In external mode `grove up` writes `env_var` to the env file, then starts the services.
 
 **Usage:**
 ```
@@ -1391,12 +1409,8 @@ Flags:
 
 **Output:**
 ```
-Starting containers for 'testing'...
-  ✓ grove-testing-db
-  ✓ grove-testing-redis
-  ✓ grove-testing-web
-
-All containers running. Web available at http://localhost:3001
+→ Bringing the stack up...
+✓ Stack is up
 ```
 
 **Edge Cases:**
@@ -1406,13 +1420,13 @@ All containers running. Web available at http://localhost:3001
 | No docker-compose.yml | Error: "No docker-compose.yml found" |
 | Docker not running | Error: "Docker daemon not running" |
 | Port conflict | Error with suggestion to check port allocation |
-| Already running | Message: "Containers already running" |
+| Already running | The stack is brought up again (compose leaves running services as they are) |
 
 ---
 
 ### grove down
 
-**Purpose:** Stop Docker containers for the current worktree (local mode) or the shared stack (external mode).
+**Purpose:** Stop the stack: this worktree's own stack (local mode) or the one shared stack (external mode).
 
 **Usage:**
 ```
@@ -1422,27 +1436,23 @@ grove down
 auto-detected and torn down)
 ```
 
-**External mode:** There is one shared stack, so `grove down` stops its configured services whichever worktree it is configured for. It never does this silently: when the env file names a different worktree than the current one, grove prints this before stopping:
+**External mode:** There is one shared stack, so `grove down` stops its configured services whichever worktree it is on. It never does this silently: when the stack is on a different worktree than here, grove prints this before stopping:
 ```
-Stopping the shared stack, currently configured for 'main'
+Stopping the stack. It is on 'main', not here.
 ```
-With the env var unset, or configured for the current worktree, no notice is printed. A worktree with an isolated agent stack tears down that stack instead.
+With the env var unset, or the stack on here, no notice is printed. A worktree with an isolated agent stack tears down that stack instead.
 
 **Output:**
 ```
-Stopping containers for 'testing'...
-  ✓ grove-testing-web
-  ✓ grove-testing-redis
-  ✓ grove-testing-db
-
-All containers stopped.
+→ Stopping the stack...
+✓ Stack stopped
 ```
 
 ---
 
 ### grove logs
 
-**Purpose:** View Docker container logs.
+**Purpose:** Tail the stack's logs.
 
 **Usage:**
 ```
@@ -1463,7 +1473,7 @@ Pass through to `docker compose logs` with appropriate project name.
 
 ### grove kick
 
-**Purpose:** Kick (restart) Docker containers. Aliases: `restart`, `k`.
+**Purpose:** Restart the stack's services. Aliases: `restart`, `k`.
 
 **Usage:**
 ```
@@ -1622,7 +1632,7 @@ Flags:
 
 4. **Register in state** with parent worktree tracked
 
-5. **Fire `post-create` hook**. In external Docker mode this never repoints the shared stack's env file. After `grove fork`, the shared stack stays on the worktree it was configured for; run `grove to <name>` or `grove up` in the new worktree to load it, or set `auto_up = true`.
+5. **Fire `post-create` hook**. In external Docker mode this never moves the stack: the env file is not written. After `grove fork`, the stack stays on the worktree it was on. Run `grove up` in the new worktree or `grove to <name> --up`, or set `auto_up = true`.
 
 6. **Create tmux session** with session name `{project}-{name}`
 
@@ -2140,7 +2150,7 @@ Flags:
    - **No flag, TTY**: prompt the user to pick `auto` or `walkthrough`.
    - **No flag, non-TTY**: defaults to `auto` (silent — no preview).
 6. **Docker-aware routing:** when a `docker-compose.yml` is present alongside a Rails/Node/Python marker, install commands (`bundle install`, `npm install`, `pip install`) are auto-generated as `docker:compose` hooks instead of host commands. Service name inferred from the compose file (single service used as-is, or first non-infra service when multiple). Dockerfile-only projects (no compose file) keep host commands and emit a manual-setup note.
-7. Optionally create starter worktrees with `--with-testing`, `--with-scratch`, or `--full`. After `grove init`, the shared stack stays on the worktree it was configured for; run `grove to <name>` or `grove up` in the new worktree to load it, or set `auto_up = true`.
+7. Optionally create starter worktrees with `--with-testing`, `--with-scratch`, or `--full`. After `grove init`, the stack stays on the worktree it was on. Run `grove up` in the new worktree or `grove to <name> --up`, or set `auto_up = true`.
 
 **Mode selection precedence:**
 
@@ -2235,7 +2245,7 @@ Arguments:
 2. Read the current branch via `git rev-parse --abbrev-ref HEAD`. If the directory isn't a git worktree, abort with an actionable error.
 3. Derive the short name by stripping the project prefix from the directory name (e.g., `grove-feature` → `feature`).
 4. If the worktree is already registered with the same path, print an info message and exit successfully (idempotent).
-5. Run the shared bootstrap: record grove's machine-local git excludes, register state, fire per-project and global post-create hooks. (Config needs no per-worktree files — every command resolves it from the main worktree via git's common dir.) After `grove adopt`, the shared stack stays on the worktree it was configured for; run `grove to <name>` or `grove up` in the new worktree to load it, or set `auto_up = true`.
+5. Run the shared bootstrap: record grove's machine-local git excludes, register state, fire per-project and global post-create hooks. (Config needs no per-worktree files — every command resolves it from the main worktree via git's common dir.) After `grove adopt`, the stack stays on the worktree it was on. Run `grove up` in the adopted worktree or `grove to <name> --up`. `auto_up` does not apply to `grove adopt`.
 
 **Drift detection:** Running any grove command from a drifted worktree prints a non-fatal warning suggesting `grove adopt`. `grove doctor` also reports drift in its Tier-2 project checks.
 

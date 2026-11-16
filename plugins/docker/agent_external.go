@@ -75,9 +75,9 @@ func (s *agentExternalStrategy) OnPostSwitch(ctx *hooks.Context) error {
 		return nil
 	}
 	if slot == 0 {
-		// Agent mode must not repoint the stack a human is using, so there is
-		// nothing to load here. Say so: otherwise the switch looks successful
-		// while the shared stack still serves another worktree.
+		// Agent mode must not move the stack a human is using, so there is
+		// nothing to bring here. Say so: otherwise the switch looks successful
+		// while the stack stays on another worktree.
 		s.warnNoIsolatedStack(ctx.WorktreePath)
 		return nil
 	}
@@ -89,14 +89,14 @@ func (s *agentExternalStrategy) OnPostSwitch(ctx *hooks.Context) error {
 }
 
 // warnNoIsolatedStack reports on stderr (stdout carries JSON and shell
-// directives) that a switch in agent mode left the shared stack untouched.
+// directives) that a switch in agent mode left the stack where it was.
 func (s *agentExternalStrategy) warnNoIsolatedStack(worktreePath string) {
 	wtName := filepath.Base(worktreePath)
 	composePath := s.composePath()
 	envValue := readEnvVar(composePath, s.ext.EnvFileName(), s.ext.EnvVar)
 
 	if pathMatchesEnv(worktreePath, envValue, composePath) {
-		fmt.Fprintf(os.Stderr, "agent mode: '%s' has no isolated stack, but the shared stack is already configured for '%s'.\n", wtName, wtName)
+		fmt.Fprintf(os.Stderr, "agent mode: '%s' has no isolated stack, but the stack is already on '%s'.\n", wtName, wtName)
 		return
 	}
 
@@ -106,10 +106,10 @@ func (s *agentExternalStrategy) warnNoIsolatedStack(worktreePath string) {
 		if !filepath.IsAbs(resolved) {
 			resolved = filepath.Join(composePath, resolved)
 		}
-		configured = fmt.Sprintf(" (it is configured for '%s')", filepath.Base(filepath.Clean(resolved)))
+		configured = fmt.Sprintf(" (it is on '%s')", filepath.Base(filepath.Clean(resolved)))
 	}
-	fmt.Fprintf(os.Stderr, "agent mode: '%s' has no isolated stack, and the shared stack was not repointed%s.\n", wtName, configured)
-	fmt.Fprintln(os.Stderr, "Run `grove up --isolated` here to start an isolated stack for this worktree.")
+	fmt.Fprintf(os.Stderr, "agent mode: '%s' has no isolated stack. The stack was not brought here%s.\n", wtName, configured)
+	fmt.Fprintln(os.Stderr, "Run `grove up --isolated` here to start an isolated stack.")
 }
 
 // OnPostCreate is a no-op — file setup runs unconditionally via

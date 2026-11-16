@@ -1376,3 +1376,62 @@ func TestTmuxSessionNameSanitizesTmuxUnsafeChars(t *testing.T) {
 		})
 	}
 }
+
+// Two worktrees in different directories can share a basename, and so a short
+// name: git allows it, and grove lists worktrees it did not create. A path is
+// the only identifier that tells them apart.
+func TestFindByPath_DistinguishesWorktreesThatShareAName(t *testing.T) {
+	tmpDir, _ := setupTestRepo(t)
+	m := &Manager{repoRoot: tmpDir}
+
+	// Resolve symlinks (macOS temp dirs) so the paths match what git reports.
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var paths []string
+	for _, parent := range []string{"one", "two"} {
+		path := filepath.Join(base, parent, "feature")
+		add := exec.Command("git", "worktree", "add", "-b", "feature-"+parent, path)
+		add.Dir = tmpDir
+		if out, err := add.CombinedOutput(); err != nil {
+			t.Fatalf("git worktree add: %v\n%s", err, out)
+		}
+		paths = append(paths, path)
+	}
+
+	// The premise: a name cannot pick the second one.
+	byName, err := m.Find("feature")
+	if err != nil || byName == nil {
+		t.Fatalf("Find(feature) = %v, %v", byName, err)
+	}
+
+	for _, want := range paths {
+		got, err := m.FindByPath(want)
+		if err != nil {
+			t.Fatalf("FindByPath(%q) error = %v", want, err)
+		}
+		if got == nil {
+			t.Fatalf("FindByPath(%q) = nil", want)
+		}
+		if got.Path != want {
+			t.Errorf("FindByPath(%q).Path = %q", want, got.Path)
+		}
+		if got.ShortName != "feature" {
+			t.Errorf("ShortName = %q, want both worktrees to share %q", got.ShortName, "feature")
+		}
+	}
+}
+
+func TestFindByPath_UnknownPathIsNil(t *testing.T) {
+	tmpDir, _ := setupTestRepo(t)
+	m := &Manager{repoRoot: tmpDir}
+
+	got, err := m.FindByPath(filepath.Join(tmpDir, "no-such-worktree"))
+	if err != nil {
+		t.Fatalf("FindByPath() error = %v", err)
+	}
+	if got != nil {
+		t.Errorf("FindByPath() = %+v, want nil", got)
+	}
+}

@@ -19,7 +19,6 @@ import (
 	"github.com/lost-in-the/grove/internal/updatecheck"
 	"github.com/lost-in-the/grove/internal/version"
 	"github.com/lost-in-the/grove/internal/worktree"
-	"github.com/lost-in-the/grove/plugins/docker"
 )
 
 var (
@@ -49,6 +48,27 @@ func decideBareAction(isTTY, tuiDisabled, inProject bool) bareAction {
 	default:
 		return bareLaunchTUI
 	}
+}
+
+// switchAfterDashboard says which `grove to` the bare-grove entry point runs
+// after the dashboard closes. U is exactly `grove to <name> --up`, pinned to
+// the selected row's path so a name two worktrees share cannot pick the other
+// one. Every other exit has nothing left to do: the dashboard already moved
+// the user, or they only quit.
+func switchAfterDashboard(exit tui.Exit) (string, switchOptions, bool) {
+	if !exit.Up || exit.Name == "" {
+		return "", switchOptions{}, false
+	}
+	return exit.Name, switchOptions{Up: true, Path: exit.Path}, true
+}
+
+// finishDashboard runs the switch a closed dashboard left to its caller.
+func finishDashboard(ctx *GroveContext, exit tui.Exit) error {
+	name, opts, ok := switchAfterDashboard(exit)
+	if !ok {
+		return nil
+	}
+	return performSwitch(ctx, name, opts)
 }
 
 var rootCmd = &cobra.Command{
@@ -132,19 +152,20 @@ shorthand alias (e.g. 'w'). Use 'grove install --help' for details.`,
 		}
 		pluginMgr := registerPlugins(cfg)
 
-		switchPath, forceUp, err := tui.Run(mgr, stateMgr, projectRoot, pluginMgr)
+		exit, err := tui.Run(mgr, stateMgr, projectRoot, pluginMgr)
 		if err != nil {
 			return err
 		}
 
-		if forceUp && switchPath != "" {
-			dockerPlugin := docker.New()
-			if initErr := dockerPlugin.Init(cfg); initErr == nil {
-				_ = dockerPlugin.Up(switchPath, true)
-			}
+		ctx := &GroveContext{
+			GroveDir:      groveDir,
+			ProjectRoot:   projectRoot,
+			State:         stateMgr,
+			Config:        cfg,
+			PluginManager: pluginMgr,
+			wtMgr:         mgr,
 		}
-
-		return nil
+		return finishDashboard(ctx, exit)
 	},
 	PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
 		if checkUpdateFlag {

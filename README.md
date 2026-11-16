@@ -56,10 +56,10 @@ Grove wraps the full worktree lifecycle — create, switch, fork, clean up — a
 | What | How |
 |---|---|
 | **Interactive TUI Dashboard** | Run `grove` to browse, create, and manage worktrees in a full-screen terminal UI |
-| **Fast Context Switching** | `grove to <name>` — changes directory, runs hooks, attaches tmux in <500ms |
+| **Fast Context Switching** | `grove to <name>` — changes directory, runs hooks, attaches tmux in <500ms. It moves you only; `grove up` brings the Docker stack |
 | **GitHub Integration** | `grove fetch pr/42` or browse PRs and issues interactively with `grove prs` |
 | **Lifecycle Hooks** | Auto-copy `.env`, symlink `node_modules`, run `bundle install` on worktree create |
-| **Docker Support** | Start, stop, and tail containers scoped to each worktree — automatically |
+| **Docker Support** | `grove up` brings the stack to the worktree you are in, `grove down` stops it, and `grove logs` tails it |
 | **Tmux Integration** | Every worktree gets its own tmux session; attach, detach, switch without losing context |
 | **Herdr Support** | Prefer [herdr](https://herdr.dev)? Set `[mux] backend = "herdr"` and every worktree gets a herdr workspace instead — plus a live agent-status column (`idle` / `working` / `blocked`) in `grove ls` and the dashboard |
 | **Shell Integration** | `grove to` actually changes your directory; tab completion included |
@@ -198,7 +198,7 @@ grove new feature-login
 ### 4 — Switch between worktrees
 
 ```bash
-grove to feature-login   # switch (changes directory automatically)
+grove to feature-login   # move (changes directory automatically)
 grove to main            # switch back
 grove last               # toggle to previous worktree
 ```
@@ -254,7 +254,7 @@ The detail panel updates as you navigate — branch, commit, sync status, tmux s
 | `↑` / `↓` or `k` / `j` | Navigate worktrees |
 | `1`–`9` | Quick-switch to the nth worktree |
 | `enter` | Switch to selected worktree |
-| `U` | Switch and start containers |
+| `U` | Switch and bring the stack (`grove to --up`) |
 | `n` | Create new worktree |
 | `d` | Delete selected worktree |
 | `f` | Fork selected worktree |
@@ -280,12 +280,14 @@ See [docs/TUI.md](docs/TUI.md) for the full reference — overlays, PR browser, 
 | `grove ls` | List all worktrees — name, branch, status, tmux state |
 | `grove new <name>` | Create a worktree + branch + tmux session (`--branch`, `--from`) |
 | `grove adopt [path]` | Bootstrap a git worktree that grove doesn't know about |
-| `grove to <name>` | Switch context: directory, hooks, Docker, tmux |
-| `grove to <name> --peek` | Lightweight switch — skip hooks (no Docker side effects) |
+| `grove to <name>` | Move to a worktree: directory, hooks, tmux. Does not touch the stack by default (see `[switch] container_switch`) |
+| `grove to <name> --up` | Move and bring the stack to that worktree |
+| `grove to <name> --peek` | Lightweight move: skip hooks and tmux |
+| `grove up` / `grove down` | Bring the stack to the worktree you are in / stop the stack |
 | `grove here` | Show current worktree: branch, SHA, age, status |
-| `grove which` | Show current worktree and service status (alias: `status`) |
+| `grove which` | Show where you are and the state of the stack (alias: `status`) |
 | `grove context` | Show full worktree context details |
-| `grove last` | Toggle to previous worktree |
+| `grove last` | Toggle to previous worktree (`--up` also brings the stack) |
 | `grove rm <name>` | Remove worktree, kill tmux session, delete branch |
 | `grove rename [old] [new]` | Rename a worktree |
 | `grove open <name>` | Open a session in any worktree (create if needed) |
@@ -318,10 +320,10 @@ Requires `gh` CLI (installed and authenticated to your repo).
 
 | Command | What it does |
 |---------|-------------|
-| `grove up` | Start Docker containers for the current worktree |
-| `grove down` | Stop Docker containers |
-| `grove logs [service]` | Tail container logs |
-| `grove kick [service]` | Kick (restart) containers |
+| `grove up` | Bring the stack to this worktree |
+| `grove down` | Stop the stack |
+| `grove logs [service]` | Tail the stack's logs (one service, or all) |
+| `grove kick [service]` | Kick (restart) the stack's services |
 | `grove up --isolated` | Start an isolated Docker stack (for parallel agent use) |
 | `grove ps` | Show active stacks with ports and reference IDs |
 
@@ -433,8 +435,8 @@ command = "bin/rails test"
 
 [plugins.docker]
 enabled = true
-auto_start = true    # start containers when switching to a worktree
-auto_stop = false    # stop containers when switching away
+auto_start = true    # bring the stack up when `grove to` moves it (needs container_switch = "auto" or --up)
+auto_stop = false    # stop the stack when `grove to` moves it away (same gate)
 
 [protection]
 protected = ["production"]   # requires --force --unprotect to delete
@@ -459,11 +461,11 @@ Run `grove config` to see the merged effective config for the current project.
 
 ## Docker Integration
 
-Grove's Docker plugin handles containers scoped to each worktree. Three modes:
+Grove's Docker plugin runs the stack for your worktrees. Three modes:
 
 ### Local (default)
 
-Each worktree runs its own `docker-compose.yml`. Grove auto-starts and auto-stops containers on context switch.
+Each worktree runs its own `docker-compose.yml`. `grove up` brings its stack up and `grove down` stops it. `grove to` moves you only: it never touches the stack unless you pass `--up` or set `[switch] container_switch = "auto"`.
 
 ```toml
 [plugins.docker]
@@ -474,7 +476,7 @@ auto_stop = false   # keep stacks running side-by-side (mind port conflicts)
 
 ### External
 
-One shared compose directory orchestrates services for all worktrees. Grove writes the active worktree path to an env file and injects it into every compose command — so containers mount the right code automatically.
+One shared compose directory orchestrates services for all worktrees. Grove writes the active worktree path to an env file and injects it into every compose command, so the stack mounts the right worktree's code.
 
 ```toml
 [plugins.docker]
@@ -489,7 +491,7 @@ symlink_files = ["config/credentials/development.key"]  # files symlinked from m
 symlink_dirs = ["vendor/bundle", "node_modules"]
 ```
 
-On `grove to feature-x`: stop current stack → update `APP_DIR` → start new stack. Atomic.
+On `grove to feature-x --up` (or `grove up` from inside `feature-x`): stop the stack → update `APP_DIR` → start the stack on `feature-x`. Plain `grove to feature-x` only moves you, then prints where the stack is.
 
 ### Agent isolation
 
