@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -102,6 +103,8 @@ func (s *ConfigState) configHints() []Hint {
 	switch {
 	case f == nil:
 		return []Hint{{"esc", "close"}}
+	case s.confirming:
+		return []Hint{{"enter", "change"}, {"esc", "cancel"}}
 	case s.editing:
 		return []Hint{{"enter", "save"}, {"esc", "cancel"}}
 	}
@@ -127,6 +130,7 @@ func configFooterVariants() [][]Hint {
 		configFieldHints(ConfigEnum, true),
 		configFieldHints(ConfigString, true),
 		{{"enter", "save"}, {"esc", "cancel"}},
+		{{"enter", "change"}, {"esc", "cancel"}},
 	}
 }
 
@@ -153,7 +157,7 @@ func (m Model) renderConfigFrame() string {
 		list = []string{" " + Styles.DetailDim.Render("Loading settings…")}
 	default:
 		list = s.listLines(l)
-		ctx = s.contextLines(l)
+		ctx = s.contextLines(l, m.otherWorktreeCount())
 	}
 	if l.wide {
 		left := lipgloss.NewStyle().Width(l.listW).Render(strings.Join(padRows(list, l.listH), "\n"))
@@ -338,8 +342,9 @@ func (s *ConfigState) listRow(f ConfigField, selected bool, l configLayout) stri
 }
 
 // contextLines explain the focused field: its label and key, what it does,
-// then its choices or its value, cut to fit the panel.
-func (s *ConfigState) contextLines(l configLayout) []string {
+// what changing it does to other worktrees, then its choices or its
+// value, cut to fit the panel.
+func (s *ConfigState) contextLines(l configLayout, others int) []string {
 	f := s.focused()
 	w := l.ctxW - 1
 
@@ -351,23 +356,63 @@ func (s *ConfigState) contextLines(l configLayout) []string {
 		head = append(head, " "+keyText)
 	}
 
-	desc := wrapStyled(f.Description, w, Styles.TextNormal)
-
-	var body []string
+	c := contextParts{head: head, desc: wrapStyled(f.Description, w, Styles.TextNormal)}
+	if f.renamesWorktrees && others > 0 {
+		c.warn = hangingWrap(renameWarning(others), w, Styles.WarningText)
+	}
 	switch f.Type {
 	case ConfigEnum, ConfigBool:
-		body = s.optionLines(f, w)
+		c.body = s.optionLines(f, w)
 	default:
-		body = s.valueLines(f, w)
+		c.body, c.help = s.valueLines(f, w)
 	}
-	if s.editing && s.editErr != "" {
-		body = append(body, wrapStyled(s.editErr, w, Styles.ErrorText)...)
+	switch {
+	case s.confirming:
+		c.msg = wrapStyled(confirmText(f), w, Styles.WarningText)
+	case s.editing && s.editErr != "":
+		c.msg = wrapStyled(s.editErr, w, Styles.ErrorText)
 	}
-	var msg []string
 	if s.saveErr != nil && s.saveErrKey == f.Key {
-		msg = wrapStyled("Not saved: "+s.saveErr.Error(), w, Styles.ErrorText)
+		c.msg = append(c.msg, wrapStyled("Not saved: "+s.saveErr.Error(), w, Styles.ErrorText)...)
 	}
-	return fitContext(head, desc, body, msg, l.ctxH)
+	return c.fit(l.ctxH)
+}
+
+// renameWarning says what changing the project name or folder pattern does
+// to the n worktrees besides root.
+func renameWarning(n int) string {
+	if n == 1 {
+		return "⚠ This project has 1 worktree besides root. Changing this does not rename its folder. " +
+			"Grove will stop recognizing it by its short name."
+	}
+	return fmt.Sprintf("⚠ This project has %d worktrees besides root. Changing this does not rename their folders. "+
+		"Grove will stop recognizing them by their short names.", n)
+}
+
+// confirmText is the status line of the confirm step: the second enter
+// writes, esc keeps the value in the file.
+func confirmText(f *ConfigField) string {
+	keeps := "esc leaves it not set."
+	if f.Value != "" {
+		keeps = fmt.Sprintf("esc keeps %q.", f.Value)
+	}
+	return "Press enter again to change. " + keeps
+}
+
+// hangingWrap is wrapStyled for text that opens with a glyph and a space:
+// the lines after the first sit under the text, not the glyph.
+func hangingWrap(text string, width int, style lipgloss.Style) []string {
+	glyph, rest, _ := strings.Cut(text, " ")
+	indent := lipgloss.Width(glyph) + 1
+	out := wrapStyled(rest, width-indent, style)
+	for i := range out {
+		lead := strings.Repeat(" ", indent)
+		if i == 0 {
+			lead = style.Render(glyph) + " "
+		}
+		out[i] = " " + lead + out[i][1:]
+	}
+	return out
 }
 
 // optionLines lists every choice with its meaning: ● marks the current one.
@@ -401,8 +446,8 @@ func (s *ConfigState) optionLines(f *ConfigField, w int) []string {
 }
 
 // valueLines show a text or list field's value (or the field being typed
-// in), its default, what to type, and why a typed value was refused.
-func (s *ConfigState) valueLines(f *ConfigField, w int) []string {
+// in), then as help its default and what to type.
+func (s *ConfigState) valueLines(f *ConfigField, w int) ([]string, []string) {
 	row := func(name, value string) string {
 		return ansi.Truncate("  "+Styles.DetailLabel.Render(padCells(name, configValueLabelW))+value, w+1, "…")
 	}
@@ -425,26 +470,34 @@ func (s *ConfigState) valueLines(f *ConfigField, w int) []string {
 			out = append(out, row(name, Styles.TextBright.Render(l)))
 		}
 	}
-	out = append(out, row("Default", Styles.TextNormal.Render(f.Default)))
+	help := []string{row("Default", Styles.TextNormal.Render(f.Default))}
 	for _, note := range f.Notes {
 		for _, l := range wrapStyled(note, w-1, Styles.TextMuted) {
-			out = append(out, " "+l)
+			help = append(help, " "+l)
 		}
 	}
-	return out
+	return out, help
 }
 
-// fitContext joins the context's parts, with a blank before the body, in
-// h rows. When they do not fit, the blank goes first, then description
-// lines, then body lines from the end, each cut marked with an ellipsis.
-// msg, a write error, is kept whole: it is what needs reading now.
-func fitContext(head, desc, body, msg []string, h int) []string {
+// contextParts are the context panel's pieces, top to bottom: the title,
+// the description, the warning, then after a blank the choices or value,
+// the help under a value, and the message.
+type contextParts struct {
+	head, desc, warn, body, help, msg []string
+}
+
+// fit joins the parts in h rows. When they do not fit, the blank goes
+// first, then help lines from the end, then description lines, then body
+// lines from the end, each cut marked with an ellipsis. The title, the
+// warning, and the message (a refused value, the confirm step, a write
+// error) are kept whole: they are what needs reading now.
+func (c contextParts) fit(h int) []string {
 	join := func(gap bool) []string {
-		out := append(append([]string{}, head...), desc...)
+		out := slices.Concat(c.head, c.desc, c.warn)
 		if gap {
 			out = append(out, "")
 		}
-		return append(append(out, body...), msg...)
+		return slices.Concat(out, c.body, c.help, c.msg)
 	}
 	if out := join(true); len(out) <= h {
 		return out
@@ -452,9 +505,10 @@ func fitContext(head, desc, body, msg []string, h int) []string {
 	if out := join(false); len(out) <= h {
 		return out
 	}
-	room := h - len(head) - len(msg)
-	desc = cutLines(desc, max(0, min(len(desc), room-len(body))))
-	body = cutLines(body, max(0, room-len(desc)))
+	room := h - len(c.head) - len(c.warn) - len(c.msg)
+	c.help = cutLines(c.help, max(0, room-len(c.desc)-len(c.body)))
+	c.desc = cutLines(c.desc, max(0, min(len(c.desc), room-len(c.body)-len(c.help))))
+	c.body = cutLines(c.body, max(0, room-len(c.desc)-len(c.help)))
 	return padRows(join(false), h)
 }
 

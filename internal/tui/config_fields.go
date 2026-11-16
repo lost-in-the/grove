@@ -31,6 +31,10 @@ type ConfigField struct {
 
 	set   func(*config.Config, string) // applies a value, for validation
 	check func(string) error           // rules config.Validate does not cover
+
+	// renamesWorktrees: existing worktrees' short names are read from their
+	// folder names with this value, so changing it leaves them unmatched.
+	renamesWorktrees bool
 }
 
 // validate reports whether value is one config loading would accept, by
@@ -117,12 +121,13 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 	fields[ConfigTabGeneral] = []ConfigField{
 		{
 			Key: "project_name", Label: "Project name", Type: ConfigString,
-			Value:       cfg.ProjectName,
-			Default:     "the repo name",
-			Description: "The {project} part of worktree folder and session names.",
-			Notes:       []string{"Empty: the repo name from the git remote, else the folder name."},
-			Empty:       "not set",
-			set:         func(c *config.Config, v string) { c.ProjectName = v },
+			Value:            cfg.ProjectName,
+			Default:          "the repo name",
+			Description:      "The {project} part of worktree folder and session names.",
+			Notes:            []string{"Empty: the repo name from the git remote, else the folder name."},
+			Empty:            "not set",
+			set:              func(c *config.Config, v string) { c.ProjectName = v },
+			renamesWorktrees: true,
 		},
 		{
 			Key: "projects_dir", Label: "Projects folder", Type: ConfigString,
@@ -196,8 +201,9 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 				"{project} is the project name, {name} the worktree's short name.",
 				"Each appears once. Other characters: letters, digits, . _ -",
 			},
-			set:   func(c *config.Config, v string) { c.Naming.Pattern = v },
-			check: worktree.ValidateNamePattern,
+			set:              func(c *config.Config, v string) { c.Naming.Pattern = v },
+			check:            worktree.ValidateNamePattern,
+			renamesWorktrees: true,
 		},
 	}
 

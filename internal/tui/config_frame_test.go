@@ -366,10 +366,17 @@ func TestRenderConfig_Loading(t *testing.T) {
 }
 
 // goldenConfig opens the panel on the golden fixture at size, focused on
-// key.
+// key, over a dashboard of root alone, so no field warns.
 func goldenConfig(t *testing.T, size termSize, key string) Model {
 	t.Helper()
-	m := goldenModel(t, size, withItems(3), withConfigOverlay())
+	return goldenConfigOver(t, size, key, 1)
+}
+
+// goldenConfigOver is goldenConfig over a dashboard of n worktrees, root
+// included.
+func goldenConfigOver(t *testing.T, size termSize, key string, n int) Model {
+	t.Helper()
+	m := goldenModel(t, size, withItems(n), withConfigOverlay())
 	return focusField(t, m, key)
 }
 
@@ -438,6 +445,36 @@ func TestGolden_Config_States(t *testing.T) {
 	})
 }
 
+// The project name and folder pattern with two worktrees besides root: the
+// warning, and the confirm step after a changed value.
+func TestGolden_Config_Rename(t *testing.T) {
+	wide := termSize{"wide_120x40", 120, 40}
+	narrow := termSize{"narrow_44x24", 44, 24}
+	for _, c := range []struct {
+		name    string
+		size    termSize
+		key     string
+		confirm string
+	}{
+		{"warning_80x24", sizeStandard, "project_name", ""},
+		{"warning_120x40", wide, "project_name", ""},
+		{"warning_44x24", narrow, "project_name", ""},
+		{"pattern_warning_80x24", sizeStandard, "naming.pattern", ""},
+		{"confirm_80x24", sizeStandard, "project_name", "shop"},
+		{"confirm_120x40", wide, "project_name", "shop"},
+		{"pattern_confirm_80x24", sizeStandard, "naming.pattern", "{project}.{name}"},
+		{"pattern_confirm_44x24", narrow, "naming.pattern", "{project}.{name}"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			m := goldenConfigOver(t, c.size, c.key, 3)
+			if c.confirm != "" {
+				m = editTo(t, m, c.confirm)
+			}
+			golden.RequireEqual(t, []byte(m.viewString()))
+		})
+	}
+}
+
 // writeIgnoringDisk sends keys with writes that succeed without touching a
 // file, for goldens of the state after a write. The reload after a write
 // reads an empty temp project, not this repository's config.
@@ -475,4 +512,105 @@ func TestGolden_Themed_ConfigTabs(t *testing.T) {
 	m := goldenModelThemed(t, sizeStandard, withItems(3), withConfigOverlay())
 	m = focusField(t, m, "plugins.docker.auto_start")
 	golden.RequireEqual(t, []byte(m.viewString()))
+}
+
+// flatView is the context panel's text with its line breaks and padding
+// folded to single spaces, so wrapped sentences read whole.
+func flatView(t *testing.T, m Model) string {
+	t.Helper()
+	lines := strings.Split(stripAnsi(m.viewString()), "\n")
+	var ctx []string
+	if col := dividerCol(t, m); col >= 0 {
+		for _, l := range lines[3 : m.height-m.configLayout().footerH] {
+			ctx = append(ctx, string([]rune(l)[col+1:]))
+		}
+	} else {
+		ctx = lines[ruleRow(t, m.viewString())+1 : m.height-m.configLayout().footerH]
+	}
+	return strings.Join(strings.Fields(strings.Join(ctx, "\n")), " ")
+}
+
+const (
+	warnTwo = "⚠ This project has 2 worktrees besides root. Changing this does not rename their folders. Grove will stop recognizing them by their short names."
+	warnOne = "⚠ This project has 1 worktree besides root. Changing this does not rename its folder. Grove will stop recognizing it by its short name."
+)
+
+// Project name and Folder pattern warn, under their description, when other
+// worktrees would lose their short names; no other field does, and neither
+// does with root alone.
+func TestConfig_RenameWarning(t *testing.T) {
+	for _, c := range []struct {
+		items int
+		want  string
+	}{{1, ""}, {2, warnOne}, {3, warnTwo}} {
+		m, _ := openConfigOver(t, 80, 24, "", c.items)
+		for _, tab := range m.configState.Fields {
+			for _, f := range tab {
+				m = focusField(t, m, f.Key)
+				view := flatView(t, m)
+				renames := f.Key == "project_name" || f.Key == "naming.pattern"
+				switch {
+				case !renames || c.want == "":
+					if strings.Contains(view, "⚠") {
+						t.Errorf("%d items, %s: unexpected warning:\n%s", c.items, f.Key, stripAnsi(m.viewString()))
+					}
+				case !strings.Contains(view, c.want):
+					t.Errorf("%d items, %s: want %q in:\n%s", c.items, f.Key, c.want, stripAnsi(m.viewString()))
+				case strings.Index(view, c.want) < strings.Index(view, strings.Fields(f.Description)[0]):
+					t.Errorf("%d items, %s: the warning should follow the description:\n%s", c.items, f.Key, stripAnsi(m.viewString()))
+				}
+			}
+		}
+	}
+}
+
+// The confirm step says what the second enter does and what esc keeps, and
+// the footer names only those two keys.
+func TestConfig_ConfirmStepText(t *testing.T) {
+	for _, c := range []struct{ key, file, typed, want string }{
+		{"project_name", "project_name = \"myapp\"\n", "shop", `Press enter again to change. esc keeps "myapp".`},
+		{"project_name", "", "shop", "Press enter again to change. esc leaves it not set."},
+		{"naming.pattern", "", "{project}.{name}", `Press enter again to change. esc keeps "{project}-{name}".`},
+	} {
+		m, _ := openConfigIn(t, 80, 24, c.file)
+		m = editTo(t, focusField(t, m, c.key), c.typed)
+		if view := flatView(t, m); !strings.Contains(view, c.want) || !strings.Contains(view, warnTwo) {
+			t.Errorf("%s: want %q and the warning in:\n%s", c.key, c.want, stripAnsi(m.viewString()))
+		}
+		if f := strings.TrimSpace(stripAnsi(m.configFooter())); f != "enter change · esc cancel" {
+			t.Errorf("%s: footer %q, want enter change · esc cancel", c.key, f)
+		}
+	}
+}
+
+// The warning and the confirm step fit the frame every other field uses:
+// the same rule row or divider, the terminal filled, the warning whole.
+func TestConfig_ConfirmStepKeepsTheLayout(t *testing.T) {
+	for _, size := range [][2]int{{80, 24}, {44, 24}, {120, 40}, {160, 50}} {
+		w, h := size[0], size[1]
+		for _, c := range renamingFields {
+			m, _ := openConfigIn(t, w, h, c.file)
+			mark := bodyMark(t, m)
+			m = focusField(t, m, c.key)
+			for _, state := range []string{"focused", "confirm"} {
+				if state == "confirm" {
+					m = editTo(t, m, c.typed)
+				}
+				label := fmt.Sprintf("%dx%d %s %s", w, h, c.key, state)
+				checkConfigFrame(t, m, w, h, label)
+				if got := bodyMark(t, m); got != mark {
+					t.Errorf("%s: %s, want %s", label, got, mark)
+				}
+				if view := flatView(t, m); !strings.Contains(view, warnTwo) {
+					t.Errorf("%s: the warning is cut:\n%s", label, stripAnsi(m.viewString()))
+				}
+				if state == "confirm" && !strings.Contains(flatView(t, m), "Press enter again to change.") {
+					t.Errorf("%s: the confirm line is missing:\n%s", label, stripAnsi(m.viewString()))
+				}
+				if w == 80 && strings.Contains(flatView(t, m), "…") {
+					t.Errorf("%s: something is cut:\n%s", label, stripAnsi(m.viewString()))
+				}
+			}
+		}
+	}
 }

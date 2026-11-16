@@ -239,7 +239,7 @@ func TestConfig_EscClosesAtOnceAfterChanges(t *testing.T) {
 
 // enter edits a text field in place; enter again saves, and keys type.
 func TestConfig_TextEditCommits(t *testing.T) {
-	m, path := openConfigIn(t, 80, 24, "")
+	m, path := openConfigOver(t, 80, 24, "", 1)
 	m = focusField(t, m, "project_name")
 	m = sendConfigKeys(t, m, "enter")
 	if !m.configState.editing {
@@ -498,5 +498,166 @@ func TestConfig_PasteIntoAnEdit(t *testing.T) {
 	m = sendConfigMsg(t, m, tea.PasteMsg{Content: "develop"})
 	if got := m.configState.input.Value(); got != "develop" {
 		t.Errorf("after paste: %q, want develop", got)
+	}
+}
+
+// recordWrites counts the config writes until the test ends, passing each
+// through to the real writer.
+func recordWrites(t *testing.T) *[]map[string]string {
+	t.Helper()
+	var writes []map[string]string
+	write := saveProjectConfig
+	saveProjectConfig = func(updates map[string]string) error {
+		writes = append(writes, updates)
+		return write(updates)
+	}
+	t.Cleanup(func() { saveProjectConfig = write })
+	return &writes
+}
+
+// The two fields that name worktree folders, with a value that passes
+// validation and differs from the one in the file.
+var renamingFields = []struct {
+	key, file, old, typed, toml string
+}{
+	{"project_name", "project_name = \"myapp\"\n", "myapp", "shop", `"shop"`},
+	{"naming.pattern", "[naming]\npattern = \"{project}-{name}\"\n", "{project}-{name}", "{project}.{name}", `"{project}.{name}"`},
+}
+
+// editTo opens the focused field, replaces its text with typed, and presses
+// enter once.
+func editTo(t *testing.T, m Model, typed string) Model {
+	t.Helper()
+	m = sendConfigKeys(t, m, "enter", "ctrl+u")
+	m = typeConfig(t, m, typed)
+	return sendConfigKeys(t, m, "enter")
+}
+
+// With other worktrees, the first enter on a changed project name or folder
+// pattern writes nothing and asks again; the second writes that one key once.
+func TestConfig_RenamingFieldAsksBeforeWriting(t *testing.T) {
+	for _, c := range renamingFields {
+		t.Run(c.key, func(t *testing.T) {
+			m, path := openConfigIn(t, 80, 24, c.file)
+			writes := recordWrites(t)
+			m = focusField(t, m, c.key)
+			m = editTo(t, m, c.typed)
+			if !m.configState.editing || !m.configState.confirming {
+				t.Fatalf("first enter: editing %v, confirming %v; want both", m.configState.editing, m.configState.confirming)
+			}
+			if len(*writes) != 0 || readConfigFile(t, path) != c.file {
+				t.Fatalf("first enter wrote %v:\n%s", *writes, readConfigFile(t, path))
+			}
+			if got := m.configState.focused().Value; got != c.old {
+				t.Errorf("first enter: value %q, want %q", got, c.old)
+			}
+
+			m = sendConfigKeys(t, m, "enter")
+			if m.configState.editing || m.configState.confirming {
+				t.Errorf("second enter: editing %v, confirming %v; want neither", m.configState.editing, m.configState.confirming)
+			}
+			if len(*writes) != 1 || len((*writes)[0]) != 1 || (*writes)[0][c.key] != c.toml {
+				t.Fatalf("second enter: writes %v, want one of %s = %s", *writes, c.key, c.toml)
+			}
+			if got := m.configState.focused().Value; got != c.typed {
+				t.Errorf("second enter: value %q, want %q", got, c.typed)
+			}
+			if h := configHeaderLine(m); !strings.Contains(h, "✓ saved") || !strings.Contains(h, "u undo") {
+				t.Errorf("header after the write: %q, want saved and u undo", h)
+			}
+
+			m = sendConfigKeys(t, m, "u")
+			if m.configState.confirming || m.configState.editing || len(*writes) != 2 {
+				t.Errorf("undo should write at once: confirming %v, editing %v, %d writes", m.configState.confirming, m.configState.editing, len(*writes))
+			}
+			if got := m.configState.focused().Value; got != c.old {
+				t.Errorf("after undo: value %q, want %q", got, c.old)
+			}
+		})
+	}
+}
+
+// esc from the confirm step goes back to the edit with the typed text; a
+// second esc drops the edit. Nothing is written.
+func TestConfig_RenamingFieldEscKeepsTheTypedText(t *testing.T) {
+	for _, c := range renamingFields {
+		t.Run(c.key, func(t *testing.T) {
+			m, path := openConfigIn(t, 80, 24, c.file)
+			m = editTo(t, focusField(t, m, c.key), c.typed)
+			m = sendConfigKeys(t, m, "esc")
+			s := m.configState
+			if !s.editing || s.confirming || s.input.Value() != c.typed {
+				t.Fatalf("esc from confirm: editing %v, confirming %v, text %q; want the edit with %q", s.editing, s.confirming, s.input.Value(), c.typed)
+			}
+			m = sendConfigKeys(t, m, "esc")
+			if m.configState.editing || m.activeView() != ViewConfig {
+				t.Errorf("second esc: editing %v, view %v; want the panel, not editing", m.configState.editing, m.activeView())
+			}
+			if readConfigFile(t, path) != c.file || m.configState.focused().Value != c.old {
+				t.Errorf("esc wrote: value %q, file:\n%s", m.configState.focused().Value, readConfigFile(t, path))
+			}
+		})
+	}
+}
+
+// Any other key in the confirm step goes back to the edit and types.
+func TestConfig_RenamingFieldTypingReturnsToTheEdit(t *testing.T) {
+	m, path := openConfigIn(t, 80, 24, renamingFields[0].file)
+	m = editTo(t, focusField(t, m, "project_name"), "shop")
+	m = typeConfig(t, m, "s")
+	s := m.configState
+	if !s.editing || s.confirming || s.input.Value() != "shops" {
+		t.Fatalf("typing from confirm: editing %v, confirming %v, text %q; want the edit with shops", s.editing, s.confirming, s.input.Value())
+	}
+	if readConfigFile(t, path) != renamingFields[0].file {
+		t.Errorf("typing wrote:\n%s", readConfigFile(t, path))
+	}
+	if m = sendConfigKeys(t, m, "enter"); !m.configState.confirming {
+		t.Error("enter on the new text should ask again")
+	}
+}
+
+// An invalid value shows its reason and never reaches the confirm step; an
+// unchanged one ends the edit without asking.
+func TestConfig_RenamingFieldChecksFirst(t *testing.T) {
+	m, path := openConfigIn(t, 80, 24, renamingFields[1].file)
+	m = editTo(t, focusField(t, m, "naming.pattern"), "{name}")
+	if m.configState.confirming || m.configState.editErr == "" {
+		t.Errorf("invalid value: confirming %v, reason %q; want the reason only", m.configState.confirming, m.configState.editErr)
+	}
+	m = sendConfigKeys(t, m, "esc")
+
+	m = sendConfigKeys(t, m, "enter", "enter")
+	if m.configState.confirming || m.configState.editing {
+		t.Errorf("unchanged value: confirming %v, editing %v; want neither", m.configState.confirming, m.configState.editing)
+	}
+	if readConfigFile(t, path) != renamingFields[1].file {
+		t.Errorf("nothing should be written:\n%s", readConfigFile(t, path))
+	}
+}
+
+// With no worktree besides root, nothing can lose its name, so one enter
+// writes.
+func TestConfig_RenamingFieldWritesAtOnceWithoutOtherWorktrees(t *testing.T) {
+	for _, c := range renamingFields {
+		t.Run(c.key, func(t *testing.T) {
+			m, path := openConfigOver(t, 80, 24, c.file, 1)
+			m = editTo(t, focusField(t, m, c.key), c.typed)
+			if m.configState.confirming || m.configState.editing {
+				t.Errorf("confirming %v, editing %v; want the write done", m.configState.confirming, m.configState.editing)
+			}
+			if !strings.Contains(readConfigFile(t, path), c.toml) {
+				t.Errorf("file:\n%s", readConfigFile(t, path))
+			}
+		})
+	}
+}
+
+// Every other text field writes on the first enter, other worktrees or not.
+func TestConfig_OtherTextFieldsWriteAtOnce(t *testing.T) {
+	m, path := openConfigIn(t, 80, 24, "")
+	m = editTo(t, focusField(t, m, "projects_dir"), "~/src")
+	if m.configState.confirming || !strings.Contains(readConfigFile(t, path), `projects_dir = "~/src"`) {
+		t.Errorf("confirming %v, file:\n%s", m.configState.confirming, readConfigFile(t, path))
 	}
 }

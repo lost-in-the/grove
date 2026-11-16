@@ -82,7 +82,7 @@ func TestBranchForm_InUseBranchSwitches(t *testing.T) {
 	if in.Kind != intentSwitchTo || in.Target == nil || in.Target.ShortName != "auth" {
 		t.Fatalf("intent = %+v, want switch to auth", in)
 	}
-	if msg, _ := s.status(); msg != "in use by auth · ⏎ switches there" {
+	if msg, _ := s.status(); msg != "in use by auth · enter switches there" {
 		t.Errorf("status = %q", msg)
 	}
 	if press(s, "enter") != formSubmit {
@@ -920,7 +920,7 @@ func TestSwitchForm_StatusNamesThePick(t *testing.T) {
 		t.Errorf("empty: status = %q", msg)
 	}
 	typeInto(t, s, "fi")
-	if msg, _ := s.status(); msg != "⏎ switches to fix/login" {
+	if msg, _ := s.status(); msg != "enter switches to fix/login" {
 		t.Errorf("partial: status = %q", msg)
 	}
 	typeInto(t, s, "x/login")
@@ -996,7 +996,7 @@ func TestSwitchForm_ExplicitPickOnEmptySubmits(t *testing.T) {
 	s := newSwitchForm(testFormOptions(), testSource())
 	s.setWIP("/r/auth", false, nil, nil)
 	press(s, "ctrl+j")
-	if msg, _ := s.status(); msg != "⏎ switches to fix/login" {
+	if msg, _ := s.status(); msg != "enter switches to fix/login" {
 		t.Errorf("status = %q", msg)
 	}
 	if press(s, "enter") != formSubmit || s.intent().Branch != "fix/login" {

@@ -43,8 +43,16 @@ func requireTempWorkingDir() error {
 // openConfigIn opens the settings panel on a temp project whose
 // .grove/config.toml holds content, and returns the model and that file's
 // path. The test's working directory moves into the project, so the panel
-// loads and writes that file.
+// loads and writes that file. The dashboard behind it lists root and two
+// other worktrees.
 func openConfigIn(t *testing.T, w, h int, content string) (Model, string) {
+	t.Helper()
+	return openConfigOver(t, w, h, content, 3)
+}
+
+// openConfigOver is openConfigIn over a dashboard of n worktrees, root
+// included.
+func openConfigOver(t *testing.T, w, h int, content string, n int) (Model, string) {
 	t.Helper()
 	project := t.TempDir()
 	path := filepath.Join(project, ".grove", "config.toml")
@@ -60,7 +68,7 @@ func openConfigIn(t *testing.T, w, h int, content string) (Model, string) {
 	if err != nil {
 		t.Fatalf("load the temp project's config: %v", err)
 	}
-	m := newTestModel(withItems(3), withSize(w, h))
+	m := newTestModel(withItems(n), withSize(w, h))
 	m = sendKey(m, "c")
 	m = sendConfigMsg(t, m, configLoadedMsg{cfg: cfg})
 	return m, path

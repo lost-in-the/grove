@@ -1,0 +1,24 @@
+ [1m[1mtest-project[m ▸ [1msettings[m                                                       [m 
+  [1mgeneral[m   behavior   plugins   protection                                     
+                                                                                
+ ❯ [1mProject name         [m  myapp                                                 
+   Projects folder        ~/projects                                            
+   Default branch         main                                                  
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ ────────────────────────────────────────────────────────────────────────────── 
+  [1mProject name[m  project_name                                                    
+  The {project} part of worktree folder and session names.                      
+  ⚠ This project has 2 worktrees besides root. Changing this does not rename    
+    their folders. Grove will stop recognizing them by their short names.       
+                                                                                
+   Value    [37m▏[mshop[7;37m [m                                                              
+   Default  the repo name                                                       
+   Empty: the repo name from the git remote, else the folder name.              
+  Press enter again to change. esc keeps "myapp".                               
+                                                                                
+                                                                                
+  [1menter[m change · [1mesc[m cancel                                                     

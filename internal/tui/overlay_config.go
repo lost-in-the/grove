@@ -59,6 +59,9 @@ type ConfigState struct {
 	editing bool // a text field's value is being typed
 	input   textinput.Model
 	editErr string // why the typed value was not written
+	// confirming: the typed value would leave other worktrees' folders
+	// unmatched, so enter must be pressed again to write it.
+	confirming bool
 
 	saveErr    error  // the last write failed
 	saveErrKey string // the field it failed for
@@ -81,7 +84,7 @@ func (s *ConfigState) load(cfg *config.Config) {
 	s.Config = cfg
 	s.Fields = populateConfigFields(cfg)
 	s.cursor = [ConfigTabCount]int{}
-	s.editing = false
+	s.editing, s.confirming = false, false
 }
 
 // focused is the field under the cursor, or nil before the config loads.
@@ -350,20 +353,39 @@ func (s *ConfigState) startEdit() tea.Cmd {
 	in.CharLimit = 500
 	in.SetValue(s.focused().Value)
 	in.CursorEnd()
-	s.input, s.editing, s.editErr = in, true, ""
+	s.input, s.editing, s.editErr, s.confirming = in, true, "", false
 	return s.input.Focus()
 }
 
+// otherWorktreeCount is how many worktrees the dashboard lists besides
+// root: the ones whose short names hang on the project name and the
+// folder pattern.
+func (m Model) otherWorktreeCount() int {
+	n := 0
+	for _, li := range m.list.Items() {
+		if item, ok := li.(WorktreeItem); ok && !item.IsMain {
+			n++
+		}
+	}
+	return n
+}
+
 // handleConfigEditKey sends keys to the field being typed in: enter writes
-// the value, esc drops the edit, and every other key types.
+// the value, esc drops the edit, and every other key types. In the confirm
+// step, enter writes, esc goes back to the edit, and any other key goes
+// back to the edit and types.
 func (m Model) handleConfigEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := m.configState
+	confirming := s.confirming
+	s.confirming = false
 	switch {
 	case key.Matches(msg, m.keys.Escape):
-		s.editing, s.editErr = false, ""
+		if !confirming {
+			s.editing, s.editErr = false, ""
+		}
 		return m, nil
 	case key.Matches(msg, m.keys.Enter):
-		return m, m.commitConfigEdit()
+		return m, m.commitConfigEdit(confirming)
 	}
 	s.editErr = ""
 	var cmd tea.Cmd
@@ -372,8 +394,9 @@ func (m Model) handleConfigEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 // commitConfigEdit writes the typed value. An invalid one, or a failed
-// write, keeps the edit open with the reason.
-func (m *Model) commitConfigEdit() tea.Cmd {
+// write, keeps the edit open with the reason. A change to the project name
+// or folder pattern, with other worktrees, waits until confirmed.
+func (m *Model) commitConfigEdit(confirmed bool) tea.Cmd {
 	s := m.configState
 	f := s.focused()
 	value := strings.TrimSpace(s.input.Value())
@@ -388,6 +411,10 @@ func (m *Model) commitConfigEdit() tea.Cmd {
 		s.editErr = err.Error()
 		return nil
 	}
+	if f.renamesWorktrees && !confirmed && m.otherWorktreeCount() > 0 {
+		s.confirming = true
+		return nil
+	}
 	cmd := m.changeConfigField(s.Tab, s.cursor[s.Tab], value, "saved")
 	if s.saveErr != nil && s.saveErrKey == f.Key {
 		return nil
@@ -400,6 +427,9 @@ func (m *Model) commitConfigEdit() tea.Cmd {
 // being typed in.
 func (m Model) handleConfigInputMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	s := m.configState
+	if _, ok := msg.(tea.PasteMsg); ok {
+		s.confirming = false
+	}
 	var cmd tea.Cmd
 	s.input, cmd = s.input.Update(msg)
 	return m, cmd

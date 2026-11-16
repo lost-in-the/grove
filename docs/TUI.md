@@ -324,6 +324,8 @@ A full-screen panel for the project's grove config. Every change is written to `
 
 **Editing a text or list field.** `enter` opens the value for typing in the context panel. Every key types, digits and letters too, so the tabs drop their numbers and the footer shows only `enter save · esc cancel`. `enter` checks the value with the same rules config loading uses (a folder pattern needs `{project}` and `{name}` once each, the default branch cannot be empty) and writes it only when it passes; otherwise the reason shows under the value. `esc` drops the edit. A list is typed as names separated by commas.
 
+**Project name and Folder pattern.** Grove reads a worktree's short name from its folder name with these two values, and changing them does not rename folders. So when the dashboard lists worktrees besides root, the context panel warns under the description: `⚠ This project has 2 worktrees besides root. Changing this does not rename their folders. Grove will stop recognizing them by their short names.` The count comes from the dashboard's list. Committing a changed value then takes a second `enter`: the first one writes nothing, the status line reads `Press enter again to change. esc keeps "myapp".`, and the footer shows only `enter change · esc cancel`. The second `enter` writes it as any edit does. `esc` goes back to the edit with the typed text, and any other key goes back to the edit and types. A refused value never reaches this step, and an unchanged value, a project with root alone, every other field, and `u` write at once. When the context panel is short of rows, the help under the value gives way first, then the description; the warning and the status line stay whole.
+
 The frame has one layout at a given size: every section and every field put the rule on the same row. Narrow terminals show only the active tab's name and wrap the context panel's text; a title and key too long for one line put the key on the next.
 
 At 110 columns and up (the dashboard's split width, `splitWidth`) the list and the context panel sit side by side, as the dashboard's list and detail do. The list is a column of 44 to 56 cells, and a value too long for it ends in `…` (the context panel shows it whole). The context panel is to its right, past the dashboard's divider, and wraps at 76 columns however wide the terminal is. The header, tabs, and footer stay full width.
@@ -516,7 +518,7 @@ Every dashboard key is an `Action` in `internal/tui/actions.go`: its keys, label
 | `internal/tui/compositor.go` | Draws an overlay over a dimmed background (`composeOverlay`) and toasts on top (`composeLayerAt`) |
 | `internal/tui/worktree_list.go` | The dashboard list constructor (`newWorktreeList`) |
 | `internal/tui/config_fields.go` | The settings fields: label, key, description, choices and their meanings, default, validation |
-| `internal/tui/overlay_config.go` | The settings panel's state and keys: writes each change at once (`saveProjectConfig`), undo, text edits |
+| `internal/tui/overlay_config.go` | The settings panel's state and keys: writes each change at once (`saveProjectConfig`), undo, text edits, the second `enter` on fields that name worktree folders (`renamesWorktrees`, `otherWorktreeCount`) |
 | `internal/tui/config_view.go` | The settings frame: list, then the context panel under a rule or beside a divider, footer, one layout per size (`configLayout`) |
 
 ### List View Modes

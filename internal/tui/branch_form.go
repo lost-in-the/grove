@@ -624,10 +624,10 @@ func (s *BranchFormState) status() (string, formStatusKind) {
 		if _, msg, ok := s.validateWIP(); !ok {
 			return msg, formStatusHint
 		}
-		return "⏎ switches to " + sg[s.Pick].Branch, formStatusInfo
+		return "enter switches to " + sg[s.Pick].Branch, formStatusInfo
 	}
 	if w := s.inUse[s.branchValue()]; s.Mode == formModeNew && w != nil {
-		return fmt.Sprintf("in use by %s · ⏎ switches there", w.ShortName), formStatusInfo
+		return fmt.Sprintf("in use by %s · enter switches there", w.ShortName), formStatusInfo
 	}
 	if _, msg, ok := s.validate(); !ok {
 		return msg, formStatusHint
