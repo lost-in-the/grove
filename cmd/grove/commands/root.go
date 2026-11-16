@@ -51,14 +51,15 @@ func decideBareAction(isTTY, tuiDisabled, inProject bool) bareAction {
 }
 
 // switchAfterDashboard says which `grove to` the bare-grove entry point runs
-// after the dashboard closes. U is exactly `grove to <name> --up`. Every other
-// exit has nothing left to do: the dashboard already moved the user, or they
-// only quit.
+// after the dashboard closes. U is exactly `grove to <name> --up`, pinned to
+// the selected row's path so a name two worktrees share cannot pick the other
+// one. Every other exit has nothing left to do: the dashboard already moved
+// the user, or they only quit.
 func switchAfterDashboard(exit tui.Exit) (string, switchOptions, bool) {
 	if !exit.Up || exit.Name == "" {
 		return "", switchOptions{}, false
 	}
-	return exit.Name, switchOptions{Up: true}, true
+	return exit.Name, switchOptions{Up: true, Path: exit.Path}, true
 }
 
 // finishDashboard runs the switch a closed dashboard left to its caller.

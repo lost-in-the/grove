@@ -32,7 +32,7 @@ func TestAgentHelpOutput(t *testing.T) {
 		"grove rm <name>",
 		"Agent Tips",
 		"grove to <name> --up",
-		"never touches the stack",
+		"does not touch the stack by default",
 		"grove up --isolated",
 		"Full Documentation",
 	}

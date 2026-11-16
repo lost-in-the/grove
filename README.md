@@ -280,7 +280,7 @@ See [docs/TUI.md](docs/TUI.md) for the full reference — overlays, PR browser, 
 | `grove ls` | List all worktrees — name, branch, status, tmux state |
 | `grove new <name>` | Create a worktree + branch + tmux session (`--branch`, `--from`) |
 | `grove adopt [path]` | Bootstrap a git worktree that grove doesn't know about |
-| `grove to <name>` | Move to a worktree: directory, hooks, tmux. Never touches the stack |
+| `grove to <name>` | Move to a worktree: directory, hooks, tmux. Does not touch the stack by default (see `[switch] container_switch`) |
 | `grove to <name> --up` | Move and bring the stack to that worktree |
 | `grove to <name> --peek` | Lightweight move: skip hooks and tmux |
 | `grove up` / `grove down` | Bring the stack to the worktree you are in / stop the stack |

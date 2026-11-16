@@ -1081,6 +1081,9 @@ func TestPlugin_OnPreRemove_AgentSlotReleasedWithoutAgentMode(t *testing.T) {
 func newPostCreateExternalPlugin(t *testing.T) (*Plugin, *config.Config, string) {
 	t.Helper()
 	composeDir := t.TempDir()
+	// Tests built on this run real compose commands and expect them to fail.
+	// An inherited COMPOSE_FILE would point them at a real stack instead.
+	t.Setenv("COMPOSE_FILE", filepath.Join(composeDir, "no-such-compose.yml"))
 	cfg := &config.Config{
 		Plugins: config.PluginsConfig{
 			Docker: config.DockerPluginConfig{

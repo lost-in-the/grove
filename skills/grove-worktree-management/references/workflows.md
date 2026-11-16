@@ -43,6 +43,8 @@ grove new my-feature
 grove to my-feature
 
 # Bring the stack here (or do both at once: grove to my-feature --up)
+# With GROVE_AGENT_MODE=1 and agent stacks enabled, `to --up` only prints a
+# notice and starts nothing: run `grove up --isolated` here instead
 grove up
 
 # Work, commit as normal

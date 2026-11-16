@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -34,6 +35,9 @@ type switchOptions struct {
 	// "auto" for this invocation. Without it the setting decides, and its
 	// default ("off") means a switch never touches Docker.
 	Up bool
+	// Path, when set, is the worktree to switch to and wins over the name. The
+	// dashboard sets it: it knows the exact row, and a name can be ambiguous.
+	Path string
 }
 
 // switchConfigForStack returns the config the Docker switch hooks should see.
@@ -159,6 +163,15 @@ When using shell integration, this will also change your current directory.`,
 	}),
 }
 
+// findSwitchTarget resolves the worktree a switch goes to: by path when one is
+// given, otherwise by name.
+func findSwitchTarget(mgr *worktree.Manager, name, path string) (*worktree.Worktree, error) {
+	if path != "" {
+		return mgr.FindByPath(path)
+	}
+	return mgr.Find(name)
+}
+
 // performSwitch executes the full switch-to-worktree flow shared by `grove to`
 // and `grove last`: resolve the target, honor dirty handling, fire pre/post
 // switch hooks, manage the tmux session, and emit the cd/attach directives.
@@ -176,8 +189,9 @@ func performSwitch(ctx *GroveContext, name string, opts switchOptions) error {
 		return err
 	}
 
-	// Find worktree by short name or full name
-	targetTree, err := mgr.Find(name)
+	// Find worktree by short name or full name, or by the exact path when the
+	// caller already knows which one it means.
+	targetTree, err := findSwitchTarget(mgr, name, opts.Path)
 	if err != nil {
 		return fmt.Errorf("failed to find worktree: %w", err)
 	}
@@ -202,10 +216,11 @@ func performSwitch(ctx *GroveContext, name string, opts switchOptions) error {
 	if currentPath != "" && currentPath == targetTree.Path {
 		// The shared external stack follows the env file, not the shell. When
 		// the stack is on another worktree, a self-switch with --up (or a
-		// container_switch of auto/prompt) is the way to bring it here.
+		// container_switch of auto/prompt) is the way to bring it here. --up
+		// also starts a stack that is already here but down.
 		configured, configuredOK := docker.ConfiguredWorktreePath(ctx.Config)
-		if shouldRepointStack(ctx.Config.IsExternalDockerMode(), stackFollowsSwitch(hookConfig), configured, configuredOK, targetTree.Path, peek) {
-			repointSharedStack(ctx, hookConfig, mgr, targetTree, configured, jsonOut, stderr)
+		if events := selfSwitchStackEvents(ctx.Config.IsExternalDockerMode(), stackFollowsSwitch(hookConfig), opts.Up, configured, configuredOK, targetTree.Path, peek); len(events) > 0 {
+			runStackSwitchHooks(ctx, hookConfig, mgr, targetTree, configured, events, jsonOut, stderr)
 		}
 
 		stack := stackStatusFor(ctx.Config, targetTree.Path, mgr.DisplayNameForPath)
@@ -508,6 +523,23 @@ func shouldRepointStack(external, follows bool, configured string, configuredOK 
 	return !configuredOK || filepath.Clean(configured) != filepath.Clean(target)
 }
 
+// selfSwitchStackEvents returns the Docker switch events a self-switch
+// (`grove to <current>`) fires, or nil when it leaves the stack alone.
+//
+// A stack on another worktree gets both events, as a real switch would. With
+// --up and nothing to repoint (the stack is already here, or local mode has no
+// env file) only post-switch fires: it starts a stack that is down, and
+// pre-switch would stop one that is up. Without --up that case stays a no-op.
+func selfSwitchStackEvents(external, follows, up bool, configured string, configuredOK bool, target string, peek bool) []string {
+	if shouldRepointStack(external, follows, configured, configuredOK, target, peek) {
+		return []string{hooks.EventPreSwitch, hooks.EventPostSwitch}
+	}
+	if up && !peek {
+		return []string{hooks.EventPostSwitch}
+	}
+	return nil
+}
+
 // repointSucceeded reports whether the env file, re-read after the hooks ran,
 // names the target. It keeps the "Stack is now on" line true in every mode: in agent
 // mode the plugin may decline to bring the shared stack and says so itself.
@@ -521,11 +553,12 @@ func usesSharedExternalStack(cfg *config.Config) bool {
 	return cfg.IsExternalDockerMode() && !cfg.AgentMode
 }
 
-// repointSharedStack runs only the Docker plugin's pre/post-switch hooks for the
-// target, exactly as a real switch would (hookConfig carries --up, and
-// container_switch and auto_start still apply). It deliberately skips the dirty gate, other plugins' hooks, and state
-// recording so the A<->B toggle (B18) is unaffected.
-func repointSharedStack(ctx *GroveContext, hookConfig *config.Config, mgr *worktree.Manager, targetTree *worktree.Worktree, configuredPath string, jsonOut bool, stderr *cli.Writer) {
+// runStackSwitchHooks runs only the Docker plugin's switch hooks for the given
+// events on the target, exactly as a real switch would (hookConfig carries
+// --up, and container_switch and auto_start still apply). It deliberately
+// skips the dirty gate, other plugins' hooks, and state recording so the
+// A<->B toggle (B18) is unaffected.
+func runStackSwitchHooks(ctx *GroveContext, hookConfig *config.Config, mgr *worktree.Manager, targetTree *worktree.Worktree, configuredPath string, events []string, jsonOut bool, stderr *cli.Writer) {
 	plugin := docker.New()
 	if err := plugin.Init(ctx.Config); err != nil {
 		cli.Warning(stderr, "could not bring the stack: %v", err)
@@ -547,12 +580,14 @@ func repointSharedStack(ctx *GroveContext, hookConfig *config.Config, mgr *workt
 		MainPath:         ctx.ProjectRoot,
 	}
 
-	for _, event := range []string{hooks.EventPreSwitch, hooks.EventPostSwitch} {
+	for _, event := range events {
 		if err := registry.Fire(event, hookCtx); err != nil {
 			cli.Warning(stderr, "%s hooks failed: %v", event, err)
 		}
 	}
-	if after, ok := docker.ConfiguredWorktreePath(ctx.Config); !jsonOut && repointSucceeded(after, ok, targetTree.Path) {
+	// Only a repoint moved the stack; a start-only run found it already here.
+	moved := slices.Contains(events, hooks.EventPreSwitch)
+	if after, ok := docker.ConfiguredWorktreePath(ctx.Config); moved && !jsonOut && repointSucceeded(after, ok, targetTree.Path) {
 		if from == "" {
 			cli.Info(stderr, "Stack is now on '%s'", targetTree.DisplayName())
 		} else {

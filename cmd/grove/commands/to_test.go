@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 
 	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/hooks"
 	"github.com/lost-in-the/grove/internal/worktree"
 )
 
@@ -307,5 +309,41 @@ func TestSwitchResult_StackFields(t *testing.T) {
 	m = marshal(stackStatus{})
 	if _, ok := m["stack_here"]; ok {
 		t.Errorf("not tracked should omit the stack fields: got %v", m)
+	}
+}
+
+// A self-switch (`grove to <current>`) fires the Docker switch hooks only when
+// the stack has something to do. --up always has: after `grove down` the env
+// file still names this worktree, and the stack must start anyway.
+func TestSelfSwitchStackEvents(t *testing.T) {
+	const target = "/work/myapp-feature"
+	repoint := []string{hooks.EventPreSwitch, hooks.EventPostSwitch}
+	startOnly := []string{hooks.EventPostSwitch}
+	tests := []struct {
+		name       string
+		external   bool
+		follows    bool
+		up         bool
+		configured string
+		ok         bool
+		peek       bool
+		want       []string
+	}{
+		{name: "--up with the stack on another worktree repoints", external: true, follows: true, up: true, configured: "/work/myapp-main", ok: true, want: repoint},
+		{name: "--up with the stack already here still starts it", external: true, follows: true, up: true, configured: target, ok: true, want: startOnly},
+		{name: "--up in local mode starts the stack", follows: true, up: true, want: startOnly},
+		{name: "no --up with the stack already here does nothing", external: true, configured: target, ok: true, want: nil},
+		{name: "no --up in local mode does nothing", want: nil},
+		{name: "container_switch auto with the stack already here does nothing", external: true, follows: true, configured: target, ok: true, want: nil},
+		{name: "container_switch auto with the stack elsewhere repoints", external: true, follows: true, configured: "/work/myapp-main", ok: true, want: repoint},
+		{name: "--peek never fires hooks", external: true, follows: true, up: true, configured: target, ok: true, peek: true, want: nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := selfSwitchStackEvents(tt.external, tt.follows, tt.up, tt.configured, tt.ok, target, tt.peek)
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("selfSwitchStackEvents() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

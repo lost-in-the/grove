@@ -236,10 +236,21 @@ func readEnvVar(composePath, envFileName, key string) string {
 	prefix := key + "="
 	for _, line := range strings.Split(string(content), "\n") {
 		if strings.HasPrefix(line, prefix) {
-			return strings.TrimSpace(line[len(prefix):])
+			return unquoteEnvValue(strings.TrimSpace(line[len(prefix):]))
 		}
 	}
 	return ""
+}
+
+// unquoteEnvValue strips one pair of matching quotes, which Compose accepts
+// around an env file value (APP_DIR="/work/myapp-feature").
+func unquoteEnvValue(value string) string {
+	if len(value) >= 2 {
+		if q := value[0]; (q == '"' || q == '\'') && value[len(value)-1] == q {
+			return value[1 : len(value)-1]
+		}
+	}
+	return value
 }
 
 // pathMatchesEnv checks whether a worktree path matches the env var value.

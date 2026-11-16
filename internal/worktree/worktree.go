@@ -286,6 +286,25 @@ func (m *Manager) Find(name string) (*Worktree, error) {
 	return nil, nil
 }
 
+// FindByPath returns the worktree registered at path, or nil when there is
+// none. Unlike Find it cannot be ambiguous: worktrees in different directories
+// can share a basename (and so a short name), but never a path. The path must
+// be spelled the way git reports it.
+func (m *Manager) FindByPath(path string) (*Worktree, error) {
+	trees, err := m.listLight()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list worktrees: %w", err)
+	}
+
+	want := filepath.Clean(path)
+	for _, tree := range trees {
+		if filepath.Clean(tree.Path) == want {
+			return tree, nil
+		}
+	}
+	return nil, nil
+}
+
 // List returns all worktrees in the repository.
 // Each tree's IsDirty + DirtyFiles are populated from a single git status call —
 // callers that need the dirty file list should read tree.DirtyFiles rather than

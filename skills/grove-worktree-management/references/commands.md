@@ -7,7 +7,7 @@ Read this file when you need the complete command surface including rarely-used 
 | Canonical | Aliases | `--json` | Mutates | Description |
 |-----------|---------|:--------:|:-------:|-------------|
 | `grove new [name]` | `spawn`, `n` | — | ✓ | Create worktree + branch + tmux session; `--up` also brings the stack |
-| `grove to [name]` | `switch`, `t` | — | ✓ | Move to a worktree; never touches the stack. `--up` also brings it, `--peek` skips hooks and tmux |
+| `grove to [name]` | `switch`, `t` | — | ✓ | Move to a worktree; does not touch the stack by default (`[switch] container_switch` set to `auto` or `prompt` changes that). `--up` also brings it, `--peek` skips hooks and tmux |
 | `grove fetch <ref>` | `f` | — | ✓ | Create worktree from PR (`pr/N`) or issue (`issue/N`); requires `gh` CLI |
 | `grove ls` | `list`, `l` | ✓ | — | List all worktrees with status, branch, tmux, containers |
 | `grove here` | `h` | ✓ | — | Current worktree status (name, branch, SHA, changes, tmux, agent slot) |
