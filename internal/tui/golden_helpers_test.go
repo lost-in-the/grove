@@ -185,7 +185,7 @@ func withConfigOverlay() testOpt {
 			{Key: "default_base_branch", Label: "default_branch", Value: "main", Loaded: "main", Type: ConfigString, Description: "Base branch for new worktrees"},
 		}
 		cs.Fields[ConfigTabBehavior] = []ConfigField{
-			{Key: "switch.dirty_handling", Label: "dirty_handling", Value: "auto-stash", Loaded: "auto-stash", Type: ConfigEnum, Options: []string{"auto-stash", "prompt", "refuse"}, Description: "How to handle dirty worktree on switch"},
+			{Key: "switch.dirty_handling", Label: "dirty_handling", Value: "auto-stash", Loaded: "auto-stash", Type: ConfigEnum, Options: []string{"warn", "ignore", "prompt", "refuse", "auto-stash"}, Description: "On leaving uncommitted changes: warn, ignore, prompt, refuse, auto-stash"},
 			{Key: "tmux.mode", Label: "session_mode", Value: "auto", Loaded: "auto", Type: ConfigEnum, Options: []string{"auto", "manual", "off"}, Description: "Sessions: auto (attach), manual (print the command), off (none)"},
 		}
 		cs.Fields[ConfigTabPlugins] = []ConfigField{

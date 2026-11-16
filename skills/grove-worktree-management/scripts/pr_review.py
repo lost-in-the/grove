@@ -107,7 +107,7 @@ def main() -> None:
             "Orchestrate a non-destructive PR review workflow. "
             "Fetches the PR worktree with `grove fetch pr/N` if it does not "
             "already exist, then switches to it with `grove to <name> --peek` "
-            "(no hooks, no tmux). Emits a JSON result."
+            "(no hooks, no session). Emits a JSON result."
         ),
         epilog=(
             "Examples:\n"

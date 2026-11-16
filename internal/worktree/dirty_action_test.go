@@ -111,6 +111,53 @@ func TestResolveDirtyAction(t *testing.T) {
 			want:          DirtyRefuse,
 		},
 
+		// Warn mode never blocks, with or without a terminal
+		{
+			name:          "warn warns on dirty interactive",
+			dirtyHandling: "warn",
+			isDirty:       true,
+			isInteractive: true,
+			want:          DirtyWarn,
+		},
+		{
+			name:          "warn warns on dirty non-interactive",
+			dirtyHandling: "warn",
+			isDirty:       true,
+			isInteractive: false,
+			want:          DirtyWarn,
+		},
+		{
+			name:          "warn allows clean worktree",
+			dirtyHandling: "warn",
+			isDirty:       false,
+			isInteractive: true,
+			want:          DirtyAllow,
+		},
+		{
+			name:          "--no-hooks skips the warning",
+			dirtyHandling: "warn",
+			isDirty:       true,
+			noHooks:       true,
+			isInteractive: true,
+			want:          DirtyAllow,
+		},
+
+		// Ignore mode moves without a word
+		{
+			name:          "ignore allows dirty interactive",
+			dirtyHandling: "ignore",
+			isDirty:       true,
+			isInteractive: true,
+			want:          DirtyAllow,
+		},
+		{
+			name:          "ignore allows dirty non-interactive",
+			dirtyHandling: "ignore",
+			isDirty:       true,
+			isInteractive: false,
+			want:          DirtyAllow,
+		},
+
 		// Unknown config value defaults to refuse (safety fallback)
 		{
 			name:          "unknown handling defaults to refuse",

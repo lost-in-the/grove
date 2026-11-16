@@ -77,7 +77,8 @@ func writeAgentHelp(cmd *cobra.Command) {
     it is (a human may be using it). If the target has no isolated stack yet, it
     also prints an 'agent mode:' notice on stderr.
     Run grove up --isolated before running tests
-  - grove new emits cd:/path directives — parse these to know where the worktree was created
+  - grove new <name> --json prints switch_to: the path of the new worktree. The cd:/path
+    directive is only printed when GROVE_SHELL=1
 
 ## Full Documentation
   grove --help              All commands

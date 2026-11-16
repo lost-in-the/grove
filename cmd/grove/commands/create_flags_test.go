@@ -124,7 +124,7 @@ func TestQuietCannotBeCombinedWithJSON(t *testing.T) {
 }
 
 func TestCommandsThatTakeAWorktreeNameCompleteIt(t *testing.T) {
-	for _, cmd := range []*cobra.Command{attachCmd, applyCmd, syncCmd, testCmd} {
+	for _, cmd := range []*cobra.Command{attachCmd, applyCmd, syncCmd, testCmd, doctorCmd} {
 		if cmd.ValidArgsFunction == nil {
 			t.Errorf("%s does not complete worktree names", cmd.Name())
 		}

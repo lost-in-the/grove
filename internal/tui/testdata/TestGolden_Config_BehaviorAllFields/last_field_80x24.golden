@@ -20,5 +20,5 @@
  ┃ [1mnaming_pattern[m                                                               
  ┃ Worktree directory template; {project} and {name} each exactly once          
  ┃ > {project}-{name}[7m [m                                                          
-                                                                                
+ ↑ more above                                                                   
   [1mtab[m next field · [1mctrl+n/p[m section · [1mesc[m close                                 

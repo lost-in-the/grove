@@ -79,17 +79,21 @@ default_base_branch = "main"       # string
 
 ### [switch]
 
-Controls behavior when switching to a worktree that has uncommitted changes in the current one.
+Controls what `grove to` and `grove last` do when the worktree you are leaving has uncommitted changes. Uncommitted files stay in the worktree you leave, so the default only tells you about them.
 
 ```toml
 [switch]
-# How to handle a dirty working tree on switch.
-# "prompt"     — ask the user what to do (default)
-# "auto-stash" — stash changes before switching (restored automatically only if
-#                the switch aborts; after a completed switch, run `git stash pop`
-#                in that worktree to take the changes back up)
-# "refuse"     — abort the switch if changes are present
-dirty_handling = "prompt"          # string: prompt | auto-stash | refuse
+# What to do when the worktree you are leaving has uncommitted changes.
+# "warn"       : print one line on stderr (`feature has 3 uncommitted files`),
+#                then move (default)
+# "ignore"     : say nothing, move
+# "prompt"     : ask before moving; with no terminal to ask on, refuse
+# "refuse"     : stop the move
+# "auto-stash" : stash the changes, then move. The stash stays parked after the
+#                move: run `git stash pop` in that worktree to get the changes
+#                back. Git stashes are shared across all worktrees. The stash is
+#                restored for you only if the move aborts.
+dirty_handling = "warn"            # string: warn | ignore | prompt | refuse | auto-stash
 
 # Whether `grove to` and `grove last` bring the Docker stack along with you.
 # "off"    — a move never touches the stack: no env file write, no start, no stop,
@@ -1092,9 +1096,6 @@ mode = "auto"
 project_name = "rails-app"
 default_base_branch = "main"
 
-[switch]
-dirty_handling = "auto-stash"
-
 [tmux]
 mode = "auto"
 on_switch = "reset"
@@ -1128,9 +1129,6 @@ symlink_dirs  = ["storage"]
 # .grove/config.toml — high-concurrency agent workloads with isolated stacks
 
 project_name = "my-app"
-
-[switch]
-dirty_handling = "auto-stash"
 
 [tmux]
 mode = "off"          # tmux suppressed; agents don't need sessions

@@ -644,9 +644,11 @@ Flags:
 2. **Check dirty state** (unless `--no-hooks` or `--peek`):
    - Inspect the *current* worktree for uncommitted changes (`git status --porcelain`)
    - Behavior controlled by `switch.dirty_handling` in `.grove/config.toml`:
-     - `"prompt"` (default): In interactive mode (TTY), show dirty files and ask "Switch anyway?". In non-interactive mode, fall back to refuse behavior
-     - `"auto-stash"`: Automatically run `git stash push -m "grove: auto-stash before switch to {name}"`, then proceed
+     - `"warn"` (default): Print one line on stderr that names the worktree and counts the files (`feature-auth has 3 uncommitted files`), then proceed. Never prompts and never fails, with or without a TTY. With `--json` the line still goes to stderr and stdout holds only the JSON result
+     - `"ignore"`: Proceed and print nothing
+     - `"prompt"`: In interactive mode (TTY), show dirty files and ask "Switch anyway?". In non-interactive mode, fall back to refuse behavior
      - `"refuse"`: Block the switch, list dirty files, suggest committing/stashing or changing config
+     - `"auto-stash"`: Automatically run `git stash push -m "grove: auto-stash before switch to {name}"`, then proceed. The stash stays parked after the move, and git stashes are shared across all worktrees
    - If the dirty check itself fails (e.g., git error), treat the worktree as clean and proceed — never block the user on a failed status check
    - `--no-hooks` and `--peek` always bypass the dirty check (the run has no side effects)
 
@@ -712,9 +714,15 @@ To enter directory: cd ~/projects/grove-testing
   M internal/auth.go
   ?? internal/auth_test.go
 
-Commit or stash your changes, or set dirty_handling = "auto-stash" in .grove/config.toml
+Commit or stash your changes, or set dirty_handling = "warn" in .grove/config.toml
 ```
 **Exit code: 1**
+
+**Output (Dirty worktree, warn mode, the default):**
+```
+⚠ feature-auth has 3 uncommitted files
+✓ Switched to 'testing'
+```
 
 **Output (Dirty worktree, auto-stash mode):**
 ```
@@ -774,8 +782,10 @@ Please be more specific.
 | Partial name matches multiple | Error with list of matches |
 | Frozen worktree | Auto-resume, then switch |
 | Session exists but wrong directory | Detect drift and correct per `tmux.on_switch` setting |
+| Dirty worktree, warn mode (default) | Print `<name> has N uncommitted files` on stderr (`1 uncommitted file` for one), proceed with switch. Same with and without a TTY |
+| Dirty worktree, ignore mode | Proceed with switch, print nothing |
 | Dirty worktree, refuse mode | Block switch, list dirty files, exit 1 |
-| Dirty worktree, auto-stash mode | Stash changes automatically, proceed with switch |
+| Dirty worktree, auto-stash mode | Stash changes automatically, proceed with switch. The stash stays parked after the move; git stashes are shared across all worktrees |
 | Dirty worktree, prompt mode (TTY) | Show dirty files, ask user to confirm, abort or proceed |
 | Dirty worktree, prompt mode (non-TTY) | Fall back to refuse behavior (exit 1) |
 | Dirty worktree with `--no-hooks` or `--peek` | Bypass dirty check entirely, proceed with switch |
@@ -2224,7 +2234,7 @@ General:
   default_base_branch: main
 
 [switch]:
-  dirty_handling: prompt
+  dirty_handling: warn
 
 [naming]:
   pattern: {project}-{name}

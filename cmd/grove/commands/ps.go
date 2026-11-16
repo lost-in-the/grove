@@ -34,8 +34,8 @@ var psCmd = &cobra.Command{
 	Short:   "Show active stacks",
 	Long: `List all active Docker stacks, their reference IDs, and URLs.
 
-Each stack started with 'grove up --isolated' or auto-started by 'grove new'
-runs its own containers independently.
+Each stack started with 'grove up --isolated', or by 'grove new' with --up or
+auto_up = true, runs its own containers independently.
 
 Examples:
   grove ps          # Show active stacks

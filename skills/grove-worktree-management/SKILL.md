@@ -37,13 +37,13 @@ the passive update notice, so `--check-update` is how you surface it.
 Before any grove command:
 
 ```bash
-export GROVE_AGENT_MODE=1        # suppress tmux takeover; implies NO_UPDATE_NOTIFIER
+export GROVE_AGENT_MODE=1        # suppress session takeover; implies NO_UPDATE_NOTIFIER
 export GROVE_NONINTERACTIVE=1    # auto-accept all prompts
 export GROVE_TUI=0               # disable dashboard
 ```
 
-> `GROVE_AGENT_MODE=1` suppresses tmux in `grove to` but not session creation in
-> `grove new`. To fully disable tmux, set `[tmux] mode = "off"` in config.
+> `GROVE_AGENT_MODE=1` suppresses the session in `grove to` but not session creation in
+> `grove new`. To fully disable sessions, set `[tmux] mode = "off"` in config.
 >
 > **Docker effect:** in external Docker mode with `[plugins.docker.external.agent] enabled = true`,
 > `grove to` never moves the stack (a human may be using it). `grove to --up` leaves the
@@ -84,7 +84,7 @@ With `--json` (`-j`), a failed command prints one JSON object on stderr: `{"erro
 
 ## Critical Rules
 
-- **Worktree naming:** directories default to `{project}-{name}`; projects can override via `[naming] pattern` in `.grove/config.toml`. `grove ls` shows short names; tmux sessions always use canonical `{project}-{name}`.
+- **Worktree naming:** directories default to `{project}-{name}`; projects can override via `[naming] pattern` in `.grove/config.toml`. `grove ls` shows short names; sessions always use canonical `{project}-{name}`.
 - **Read-only switching:** `grove to <name> --peek` is short for `--here --no-hooks`: it stays in this shell and skips hooks. Safe for PR review.
 - **Shell directives:** grove prints `cd:`, `tmux-attach:`, and `env:` lines only when `GROVE_SHELL=1` is set (the shell wrapper sets it). An agent that calls the binary directly gets none. To learn the path, use `--json` and read `switch_to`. If `GROVE_SHELL=1` is in your environment, filter the lines: `grove to x 2>&1 | grep -vE '^(cd:|tmux-attach(-cc)?:|env:)'`
 - **`grove new` and sessions:** `GROVE_AGENT_MODE=1` does NOT suppress session creation in `grove new`. Pass `--here` for that, or set `[session] open_in = "here"` in config.

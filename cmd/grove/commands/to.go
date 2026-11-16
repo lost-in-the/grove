@@ -202,6 +202,19 @@ When using shell integration, this will also change your current directory.`,
 	}),
 }
 
+// uncommittedNotice is the line dirty_handling = "warn" prints about the
+// worktree being left. A count of zero means the files could not be listed.
+func uncommittedNotice(worktreeName string, files int) string {
+	switch files {
+	case 0:
+		return fmt.Sprintf("%s has uncommitted changes", worktreeName)
+	case 1:
+		return fmt.Sprintf("%s has 1 uncommitted file", worktreeName)
+	default:
+		return fmt.Sprintf("%s has %d uncommitted files", worktreeName, files)
+	}
+}
+
 // findSwitchTarget resolves the worktree a switch goes to: by path when one is
 // given, otherwise by name.
 func findSwitchTarget(mgr *worktree.Manager, name, path string) (*worktree.Worktree, error) {
@@ -304,13 +317,16 @@ func performSwitch(ctx *GroveContext, name string, opts switchOptions) error {
 		}
 		action := worktree.ResolveDirtyAction(ctx.Config.Switch.DirtyHandling, hasDirty, noHooks, cli.IsInteractive())
 		switch action {
+		case worktree.DirtyWarn:
+			files, _ := wip.ListWIPFiles()
+			cli.Warning(stderr, "%s", uncommittedNotice(prevWorktree, len(files)))
 		case worktree.DirtyRefuse:
 			files, _ := wip.ListWIPFiles()
 			msg := fmt.Sprintf("worktree '%s' has uncommitted changes", prevWorktree)
 			if len(files) > 0 {
 				msg += ":\n  " + strings.Join(files, "\n  ")
 			}
-			msg += "\n\nCommit or stash your changes, or set dirty_handling = \"auto-stash\" in .grove/config.toml"
+			msg += "\n\nCommit or stash your changes, or set dirty_handling = \"warn\" in .grove/config.toml"
 			return fmt.Errorf("%s", msg)
 		case worktree.DirtyStash:
 			stashMsg := fmt.Sprintf("grove: auto-stash before switch to %s", name)
@@ -705,7 +721,7 @@ func handleDirectoryDrift(m mux.Multiplexer, target mux.Target, worktreePath, on
 		return
 	}
 
-	if pane.CurrentPath == worktreePath {
+	if mux.SamePath(pane.CurrentPath, worktreePath) {
 		return
 	}
 

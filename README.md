@@ -340,7 +340,7 @@ Requires `gh` CLI (installed and authenticated to your repo).
 | `grove setup` | Auto-configure shell integration |
 | `grove install <shell>` | Print shell integration code (use in `eval "$(grove install zsh)"`) |
 | `grove doctor` | Health check: binary, shell integration, git, tmux/herdr, Docker |
-| `grove repair` | Fix state inconsistencies and orphaned tmux sessions |
+| `grove repair` | Fix state inconsistencies and orphaned sessions (tmux or herdr) |
 | `grove agent-help` | Quick reference for AI agent workflows |
 | `grove version` | Show version information (`grove --version` prints the same line) |
 
@@ -416,9 +416,11 @@ Grove uses TOML config files. Later files override earlier ones:
 project_name = "my-project"
 
 [switch]
-# What to do with uncommitted changes when switching
-# "prompt" (default) | "auto-stash" | "refuse"
-dirty_handling = "prompt"
+# What to do when the worktree you are leaving has uncommitted changes
+# "warn" (default) | "ignore" | "prompt" | "refuse" | "auto-stash"
+# "auto-stash" leaves the stash parked after the move. Git stashes are shared
+# across all worktrees.
+dirty_handling = "warn"
 
 [tmux]
 # "auto" (default) | "manual" | "off"

@@ -60,9 +60,9 @@ export GROVE_TUI=0               # disable dashboard; bare `grove` prints usage
 
 | Command | Purpose | `--json` | Mutates |
 |---------|---------|:--------:|:-------:|
-| `grove new [name]` | Create worktree + branch + tmux; `--up` also brings the stack (aliases: `spawn`, `n`) | — | ✓ |
-| `grove to [name]` | Move to a worktree; does not touch Docker by default (`[switch] container_switch` set to `auto` or `prompt` changes that). `--up` also brings the stack, `--here` stays in this shell (hooks still run), `--no-hooks` skips hooks, `--peek` is short for `--here --no-hooks` (aliases: `switch`, `t`) | — | ✓ |
-| `grove fetch <pr\|issue>/<n>` | Create worktree from GitHub PR/issue; needs `gh` (aliases: `f`) | — | ✓ |
+| `grove new [name]` | Create worktree + branch + tmux; `--up` also brings the stack (aliases: `spawn`, `n`) | ✓ | ✓ |
+| `grove to [name]` | Move to a worktree; does not touch Docker by default (`[switch] container_switch` set to `auto` or `prompt` changes that). `--up` also brings the stack, `--here` stays in this shell (hooks still run), `--no-hooks` skips hooks and the dirty check, `--peek` is short for `--here --no-hooks` (aliases: `switch`, `t`) | ✓ | ✓ |
+| `grove fetch <pr\|issue>/<n>` | Create worktree from GitHub PR/issue; needs `gh` (aliases: `f`) | ✓ | ✓ |
 | `grove ls` | List all worktrees in this project (aliases: `list`, `l`) | ✓ | — |
 | `grove here` | Current worktree status (aliases: `h`) | ✓ | — |
 | `grove context` | Rich status: ahead/behind, stash count, recent commits | ✓ | — |

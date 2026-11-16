@@ -183,3 +183,81 @@ func TestOpenIn_OldSpellingsStillLoad(t *testing.T) {
 		t.Fatalf("open_in = \"current\" stopped loading: %v\n%s", err, stderr)
 	}
 }
+
+// dirtyMainRepo leaves the main checkout with two changed files: one modified
+// and one untracked.
+func dirtyMainRepo(t *testing.T, repo string) {
+	t.Helper()
+	testhelper.WriteFile(t, filepath.Join(repo, "a.txt"), "modified\n")
+	testhelper.WriteFile(t, filepath.Join(repo, "b.txt"), "new\n")
+}
+
+func TestTo_DefaultWarnsAboutUncommittedFilesAndMoves(t *testing.T) {
+	binary := buildGroveBinary(t)
+	repo, wt := setupPlacementRepo(t, binary, "")
+	dirtyMainRepo(t, repo)
+
+	stdout, stderr, err := groveIn(repo, binary, "to", "feat", "--json")
+	if err != nil {
+		t.Fatalf("the default dirty_handling stopped the move: %v\n%s", err, stderr)
+	}
+	if !strings.Contains(stderr, "root has 2 uncommitted files\n") {
+		t.Errorf("stderr does not name the worktree and the file count:\n%s", stderr)
+	}
+	var result struct {
+		SwitchTo string `json:"switch_to"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("stdout is not JSON alone: %v\n%s", err, stdout)
+	}
+	if result.SwitchTo != wt {
+		t.Errorf("switch_to = %q, want %q", result.SwitchTo, wt)
+	}
+	if data, _ := os.ReadFile(filepath.Join(repo, "a.txt")); string(data) != "modified\n" {
+		t.Errorf("the move changed the files left behind: a.txt = %q", data)
+	}
+}
+
+func TestTo_WarnUsesTheSingularForOneFile(t *testing.T) {
+	binary := buildGroveBinary(t)
+	repo, _ := setupPlacementRepo(t, binary, "\n[switch]\ndirty_handling = \"warn\"\n")
+	testhelper.WriteFile(t, filepath.Join(repo, "a.txt"), "modified\n")
+
+	_, stderr, err := groveIn(repo, binary, "to", "feat")
+	if err != nil {
+		t.Fatalf("grove to failed: %v\n%s", err, stderr)
+	}
+	if !strings.Contains(stderr, "root has 1 uncommitted file\n") {
+		t.Errorf("stderr does not report one file in the singular:\n%s", stderr)
+	}
+}
+
+func TestTo_IgnoreMovesWithoutMentioningUncommittedFiles(t *testing.T) {
+	binary := buildGroveBinary(t)
+	repo, _ := setupPlacementRepo(t, binary, "\n[switch]\ndirty_handling = \"ignore\"\n")
+	dirtyMainRepo(t, repo)
+
+	_, stderr, err := groveIn(repo, binary, "to", "feat")
+	if err != nil {
+		t.Fatalf("dirty_handling = ignore stopped the move: %v\n%s", err, stderr)
+	}
+	if strings.Contains(stderr, "uncommitted") {
+		t.Errorf("dirty_handling = ignore mentioned the uncommitted files:\n%s", stderr)
+	}
+}
+
+func TestTo_NoHooksPrintsNoUncommittedFilesLine(t *testing.T) {
+	binary := buildGroveBinary(t)
+	repo, _ := setupPlacementRepo(t, binary, "")
+	dirtyMainRepo(t, repo)
+
+	for _, flags := range [][]string{{"--no-hooks"}, {"--peek"}} {
+		_, stderr, err := groveIn(repo, binary, append([]string{"to", "feat"}, flags...)...)
+		if err != nil {
+			t.Fatalf("grove to %v failed: %v\n%s", flags, err, stderr)
+		}
+		if strings.Contains(stderr, "uncommitted") {
+			t.Errorf("grove to %v ran the dirty check:\n%s", flags, stderr)
+		}
+	}
+}

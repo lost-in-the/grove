@@ -1,7 +1,7 @@
 id = "lost-in-the.grove"
 name = "Grove"
 version = "0.3.0"
-# Everything below is verified against herdr 0.8.0 and 0.9.1. An older herdr
+# Everything below is verified against herdr 0.8.0, 0.9.1 and 0.9.5. An older herdr
 # that does not know an event still links the plugin — with an "unknown event"
 # warning — and then silently never fires that hook, so the floor is the
 # oldest version actually tested rather than a guess.

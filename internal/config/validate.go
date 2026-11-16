@@ -4,10 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
 const dockerModeExternal = "external"
+
+// DirtyHandlingValues lists every [switch] dirty_handling value, default first.
+var DirtyHandlingValues = []string{"warn", "ignore", "prompt", "refuse", "auto-stash"}
 
 // Validate checks if the configuration is valid
 func Validate(cfg *Config) error {
@@ -20,14 +24,8 @@ func Validate(cfg *Config) error {
 		return fmt.Errorf("dirty_handling cannot be empty")
 	}
 
-	validDirtyHandling := map[string]bool{
-		"auto-stash": true,
-		"prompt":     true,
-		"refuse":     true,
-	}
-
-	if !validDirtyHandling[cfg.Switch.DirtyHandling] {
-		return fmt.Errorf("dirty_handling must be one of: auto-stash, prompt, refuse")
+	if !slices.Contains(DirtyHandlingValues, cfg.Switch.DirtyHandling) {
+		return fmt.Errorf("dirty_handling must be one of: %s", strings.Join(DirtyHandlingValues, ", "))
 	}
 
 	// Validate container switch behavior

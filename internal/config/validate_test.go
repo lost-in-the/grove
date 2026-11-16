@@ -12,8 +12,8 @@ func TestLoadDefaults_AllFields(t *testing.T) {
 	if cfg.DefaultBranch != "main" {
 		t.Errorf("DefaultBranch = %q, want %q", cfg.DefaultBranch, "main")
 	}
-	if cfg.Switch.DirtyHandling != "prompt" {
-		t.Errorf("DirtyHandling = %q, want %q", cfg.Switch.DirtyHandling, "prompt")
+	if cfg.Switch.DirtyHandling != "warn" {
+		t.Errorf("DirtyHandling = %q, want %q", cfg.Switch.DirtyHandling, "warn")
 	}
 	if cfg.Switch.ContainerSwitch != "off" {
 		t.Errorf("ContainerSwitch = %q, want %q", cfg.Switch.ContainerSwitch, "off")
@@ -99,9 +99,20 @@ func TestValidate_DefaultBranch(t *testing.T) {
 	}
 }
 
+func TestValidate_DirtyHandlingErrorListsEveryValue(t *testing.T) {
+	err := Validate(&Config{DefaultBranch: "main", Switch: SwitchConfig{DirtyHandling: "bogus"}})
+	if err == nil {
+		t.Fatal("expected an error for an unknown dirty_handling")
+	}
+	const want = "dirty_handling must be one of: warn, ignore, prompt, refuse, auto-stash"
+	if err.Error() != want {
+		t.Errorf("error = %q, want %q", err.Error(), want)
+	}
+}
+
 // TestValidate_DirtyHandlingValidValues confirms each valid value passes.
 func TestValidate_DirtyHandlingValidValues(t *testing.T) {
-	for _, val := range []string{"auto-stash", "prompt", "refuse"} {
+	for _, val := range []string{"warn", "ignore", "prompt", "refuse", "auto-stash"} {
 		t.Run(val, func(t *testing.T) {
 			cfg := &Config{
 				DefaultBranch: "main",

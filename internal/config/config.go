@@ -120,7 +120,7 @@ type ProtectionConfig struct {
 
 // SwitchConfig controls worktree switching behavior
 type SwitchConfig struct {
-	DirtyHandling   string `toml:"dirty_handling"`   // auto-stash, prompt, refuse
+	DirtyHandling   string `toml:"dirty_handling"`   // warn, ignore, prompt, refuse, auto-stash
 	ContainerSwitch string `toml:"container_switch"` // auto, prompt, off
 }
 
@@ -138,7 +138,7 @@ type NamingConfig struct {
 type MuxConfig struct {
 	// Backend is one of auto, tmux, herdr, off. Empty means auto, which
 	// prefers the multiplexer grove is already running inside and otherwise
-	// falls back to whichever binary is installed (tmux winning ties).
+	// falls back to whichever binary is installed (herdr winning ties).
 	Backend string `toml:"backend"`
 }
 

@@ -244,8 +244,8 @@ func populateConfigFields(cfg *config.Config) [][]ConfigField {
 			Value:       cfg.Switch.DirtyHandling,
 			Loaded:      cfg.Switch.DirtyHandling,
 			Type:        ConfigEnum,
-			Options:     []string{"auto-stash", "prompt", "refuse"},
-			Description: "How to handle dirty worktree on switch",
+			Options:     config.DirtyHandlingValues,
+			Description: "On leaving uncommitted changes: warn, ignore, prompt, refuse, auto-stash",
 		},
 		{
 			Key:         "switch.container_switch",

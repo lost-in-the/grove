@@ -13,13 +13,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`--here`** on `grove to`, `last`, `new`, `fork`, `open`, and `fetch`: stay in the shell or pane you are in for this run. Grove only changes directory and creates no session. Hooks still run.
 - **`--no-hooks`** on `grove to` and `grove last`: skip hooks and the dirty check for this run. `--peek` is now short for `--here --no-hooks` and behaves as before. `grove last` gains `--peek` too.
 - The config panel in the dashboard has an `open_in` field.
+- The config panel shows `↓ more below` or `↑ more above` when a section has fields scrolled out of view.
 - **`grove --version`** prints the same line as `grove version`.
 - **`--up` (`-u`) and `--no-docker`** on `grove fork` and `grove fetch`, and `--up` on `grove open`: the same flags as `grove new`, through the same code. `grove open <name> --up` brings the stack even when the worktree already exists.
 - **`--no-switch` (`-n`) and `--json` (`-j`)** on `grove fetch`. `grove fork --no-switch` gains the short form `-n`, and `grove browse --json` gains `-j`.
-- Shell completion offers worktree names for `grove join`, `graft`, `sync`, and `test`, and the values of `--state` for `grove prs` and `grove issues`.
+- Shell completion offers worktree names for `grove join`, `graft`, `sync`, `test`, and `doctor`, and the values of `--state` for `grove prs` and `grove issues`.
 - `grove doctor` warns when herdr is older than 0.8.0, and when the running herdr server is a different version than the installed herdr CLI (herdr's `server_binary_stale`).
 
 ### Changed
+- **`[switch] dirty_handling` now defaults to `warn`.** When the worktree you leave has uncommitted changes, `grove to` and `grove last` print one line on stderr (`feature has 3 uncommitted files`) and move. They no longer ask, and they no longer refuse when there is no terminal. Set `dirty_handling = "prompt"` to get the old behavior. A new value, `ignore`, moves and prints nothing. A config that already sets `dirty_handling` is not affected, and `grove init` used to write `dirty_handling = "prompt"`, so projects it created keep asking until you change that line. With `auto-stash`, the stash stays parked after the move, and git stashes are shared across all worktrees.
 - **One vocabulary for where you land.** The placement is `session` (the worktree's own session: a tmux session or a herdr workspace) or `here` (the shell or pane you are in). `[session] open_in` now takes `"session"` (default) or `"here"`. The old values `"new"` and `"current"` still work; `grove doctor` and `grove config` name the value to change to. The full table is in `docs/COMMAND_SPECIFICATIONS.md`.
 - `--no-tmux` is now a hidden alias of `--here` on `grove to` and `grove new`. It still works and prints a deprecation line on stderr.
 - `--up` cannot be combined with `--no-hooks`, as it already could not with `--peek`.
@@ -37,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The herdr backend is verified against herdr 0.9.5, and CI runs the live suite on it.
 
 ### Fixed
+- Outside a grove project, a command run with `--json` now prints the JSON error object on stderr. Before, it printed plain text. The exit code is still 10. In text mode the message now starts with `Error:`.
+- A session whose pane is in the worktree by another spelling of the path (a symlink) is no longer treated as drifted, so `grove to` does not send it a `cd`.
 - `grove fetch` no longer creates a session when `[session] open_in = "here"`.
 - `grove ps --json` prints `[]` when there are no agent stacks or they are not configured. Before, it printed nothing on stdout and an error object on stderr, and exited 0. A real failure to list stacks now exits 6.
 - `grove new --help` no longer shows `--dirty git diff HEAD` as if the flag took a value.

@@ -2,7 +2,7 @@
 project_name = "grove"
 
 [switch]
-dirty_handling = "prompt"  # auto-stash, prompt, refuse
+dirty_handling = "prompt"  # warn, ignore, prompt, refuse, auto-stash
 
 [naming]
 pattern = "{project}-{name}"

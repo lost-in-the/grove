@@ -21,7 +21,7 @@ Read this file before running `grove new`, `grove fetch`, or `grove to` in a rep
 
 These commands never run hooks and are safe to use in any repo without inspection:
 
-- `grove ls` — reads git and tmux state only
+- `grove ls` — reads git and session state only
 - `grove here` — reads current worktree state only
 - `grove context` — reads git history and tracking info only
 - `grove ps` — reads Docker state only

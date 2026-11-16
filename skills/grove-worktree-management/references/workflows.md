@@ -14,7 +14,7 @@ Requires `gh` CLI installed and authenticated.
 # Create a worktree from the PR (runs post_create hooks — audit first if unfamiliar repo)
 grove fetch pr/42
 
-# Switch to it in read-only mode — no pre/post_switch hooks fire, no tmux
+# Switch to it in read-only mode — no pre/post_switch hooks fire, no session
 grove to pr-42 --peek
 
 # Review files, run grep, read tests
@@ -36,10 +36,10 @@ grove rm pr-42
 **Goal:** Develop a new feature in an isolated worktree with its own Docker stack.
 
 ```bash
-# Create worktree + branch + tmux session (add --up to bring the stack)
+# Create worktree + branch + session (add --up to bring the stack)
 grove new my-feature
 
-# Move to it (or grove will prompt; GROVE_AGENT_MODE=1 skips tmux takeover)
+# Move to it (or grove will prompt; GROVE_AGENT_MODE=1 skips session takeover)
 grove to my-feature
 
 # Bring the stack here (or do both at once: grove to my-feature --up)
@@ -136,7 +136,7 @@ grove sync
 # Check what git knows about
 git worktree list
 
-# Adopt the orphan — grove creates its metadata, registers tmux session name, etc.
+# Adopt the orphan — grove creates its metadata, registers the session name, etc.
 grove adopt /path/to/existing-worktree
 ```
 
@@ -185,8 +185,8 @@ grove trim --older-than 7
 **Goal:** Understand current state before making changes. Always do this before writing code or running mutating commands.
 
 ```bash
-grove here --json       # current worktree: name, branch, SHA, changes, tmux, agent slot
-grove ls --json         # all worktrees: name, branch, path, status, tmux, containers
+grove here --json       # current worktree: name, branch, SHA, changes, session, agent slot
+grove ls --json         # all worktrees: name, branch, path, status, session, containers
 grove context --json    # current worktree: ahead/behind, stash count, recent commits
 grove ps --json         # active isolated Docker slots
 ```
@@ -216,6 +216,6 @@ grove doctor feature
 grove doctor project-feature
 ```
 
-`grove doctor` runs health checks: git worktree integrity, tmux session existence, Docker stack status, hook configuration validity, and copy_files/symlink targets. Output is color-coded: green = healthy, yellow = warnings, red = broken.
+`grove doctor` runs health checks: git worktree integrity, session existence, Docker stack status, hook configuration validity, and copy_files/symlink targets. Output is color-coded: green = healthy, yellow = warnings, red = broken.
 
 For hook-related warnings, read `.grove/hooks.toml` and `.grove/config.toml` directly — see `references/trust-model.md` for what to look for.

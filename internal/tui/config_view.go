@@ -102,8 +102,8 @@ func renderTabRow(labels []string, active, width int) string {
 }
 
 // configStatus is the frame's status line: a load or save error, else the
-// active form's first validation error, else blank. huh shows neither
-// (spec 11).
+// active form's first validation error, else a hint that fields are scrolled
+// out of view, else blank. huh shows none of these (spec 11).
 func (m Model) configStatus() string {
 	s := m.configState
 	if s.Err != nil {
@@ -114,7 +114,34 @@ func (m Model) configStatus() string {
 			return Styles.ErrorText.Render(errs[0].Error())
 		}
 	}
+	if hint := s.hiddenFieldsHint(); hint != "" {
+		return Styles.TextMuted.Render(hint)
+	}
 	return ""
+}
+
+// hiddenFieldsHint says on which side the active section has fields the form
+// is not showing. huh scrolls a tall section with focus and does not expose
+// its scroll position, so the hint reads it from the drawn form: the section's
+// first or last field label is missing when that end is scrolled out.
+func (s *ConfigState) hiddenFieldsHint() string {
+	fields := s.Fields[s.Tab]
+	if s.form() == nil || len(fields) == 0 {
+		return ""
+	}
+	view := ansi.Strip(s.form().View())
+	above := !strings.Contains(view, fields[0].Label)
+	below := !strings.Contains(view, fields[len(fields)-1].Label)
+	switch {
+	case above && below:
+		return "↑ more above · ↓ more below"
+	case above:
+		return "↑ more above"
+	case below:
+		return "↓ more below"
+	default:
+		return ""
+	}
 }
 
 // renderConfigPrompt is the small save confirm drawn over the frame.

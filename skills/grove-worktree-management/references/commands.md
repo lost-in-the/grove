@@ -85,6 +85,7 @@ Taken from `--help` of the built binary. `-h/--help` and the two global flags (`
 - `--up` (`-u`) — also bring the stack to the worktree you move to. Same flag on `grove last` and `grove new`. Without it, `grove to` never touches Docker (unless `[switch] container_switch` is `auto` or `prompt`).
 - `--here`: placement "here" for this run: stay in the shell or pane you are in, change directory only. Hooks still run. Also on `last`, `new`, `fork`, `open`, `fetch`.
 - `--no-hooks`: skip pre/post_switch hooks and the dirty check. Cannot combine with `--up`.
+- Dirty check: when the worktree you leave has uncommitted changes, `grove to` prints one line on stderr (`feature has 3 uncommitted files`) and moves. It never blocks by default. `[switch] dirty_handling` selects `warn` (default), `ignore`, `prompt`, `refuse`, or `auto-stash`. `auto-stash` leaves the stash parked after the move, and git stashes are shared across all worktrees.
 - `--peek`: short for `--here --no-hooks`. Safe for PR review and parallel inspection.
 
 **`grove trim`:**

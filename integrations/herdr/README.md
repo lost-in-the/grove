@@ -20,7 +20,7 @@ so its bootstrap never runs either — no state, no excludes, no post-create
 hooks, no docker. If you remove one through herdr, grove's record of it goes
 stale the same way. Nothing in grove can notice either on its own.
 
-Verified against herdr 0.8.0 and 0.9.1.
+Verified against herdr 0.8.0, 0.9.1 and 0.9.5.
 
 There is deliberately **no dashboard pane**. herdr's sidebar already lists every
 worktree as a workspace, so a grove picker inside herdr duplicates the primary

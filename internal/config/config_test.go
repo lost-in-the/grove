@@ -16,8 +16,8 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.DefaultBranch != "main" {
 		t.Errorf("Expected default branch 'main', got '%s'", cfg.DefaultBranch)
 	}
-	if cfg.Switch.DirtyHandling != "prompt" {
-		t.Errorf("Expected default dirty handling 'prompt', got '%s'", cfg.Switch.DirtyHandling)
+	if cfg.Switch.DirtyHandling != "warn" {
+		t.Errorf("Expected default dirty handling 'warn', got '%s'", cfg.Switch.DirtyHandling)
 	}
 }
 
@@ -1830,7 +1830,7 @@ enabled = false
 		t.Errorf("Plugins.Docker.Enabled = %v, want global false", cfg.Plugins.Docker.Enabled)
 	}
 	// And defaults still fill fields no layer set.
-	if cfg.Switch.DirtyHandling != "prompt" {
-		t.Errorf("Switch.DirtyHandling = %q, want default %q", cfg.Switch.DirtyHandling, "prompt")
+	if cfg.Switch.DirtyHandling != "warn" {
+		t.Errorf("Switch.DirtyHandling = %q, want default %q", cfg.Switch.DirtyHandling, "warn")
 	}
 }

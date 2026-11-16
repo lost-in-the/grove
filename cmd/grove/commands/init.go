@@ -168,7 +168,7 @@ func writeInitConfig(groveDir, projectName string) (string, error) {
 project_name = %q
 
 [switch]
-dirty_handling = "prompt"  # auto-stash, prompt, refuse
+dirty_handling = "warn"  # warn, ignore, prompt, refuse, auto-stash
 
 [naming]
 pattern = "{project}-{name}"

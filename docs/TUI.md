@@ -254,9 +254,11 @@ The header reads `<project> ▸ settings`, with `● 2 unsaved` on the right whi
 | Section | Settings |
 |-----|----------|
 | `[1] general` | `project_name`, `projects_dir`, `default_branch` |
-| `[2] behavior` | `dirty_handling`, `container_switch` (stack follows every move: `off`, `prompt`, `auto`), `open_in` (placement: `session` or `here`), `session_mode`, `naming_pattern` |
+| `[2] behavior` | `dirty_handling` (uncommitted changes in the worktree you leave: `warn`, `ignore`, `prompt`, `refuse`, `auto-stash`), `container_switch` (stack follows every move: `off`, `prompt`, `auto`), `open_in` (placement: `session` or `here`), `session_mode`, `naming_pattern` |
 | `[3] plugins` | Docker plugin `enabled`, `auto_start`, `auto_stop` |
 | `[4] protection` | `protected` list, `immutable` list |
+
+A section with more fields than fit scrolls as you move through it. The line above the footer then reads `↓ more below` or `↑ more above`.
 
 | Key | Action |
 |-----|--------|

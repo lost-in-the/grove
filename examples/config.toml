@@ -27,15 +27,19 @@ default_base_branch = "main"
 # =============================================================================
 
 [switch]
-# What to do when switching to a worktree with uncommitted changes.
-# Default: "prompt"
+# What to do when the worktree you are leaving has uncommitted changes.
+# Default: "warn"
 #
 # Options:
-#   prompt     - Ask the user what to do (default)
-#   auto-stash - Automatically stash changes before switching (restored only
-#                if the switch aborts; run `git stash pop` there to resume)
-#   refuse     - Refuse to switch until changes are committed or stashed
-dirty_handling = "prompt"
+#   warn       - Print one line on stderr, then move (default)
+#   ignore     - Say nothing, move
+#   prompt     - Ask before moving; with no terminal to ask on, refuse
+#   refuse     - Refuse to move until changes are committed or stashed
+#   auto-stash - Stash changes, then move. The stash stays parked after the
+#                move (run `git stash pop` there to resume), and git stashes
+#                are shared across all worktrees. Restored for you only if the
+#                move aborts.
+dirty_handling = "warn"
 
 # =============================================================================
 # Worktree Naming

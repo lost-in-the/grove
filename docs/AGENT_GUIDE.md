@@ -632,8 +632,10 @@ Config is loaded in layers (later overrides earlier):
 
 [switch]
 # What to do when switching away from a dirty worktree
-# "prompt" (default) | "auto-stash" | "refuse"
-dirty_handling = "prompt"
+# "warn" (default) | "ignore" | "prompt" | "refuse" | "auto-stash"
+# "auto-stash" leaves the stash parked after the move. Git stashes are shared
+# across all worktrees.
+dirty_handling = "warn"
 
 [naming]
 # Worktree directory naming template
@@ -799,8 +801,8 @@ Recommended `.grove/config.toml` additions for projects that agents use:
 
 ```toml
 [switch]
-# Agents should not be blocked by dirty worktrees
-dirty_handling = "auto-stash"
+# The default never blocks an agent: it prints one line on stderr and moves
+dirty_handling = "warn"
 
 [tmux]
 # Agents should not attach to tmux sessions
@@ -1012,7 +1014,7 @@ Two worktrees running containers that bind the same host ports:
 If a session exists with a worktree name but the worktree was removed manually:
 ```bash
 grove repair
-# Detects and resolves state inconsistencies including orphaned tmux sessions
+# Detects and resolves state inconsistencies including orphaned sessions (tmux or herdr)
 ```
 
 Or clean manually:

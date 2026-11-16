@@ -13,7 +13,7 @@ import (
 
 // Each section is its own form holding only that section's fields (spec 11).
 func TestConfig_FormPerSection(t *testing.T) {
-	m := openConfigWith(t, 100, 30, nil)
+	m := openConfigWith(t, 100, 40, nil)
 	s := m.configState
 	for tab := ConfigTab(0); tab < ConfigTabCount; tab++ {
 		f := s.Forms[tab]
@@ -120,4 +120,28 @@ func sizeRequests(cmd tea.Cmd) int {
 		}
 	}
 	return n
+}
+
+// A section taller than the form scrolls with focus, so the status line says
+// on which side fields are hidden.
+func TestConfigStatus_SaysWhereHiddenFieldsAre(t *testing.T) {
+	m := sendConfigKeys(t, openConfigWith(t, 80, 24, nil), "ctrl+n")
+	if got := stripAnsi(m.configStatus()); got != "↓ more below" {
+		t.Errorf("on Behavior's first field: status %q, want %q", got, "↓ more below")
+	}
+
+	last := len(m.configState.Fields[ConfigTabBehavior]) - 1
+	for range last {
+		m = sendConfigKeys(t, m, "tab")
+	}
+	if got := stripAnsi(m.configStatus()); got != "↑ more above" {
+		t.Errorf("on Behavior's last field: status %q, want %q", got, "↑ more above")
+	}
+}
+
+func TestConfigStatus_BlankWhenEveryFieldFits(t *testing.T) {
+	m := openConfigWith(t, 80, 24, nil)
+	if got := m.configStatus(); got != "" {
+		t.Errorf("General fits at 80x24: status %q, want blank", got)
+	}
 }

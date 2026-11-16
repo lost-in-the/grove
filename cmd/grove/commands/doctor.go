@@ -60,7 +60,8 @@ Examples:
   grove doctor my-feature     # audit one worktree
   grove doctor --all          # audit every registered worktree
   grove doctor my-feature --fix   # restore missing entries in one worktree`,
-	Args: cobra.MaximumNArgs(1),
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: completeWorktreeNames,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		w := cli.NewStdout()
 
