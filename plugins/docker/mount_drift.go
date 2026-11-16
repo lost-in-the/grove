@@ -301,9 +301,15 @@ func parseInspectMounts(jsonBlob []byte, mountDest string) (string, error) {
 	}
 	cleanedDest := filepath.Clean(mountDest)
 	for _, m := range mounts {
-		if filepath.Clean(m.Destination) == cleanedDest {
-			return m.Source, nil
+		if filepath.Clean(m.Destination) != cleanedDest {
+			continue
 		}
+		// A named volume or tmpfs at this path has no worktree behind it, so
+		// its source must not be compared against one.
+		if m.Type != "bind" {
+			return "", fmt.Errorf("%w at %q in container (it is a %s mount)", errNoMount, mountDest, m.Type)
+		}
+		return m.Source, nil
 	}
 	return "", fmt.Errorf("%w at %q in container", errNoMount, mountDest)
 }

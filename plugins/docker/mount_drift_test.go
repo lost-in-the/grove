@@ -38,7 +38,7 @@ func TestParseInspectMounts(t *testing.T) {
 		},
 		{
 			name:      "multiple mounts — first match wins",
-			blob:      `[{"Source":"/vendor","Destination":"/vendor"},{"Source":"/work/proj","Destination":"/app"},{"Source":"/cache","Destination":"/cache"}]`,
+			blob:      `[{"Type":"bind","Source":"/vendor","Destination":"/vendor"},{"Type":"bind","Source":"/work/proj","Destination":"/app"},{"Type":"bind","Source":"/cache","Destination":"/cache"}]`,
 			mountDest: "/app",
 			wantSrc:   "/work/proj",
 		},
@@ -422,5 +422,20 @@ func TestComposePsQArgs_DefaultEnvFileOmitsFlag(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("args[%d] = %q, want %q (full: %v)", i, got[i], want[i], got)
 		}
+	}
+}
+
+func TestParseInspectMounts_NonBindMountAtDestIsNoMount(t *testing.T) {
+	blob := []byte(`[
+		{"Type":"bind","Source":"/home/dev/projects/myapp-feature","Destination":"/app"},
+		{"Type":"volume","Name":"node_modules","Source":"/var/lib/docker/volumes/node_modules/_data","Destination":"/app/node_modules"}
+	]`)
+
+	got, err := parseInspectMounts(blob, "/app/node_modules")
+	if !errors.Is(err, errNoMount) {
+		t.Fatalf("parseInspectMounts() = %q, %v; want an error wrapping errNoMount", got, err)
+	}
+	if got != "" {
+		t.Errorf("source = %q, want empty: a named volume has no worktree source", got)
 	}
 }
