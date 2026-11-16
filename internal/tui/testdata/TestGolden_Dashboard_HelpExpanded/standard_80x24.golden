@@ -1,24 +1,24 @@
-[2m [1m[1mtest-project[m  ·  5 worktrees  ·  on root  ·  ↕ name                     ● root[m [m
+[2m test-project · 5 worktrees · ⬍ name                                        1/5 [m
 [2m                                                                                [m
-          ╭──────────────────────────────────────────────────────────╮
-          │                                                          │
-          │   [1mNavigation[m                                             │
-          │  ──────────────────────────────────────────────────────  │
-          │   [1m↑/k ↓/j[m                                                │
-          │   └ Move up / down                                       │
-          │   [1menter[m                                                  │
-          │   └ Switch to selected worktree                          │
-          │   [1mU[m                                                      │
-          │   └ Switch and start containers                          │
-          │   [1m1-9[m                                                    │
-          │   └ Quick-switch by number                               │
-          │   [1m/[m                                                      │
-          │   └ Filter worktrees                                     │
-          │   [1mtab[m                                                    │
-          │   └ Focus detail panel                                   │
-          │  ──────────────────────────────────────────────────────  │
-          │    [1m↑↓[m scroll · [1mesc[m close                                 │
-          │                                                          │
-          ╰──────────────────────────────────────────────────────────╯
-[2m  [1m↑↓[m navigate · [1menter[m switch · [1mU[m up · [1mn[m new                                     [m
-[2m  [1m/[m filter · [1mtab[m detail · [1mo[m sort · [1m?[m help · [1mq[m quit                              [m
+[2m ❯ ● root [m╭──────────────────────────────────────────────────────────╮[2m  0s      [m
+[2m   ○ featu[m│                                                          │[2m 60m      [m
+[2m   ○ fix-b[m│   [1mNavigation[m                                             │[2m  2h      [m
+[2m   ● testi[m│  ──────────────────────────────────────────────────────  │[2m  3h      [m
+[2m   ○ refac[m│   [1m↑/k ↓/j[m                                                │[2m  4h      [m
+[2m          [m│   └ Move up / down                                       │[2m          [m
+[2m          [m│   [1mg[m                                                      │[2m          [m
+[2m          [m│   └ Goto strip (g top, p PRs, i issues, c config, u      │[2m          [m
+[2m          [m│  upgrade, d local diff, a agent under herdr)             │[2m          [m
+[2m          [m│   [1mgg / G[m                                                 │[2m          [m
+[2m          [m│   └ Top / bottom of list                                 │[2m          [m
+[2m          [m│   [1mctrl+d / ctrl+u[m                                        │[2m          [m
+[2m          [m│   └ Half page down / up                                  │[2m          [m
+[2m          [m│   [1menter[m                                                  │[2m          [m
+[2m          [m│   └ Switch to selected worktree                          │[2m          [m
+[2m          [m│   [1mU[m                                                      │[2m          [m
+[2m          [m│  ──────────────────────────────────────────────────────  │[2m          [m
+[2m          [m│    [1m↑↓[m scroll · [1mesc[m close                                 │[2m          [m
+[2m          [m│                                                          │[2m          [m
+[2m root · te[m╰──────────────────────────────────────────────────────────╯[2m          [m
+[2m  ↑↓ navigate · enter switch · ␣ find                                           [m
+[2m  tab detail · / filter · g goto · ? help                                       [m

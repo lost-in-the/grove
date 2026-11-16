@@ -46,7 +46,7 @@ func TestGolden_Dashboard_SortModes(t *testing.T) {
 		mode SortMode
 	}{
 		{"name", SortByName},
-		{"recent", SortByLastAccessed},
+		{"age", SortByAge},
 		{"dirty", SortByDirtyFirst},
 	}
 	for _, tc := range modes {
@@ -57,10 +57,10 @@ func TestGolden_Dashboard_SortModes(t *testing.T) {
 	}
 }
 
-func TestGolden_Dashboard_CompactMode(t *testing.T) {
+func TestGolden_Dashboard_TwoLine(t *testing.T) {
 	for _, size := range []termSize{sizeStandard, sizeWide} {
 		t.Run(size.name, func(t *testing.T) {
-			m := goldenModel(t, size, withItems(5), withCompactMode())
+			m := goldenModel(t, size, withItems(5), withTwoLine())
 			golden.RequireEqual(t, []byte(m.viewString()))
 		})
 	}
@@ -90,25 +90,6 @@ func TestGolden_Overlay_Delete(t *testing.T) {
 	})
 }
 
-func TestGolden_Overlay_Create(t *testing.T) {
-	t.Run("branch_choice_step", func(t *testing.T) {
-		m := goldenModel(t, sizeStandard, withItems(3), withCreateStep(CreateStepBranchChoice))
-		golden.RequireEqual(t, []byte(m.viewString()))
-	})
-	t.Run("branch_select_step", func(t *testing.T) {
-		m := goldenModel(t, sizeStandard, withItems(3), withCreateStep(CreateStepBranchSelect))
-		golden.RequireEqual(t, []byte(m.viewString()))
-	})
-	t.Run("name_step", func(t *testing.T) {
-		m := goldenModel(t, sizeStandard, withItems(3), withCreateStep(CreateStepName))
-		golden.RequireEqual(t, []byte(m.viewString()))
-	})
-	t.Run("confirm_step", func(t *testing.T) {
-		m := goldenModel(t, sizeStandard, withItems(3), withCreateStep(CreateStepConfirm))
-		golden.RequireEqual(t, []byte(m.viewString()))
-	})
-}
-
 func TestGolden_Overlay_Bulk(t *testing.T) {
 	t.Run("with_items", func(t *testing.T) {
 		m := goldenModel(t, sizeStandard, withItems(5), withBulkOverlay(5))
@@ -125,18 +106,16 @@ func TestGolden_Overlay_PRs(t *testing.T) {
 		m := goldenModel(t, sizeStandard, withItems(3), withPRData())
 		golden.RequireEqual(t, []byte(m.viewString()))
 	})
+	t.Run("stale", func(t *testing.T) {
+		m := goldenModel(t, sizeStandard, withItems(3), withPRData())
+		m.prState.Stale = true
+		golden.RequireEqual(t, []byte(m.viewString()))
+	})
 }
 
 func TestGolden_Overlay_Issues(t *testing.T) {
 	t.Run("with_data", func(t *testing.T) {
 		m := goldenModel(t, sizeStandard, withItems(3), withIssueData())
-		golden.RequireEqual(t, []byte(m.viewString()))
-	})
-}
-
-func TestGolden_Overlay_Fork(t *testing.T) {
-	t.Run("confirm", func(t *testing.T) {
-		m := goldenModel(t, sizeStandard, withItems(3), withForkOverlay())
 		golden.RequireEqual(t, []byte(m.viewString()))
 	})
 }
@@ -148,12 +127,7 @@ func TestGolden_Overlay_Sync(t *testing.T) {
 	})
 }
 
-func TestGolden_Overlay_Config(t *testing.T) {
-	t.Run("general_tab", func(t *testing.T) {
-		m := goldenModel(t, sizeStandard, withItems(3), withConfigOverlay())
-		golden.RequireEqual(t, []byte(m.viewString()))
-	})
-}
+// TestGolden_Config (config_frame_test.go) covers the config frame.
 
 // =============================================================================
 // Component tests (isolated render functions)
@@ -172,12 +146,7 @@ func TestGolden_Component_Header(t *testing.T) {
 				goldenMu.Unlock()
 			})
 
-			h := Header{
-				ProjectName:   "grove-cli",
-				WorktreeCount: 5,
-				CurrentBranch: "main",
-				CurrentName:   "root",
-			}
+			h := Header{ProjectName: "grove-cli", WorktreeCount: 5, SortLabel: "name", Cursor: 1, Total: 5}
 			golden.RequireEqual(t, []byte(h.View(size.width)))
 		})
 	}
@@ -249,7 +218,7 @@ func TestGolden_Component_HelpFooter(t *testing.T) {
 	}{
 		{"dashboard", ViewDashboard},
 		{"delete", ViewDelete},
-		{"create", ViewCreate},
+		{"create", ViewBranchForm},
 	}
 	for _, tc := range contexts {
 		t.Run(tc.name, func(t *testing.T) {
@@ -332,6 +301,8 @@ func withHerdrItems(n int) testOpt {
 			listItems[i] = items[i]
 		}
 		m.list.SetItems(listItems)
+		m.agentAware = true
+		m.refreshDelegate()
 	}
 }
 
@@ -345,4 +316,120 @@ func TestGolden_Dashboard_Herdr(t *testing.T) {
 			golden.RequireEqual(t, []byte(m.viewString()))
 		})
 	}
+}
+
+// Rows with a chip, counts, ages, and tail glyphs, so column alignment is
+// encoded in a golden.
+func TestGolden_Dashboard_RichRows(t *testing.T) {
+	for _, size := range []termSize{sizeStandard, sizeWide} {
+		t.Run(size.name, func(t *testing.T) {
+			m := goldenModel(t, size, withRichRows())
+			golden.RequireEqual(t, []byte(m.viewString()))
+		})
+	}
+}
+
+func withRichRows() testOpt {
+	return func(m *Model) {
+		items := rowFixture()
+		li := make([]list.Item, len(items))
+		for i, it := range items {
+			it.Path = "/tmp/test-project-" + it.ShortName
+			li[i] = it
+		}
+		m.list.SetItems(li)
+		m.refreshDelegate()
+		m.updateLayout()
+	}
+}
+
+// The m strip docked above the footer, with one slot taken.
+func TestGolden_Dashboard_PinStrip(t *testing.T) {
+	for _, size := range []termSize{sizeStandard, sizeWide} {
+		t.Run(size.name, func(t *testing.T) {
+			m := goldenModel(t, size, withItems(5), func(m *Model) {
+				m.pins = pinSet{"1": "root"}
+				m.list.Select(2)
+				m.pendingM = true
+				m.refreshDelegate()
+				m.updateLayout()
+			})
+			golden.RequireEqual(t, []byte(m.viewString()))
+		})
+	}
+}
+
+// Pinned rows show their slot digit in the lead column.
+func TestGolden_Dashboard_Pinned(t *testing.T) {
+	m := goldenModel(t, sizeWide, withItems(5), func(m *Model) {
+		m.pins = pinSet{"1": "root", "3": "testing"}
+		m.refreshDelegate()
+	})
+	golden.RequireEqual(t, []byte(m.viewString()))
+}
+
+// The full-screen detail sheet opened with tab below 110 columns.
+func TestGolden_DetailSheet(t *testing.T) {
+	m := goldenModel(t, sizeStandard, withItems(3), func(m *Model) {
+		m.list.Select(1)
+		m.openDetail()
+	})
+	golden.RequireEqual(t, []byte(m.viewString()))
+}
+
+// Under 44 columns one line replaces the UI.
+func TestGolden_Guard(t *testing.T) {
+	m := goldenModel(t, termSize{name: "narrow_40x24", width: 40, height: 24}, withItems(3))
+	golden.RequireEqual(t, []byte(m.viewString()))
+}
+
+// The g strip docked above the footer.
+func TestGolden_Dashboard_GStrip(t *testing.T) {
+	for _, size := range []termSize{sizeStandard, sizeWide} {
+		t.Run(size.name, func(t *testing.T) {
+			m := goldenModel(t, size, withItems(5), func(m *Model) {
+				m.pendingG = true
+				m.updateLayout()
+			})
+			golden.RequireEqual(t, []byte(m.viewString()))
+		})
+	}
+}
+
+// Omni over the dashboard: empty, with a query, and scoped to actions.
+func TestGolden_Omni(t *testing.T) {
+	cases := map[string]func(m *Model){
+		"empty": func(m *Model) {
+			m.pins = pinSet{"1": "root"}
+			next, _ := m.openOmni(omniScopeAll)
+			*m = next.(Model)
+		},
+		"query": func(m *Model) {
+			next, _ := m.openOmni(omniScopeAll)
+			*m = next.(Model)
+			m.omni.Input.SetValue("fix")
+			m.omni.refresh()
+		},
+		"actions": func(m *Model) {
+			next, _ := m.openOmni(omniScopeActions)
+			*m = next.(Model)
+		},
+	}
+	for name, setup := range cases {
+		t.Run(name, func(t *testing.T) {
+			m := goldenModel(t, sizeStandard, withItems(5), setup)
+			golden.RequireEqual(t, []byte(m.viewString()))
+		})
+	}
+}
+
+// The message history with fixed times, so ages never drift.
+func TestGolden_Messages(t *testing.T) {
+	m := goldenModel(t, sizeStandard, withItems(3), func(m *Model) {
+		m.toast.Show(&Toast{Message: "Created \"auth\" (hook failed: exit 1)", Level: ToastWarning, Duration: time.Hour, CreatedAt: testNow.Add(-2 * time.Hour)})
+		m.toast.Show(&Toast{Message: "Delete failed: worktree is locked", Level: ToastError, Duration: time.Hour, CreatedAt: testNow.Add(-90 * time.Second)})
+		m.toast.Dismiss()
+		m.pushView(ViewMessages)
+	})
+	golden.RequireEqual(t, []byte(m.viewString()))
 }

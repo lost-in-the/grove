@@ -1,0 +1,14 @@
+╭──────────────────────────────────────────────────────╮
+│ [1mSwitch branch of auth[m                                │
+│ ❯ Branch  [37m[m[7;37mt[m[38;5;240mype to search local branches[m[38;5;240m             [m │
+│           ❯ fix/login                          local │
+│                                                      │
+│                                                      │
+│                                                      │
+│   In      auth                                       │
+│   Now     feature/auth                               │
+│                                                      │
+│   Changes stash 1 file before switching              │
+│ type a branch name                                   │
+│ ⏎ switch · ctrl+j/k pick · esc back                  │
+╰──────────────────────────────────────────────────────╯

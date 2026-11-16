@@ -135,7 +135,7 @@ func (s *SyncState) selectedSource() *WorktreeWIPInfo {
 // handleSyncKey handles key input for the sync overlay.
 func (m Model) handleSyncKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.syncState == nil {
-		m.activeView = ViewDashboard
+		m.popView()
 		return m, nil
 	}
 
@@ -157,7 +157,7 @@ func (m Model) handleSyncKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // dismissSync closes the sync overlay and returns to the dashboard.
 func (m Model) dismissSync() (tea.Model, tea.Cmd) {
-	m.activeView = ViewDashboard
+	m.popView()
 	m.syncState = nil
 	return m, nil
 }

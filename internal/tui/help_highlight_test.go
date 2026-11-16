@@ -83,9 +83,9 @@ func TestHighlightOverwrite(t *testing.T) {
 
 func TestRenderCompactHighlightsMatchedKey(t *testing.T) {
 	hf := NewHelpFooter()
-	hf.SetHighlight("n")
+	hf.SetHighlight("g")
 
-	// Render without highlight -- "n" uses normal HelpKey style
+	// Render without highlight -- "g" uses normal HelpKey style
 	hfNoHighlight := NewHelpFooter()
 	normalRender := hfNoHighlight.RenderCompact(ViewDashboard, 200)
 	highlightRender := hf.RenderCompact(ViewDashboard, 200)
@@ -96,8 +96,8 @@ func TestRenderCompactHighlightsMatchedKey(t *testing.T) {
 	}
 
 	// Both should still contain the key descriptions
-	if !strings.Contains(highlightRender, "new") {
-		t.Error("highlighted render should still contain 'new' description")
+	if !strings.Contains(highlightRender, "goto") {
+		t.Error("highlighted render should still contain 'goto' description")
 	}
 	if !strings.Contains(highlightRender, "navigate") {
 		t.Error("highlighted render should still contain 'navigate' description")

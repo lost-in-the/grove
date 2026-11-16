@@ -11,7 +11,6 @@ import (
 
 // HelpOverlay renders context-sensitive help as a scrollable overlay.
 type HelpOverlay struct {
-	Active    bool
 	ForView   ActiveView
 	viewport  viewport.Model
 	cache     map[ActiveView]string
@@ -25,9 +24,8 @@ func NewHelpOverlay() *HelpOverlay {
 	}
 }
 
-// Open activates the overlay for the given view.
+// Open renders help for the given view at the given size.
 func (h *HelpOverlay) Open(view ActiveView, width, height int) {
-	h.Active = true
 	h.ForView = view
 
 	w, ht := calcHelpOverlaySize(width, height)
@@ -61,11 +59,6 @@ func (h *HelpOverlay) Open(view ActiveView, width, height int) {
 		viewport.WithHeight(vpHeight),
 	)
 	h.viewport.SetContent(rendered)
-}
-
-// Close deactivates the overlay.
-func (h *HelpOverlay) Close() {
-	h.Active = false
 }
 
 // Update handles scroll keys within the help viewport.
@@ -238,26 +231,26 @@ func helpSectionsFor(view ActiveView) []helpSection {
 	switch view {
 	case ViewDashboard, ViewHelp:
 		return helpSectionsDashboard
+	case ViewDetailSheet:
+		return helpSectionsDetailSheet
 	case ViewDelete:
 		return helpSectionsDelete
-	case ViewCreate:
-		return helpSectionsCreate
+	case ViewBranchForm:
+		return helpSectionsBranchForm
 	case ViewBulk:
 		return helpSectionsBulk
 	case ViewPRs:
 		return helpSectionsPRs
 	case ViewIssues:
 		return helpSectionsIssues
-	case ViewFork:
-		return helpSectionsFork
 	case ViewSync:
 		return helpSectionsSync
 	case ViewConfig:
 		return helpSectionsConfig
+	case ViewPRReview:
+		return helpSectionsPRReview
 	case ViewRename:
 		return helpSectionsRename
-	case ViewCheckout:
-		return helpSectionsCheckout
 	default:
 		return helpSectionsDashboard
 	}
@@ -266,24 +259,29 @@ func helpSectionsFor(view ActiveView) []helpSection {
 var helpSectionsDashboard = []helpSection{
 	{title: "Navigation", items: []helpEntry{
 		{"↑/k ↓/j", "Move up / down"},
+		{"g", "Goto strip (g top, p PRs, i issues, c config, u upgrade, d local diff, a agent under herdr)"},
+		{"gg / G", "Top / bottom of list"},
+		{"ctrl+d / ctrl+u", "Half page down / up"},
 		{"enter", "Switch to selected worktree"},
 		{"U", "Switch and start containers"},
-		{"1-9", "Quick-switch by number"},
+		{"1-9", "Switch to the pinned worktree"},
+		{"m 1-9", "Pin selected to a slot (m 0 unpins)"},
+		{"-", "Switch to the previous worktree"},
 		{"/", "Filter worktrees"},
-		{"tab", "Focus detail panel"},
+		{"tab / l", "Detail (panel at 110+ columns, else full screen)"},
 	}},
 	{title: "Detail Panel (when focused)", items: []helpEntry{
 		{"↑/k ↓/j", "Scroll up / down"},
 		{"g / G", "Jump to top / bottom"},
 		{"ctrl+u / ctrl+d", "Half page up / down"},
 		{"B", "Open associated PR in browser"},
-		{"tab / esc", "Return to list"},
+		{"tab / esc / h", "Return to list"},
 	}},
 	{title: "Worktree Actions", items: []helpEntry{
 		{"n", "Create new worktree"},
 		{"d", "Delete worktree"},
 		{"R", "Rename worktree"},
-		{"f", "Fork (copy) worktree"},
+		{"f", "Copy worktree to a new branch"},
 		{"a", "Bulk delete worktrees"},
 	}},
 	{title: "Workflow", items: []helpEntry{
@@ -293,8 +291,9 @@ var helpSectionsDashboard = []helpSection{
 		{"i", "Browse issues"},
 	}},
 	{title: "Display", items: []helpEntry{
-		{"o", "Cycle sort (name → recent → dirty)"},
-		{"v", "Toggle compact/detailed view"},
+		{"o", "Cycle sort (name → age → dirty)"},
+		{"O", "Reverse sort"},
+		{"v", "Show or hide commit messages"},
 		{"r", "Refresh worktree list"},
 		{"c", "Open configuration"},
 	}},
@@ -316,11 +315,13 @@ var helpSectionsDelete = []helpSection{
 	}},
 }
 
-var helpSectionsCreate = []helpSection{
-	{title: "Create Worktree", note: "Create a new worktree with a new or existing branch.", items: []helpEntry{
-		{"tab / shift+tab", "Navigate fields"},
-		{"enter", "Create worktree"},
-		{"esc", "Cancel"},
+var helpSectionsBranchForm = []helpSection{
+	{title: "Branch Form", note: "New (n), copy (f), and switch branch (b) share this form. It shows what enter will do.", items: []helpEntry{
+		{"tab / shift+tab", "Next / previous field"},
+		{"ctrl+j / ctrl+k", "Move through suggestions"},
+		{"←/→ / space", "Choose what happens to uncommitted changes (copy)"},
+		{"enter", "Create, copy, or switch"},
+		{"esc", "Close"},
 	}},
 }
 
@@ -333,10 +334,32 @@ var helpSectionsBulk = []helpSection{
 	}},
 }
 
+var helpSectionsPRReview = []helpSection{
+	{title: "PR Review", note: "One pull request: conversation, commits, checks, and files.", items: []helpEntry{
+		{"1-4", "Conversation, commits, checks, files"},
+		{"j / k", "Move between items (tabs 1-3)"},
+		{"enter", "On a thread, open its line; on a commit, show its files"},
+		{"a", "All commits' files again"},
+		{"B", "Open PR in browser"},
+		{"esc", "Back"},
+	}},
+	{title: "Files", items: []helpEntry{
+		{"J / K", "Next / previous file (also ctrl+n / ctrl+p)"},
+		{"↑/k ↓/j", "Scroll"},
+		{"g / G", "Top / bottom of the file"},
+		{"ctrl+u / ctrl+d", "Half page up / down"},
+		{"v", "Mark the file viewed (kept until it changes)"},
+		{"z", "Fold runs of removed lines"},
+		{"t", "Show or hide the file rail"},
+		{"enter", "Open the file in $VISUAL / $EDITOR at the line in view"},
+	}},
+}
+
 var helpSectionsPRs = []helpSection{
 	{title: "Pull Requests", note: "Browse and create worktrees from open pull requests.", items: []helpEntry{
 		{"↑/k ↓/j", "Navigate PRs"},
-		{"enter", "Create worktree from PR"},
+		{"enter", "Review the PR"},
+		{"n", "Create worktree from PR"},
 		{"B", "Open PR in browser"},
 		{"tab", "Focus detail panel"},
 		{"/", "Filter PRs"},
@@ -366,14 +389,6 @@ var helpSectionsIssues = []helpSection{
 	}},
 }
 
-var helpSectionsFork = []helpSection{
-	{title: "Fork Worktree", note: "Copy a worktree to a new branch, optionally moving uncommitted changes.", items: []helpEntry{
-		{"tab / shift+tab", "Navigate fields"},
-		{"enter", "Create fork"},
-		{"esc", "Cancel"},
-	}},
-}
-
 var helpSectionsSync = []helpSection{
 	{title: "Sync Changes", note: "Pull uncommitted changes from another worktree into the current one (source → preview → confirm).", items: []helpEntry{
 		{"↑/k ↓/j", "Choose source worktree"},
@@ -385,10 +400,11 @@ var helpSectionsSync = []helpSection{
 
 var helpSectionsConfig = []helpSection{
 	{title: "Configuration", note: "Edit grove settings. Changes saved to .grove/config.toml.", items: []helpEntry{
-		{"tab / shift+tab", "Switch config tab"},
-		{"↑/k ↓/j", "Navigate fields"},
-		{"enter", "Edit selected field"},
-		{"esc", "Close configuration"},
+		{"tab / shift+tab", "Next / previous field"},
+		{"enter", "Next field; next section from the last field; closes from protection"},
+		{"ctrl+n / ctrl+p", "Next / previous section"},
+		{"1-4", "Jump to a section (not while typing in a text field)"},
+		{"esc", "Close; asks to save unsaved changes"},
 	}},
 }
 
@@ -399,11 +415,13 @@ var helpSectionsRename = []helpSection{
 	}},
 }
 
-var helpSectionsCheckout = []helpSection{
-	{title: "Switch Branch", note: "Switch the git branch of the current worktree.", items: []helpEntry{
-		{"↑/k ↓/j", "Navigate branches"},
-		{"/", "Filter branches"},
-		{"enter", "Switch to branch"},
-		{"esc", "Cancel"},
+var helpSectionsDetailSheet = []helpSection{
+	{title: "Worktree Detail", note: "The selected worktree, full screen. Opened with tab or l below 110 columns.", items: []helpEntry{
+		{"↑/k ↓/j", "Scroll up / down"},
+		{"g / G", "Jump to top / bottom"},
+		{"ctrl+u / ctrl+d", "Half page up / down"},
+		{"B", "Open associated PR in browser"},
+		{"d", "Review this worktree's changes against the default branch"},
+		{"esc / h / tab", "Back to the list"},
 	}},
 }

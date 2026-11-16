@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/lost-in-the/grove/internal/config"
 )
@@ -18,8 +19,8 @@ func newConfigTestModel(t *testing.T) Model {
 	t.Helper()
 	m := newTestModel(withItems(3), withSize(80, 30))
 	m = sendKey(m, "c")
-	if m.activeView != ViewConfig {
-		t.Fatalf("expected ViewConfig, got %d", m.activeView)
+	if m.activeView() != ViewConfig {
+		t.Fatalf("expected ViewConfig, got %d", m.activeView())
 	}
 	if m.configState == nil {
 		t.Fatal("expected configState to be set")
@@ -44,16 +45,16 @@ func TestNewConfigState(t *testing.T) {
 func TestConfigOverlay_OpenClose(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
 	m = sendKey(m, "c")
-	if m.activeView != ViewConfig {
-		t.Errorf("expected ViewConfig, got %d", m.activeView)
+	if m.activeView() != ViewConfig {
+		t.Errorf("expected ViewConfig, got %d", m.activeView())
 	}
 	if m.configState == nil {
 		t.Fatal("expected configState to be set")
 	}
 
 	m = sendKey(m, "esc")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after esc, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after esc, got %d", m.activeView())
 	}
 	if m.configState != nil {
 		t.Error("expected configState to be nil after close")
@@ -62,18 +63,18 @@ func TestConfigOverlay_OpenClose(t *testing.T) {
 
 func TestConfigOverlay_NilState(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewConfig
+	m.setViewForTest(ViewConfig)
 	m.configState = nil
 	m = sendKey(m, "enter")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard for nil state, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard for nil state, got %d", m.activeView())
 	}
 }
 
 func TestConfigOverlay_FormBuiltOnLoad(t *testing.T) {
 	m := newConfigTestModel(t)
 
-	if m.configState.Form == nil {
+	if m.configState.form() == nil {
 		t.Fatal("expected Form to be built after configLoadedMsg")
 	}
 	if m.configState.FormValues == nil {
@@ -83,7 +84,7 @@ func TestConfigOverlay_FormBuiltOnLoad(t *testing.T) {
 
 func TestConfigLoadedMsg(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewConfig
+	m.setViewForTest(ViewConfig)
 	m.configState = NewConfigState()
 
 	cfg := config.LoadDefaults()
@@ -99,33 +100,33 @@ func TestConfigLoadedMsg(t *testing.T) {
 	if len(m.configState.Fields[ConfigTabGeneral]) == 0 {
 		t.Error("expected General fields to be populated")
 	}
-	if m.configState.Form == nil {
+	if m.configState.form() == nil {
 		t.Error("expected Form to be built")
 	}
 }
 
 func TestConfigLoadedMsg_Error(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewConfig
+	m.setViewForTest(ViewConfig)
 	m.configState = NewConfigState()
 
 	m = sendMsg(m, configLoadedMsg{err: errTest})
 	if m.configState.Err == nil {
 		t.Error("expected error on configState")
 	}
-	if m.configState.Form != nil {
+	if m.configState.form() != nil {
 		t.Error("expected Form to be nil on error")
 	}
 }
 
 func TestConfigSavedMsg_Success(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewConfig
+	m.setViewForTest(ViewConfig)
 	m.configState = NewConfigState()
 
 	m = sendMsg(m, configSavedMsg{})
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after save, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after save, got %d", m.activeView())
 	}
 	if m.configState != nil {
 		t.Error("expected configState nil after save")
@@ -134,12 +135,12 @@ func TestConfigSavedMsg_Success(t *testing.T) {
 
 func TestConfigSavedMsg_Error(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewConfig
+	m.setViewForTest(ViewConfig)
 	m.configState = NewConfigState()
 
 	m = sendMsg(m, configSavedMsg{err: errTest})
-	if m.activeView != ViewConfig {
-		t.Errorf("expected ViewConfig after save error, got %d", m.activeView)
+	if m.activeView() != ViewConfig {
+		t.Errorf("expected ViewConfig after save error, got %d", m.activeView())
 	}
 	if m.configState.Err == nil {
 		t.Error("expected error on configState")
@@ -149,13 +150,13 @@ func TestConfigSavedMsg_Error(t *testing.T) {
 func TestConfigSavedMsg_ErrorAfterClose(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
 	// Simulate save-on-close: configState is already nil when error arrives
-	m.activeView = ViewDashboard
+	m.setViewForTest(ViewDashboard)
 	m.configState = nil
 
 	m = sendMsg(m, configSavedMsg{err: errTest})
 	// Should show toast error even though configState is nil
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard, got %d", m.activeView())
 	}
 }
 
@@ -180,8 +181,15 @@ func TestPopulateConfigFields(t *testing.T) {
 
 	// Behavior tab
 	behavior := fields[ConfigTabBehavior]
-	if len(behavior) != 5 {
-		t.Errorf("expected 5 Behavior fields, got %d", len(behavior))
+	if len(behavior) != 3 {
+		t.Errorf("expected 3 Behavior fields, got %d", len(behavior))
+	}
+	// The branch form replaced the branch-exists notice, so these settings
+	// no longer do anything and must not be offered.
+	for _, f := range behavior {
+		if f.Key == "tui.skip_branch_notice" || f.Key == "tui.default_branch_action" {
+			t.Errorf("Behavior tab still offers the unused setting %q", f.Key)
+		}
 	}
 
 	// Plugins tab
@@ -212,78 +220,72 @@ func TestTabName(t *testing.T) {
 }
 
 func TestRenderConfig_AllStates(t *testing.T) {
+	frame := func(edit func(m *Model)) string {
+		m := newTestModel(withItems(3), withSize(100, 30))
+		m = sendKey(m, "c")
+		edit(&m)
+		return stripAnsi(m.viewString())
+	}
+
 	t.Run("no form yet", func(t *testing.T) {
-		s := NewConfigState()
-		v := renderConfig(s, 80)
-		if v == "" {
-			t.Fatal("expected non-empty render")
-		}
-		if !strings.Contains(v, "Configuration") {
-			t.Error("expected 'Configuration' title")
-		}
-		if !strings.Contains(v, "Loading configuration...") {
-			t.Error("expected loading message when form is nil")
+		if v := frame(func(*Model) {}); !strings.Contains(v, "Loading configuration") || !strings.Contains(v, "settings") {
+			t.Errorf("expected the frame with a loading message:\n%s", v)
 		}
 	})
 
 	t.Run("with form", func(t *testing.T) {
-		s := NewConfigState()
-		cfg := config.LoadDefaults()
-		cfg.ProjectName = "test-project"
-		s.Config = cfg
-		s.Fields = populateConfigFields(cfg)
-		form, vals := buildConfigForm(s.Fields, 60)
-		s.Form = form
-		s.FormValues = vals
-		// Initialize the form so it renders
-		s.Form.Init()
-
-		v := renderConfig(s, 100)
-		plain := ansiStripRE.ReplaceAllString(v, "")
-		if !strings.Contains(plain, "project_name") {
-			t.Errorf("expected 'project_name' field in render, got:\n%s", v)
-		}
-		if !strings.Contains(plain, "General") {
-			t.Errorf("expected 'General' group title, got:\n%s", v)
+		v := frame(func(m *Model) {
+			cfg := config.LoadDefaults()
+			m.configState.Fields = populateConfigFields(cfg)
+			m.configState.buildForms(m.configFormSize())
+		})
+		if !strings.Contains(v, "project_name") || !strings.Contains(v, "[1] general") {
+			t.Errorf("expected the general section and its tab:\n%s", v)
 		}
 	})
 
 	t.Run("confirming state", func(t *testing.T) {
-		s := NewConfigState()
-		cfg := config.LoadDefaults()
-		s.Config = cfg
-		s.Fields = populateConfigFields(cfg)
-		s.Dirty = true
-		s.Confirming = true
-
-		v := renderConfig(s, 100)
-		if !strings.Contains(v, "Save changes?") {
-			t.Error("expected 'Save changes?' prompt in confirming state")
-		}
-		if !strings.Contains(v, "save") || !strings.Contains(v, "discard") {
-			t.Error("expected save/discard hints in confirming state")
+		v := frame(func(m *Model) {
+			m.configState.Fields = populateConfigFields(config.LoadDefaults())
+			m.configState.buildForms(m.configFormSize())
+			m.configState.Confirming = true
+		})
+		if !strings.Contains(v, "Save changes?") || !strings.Contains(v, "save") || !strings.Contains(v, "discard") {
+			t.Errorf("expected the save prompt:\n%s", v)
 		}
 	})
 
-	t.Run("error state", func(t *testing.T) {
-		s := NewConfigState()
-		s.Err = errTest
-
-		v := renderConfig(s, 80)
-		if !strings.Contains(v, "test error") {
-			t.Error("expected error text in render")
+	// Reached through the real open and load path, so the frame is sized
+	// by openConfig, not by hand.
+	t.Run("load error", func(t *testing.T) {
+		m := newTestModel(withItems(3), withSize(100, 30))
+		m = sendKey(m, "c")
+		m = sendMsg(m, configLoadedMsg{err: errTest})
+		lines := strings.Split(stripAnsi(m.viewString()), "\n")
+		status := 30 - 1 - lipgloss.Height(m.configFooter())
+		if len(lines) != 30 || !strings.Contains(lines[status], "test error") {
+			t.Errorf("expected the error on the status row %d of 30:\n%s", status, strings.Join(lines, "\n"))
+		}
+		if strings.Contains(strings.Join(lines, "\n"), "Loading configuration") {
+			t.Errorf("a load error should replace the loading message")
 		}
 	})
 }
 
+// changeAField edits the first general field, as typing into it would.
+func changeAField(m Model) {
+	f := &m.configState.Fields[ConfigTabGeneral][0]
+	f.Value = f.Loaded + "-edited"
+}
+
 func TestConfigOverlay_EscDirtyConfirms(t *testing.T) {
 	m := newConfigTestModel(t)
-	m.configState.Dirty = true
+	changeAField(m)
 
 	m = sendKey(m, "esc")
 	// Should show confirmation prompt, not close
-	if m.activeView != ViewConfig {
-		t.Errorf("expected ViewConfig after dirty esc, got %d", m.activeView)
+	if m.activeView() != ViewConfig {
+		t.Errorf("expected ViewConfig after dirty esc, got %d", m.activeView())
 	}
 	if m.configState == nil {
 		t.Fatal("expected configState to still exist")
@@ -295,13 +297,13 @@ func TestConfigOverlay_EscDirtyConfirms(t *testing.T) {
 
 func TestConfigOverlay_ConfirmEnterSaves(t *testing.T) {
 	m := newConfigTestModel(t)
-	m.configState.Dirty = true
+	changeAField(m)
 	m.configState.Confirming = true
 
 	m = sendKey(m, "enter")
 	// Enter while confirming should save and close
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after confirm enter, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after confirm enter, got %d", m.activeView())
 	}
 	if m.configState != nil {
 		t.Error("expected configState nil after confirm enter")
@@ -310,100 +312,60 @@ func TestConfigOverlay_ConfirmEnterSaves(t *testing.T) {
 
 func TestConfigOverlay_ConfirmEscDiscards(t *testing.T) {
 	m := newConfigTestModel(t)
-	m.configState.Dirty = true
+	changeAField(m)
 	m.configState.Confirming = true
 
 	m = sendKey(m, "esc")
 	// Esc while confirming should discard and close
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after confirm esc, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after confirm esc, got %d", m.activeView())
 	}
 	if m.configState != nil {
 		t.Error("expected configState nil after confirm esc")
 	}
 }
 
-func TestBuildConfigForm(t *testing.T) {
-	cfg := config.LoadDefaults()
-	fields := populateConfigFields(cfg)
-
-	form, vals := buildConfigForm(fields, 60)
-	if form == nil {
+func TestBuildSectionForm_BindsBools(t *testing.T) {
+	fields := populateConfigFields(config.LoadDefaults())
+	vals := newConfigFormValues()
+	if form := buildSectionForm(fields[ConfigTabPlugins], vals, 60, 0); form == nil {
 		t.Fatal("expected form to be non-nil")
 	}
-	if vals == nil {
-		t.Fatal("expected vals to be non-nil")
-	}
-
-	// Should have bool bindings for the boolean fields
-	if len(vals.bools) == 0 {
-		t.Error("expected bool value bindings")
-	}
-
-	// Should have string bindings for string/enum/list fields
-	if len(vals.strings) == 0 {
-		t.Error("expected string value bindings")
+	if len(vals.bools) != len(fields[ConfigTabPlugins]) {
+		t.Errorf("expected a bool binding per plugins field, got %d", len(vals.bools))
 	}
 }
 
 func TestSyncConfigFormValues(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 30))
-	m.activeView = ViewConfig
+	m.setViewForTest(ViewConfig)
 	m.configState = NewConfigState()
 
 	cfg := config.LoadDefaults()
 	m.configState.Config = cfg
 	m.configState.Fields = populateConfigFields(cfg)
 
-	form, vals := buildConfigForm(m.configState.Fields, 60)
-	m.configState.Form = form
-	m.configState.FormValues = vals
+	m.configState.buildForms(60, 0)
 
 	// Simulate a bool value change through the binding
-	for key, bPtr := range vals.bools {
+	for key, bPtr := range m.configState.FormValues.bools {
 		*bPtr = !*bPtr // flip the bool
 		_ = key
 		break
 	}
 
 	m.syncConfigFormValues()
-	if !m.configState.Dirty {
-		t.Error("expected Dirty=true after changing a bool value")
-	}
-}
-
-func TestConfigEditKey_DirtyDetection(t *testing.T) {
-	// Verify that direct field value changes are detected by syncConfigFormValues
-	m := newTestModel(withItems(3), withSize(80, 30))
-	m.configState = NewConfigState()
-
-	cfg := config.LoadDefaults()
-	m.configState.Config = cfg
-	m.configState.Fields = populateConfigFields(cfg)
-
-	original := m.configState.Fields[ConfigTabGeneral][0].Value
-
-	// Simulate Huh changing the value through pointer binding
-	m.configState.Fields[ConfigTabGeneral][0].Value = "changed-value"
-
-	if m.configState.Fields[ConfigTabGeneral][0].Value == original {
-		t.Error("expected value to differ after change")
-	}
-
-	// Restore and verify
-	m.configState.Fields[ConfigTabGeneral][0].Value = original
-	if m.configState.Fields[ConfigTabGeneral][0].Value != original {
-		t.Error("expected value to match original after restore")
+	if n := m.configState.unsaved(); n != 1 {
+		t.Errorf("expected 1 unsaved after changing a bool value, got %d", n)
 	}
 }
 
 func TestConfigForm_EscapeClosesOverlay(t *testing.T) {
 	m := newConfigTestModel(t)
-	// Form is not dirty, so esc should close directly
-	m.configState.Dirty = false
+	// Nothing changed, so esc should close directly
 	m = sendKey(m, "esc")
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after esc on clean form, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after esc on clean form, got %d", m.activeView())
 	}
 	if m.configState != nil {
 		t.Error("expected configState nil after esc on clean form")
@@ -417,7 +379,7 @@ func TestConfigForm_EscapeWithEditsPromptsSave(t *testing.T) {
 	// differs from its default. On esc the overlay must sync and offer to save,
 	// rather than silently discarding the change.
 	f := &m.configState.Fields[ConfigTabGeneral][0]
-	f.Value = f.Default + "-edited"
+	f.Value = f.Loaded + "-edited"
 
 	m = sendKey(m, "esc")
 	if m.configState == nil {
@@ -426,8 +388,8 @@ func TestConfigForm_EscapeWithEditsPromptsSave(t *testing.T) {
 	if !m.configState.Confirming {
 		t.Error("expected Confirming prompt after esc with unsaved edits")
 	}
-	if m.activeView != ViewConfig {
-		t.Errorf("expected ViewConfig to remain during confirm, got %d", m.activeView)
+	if m.activeView() != ViewConfig {
+		t.Errorf("expected ViewConfig to remain during confirm, got %d", m.activeView())
 	}
 }
 
@@ -435,8 +397,8 @@ func TestConfigForm_MessageForwarding(t *testing.T) {
 	m := newConfigTestModel(t)
 	// Send a WindowSizeMsg — should not panic
 	m = sendMsg(m, tea.WindowSizeMsg{Width: 100, Height: 40})
-	if m.activeView != ViewConfig {
-		t.Errorf("expected ViewConfig after WindowSizeMsg, got %d", m.activeView)
+	if m.activeView() != ViewConfig {
+		t.Errorf("expected ViewConfig after WindowSizeMsg, got %d", m.activeView())
 	}
 }
 

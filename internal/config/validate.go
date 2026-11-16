@@ -50,6 +50,11 @@ func Validate(cfg *Config) error {
 		return fmt.Errorf("mux.backend must be one of: auto, tmux, herdr, off (got %q)", cfg.Mux.Backend)
 	}
 
+	validListSecondary := map[string]bool{"": true, "branch": true, "dir": true, "off": true}
+	if !validListSecondary[cfg.TUI.ListSecondary] {
+		return fmt.Errorf("tui.list_secondary must be one of: branch, dir, off (got %q)", cfg.TUI.ListSecondary)
+	}
+
 	validOpenIn := map[string]bool{
 		"":            true,
 		OpenInNew:     true,

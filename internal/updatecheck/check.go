@@ -61,7 +61,7 @@ func cachedUpdateAnnotationFromPath(currentVersion, path string) string {
 
 // CachedRelease returns the cached LatestVersion + LatestURL when a newer
 // release is available, or zero strings when there's nothing to surface.
-// Used by UI surfaces (TUI footer badge, modal, version annotation) that
+// Used by UI surfaces (TUI header badge, upgrade overlay, version annotation) that
 // need both fields without re-implementing the cache+compare flow.
 func CachedRelease(currentVersion string) (latest, url string, available bool) {
 	return cachedReleaseFromPath(currentVersion, DefaultCachePath())

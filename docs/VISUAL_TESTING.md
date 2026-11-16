@@ -75,16 +75,15 @@ internal/tui/testdata/
   TestGolden_Overlay_Delete/
     default.golden
     with_warnings.golden
-  TestGolden_Overlay_Create/
-    branch_step.golden
-    name_step.golden
-    confirm_step.golden
+  TestGolden_BranchForm/
+    standard_80x24/  (one per case: empty, new_branch, in_use,
+                      copy_dirty, switch_dirty, …; also at
+                      short_80x20/, narrow_60x24/, wide_120x40/)
   TestGolden_Overlay_Bulk/
     with_items.golden
     empty.golden
   TestGolden_Overlay_PRs/with_data.golden
   TestGolden_Overlay_Issues/with_data.golden
-  TestGolden_Overlay_Fork/confirm.golden
   TestGolden_Overlay_Sync/source_step.golden
   TestGolden_Overlay_Config/general_tab.golden
   TestGolden_Component_Header/
@@ -128,11 +127,9 @@ All opts are functional options (`testOpt = func(*Model)`) defined in
 | `withLoading()` | `helpers_test.go` | Sets `m.loading = true` |
 | `withSize(w, h int)` | `helpers_test.go` | Sets dimensions and calls `updateLayout()` (applied automatically by `goldenModel`) |
 | `withDeleteOverlay(warnings ...string)` | `golden_helpers_test.go` | Opens delete overlay with optional warning strings |
-| `withCreateStep(step CreateStep)` | `golden_helpers_test.go` | Opens create overlay at `CreateStepBranch`, `CreateStepName`, or `CreateStepConfirm` |
 | `withBulkOverlay(n int)` | `golden_helpers_test.go` | Opens bulk delete overlay with n items, first and third pre-selected |
 | `withPRData()` | `golden_helpers_test.go` | Opens PR browser overlay with 3 mock PRs |
 | `withIssueData()` | `golden_helpers_test.go` | Opens issue browser overlay with 3 mock issues |
-| `withForkOverlay()` | `golden_helpers_test.go` | Opens fork overlay at `ForkStepConfirm` |
 | `withSyncOverlay()` | `golden_helpers_test.go` | Opens sync overlay at `SyncStepSource` with 3 source items |
 | `withConfigOverlay()` | `golden_helpers_test.go` | Opens config overlay with deterministic fields across all 4 tabs |
 | `withToastVisible(msg string, level ToastLevel)` | `golden_helpers_test.go` | Shows a toast with 24h expiry (never expires during test) |

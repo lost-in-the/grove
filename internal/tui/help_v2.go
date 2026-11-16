@@ -64,18 +64,13 @@ func (h *HelpFooter) HasHighlight() bool {
 // CompactHints returns context-aware key hints for the given view.
 func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 	switch view {
-	case ViewDashboard:
+	case ViewDetailSheet:
 		return []Hint{
-			{"↑↓", "navigate"},
-			{"enter", "switch"},
-			{"U", "up"},
-			{"n", "new"},
-			{"/", "filter"},
-			{"tab", "detail"},
-			{"o", "sort"},
-			{"?", "help"},
-			{"q", "quit"},
+			{"↑↓", "scroll"},
+			{"esc", "list"},
 		}
+	case ViewDashboard:
+		return dashboardFooterHints()
 	case ViewIssues:
 		return []Hint{
 			{"↑↓", "navigate"},
@@ -85,10 +80,12 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 			{"/", "filter"},
 			{"esc", "close"},
 		}
-	case ViewCreate:
+	case ViewBranchForm:
 		return []Hint{
-			{"enter", "continue"},
-			{"esc", "cancel"},
+			{"enter", "create"},
+			{"tab", "field"},
+			{"ctrl+j/k", "pick"},
+			{"esc", "back"},
 		}
 	case ViewDelete:
 		return []Hint{
@@ -106,16 +103,12 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 	case ViewPRs:
 		return []Hint{
 			{"↑↓", "navigate"},
-			{"enter", "create worktree"},
+			{"enter", "review"},
+			{"n", "new worktree"},
 			{"B", "open in browser"},
 			{"tab", "detail"},
 			{"/", "filter"},
 			{"esc", "close"},
-		}
-	case ViewFork:
-		return []Hint{
-			{"enter", "continue"},
-			{"esc", "cancel"},
 		}
 	case ViewSync:
 		return []Hint{
@@ -123,21 +116,24 @@ func (h *HelpFooter) CompactHints(view ActiveView) []Hint {
 			{"enter", "select"},
 			{"esc", "cancel"},
 		}
+	case ViewPRReview:
+		return []Hint{
+			{"J/K", "file"},
+			{"v", "viewed"},
+			{"z", "fold"},
+			{"t", "rail"},
+			{"1-4", "tab"},
+			{"esc", "back"},
+		}
 	case ViewConfig:
 		return []Hint{
-			{"tab", "next tab"},
-			{"↑↓", "navigate"},
-			{"enter", "edit"},
+			{"tab", "next field"},
+			{"ctrl+n/p", "section"},
 			{"esc", "close"},
 		}
 	case ViewRename:
 		return []Hint{
 			{"enter", "rename"},
-			{"esc", "cancel"},
-		}
-	case ViewCheckout:
-		return []Hint{
-			{"enter", "continue"},
 			{"esc", "cancel"},
 		}
 	default:
@@ -158,25 +154,6 @@ func (h *HelpFooter) RenderCompact(view ActiveView, width int) string {
 func (h *HelpFooter) CompactHeight(view ActiveView, width int) int {
 	rendered := h.RenderCompact(view, width)
 	return strings.Count(rendered, "\n") + 1
-}
-
-// Pre-built styles for RenderUpdateBadge. The badge re-renders on every
-// dashboard frame whenever an update is cached, so allocating these per
-// call is wasted work.
-var (
-	updateBadgeMutedStyle = lipgloss.NewStyle().Foreground(Colors.TextMuted)
-	updateBadgeKeyStyle   = lipgloss.NewStyle().Foreground(Colors.Primary).Bold(true)
-)
-
-// RenderUpdateBadge returns a muted "↑ current → latest  press u" badge string
-// suitable for appending to a footer. Returns "" when no update is available
-// (zero strings) — caller should handle the empty case.
-func RenderUpdateBadge(currentVersion, latestVersion string) string {
-	if currentVersion == "" || latestVersion == "" {
-		return ""
-	}
-	return updateBadgeMutedStyle.Render("↑ "+currentVersion+" → "+latestVersion+"  press ") +
-		updateBadgeKeyStyle.Render("u")
 }
 
 // RenderCompactWithHints renders a one- or two-line footer with the given hints

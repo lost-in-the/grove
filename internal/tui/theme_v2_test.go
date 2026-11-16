@@ -236,3 +236,12 @@ func TestColorScheme_AllFieldsPopulated(t *testing.T) {
 		}
 	}
 }
+
+// Under NO_COLOR every style loses its colors. A pressed key's highlight
+// must still look different from a plain key.
+func TestNewStyleSet_HighlightVisibleWithoutColor(t *testing.T) {
+	ss := NewStyleSet(ColorScheme{})
+	if ss.HelpKeyHighlight.Render("n") == ss.HelpKey.Render("n") {
+		t.Error("without color, the highlighted key renders the same as a plain key")
+	}
+}

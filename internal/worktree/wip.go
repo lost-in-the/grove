@@ -148,6 +148,19 @@ func (h *WIPHandler) CreatePatch() ([]byte, error) {
 	return patch, nil
 }
 
+// Discard drops every uncommitted change: staged, unstaged, and untracked
+// (ignored files stay). reset --hard, unlike `checkout -- .`, also works in
+// a worktree whose commit tracks no files, where the pathspec matches none.
+func (h *WIPHandler) Discard() error {
+	if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", h.repoPath, "reset", "--hard", "-q"}, "", cmdexec.GitLocal); err != nil {
+		return fmt.Errorf("failed to discard changes: %w\n%s", err, output)
+	}
+	if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", h.repoPath, "clean", "-fd"}, "", cmdexec.GitLocal); err != nil {
+		return fmt.Errorf("failed to remove untracked files: %w\n%s", err, output)
+	}
+	return nil
+}
+
 // ApplyPatch applies a patch to the working tree.
 func (h *WIPHandler) ApplyPatch(patch []byte) error {
 	if len(patch) == 0 {

@@ -671,8 +671,6 @@ auto_stop = false
 # immutable = []
 
 [tui]
-# skip_branch_notice = false
-# default_branch_action = "split"  # "split" | "fork"
 # worktree_name_from_branch = "last_segment"
 ```
 

@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **PR review.** `enter` on a pull request (in the PR browser or in Find) opens a full-screen review with four tabs. The files tab shows the diff file by file with line numbers, a folder rail with `+/-` counts (`t` shows or hides it), `J` / `K` between files, `v` to mark a file viewed (kept across restarts until the file changes), and `z` to fold runs of removed lines. The review opens on the conversation: comments, reviews, and review threads in order, with a check summary; `enter` on a thread opens its file at its line. The commits tab lists the PR's commits, and `enter` shows one commit's files (`a` returns to all). The checks tab lists every check, failing first. `enter` in the files tab opens the file in your editor at the line in view.
+- **Local diff.** `g d` on the dashboard (or `d` in the focused detail pane) reviews the selected worktree's changes against its merge-base with the default branch, committed and uncommitted, in the same frame, without `gh`. Control characters in a diff are shown as symbols, never sent to the terminal.
+
+### Fixed
+- Toast notifications show again. They had stopped appearing on the dashboard; they now draw in the top-right corner above everything else.
+- Overlays in the dashboard no longer erase the rows beside them, and the background behind them is dimmed evenly instead of stopping at the first styled word. (#19)
+- `esc` in the dashboard goes back exactly one level, and returns the cursor to the worktree it was on, even after the list refreshes.
+- With `NO_COLOR` set, the footer now shows which key you pressed (reverse video). Before, the highlight looked the same as every other key.
+- The issue browser fills in the branch `issue-N` again when it opens the New Worktree form.
+- Saving the protected or immutable list from the config editor writes a valid TOML array. Before, it wrote the bare text (`protected = main, staging`), and grove then ignored the whole config file. A value with a control character in it is now escaped the way TOML allows, for the same reason. Saving a key whose value spans several lines (an array or a `"""` string) replaces the whole value, not just its first line.
+- Saving from the config editor also handles a quoted key containing `=`, and a top-level key no longer overwrites a key of the same name under a `[section]`.
+- A toast now clears after its few seconds even when nothing else is happening on the dashboard. Before, toasts such as `slot 3 is empty` or `no previous worktree` could stay on screen indefinitely.
+- The header bar's background now runs behind its whole row, not just the edges.
+- Moving uncommitted changes to a copy (`f`, or `grove fork --move-wip`) now also cleans the source in a worktree that tracks no files.
+- Creating a worktree from the dashboard shows hook and Docker output in the activity log as it is printed. Before, the log froze on `Bootstrapping worktree...` for the whole bootstrap and then showed everything at once. (#143)
+- A pull request or issue whose title, labels, or body holds terminal control characters can no longer drive the terminal: titles and labels show them as symbols (`␛`), and bodies drop them, including ones written as character references such as `&#x1b;`, which the markdown renderer would otherwise turn back into control characters.
+
+### Changed
+- In the PR browser, `enter` now opens the PR review; `n` creates a worktree from the PR, as `enter` used to.
+- `p` opens the PR browser at once on the last list grove fetched, marked `cached · refreshing`, and swaps in the new list when it arrives, keeping the selected PR. If the refresh fails, the saved list stays. Find's PR results use the saved list too.
+- Dashboard rows are one line: agent state (under herdr), cursor, status, alias, branch chip, counts, age, and session and container glyphs. Ages round the way `git log --date=relative` does (`35h`, `13d`, `11mo`), so a row agrees with git. The cursor no longer hides a row's status. As the terminal narrows, columns drop in a fixed order and long aliases shorten in the middle. `v` adds the commit message back; one line is the new default unless you saved a choice.
+- The header shows the sort and your position in the list (`3/12`) instead of the current branch.
+- Sort modes are name, age (last commit), and dirty; `O` reverses. Age replaces recent (last accessed).
+- New list keys: `gg` / `G`, `ctrl+d` / `ctrl+u`, `l` / `h` for the detail panel. The list pages only on `pgup` / `pgdown`, so a bare `u` no longer pages it.
+- Text colors meet 4.5:1 contrast on the selected row and header too, in every theme. The focused detail panel's title says `focused`.
+- New `tui.list_secondary` setting: `branch` (default), `dir`, or `off`.
+- Pins: `m` then a digit pins the selected worktree to that slot, shown in the row's first column; a bare digit switches to it, also with a filter applied. `1`-`9` no longer switch by row position.
+- `space` opens Find: one search over worktrees, actions, and the PRs and issues already loaded, with fuzzy matching and plain-language synonyms (`fork` finds copy worktree). `?` opens it limited to actions; the full key reference is the `keyboard shortcuts` action there.
+- Warnings and errors are kept for the session; search `messages` in Find to read them after their toast is gone.
+- The dashboard footer is shorter: `↑↓ navigate · enter switch · ␣ find · tab detail · / filter · g goto · ? help`.
+- `g` opens a goto strip above the footer: `g` top of list, `p` pull requests, `i` issues, `c` config, `u` upgrade grove. The footer shows `g goto`.
+- A newer grove release now shows as a `⭡0.12.0` badge in the header instead of the footer. `g u` opens the upgrade overlay, and says `grove is up to date` when nothing newer is cached; bare `u` no longer does anything. The update opt-outs hide the badge, but `g u` still reports the cached release.
+- Under herdr the dashboard tracks agents that need you: the header counts blocked and done agents, `o` adds an `attention` sort, `g a` jumps to the next blocked (or done) agent, and agent state refreshes every 3 seconds without a full reload.
+- `-` switches to the previous worktree, as `grove last` does; its row shows `↩`.
+- Below 110 columns the dashboard shows a one-line summary of the selected worktree instead of a cramped detail panel, and `tab` or `l` opens the detail full screen. Under 44 columns a single line asks for more room, and everything is restored when the terminal widens.
+- The New Worktree wizard is now a single form: Branch, Base, and Alias. It never moves or changes size, and its status line says what `enter` will do. A new branch now starts from the configured default branch, not from whatever the main checkout has checked out. An alias already used by another worktree is reported as an error instead of switching to that worktree.
+- Copy worktree (`f`, formerly fork) and Switch branch (`b`) use the New Worktree form. Copy lets you name the new branch, copies uncommitted changes by default instead of moving them, and waits for the changes check before acting. Switch lists only local branches no worktree has checked out.
+- The config editor is a full screen with one section at a time: `[1] general  [2] behavior  [3] plugins  [4] protection`. `ctrl+n` / `ctrl+p` switch sections, and `1`-`4` jump to one when you are not typing in a text field. Every section has the same height. The header counts unsaved changes against the file on disk, so undoing a change no longer asks to save. `?` now types into a config text field instead of opening help.
+- The config editor no longer offers `skip_branch_notice` and `default_branch_action`. The branch form replaced the notice they controlled; the keys still load without error.
+- Updated the terminal UI libraries: bubbletea 2.0.10, lipgloss 2.0.6, bubbles 2.1.1, and glamour v2, which removes the older lipgloss v1 from the build.
+- Building grove from source now requires Go 1.26 or newer (bubbletea 2.0.10 needs it).
+
 ## [0.11.0] - 2026-09-25
 
 > **Upgrading:** One breaking change, for scripts that read grove's JSON: the session field was renamed from `tmux` to `session`. `grove ls --json` now reports `.worktrees[].session` (was `.worktrees[].tmux`), and `grove here --json` reports `.session.{session,status}` (was `.tmux.{session,status}`). Values are unchanged under tmux; under herdr they read `active` / `open`. Otherwise drop-in: tmux users see no behavior change, and shell integration is unchanged, so no re-source is needed. Highlights: **[herdr](https://herdr.dev) support** (`[mux] backend = "herdr"`), with each worktree's coding-agent state in `grove ls` and the dashboard, and a herdr plugin (`herdr plugin install lost-in-the/grove/integrations/herdr --ref v0.11.0`); **`[session] open_in`**; `grove doctor`'s closing action list; and opt-in per-slot git metadata for agent stacks.

@@ -87,38 +87,10 @@ func goldenModelThemed(t *testing.T, size termSize, opts ...testOpt) Model {
 func withDeleteOverlay(warnings ...string) testOpt {
 	return func(m *Model) {
 		item := makeTestItems(3)[1] // non-main item
-		m.activeView = ViewDelete
+		m.setViewForTest(ViewDelete)
 		m.deleteState = &DeleteState{
 			Item:     &item,
 			Warnings: warnings,
-		}
-	}
-}
-
-// withCreateStep sets up the create overlay at a specific step.
-func withCreateStep(step CreateStep) testOpt {
-	return func(m *Model) {
-		m.activeView = ViewCreate
-		m.createState = &CreateState{
-			Step:              step,
-			Branches:          []string{"main", "develop", "feature/auth", "fix/login-bug", "release/v2"},
-			ProjectName:       m.projectName,
-			BranchFilterInput: newBranchFilterInput(),
-			BranchNameInput:   newBranchNameInput(),
-		}
-		switch step {
-		case CreateStepName:
-			m.createState.BaseBranch = "feature/auth"
-			m.createState.NameSuggestion = "auth"
-			m.createState.NameInput = newNameInput("auth")
-		case CreateStepBranchAction:
-			m.createState.BaseBranch = "feature/auth"
-		case CreateStepConfirm:
-			m.createState.BaseBranch = "feature/auth"
-			m.createState.Name = "auth-work"
-			ni := newNameInput("")
-			ni.SetValue("auth-work")
-			m.createState.NameInput = ni
 		}
 	}
 }
@@ -134,7 +106,7 @@ func withBulkOverlay(n int) testOpt {
 				bulkItems = append(bulkItems, item)
 			}
 		}
-		m.activeView = ViewBulk
+		m.setViewForTest(ViewBulk)
 		m.bulkState = &BulkState{
 			Items:    bulkItems,
 			Selected: make([]bool, len(bulkItems)),
@@ -152,7 +124,7 @@ func withBulkOverlay(n int) testOpt {
 // withPRData sets up the PR browser overlay with mock data.
 func withPRData() testOpt {
 	return func(m *Model) {
-		m.activeView = ViewPRs
+		m.setViewForTest(ViewPRs)
 		fi := newFilterInput("")
 		m.prState = &PRViewState{
 			FilterInput: fi,
@@ -171,7 +143,7 @@ func withPRData() testOpt {
 // withIssueData sets up the issue browser overlay with mock data.
 func withIssueData() testOpt {
 	return func(m *Model) {
-		m.activeView = ViewIssues
+		m.setViewForTest(ViewIssues)
 		ifi := newFilterInput("")
 		m.issueState = &IssueViewState{
 			FilterInput: ifi,
@@ -184,29 +156,11 @@ func withIssueData() testOpt {
 	}
 }
 
-// withForkOverlay sets up the fork overlay at the confirm step.
-func withForkOverlay() testOpt {
-	return func(m *Model) {
-		source := makeTestItems(3)[1]
-		ni := newForkNameInput()
-		ni.SetValue("experiment")
-		m.activeView = ViewFork
-		m.forkState = &ForkState{
-			Step:      ForkStepConfirm,
-			Source:    source,
-			Name:      "experiment",
-			NameInput: ni,
-			Stepper:   NewStepper("Name", "WIP", "Confirm"),
-		}
-		m.forkState.Stepper.Current = 2
-	}
-}
-
 // withSyncOverlay sets up the sync overlay at the source selection step.
 func withSyncOverlay() testOpt {
 	return func(m *Model) {
 		items := makeTestItems(5)
-		m.activeView = ViewSync
+		m.setViewForTest(ViewSync)
 		m.syncState = &SyncState{
 			Step:    SyncStepSource,
 			Target:  items[0],
@@ -223,37 +177,25 @@ func withSyncOverlay() testOpt {
 // withConfigOverlay sets up the config overlay with deterministic fields.
 func withConfigOverlay() testOpt {
 	return func(m *Model) {
-		m.activeView = ViewConfig
+		m.setViewForTest(ViewConfig)
 		cs := NewConfigState()
 		cs.Fields[ConfigTabGeneral] = []ConfigField{
-			{Key: "project_name", Label: "project_name", Value: "grove-cli", Default: "grove-cli", Type: ConfigString, Description: "Project name"},
-			{Key: "projects_dir", Label: "projects_dir", Value: "/home/dev/projects", Default: "/home/dev/projects", Type: ConfigString, Description: "Where worktrees are created"},
-			{Key: "default_base_branch", Label: "default_branch", Value: "main", Default: "main", Type: ConfigString, Description: "Base branch for new worktrees"},
+			{Key: "project_name", Label: "project_name", Value: "grove-cli", Loaded: "grove-cli", Type: ConfigString, Description: "Project name"},
+			{Key: "projects_dir", Label: "projects_dir", Value: "/home/dev/projects", Loaded: "/home/dev/projects", Type: ConfigString, Description: "Where worktrees are created"},
+			{Key: "default_base_branch", Label: "default_branch", Value: "main", Loaded: "main", Type: ConfigString, Description: "Base branch for new worktrees"},
 		}
 		cs.Fields[ConfigTabBehavior] = []ConfigField{
-			{Key: "switch.dirty_handling", Label: "dirty_handling", Value: "auto-stash", Default: "auto-stash", Type: ConfigEnum, Options: []string{"auto-stash", "prompt", "refuse"}, Description: "How to handle dirty worktree on switch"},
-			{Key: "tmux.mode", Label: "tmux_mode", Value: "auto", Default: "auto", Type: ConfigEnum, Options: []string{"auto", "manual", "off"}, Description: "Tmux session behavior"},
+			{Key: "switch.dirty_handling", Label: "dirty_handling", Value: "auto-stash", Loaded: "auto-stash", Type: ConfigEnum, Options: []string{"auto-stash", "prompt", "refuse"}, Description: "How to handle dirty worktree on switch"},
+			{Key: "tmux.mode", Label: "tmux_mode", Value: "auto", Loaded: "auto", Type: ConfigEnum, Options: []string{"auto", "manual", "off"}, Description: "Tmux session behavior"},
 		}
 		cs.Fields[ConfigTabPlugins] = []ConfigField{
-			{Key: "plugins.docker.enabled", Label: "docker_enabled", Value: "true", Default: "true", Type: ConfigBool, Description: "Enable Docker plugin"},
+			{Key: "plugins.docker.enabled", Label: "docker_enabled", Value: "true", Loaded: "true", Type: ConfigBool, Description: "Enable Docker plugin"},
 		}
 		cs.Fields[ConfigTabProtection] = []ConfigField{
-			{Key: "protection.protected", Label: "protected", Value: "main, staging", Default: "main, staging", Type: ConfigList, Description: "Protected worktrees (comma-separated)"},
+			{Key: "protection.protected", Label: "protected", Value: "main, staging", Loaded: "main, staging", Type: ConfigList, Description: "Protected worktrees (comma-separated)"},
 		}
-		// Build the Huh form so renderConfig shows the form view
-		overlayWidth := 80 * 60 / 100
-		if overlayWidth < 60 {
-			overlayWidth = 60
-		}
-		if overlayWidth > 80 {
-			overlayWidth = 80
-		}
-		contentWidth := overlayWidth - 6
-		form, vals := buildConfigForm(cs.Fields, contentWidth)
-		form.Init()
-		cs.Form = form
-		cs.FormValues = vals
 		m.configState = cs
+		cs.buildForms(m.configFormSize())
 	}
 }
 
@@ -272,7 +214,8 @@ func withToastVisible(msg string, level ToastLevel) testOpt {
 // withHelpExpanded opens the help overlay for the current view.
 func withHelpExpanded() testOpt {
 	return func(m *Model) {
-		m.helpOverlay.Open(m.activeView, m.width, m.height)
+		m.helpOverlay.Open(m.activeView(), m.width, m.height)
+		m.pushView(ViewHelp)
 	}
 }
 
@@ -283,13 +226,11 @@ func withSortMode(mode SortMode) testOpt {
 	}
 }
 
-// withCompactMode switches the model to compact (V1) delegate.
-func withCompactMode() testOpt {
+// withTwoLine switches the model to rows with the commit message.
+func withTwoLine() testOpt {
 	return func(m *Model) {
-		m.compactMode = true
-		d := ComputeDelegateWidths(m.list.Items(), m.list.Width())
-		m.listDelegate = d
-		m.list.SetDelegate(d)
+		m.compactMode = false
+		m.refreshDelegate()
 		m.updateLayout()
 	}
 }

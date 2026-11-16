@@ -1,0 +1,24 @@
+{
+  "number": 42,
+  "updatedAt": "2026-10-20T12:00:00Z",
+  "headRefOid": "0123456789abcdef0123456789abcdef01234567",
+  "comments": [
+    {"id": "IC_1", "author": {"login": "octocat"}, "authorAssociation": "OWNER", "body": "Looks close.", "createdAt": "2026-10-19T09:00:00Z", "includesCreatedEdit": false, "isMinimized": false, "minimizedReason": "", "reactionGroups": [], "url": "https://github.com/o/r/pull/42#issuecomment-1", "viewerDidAuthor": false}
+  ],
+  "reviews": [
+    {"id": "PRR_1", "author": {"login": "hubot"}, "authorAssociation": "MEMBER", "body": "", "submittedAt": "2026-10-19T10:00:00Z", "includesCreatedEdit": false, "reactionGroups": [], "state": "APPROVED", "commit": {"oid": "0123456789abcdef0123456789abcdef01234567"}}
+  ],
+  "statusCheckRollup": [
+    {"__typename": "CheckRun", "completedAt": "2026-10-19T11:00:00Z", "conclusion": "SUCCESS", "detailsUrl": "https://github.com/o/r/actions/runs/1/job/1", "name": "Lint", "startedAt": "2026-10-19T10:58:00Z", "status": "COMPLETED", "workflowName": "CI"},
+    {"__typename": "CheckRun", "completedAt": "0001-01-01T00:00:00Z", "conclusion": "", "detailsUrl": "https://github.com/o/r/actions/runs/1/job/2", "name": "Test", "startedAt": "2026-10-19T10:58:00Z", "status": "IN_PROGRESS", "workflowName": "CI"},
+    {"__typename": "StatusContext", "context": "ci/legacy", "startedAt": "2026-10-19T10:57:00Z", "state": "PENDING", "targetUrl": "https://ci.example.com/42"}
+  ],
+  "commits": [
+    {"authoredDate": "2026-10-18T08:00:00Z", "authors": [{"email": "octocat@example.com", "id": "U_1", "login": "octocat", "name": "Octo Cat"}], "committedDate": "2026-10-18T08:00:00Z", "messageBody": "", "messageHeadline": "feat: first", "oid": "aaaaaaa1111111111111111111111111111111111"},
+    {"authoredDate": "2026-10-19T08:00:00Z", "authors": [{"email": "octocat@example.com", "id": "U_1", "login": "octocat", "name": "Octo Cat"}], "committedDate": "2026-10-19T08:00:00Z", "messageBody": "Body.", "messageHeadline": "fix: second", "oid": "bbbbbbb2222222222222222222222222222222222"}
+  ],
+  "files": [
+    {"path": "main.go", "additions": 3, "deletions": 1},
+    {"path": "docs/README.md", "additions": 10, "deletions": 0}
+  ]
+}

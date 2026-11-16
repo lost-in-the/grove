@@ -19,15 +19,7 @@ func newTestModel(opts ...testOpt) Model {
 
 	s := GroveSpinner()
 
-	delegate := NewWorktreeDelegateV2()
-	l := list.New(nil, delegate, 0, 0)
-	l.SetShowTitle(false)
-	l.SetShowStatusBar(false)
-	l.SetShowHelp(false)
-	l.SetFilteringEnabled(true)
-	l.KeyMap.Filter.SetKeys("/")
-	l.KeyMap.CursorUp.SetKeys("up", "k")
-	l.KeyMap.CursorDown.SetKeys("down", "j")
+	l := newWorktreeList(rowDelegate{Secondary: "branch", Now: func() time.Time { return testNow }})
 
 	h := help.New()
 
@@ -39,10 +31,11 @@ func newTestModel(opts ...testOpt) Model {
 		spinner:     s,
 		help:        h,
 		toast:       NewToastModel(),
+		now:         func() time.Time { return testNow },
+		compactMode: true,
 		helpFooter:  NewHelpFooter(),
 		helpOverlay: NewHelpOverlay(),
 		detail:      viewport.New(viewport.WithWidth(80), viewport.WithHeight(20)),
-		activeView:  ViewDashboard,
 		loading:     false,
 		ready:       true,
 		width:       80,
@@ -86,6 +79,9 @@ func withLoading() testOpt {
 }
 
 // makeTestItems generates n WorktreeItem values for testing.
+// testNow is the fixed clock for tests and goldens, so ages never drift.
+var testNow = time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
+
 func makeTestItems(n int) []WorktreeItem {
 	names := []string{"root", "feature-auth", "fix-bug", "testing", "refactor", "docs", "perf", "ci", "staging", "dev"}
 	items := make([]WorktreeItem, n)
@@ -99,6 +95,7 @@ func makeTestItems(n int) []WorktreeItem {
 			Commit:        "abc1234",
 			CommitMessage: "test commit for " + name,
 			CommitAge:     "2 hours ago",
+			CommitTime:    testNow.Add(-time.Duration(i) * time.Hour),
 			IsMain:        i == 0,
 			IsCurrent:     i == 0,
 			IsDirty:       i%3 == 0,
@@ -125,6 +122,26 @@ func makeKeyMsg(keyStr string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyUp}
 	case "down":
 		return tea.KeyPressMsg{Code: tea.KeyDown}
+	case "pgdown":
+		return tea.KeyPressMsg{Code: tea.KeyPgDown}
+	case "pgup":
+		return tea.KeyPressMsg{Code: tea.KeyPgUp}
+	case "space":
+		return tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}
+	case "ctrl+j":
+		return tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl}
+	case "ctrl+k":
+		return tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl}
+	case "ctrl+d":
+		return tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl}
+	case "ctrl+u":
+		return tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl}
+	case "ctrl+n":
+		return tea.KeyPressMsg{Code: 'n', Mod: tea.ModCtrl}
+	case "ctrl+p":
+		return tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl}
+	case "shift+tab":
+		return tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
 	default:
 		// Printable character(s)
 		runes := []rune(keyStr)
@@ -147,25 +164,10 @@ func sendMsg(m Model, msg tea.Msg) Model {
 	return result.(Model)
 }
 
-// enterCreateManual enters the create wizard and navigates to the branch select step.
-func enterCreateManual(m Model) Model {
-	m = sendKey(m, "n") // opens wizard at BranchChoice
-	if m.createState != nil {
-		m.createState.Branches = []string{"main", "develop", "feature/auth"}
-		m = sendKey(m, "enter") // select "Select existing branch" → BranchSelect
+// setViewForTest makes v the only frame above the dashboard root.
+func (m *Model) setViewForTest(v ActiveView) {
+	m.views = nil
+	if v != ViewDashboard {
+		m.pushView(v)
 	}
-	return m
-}
-
-// enterNameStep transitions the create wizard to the name step with a properly
-// initialized NameInput textinput.
-func enterNameStep(m Model) Model {
-	if m.createState != nil {
-		ni := newNameInput("")
-		m.createState.NameInput = ni
-		m.createState.Step = CreateStepName
-		// Focus the input synchronously for tests (ignore the cmd)
-		m.createState.NameInput.Focus()
-	}
-	return m
 }

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -257,11 +258,12 @@ working_dir = "main"
 	}
 
 	srcPath := filepath.Join(filepath.Dir(repo), "rails-app-src")
-	forkState := &ForkState{
+	req := forkRequest{
 		Source: WorktreeItem{ShortName: "src", Branch: "src", Path: srcPath},
 		Name:   "forked",
+		Branch: "src-forked",
 	}
-	msg := forkWorktreeCmd(mgr, stateMgr, nil, repo, forkState)()
+	msg := forkWorktreeCmd(mgr, stateMgr, nil, repo, req)()
 	done, ok := msg.(forkCompleteMsg)
 	if !ok {
 		t.Fatalf("expected forkCompleteMsg, got %T", msg)
@@ -692,37 +694,17 @@ func TestUpdate_WorktreeDeletedMsg(t *testing.T) {
 	mgr, stateMgr := newTestManagers(t, repo)
 
 	m := NewModel(mgr, stateMgr, repo)
-	m.activeView = ViewDelete
+	m.setViewForTest(ViewDelete)
 
 	msg := worktreeDeletedMsg{name: "test", err: nil}
 	updated, _ := m.Update(msg)
 	m = updated.(Model)
 
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after delete, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after delete, got %d", m.activeView())
 	}
 	if m.toast.Message() == "" {
 		t.Error("expected non-empty status message after successful delete")
-	}
-}
-
-func TestUpdate_WorktreeCreatedMsg(t *testing.T) {
-	repo := setupRailsFixture(t)
-	mgr, stateMgr := newTestManagers(t, repo)
-
-	m := NewModel(mgr, stateMgr, repo)
-	m.activeView = ViewCreate
-	m.createState = &CreateState{}
-
-	msg := worktreeCreatedMsg{name: "new-wt"}
-	updated, _ := m.Update(msg)
-	m = updated.(Model)
-
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after create, got %d", m.activeView)
-	}
-	if m.toast.Message() == "" {
-		t.Error("expected non-empty status message after successful create")
 	}
 }
 
@@ -731,15 +713,15 @@ func TestUpdate_BulkDeleteDoneMsg(t *testing.T) {
 	mgr, stateMgr := newTestManagers(t, repo)
 
 	m := NewModel(mgr, stateMgr, repo)
-	m.activeView = ViewBulk
+	m.setViewForTest(ViewBulk)
 	m.bulkState = &BulkState{}
 
 	msg := bulkDeleteDoneMsg{count: 3}
 	updated, _ := m.Update(msg)
 	m = updated.(Model)
 
-	if m.activeView != ViewDashboard {
-		t.Errorf("expected ViewDashboard after bulk delete, got %d", m.activeView)
+	if m.activeView() != ViewDashboard {
+		t.Errorf("expected ViewDashboard after bulk delete, got %d", m.activeView())
 	}
 	if m.toast.Message() == "" {
 		t.Error("expected non-empty status message after bulk delete")
@@ -842,11 +824,12 @@ working_dir = "main"
 	}
 
 	srcPath := filepath.Join(filepath.Dir(repo), "rails-app-src")
-	forkState := &ForkState{
+	req := forkRequest{
 		Source: WorktreeItem{ShortName: "src", Branch: "src", Path: srcPath},
 		Name:   "forked",
+		Branch: "src-forked",
 	}
-	msg := forkWorktreeCmd(mgr, stateMgr, nil, repo, forkState)()
+	msg := forkWorktreeCmd(mgr, stateMgr, nil, repo, req)()
 	done, ok := msg.(forkCompleteMsg)
 	if !ok {
 		t.Fatalf("expected forkCompleteMsg, got %T", msg)
@@ -921,5 +904,193 @@ working_dir = "main"
 	}
 	if dockerCalled {
 		t.Error("docker auto-up ran despite bootstrap failure (CLI skips it)")
+	}
+}
+
+// Bootstrap output reaches the activity log as it is written, not in one
+// dump when bootstrap returns (#143): a hook's first line shows while the
+// hook is still running, so it arrives well before the hook's last line.
+func TestRunPostCreateStreaming_StreamsHookOutputLive(t *testing.T) {
+	t.Setenv("HOME", t.TempDir()) // no global hooks
+	repo := setupRailsFixtureWithWorktrees(t, "live")
+	mgr, stateMgr := newTestManagers(t, repo)
+
+	hooksToml := `[hooks]
+[[hooks.post_create]]
+type = "command"
+command = "echo hook-early && sleep 2 && echo hook-late"
+working_dir = "main"
+`
+	if err := os.WriteFile(filepath.Join(repo, ".grove", "hooks.toml"), []byte(hooksToml), 0o644); err != nil {
+		t.Fatalf("write hooks.toml: %v", err)
+	}
+	wt, err := mgr.Find("live")
+	if err != nil || wt == nil {
+		t.Fatalf("Find(live): wt=%v err=%v", wt, err)
+	}
+
+	ch := make(chan creationEvent, 100)
+	go func() {
+		defer close(ch)
+		cfg := &config.Config{}
+		cfg.Session.OpenIn = config.OpenInCurrent // no session
+		runPostCreateStreaming(ch, mgr, stateMgr, cfg, repo, "live", wt)
+	}()
+	var lines []string
+	var early, late time.Time
+	for ev := range ch {
+		lines = append(lines, ev.line)
+		switch ev.line {
+		case "hook-early":
+			early = time.Now()
+		case "hook-late":
+			late = time.Now()
+		}
+	}
+	if early.IsZero() || late.IsZero() {
+		t.Fatalf("hook output missing from the log: %q", lines)
+	}
+	if gap := late.Sub(early); gap < time.Second {
+		t.Errorf("hook-early arrived %v before hook-late, want about the hook's 2s sleep: %q", gap, lines)
+	}
+}
+
+// Typing a new branch into the branch form and pressing enter creates the
+// worktree on that branch, cut from Base, through the dashboard's command.
+func TestIntegration_BranchFormCreatesNewBranchFromBase(t *testing.T) {
+	repo := setupRailsFixture(t)
+	mgr, stateMgr := newTestManagers(t, repo)
+	base := strings.TrimSpace(runGit(t, repo, "rev-parse", "--abbrev-ref", "HEAD"))
+	baseHead := strings.TrimSpace(runGit(t, repo, "rev-parse", "HEAD"))
+
+	m := newTestModel(withSize(120, 40))
+	m.worktreeMgr, m.stateMgr, m.projectRoot = mgr, stateMgr, repo
+	next, _ := m.openBranchForm(branchFormPrefill{Branch: "form-made"})
+	m = next.(Model)
+	m.branchForm.Base.SetValue(base)
+
+	next, cmd := m.Update(makeKeyMsg("enter"))
+	m = next.(Model)
+	if !m.branchForm.Busy || cmd == nil {
+		t.Fatalf("busy=%v cmd=%v, want creation started", m.branchForm.Busy, cmd != nil)
+	}
+
+	var done creationDoneMsg
+	found := false
+	for _, c := range cmd().(tea.BatchMsg) {
+		if c == nil {
+			continue
+		}
+		switch msg := c().(type) {
+		case creationLogMsg:
+			done, found = drainCreationStream(t, readCreationLog(msg.ch, msg.source)), true
+		case creationDoneMsg:
+			done, found = msg, true
+		}
+	}
+	if !found {
+		t.Fatal("no creation command in the batch")
+	}
+	if done.err != nil {
+		t.Fatalf("creation failed: %v", done.err)
+	}
+
+	next, _ = m.Update(done)
+	m = next.(Model)
+	if m.activeView() != ViewDashboard || m.branchForm != nil || m.pendingSelect != "form-made" {
+		t.Errorf("after done: view=%v form nil=%v pendingSelect=%q", m.activeView(), m.branchForm == nil, m.pendingSelect)
+	}
+	if got := strings.TrimSpace(runGit(t, done.path, "rev-parse", "--abbrev-ref", "HEAD")); got != "form-made" {
+		t.Errorf("worktree branch = %q, want form-made", got)
+	}
+	if got := strings.TrimSpace(runGit(t, done.path, "rev-parse", "HEAD")); got != baseHead {
+		t.Errorf("worktree HEAD = %q, want base %s at %q", got, base, baseHead)
+	}
+}
+
+// Copy with "move" carries an untracked file to the new worktree and leaves
+// the source without it.
+func TestForkWorktreeCmd_MoveCleansUntrackedFromSource(t *testing.T) {
+	repo := setupRailsFixtureWithWorktrees(t, "src")
+	mgr, stateMgr := newTestManagers(t, repo)
+	srcPath := filepath.Join(filepath.Dir(repo), "rails-app-src")
+	if err := os.WriteFile(filepath.Join(srcPath, "wip.txt"), []byte("wip\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	req := forkRequest{
+		Source: WorktreeItem{ShortName: "src", Branch: "src", Path: srcPath},
+		Name:   "moved",
+		Branch: "src-moved",
+		HasWIP: true,
+		WIP:    WIPMove,
+	}
+	done, ok := forkWorktreeCmd(mgr, stateMgr, nil, repo, req)().(forkCompleteMsg)
+	if !ok || done.err != nil {
+		t.Fatalf("copy failed: %+v", done)
+	}
+	if _, err := os.Stat(filepath.Join(done.path, "wip.txt")); err != nil {
+		t.Errorf("wip.txt missing from the copy: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(srcPath, "wip.txt")); err == nil {
+		t.Error("wip.txt is still in the source after a move")
+	}
+}
+
+// End to end through the form: f on a dirty worktree, choose move, enter.
+// The copy gets the change and the source loses it.
+func TestIntegration_CopyFormMoveCleansSource(t *testing.T) {
+	repo := setupRailsFixtureWithWorktrees(t, "src")
+	mgr, stateMgr := newTestManagers(t, repo)
+	srcPath := filepath.Join(filepath.Dir(repo), "rails-app-src")
+	if err := os.WriteFile(filepath.Join(srcPath, "wip.txt"), []byte("wip\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := newTestModel(withSize(120, 40))
+	m.worktreeMgr, m.stateMgr, m.projectRoot = mgr, stateMgr, repo
+	next, cmd := m.openCopyForm(WorktreeItem{ShortName: "src", Branch: "src", Path: srcPath})
+	m = next.(Model)
+	for _, c := range cmd().(tea.BatchMsg) {
+		if c == nil {
+			continue
+		}
+		if msg, ok := c().(wipCheckMsg); ok {
+			next, _ = m.Update(msg)
+			m = next.(Model)
+		}
+	}
+	if !m.branchForm.HasWIP {
+		t.Fatal("changes check did not report wip.txt")
+	}
+	for _, k := range []string{"tab", "tab", "right"} {
+		next, _ = m.Update(makeKeyMsg(k))
+		m = next.(Model)
+	}
+	if m.branchForm.Changes != WIPMove {
+		t.Fatalf("changes = %v, want move", m.branchForm.Changes)
+	}
+	next, cmd = m.Update(makeKeyMsg("enter"))
+	m = next.(Model)
+	if cmd == nil || !m.branchForm.Busy {
+		t.Fatal("enter did not start the copy")
+	}
+	var done forkCompleteMsg
+	found := false
+	for _, c := range cmd().(tea.BatchMsg) {
+		if c == nil {
+			continue
+		}
+		if msg, ok := c().(forkCompleteMsg); ok {
+			done, found = msg, true
+		}
+	}
+	if !found || done.err != nil {
+		t.Fatalf("copy failed: found=%v %+v", found, done)
+	}
+	if _, err := os.Stat(filepath.Join(done.path, "wip.txt")); err != nil {
+		t.Errorf("wip.txt missing from the copy: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(srcPath, "wip.txt")); err == nil {
+		t.Error("wip.txt is still in the source after a move")
 	}
 }

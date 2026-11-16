@@ -117,9 +117,6 @@ func (m Model) renderPRPanel() string {
 			if s.Loading {
 				return ""
 			}
-			if s.Creating {
-				return renderCreatingDetail(s.ActivityLog, m.spinner.View(), renderCreatingMsg(s))
-			}
 			if len(filtered) > 0 && s.Cursor < len(filtered) {
 				return m.renderPRDetailViewport(filtered[s.Cursor], width, height)
 			}
@@ -129,18 +126,9 @@ func (m Model) renderPRPanel() string {
 	})
 
 	if s.ExistsPrompt != nil {
-		return centerOverlay(panel, renderExistingWorktreePrompt(s.ExistsPrompt, m.width), m.width, m.height)
+		return composeOverlay(panel, renderExistingWorktreePrompt(s.ExistsPrompt, m.width), m.width, m.height)
 	}
 	return panel
-}
-
-// renderCreatingMsg returns the "creating worktree" message for PR view.
-func renderCreatingMsg(s *PRViewState) string {
-	if s.CreatingPR != nil {
-		return fmt.Sprintf("Creating worktree for PR #%d: %s...",
-			s.CreatingPR.Number, truncate(s.CreatingPR.Title, 40))
-	}
-	return "Creating worktree from PR..."
 }
 
 // renderPRList renders the PR list content for the panel layout.
@@ -153,8 +141,11 @@ func renderPRList(s *PRViewState, width int, spinnerView string, maxHeight int) 
 		return b.String()
 	}
 
-	if s.Error != "" {
+	switch {
+	case s.Error != "":
 		b.WriteString(Styles.ErrorText.Render(s.Error) + "\n")
+	case s.Stale:
+		b.WriteString(Styles.TextMuted.Render(spinnerView+" cached · refreshing") + "\n")
 	}
 
 	filter := s.FilterInput.Value()
@@ -332,13 +323,6 @@ func (m Model) renderContextPanel(cfg contextPanelConfig) string {
 		body = lipgloss.JoinVertical(lipgloss.Left, listContent, separator, detailView)
 	}
 
-	if m.toast != nil && m.toast.Current != nil {
-		toastView := m.toast.View(m.width)
-		if toastView != "" {
-			statusBar = compositeToastOnHeader(statusBar, toastView, m.width)
-		}
-	}
-
 	body = lipgloss.NewStyle().Padding(0, 1).Render(body)
 
 	if m.height > 0 && bodyBudget > 0 {
@@ -367,5 +351,5 @@ func renderContextHeader(contextLabel, projectName string, width int) string {
 		content = left
 	}
 
-	return Styles.HeaderBar.Width(width).Render(content)
+	return headerBar(content, width)
 }

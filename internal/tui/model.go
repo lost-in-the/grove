@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -25,6 +26,7 @@ import (
 	"github.com/lost-in-the/grove/internal/updatecheck"
 	"github.com/lost-in-the/grove/internal/version"
 	"github.com/lost-in-the/grove/internal/worktree"
+	"github.com/lost-in-the/grove/plugins/tracker"
 )
 
 // ActiveView tracks which view is currently displayed.
@@ -34,15 +36,18 @@ const (
 	ViewDashboard ActiveView = iota
 	ViewHelp
 	ViewDelete
-	ViewCreate
+	ViewBranchForm
 	ViewBulk
 	ViewPRs
 	ViewIssues
-	ViewFork
 	ViewSync
 	ViewConfig
 	ViewRename
-	ViewCheckout
+	ViewUpdate
+	ViewDetailSheet // full-screen detail below 110 columns
+	ViewOmni        // search over worktrees, actions, PRs, and issues
+	ViewMessages    // session history of warnings and errors
+	ViewPRReview    // full-screen review of one pull request (spec 13)
 )
 
 // Model is the root Bubble Tea model.
@@ -73,30 +78,48 @@ type Model struct {
 	// don't read the cache file on every render. Empty strings = no update.
 	updateLatestVersion string
 	updateLatestURL     string
+	updateNotify        bool // update notices allowed; opt-outs hide the badge only
 
 	// Keys
 	keys KeyMap
 
 	// State
-	activeView    ActiveView
+	views         viewStack
 	ready         bool // true after first WindowSizeMsg
 	loading       bool // true while fetching worktrees
 	detailFocused bool // true when dashboard detail panel has focus
 
 	// Sort
-	sortMode SortMode
+	sortMode     SortMode
+	sortReversed bool // O reverses the current sort
+	pendingG     bool // g was pressed; a second g goes to the top
+	pendingM     bool // m was pressed; the pin strip is open
+	pins         pinSet
+	lastActive   string // display name of the worktree before this one (state.LastWorktree)
 
 	// Overlay state
-	deleteState   *DeleteState
-	createState   *CreateState
-	bulkState     *BulkState
-	prState       *PRViewState
-	issueState    *IssueViewState
-	forkState     *ForkState
-	syncState     *SyncState
-	configState   *ConfigState
-	renameState   *RenameState
-	checkoutState *CheckoutState
+	deleteState *DeleteState
+	branchForm  *BranchFormState
+	omni        *OmniState
+
+	// Session caches of PR and issue data, filled whenever a browser
+	// fetches, so omni can search them without calling gh (spec 9.2).
+	prCache        []*tracker.PullRequest
+	issueCache     []*tracker.Issue
+	prFetching     bool // a PR list fetch is in flight
+	messagesOffset int  // first row shown in the message history
+	pendingIssue   int
+	bulkState      *BulkState
+	prState        *PRViewState
+	prReview       *PRReviewState
+	prReviewGen    int                       // generation of the latest review open
+	prReviewCache  map[int]*prReviewData     // loaded review data by PR number
+	ghRepo         string                    // the gh repository, once resolved
+	commitDiffs    map[string][]git.FileDiff // commit diffs by "number:sha"
+	issueState     *IssueViewState
+	syncState      *SyncState
+	configState    *ConfigState
+	renameState    *RenameState
 
 	// Post-create selection
 	pendingSelect string
@@ -114,11 +137,25 @@ type Model struct {
 
 	// Layout
 	width, height int
-	compactMode   bool // true = V1 single-line delegate, false = V2 two-line
+	compactMode   bool // true = one-line rows, false = rows with the commit message
 
-	// List delegate (stored for header rendering in compact mode)
-	listDelegate WorktreeDelegate
+	// agentAware is true when the first fetch reported the herdr backend.
+	// It is decided once, so columns never appear or vanish mid-session.
+	agentAware    bool
+	agentAwareSet bool
+
+	// The agent poll (spec 7.4): polling is true once the loop starts;
+	// pollGen numbers polls so a stale result is dropped.
+	polling      bool
+	pollInFlight bool
+	pollGen      int
+
+	// now is the clock rows use for ages; tests pin it.
+	now func() time.Time
 }
+
+// updateSkip reports whether update notices are opted out; tests stub it.
+var updateSkip = updatecheck.Skip
 
 // NewModel creates a new TUI model.
 func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, pluginMgr ...*plugins.Manager) Model {
@@ -132,30 +169,20 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 
 	s := GroveSpinner()
 
-	// Determine compact mode: persisted preference > config > default (false)
-	compact := cfg != nil && cfg.TUI.CompactList != nil && *cfg.TUI.CompactList
-	if prefs := loadUIPrefs(projectRoot); prefs != nil && prefs.CompactMode != nil {
-		compact = *prefs.CompactMode
+	var configCompact, prefCompact *bool
+	if cfg != nil {
+		configCompact = cfg.TUI.CompactList
 	}
-
-	var delegate list.ItemDelegate
-	var v1Delegate WorktreeDelegate
-	if compact {
-		v1Delegate = NewWorktreeDelegate()
-		delegate = v1Delegate
-	} else {
-		delegate = NewWorktreeDelegateV2()
+	pins := pinSet{}
+	if prefs := loadUIPrefs(projectRoot); prefs != nil {
+		prefCompact = prefs.CompactMode
+		for slot, alias := range prefs.Pins {
+			pins[slot] = alias
+		}
 	}
+	compact := startupCompact(configCompact, prefCompact)
 
-	l := list.New(nil, delegate, 0, 0)
-	l.SetShowTitle(false)
-	l.SetShowStatusBar(false)
-	l.SetShowHelp(false)
-	l.SetFilteringEnabled(true)
-	l.KeyMap.Filter.SetKeys("/")
-	// Map our navigation keys to list's keymap
-	l.KeyMap.CursorUp.SetKeys("up", "k")
-	l.KeyMap.CursorDown.SetKeys("down", "j")
+	l := newWorktreeList(rowDelegate{TwoLine: !compact, Secondary: listSecondary(cfg)})
 
 	h := help.New()
 
@@ -168,14 +195,11 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 	// available (which is the common case). Reading from disk here instead of
 	// on every render keeps the hot path allocation-free.
 	//
-	// Honor Skip for the in-TUI update surfaces (badge + u-keybind modal),
-	// matching the CLI box and `grove version` annotation. Users who set
-	// GROVE_NO_UPDATE_NOTIFIER, GROVE_AGENT_MODE, etc. get no update UI anywhere.
-	// Use `grove --check-update` to force a synchronous check.
-	var latest, latestURL string
-	if !updatecheck.Skip(false, version.Version) {
-		latest, latestURL, _ = updatecheck.CachedRelease(version.Version)
-	}
+	// Skip (GROVE_NO_UPDATE_NOTIFIER, GROVE_AGENT_MODE, etc.) hides the header
+	// badge, matching the CLI box and `grove version`. `g u` is an explicit
+	// request, so it still reports the cache (spec 12).
+	latest, latestURL, _ := updatecheck.CachedRelease(version.Version)
+	notify := !updateSkip(false, version.Version)
 
 	return Model{
 		worktreeMgr:         mgr,
@@ -187,8 +211,10 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		cfgLoadErr:          cfgErr,
 		keys:                keys,
 		list:                l,
-		listDelegate:        v1Delegate,
 		compactMode:         compact,
+		pins:                pins,
+		now:                 time.Now,
+		lastActive:          lastWorktreeName(stateMgr),
 		spinner:             s,
 		help:                h,
 		toast:               NewToastModel(),
@@ -197,7 +223,7 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		updateOverlay:       NewUpdateOverlay(),
 		updateLatestVersion: latest,
 		updateLatestURL:     latestURL,
-		activeView:          ViewDashboard,
+		updateNotify:        notify,
 		loading:             true,
 	}
 }
@@ -214,18 +240,34 @@ func (m Model) Err() error { return m.err }
 // --- Tea interface ---
 
 func (m Model) Init() tea.Cmd {
-	tuilog.Printf("Init: loading=%v ready=%v activeView=%d", m.loading, m.ready, m.activeView)
-	cmds := []tea.Cmd{m.spinner.Tick, m.fetchWorktrees}
-	if m.activeView == ViewPRs {
+	tuilog.Printf("Init: loading=%v ready=%v activeView=%d", m.loading, m.ready, m.activeView())
+	cmds := []tea.Cmd{m.spinner.Tick, m.fetchWorktrees, loadPRCacheCmd(m.projectRoot)}
+	if m.activeView() == ViewPRs {
 		cmds = append(cmds, m.fetchPRsCmd)
 	}
-	if m.activeView == ViewIssues {
+	if m.activeView() == ViewIssues {
 		cmds = append(cmds, m.fetchIssuesCmd)
 	}
 	return tea.Batch(cmds...)
 }
 
+// Update handles msg. A toast expires on the spinner tick, which runs only
+// while something animates, so a message that shows a new toast also starts
+// the tick. A second tick in flight is harmless: the spinner drops ticks
+// with a stale tag.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var shown *Toast
+	if m.toast != nil {
+		shown = m.toast.Current
+	}
+	next, cmd := m.update(msg)
+	if nm, ok := next.(Model); ok && nm.toast != nil && nm.toast.Current != nil && nm.toast.Current != shown {
+		cmd = tea.Batch(cmd, nm.spinner.Tick)
+	}
+	return next, cmd
+}
+
+func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		return m.handleWindowSize(msg)
@@ -233,6 +275,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleWorktreesFetched(msg)
 	case detailMetricsLoadedMsg:
 		return m.handleDetailMetricsLoaded(msg)
+	case agentPollTickMsg:
+		return m.handleAgentPollTick()
+	case agentPollMsg:
+		return m.handleAgentPoll(msg)
 	case prLookupMsg:
 		return m.handlePRLookup(msg)
 	case worktreeDeletedMsg:
@@ -241,10 +287,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleCreationLog(msg)
 	case creationDoneMsg:
 		return m.handleCreationDone(msg)
-	case worktreeCreatedMsg:
-		return m.handleWorktreeCreated(msg)
 	case prsFetchedMsg:
 		return m.handlePRsFetched(msg)
+	case prCacheLoadedMsg:
+		return m.handlePRCacheLoaded(msg)
+	case prReviewRepoMsg:
+		return m.handlePRReviewRepo(msg)
+	case prDetailMsg:
+		return m.handlePRDetail(msg)
+	case prDiffMsg:
+		return m.handlePRDiff(msg)
+	case prCommentsMsg:
+		return m.handlePRComments(msg)
+	case prCommitDiffMsg:
+		return m.handlePRCommitDiff(msg)
+	case editorClosedMsg:
+		return m.handleEditorClosed(msg)
 	case issuesFetchedMsg:
 		return m.handleIssuesFetched(msg)
 	case bulkDeleteDoneMsg:
@@ -263,14 +321,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleConfigSaved(msg)
 	case renameCompleteMsg:
 		return m.handleRenameComplete(msg)
-	case checkoutBranchesMsg:
-		return m.handleCheckoutBranches(msg)
 	case checkoutCompleteMsg:
 		return m.handleCheckoutComplete(msg)
 	case spinner.TickMsg:
 		return m.handleSpinnerTick(msg)
 	case tea.KeyPressMsg:
 		return m.handleKeyPress(msg)
+	case tea.PasteMsg:
+		if m.activeView() == ViewBranchForm && m.branchForm != nil {
+			return m, m.branchForm.paste(msg)
+		}
+		if m.activeView() == ViewOmni && m.omni != nil {
+			return m, m.typeOmni(msg)
+		}
+		return m.handleDefault(msg)
 	default:
 		return m.handleDefault(msg)
 	}
@@ -282,15 +346,44 @@ func (m Model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.height = msg.Height
 	m.ready = true
 	m.updateLayout()
+	if m.branchForm != nil {
+		m.branchForm.setWidth(m.width, m.height)
+	}
+	if m.omni != nil {
+		w, _ := omniFrameSize(m.width, m.height)
+		m.omni.Input.SetWidth(max(4, w-8))
+	}
+	if m.configState != nil {
+		m.configState.resize(m.configFormSize())
+	}
 	tuilog.Printf("WindowSizeMsg: %dx%d, list size: %dx%d", msg.Width, msg.Height, m.list.Width(), m.list.Height())
 	if !wasReady && m.cfgLoadErr != nil {
 		m.toast.Show(NewToast("Config load failed: "+m.cfgLoadErr.Error(), ToastWarning))
 		m.cfgLoadErr = nil
 	}
-	if m.helpOverlay.Active {
+	if m.activeView() == ViewHelp {
 		m.helpOverlay.Open(m.helpOverlay.ForView, m.width, m.height)
 	}
+	m.reconcileDetailWithWidth()
 	return m, nil
+}
+
+// reconcileDetailWithWidth keeps the detail mode right for the width tier:
+// pane focus exists only at 110+, the full-screen sheet only below it.
+func (m *Model) reconcileDetailWithWidth() {
+	wide := isWideLayout(m.width)
+	if !wide && m.detailFocused {
+		m.detailFocused = false
+		m.refreshDetailForFocus()
+	}
+	if m.layoutView() == ViewDetailSheet {
+		if wide && m.activeView() == ViewDetailSheet {
+			m.popView()
+			m.updateDetailContent()
+			return
+		}
+		m.refreshDetailSheet()
+	}
 }
 
 func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.Cmd) {
@@ -304,13 +397,36 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 	for i, item := range msg.items {
 		listItems[i] = item
 	}
-	if m.sortMode != SortByName {
-		listItems = sortWorktreeItems(listItems, m.sortMode)
+	if m.sortMode != SortByName || m.sortReversed {
+		listItems = sortWorktreeItems(listItems, m.sortMode, m.sortReversed)
 	}
 	// Capture SetItems' cmd: with a filter applied it re-runs the filter, and
 	// dropping it left the list showing no items until the user re-filtered (B38).
 	setItemsCmd := m.list.SetItems(listItems)
-	m.computeColumnWidths()
+	// Prune only here, after a successful fetch: a failed fetch must never
+	// wipe pins (spec 8.3).
+	if len(m.pins) > 0 {
+		aliases := map[string]bool{}
+		for _, item := range msg.items {
+			aliases[item.ShortName] = true
+		}
+		if pruned := m.pins.prune(aliases); len(pruned) != len(m.pins) {
+			m.changePins(func(p pinSet) pinSet { return p.prune(aliases) })
+		}
+	}
+	if !m.agentAwareSet {
+		// Decided by the first successful fetch, even one that found no
+		// backend, so the column never appears mid-session.
+		m.agentAware, m.agentAwareSet = msg.backend == "herdr", true
+	}
+	// A poll started before this fetch would overwrite fresher sessions.
+	m.pollGen++
+	var pollCmd tea.Cmd
+	if m.agentAware && !m.polling {
+		m.polling = true
+		pollCmd = agentPollTick()
+	}
+	m.refreshDelegate()
 	m.loading = false
 
 	if m.pendingSelect != "" {
@@ -350,6 +466,7 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 	m.detailMetricsGen++
 	return m, tea.Batch(
 		setItemsCmd,
+		pollCmd,
 		lookupPRsCmd(branches),
 		fetchDetailMetricsCmd(m.detailMetricsGen, msg.items, ResolveDefaultBranch(m.cfg)),
 	)
@@ -402,8 +519,12 @@ func (m Model) handlePRLookup(msg prLookupMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) handleWorktreeDeleted(msg worktreeDeletedMsg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
-	m.activeView = ViewDashboard
+	m.popToRoot()
 	m.deleteState = nil
+	if msg.err == nil && m.pins.slotOf(msg.name) != "" {
+		name := msg.name
+		m.changePins(func(p pinSet) pinSet { return p.drop(name) })
+	}
 	if msg.err != nil {
 		m.toast.Show(NewToast(fmt.Sprintf("Delete failed: %s", msg.err), ToastError))
 	} else if msg.branchErr != nil {
@@ -442,7 +563,7 @@ func (m Model) handleCreationDone(msg creationDoneMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		return m, nil
 	}
-	m.activeView = ViewDashboard
+	m.popToRoot()
 	if cleanup != nil {
 		cleanup()
 	}
@@ -458,55 +579,70 @@ func (m Model) handleCreationDone(msg creationDoneMsg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
 }
 
-func (m Model) handleWorktreeCreated(msg worktreeCreatedMsg) (tea.Model, tea.Cmd) {
-	if msg.err != nil {
-		if m.createState != nil {
-			m.createState.Creating = false
-			m.createState.Error = msg.err.Error()
-		}
-		return m, nil
-	}
-	m.activeView = ViewDashboard
-	m.createState = nil
-	m.pendingSelect = msg.name
-
-	if msg.hookErr != nil {
-		m.toast.Show(NewToast(fmt.Sprintf("Created %q (hook failed: %s)", msg.name, msg.hookErr), ToastWarning))
-	} else {
-		m.toast.Show(NewToast(fmt.Sprintf("Created %q", msg.name), ToastSuccess))
-	}
-	if msg.hookOutput != "" {
-		tuilog.Printf("hook output for %q: %s", msg.name, msg.hookOutput)
-	}
-	return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
-}
-
 func (m Model) handlePRsFetched(msg prsFetchedMsg) (tea.Model, tea.Cmd) {
-	if m.prState != nil {
-		m.prState.Loading = false
-		if msg.err != nil {
-			m.prState.Error = msg.err.Error()
-		} else {
-			m.prState.PRs = msg.prs
+	m.prFetching = false
+	msg.prs = safePRs(msg.prs)
+	if msg.err == nil {
+		m.prCache = msg.prs
+	}
+	if s := m.prState; s != nil {
+		s.Loading = false
+		switch {
+		case msg.err != nil && s.Stale:
+			s.Error = "refresh failed: " + msg.err.Error() // keep the saved list
+		case msg.err != nil:
+			s.Error = msg.err.Error()
+		default:
+			pending := s.selectedPRNumber() // keep the stale list's selection
+			s.PRs, s.Stale, s.Error, s.Cursor = msg.prs, false, "", 0
+			for i, pr := range filteredPRs(msg.prs, s.FilterInput.Value()) {
+				if pending != 0 && pr.Number == pending {
+					s.Cursor = i
+				}
+			}
 		}
 	}
 	return m, nil
 }
 
+// handlePRCacheLoaded takes the PR list saved by an earlier session, unless
+// a fetch has already brought a newer one. Omni and the PR browser use it.
+func (m Model) handlePRCacheLoaded(msg prCacheLoadedMsg) (tea.Model, tea.Cmd) {
+	msg.prs = safePRs(msg.prs)
+	if m.prCache == nil {
+		m.prCache = msg.prs
+	}
+	if s := m.prState; s != nil && s.Loading && len(msg.prs) > 0 {
+		s.PRs, s.Loading, s.Stale = msg.prs, false, true
+	}
+	return m, nil
+}
+
 func (m Model) handleIssuesFetched(msg issuesFetchedMsg) (tea.Model, tea.Cmd) {
+	msg.issues = safeIssues(msg.issues)
+	pending := m.pendingIssue
+	m.pendingIssue = 0
+	if msg.err == nil {
+		m.issueCache = msg.issues
+	}
 	if m.issueState != nil {
 		m.issueState.Loading = false
 		if msg.err != nil {
 			m.issueState.Error = msg.err.Error()
 		} else {
 			m.issueState.Issues = msg.issues
+			for i, is := range msg.issues {
+				if pending != 0 && is.Number == pending {
+					m.issueState.Cursor = i
+				}
+			}
 		}
 	}
 	return m, nil
 }
 
 func (m Model) handleBulkDeleteDone(msg bulkDeleteDoneMsg) (tea.Model, tea.Cmd) {
-	m.activeView = ViewDashboard
+	m.popToRoot()
 	m.bulkState = nil
 	if len(msg.failed) > 0 {
 		names := make([]string, 0, len(msg.failed))
@@ -522,46 +658,46 @@ func (m Model) handleBulkDeleteDone(msg bulkDeleteDoneMsg) (tea.Model, tea.Cmd) 
 }
 
 func (m Model) handleWIPCheck(msg wipCheckMsg) (tea.Model, tea.Cmd) {
-	// Only apply the result to the overlay whose worktree path matches, so a
-	// stale check dispatched by a since-canceled overlay cannot overwrite the
-	// WIP state of a different overlay opened afterwards.
-	if m.forkState != nil && m.forkState.Source.Path == msg.path {
-		m.forkState.HasWIP = msg.hasWIP
-		m.forkState.WIPFiles = msg.files
-		if msg.err != nil {
-			m.forkState.Err = msg.err
-		}
-	}
-	if m.checkoutState != nil && m.checkoutState.Item.Path == msg.path {
-		m.checkoutState.HasWIP = msg.hasWIP
-		m.checkoutState.WIPCheckDone = true
-		m.checkoutState.WIPFiles = msg.files
-		if msg.err != nil {
-			m.checkoutState.Err = msg.err
-		}
+	// The form ignores a result for any other worktree, so a stale check from
+	// a form canceled earlier cannot mark this one clean.
+	if m.branchForm != nil {
+		m.branchForm.setWIP(msg.path, msg.hasWIP, msg.files, msg.err)
 	}
 	return m, nil
 }
 
-func (m Model) handleForkComplete(msg forkCompleteMsg) (tea.Model, tea.Cmd) {
-	if msg.err != nil {
-		if msg.name != "" {
-			m.activeView = ViewDashboard
-			m.forkState = nil
-			m.pendingSelect = msg.name
-			m.toast.Show(NewToast(fmt.Sprintf("Forked %q (warning: %s)", msg.name, msg.err), ToastWarning))
-			return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
-		}
-		if m.forkState != nil {
-			m.forkState.Err = msg.err
-			m.forkState.Forking = false
-		}
+// finishFormWithError shows a failed copy or switch in the form, which stays
+// open so the user can change something and try again. The failed command
+// may already have stashed or captured changes, so the old check is stale:
+// enter waits for a fresh one.
+func (m Model) finishFormWithError(err error) (tea.Model, tea.Cmd) {
+	s := m.branchForm
+	if s == nil {
 		return m, nil
 	}
-	m.activeView = ViewDashboard
-	m.forkState = nil
+	if s.Log != nil {
+		s.Log.SetDone(err)
+	}
+	s.setCreatingDone(err.Error())
+	if s.Source == nil {
+		return m, nil
+	}
+	s.wipDone = false
+	return m, wipCheckCmd(s.Source.Path)
+}
+
+func (m Model) handleForkComplete(msg forkCompleteMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil && msg.name == "" {
+		return m.finishFormWithError(msg.err)
+	}
+	m.popToRoot()
+	m.branchForm = nil
 	m.pendingSelect = msg.name
-	m.toast.Show(NewToast(fmt.Sprintf("Forked %q", msg.name), ToastSuccess))
+	if msg.err != nil {
+		m.toast.Show(NewToast(fmt.Sprintf("Copied to %q (warning: %s)", msg.name, msg.err), ToastWarning))
+	} else {
+		m.toast.Show(NewToast(fmt.Sprintf("Copied to %q", msg.name), ToastSuccess))
+	}
 	return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
 }
 
@@ -584,7 +720,7 @@ func (m Model) handleSyncComplete(msg syncCompleteMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	m.activeView = ViewDashboard
+	m.popToRoot()
 	m.syncState = nil
 	m.toast.Show(NewToast(fmt.Sprintf("Synced %d files", msg.filesApplied), ToastSuccess))
 	return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
@@ -598,18 +734,7 @@ func (m Model) handleConfigLoaded(msg configLoadedMsg) (tea.Model, tea.Cmd) {
 			m.configState.Config = msg.cfg
 			m.configState.Fields = populateConfigFields(msg.cfg)
 
-			overlayWidth := m.width * 60 / 100
-			if overlayWidth < 60 {
-				overlayWidth = 60
-			}
-			if overlayWidth > 80 {
-				overlayWidth = 80
-			}
-			contentWidth := overlayWidth - 6
-			form, vals := buildConfigForm(m.configState.Fields, contentWidth)
-			m.configState.Form = form
-			m.configState.FormValues = vals
-			return m, form.Init()
+			return m, m.configState.buildForms(m.configFormSize())
 		}
 	}
 	return m, nil
@@ -625,7 +750,7 @@ func (m Model) handleConfigSaved(msg configSavedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.configState != nil {
-		m.activeView = ViewDashboard
+		m.popToRoot()
 		m.configState = nil
 	}
 	m.toast.Show(NewToast("Configuration saved", ToastSuccess))
@@ -634,18 +759,23 @@ func (m Model) handleConfigSaved(msg configSavedMsg) (tea.Model, tea.Cmd) {
 		m.toast.Show(NewToast("Saved but reload failed — restart TUI to apply", ToastWarning))
 	} else {
 		m.cfg = cfg
+		m.refreshDelegate() // tui.list_secondary and density settings
 	}
 	return m, nil
 }
 
 func (m Model) handleRenameComplete(msg renameCompleteMsg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
-	m.activeView = ViewDashboard
+	m.popToRoot()
 	m.renameState = nil
 	if msg.err != nil {
 		m.toast.Show(NewToast(fmt.Sprintf("Rename failed: %s", msg.err), ToastError))
 	} else {
 		m.toast.Show(NewToast(fmt.Sprintf("Renamed %q to %q", msg.oldName, msg.newName), ToastSuccess))
+		if m.pins.slotOf(msg.oldName) != "" {
+			old, renamed := msg.oldName, msg.newName
+			m.changePins(func(p pinSet) pinSet { return p.rename(old, renamed) })
+		}
 		m.pendingSelect = msg.newName
 		cmds = append(cmds, m.spinner.Tick)
 	}
@@ -653,33 +783,12 @@ func (m Model) handleRenameComplete(msg renameCompleteMsg) (tea.Model, tea.Cmd) 
 	return m, tea.Batch(cmds...)
 }
 
-func (m Model) handleCheckoutBranches(msg checkoutBranchesMsg) (tea.Model, tea.Cmd) {
-	if m.checkoutState != nil {
-		if msg.err != nil {
-			m.checkoutState.Err = msg.err
-		} else {
-			var available []string
-			for _, br := range msg.branches {
-				if !msg.usedBranches[br] {
-					available = append(available, br)
-				}
-			}
-			m.checkoutState.Branches = available
-		}
-	}
-	return m, nil
-}
-
 func (m Model) handleCheckoutComplete(msg checkoutCompleteMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
-		if m.checkoutState != nil {
-			m.checkoutState.Err = msg.err
-			m.checkoutState.Switching = false
-		}
-		return m, nil
+		return m.finishFormWithError(msg.err)
 	}
-	m.activeView = ViewDashboard
-	m.checkoutState = nil
+	m.popToRoot()
+	m.branchForm = nil
 	m.toast.Show(NewToast(fmt.Sprintf("Switched to branch %q", msg.branch), ToastSuccess))
 	return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
 }
@@ -699,11 +808,12 @@ func (m Model) handleSpinnerTick(msg spinner.TickMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	tuilog.Printf("KeyMsg: code=%d string=%q text=%q", msg.Code, msg.String(), msg.Text)
-	if m.activeView != ViewDashboard {
+	if m.activeView() != ViewDashboard {
 		return m.handleKey(msg)
 	}
 
 	if m.list.FilterState() == list.Filtering {
+		m.pendingG = false
 		prevIdx := m.list.Index()
 		var cmd tea.Cmd
 		m.list, cmd = m.list.Update(msg)
@@ -717,7 +827,7 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleDefault(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.activeView == ViewConfig && m.configState != nil && m.configState.Form != nil {
+	if m.layoutView() == ViewConfig && m.configState != nil && m.configState.form() != nil {
 		return m.handleConfigFormMsg(msg)
 	}
 
@@ -732,16 +842,8 @@ func (m Model) handleDefault(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) creationTrackerForSource(source string) (ct creationTracker, label string, cleanup func()) {
 	switch source {
 	case "create":
-		if m.createState != nil {
-			return m.createState, "", func() { m.createState = nil }
-		}
-	case "pr":
-		if m.prState != nil {
-			return m.prState, "from PR ", func() { m.prState = nil }
-		}
-	case "issue":
-		if m.issueState != nil {
-			return m.issueState, "from issue ", func() { m.issueState = nil }
+		if m.branchForm != nil {
+			return m.branchForm, "", func() { m.branchForm = nil }
 		}
 	}
 	return nil, "", nil
@@ -753,16 +855,12 @@ func (m *Model) updateLayout() {
 	}
 
 	headerHeight := 1 // status bar
-	footerHeight := m.helpFooter.CompactHeight(m.activeView, m.width-4)
+	footerHeight := m.helpFooter.CompactHeight(m.layoutView(), m.width-4) + m.stripHeight()
 	available := m.height - headerHeight - footerHeight
 
 	contentWidth := m.width - 2 // body padding (1 char each side)
 
-	// Column headers + separator are only shown in compact mode (2 lines).
 	listHeaderHeight := 0
-	if m.compactMode {
-		listHeaderHeight = 2
-	}
 
 	useSideBySide := isWideLayout(m.width)
 	if useSideBySide {
@@ -774,28 +872,14 @@ func (m *Model) updateLayout() {
 		m.detail.SetWidth(detailWidth)
 		m.detail.SetHeight(available)
 	} else {
-		// Stacked: cap list height at item count * row height + padding
-		itemCount := len(m.list.Items())
-		rowHeight := m.delegateHeight()
-		idealListHeight := itemCount*rowHeight + 2 // +2 for padding
-		maxListHeight := (available - listHeaderHeight) * 75 / 100
-		listHeight := idealListHeight
-		if listHeight > maxListHeight {
-			listHeight = maxListHeight
-		}
-		if listHeight < 3 {
-			listHeight = 3
-		}
-		detailHeight := available - listHeaderHeight - listHeight - 1
-		if detailHeight < 3 {
-			detailHeight = 3
-		}
-		m.list.SetSize(contentWidth, listHeight)
+		// The list takes everything but the selection line. The detail
+		// viewport is sized for the full-screen sheet.
+		m.list.SetSize(contentWidth, max(1, available-1))
 		m.detail.SetWidth(contentWidth)
-		m.detail.SetHeight(detailHeight)
+		m.detail.SetHeight(max(3, available))
 	}
 
-	m.computeColumnWidths()
+	m.refreshDelegate()
 
 	m.help.SetWidth(contentWidth)
 }
@@ -806,46 +890,56 @@ func (m *Model) toggleCompactMode() {
 
 	// Persist preference (best-effort, don't block on errors)
 	newVal := m.compactMode
-	if err := saveUIPrefs(m.projectRoot, &UIPrefs{CompactMode: &newVal}); err != nil {
+	if err := updateUIPrefs(m.projectRoot, func(p *UIPrefs) { p.CompactMode = &newVal }); err != nil {
 		tuilog.Printf("warning: failed to save UI prefs: %v", err)
 	}
 
-	if m.compactMode {
-		d := ComputeDelegateWidths(m.list.Items(), m.list.Width())
-		m.listDelegate = d
-		m.list.SetDelegate(d)
-	} else {
-		d := ComputeDelegateWidthsV2(m.list.Items(), m.list.Width())
-		m.list.SetDelegate(d)
-	}
+	m.refreshDelegate()
 	m.updateLayout()
 	m.updateDetailContent()
 }
 
-// delegateHeight returns the item height for the active delegate.
-func (m *Model) delegateHeight() int {
-	if m.compactMode {
-		return 1
+// startupCompact decides the starting density: a saved preference, else the
+// tui.compact_list config, else one-line rows (spec 5.4).
+func startupCompact(config, pref *bool) bool {
+	switch {
+	case pref != nil:
+		return *pref
+	case config != nil:
+		return *config
 	}
-	return 2
+	return true
 }
 
-// computeColumnWidths scans list items to find max name/branch lengths,
-// then distributes available width proportionally.
-func (m *Model) computeColumnWidths() {
-	listWidth := m.list.Width()
-	if listWidth <= 0 {
-		return
+// listSecondary is the text after the alias: "branch" (default), "dir", or
+// "off" (tui.list_secondary).
+func listSecondary(cfg *config.Config) string {
+	if cfg == nil || cfg.TUI.ListSecondary == "" {
+		return "branch"
 	}
+	return cfg.TUI.ListSecondary
+}
 
-	if m.compactMode {
-		d := ComputeDelegateWidths(m.list.Items(), listWidth)
-		m.listDelegate = d
-		m.list.SetDelegate(d)
-	} else {
-		d := ComputeDelegateWidthsV2(m.list.Items(), listWidth)
-		m.list.SetDelegate(d)
+// rowDelegate is the dashboard row delegate for the current settings.
+func (m *Model) rowDelegate() rowDelegate {
+	pinOf := map[string]string{}
+	for slot, alias := range m.pins {
+		pinOf[alias] = slot
 	}
+	return rowDelegate{
+		TwoLine:    !m.compactMode,
+		Pins:       len(m.pins) > 0,
+		PinOf:      pinOf,
+		LastActive: m.lastActive,
+		AgentAware: m.agentAware,
+		Secondary:  listSecondary(m.cfg),
+		Now:        m.now,
+	}
+}
+
+// refreshDelegate installs the row delegate for the current settings.
+func (m *Model) refreshDelegate() {
+	m.list.SetDelegate(m.rowDelegate())
 }
 
 func (m *Model) updateDetailContent() {
@@ -879,18 +973,17 @@ func (m Model) isAnimating() bool {
 
 // isOperationAnimating reports whether any worktree operation spinner is active.
 func (m Model) isOperationAnimating() bool {
-	return (m.createState != nil && m.createState.Creating) ||
-		(m.forkState != nil && m.forkState.Forking) ||
+	return (m.branchForm != nil && m.branchForm.Busy) ||
 		(m.syncState != nil && m.syncState.Syncing) ||
 		(m.deleteState != nil && m.deleteState.Deleting) ||
-		(m.renameState != nil && m.renameState.Renaming) ||
-		(m.checkoutState != nil && m.checkoutState.Switching)
+		(m.renameState != nil && m.renameState.Renaming)
 }
 
 // isTrackerAnimating reports whether PR or issue state is loading/creating.
 func (m Model) isTrackerAnimating() bool {
-	return (m.prState != nil && (m.prState.Loading || m.prState.Creating)) ||
-		(m.issueState != nil && (m.issueState.Loading || m.issueState.Creating))
+	return (m.prState != nil && (m.prState.Loading || m.prState.Stale && m.prState.Error == "")) ||
+		(m.prReview != nil && (m.prReview.loading() || m.prReview.LoadingScope)) ||
+		(m.issueState != nil && m.issueState.Loading)
 }
 
 // existingWorktreeItems returns all current worktree items from the list.
@@ -915,23 +1008,35 @@ func (m Model) selectedItem() (WorktreeItem, bool) {
 }
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	// Help overlay intercepts all keys when active
-	if m.helpOverlay.Active {
+	// A pending g or m owns the next key, before help or any other
+	// dashboard key sees it.
+	if m.activeView() == ViewDashboard && !m.detailFocused {
+		if m.pendingG {
+			if updated, cmd, handled := m.handleGLayerKey(msg); handled {
+				return updated, cmd
+			}
+		}
+		if m.pendingM {
+			if updated, cmd, handled := m.handlePinStripKey(msg); handled {
+				return updated, cmd
+			}
+		}
+	}
+
+	// Help and upgrade frames take every key. esc closes either, and ? also
+	// closes help; both return to the frame beneath.
+	switch m.activeView() {
+	case ViewHelp:
 		if key.Matches(msg, m.keys.Help) || key.Matches(msg, m.keys.Escape) {
-			m.helpOverlay.Close()
+			m.popView()
 			return m, nil
 		}
 		var cmd tea.Cmd
 		m.helpOverlay, cmd = m.helpOverlay.Update(msg)
 		return m, cmd
-	}
-
-	// Update overlay intercepts all keys when active. Mirrors HelpOverlay's
-	// pattern from #54: both the trigger key (u) and esc close the modal.
-	if m.updateOverlay != nil && m.updateOverlay.Active {
-		if key.Matches(msg, m.keys.Update) || key.Matches(msg, m.keys.Escape) {
-			m.updateOverlay.Close()
-			return m, nil
+	case ViewUpdate:
+		if key.Matches(msg, m.keys.Escape) {
+			m.popView()
 		}
 		return m, nil
 	}
@@ -939,41 +1044,40 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// ? opens help for views without text input
 	// Views with active text inputs (Create, Rename, Checkout, Fork) pass ? through
 	if key.Matches(msg, m.keys.Help) && !m.viewHasTextInput() {
-		m.helpOverlay.Open(m.activeView, m.width, m.height)
+		if m.activeView() == ViewDashboard && !m.detailFocused {
+			// On the dashboard, ? is omni scoped to actions (spec 9.1).
+			return m.openOmni(omniScopeActions)
+		}
+		m.helpOverlay.Open(m.activeView(), m.width, m.height)
+		m.pushView(ViewHelp)
 		return m, nil
 	}
 
-	// u opens the update modal when an update is available and no text input
-	// is focused. Same gating as ?-for-help.
-	if key.Matches(msg, m.keys.Update) && !m.viewHasTextInput() && m.updateAvailable() {
-		m.updateOverlay.Open(version.Version, m.updateLatestVersion, m.updateLatestURL)
-		return m, nil
-	}
-
-	switch m.activeView {
-	case ViewHelp:
-		m.activeView = ViewDashboard
-		return m, nil
+	switch m.activeView() {
 	case ViewDelete:
 		return m.handleDeleteKey(msg)
-	case ViewCreate:
-		return m.handleCreateKey(msg)
+	case ViewBranchForm:
+		return m.handleBranchFormKey(msg)
 	case ViewBulk:
 		return m.handleBulkKey(msg)
 	case ViewPRs:
 		return m.handlePRKey(msg)
 	case ViewIssues:
 		return m.handleIssueKey(msg)
-	case ViewFork:
-		return m.handleForkKey(msg)
 	case ViewSync:
 		return m.handleSyncKey(msg)
 	case ViewConfig:
 		return m.handleConfigKey(msg)
 	case ViewRename:
 		return m.handleRenameKey(msg)
-	case ViewCheckout:
-		return m.handleCheckoutKey(msg)
+	case ViewOmni:
+		return m.handleOmniKey(msg)
+	case ViewMessages:
+		return m.handleMessagesKey(msg)
+	case ViewDetailSheet:
+		return m.handleDetailSheetKey(msg)
+	case ViewPRReview:
+		return m.handlePRReviewKey(msg)
 	case ViewDashboard:
 		return m.handleDashboardKey(msg)
 	}
@@ -984,93 +1088,58 @@ func (m Model) handleDashboardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.detailFocused {
 		return m.handleDashboardDetailKey(msg)
 	}
-
-	switch {
-	// With a filter applied, esc clears it (the list's own ClearFilter
-	// behavior) instead of quitting the whole dashboard, which is what the
-	// docs promise and what the un-reached list binding intended (B38). q
-	// still quits regardless.
-	case key.Matches(msg, m.keys.Escape) && m.list.FilterState() == list.FilterApplied:
-		m.list.ResetFilter()
-		return m, nil
-
-	case key.Matches(msg, m.keys.Quit), key.Matches(msg, m.keys.Escape):
-		return m, tea.Quit
-
-	case key.Matches(msg, m.keys.Tab):
-		m.detailFocused = true
-		m.refreshDetailForFocus()
-		return m, nil
-
-	case msg.String() == "B":
-		m.openSelectedPRURL()
-		return m, nil
-
-	case key.Matches(msg, m.keys.Refresh):
-		m.helpFooter.SetHighlight("r")
-		m.loading = true
-		return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
-
-	case key.Matches(msg, m.keys.New):
-		return m.handleDashboardNewKey()
-
-	case key.Matches(msg, m.keys.Delete):
-		return m.handleDashboardDeleteKey()
-
-	case key.Matches(msg, m.keys.SwitchUp):
-		return m.handleDashboardSwitchUpKey()
-
-	case key.Matches(msg, m.keys.Enter):
-		return m.handleDashboardEnterKey()
-
-	case key.Matches(msg, m.keys.ViewMode):
-		m.helpFooter.SetHighlight("v")
-		m.toggleCompactMode()
-		return m, nil
-
-	case key.Matches(msg, m.keys.Sort):
-		m.helpFooter.SetHighlight("o")
-		m.sortMode = m.sortMode.Next()
-		return m, m.applySortToList()
-
-	case key.Matches(msg, m.keys.All):
-		return m.enterBulkMode()
-
-	case key.Matches(msg, m.keys.PRs):
-		return m.enterPRView()
-
-	case key.Matches(msg, m.keys.Issues):
-		return m.enterIssueView()
-
-	case key.Matches(msg, m.keys.Fork):
-		return m.handleDashboardForkKey()
-
-	case key.Matches(msg, m.keys.Sync):
-		m.activeView = ViewSync
-		m.syncState = NewSyncState(m.existingWorktreeItems())
-		return m, gatherWIPInfoCmd(m.existingWorktreeItems())
-
-	case key.Matches(msg, m.keys.Config):
-		m.activeView = ViewConfig
-		m.configState = NewConfigState()
-		return m, loadConfigCmd()
-
-	case key.Matches(msg, m.keys.Rename):
-		return m.handleDashboardRenameKey()
-
-	case key.Matches(msg, m.keys.Checkout):
-		return m.handleDashboardCheckoutKey()
+	// The action table decides (spec 15.4). Keys it gives the list, and
+	// keys it does not know, go to the list.
+	k := msg.String()
+	a, ok := findAction("", k)
+	if !ok || a.Run == nil {
+		return m.routeToList(msg)
 	}
-
-	if updated, cmd, handled := m.handleQuickSwitch(msg); handled {
-		return updated, cmd
+	if a.Enabled != nil && !a.Enabled(m) {
+		return m, nil
 	}
+	return a.Run(m, k)
+}
 
-	return m.routeToList(msg)
+// handleGLayerKey takes the key after g (spec 6.3): an action from the g
+// strip, or anything else, which only closes the strip. ctrl+c still quits.
+func (m Model) handleGLayerKey(msg tea.KeyPressMsg) (Model, tea.Cmd, bool) {
+	k := msg.String()
+	m.pendingG = false
+	m.updateLayout()
+	if k == "ctrl+c" {
+		return m, nil, false
+	}
+	if a, ok := findAction("g", k); ok && a.Run != nil {
+		if a.Enabled != nil && !a.Enabled(m) {
+			return m, nil, true
+		}
+		next, cmd := a.Run(m, k)
+		return next.(Model), cmd, true
+	}
+	return m, nil, true
+}
+
+// halfPage is half the rows the list shows per page, at least 1.
+func (m Model) halfPage() int {
+	return max(1, m.list.Paginator.PerPage/2)
+}
+
+// moveCursorTo selects visible row i, clamped to the list.
+func (m *Model) moveCursorTo(i int) {
+	n := len(m.list.VisibleItems())
+	if n == 0 {
+		return
+	}
+	i = max(0, min(i, n-1))
+	if i != m.list.Index() {
+		m.list.Select(i)
+		m.updateDetailContent()
+	}
 }
 
 func (m Model) handleDashboardDetailKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if key.Matches(msg, m.keys.Escape) || key.Matches(msg, m.keys.Tab) {
+	if key.Matches(msg, m.keys.Escape) || key.Matches(msg, m.keys.Tab) || msg.String() == "h" {
 		m.detailFocused = false
 		m.refreshDetailForFocus()
 		return m, nil
@@ -1081,6 +1150,9 @@ func (m Model) handleDashboardDetailKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd
 	if msg.String() == "B" {
 		m.openSelectedPRURL()
 		return m, nil
+	}
+	if msg.String() == "d" {
+		return m.openSelectedLocalReview()
 	}
 	handleDetailFocusedKey(msg, m.keys, &m.detail)
 	return m, nil
@@ -1094,22 +1166,7 @@ func (m *Model) openSelectedPRURL() {
 }
 
 func (m Model) handleDashboardNewKey() (tea.Model, tea.Cmd) {
-	m.activeView = ViewCreate
-	branches, branchErr := git.ListAllBranches(m.projectRoot)
-	if branchErr != nil {
-		tuilog.Printf("warning: failed to list branches: %v", branchErr)
-	}
-	m.createState = &CreateState{
-		Step:              CreateStepBranchChoice,
-		ReturnView:        ViewDashboard,
-		ProjectName:       m.projectName,
-		NamePattern:       m.worktreeNamePattern(),
-		Branches:          branches,
-		BranchFilterInput: newBranchFilterInput(),
-		BranchNameInput:   newBranchNameInput(),
-		WorktreeBranches:  m.worktreeBranchMap(),
-	}
-	return m, nil
+	return m.openBranchForm(branchFormPrefill{})
 }
 
 // worktreeNamePattern returns the configured worktree naming pattern for
@@ -1125,7 +1182,7 @@ func (m Model) worktreeNamePattern() string {
 func (m Model) handleDashboardDeleteKey() (tea.Model, tea.Cmd) {
 	item, ok := m.selectedItem()
 	if ok && !item.IsMain && !item.IsProtected {
-		m.activeView = ViewDelete
+		m.pushView(ViewDelete)
 		m.deleteState = &DeleteState{
 			Item:     &item,
 			Warnings: gatherDeleteWarnings(&item),
@@ -1165,15 +1222,13 @@ func (m Model) handleDashboardForkKey() (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	m.activeView = ViewFork
-	m.forkState = NewForkState(item)
-	return m, wipCheckCmd(item.Path)
+	return m.openCopyForm(item)
 }
 
 func (m Model) handleDashboardRenameKey() (tea.Model, tea.Cmd) {
 	item, ok := m.selectedItem()
 	if ok && !item.IsMain && !item.IsProtected {
-		m.activeView = ViewRename
+		m.pushView(ViewRename)
 		m.renameState = NewRenameState(&item)
 		return m, m.renameState.Input.Focus()
 	}
@@ -1183,41 +1238,9 @@ func (m Model) handleDashboardRenameKey() (tea.Model, tea.Cmd) {
 func (m Model) handleDashboardCheckoutKey() (tea.Model, tea.Cmd) {
 	item, ok := m.selectedItem()
 	if ok && !item.IsMain && !item.IsProtected {
-		m.activeView = ViewCheckout
-		m.checkoutState = NewCheckoutState(item)
-		return m, tea.Batch(
-			m.checkoutState.BranchFilterInput.Focus(),
-			listCheckoutBranchesCmd(m.projectRoot, item.Path),
-			wipCheckCmd(item.Path),
-		)
+		return m.openSwitchForm(item)
 	}
 	return m, nil
-}
-
-func (m Model) handleQuickSwitch(msg tea.KeyPressMsg) (Model, tea.Cmd, bool) {
-	runes := []rune(msg.Text)
-	if len(runes) != 1 || m.list.FilterState() != list.Unfiltered {
-		return m, nil, false
-	}
-	r := runes[0]
-	if r < '1' || r > '9' {
-		return m, nil, false
-	}
-	idx := int(r - '1')
-	items := m.list.Items()
-	if idx >= len(items) {
-		return m, nil, true
-	}
-	item, ok := items[idx].(WorktreeItem)
-	if !ok {
-		return m, nil, true
-	}
-	if item.IsCurrent {
-		return m, tea.Quit, true
-	}
-	m.switchTo = item.Path
-	m.switchToDisplayName = item.displayName()
-	return m, tea.Quit, true
 }
 
 func (m Model) routeToList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -1232,7 +1255,7 @@ func (m Model) routeToList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) handleDeleteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.deleteState == nil {
-		m.activeView = ViewDashboard
+		m.popView()
 		return m, nil
 	}
 
@@ -1243,7 +1266,7 @@ func (m Model) handleDeleteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.Confirm):
 		if m.deleteState.Item == nil {
-			m.activeView = ViewDashboard
+			m.popView()
 			m.deleteState = nil
 			return m, nil
 		}
@@ -1252,7 +1275,7 @@ func (m Model) handleDeleteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.spinner.Tick, deleteWorktreeCmd(m.worktreeMgr, m.stateMgr, m.cfg, m.projectRoot, name, m.deleteState.DeleteBranch))
 
 	case key.Matches(msg, m.keys.Escape), key.Matches(msg, m.keys.Deny):
-		m.activeView = ViewDashboard
+		m.popView()
 		m.deleteState = nil
 		return m, nil
 
@@ -1266,7 +1289,7 @@ func (m Model) handleDeleteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) handleRenameKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.renameState == nil {
-		m.activeView = ViewDashboard
+		m.popView()
 		return m, nil
 	}
 
@@ -1276,7 +1299,7 @@ func (m Model) handleRenameKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	switch {
 	case key.Matches(msg, m.keys.Escape):
-		m.activeView = ViewDashboard
+		m.popView()
 		m.renameState = nil
 		return m, nil
 
@@ -1321,448 +1344,35 @@ func (m Model) handleRenameKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m Model) handleCreateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if m.createState == nil {
-		m.activeView = ViewDashboard
-		return m, nil
-	}
-
-	switch m.createState.Step {
-	case CreateStepBranchChoice:
-		return m.handleBranchChoiceKey(msg)
-	case CreateStepBranchSelect:
-		return m.handleBranchSelectKey(msg)
-	case CreateStepBranchCreate:
-		return m.handleBranchCreateKey(msg)
-	case CreateStepBranchAction:
-		return m.handleBranchActionKey(msg)
-	case CreateStepName:
-		return m.handleNameKey(msg)
-	case CreateStepConfirm:
-		return m.handleConfirmKey(msg)
-	}
-
-	return m, nil
-}
-
-// handleBranchActionKey handles the branch action step (split vs fork).
-func (m Model) handleBranchActionKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	s := m.createState
-	switch {
-	case key.Matches(msg, m.keys.ShiftTab):
-		s.Step = CreateStepBranchSelect
-		return m, nil
-
-	case key.Matches(msg, m.keys.Escape):
-		returnView := s.ReturnView
-		m.createState = nil
-		m.activeView = returnView
-		return m, nil
-
-	case key.Matches(msg, m.keys.Back):
-		s.Step = CreateStepBranchSelect
-		return m, nil
-
-	case key.Matches(msg, m.keys.Up):
-		if s.ActionChoice > 0 {
-			s.ActionChoice--
-		}
-		return m, nil
-
-	case key.Matches(msg, m.keys.Down):
-		if s.ActionChoice < 1 {
-			s.ActionChoice++
-		}
-		return m, nil
-
-	case key.Matches(msg, m.keys.Toggle):
-		s.DontShowAgain = !s.DontShowAgain
-		return m, nil
-
-	case key.Matches(msg, m.keys.Enter):
-		if s.DontShowAgain && m.cfg != nil {
-			action := "fork"
-			if s.ActionChoice == 0 {
-				action = "split"
-			}
-			if err := config.SetProjectConfigValues(map[string]string{
-				"tui.skip_branch_notice":    "true",
-				"tui.default_branch_action": `"` + action + `"`,
-			}); err != nil {
-				m.toast.Show(NewToast("Failed to save preference: "+err.Error(), ToastWarning))
-			}
-		}
-
-		if s.ActionChoice == 1 {
-			// fork: create a new branch based on the selected branch
-			s.ForkBase = s.BaseBranch
-			s.BaseBranch = ""
-		}
-		// Initialize name input and proceed to Name step
-		s.NameInput = newNameInput("")
-		s.Step = CreateStepName
-		return m, s.NameInput.Focus()
-	}
-	return m, nil
-}
-
-// handleConfirmKey handles the confirmation step key input.
-func (m Model) handleConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	s := m.createState
-	switch {
-	case key.Matches(msg, m.keys.ShiftTab):
-		s.Step = CreateStepName
-		return m, s.NameInput.Focus()
-
-	case key.Matches(msg, m.keys.Escape):
-		returnView := s.ReturnView
-		m.createState = nil
-		m.activeView = returnView
-		return m, nil
-
-	case key.Matches(msg, m.keys.Back):
-		s.Step = CreateStepName
-		return m, s.NameInput.Focus()
-
-	case key.Matches(msg, m.keys.Enter):
-		return m.startCreate(s)
-	}
-	return m, nil
-}
-
-func (m *Model) startCreate(s *CreateState) (tea.Model, tea.Cmd) {
-	if s.Creating {
-		return m, nil
-	}
-	s.Error = ""
-	s.Creating = true
-	s.ActivityLog = NewActivityLog(60, 10)
-	return m, tea.Batch(m.spinner.Tick, createWorktreeCmd(m.worktreeMgr, m.stateMgr, m.cfg, m.projectRoot, s.Name, s.BaseBranch, s.NewBranchName, s.ForkBase))
-}
-
-// handleBranchChoiceKey handles the initial "Select existing" vs "Create new" choice.
-func (m Model) handleBranchChoiceKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	s := m.createState
-	switch {
-	case key.Matches(msg, m.keys.ShiftTab):
-		if s.Source != "" {
-			returnView := s.ReturnView
-			m.createState = nil
-			m.activeView = returnView
-			return m, nil
-		}
-		// First step from dashboard — no back, treat as no-op
-		return m, nil
-
-	case key.Matches(msg, m.keys.Escape):
-		returnView := s.ReturnView
-		m.createState = nil
-		m.activeView = returnView
-		return m, nil
-
-	case key.Matches(msg, m.keys.Up):
-		if s.BranchChoice > 0 {
-			s.BranchChoice--
-		}
-		return m, nil
-
-	case key.Matches(msg, m.keys.Down):
-		if s.BranchChoice < 1 {
-			s.BranchChoice++
-		}
-		return m, nil
-
-	case key.Matches(msg, m.keys.Enter):
-		if s.BranchChoice == 0 {
-			s.Step = CreateStepBranchSelect
-			s.BranchCursor = 0
-			s.BranchFilterMode = BranchFilterOff
-			return m, nil
-		}
-		// Create new branch — pre-fill from source context if available
-		s.Step = CreateStepBranchCreate
-		s.BranchNameInput = newBranchNameInput()
-		if s.NameSuggestion != "" {
-			s.BranchNameInput.SetValue(s.NameSuggestion)
-		}
-		return m, s.BranchNameInput.Focus()
-	}
-	return m, nil
-}
-
-// handleBranchSelectKey handles the filterable branch list step.
-func (m Model) handleBranchSelectKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	s := m.createState
-
-	// When filter is active, route most keys to the textinput
-	if s.BranchFilterMode == BranchFilterOn {
-		switch {
-		case key.Matches(msg, m.keys.Escape):
-			// Exit filter mode, keep filter text
-			s.BranchFilterMode = BranchFilterOff
-			s.BranchFilterInput.Blur()
-			return m, nil
-
-		case key.Matches(msg, m.keys.Enter):
-			// Accept filter and exit filter mode
-			s.BranchFilterMode = BranchFilterOff
-			s.BranchFilterInput.Blur()
-			return m, nil
-
-		default:
-			// All other keys go to the textinput (j/k are typed as text)
-			prevVal := s.BranchFilterInput.Value()
-			var cmd tea.Cmd
-			s.BranchFilterInput, cmd = s.BranchFilterInput.Update(msg)
-			if s.BranchFilterInput.Value() != prevVal {
-				s.BranchCursor = 0
-			}
-			return m, cmd
-		}
-	}
-
-	// Filter is off — j/k navigate, / enters filter mode
-	filter := s.BranchFilterInput.Value()
-	filtered := filteredBranches(s.Branches, filter)
-	totalItems := len(filtered)
-
-	switch {
-	case key.Matches(msg, m.keys.ShiftTab):
-		s.Step = CreateStepBranchChoice
-		return m, nil
-
-	case key.Matches(msg, m.keys.Escape):
-		returnView := s.ReturnView
-		m.createState = nil
-		m.activeView = returnView
-		return m, nil
-
-	case key.Matches(msg, m.keys.Back):
-		s.Step = CreateStepBranchChoice
-		s.BranchFilterInput.SetValue("")
-		s.BranchCursor = 0
-		return m, nil
-
-	case msg.String() == "/":
-		s.BranchFilterMode = BranchFilterOn
-		return m, s.BranchFilterInput.Focus()
-
-	case key.Matches(msg, m.keys.Up):
-		if s.BranchCursor > 0 {
-			s.BranchCursor--
-		}
-		return m, nil
-
-	case key.Matches(msg, m.keys.Down):
-		if totalItems > 0 && s.BranchCursor < totalItems-1 {
-			s.BranchCursor++
-		}
-		return m, nil
-
-	case key.Matches(msg, m.keys.Enter):
-		if totalItems == 0 {
-			return m, nil
-		}
-		if s.BranchCursor < len(filtered) {
-			return m.selectExistingBranch(filtered[s.BranchCursor])
-		}
-		return m, nil
-	}
-	return m, nil
-}
-
-// handleBranchCreateKey handles the new branch name text input step.
-func (m Model) handleBranchCreateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	s := m.createState
-
-	switch {
-	case key.Matches(msg, m.keys.ShiftTab):
-		s.Step = CreateStepBranchChoice
-		return m, nil
-
-	case key.Matches(msg, m.keys.Escape):
-		returnView := s.ReturnView
-		m.createState = nil
-		m.activeView = returnView
-		return m, nil
-
-	case key.Matches(msg, m.keys.Back):
-		if s.BranchNameInput.Value() == "" {
-			s.Step = CreateStepBranchChoice
-			return m, nil
-		}
-		// Let textinput handle backspace
-		var cmd tea.Cmd
-		s.BranchNameInput, cmd = s.BranchNameInput.Update(msg)
-		return m, cmd
-
-	case key.Matches(msg, m.keys.Enter):
-		name := s.BranchNameInput.Value()
-		if name == "" {
-			return m, nil
-		}
-		s.BaseBranch = ""
-		s.ForkBase = ""
-		s.NewBranchName = name
-		if s.NameSuggestion == "" {
-			s.NameSuggestion = name
-		}
-		s.NameInput = newNameInput("")
-		s.Step = CreateStepName
-		return m, s.NameInput.Focus()
-
-	default:
-		var cmd tea.Cmd
-		s.BranchNameInput, cmd = s.BranchNameInput.Update(msg)
-		return m, cmd
-	}
-}
-
-func (m Model) selectExistingBranch(branch string) (tea.Model, tea.Cmd) {
-	s := m.createState
-	s.BaseBranch = branch
-	s.ForkBase = ""
-	s.NewBranchName = ""
-
-	strategy := ""
-	if m.cfg != nil {
-		strategy = m.cfg.TUI.WorktreeNameFromBranch
-	}
-	// Keep the existing suggestion if pre-set from a source (e.g., issue name)
-	if s.NameSuggestion == "" {
-		s.NameSuggestion = worktree.DeriveWorktreeName(branch, strategy)
-	}
-	s.NameInput = newNameInput("")
-
-	if m.cfg != nil && m.cfg.TUI.SkipBranchNotice != nil && *m.cfg.TUI.SkipBranchNotice {
-		if m.cfg.TUI.DefaultBranchAction == "fork" {
-			s.ForkBase = s.BaseBranch
-			s.BaseBranch = ""
-		}
-		s.Step = CreateStepName
-		return m, s.NameInput.Focus()
-	}
-
-	s.ActionChoice = 0
-	s.DontShowAgain = false
-	s.Step = CreateStepBranchAction
-	return m, nil
-}
-
-// handleNameKey handles the name step key input.
-func (m Model) handleNameKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	s := m.createState
-
-	switch {
-	case key.Matches(msg, m.keys.ShiftTab):
-		// Always go back regardless of input content
-		if s.Source != "" {
-			// From PR/issue view — back returns to source view
-			returnView := s.ReturnView
-			m.createState = nil
-			m.activeView = returnView
-			return m, nil
-		}
-		s.Step = CreateStepBranchChoice
-		return m, nil
-
-	case key.Matches(msg, m.keys.Escape):
-		returnView := s.ReturnView
-		m.createState = nil
-		m.activeView = returnView
-		return m, nil
-
-	case key.Matches(msg, m.keys.Back):
-		// Only go back if the name input is empty
-		if s.NameInput.Value() == "" {
-			if s.Source != "" {
-				// From PR/issue view — dismiss wizard, return to source view
-				returnView := s.ReturnView
-				m.createState = nil
-				m.activeView = returnView
-				return m, nil
-			}
-			s.Step = CreateStepBranchChoice
-			return m, nil
-		}
-		// Otherwise let textinput handle backspace
-		prevVal := s.NameInput.Value()
-		var cmd tea.Cmd
-		s.NameInput, cmd = s.NameInput.Update(msg)
-		if s.NameInput.Value() != prevVal {
-			s.Name = s.NameInput.Value()
-			s.Error = ""
-			s.ExistingWorktree = checkDuplicateWorktree(s.Name, m.existingWorktreeItems())
-		}
-		return m, cmd
-
-	case key.Matches(msg, m.keys.Enter):
-		effectiveName := s.NameInput.Value()
-		if effectiveName == "" && s.NameSuggestion != "" {
-			effectiveName = s.NameSuggestion
-			s.NameInput.SetValue(effectiveName)
-		}
-		s.Name = effectiveName
-		if effectiveName == "" {
-			s.Error = "name cannot be empty"
-			return m, nil
-		}
-		if errMsg := ValidateWorktreeName(effectiveName); errMsg != "" {
-			s.Error = errMsg
-			return m, nil
-		}
-		// If duplicate exists, switch to it
-		if s.ExistingWorktree != nil {
-			m.switchTo = s.ExistingWorktree.Path
-			m.switchToDisplayName = s.ExistingWorktree.displayName()
-			m.activeView = ViewDashboard
-			m.createState = nil
-			return m, tea.Quit
-		}
-		s.Error = ""
-		s.Step = CreateStepConfirm
-		return m, nil
-
-	default:
-		// Route remaining keys through the name textinput
-		prevVal := s.NameInput.Value()
-		var cmd tea.Cmd
-		s.NameInput, cmd = s.NameInput.Update(msg)
-		if s.NameInput.Value() != prevVal {
-			s.Name = s.NameInput.Value()
-			if errMsg := ValidateWorktreeName(s.Name); errMsg != "" {
-				s.Error = errMsg
-			} else {
-				s.Error = ""
-			}
-			s.ExistingWorktree = checkDuplicateWorktree(s.Name, m.existingWorktreeItems())
-		}
-		return m, cmd
-	}
-}
-
 func (m *Model) applySortToList() tea.Cmd {
-	sorted := sortWorktreeItems(m.list.Items(), m.sortMode)
+	sorted := sortWorktreeItems(m.list.Items(), m.sortMode, m.sortReversed)
 	cmd := m.list.SetItems(sorted)
-	m.computeColumnWidths()
+	m.refreshDelegate()
 	m.updateDetailContent()
 	return cmd
 }
 
 func (m Model) enterPRView() (tea.Model, tea.Cmd) {
 	branches := m.worktreeBranchMap()
-	m.activeView = ViewPRs
+	m.pushView(ViewPRs)
+	// The last list shows at once, marked stale, while a refresh runs.
 	m.prState = &PRViewState{
-		Loading:          true,
+		PRs:              m.prCache,
+		Loading:          m.prCache == nil,
+		Stale:            m.prCache != nil,
 		WorktreeBranches: branches,
 		FilterInput:      newFilterInput(""),
 	}
+	if m.prFetching {
+		return m, m.spinner.Tick // the fetch in flight fills this browser
+	}
+	m.prFetching = true
 	return m, tea.Batch(m.spinner.Tick, m.fetchPRsCmd)
 }
 
 func (m Model) enterIssueView() (tea.Model, tea.Cmd) {
 	branches := m.worktreeBranchMap()
-	m.activeView = ViewIssues
+	m.pushView(ViewIssues)
 	m.issueState = &IssueViewState{
 		Loading:          true,
 		FilterInput:      newFilterInput(""),
@@ -1794,7 +1404,7 @@ func (m Model) enterBulkMode() (tea.Model, tea.Cmd) {
 		}
 	}
 
-	m.activeView = ViewBulk
+	m.pushView(ViewBulk)
 	m.bulkState = &BulkState{
 		Items:    deletable,
 		Selected: make([]bool, len(deletable)),
@@ -1804,7 +1414,7 @@ func (m Model) enterBulkMode() (tea.Model, tea.Cmd) {
 
 func (m Model) handleBulkKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.bulkState == nil {
-		m.activeView = ViewDashboard
+		m.popView()
 		return m, nil
 	}
 
@@ -1817,7 +1427,7 @@ func (m Model) handleBulkKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	switch {
 	case key.Matches(msg, m.keys.Escape):
-		m.activeView = ViewDashboard
+		m.popView()
 		m.bulkState = nil
 		return m, nil
 
@@ -1875,6 +1485,10 @@ func (m Model) viewContent() string {
 	if !m.ready {
 		return m.viewNotReady()
 	}
+	if LayoutBreakpoint(m.width) == LayoutGuard {
+		// Nothing else is drawn; all state is kept for when it widens.
+		return "grove needs ≥44 columns"
+	}
 	if m.loading {
 		return m.viewLoading()
 	}
@@ -1882,19 +1496,109 @@ func (m Model) viewContent() string {
 		return m.viewEmpty()
 	}
 
-	result := m.viewForActiveView()
-	if result == "" {
-		result = m.renderDashboard()
+	return m.withToast(m.renderFrame(len(m.views) - 1))
+}
+
+// withToast draws the current toast over the top-right corner of a finished
+// screen, above any overlay.
+func (m Model) withToast(screen string) string {
+	if m.toast == nil || m.toast.Current == nil {
+		return screen
 	}
-	return m.compositeActiveOverlay(result)
+	box := m.toast.View(m.width)
+	return composeLayerAt(screen, box, m.width, m.height, m.width-lipgloss.Width(box), 0)
+}
+
+// renderFrame renders frame i of the view stack; -1 is the dashboard root.
+// Overlay frames draw over the frame beneath them, so an overlay opened
+// from the PR browser shows the PR browser behind it.
+func (m Model) renderFrame(i int) string {
+	v := ViewDashboard
+	if i >= 0 {
+		v = m.views[i].view
+	}
+	switch v {
+	case ViewDashboard:
+		return m.renderDashboard()
+	case ViewPRs:
+		if m.prState != nil {
+			return m.renderPRPanel()
+		}
+		return m.renderFrame(i - 1)
+	case ViewIssues:
+		if m.issueState != nil {
+			return m.renderIssuePanel()
+		}
+		return m.renderFrame(i - 1)
+	case ViewDetailSheet:
+		return m.renderDetailSheet()
+	case ViewConfig:
+		if m.configState != nil {
+			return m.renderConfigFrame()
+		}
+		return m.renderFrame(i - 1)
+	case ViewPRReview:
+		if m.prReview != nil {
+			return m.renderPRReviewFrame()
+		}
+		return m.renderFrame(i - 1)
+	}
+	overlay := m.renderOverlay(v)
+	if overlay == "" {
+		return m.renderFrame(i - 1)
+	}
+	if v == ViewBranchForm || v == ViewOmni {
+		return composeOverlayAt(m.renderFrame(i-1), overlay, m.width, m.height, formTop)
+	}
+	return composeOverlay(m.renderFrame(i-1), overlay, m.width, m.height)
+}
+
+// renderOverlay returns the panel for an overlay view, or "" when its state
+// is gone.
+func (m Model) renderOverlay(v ActiveView) string {
+	switch v {
+	case ViewDelete:
+		if m.deleteState != nil {
+			return renderDeleteV2(m.deleteState, m.width)
+		}
+	case ViewBranchForm:
+		if m.branchForm != nil {
+			return renderBranchForm(m.branchForm, m.width, m.height, m.spinner.View())
+		}
+	case ViewOmni:
+		if m.omni != nil {
+			return renderOmni(m.omni, m.width, m.height)
+		}
+	case ViewMessages:
+		return m.renderMessages()
+	case ViewBulk:
+		if m.bulkState != nil {
+			return renderBulk(m.bulkState)
+		}
+	case ViewSync:
+		if m.syncState != nil {
+			return renderSync(m.syncState, m.width)
+		}
+	case ViewRename:
+		if m.renameState != nil {
+			return renderRename(m.renameState, m.width)
+		}
+	case ViewHelp:
+		return m.helpOverlay.View(m.width, m.height)
+	case ViewUpdate:
+		if m.updateOverlay != nil {
+			return m.updateOverlay.View(m.width, m.height)
+		}
+	}
+	return ""
 }
 
 func (m Model) viewNotReady() string {
 	tuilog.Printf("View: not ready")
-	if m.activeView == ViewPRs && m.prState != nil {
+	if m.activeView() == ViewPRs && m.prState != nil {
 		return m.spinner.View() + " Loading PRs..."
 	}
-	if m.activeView == ViewIssues && m.issueState != nil {
+	if m.activeView() == ViewIssues && m.issueState != nil {
 		return m.spinner.View() + " Loading issues..."
 	}
 	return "loading..."
@@ -1915,71 +1619,6 @@ func (m Model) viewEmpty() string {
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, content)
 }
 
-func (m Model) viewForActiveView() string {
-	switch m.activeView {
-	case ViewHelp:
-		return m.renderDashboard()
-	case ViewDelete:
-		return m.overlayOnDashboard(m.deleteState != nil, func() string { return renderDeleteV2(m.deleteState, m.width) })
-	case ViewCreate:
-		if m.createState != nil {
-			overlay := renderCreateV2(m.createState, m.width, m.spinner.View())
-			var bg string
-			switch m.createState.Source {
-			case "pr":
-				if m.prState != nil {
-					bg = m.renderPRPanel()
-				}
-			case "issue":
-				if m.issueState != nil {
-					bg = m.renderIssuePanel()
-				}
-			}
-			if bg == "" {
-				bg = m.renderDashboard()
-			}
-			return centerOverlay(bg, overlay, m.width, m.height)
-		}
-		return ""
-	case ViewBulk:
-		return m.overlayOnDashboard(m.bulkState != nil, func() string { return renderBulk(m.bulkState) })
-	case ViewPRs:
-		if m.prState != nil {
-			return m.renderPRPanel()
-		}
-	case ViewIssues:
-		if m.issueState != nil {
-			return m.renderIssuePanel()
-		}
-	case ViewFork:
-		return m.overlayOnDashboard(m.forkState != nil, func() string { return renderFork(m.forkState, m.width) })
-	case ViewSync:
-		return m.overlayOnDashboard(m.syncState != nil, func() string { return renderSync(m.syncState, m.width) })
-	case ViewConfig:
-		return m.overlayOnDashboard(m.configState != nil, func() string { return renderConfig(m.configState, m.width) })
-	case ViewRename:
-		return m.overlayOnDashboard(m.renameState != nil, func() string { return renderRename(m.renameState, m.width) })
-	case ViewCheckout:
-		return m.overlayOnDashboard(m.checkoutState != nil, func() string { return renderCheckout(m.checkoutState, m.width) })
-	}
-	return ""
-}
-
-// compositeActiveOverlay renders whichever overlay (update or help) is active
-// on top of the given content. The update overlay takes precedence when both
-// are active. Returns content unchanged when no overlay is active.
-func (m Model) compositeActiveOverlay(content string) string {
-	if m.updateOverlay != nil && m.updateOverlay.Active {
-		panel := m.updateOverlay.View(m.width, m.height)
-		return centerOverlay(content, panel, m.width, m.height)
-	}
-	if m.helpOverlay.Active {
-		helpPanel := m.helpOverlay.View(m.width, m.height)
-		return centerOverlay(content, helpPanel, m.width, m.height)
-	}
-	return content
-}
-
 // updateAvailable reports whether the cached release info shows a newer
 // grove version is available than the running binary.
 //
@@ -1992,44 +1631,14 @@ func (m Model) updateAvailable() bool {
 	return m.updateLatestVersion != "" && m.updateLatestVersion != version.Version
 }
 
-// appendUpdateBadge appends a passive update-available badge to the given
-// footer when an update is cached. Returns footer unchanged otherwise.
-// The badge is appended on the same line if it fits within the width
-// budget (m.width-4), or on a new line below otherwise.
-func (m Model) appendUpdateBadge(footer string) string {
-	if !m.updateAvailable() {
-		return footer
-	}
-	badge := RenderUpdateBadge(version.Version, m.updateLatestVersion)
-	if badge == "" {
-		return footer
-	}
-
-	// Find the longest line in the footer. If the badge fits beside it with
-	// a separator, append inline; otherwise add as a new line.
-	maxLineWidth := 0
-	for _, line := range strings.Split(footer, "\n") {
-		if w := lipgloss.Width(line); w > maxLineWidth {
-			maxLineWidth = w
-		}
-	}
-	sep := Styles.HelpSep.Render("  ·  ")
-	budget := m.width - 4
-	if maxLineWidth+lipgloss.Width(sep)+lipgloss.Width(badge) <= budget {
-		// Append to the last line of the footer.
-		lines := strings.Split(footer, "\n")
-		lines[len(lines)-1] = lines[len(lines)-1] + sep + badge
-		return strings.Join(lines, "\n")
-	}
-	return footer + "\n  " + badge
-}
-
 // viewHasTextInput returns true if the active view has a focused text input
 // that should receive ? as a character rather than triggering help.
 func (m Model) viewHasTextInput() bool {
-	switch m.activeView {
-	case ViewCreate, ViewRename, ViewCheckout, ViewFork:
+	switch m.activeView() {
+	case ViewBranchForm, ViewRename, ViewOmni:
 		return true
+	case ViewConfig:
+		return m.configState != nil && m.configState.focusOnInput()
 	case ViewPRs:
 		return m.prState != nil && m.prState.Filtering
 	case ViewIssues:
@@ -2052,13 +1661,15 @@ func (m Model) renderDashboard() string {
 	} else {
 		footer = m.helpFooter.RenderCompact(ViewDashboard, m.width-4)
 	}
-	footer = m.appendUpdateBadge(footer)
-
-	statusBar = m.applyToastToHeader(statusBar)
+	if strip := m.renderOpenStrip(); strip != "" {
+		footer = strip + "\n" + footer
+	}
 
 	body = lipgloss.NewStyle().Padding(0, 1).Render(body)
 	body = m.clampBodyToHeight(body, footer)
-
+	if body == "" {
+		return lipgloss.JoinVertical(lipgloss.Left, statusBar, footer)
+	}
 	return lipgloss.JoinVertical(lipgloss.Left, statusBar, body, footer)
 }
 
@@ -2068,19 +1679,22 @@ func (m Model) buildDashboardHeader() Header {
 		ProjectName:   m.projectName,
 		WorktreeCount: len(m.list.Items()),
 		SortLabel:     m.sortMode.String(),
+		SortReversed:  m.sortReversed,
+		Cursor:        m.list.Index() + 1,
+		Total:         len(m.list.VisibleItems()),
 	}
-	for _, li := range m.list.Items() {
-		item, ok := li.(WorktreeItem)
-		if !ok {
-			continue
-		}
-		if item.IsCurrent {
-			h.CurrentBranch = item.Branch
-			h.CurrentName = item.ShortName
-		}
-		for _, ps := range item.PluginStatuses {
-			if strings.Contains(ps.Detail, "pointed") {
-				h.ContainerTarget = item.ShortName
+	if m.updateNotify && m.updateAvailable() {
+		h.Upgrade = m.updateLatestVersion
+	}
+	if m.agentAware {
+		for _, li := range m.list.Items() {
+			if item, ok := li.(WorktreeItem); ok {
+				switch item.AgentStatus {
+				case mux.AgentBlocked:
+					h.Blocked++
+				case mux.AgentDone:
+					h.Done++
+				}
 			}
 		}
 	}
@@ -2097,43 +1711,15 @@ func (m Model) renderDashboardBody() string {
 
 func (m Model) renderSideBySideBody() string {
 	listWidth := m.list.Width()
-	listContent := m.list.View()
-	if m.compactMode {
-		header := renderListHeader(m.listDelegate, listWidth)
-		listContent = lipgloss.JoinVertical(lipgloss.Left, header, listContent)
-	}
-	listContent = lipgloss.NewStyle().Width(listWidth).Render(listContent)
-	dividerHeight := m.list.Height()
-	if m.compactMode {
-		dividerHeight += 2
-	}
-	divider := renderVerticalDivider(dividerHeight, Colors.SurfaceDim)
+	listContent := lipgloss.NewStyle().Width(listWidth).Render(m.list.View())
+	divider := renderVerticalDivider(m.list.Height(), Colors.SurfaceDim)
 	detailView := m.renderDetailPanel()
 	return lipgloss.JoinHorizontal(lipgloss.Top, listContent, divider, detailView)
 }
 
 func (m Model) renderStackedBody() string {
 	bodyWidth := m.width - 2
-	listView := m.list.View()
-	if m.compactMode {
-		header := renderListHeader(m.listDelegate, bodyWidth)
-		listView = lipgloss.JoinVertical(lipgloss.Left, header, listView)
-	}
-	separator := renderNamedSeparator(m.selectedItemName(), bodyWidth)
-	detailView := m.renderDetailPanel()
-	return lipgloss.JoinVertical(lipgloss.Left, listView, separator, detailView)
-}
-
-// applyToastToHeader composites a toast notification onto the header if one is active.
-func (m Model) applyToastToHeader(statusBar string) string {
-	if m.toast == nil || m.toast.Current == nil {
-		return statusBar
-	}
-	toastView := m.toast.View(m.width)
-	if toastView == "" {
-		return statusBar
-	}
-	return compositeToastOnHeader(statusBar, toastView, m.width)
+	return lipgloss.JoinVertical(lipgloss.Left, m.list.View(), m.renderSelectionLine(bodyWidth))
 }
 
 // clampBodyToHeight trims the body so statusBar + body + footer fits exactly m.height lines.
@@ -2146,16 +1732,7 @@ func (m Model) clampBodyToHeight(body, footer string) string {
 	if bodyBudget > 0 {
 		return clampLines(body, bodyBudget)
 	}
-	return body
-}
-
-// selectedItemName returns the short name of the currently selected worktree.
-func (m Model) selectedItemName() string {
-	item, ok := m.selectedItem()
-	if !ok {
-		return ""
-	}
-	return item.ShortName
+	return "" // no room: the body gives way so the screen never overflows
 }
 
 // renderVerticalDivider creates a thin column of │ characters for side-by-side layout.
@@ -2227,7 +1804,7 @@ func renderDetailV2Focused(item *WorktreeItem, width int) string {
 		Width(width - 2).
 		Render(body)
 
-	title := " " + Styles.DetailTitle.Render(item.ShortName) + " "
+	title := " " + Styles.DetailTitle.Render(item.ShortName) + Styles.TextMuted.Render(" · focused") + " "
 	card = injectBorderTitleWithColor(card, title, Colors.Primary)
 
 	return card
@@ -2242,30 +1819,8 @@ func (m Model) dashboardDetailFocusedHints() []Hint {
 	if item, ok := m.selectedItem(); ok && item.AssociatedPR != nil {
 		hints = append(hints, Hint{"B", "open PR"})
 	}
-	hints = append(hints, Hint{"tab", "list"}, Hint{"esc", "quit"})
+	hints = append(hints, Hint{"tab", "list"}, Hint{"esc", "list"})
 	return hints
-}
-
-// compositeToastOnHeader overlays a right-aligned toast onto the header line,
-// avoiding layout shift in alt-screen mode.
-func compositeToastOnHeader(header, toast string, width int) string {
-	headerWidth := lipgloss.Width(header)
-	toastWidth := lipgloss.Width(toast)
-
-	// If both fit, place toast on the right side of the header line
-	if headerWidth+toastWidth+2 <= width {
-		gap := width - headerWidth - toastWidth
-		return header + strings.Repeat(" ", gap) + toast
-	}
-
-	// If toast alone fits, it takes priority (temporary notification)
-	if toastWidth < width {
-		padding := width - toastWidth
-		return strings.Repeat(" ", padding) + toast
-	}
-
-	// Fallback: just show header
-	return header
 }
 
 // clampLines pads or trims s to exactly n lines.
@@ -2281,65 +1836,6 @@ func clampLines(s string, n int) string {
 		lines = lines[:n]
 	}
 	return strings.Join(lines, "\n")
-}
-
-// overlayOnDashboard renders the overlay produced by renderFn centered on top
-// of the dashboard. If active is false (state is nil), it returns "" so the
-// caller falls through to the default dashboard render.
-func (m Model) overlayOnDashboard(active bool, renderFn func() string) string {
-	if !active {
-		return ""
-	}
-	return centerOverlay(m.renderDashboard(), renderFn(), m.width, m.height)
-}
-
-func centerOverlay(bg, overlay string, width, height int) string {
-	// Split background and overlay into lines
-	bgLines := strings.Split(bg, "\n")
-	overlayLines := strings.Split(overlay, "\n")
-
-	// Pad/trim bg to exactly height lines
-	for len(bgLines) < height {
-		bgLines = append(bgLines, "")
-	}
-	if len(bgLines) > height {
-		bgLines = bgLines[:height]
-	}
-
-	// Dim the background lines
-	dimStyle := lipgloss.NewStyle().Faint(true)
-	for i, line := range bgLines {
-		bgLines[i] = dimStyle.Render(line)
-	}
-
-	// Calculate overlay position (centered)
-	overlayHeight := len(overlayLines)
-	overlayWidth := 0
-	for _, line := range overlayLines {
-		if w := lipgloss.Width(line); w > overlayWidth {
-			overlayWidth = w
-		}
-	}
-
-	startRow := (height - overlayHeight) / 2
-	if startRow < 0 {
-		startRow = 0
-	}
-	startCol := (width - overlayWidth) / 2
-	if startCol < 0 {
-		startCol = 0
-	}
-
-	// Composite overlay on top of dimmed background
-	padding := strings.Repeat(" ", startCol)
-	for i, oLine := range overlayLines {
-		row := startRow + i
-		if row >= 0 && row < len(bgLines) {
-			bgLines[row] = padding + oLine
-		}
-	}
-
-	return strings.Join(bgLines, "\n")
 }
 
 func gatherDeleteWarnings(item *WorktreeItem) []string {
@@ -2358,7 +1854,8 @@ func gatherDeleteWarnings(item *WorktreeItem) []string {
 
 // ConfigureForPRs configures the model to start directly in the PR browser view.
 func (m Model) ConfigureForPRs() Model {
-	m.activeView = ViewPRs
+	m.pushView(ViewPRs)
+	m.prFetching = true // Init starts the fetch
 	m.prState = &PRViewState{
 		Loading:          true,
 		WorktreeBranches: m.worktreeBranchMap(),
@@ -2369,7 +1866,7 @@ func (m Model) ConfigureForPRs() Model {
 
 // ConfigureForIssues configures the model to start directly in the issue browser view.
 func (m Model) ConfigureForIssues() Model {
-	m.activeView = ViewIssues
+	m.pushView(ViewIssues)
 	m.issueState = &IssueViewState{
 		Loading:          true,
 		FilterInput:      newFilterInput(""),
@@ -2494,7 +1991,7 @@ func (m *Model) handleTmuxSwitch(switchPath string) bool {
 }
 
 func runModel(model Model) (string, bool, error) {
-	tuilog.Printf("runModel: projectRoot=%s activeView=%d", model.projectRoot, model.activeView)
+	tuilog.Printf("runModel: projectRoot=%s activeView=%d", model.projectRoot, model.activeView())
 
 	p := tea.NewProgram(model)
 

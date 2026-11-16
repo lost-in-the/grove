@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/lost-in-the/grove/internal/mux"
-	"github.com/lost-in-the/grove/internal/worktree"
 )
 
 func TestRenderAgentValue(t *testing.T) {
@@ -40,44 +39,40 @@ func TestRenderAgentValueUnreported(t *testing.T) {
 	}
 }
 
-func TestSetTmuxStatusRecordsAgent(t *testing.T) {
-	fc := fetchContext{
-		projectName: "grove",
-		sessions: mux.NewIndex([]mux.Session{
-			{
-				Name:   "grove-testing",
-				ID:     "w2",
-				Path:   "/repos/grove-testing",
-				Status: mux.StatusDetached,
-				Agent:  mux.AgentBlocked,
-			},
-		}),
-	}
+func TestApplySessionRecordsAgent(t *testing.T) {
+	ix := mux.NewIndex([]mux.Session{
+		{
+			Name:   "grove-testing",
+			ID:     "w2",
+			Path:   "/repos/grove-testing",
+			Status: mux.StatusDetached,
+			Agent:  mux.AgentBlocked,
+		},
+	})
 
-	item := &WorktreeItem{}
-	fc.setTmuxStatus(item, worktreeForTest("grove-testing", "testing", "/repos/grove-testing"))
+	item := itemForTest("grove-testing", "testing", "/repos/grove-testing")
+	applySession(item, ix, "grove", "herdr")
 
-	if item.TmuxStatus != "detached" {
-		t.Errorf("TmuxStatus = %q, want detached", item.TmuxStatus)
+	if item.TmuxStatus != "detached" || item.SessionBackend != "herdr" {
+		t.Errorf("TmuxStatus = %q, backend %q; want detached, herdr", item.TmuxStatus, item.SessionBackend)
 	}
 	if item.AgentStatus != mux.AgentBlocked {
 		t.Errorf("AgentStatus = %q, want blocked", item.AgentStatus)
 	}
 }
 
-func TestSetTmuxStatusWithNilIndex(t *testing.T) {
+func TestApplySessionWithNilIndex(t *testing.T) {
 	// A failed listing degrades to "no sessions" rather than panicking.
-	fc := fetchContext{projectName: "grove"}
+	item := itemForTest("grove-testing", "testing", "/repos/grove-testing")
+	item.AgentStatus = mux.AgentBlocked
+	applySession(item, nil, "grove", "herdr")
 
-	item := &WorktreeItem{}
-	fc.setTmuxStatus(item, worktreeForTest("grove-testing", "testing", "/repos/grove-testing"))
-
-	if item.TmuxStatus != "" || item.AgentStatus != mux.AgentUnreported {
+	if item.TmuxStatus != "none" || item.AgentStatus != mux.AgentUnreported {
 		t.Errorf("nil index set status: tmux=%q agent=%q", item.TmuxStatus, item.AgentStatus)
 	}
 }
 
-// worktreeForTest builds the minimal worktree the status setter reads.
-func worktreeForTest(name, shortName, path string) worktree.Worktree {
-	return worktree.Worktree{Name: name, ShortName: shortName, Path: path}
+// itemForTest builds the minimal item applySession reads.
+func itemForTest(fullName, shortName, path string) *WorktreeItem {
+	return &WorktreeItem{FullName: fullName, ShortName: shortName, Path: path}
 }

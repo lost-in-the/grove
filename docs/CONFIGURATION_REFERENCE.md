@@ -70,7 +70,7 @@ project_name = "my-app"            # string
 # Default: ~/projects
 projects_dir = "~/projects"        # string
 
-# Default base branch for new worktrees when no branch is specified.
+# Default Base for a new branch in the TUI's New Worktree form.
 # Default: "main"
 default_base_branch = "main"       # string
 ```
@@ -317,15 +317,11 @@ Controls TUI (interactive dashboard) behavior.
 
 ```toml
 [tui]
-# Suppress the "branch already exists" notice shown when creating a worktree
-# for an existing branch.
-# Default: false (show the notice)
+# No longer used: the New Worktree form has no split/fork question.
+# The key is still accepted.
 skip_branch_notice = false         # bool
 
-# Action to take when skip_branch_notice is true and a branch conflict is encountered.
-# "split" — create worktree from the existing branch
-# "fork"  — create a new branch derived from the existing one
-# Default: "" (prompt the user)
+# No longer used, for the same reason. The key is still accepted.
 default_branch_action = "split"    # string: split | fork
 
 # How to derive a worktree name from a branch name in the TUI.
@@ -333,9 +329,17 @@ default_branch_action = "split"    # string: split | fork
 # Default: "last_segment"
 worktree_name_from_branch = "last_segment"  # string: last_segment
 
-# Use single-line compact list items in the TUI worktree list.
-# Default: false (multi-line items with detail)
-compact_list = false               # bool
+# One-line dashboard rows. false adds the commit message under each row.
+# A choice saved with `v` in the TUI takes precedence.
+# Default: true
+compact_list = true                # bool
+
+# Text after the alias on each dashboard row:
+# "branch" — `⎇ branch`, only when its last segment differs from the alias
+# "dir"    — the worktree's directory name
+# "off"    — nothing
+# Default: "branch"
+list_secondary = "branch"          # string: branch | dir | off
 ```
 
 ---
@@ -1015,7 +1019,7 @@ Per-run flags:
 
 The check runs in a detached background process and never delays command execution. Notifications are only printed when a newer stable release is available and stdout is a TTY.
 
-The opt-out env vars (`NO_UPDATE_NOTIFIER`, `GROVE_NO_UPDATE_NOTIFIER`, `GROVE_AGENT_MODE`, `GROVE_NONINTERACTIVE`) and the `--no-update-notifier` flag suppress every update surface uniformly: the CLI box on command exit, the `grove version` annotation, the TUI footer badge, and the `u`-keybind modal. Use `grove --check-update` to force a synchronous check that bypasses opt-outs.
+The opt-out env vars (`NO_UPDATE_NOTIFIER`, `GROVE_NO_UPDATE_NOTIFIER`, `GROVE_AGENT_MODE`, `GROVE_NONINTERACTIVE`) and the `--no-update-notifier` flag suppress the passive update notices: the CLI box on command exit, the `grove version` annotation, and the dashboard's header badge. In the dashboard, `g u` is an explicit request, so it still opens the upgrade overlay and reports the cached release. Use `grove --check-update` to force a synchronous check that bypasses opt-outs.
 
 ---
 

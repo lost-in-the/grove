@@ -101,7 +101,7 @@ func TestDashboard_FocusedHintsWithoutPR(t *testing.T) {
 
 func TestPR_TabEntersFocus(t *testing.T) {
 	m := newTestModel(withPRData(), withSize(120, 40))
-	m.activeView = ViewPRs
+	m.setViewForTest(ViewPRs)
 	m = sendKey(m, "tab")
 	if !m.prState.DetailFocused {
 		t.Error("tab should set prState.DetailFocused = true")
@@ -110,20 +110,20 @@ func TestPR_TabEntersFocus(t *testing.T) {
 
 func TestPR_FocusEscUnfocuses(t *testing.T) {
 	m := newTestModel(withPRData(), withSize(120, 40))
-	m.activeView = ViewPRs
+	m.setViewForTest(ViewPRs)
 	m = sendKey(m, "tab")
 	m = sendKey(m, "esc")
 	if m.prState.DetailFocused {
 		t.Error("esc should set DetailFocused = false")
 	}
-	if m.activeView != ViewPRs {
-		t.Errorf("esc from detail focus should stay in PR view, got activeView=%d", m.activeView)
+	if m.activeView() != ViewPRs {
+		t.Errorf("esc from detail focus should stay in PR view, got activeView=%d", m.activeView())
 	}
 }
 
 func TestPR_FocusTabUnfocuses(t *testing.T) {
 	m := newTestModel(withPRData(), withSize(120, 40))
-	m.activeView = ViewPRs
+	m.setViewForTest(ViewPRs)
 	m = sendKey(m, "tab")
 	m = sendKey(m, "tab")
 	if m.prState.DetailFocused {
@@ -133,7 +133,7 @@ func TestPR_FocusTabUnfocuses(t *testing.T) {
 
 func TestPR_FocusScrollSwallowsKeys(t *testing.T) {
 	m := newTestModel(withPRData(), withSize(120, 40))
-	m.activeView = ViewPRs
+	m.setViewForTest(ViewPRs)
 	cursorBefore := m.prState.Cursor
 	m = sendKey(m, "tab")
 	m = sendKey(m, "j")
@@ -144,7 +144,7 @@ func TestPR_FocusScrollSwallowsKeys(t *testing.T) {
 
 func TestPR_FocusVimKeys(t *testing.T) {
 	m := newTestModel(withPRData(), withSize(120, 40))
-	m.activeView = ViewPRs
+	m.setViewForTest(ViewPRs)
 	m = sendKey(m, "tab")
 	// These should not panic
 	m = sendKey(m, "g")
@@ -158,7 +158,7 @@ func TestPR_FocusVimKeys(t *testing.T) {
 
 func TestIssue_TabEntersFocus(t *testing.T) {
 	m := newTestModel(withIssueData(), withSize(120, 40))
-	m.activeView = ViewIssues
+	m.setViewForTest(ViewIssues)
 	m = sendKey(m, "tab")
 	if !m.issueState.DetailFocused {
 		t.Error("tab should set issueState.DetailFocused = true")
@@ -167,20 +167,20 @@ func TestIssue_TabEntersFocus(t *testing.T) {
 
 func TestIssue_FocusEscUnfocuses(t *testing.T) {
 	m := newTestModel(withIssueData(), withSize(120, 40))
-	m.activeView = ViewIssues
+	m.setViewForTest(ViewIssues)
 	m = sendKey(m, "tab")
 	m = sendKey(m, "esc")
 	if m.issueState.DetailFocused {
 		t.Error("esc should set DetailFocused = false")
 	}
-	if m.activeView != ViewIssues {
-		t.Errorf("esc from detail focus should stay in issue view, got activeView=%d", m.activeView)
+	if m.activeView() != ViewIssues {
+		t.Errorf("esc from detail focus should stay in issue view, got activeView=%d", m.activeView())
 	}
 }
 
 func TestIssue_FocusScrollSwallowsKeys(t *testing.T) {
 	m := newTestModel(withIssueData(), withSize(120, 40))
-	m.activeView = ViewIssues
+	m.setViewForTest(ViewIssues)
 	cursorBefore := m.issueState.Cursor
 	m = sendKey(m, "tab")
 	m = sendKey(m, "j")

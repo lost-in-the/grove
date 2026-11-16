@@ -32,6 +32,7 @@ type WorktreeItem struct {
 	Commit         string
 	CommitMessage  string
 	CommitAge      string
+	CommitTime     time.Time // HEAD's committer date; zero when unknown
 	IsDirty        bool
 	DirtyFiles     []string
 	IsMain         bool
@@ -174,22 +175,28 @@ func loadFetchContext(mgr *worktree.Manager, stateMgr *state.Manager) fetchConte
 	return fc
 }
 
-func (fc *fetchContext) setTmuxStatus(item *WorktreeItem, tree worktree.Worktree) {
-	target := mux.Target{
-		Name: worktree.TmuxSessionName(fc.projectName, tree.ShortName),
-		Path: tree.Path,
+// applySession sets the item's session fields from the multiplexer's
+// sessions: the fetch and the agent poll both use it, so they match sessions
+// the same way. An item with no session gets "none" and no agent.
+func applySession(item *WorktreeItem, ix *mux.Index, projectName, backend string) {
+	// Sessions are named from the tree's short name. The main worktree's
+	// item shows "root", so its directory name stands in.
+	name := item.ShortName
+	if item.IsMain {
+		name = item.FullName
 	}
-	s, ok := fc.sessions.Lookup(target)
+	s, ok := ix.Lookup(mux.Target{Name: worktree.TmuxSessionName(projectName, name), Path: item.Path})
 	if !ok {
 		// Fall back to a session named after the worktree directory, which is
 		// how sessions created outside grove look.
-		s, ok = fc.sessions.Lookup(mux.Target{Name: tree.Name})
+		s, ok = ix.Lookup(mux.Target{Name: item.FullName})
 	}
 	if !ok {
+		item.TmuxStatus, item.SessionBackend, item.AgentStatus = "none", "", mux.AgentUnreported
 		return
 	}
 	item.TmuxStatus = string(s.Status)
-	item.SessionBackend = fc.backend
+	item.SessionBackend = backend
 	item.AgentStatus = s.Agent
 }
 
@@ -214,6 +221,7 @@ func (fc *fetchContext) enrichGitInfo(item *WorktreeItem, tree *worktree.Worktre
 	item.Commit = commitInfo.ShortHash
 	item.CommitMessage = commitInfo.Message
 	item.CommitAge = commitInfo.Age
+	item.CommitTime = commitInfo.Time
 	item.RecentCommits = recents
 
 	// Dirty file list was populated by Manager.List(); split it here.
@@ -281,10 +289,17 @@ func FetchDetailMetrics(items []WorktreeItem, defaultBranch string) map[string]D
 // FetchWorktrees gathers all enriched worktree data for display.
 // pluginMgr is optional — pass nil to skip plugin status collection.
 func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager, pluginMgr ...*plugins.Manager) ([]WorktreeItem, error) {
+	items, _, err := fetchWorktreesAndBackend(mgr, stateMgr, pluginMgr...)
+	return items, err
+}
+
+// fetchWorktreesAndBackend is FetchWorktrees plus the multiplexer backend it
+// resolved, which the dashboard uses to decide once whether it is agent-aware.
+func fetchWorktreesAndBackend(mgr *worktree.Manager, stateMgr *state.Manager, pluginMgr ...*plugins.Manager) ([]WorktreeItem, string, error) {
 	trees, err := mgr.List()
 	if err != nil {
 		// Manager.List already wraps with "failed to list worktrees".
-		return nil, err
+		return nil, "", err
 	}
 
 	fc := loadFetchContext(mgr, stateMgr)
@@ -310,9 +325,8 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager, pluginMgr ..
 		item.IsMain = tree.IsMain
 		item.IsCurrent = tree.Path == fc.currentPath
 		item.IsPrunable = tree.IsPrunable
-		item.TmuxStatus = "none"
 
-		fc.setTmuxStatus(item, *tree)
+		applySession(item, fc.sessions, fc.projectName, fc.backend)
 		fc.setStateInfo(item, tree.ShortName)
 
 		if fc.cfg != nil {
@@ -355,5 +369,5 @@ func FetchWorktrees(mgr *worktree.Manager, stateMgr *state.Manager, pluginMgr ..
 		}
 	}
 
-	return items, nil
+	return items, fc.backend, nil
 }

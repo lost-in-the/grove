@@ -1,0 +1,24 @@
+ [1m[1mtest-project[m ▸ [1msettings[m                                            ● 1 unsaved[m 
+  [1m[1] general[m   [2] behavior   [3] plugins   [4] protection                     
+                                                                                
+ ┃ [1mproject_name[m                                                                 
+ ┃ Project name                                                                 
+ ┃ > grove-cli[7m [m                                                                 
+                                                                                
+   [1mprojects_dir[m                                                                 
+   Where worktrees are created                                                  
+   [37m> [m[37m/home/dev/projects[m [37m                                                       [m 
+                                                                                
+   [1mdefault_branch[m                                                               
+   Base branch for new worktrees                                                
+   [37m> [m[37mmain[m [37m                                                                     [m 
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+  [1mtab[m next field · [1mctrl+n/p[m section · [1mesc[m close                                 

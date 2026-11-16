@@ -89,7 +89,8 @@ type TUIConfig struct {
 	SkipBranchNotice       *bool  `toml:"skip_branch_notice"`        // Don't show "branch exists" notice
 	DefaultBranchAction    string `toml:"default_branch_action"`     // "split" or "fork" — used when notice is skipped
 	WorktreeNameFromBranch string `toml:"worktree_name_from_branch"` // "last_segment" (default) — how to derive name from branch
-	CompactList            *bool  `toml:"compact_list"`              // Use single-line list items (V1 delegate)
+	CompactList            *bool  `toml:"compact_list"`              // One-line dashboard rows (default); false adds the commit message
+	ListSecondary          string `toml:"list_secondary"`            // Text after the alias: "branch" (default), "dir", or "off"
 }
 
 // ProtectionConfig controls worktree protection settings
@@ -569,6 +570,9 @@ func mergeTUIConfig(result, override *TUIConfig) {
 	if override.CompactList != nil {
 		result.CompactList = override.CompactList
 	}
+	if override.ListSecondary != "" {
+		result.ListSecondary = override.ListSecondary
+	}
 }
 
 func mergeProtectionConfig(result, override *ProtectionConfig) {
@@ -695,16 +699,94 @@ func lineMatchesField(trimmed, field string) bool {
 	return strings.HasPrefix(trimmed, field+" =") || strings.HasPrefix(trimmed, field+"=")
 }
 
-// setTopLevelValue handles the section=="" case for setValueInLines.
-func setTopLevelValue(lines []string, field, formattedLine string) []string {
-	for i, line := range lines {
-		if lineMatchesField(strings.TrimSpace(line), field) {
-			lines[i] = formattedLine
-			return lines
+// assignment returns the index of the = that ends the key on line, or -1
+// when the line assigns nothing (blank, comment, section header). A quoted
+// key may hold an = of its own.
+func assignment(line string) int {
+	var quote byte
+	for k := 0; k < len(line); k++ {
+		switch c := line[k]; {
+		case quote != 0:
+			if c == '\\' && quote == '"' {
+				k++ // an escape: skip the escaped character
+			} else if c == quote {
+				quote = 0
+			}
+		case c == '"', c == '\'':
+			quote = c
+		case c == '#', c == '[':
+			return -1
+		case c == '=':
+			return k
 		}
 	}
-	for i, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), "[") {
+	return -1
+}
+
+// valueEnd returns the index of the last line of the value assigned on line
+// i, so a multi-line array or string is read whole. A line that assigns
+// nothing ends where it starts.
+func valueEnd(lines []string, i int) int {
+	eq := assignment(lines[i])
+	if eq < 0 {
+		return i
+	}
+	depth := 0     // open [ and {
+	var str string // the open string's delimiter, if any
+	for j, line := i, lines[i][eq+1:]; ; j++ {
+		for k := 0; k < len(line); k++ {
+			rest := line[k:]
+			switch {
+			case str == "":
+				switch {
+				case rest[0] == '#':
+					k = len(line)
+				case strings.HasPrefix(rest, `"""`), strings.HasPrefix(rest, "'''"):
+					str, k = rest[:3], k+2
+				case rest[0] == '"', rest[0] == '\'':
+					str = rest[:1]
+				case rest[0] == '[', rest[0] == '{':
+					depth++
+				case rest[0] == ']', rest[0] == '}':
+					depth--
+				}
+			case rest[0] == '\\' && str[0] == '"':
+				k++ // an escape: skip the escaped character
+			case strings.HasPrefix(rest, str):
+				k += len(str) - 1
+				str = ""
+			}
+		}
+		if len(str) == 1 {
+			str = "" // a single-line string cannot run past its line
+		}
+		if (depth <= 0 && str == "") || j+1 == len(lines) {
+			return j
+		}
+		line = lines[j+1]
+	}
+}
+
+// replaceValue replaces the assignment starting on line i, every line of
+// it, with formattedLine.
+func replaceValue(lines []string, i int, formattedLine string) []string {
+	end := valueEnd(lines, i)
+	out := make([]string, 0, len(lines)-(end-i))
+	out = append(out, lines[:i]...)
+	out = append(out, formattedLine)
+	return append(out, lines[end+1:]...)
+}
+
+// setTopLevelValue handles the section=="" case for setValueInLines. Top-level
+// keys come before the first section header, so the search stops there, and
+// a new key goes just above it.
+func setTopLevelValue(lines []string, field, formattedLine string) []string {
+	for i := 0; i < len(lines); i = valueEnd(lines, i) + 1 {
+		trimmed := strings.TrimSpace(lines[i])
+		if lineMatchesField(trimmed, field) {
+			return replaceValue(lines, i, formattedLine)
+		}
+		if strings.HasPrefix(trimmed, "[") {
 			inserted := make([]string, 0, len(lines)+1)
 			inserted = append(inserted, lines[:i]...)
 			inserted = append(inserted, formattedLine)
@@ -719,8 +801,8 @@ func setTopLevelValue(lines []string, field, formattedLine string) []string {
 // index (exclusive) of the section body. Returns -1, -1 if the section is not found.
 func findSectionBounds(lines []string, sectionHeader string) (start, end int) {
 	start = -1
-	for i, line := range lines {
-		if strings.TrimSpace(line) == sectionHeader {
+	for i := 0; i < len(lines); i = valueEnd(lines, i) + 1 {
+		if strings.TrimSpace(lines[i]) == sectionHeader {
 			start = i
 			break
 		}
@@ -729,7 +811,7 @@ func findSectionBounds(lines []string, sectionHeader string) (start, end int) {
 		return -1, -1
 	}
 	end = len(lines)
-	for i := start + 1; i < len(lines); i++ {
+	for i := start + 1; i < len(lines); i = valueEnd(lines, i) + 1 {
 		trimmed := strings.TrimSpace(lines[i])
 		if strings.HasPrefix(trimmed, "[") && strings.Contains(trimmed, "]") {
 			end = i
@@ -753,10 +835,9 @@ func setSectionValue(lines []string, section, field, formattedLine string) []str
 		return lines
 	}
 
-	for i := sectionStart + 1; i < sectionEnd; i++ {
+	for i := sectionStart + 1; i < sectionEnd; i = valueEnd(lines, i) + 1 {
 		if lineMatchesField(strings.TrimSpace(lines[i]), field) {
-			lines[i] = formattedLine
-			return lines
+			return replaceValue(lines, i, formattedLine)
 		}
 	}
 

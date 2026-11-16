@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -56,93 +55,5 @@ func TestCheckDuplicateWorktreeReturnsCorrectItem(t *testing.T) {
 	}
 	if !got.IsDirty {
 		t.Error("expected IsDirty = true")
-	}
-}
-
-func TestRenderCreateNameV2WithDuplicate(t *testing.T) {
-	tests := []struct {
-		name     string
-		state    *CreateState
-		wantStrs []string
-		dontWant []string
-	}{
-		{
-			name: "duplicate found shows warning and details",
-			state: func() *CreateState {
-				s := createStateWithName("feature-auth", "acupoll")
-				s.ExistingWorktree = &WorktreeItem{
-					ShortName:  "feature-auth",
-					Path:       "/home/user/acupoll-feature-auth",
-					Branch:     "feature/authentication",
-					IsDirty:    true,
-					DirtyFiles: []string{"main.go", "auth.go"},
-				}
-				return s
-			}(),
-			wantStrs: []string{
-				"already exists",
-				"feature/authentication",
-				"/home/user/acupoll-feature-auth",
-			},
-			dontWant: []string{
-				"✓ valid name",
-			},
-		},
-		{
-			name:  "no duplicate shows valid name",
-			state: createStateWithName("new-feature", "acupoll"),
-			wantStrs: []string{
-				"✓ valid name",
-			},
-			dontWant: []string{
-				"already exists",
-			},
-		},
-		{
-			name: "duplicate with clean worktree",
-			state: func() *CreateState {
-				s := createStateWithName("testing", "acupoll")
-				s.ExistingWorktree = &WorktreeItem{
-					ShortName: "testing",
-					Path:      "/home/user/acupoll-testing",
-					Branch:    "testing",
-					IsDirty:   false,
-				}
-				return s
-			}(),
-			wantStrs: []string{
-				"already exists",
-				"testing",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := renderCreateNameV2(tt.state, 120)
-			for _, want := range tt.wantStrs {
-				if !strings.Contains(got, want) {
-					t.Errorf("missing %q in output:\n%s", want, got)
-				}
-			}
-			for _, dontWant := range tt.dontWant {
-				if strings.Contains(got, dontWant) {
-					t.Errorf("should not contain %q in output:\n%s", dontWant, got)
-				}
-			}
-		})
-	}
-}
-
-func TestRenderDuplicateFooterHints(t *testing.T) {
-	state := createStateWithName("feature-auth", "acupoll")
-	state.ExistingWorktree = &WorktreeItem{
-		ShortName: "feature-auth",
-	}
-
-	got := renderCreateNameV2(state, 80)
-	// When duplicate exists, footer should offer switching
-	if !strings.Contains(got, "switch") && !strings.Contains(got, "Switch") {
-		t.Errorf("duplicate footer should mention switching, got:\n%s", got)
 	}
 }

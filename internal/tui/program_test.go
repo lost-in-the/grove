@@ -69,8 +69,15 @@ func TestProgram_HelpOverlay(t *testing.T) {
 		return regexp.MustCompile(`(?i)rails-app`).MatchString(s)
 	}, teatest.WithDuration(5*time.Second))
 
-	// Press ? for help
+	// ? lists actions; the keyboard shortcuts action opens the full help.
 	tm.Send(tea.KeyPressMsg{Code: '?', Text: "?"})
+	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+		return regexp.MustCompile(`Actions`).MatchString(stripANSI(string(bts)))
+	}, teatest.WithDuration(5*time.Second))
+	for _, r := range "keyboard" {
+		tm.Send(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	// Wait for help overlay text
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
@@ -94,21 +101,18 @@ func TestProgram_HelpOverlay_QuestionMarkToggles(t *testing.T) {
 		return regexp.MustCompile(`(?i)rails-app`).MatchString(s)
 	}, teatest.WithDuration(5*time.Second))
 
-	// Press ? to open the overlay. The overlay footer always renders "esc close",
-	// which is unique to the overlay (the dashboard footer uses "esc back").
+	// ? opens the action list; its prompt is unique to it.
 	tm.Send(tea.KeyPressMsg{Code: '?', Text: "?"})
 
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
-		s := stripANSI(string(bts))
-		return regexp.MustCompile(`esc\s+close`).MatchString(s)
+		return regexp.MustCompile(`type an action`).MatchString(stripANSI(string(bts)))
 	}, teatest.WithDuration(5*time.Second))
 
-	// Press ? again — toggles the overlay closed; overlay footer disappears
-	tm.Send(tea.KeyPressMsg{Code: '?', Text: "?"})
+	// esc closes it; the prompt disappears
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEscape})
 
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
-		s := stripANSI(string(bts))
-		return !regexp.MustCompile(`esc\s+close`).MatchString(s)
+		return !regexp.MustCompile(`type an action`).MatchString(stripANSI(string(bts)))
 	}, teatest.WithDuration(5*time.Second))
 
 	tm.Send(tea.KeyPressMsg{Code: 'q', Text: "q"})
@@ -125,14 +129,12 @@ func TestProgram_HelpOverlay_QuestionMarkToggles(t *testing.T) {
 // that TestProgram_HelpOverlay_QuestionMarkToggles verifies the overlay's
 // open/closed state machine end-to-end.
 
-func TestProgram_UpdateOverlay_OpensOnUWhenAvailable(t *testing.T) {
+func TestProgram_UpdateOverlay_OpensOnGUWhenAvailable(t *testing.T) {
 	repo := setupRailsFixture(t)
 	mgr, stateMgr := newTestManagers(t, repo)
 	m := NewModel(mgr, stateMgr, repo)
-	// Inject a fake update so the overlay gate passes regardless of the
-	// real ~/.grove/update-check.json contents on the test host. With the
-	// Skip-honoring gate in NewModel, a non-TTY test run produces empty
-	// fields by design, so direct injection is the canonical seam.
+	// Inject a fake update: a test build's -dev version fails semver
+	// parsing, so the real cache never yields one here.
 	m.updateLatestVersion = "99.0.0"
 	m.updateLatestURL = "https://github.com/lost-in-the/grove/releases/tag/v99.0.0"
 
@@ -144,7 +146,8 @@ func TestProgram_UpdateOverlay_OpensOnUWhenAvailable(t *testing.T) {
 		return regexp.MustCompile(`(?i)rails-app`).MatchString(s)
 	}, teatest.WithDuration(5*time.Second))
 
-	// Press u — modal should open with "Update available" and the latest version.
+	// g u: the modal opens with "Update available" and the latest version.
+	tm.Send(tea.KeyPressMsg{Code: 'g', Text: "g"})
 	tm.Send(tea.KeyPressMsg{Code: 'u', Text: "u"})
 
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
@@ -159,22 +162,21 @@ func TestProgram_UpdateOverlay_OpensOnUWhenAvailable(t *testing.T) {
 	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
 }
 
-// TestProgram_UpdateOverlay_GateRespectsSkip verifies NewModel honors
-// updatecheck.Skip — when the env-var opt-out is set, NewModel must produce
-// a model with an empty updateLatestVersion regardless of cache contents.
-// This is the parity guarantee with the CLI box and `grove version`.
+// TestProgram_UpdateOverlay_GateRespectsSkip verifies NewModel takes the
+// badge gate from updatecheck.Skip, the parity guarantee with the CLI box and
+// `grove version`. Skip is stubbed both ways: under go test it is always true
+// (stdout is not a TTY), so the real one proves nothing.
 func TestProgram_UpdateOverlay_GateRespectsSkip(t *testing.T) {
-	t.Setenv("GROVE_NO_UPDATE_NOTIFIER", "1")
-
 	repo := setupRailsFixture(t)
 	mgr, stateMgr := newTestManagers(t, repo)
-	m := NewModel(mgr, stateMgr, repo)
+	was := updateSkip
+	t.Cleanup(func() { updateSkip = was })
 
-	if m.updateLatestVersion != "" {
-		t.Fatalf("expected updateLatestVersion to be empty when Skip returns true, got %q", m.updateLatestVersion)
-	}
-	if m.updateLatestURL != "" {
-		t.Fatalf("expected updateLatestURL to be empty when Skip returns true, got %q", m.updateLatestURL)
+	for _, skip := range []bool{true, false} {
+		updateSkip = func(bool, string) bool { return skip }
+		if m := NewModel(mgr, stateMgr, repo); m.updateNotify == skip {
+			t.Errorf("Skip %v: updateNotify %v, want %v", skip, m.updateNotify, !skip)
+		}
 	}
 }
 

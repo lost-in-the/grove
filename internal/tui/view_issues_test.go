@@ -140,7 +140,7 @@ func TestRenderIssueDetailContent_Labels(t *testing.T) {
 
 func TestRenderIssueFooter_ListFocused(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(120, 30))
-	m.activeView = ViewIssues
+	m.setViewForTest(ViewIssues)
 	m.issueState = &IssueViewState{
 		Issues:        []*tracker.Issue{{Number: 1, Title: "T", Author: "u"}},
 		FilterInput:   newFilterInput(""),
@@ -157,7 +157,7 @@ func TestRenderIssueFooter_ListFocused(t *testing.T) {
 
 func TestRenderIssueFooter_DetailFocused(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(120, 30))
-	m.activeView = ViewIssues
+	m.setViewForTest(ViewIssues)
 	m.issueState = &IssueViewState{
 		Issues:        []*tracker.Issue{{Number: 1, Title: "T", Author: "u"}},
 		FilterInput:   newFilterInput(""),

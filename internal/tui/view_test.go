@@ -46,9 +46,12 @@ func TestViewDashboardEmpty(t *testing.T) {
 	}
 }
 
+// The full key reference stays one action away: ? then "keyboard".
 func TestViewHelpOverlay(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
 	m = sendKey(m, "?")
+	m = typeOmni(m, "keyboard")
+	m = sendKey(m, "enter")
 	v := m.viewString()
 	if !strings.Contains(v, "Navigation") {
 		t.Error("expected 'Navigation' section in help overlay")
@@ -72,8 +75,8 @@ func TestViewCreateOverlay(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(80, 24))
 	m = sendKey(m, "n")
 	v := m.viewString()
-	if !strings.Contains(v, "New Worktree") {
-		t.Error("expected 'New Worktree' in create overlay")
+	if !strings.Contains(v, "New worktree") {
+		t.Error("expected 'New worktree' in the branch form")
 	}
 }
 
@@ -91,14 +94,5 @@ func TestViewSideBySideLayout(t *testing.T) {
 	v := m.viewString()
 	if v == "" {
 		t.Error("expected non-empty view for wide terminal")
-	}
-}
-
-func TestViewStackedLayout(t *testing.T) {
-	m := newTestModel(withItems(3), withSize(80, 24))
-	v := m.viewString()
-	// Stacked layout should contain a separator
-	if !strings.Contains(v, "─") {
-		t.Error("expected separator in stacked layout")
 	}
 }

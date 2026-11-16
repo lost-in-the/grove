@@ -49,6 +49,8 @@ type StyleSet struct {
 
 	// List selection
 	SelectionRow lipgloss.Style
+	TabActive    lipgloss.Style // config section tab, raised
+	TabInactive  lipgloss.Style
 
 	// Status badges
 	StatusClean          lipgloss.Style
@@ -101,7 +103,7 @@ var Styles = NewStyleSet(Colors)
 
 // NewStyleSet creates a StyleSet from a ColorScheme.
 func NewStyleSet(cs ColorScheme) StyleSet {
-	return StyleSet{
+	ss := StyleSet{
 		// Borders
 		RoundedBorder: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
@@ -124,6 +126,8 @@ func NewStyleSet(cs ColorScheme) StyleSet {
 
 		// List selection
 		SelectionRow: lipgloss.NewStyle().Background(cs.SelectionBg),
+		TabActive:    lipgloss.NewStyle().Background(cs.SelectionBg).Foreground(cs.TextBright).Bold(true).Padding(0, 1),
+		TabInactive:  lipgloss.NewStyle().Foreground(cs.TextMuted).Padding(0, 1),
 
 		// Layout
 		Header: lipgloss.NewStyle().Bold(true).Foreground(cs.Info),
@@ -197,4 +201,10 @@ func NewStyleSet(cs ColorScheme) StyleSet {
 			BorderForeground(cs.Primary),
 		InputText: lipgloss.NewStyle().Foreground(cs.TextNormal),
 	}
+	// Without color the highlight would be plain bold, the same as any key.
+	// Reverse video keeps a pressed key visible.
+	if cs.Primary == nil {
+		ss.HelpKeyHighlight = ss.HelpKeyHighlight.Reverse(true)
+	}
+	return ss
 }

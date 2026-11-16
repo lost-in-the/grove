@@ -11,7 +11,6 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/lost-in-the/grove/internal/git"
 	"github.com/lost-in-the/grove/internal/tuilog"
 	"github.com/lost-in-the/grove/plugins/tracker"
 )
@@ -21,23 +20,16 @@ type PRViewState struct {
 	PRs              []*tracker.PullRequest
 	Cursor           int
 	Loading          bool
+	Stale            bool // PRs is the saved list; a refresh is running or failed
 	Error            string
 	WorktreeBranches map[string]string // branch → worktree short name
 	ExistsPrompt     *ExistingWorktreePrompt
-	Creating         bool
 	CreatingPR       *tracker.PullRequest // PR being created
-	ActivityLog      *ActivityLog         // streaming creation progress
 	FilterInput      textinput.Model
 	Filtering        bool // true when filter input is active (activated by /)
 	DetailFocused    bool // true when detail panel has focus (Tab to toggle)
 	DetailViewport   viewport.Model
 	lastItemNumber   int // tracks the last-rendered PR number to update viewport content
-}
-
-func (s *PRViewState) getActivityLog() *ActivityLog { return s.ActivityLog }
-func (s *PRViewState) setCreatingDone(errMsg string) {
-	s.Creating = false
-	s.Error = errMsg
 }
 
 func (m Model) fetchPRsCmd() tea.Msg {
@@ -52,12 +44,15 @@ func (m Model) fetchPRsCmd() tea.Msg {
 
 	gh := tracker.NewGitHubAdapter(repo)
 	prs, err := gh.ListPRs(tracker.ListOptions{State: "open", Limit: 30})
+	if saveErr := savePRCacheAfterFetch(m.projectRoot, prs, err); saveErr != nil {
+		tuilog.Printf("warning: failed to save PR cache: %v", saveErr)
+	}
 	return prsFetchedMsg{prs: prs, err: err}
 }
 
 func (m Model) handlePRKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.prState == nil {
-		m.activeView = ViewDashboard
+		m.popView()
 		return m, nil
 	}
 
@@ -69,9 +64,9 @@ func (m Model) handlePRKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		)
 	}
 
-	if s.Loading || s.Creating {
+	if s.Loading {
 		if key.Matches(msg, m.keys.Escape) {
-			m.activeView = ViewDashboard
+			m.popView()
 			m.prState = nil
 			return m, nil
 		}
@@ -116,7 +111,7 @@ func (m Model) handlePRNormalKey(msg tea.KeyPressMsg, filtered []*tracker.PullRe
 
 	switch {
 	case key.Matches(msg, m.keys.Escape):
-		m.activeView = ViewDashboard
+		m.popView()
 		m.prState = nil
 		return m, nil
 
@@ -148,13 +143,21 @@ func (m Model) handlePRNormalKey(msg tea.KeyPressMsg, filtered []*tracker.PullRe
 		return m, s.FilterInput.Focus()
 
 	case key.Matches(msg, m.keys.Enter):
-		return m.handlePREnter(s, filtered)
+		if len(filtered) > 0 && s.Cursor < len(filtered) {
+			return m.openPRReview(filtered[s.Cursor])
+		}
+		return m, nil
+
+	case msg.String() == "n":
+		return m.handlePRNew(s, filtered)
 	}
 
 	return m, nil
 }
 
-func (m Model) handlePREnter(s *PRViewState, filtered []*tracker.PullRequest) (tea.Model, tea.Cmd) {
+// handlePRNew creates a worktree from the selected PR's branch, or asks
+// first when the branch already has one.
+func (m Model) handlePRNew(s *PRViewState, filtered []*tracker.PullRequest) (tea.Model, tea.Cmd) {
 	if len(filtered) == 0 || s.Cursor >= len(filtered) {
 		return m, nil
 	}
@@ -174,15 +177,15 @@ func (m Model) handlePREnter(s *PRViewState, filtered []*tracker.PullRequest) (t
 }
 
 func (m Model) openCreateWizardForPR(pr *tracker.PullRequest) (tea.Model, tea.Cmd) {
-	branches, _ := git.ListAllBranches(m.projectRoot)
-	m.createState = prefillCreateStateForPR(pr, m.projectName, m.worktreeNamePattern(), branches)
-	m.createState.ReturnView = ViewPRs
-	m.createState.WorktreeBranches = m.worktreeBranchMap()
-	m.createState.ExistingWorktree = checkDuplicateWorktree(
-		m.createState.NameSuggestion, m.existingWorktreeItems(),
-	)
-	m.activeView = ViewCreate
-	return m, m.createState.NameInput.Focus()
+	return m.openBranchForm(branchFormPrefill{Branch: pr.Branch, RemoteBranch: true, FocusAlias: true})
+}
+
+// selectedPRNumber is the number of the PR under the cursor, or 0.
+func (s *PRViewState) selectedPRNumber() int {
+	if prs := filteredPRs(s.PRs, s.FilterInput.Value()); s.Cursor >= 0 && s.Cursor < len(prs) {
+		return prs[s.Cursor].Number
+	}
+	return 0
 }
 
 func filteredPRs(prs []*tracker.PullRequest, filter string) []*tracker.PullRequest {

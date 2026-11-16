@@ -58,6 +58,6 @@ func BenchmarkSortWorktreeItems(b *testing.B) {
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = sortWorktreeItems(listItems, SortByDirtyFirst)
+		_ = sortWorktreeItems(listItems, SortByDirtyFirst, false)
 	}
 }

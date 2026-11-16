@@ -48,30 +48,6 @@ func TestTruncate(t *testing.T) {
 	}
 }
 
-func TestCompactAge(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"5 minutes ago", "5m ago"},
-		{"1 minute ago", "1m ago"},
-		{"2 hours ago", "2h ago"},
-		{"1 hour ago", "1h ago"},
-		{"3 days ago", "3d ago"},
-		{"1 day ago", "1d ago"},
-		{"2 weeks ago", "2w ago"},
-		{"6 months ago", "6mo ago"},
-		{"1 year ago", "1y ago"},
-		{"just now", "just now"},
-	}
-	for _, tt := range tests {
-		got := compactAge(tt.input)
-		if got != tt.want {
-			t.Errorf("compactAge(%q) = %q, want %q", tt.input, got, tt.want)
-		}
-	}
-}
-
 func TestFilteredBranches(t *testing.T) {
 	branches := []string{"main", "feature/auth", "fix/bug-123"}
 

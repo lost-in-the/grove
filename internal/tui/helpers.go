@@ -10,7 +10,16 @@ import (
 	lipgloss "charm.land/lipgloss/v2"
 
 	"github.com/lost-in-the/grove/internal/worktree"
-	"github.com/lost-in-the/grove/plugins/tracker"
+)
+
+// Shared string values used across overlays.
+const (
+	checkboxUnchecked      = "[ ]"
+	checkboxChecked        = "[x]"
+	boolTrue               = "true"
+	boolFalse              = "false"
+	reviewApproved         = "APPROVED"
+	reviewChangesRequested = "CHANGES_REQUESTED"
 )
 
 // renderFilterBar writes the filter/count bar used by list views (Issues, PRs).
@@ -44,32 +53,6 @@ func truncate(s string, max int) string {
 		return string(runes[:max])
 	}
 	return string(runes[:max-1]) + "…"
-}
-
-func compactAge(age string) string {
-	age = strings.TrimSpace(age)
-	replacements := [][2]string{
-		{" seconds ago", "s ago"},
-		{" second ago", "s ago"},
-		{" minutes ago", "m ago"},
-		{" minute ago", "m ago"},
-		{" hours ago", "h ago"},
-		{" hour ago", "h ago"},
-		{" days ago", "d ago"},
-		{" day ago", "d ago"},
-		{" weeks ago", "w ago"},
-		{" week ago", "w ago"},
-		{" months ago", "mo ago"},
-		{" month ago", "mo ago"},
-		{" years ago", "y ago"},
-		{" year ago", "y ago"},
-	}
-	for _, r := range replacements {
-		if after, found := strings.CutSuffix(age, r[0]); found {
-			return after + r[1]
-		}
-	}
-	return age
 }
 
 func filteredBranches(branches []string, filter string) []string {
@@ -112,10 +95,9 @@ func scrollWindow(total, cursor, maxVisible int) (start, end int) {
 }
 
 // wipCheckMsg is sent after checking a worktree for uncommitted changes.
-// Used by both the checkout and fork overlays. The path field correlates the
-// result back to the worktree that was checked, so a stale result from a
-// canceled overlay cannot corrupt a later overlay opened for a different
-// worktree.
+// Used by the branch form's Copy and Switch modes. The path field correlates
+// the result back to the worktree that was checked, so a stale result from a
+// canceled form cannot corrupt a later form opened for a different worktree.
 type wipCheckMsg struct {
 	path   string
 	hasWIP bool
@@ -211,7 +193,7 @@ type ExistingWorktreePrompt struct {
 }
 
 // renderExistingWorktreePrompt renders a popup offering to go to the existing
-// worktree or create a new one (fork).
+// worktree or copy it to a new branch.
 func renderExistingWorktreePrompt(p *ExistingWorktreePrompt, width int) string {
 	d := calcOverlayDims(width)
 
@@ -221,7 +203,7 @@ func renderExistingWorktreePrompt(p *ExistingWorktreePrompt, width int) string {
 	b.WriteString(d.indent + "  → " + Styles.SuccessText.Render(p.WorktreeName) + "\n")
 
 	content := b.String()
-	footer := "\n" + Styles.Footer.Render(d.indent+"[enter] go to worktree  [n] fork  [esc] back")
+	footer := "\n" + Styles.Footer.Render(d.indent+"[enter] go to worktree  [n] copy  [esc] back")
 
 	return Styles.OverlayBorder.Width(d.overlay).Render(
 		Styles.OverlayTitle.Render("Worktree Exists") + "\n\n" + padToHeight(content, 8) + footer,
@@ -229,31 +211,28 @@ func renderExistingWorktreePrompt(p *ExistingWorktreePrompt, width int) string {
 }
 
 // handleExistsPromptKey handles key input for the "worktree exists" popup.
-// Enter navigates to the existing worktree. N opens the fork overlay. Esc dismisses.
+// Enter navigates to the existing worktree. N opens Copy. Esc dismisses.
 func (m Model) handleExistsPromptKey(msg tea.KeyPressMsg, prompt *ExistingWorktreePrompt, dismiss func()) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.Escape):
 		dismiss()
 		return m, nil
 	case key.Matches(msg, m.keys.Enter):
-		m.activeView = ViewDashboard
+		m.popToRoot()
 		m.prState = nil
 		m.issueState = nil
 		m.pendingSelect = prompt.WorktreeName
 		m.toast.Show(NewToast(fmt.Sprintf("Focused worktree %q", prompt.WorktreeName), ToastInfo))
 		return m, m.fetchWorktrees
 	case msg.String() == "n" || key.Matches(msg, m.keys.New):
-		// Open the fork overlay for the existing worktree
+		// Copy the existing worktree, over the browser that raised the
+		// prompt, so esc from the form returns there.
 		item := m.findWorktreeByName(prompt.WorktreeName)
+		dismiss()
 		if item == nil {
-			dismiss()
 			return m, nil
 		}
-		m.prState = nil
-		m.issueState = nil
-		m.activeView = ViewFork
-		m.forkState = NewForkState(*item)
-		return m, wipCheckCmd(item.Path)
+		return m.openCopyForm(*item)
 	}
 	return m, nil
 }
@@ -266,40 +245,4 @@ func (m Model) findWorktreeByName(name string) *WorktreeItem {
 		}
 	}
 	return nil
-}
-
-// prefillCreateStateForPR creates a CreateState pre-filled from a PR,
-// skipping directly to the name step.
-func prefillCreateStateForPR(pr *tracker.PullRequest, projectName, namePattern string, branches []string) *CreateState {
-	suggestion := worktree.DeriveWorktreeName(pr.Branch, "")
-	ni := newNameInput("")
-	return &CreateState{
-		Step:              CreateStepName,
-		Source:            "pr",
-		ProjectName:       projectName,
-		NamePattern:       namePattern,
-		BaseBranch:        pr.Branch,
-		NameSuggestion:    suggestion,
-		NameInput:         ni,
-		Branches:          branches,
-		BranchFilterInput: newBranchFilterInput(),
-		BranchNameInput:   newBranchNameInput(),
-	}
-}
-
-// prefillCreateStateForIssue creates a CreateState pre-filled from an issue,
-// starting at the branch choice step so the user can pick a base branch.
-// The issue-derived name is carried as NameSuggestion for the Name step.
-func prefillCreateStateForIssue(issue *tracker.Issue, projectName, namePattern string, branches []string) *CreateState {
-	name := fmt.Sprintf("issue-%d", issue.Number)
-	return &CreateState{
-		Step:              CreateStepBranchChoice,
-		Source:            "issue",
-		ProjectName:       projectName,
-		NamePattern:       namePattern,
-		NameSuggestion:    name,
-		Branches:          branches,
-		BranchFilterInput: newBranchFilterInput(),
-		BranchNameInput:   newBranchNameInput(),
-	}
 }
