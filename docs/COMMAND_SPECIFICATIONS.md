@@ -959,7 +959,7 @@ Every service gets exactly one status:
 | `verified` | Mount source equals the worktree the stack is on | `✓ app ok: <path>` |
 | `drift` | Mount source differs from the worktree the stack is on | warning: `<service> drift: mounts <path>, stack is on <path>` |
 | `not_running` | `docker compose ps -q` returned no container | faint note: `container not running` |
-| `no_mount` | Container runs, but nothing is mounted at the probed path | warning: the service mounts the worktree at a different path or not at all (set `mount_dests`) |
+| `no_mount` | Container runs, but no bind mount is at the probed path (nothing is mounted there, or a named volume or tmpfs is) | warning: the service mounts the worktree at a different path or not at all (set `mount_dests`) |
 | `error` | A docker call failed (daemon down, `docker inspect` failed, unparseable output) | error line with the docker message |
 
 **Summary line**
