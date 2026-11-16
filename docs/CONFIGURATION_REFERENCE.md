@@ -136,7 +136,7 @@ Selects which terminal multiplexer grove drives.
 [mux]
 # Which multiplexer manages worktree sessions.
 # "auto"  — prefer the multiplexer grove is already running inside; otherwise
-#           use whichever binary is installed, tmux winning ties (default)
+#           use whichever binary is installed, herdr winning ties (default)
 # "tmux"  — always drive tmux
 # "herdr" — always drive herdr (https://herdr.dev)
 # "off"   — disable session management entirely
@@ -145,8 +145,9 @@ backend = "auto"                   # string: auto | tmux | herdr | off
 
 Under `auto`, grove checks `HERDR_ENV` then `TMUX` to see where it is running,
 because relocating a client in a multiplexer the user is not looking at does
-nothing useful. Outside both, tmux wins ties so existing installs keep their
-behavior when herdr merely happens to be present.
+nothing useful. Outside both, grove uses whichever binary is installed, and
+herdr when both are. Set `backend = "tmux"` to keep tmux on a machine that has
+both.
 
 An explicit backend is honored even when its binary is missing — grove reports
 that rather than silently driving a different multiplexer than you asked for.

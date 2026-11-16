@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -607,13 +609,26 @@ func (b *HerdrBackend) killAmbient(t Target) error {
 	if b.movedOn(b, s, t) {
 		return nil
 	}
-	_, err = b.call([]string{"workspace", "close", s.ID})
+	return b.closeWorkspace(s.ID)
+}
+
+// KillSession closes exactly the listed workspace, by id, in the ambient
+// session. See SessionKiller.
+func (b *HerdrBackend) KillSession(s Session) error {
+	if s.ID == "" {
+		return fmt.Errorf("herdr workspace %q has no id to close it by", s.Name)
+	}
+	return b.closeWorkspace(s.ID)
+}
+
+func (b *HerdrBackend) closeWorkspace(id string) error {
+	_, err := b.call([]string{"workspace", "close", id})
 	if errHasCode(err, "workspace_group_close_required") {
 		// Since herdr 0.9.0, closing a repository's parent workspace while
 		// worktree workspaces are open under it needs --group, which would
 		// close every one of them. grove never asks for that — each worktree's
 		// session is closed on its own — so name what is in the way instead.
-		return fmt.Errorf("herdr workspace %s still has worktree workspaces open under it; close those first: %w", s.ID, err)
+		return fmt.Errorf("herdr workspace %s still has worktree workspaces open under it; close those first: %w", id, err)
 	}
 	return err
 }
@@ -644,6 +659,12 @@ func (b *HerdrBackend) PaneInfo(t Target) (*PaneInfo, error) {
 	info := &PaneInfo{
 		CurrentPath: pane.cwd(),
 		HasAgent:    pane.Agent != nil && *pane.Agent != "",
+	}
+	// herdr reports canonical paths. Callers compare CurrentPath with the
+	// target's path as strings, so answer in the target's spelling when the
+	// pane is in that directory.
+	if SamePath(info.CurrentPath, t.Path) {
+		info.CurrentPath = t.Path
 	}
 	if info.HasAgent {
 		// No need to name the foreground process: an agent occupying the pane
@@ -1502,6 +1523,46 @@ func HerdrBinary() string {
 	return herdrBinary
 }
 
+// HerdrMinVersion is the oldest herdr grove is verified against. It matches
+// min_herdr_version in grove's herdr plugin manifest.
+const HerdrMinVersion = "0.8.0"
+
+// HerdrTooOld reads `herdr --version` output ("herdr 0.9.5") and reports the
+// version it names and whether that is older than HerdrMinVersion. Output it
+// cannot read is not called too old.
+func HerdrTooOld(versionOutput string) (version string, tooOld bool) {
+	fields := strings.Fields(versionOutput)
+	if len(fields) == 0 {
+		return "", false
+	}
+	candidate := fields[len(fields)-1]
+	got, ok := versionCore(candidate)
+	if !ok {
+		return "", false
+	}
+	floor, _ := versionCore(HerdrMinVersion)
+	return candidate, slices.Compare(got[:], floor[:]) < 0
+}
+
+// versionCore parses the major.minor.patch that leads a version, ignoring a
+// pre-release suffix.
+func versionCore(v string) ([3]int, bool) {
+	var core [3]int
+	v, _, _ = strings.Cut(v, "-")
+	parts := strings.Split(v, ".")
+	if len(parts) != len(core) {
+		return core, false
+	}
+	for i, part := range parts {
+		n, err := strconv.Atoi(part)
+		if err != nil || n < 0 {
+			return core, false
+		}
+		core[i] = n
+	}
+	return core, true
+}
+
 // HerdrServerStatus is herdr's own report on the server the CLI would talk to
 // — the ambient session, as selected by HERDR_SOCKET_PATH / HERDR_SESSION.
 type HerdrServerStatus struct {
@@ -1513,6 +1574,15 @@ type HerdrServerStatus struct {
 	// RestartNeeded means the running server predates the installed CLI and
 	// has to be restarted before the CLI can drive it.
 	RestartNeeded bool `json:"restart_needed"`
+	// EndpointCompatible is whether the server and the CLI share an endpoint
+	// protocol generation; RestartNeeded is its negation. Nil when no server
+	// is running, and on herdr 0.8.0, which does not report it.
+	EndpointCompatible *bool `json:"endpoint_compatible"`
+	// ServerBinaryStale means the running server is a different herdr version
+	// than the installed CLI: herdr was updated and the server not restarted.
+	// The two may still be compatible. Nil on herdr 0.8.0 and for a remote
+	// server.
+	ServerBinaryStale *bool `json:"server_binary_stale"`
 }
 
 // Usable reports whether the CLI can drive the server right now.
@@ -1520,17 +1590,27 @@ func (s HerdrServerStatus) Usable() bool {
 	return s.Running && !s.RestartNeeded && (s.Compatible == nil || *s.Compatible)
 }
 
+// Stale reports whether the running server is another herdr version than the
+// installed CLI.
+func (s HerdrServerStatus) Stale() bool {
+	return s.Running && s.ServerBinaryStale != nil && *s.ServerBinaryStale
+}
+
 // ProbeHerdrServer asks herdr whether its server is running and compatible
 // with the installed CLI. `herdr status server --json` answers without an API
-// envelope and exits 0 either way — verified on 0.8.0 and 0.9.1 — so this is
-// the one check that tells "stopped" apart from "running, but needs a restart
-// after an upgrade".
+// envelope and exits 0 either way (verified on 0.8.0, 0.9.1 and 0.9.5), so
+// this is the one check that tells "stopped" apart from "running, but needs a
+// restart after an upgrade".
 func ProbeHerdrServer() (HerdrServerStatus, error) {
-	var status HerdrServerStatus
 	out, err := cmdexec.Output(context.TODO(), HerdrBinary(), []string{"status", "server", "--json"}, "", cmdexec.Herdr)
 	if err != nil {
-		return status, fmt.Errorf("herdr status server: %w", err)
+		return HerdrServerStatus{}, fmt.Errorf("herdr status server: %w", err)
 	}
+	return parseHerdrServerStatus(out)
+}
+
+func parseHerdrServerStatus(out []byte) (HerdrServerStatus, error) {
+	var status HerdrServerStatus
 	if err := json.Unmarshal(bytes.TrimSpace(out), &status); err != nil {
 		return status, fmt.Errorf("decode herdr status server: %w", err)
 	}

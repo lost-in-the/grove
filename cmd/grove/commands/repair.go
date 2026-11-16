@@ -26,6 +26,9 @@ type RepairIssue struct {
 	Description string
 	Action      string
 	Resolved    bool
+	// Session is the orphaned session, for "orphan_tmux". The type keeps its
+	// name under every backend.
+	Session mux.Session
 }
 
 var repairCmd = &cobra.Command{
@@ -36,7 +39,8 @@ var repairCmd = &cobra.Command{
 Repairs performed:
   1. Remove state entries for missing worktree directories
   2. Add state entries for worktrees not tracked in state
-  3. Offer to kill orphaned tmux sessions (grove sessions without worktrees)
+  3. Offer to kill orphaned sessions (tmux sessions or herdr workspaces
+     whose worktree is gone)
   4. Reinitialize corrupted state file
 
 Examples:
@@ -104,20 +108,8 @@ Examples:
 		if m := ctx.Mux(); m.Available() {
 			sessions, err := m.List()
 			if err == nil {
-				for _, session := range sessions {
-					wtName, ok := sessionWorktreeName(projectName, session.Name)
-					if !ok {
-						continue
-					}
-
-					// Check if corresponding worktree exists
-					if _, exists := gitWorktreeByName[wtName]; !exists {
-						issues = append(issues, RepairIssue{
-							Type:        "orphan_tmux",
-							Description: fmt.Sprintf("Session '%s' has no corresponding worktree", session.Name),
-							Action:      fmt.Sprintf("Kill session '%s'", session.Name),
-						})
-					}
+				for _, session := range orphanSessions(projectName, sessions, gitWorktrees) {
+					issues = append(issues, orphanSessionIssue(m.Backend(), session))
 				}
 			}
 		}
@@ -148,10 +140,11 @@ Examples:
 		// State repairs (orphan_state/missing_state) are confirmed together — they're
 		// derived from this project's own git worktree list, so low-risk. orphan_tmux
 		// is confirmed per-session below instead: the backend listing returns every
-		// session on the server, and the "starts with {project}-" prefix match can't
-		// tell this project's sessions apart from a sibling project whose name shares
-		// the prefix (e.g. "grove" vs "grove-web-checkout"). A single blanket "yes"
-		// must not be enough to kill a live session that may belong to someone else.
+		// session on the server, and for a session that reports no path the
+		// "starts with {project}-" prefix match can't tell this project's sessions
+		// apart from a sibling project whose name shares the prefix (e.g. "grove" vs
+		// "grove-web-checkout"). A single blanket "yes" must not be enough to kill a
+		// live session that may belong to someone else.
 		hasStateIssues := false
 		for _, issue := range issues {
 			if issue.Type == "orphan_state" || issue.Type == "missing_state" {
@@ -219,15 +212,9 @@ Examples:
 				}
 
 			case "orphan_tmux":
-				// Extract session name
-				sessionName := extractQuotedName(issue.Description)
-				if sessionName == "" {
-					continue
-				}
-				confirmed, err := cli.Confirm(
-					fmt.Sprintf("Kill session '%s'? (may belong to a different project sharing this name prefix)", sessionName),
-					false,
-				)
+				m := ctx.Mux()
+				label := sessionLabel(m.Backend(), issue.Session)
+				confirmed, err := cli.Confirm(orphanSessionPrompt(m.Backend(), issue.Session), false)
 				if err != nil && !errors.Is(err, cli.ErrPromptCanceled) {
 					fmt.Fprintf(os.Stderr, "%v\n", err)
 				}
@@ -235,11 +222,11 @@ Examples:
 					skipped++
 					continue
 				}
-				if err := ctx.Mux().Kill(mux.Target{Name: sessionName}); err != nil {
-					fmt.Fprintf(os.Stderr, "  Failed to kill session '%s': %v\n", sessionName, err)
+				if err := killOrphanSession(m, issue.Session); err != nil {
+					fmt.Fprintf(os.Stderr, "  Failed to kill %s: %v\n", label, err)
 					failed++
 				} else {
-					fmt.Fprintf(os.Stderr, "  Killed session '%s'\n", sessionName)
+					fmt.Fprintf(os.Stderr, "  Killed %s\n", label)
 					issue.Resolved = true
 					repaired++
 				}
@@ -264,6 +251,93 @@ Examples:
 	}),
 }
 
+// orphanSessions returns the sessions that belong to this project and have no
+// worktree behind them.
+//
+// A session that reports its checkout path (herdr) is judged by that path and
+// never by its label, which a user can change and another repository can
+// share. It is an orphan only when its repository is this one and no
+// registered worktree claims it: by path, or by label when the recorded path
+// went stale, as it does after a rename. A session with a path and any other
+// repository is not ours.
+//
+// A session that reports no path (tmux) is judged by its label alone, see
+// sessionWorktreeName.
+func orphanSessions(projectName string, sessions []mux.Session, worktrees []*worktree.Worktree) []mux.Session {
+	ix := mux.NewIndex(sessions)
+	claimed := make(map[string]bool, len(worktrees))
+	names := make(map[string]bool, len(worktrees))
+	repoRoot := ""
+	for _, wt := range worktrees {
+		names[wt.ShortName] = true
+		if wt.IsMain {
+			repoRoot = wt.Path
+		}
+		if s, ok := ix.Lookup(muxLookupTarget(projectName, wt.ShortName, wt.Path)); ok {
+			claimed[s.ID] = true
+		}
+	}
+
+	var orphans []mux.Session
+	for _, s := range sessions {
+		if s.Path == "" {
+			if name, ok := sessionWorktreeName(projectName, s.Name); ok && !names[name] {
+				orphans = append(orphans, s)
+			}
+			continue
+		}
+		if claimed[s.ID] || !mux.SamePath(s.Repo, repoRoot) || isWorktreePath(s.Path, worktrees) {
+			continue
+		}
+		orphans = append(orphans, s)
+	}
+	return orphans
+}
+
+func isWorktreePath(path string, worktrees []*worktree.Worktree) bool {
+	for _, wt := range worktrees {
+		if mux.SamePath(path, wt.Path) {
+			return true
+		}
+	}
+	return false
+}
+
+// sessionLabel names a session for a person, with the backend it lives in.
+func sessionLabel(backend mux.Backend, s mux.Session) string {
+	return fmt.Sprintf("%s session '%s'", backend, s.Name)
+}
+
+func orphanSessionIssue(backend mux.Backend, s mux.Session) RepairIssue {
+	label := sessionLabel(backend, s)
+	description := fmt.Sprintf("%s has no corresponding worktree", label)
+	if s.Path != "" {
+		description = fmt.Sprintf("%s points at %s, which is not a worktree of this project", label, s.Path)
+	}
+	return RepairIssue{
+		Type:        "orphan_tmux",
+		Description: description,
+		Action:      fmt.Sprintf("Kill %s", label),
+		Session:     s,
+	}
+}
+
+func orphanSessionPrompt(backend mux.Backend, s mux.Session) string {
+	if s.Path != "" {
+		return fmt.Sprintf("Kill %s (%s)?", sessionLabel(backend, s), s.Path)
+	}
+	return fmt.Sprintf("Kill %s? (may belong to a different project sharing this name prefix)", sessionLabel(backend, s))
+}
+
+// killOrphanSession closes the listed session itself where the backend can
+// (see mux.SessionKiller), and otherwise the session its name and path find.
+func killOrphanSession(m mux.Multiplexer, s mux.Session) error {
+	if k, ok := m.(mux.SessionKiller); ok {
+		return k.KillSession(s)
+	}
+	return m.Kill(mux.Target{Name: s.Name, Path: s.Path})
+}
+
 // sessionWorktreeName reports whether a server-wide multiplexer session could
 // plausibly belong to this project, and if so, the worktree name it would
 // correspond to.
@@ -286,6 +360,8 @@ Examples:
 // "grove-web") are structurally indistinguishable from a same-named worktree
 // of this project and still pass. That residual ambiguity is why orphan_tmux
 // kills are confirmed individually by the caller rather than resolved here.
+//
+// Only sessions that report no checkout path are matched this way.
 func sessionWorktreeName(projectName, sessionName string) (string, bool) {
 	prefix := projectName + "-"
 	if !strings.HasPrefix(sessionName, prefix) {

@@ -50,8 +50,8 @@ func ParseBackend(s string) (Backend, error) {
 // Under auto, the multiplexer grove is already running inside wins, because
 // relocating a client in a multiplexer the user is not looking at is useless.
 // herdr beats tmux there: running herdr inside tmux is a normal setup, and the
-// inner multiplexer owns the panes. Outside both, tmux wins ties so existing
-// installs keep their behavior when herdr is merely present.
+// inner multiplexer owns the panes. Outside both, herdr wins ties: it is the
+// primary backend, and installing it alongside tmux is a choice to use it.
 func ResolveBackend(pref Backend, env Env) Backend {
 	switch pref {
 	case BackendOff, BackendTmux, BackendHerdr:
@@ -63,10 +63,10 @@ func ResolveBackend(pref Backend, env Env) Backend {
 		return BackendHerdr
 	case env.InsideTmux && env.TmuxAvailable:
 		return BackendTmux
-	case env.TmuxAvailable:
-		return BackendTmux
 	case env.HerdrAvailable:
 		return BackendHerdr
+	case env.TmuxAvailable:
+		return BackendTmux
 	default:
 		return BackendOff
 	}

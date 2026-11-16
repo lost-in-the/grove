@@ -28,9 +28,10 @@ Reference for AI agents helping users install, configure, or use Grove. Develope
 
 ## Multiplexer backends
 
-Grove drives tmux by default and [herdr](https://herdr.dev) when
-`[mux] backend = "herdr"` (or under `auto`, when grove is running inside a herdr
-pane — `HERDR_ENV=1`). Everything in this guide works the same either way.
+Grove drives [herdr](https://herdr.dev) or tmux, chosen by `[mux] backend`.
+Under `auto` (the default) the multiplexer grove is running inside wins
+(`HERDR_ENV=1`, then `TMUX`). Outside both, grove uses whichever is installed,
+and herdr when both are. Everything in this guide works the same either way.
 
 Two things are worth knowing as an agent:
 

@@ -5,8 +5,8 @@
 > and [`CLAUDE.md`](CLAUDE.md) for codebase rules.
 
 Grove is a Go CLI that manages git worktrees with terminal-multiplexer + Docker
-integration. tmux is the default; [herdr](https://herdr.dev) is supported via
-`[mux] backend`. Every
+integration. The multiplexer is [herdr](https://herdr.dev) or tmux, chosen by
+`[mux] backend`; `auto` prefers herdr when both are installed. Every
 command completes in <500ms. Always prefer `--json` flags — all status output is
 machine-parseable.
 

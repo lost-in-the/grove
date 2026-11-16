@@ -237,6 +237,17 @@ type KillReport struct {
 	Unchecked []string
 }
 
+// SessionKiller is implemented by backends whose sessions have a handle more
+// exact than a Target: herdr's workspace id. A Target finds a session by
+// checkout path and then by label, and herdr labels are not unique, so closing
+// a listed session whose checkout is gone through Kill could close a different
+// session that shares its label. KillSession closes the listed one and no
+// other.
+type SessionKiller interface {
+	// KillSession destroys exactly s, as returned by List.
+	KillSession(s Session) error
+}
+
 // AttachPreparer is implemented by backends whose attach command cannot name
 // its target — herdr's client starts on whichever workspace its server has
 // focused. PrepareAttach readies the target so that a user who runs AttachHint
