@@ -20,5 +20,5 @@
    ○ refuse       Do not move               
    ○ auto-stash   Stash the files, then     
                   move                      
-  [1m↑↓/jk[m field · [1m←→/hl[m change                
+  move · [1m↑↓/jk[m move · [1m←→/hl[m change          
   saves as you go · [1mesc[m close               

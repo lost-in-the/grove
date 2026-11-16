@@ -19,6 +19,6 @@
 [2m               [m│                                                │[2m               [m
 [2m               [m│                                                │[2m               [m
 [2m               [m│                                                │[2m               [m
-[2m root · test co[m│  ↑↓ scroll · esc close                         │[2m               [m
-[2m  ↑↓ navigate ·[m│                                                │[2m               [m
+[2m root · test co[m│  move · [1m↑↓/jk[m scroll · [1mesc[m close               │[2m               [m
+[2m  move · ↑↓/jk [m│                                                │[2m               [m
 [2m  tab detail · [m╰────────────────────────────────────────────────╯[2m               [m

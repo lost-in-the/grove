@@ -83,6 +83,9 @@ internal/tui/testdata/
                       short_80x20/, and cramped_80x15/ for small screens)
   TestGolden_BranchForm_OverPRBrowser/
     standard_80x24.golden  wide_120x40.golden
+  TestGolden_InputModel/  (the input model's states: a dashboard filter
+                           applied and being typed, a PR filter applied, and
+                           the form over a filtered list, at 80x24 and 120x40)
   TestGolden_Overlay_Bulk/
     with_items.golden
     empty.golden

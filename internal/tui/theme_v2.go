@@ -92,6 +92,7 @@ type StyleSet struct {
 	HelpKeyHighlight lipgloss.Style
 	HelpDesc         lipgloss.Style
 	HelpSep          lipgloss.Style
+	HelpMode         lipgloss.Style // the footer's mode word: move or type
 
 	// Input
 	InputBorder lipgloss.Style
@@ -194,6 +195,7 @@ func NewStyleSet(cs ColorScheme) StyleSet {
 		HelpKeyHighlight: lipgloss.NewStyle().Foreground(cs.HeaderBg).Background(cs.Primary).Bold(true),
 		HelpDesc:         lipgloss.NewStyle().Foreground(cs.TextMuted),
 		HelpSep:          lipgloss.NewStyle().Foreground(cs.TextMuted),
+		HelpMode:         lipgloss.NewStyle().Foreground(cs.TextMuted).Background(cs.SelectionBg),
 
 		// Input
 		InputBorder: lipgloss.NewStyle().

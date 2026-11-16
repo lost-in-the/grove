@@ -20,5 +20,5 @@
    ○ true    Take the stack down on the     
              worktree you leave             
    ● [1mfalse[m   Leave it up (default)          
-  [1m↑↓/jk[m field · [1m←→/hl[m change                
+  move · [1m↑↓/jk[m move · [1m←→/hl[m change          
   saves as you go · [1mesc[m close               

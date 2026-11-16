@@ -160,21 +160,22 @@ func TestConfig_FooterMatchesTheField(t *testing.T) {
 
 // j/k and h/l work as well as the arrows, so the footer names them, joined
 // with a slash as the other footers join a key pair. While a field is being
-// typed in, they type, so they are not named then.
+// typed in, they type, so they are not named then, and the mode word says
+// type.
 func TestConfig_FooterShowsVimKeys(t *testing.T) {
 	m := openConfigWith(t, 80, 24, nil)
 	footer := func(m Model) string { return stripAnsi(m.configFooter()) }
 
 	m = focusField(t, m, "switch.dirty_handling")
-	if f := footer(m); !strings.Contains(f, "↑↓/jk field") || !strings.Contains(f, "←→/hl change") {
+	if f := footer(m); !strings.HasPrefix(strings.TrimSpace(f), "move · ↑↓/jk move") || !strings.Contains(f, "←→/hl change") {
 		t.Errorf("on a choice: %q", f)
 	}
 	m = focusField(t, m, "naming.pattern")
-	if f := footer(m); !strings.Contains(f, "↑↓/jk field") || !strings.Contains(f, "enter edit") || strings.Contains(f, "hl") {
+	if f := footer(m); !strings.Contains(f, "↑↓/jk move") || !strings.Contains(f, "enter edit") || strings.Contains(f, "hl") {
 		t.Errorf("on a text field: %q", f)
 	}
 	m = sendConfigKeys(t, m, "enter")
-	if f := footer(m); strings.Contains(f, "jk") || strings.Contains(f, "hl") {
+	if f := footer(m); strings.Contains(f, "jk") || strings.Contains(f, "hl") || !strings.HasPrefix(strings.TrimSpace(f), "type ·") {
 		t.Errorf("while editing, j and k type: %q", f)
 	}
 }
@@ -191,7 +192,7 @@ func TestConfig_FooterFitsAt44(t *testing.T) {
 			t.Errorf("%s: footer is %d lines, reserved %d", key, got, want)
 		}
 		plain := stripAnsi(f)
-		for _, hint := range []string{"↑↓/jk field", "saves as you go", "u undo", "esc close"} {
+		for _, hint := range []string{"move · ", "↑↓/jk move", "saves as you go", "u undo", "esc close"} {
 			if !strings.Contains(plain, hint) {
 				t.Errorf("%s: footer lacks %q:\n%s", key, hint, plain)
 			}
@@ -577,8 +578,8 @@ func TestConfig_ConfirmStepText(t *testing.T) {
 		if view := flatView(t, m); !strings.Contains(view, c.want) || !strings.Contains(view, warnTwo) {
 			t.Errorf("%s: want %q and the warning in:\n%s", c.key, c.want, stripAnsi(m.viewString()))
 		}
-		if f := strings.TrimSpace(stripAnsi(m.configFooter())); f != "enter change · esc cancel" {
-			t.Errorf("%s: footer %q, want enter change · esc cancel", c.key, f)
+		if f := strings.TrimSpace(stripAnsi(m.configFooter())); f != "type · enter change · esc cancel" {
+			t.Errorf("%s: footer %q, want type · enter change · esc cancel", c.key, f)
 		}
 	}
 }

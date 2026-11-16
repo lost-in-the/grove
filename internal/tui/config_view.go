@@ -53,8 +53,8 @@ func (m Model) configLayout() configLayout {
 	}
 	l.labelW = min(l.labelW, max(8, l.inner-2-2-8)) // leave the value 8 cells
 	l.listH = max(1, l.listH)
-	for _, hints := range configFooterVariants() {
-		l.footerH = max(l.footerH, lipgloss.Height(m.helpFooter.RenderCompactWithHints(hints, m.width-4)))
+	for _, f := range configFooterVariants() {
+		l.footerH = max(l.footerH, lipgloss.Height(m.helpFooter.Render(f, m.width-4)))
 	}
 	body := max(0, m.height-1-2-l.footerH) // under the header, the tabs, and a blank
 	if l.wide {
@@ -97,46 +97,50 @@ func configListShape(fields []ConfigField) []configListRow {
 	return rows
 }
 
-// configHints are the keys that work in the panel's current state.
-func (s *ConfigState) configHints() []Hint {
+// configKeys is the footer for the panel's current state. H and L switch
+// sections too, but the tab row's numbers already show how to.
+func (s *ConfigState) configKeys() Footer {
 	f := s.focused()
 	switch {
 	case f == nil:
-		return []Hint{{"esc", "close"}}
+		return moveFooter(Hint{"esc", "close"})
 	case s.confirming:
-		return []Hint{{"enter", "change"}, {"esc", "cancel"}}
+		return configConfirmFooter()
 	case s.editing:
-		return []Hint{{"enter", "save"}, {"esc", "cancel"}}
+		return configEditFooter()
 	}
-	return configFieldHints(f.Type, len(s.undo) > 0)
+	return configFieldFooter(f.Type, len(s.undo) > 0)
 }
 
-func configFieldHints(t ConfigFieldType, canUndo bool) []Hint {
+func configEditFooter() Footer    { return typeFooter(Hint{"esc", "cancel"}, Hint{"enter", "save"}) }
+func configConfirmFooter() Footer { return typeFooter(Hint{"esc", "cancel"}, Hint{"enter", "change"}) }
+
+func configFieldFooter(t ConfigFieldType, canUndo bool) Footer {
 	change := Hint{"←→/hl", "change"}
 	if t == ConfigString || t == ConfigList {
 		change = Hint{"enter", "edit"}
 	}
-	hints := []Hint{{"↑↓/jk", "field"}, change, {"", "saves as you go"}}
+	hints := []Hint{{"↑↓/jk", "move"}, change, {"", "saves as you go"}}
 	if canUndo {
 		hints = append(hints, Hint{"u", "undo"})
 	}
-	return append(hints, Hint{"esc", "close"})
+	return moveFooter(Hint{"esc", "close"}, hints...)
 }
 
-// configFooterVariants are every hint line the panel can show, so the
+// configFooterVariants are every footer the panel can show, so the
 // footer's height is the same whichever is shown.
-func configFooterVariants() [][]Hint {
-	return [][]Hint{
-		configFieldHints(ConfigEnum, true),
-		configFieldHints(ConfigString, true),
-		{{"enter", "save"}, {"esc", "cancel"}},
-		{{"enter", "change"}, {"esc", "cancel"}},
+func configFooterVariants() []Footer {
+	return []Footer{
+		configFieldFooter(ConfigEnum, true),
+		configFieldFooter(ConfigString, true),
+		configEditFooter(),
+		configConfirmFooter(),
 	}
 }
 
 // configFooter is the hint line, padded to the layout's footer height.
 func (m Model) configFooter() string {
-	footer := m.helpFooter.RenderCompactWithHints(m.configState.configHints(), m.width-4)
+	footer := m.helpFooter.Render(m.configState.configKeys(), m.width-4)
 	return clampLines(footer, m.configLayout().footerH)
 }
 

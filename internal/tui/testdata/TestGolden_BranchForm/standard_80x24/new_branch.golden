@@ -1,6 +1,6 @@
  [1m[1mtest-project[m · 5 worktrees · ⬍ name                                        1/5[m 
                                                                                 
- ❯ ● [1mroot[m                                                               0s      
+   ● [1mroot[m                                                               0s      
    ○ feature-auth                                                      60m      
    ○ fix-bug                                                            2h      
    ● testing                                                            3h      
@@ -11,7 +11,7 @@
                                                                                 
  ──[1m New worktree [m────────────────────────────────────────────────────────────── 
  ❯ Branch  [37m[mabc-12[7;37m [m                                                              
-           ❯ + new "abc-12"                                           from main 
+           › + new "abc-12"                                           from main 
                                                                                 
                                                                                 
                                                                                 
@@ -21,4 +21,4 @@
            session grove-abc-12                                                 
                                                                                 
  ✓ ready                                                                        
- [1m↑↓[m pick · [1mtab[m next · [1menter[m create · [1mesc[m back                                   
+ type · [1m↑↓/ctrl+jk[m pick · [1mtab[m next · [1menter[m create · [1mesc[m cancel                  

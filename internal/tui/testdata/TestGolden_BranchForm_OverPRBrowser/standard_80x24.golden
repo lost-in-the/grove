@@ -1,7 +1,7 @@
  [1m[1mtest-project[m  ←  [1mPull Requests[m                                   esc to return[m 
  3 open                                                                         
                                                                                 
- ❯ #42    Add user authentication flow  feature/auth                            
+   #42    Add user authentication flow  feature/auth                            
           @alice · 3 commits · +245 -12  ✓ worktree                             
                                                                                 
    #38    [DRAFT] Fix login redirect loop  fix/login                            
@@ -11,7 +11,7 @@
           @carol · 7 commits · +1,203 -456                                      
  ──[1m New worktree [m────────────────────────────────────────────────────────────── 
  ❯ Branch  [37m[mabc-12[7;37m [m                                                              
-           ❯ + new "abc-12"                                           from main 
+           › + new "abc-12"                                           from main 
                                                                                 
                                                                                 
                                                                                 
@@ -21,4 +21,4 @@
            session grove-abc-12                                                 
                                                                                 
  ✓ ready                                                                        
- [1m↑↓[m pick · [1mtab[m next · [1menter[m create · [1mesc[m back                                   
+ type · [1m↑↓/ctrl+jk[m pick · [1mtab[m next · [1menter[m create · [1mesc[m cancel                  

@@ -1,6 +1,6 @@
  [1m[1mtest-project[m · 5 worktrees · ⬍ name                                        1/5[m 
                                                                                 
- ❯ ● [1mroot[m                                                               0s      
+   ● [1mroot[m                                                               0s      
    ○ feature-auth                                                      60m      
    ○ fix-bug                                                            2h      
    ● testing                                                            3h      
@@ -12,7 +12,7 @@
  ──[1m New worktree [m────────────────────────────────────────────────────────────── 
    Branch  [37m[m[37mabc-12[m [37m                                                             [m 
  ❯ Base    [37m[mf[7;37m [m                                                                   
-           ❯ feature/auth                                          in use: auth 
+           › feature/auth                                          in use: auth 
              fix/login                                                 existing 
                                                                                 
                                                                                 
@@ -21,4 +21,4 @@
            session grove-abc-12                                                 
                                                                                 
  base branch "f" not found                                                      
- [1m↑↓[m pick · [1mtab[m next · [1menter[m create · [1mesc[m back                                   
+ type · [1m↑↓/ctrl+jk[m pick · [1mtab[m next · [1menter[m create · [1mesc[m cancel                  

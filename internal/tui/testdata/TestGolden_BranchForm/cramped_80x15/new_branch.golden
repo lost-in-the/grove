@@ -1,6 +1,6 @@
  ──[1m New worktree [m────────────────────────────────────────────────────────────── 
  ❯ Branch  [37m[mabc-12[7;37m [m                                                              
-           ❯ + new "abc-12"                                           from main 
+           › + new "abc-12"                                           from main 
                                                                                 
                                                                                 
                                                                                 
@@ -12,4 +12,4 @@
                                                                                 
                                                                                 
  ✓ ready                                                                        
- [1m↑↓[m pick · [1mtab[m next · [1menter[m create · [1mesc[m back                                   
+ type · [1m↑↓/ctrl+jk[m pick · [1mtab[m next · [1menter[m create · [1mesc[m cancel                  

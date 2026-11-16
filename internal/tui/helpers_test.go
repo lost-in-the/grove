@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/help"
@@ -147,6 +148,11 @@ func makeKeyMsg(keyStr string) tea.KeyPressMsg {
 	case "shift+tab":
 		return tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
 	default:
+		// ctrl plus one character, as the kitty protocol and tmux extended
+		// keys deliver ctrl+[, ctrl+m, and ctrl+i: apart from esc, enter, tab.
+		if rest, ok := strings.CutPrefix(keyStr, "ctrl+"); ok && len([]rune(rest)) == 1 {
+			return tea.KeyPressMsg{Code: []rune(rest)[0], Mod: tea.ModCtrl}
+		}
 		// Printable character(s)
 		runes := []rune(keyStr)
 		if len(runes) == 1 {

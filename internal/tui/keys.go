@@ -66,6 +66,12 @@ type KeyMap struct {
 	Omni         key.Binding
 }
 
+// finderDown and finderUp are the keys that move through a finder's rows
+// while you type. Each pair is taken by some multiplexer or terminal, so all
+// three are bound and one always arrives.
+func finderDown(k string) bool { return k == "down" || k == "ctrl+j" || k == "ctrl+n" }
+func finderUp(k string) bool   { return k == "up" || k == "ctrl+k" || k == "ctrl+p" }
+
 // ShortHelp returns keybindings for the short help view (help.KeyMap interface).
 func (k KeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{k.Enter, k.SwitchUp, k.New, k.Delete, k.Rename, k.Fork, k.Checkout, k.Sync, k.Config, k.PRs, k.Issues, k.Sort, k.Filter, k.Help, k.Quit}
@@ -91,8 +97,11 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("down", "j"),
 			key.WithHelp("↓/j", "down"),
 		),
+		// ctrl+m, ctrl+[, and ctrl+i are enter, esc, and tab on most
+		// terminals, but the kitty keyboard protocol and tmux extended keys
+		// send them as keys of their own.
 		Enter: key.NewBinding(
-			key.WithKeys("enter"),
+			key.WithKeys("enter", "ctrl+m"),
 			key.WithHelp("enter", "switch"),
 		),
 		New: key.NewBinding(
@@ -120,7 +129,7 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("q", "quit"),
 		),
 		Escape: key.NewBinding(
-			key.WithKeys("esc"),
+			key.WithKeys("esc", "ctrl+["),
 			key.WithHelp("esc", "back"),
 		),
 		Back: key.NewBinding(
@@ -128,7 +137,7 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("backspace", "back"),
 		),
 		Tab: key.NewBinding(
-			key.WithKeys("tab"),
+			key.WithKeys("tab", "ctrl+i"),
 			key.WithHelp("tab", "detail"),
 		),
 		ShiftTab: key.NewBinding(

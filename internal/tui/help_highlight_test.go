@@ -99,7 +99,7 @@ func TestRenderCompactHighlightsMatchedKey(t *testing.T) {
 	if !strings.Contains(highlightRender, "goto") {
 		t.Error("highlighted render should still contain 'goto' description")
 	}
-	if !strings.Contains(highlightRender, "navigate") {
-		t.Error("highlighted render should still contain 'navigate' description")
+	if !strings.Contains(highlightRender, "quit") {
+		t.Error("highlighted render should still contain 'quit' description")
 	}
 }

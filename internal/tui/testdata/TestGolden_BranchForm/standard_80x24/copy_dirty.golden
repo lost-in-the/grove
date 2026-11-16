@@ -1,6 +1,6 @@
  [1m[1mtest-project[m · 5 worktrees · ⬍ name                                        1/5[m 
                                                                                 
- ❯ ● [1mroot[m                                                               0s      
+   ● [1mroot[m                                                               0s      
    ○ feature-auth                                                      60m      
    ○ fix-bug                                                            2h      
    ● testing                                                            3h      
@@ -21,4 +21,4 @@
                                                                                 
                                                                                 
  ✓ ready · 2 files changed, will be copied                                      
- [1mtab[m next · [1menter[m copy · [1mesc[m back                                               
+ type · [1mtab[m next · [1menter[m copy · [1mesc[m cancel                                      

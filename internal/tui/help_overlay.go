@@ -80,10 +80,7 @@ func (h *HelpOverlay) View(width, height int) string {
 	vpContent := h.viewport.View()
 	footerRule := lipgloss.NewStyle().Foreground(Colors.SurfaceBorder).
 		Render(strings.Repeat("─", textWidth))
-	footerKeys := "  " +
-		Styles.HelpKey.Render("↑↓") + " " + Styles.HelpDesc.Render("scroll") +
-		Styles.HelpSep.Render(" · ") +
-		Styles.HelpKey.Render("esc") + " " + Styles.HelpDesc.Render("close")
+	footerKeys := "  " + keyLine(moveFooter(Hint{"esc", "close"}, Hint{"↑↓/jk", "scroll"}), textWidth-2)
 	content := vpContent + "\n" + footerRule + "\n" + footerKeys
 
 	return Styles.OverlayBorderInfo.
@@ -256,7 +253,31 @@ func helpSectionsFor(view ActiveView) []helpSection {
 	}
 }
 
-var helpSectionsDashboard = []helpSection{
+// helpSectionKeys is the input model (docs/TUI.md): the same keys on
+// every screen, with every alternate.
+var helpSectionKeys = []helpSection{
+	{title: "Moving and typing", note: "j/k move. While you type, hold ctrl.", items: []helpEntry{
+		{"move / type", "The footer's first word: letters are commands, or they type"},
+		{"↑/k ↓/j", "Move through rows or fields"},
+		{"esc / ctrl+[", "Leave: back, close, clear, or cancel"},
+		{"enter / ctrl+m", "The action the footer names"},
+		{"tab / ctrl+i", "The tab key; ctrl+[, ctrl+m, and ctrl+i arrive as their own keys under some terminals"},
+		{"ctrl+u", "While typing: delete before the cursor (ctrl+k never deletes)"},
+		{"q / ctrl+c", "Quit, from the list"},
+	}},
+	{title: "Filter (/)", note: "Narrows the list in place.", items: []helpEntry{
+		{"enter / tab", "Keep the filter and go back to the list"},
+		{"esc", "While typing: clear it. On the list: clear an applied filter"},
+		{"/", "Edit the applied filter"},
+	}},
+	{title: "Find (space) and the form's Branch and Base", note: "Three key sets, so one always gets through.", items: []helpEntry{
+		{"↑↓, ctrl+j/k, ctrl+n/p", "Pick the next / previous row"},
+		{"tab / shift+tab", "Find only: next / previous row (in the form they change field)"},
+		{"enter", "Run the highlighted row"},
+	}},
+}
+
+var helpSectionsDashboard = append(helpSectionKeys[:len(helpSectionKeys):len(helpSectionKeys)], []helpSection{
 	{title: "Navigation", items: []helpEntry{
 		{"↑/k ↓/j", "Move up / down"},
 		{"g", "Goto strip (g top, p PRs, i issues, c config, u upgrade, d local diff, a agent under herdr)"},
@@ -304,7 +325,7 @@ var helpSectionsDashboard = []helpSection{
 		{"grove diff <name>", "Diff against another worktree"},
 		{"grove doctor", "Health check for grove setup"},
 	}},
-}
+}...)
 
 var helpSectionsDelete = []helpSection{
 	{title: "Delete Worktree", note: "Remove a worktree and optionally its git branch.", items: []helpEntry{
@@ -318,8 +339,8 @@ var helpSectionsDelete = []helpSection{
 var helpSectionsBranchForm = []helpSection{
 	{title: "Branch Form", note: "New (n), copy (f), and switch branch (b) share this form. Name is the worktree's short name; the form shows the folder and session it makes, and what enter will do.", items: []helpEntry{
 		{"tab / shift+tab", "Next / previous field (tab on Branch takes the highlighted row)"},
-		{"↑/↓", "Move through the focused field's suggestions"},
-		{"←/→ / space", "Choose what happens to uncommitted changes (copy)"},
+		{"↑/↓, ctrl+j/k, ctrl+n/p", "Move through the focused field's suggestions"},
+		{"←/h →/l / space", "Choose what happens to uncommitted changes (copy)"},
 		{"enter", "Create, copy, or switch"},
 		{"esc", "Close"},
 	}},
@@ -407,7 +428,7 @@ var helpSectionsConfig = []helpSection{
 		{"enter", "Edit a text or list field"},
 		{"u", "Undo the last change"},
 		{"1-4", "Go to a section"},
-		{"ctrl+n / ctrl+p", "Next / previous section"},
+		{"H / L", "Previous / next section"},
 		{"esc", "Close"},
 	}},
 	{title: "While editing a field", items: []helpEntry{

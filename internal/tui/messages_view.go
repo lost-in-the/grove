@@ -67,7 +67,7 @@ entries:
 	for len(lines) < rows {
 		lines = append(lines, "")
 	}
-	footer := Styles.Footer.Render("↑↓ scroll · esc close")
+	footer := keyLine(moveFooter(Hint{"esc", "close"}, Hint{"↑↓/jk", "scroll"}), inner)
 	body := Styles.OverlayTitle.Render("Messages") + "\n\n" + strings.Join(lines, "\n") + "\n\n" + footer
 	return Styles.OverlayBorder.Width(d.overlay).Render(body)
 }

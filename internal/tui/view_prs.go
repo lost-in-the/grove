@@ -110,6 +110,11 @@ func (m Model) handlePRNormalKey(msg tea.KeyPressMsg, filtered []*tracker.PullRe
 	s := m.prState
 
 	switch {
+	case key.Matches(msg, m.keys.Escape) && s.FilterInput.Value() != "":
+		s.FilterInput.SetValue("")
+		s.Cursor = 0
+		return m, nil
+
 	case key.Matches(msg, m.keys.Escape):
 		m.popView()
 		m.prState = nil

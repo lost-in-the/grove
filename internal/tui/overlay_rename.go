@@ -22,7 +22,7 @@ type RenameState struct {
 
 // NewRenameState creates a new RenameState for the given worktree item.
 func NewRenameState(item *WorktreeItem) *RenameState {
-	ti := textinput.New()
+	ti := newTextInput()
 	ti.Prompt = "New name: "
 	ti.Placeholder = item.ShortName
 	ti.CharLimit = 100
@@ -114,7 +114,7 @@ func renderRename(s *RenameState, width int) string {
 		b.WriteString("\n" + d.indent + Styles.ErrorText.Render(s.Error) + "\n")
 	}
 
-	b.WriteString("\n" + Styles.Footer.Render(d.indent+"[enter] rename  [esc] cancel"))
+	b.WriteString("\n" + promptKeys(typeFooter(Hint{"esc", "cancel"}, Hint{"enter", "rename"}), d.inner, d.indent))
 
 	return Styles.OverlayBorder.Width(d.overlay).Render(
 		Styles.OverlayTitle.Render("Rename Worktree") + "\n\n" + b.String(),

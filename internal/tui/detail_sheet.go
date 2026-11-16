@@ -60,7 +60,7 @@ func (m Model) handleDetailSheetKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // and the scroll hints.
 func (m Model) renderDetailSheet() string {
 	statusBar := m.buildDashboardHeader().View(m.width)
-	footer := m.helpFooter.RenderCompactWithHints(m.dashboardDetailFocusedHints(), m.width-4)
+	footer := m.helpFooter.Render(m.dashboardDetailFooter(), m.width-4)
 	body := lipgloss.NewStyle().Padding(0, 1).Render(m.detail.View())
 	body = m.clampBodyToHeight(body, footer)
 	return lipgloss.JoinVertical(lipgloss.Left, statusBar, body, footer)

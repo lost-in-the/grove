@@ -15,6 +15,7 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	lipgloss "charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/config"
@@ -424,13 +425,7 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 	m.loading = false
 
 	if m.pendingSelect != "" {
-		for i, li := range listItems {
-			if item, ok := li.(WorktreeItem); ok && item.ShortName == m.pendingSelect {
-				m.list.Select(i)
-				tuilog.Printf("pendingSelect: highlighted %q at index %d, path=%q", m.pendingSelect, i, item.Path)
-				break
-			}
-		}
+		m.selectNewWorktree(m.pendingSelect)
 		m.pendingSelect = ""
 	}
 
@@ -464,6 +459,33 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 		lookupPRsCmd(branches),
 		fetchDetailMetricsCmd(m.detailMetricsGen, msg.items, ResolveDefaultBranch(m.cfg)),
 	)
+}
+
+// selectNewWorktree selects the worktree named name after a fetch. SetItems
+// filters an applied filter again only later, in a command, so the filter is
+// run here at once to select by visible row; a filter that hides the new
+// worktree is cleared, as g a clears one that hides its target.
+func (m *Model) selectNewWorktree(name string) {
+	if m.list.FilterState() == list.FilterApplied {
+		m.list.SetFilterText(m.list.FilterValue())
+	}
+	find := func() int {
+		for i, li := range m.list.VisibleItems() {
+			if item, ok := li.(WorktreeItem); ok && item.ShortName == name {
+				return i
+			}
+		}
+		return -1
+	}
+	i := find()
+	if i < 0 && m.list.FilterState() != list.Unfiltered {
+		m.list.ResetFilter()
+		i = find()
+	}
+	if i >= 0 {
+		m.list.Select(i)
+		tuilog.Printf("pendingSelect: highlighted %q at visible row %d", name, i)
+	}
 }
 
 func (m Model) handleDetailMetricsLoaded(msg detailMetricsLoadedMsg) (tea.Model, tea.Cmd) {
@@ -778,6 +800,12 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	if m.list.FilterState() == list.Filtering {
 		m.pendingG = false
+		// The list keeps a filter only when it has text; enter and tab on
+		// an empty one still go back to the list.
+		if m.list.FilterValue() == "" && (key.Matches(msg, m.keys.Enter) || key.Matches(msg, m.keys.Tab)) {
+			m.list.ResetFilter()
+			return m, nil
+		}
 		prevIdx := m.list.Index()
 		var cmd tea.Cmd
 		m.list, cmd = m.list.Update(msg)
@@ -824,21 +852,20 @@ func (m *Model) updateLayout() {
 
 	contentWidth := m.width - 2 // body padding (1 char each side)
 
-	listHeaderHeight := 0
-
 	useSideBySide := isWideLayout(m.width)
 	if useSideBySide {
-		// List gets 60% of content width, detail gets the remainder
+		// List gets 60% of content width, detail gets the remainder. The
+		// filter row sits above the list.
 		listWidth := contentWidth * 60 / 100
 		dividerWidth := 3 // " │ "
 		detailWidth := contentWidth - listWidth - dividerWidth
-		m.list.SetSize(listWidth, available-listHeaderHeight)
+		m.list.SetSize(listWidth, max(1, available-1))
 		m.detail.SetWidth(detailWidth)
 		m.detail.SetHeight(available)
 	} else {
-		// The list takes everything but the selection line. The detail
-		// viewport is sized for the full-screen sheet.
-		m.list.SetSize(contentWidth, max(1, available-1))
+		// The list takes everything but the filter row and the selection
+		// line. The detail viewport is sized for the full-screen sheet.
+		m.list.SetSize(contentWidth, max(1, available-2))
 		m.detail.SetWidth(contentWidth)
 		m.detail.SetHeight(max(3, available))
 	}
@@ -1622,9 +1649,12 @@ func (m Model) renderDashboard() string {
 	body := m.renderDashboardBody()
 
 	var footer string
-	if m.detailFocused {
-		footer = m.helpFooter.RenderCompactWithHints(m.dashboardDetailFocusedHints(), m.width-4)
-	} else {
+	switch {
+	case m.detailFocused:
+		footer = m.helpFooter.Render(m.dashboardDetailFooter(), m.width-4)
+	case m.list.FilterState() == list.Filtering:
+		footer = m.helpFooter.Render(filterTypingFooter(), m.width-4)
+	default:
 		footer = m.helpFooter.RenderCompact(ViewDashboard, m.width-4)
 	}
 	if strip := m.renderOpenStrip(); strip != "" {
@@ -1677,15 +1707,23 @@ func (m Model) renderDashboardBody() string {
 
 func (m Model) renderSideBySideBody() string {
 	listWidth := m.list.Width()
-	listContent := lipgloss.NewStyle().Width(listWidth).Render(m.list.View())
-	divider := renderVerticalDivider(m.list.Height(), Colors.SurfaceDim)
+	listContent := lipgloss.NewStyle().Width(listWidth).Render(m.dashboardListView(m.list))
+	divider := renderVerticalDivider(m.list.Height()+1, Colors.SurfaceDim)
 	detailView := m.renderDetailPanel()
 	return lipgloss.JoinHorizontal(lipgloss.Top, listContent, divider, detailView)
 }
 
 func (m Model) renderStackedBody() string {
 	bodyWidth := m.width - 2
-	return lipgloss.JoinVertical(lipgloss.Left, m.list.View(), m.renderSelectionLine(bodyWidth))
+	return lipgloss.JoinVertical(lipgloss.Left, m.dashboardListView(m.list), m.renderSelectionLine(bodyWidth))
+}
+
+// dashboardListView is l under its filter row, which is blank when no
+// filter is open. l is the dashboard list, sized by the caller.
+func (m Model) dashboardListView(l list.Model) string {
+	typing := l.FilterState() == list.Filtering
+	row := filterRow(filterInputView(l.FilterInput, typing), typing, l.FilterValue(), len(l.VisibleItems()), len(l.Items()))
+	return ansi.Truncate(row, l.Width(), "…") + "\n" + l.View()
 }
 
 // clampBodyToHeight trims the body so statusBar + body + footer fits exactly m.height lines.
@@ -1776,17 +1814,14 @@ func renderDetailV2Focused(item *WorktreeItem, width int) string {
 	return card
 }
 
-// dashboardDetailFocusedHints returns hints for when the dashboard detail panel is focused.
-func (m Model) dashboardDetailFocusedHints() []Hint {
-	hints := []Hint{
-		{"↑↓", "scroll"},
-		{"g/G", "top/bottom"},
-	}
+// dashboardDetailFooter is the footer of the focused detail pane and the
+// detail sheet.
+func (m Model) dashboardDetailFooter() Footer {
+	var extra []Hint
 	if item, ok := m.selectedItem(); ok && item.AssociatedPR != nil {
-		hints = append(hints, Hint{"B", "open PR"})
+		extra = append(extra, Hint{"B", "open in browser"})
 	}
-	hints = append(hints, Hint{"tab", "list"}, Hint{"esc", "list"})
-	return hints
+	return detailFooter(Hint{"esc/tab", "back"}, extra...)
 }
 
 // clampLines pads or trims s to exactly n lines.

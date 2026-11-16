@@ -21,4 +21,4 @@
    {project} is the project name, {name} the worktree's short name.             
    Each appears once. Other characters: letters, digits, . _ -                  
   Press enter again to change. esc keeps "{project}-{name}".                    
-  [1menter[m change · [1mesc[m cancel                                                     
+  type · [1menter[m change · [1mesc[m cancel                                              

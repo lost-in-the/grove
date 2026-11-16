@@ -16,6 +16,69 @@ To disable the TUI and get plain command output, set `GROVE_TUI=0`:
 GROVE_TUI=0 grove
 ```
 
+## Input model
+
+One rule for every screen: **`j`/`k` move. While you type, hold `ctrl`.** The `ctrl` part is for `j`/`k` only; `ctrl+h` and `ctrl+l` are never bound. Future screens follow this section.
+
+### Two modes
+
+The footer's first word names the mode, so it is always on screen.
+
+| Mode | When | Letters |
+|---|---|---|
+| `move` | No text field has focus | Commands. `j`/`k` and the arrows move. |
+| `type` | A text field has focus (a text cursor shows) | Type, digits and `/` too. |
+
+### Two kinds of text entry
+
+| | Filter | Finder |
+|---|---|---|
+| Where | `/` on the dashboard list, the PR browser, and the issue browser | Find (`space`, `?`), and the form's Branch and Base fields |
+| Typing | Narrows the list in place | Lists results or suggestions under the field |
+| Rows while typing | Do not move | `ctrl+j`/`ctrl+k`, `ctrl+n`/`ctrl+p`, and the arrows move them |
+| `enter` | Keeps the filter, back to `move` on the list | Acts on the highlighted row |
+| `tab` | Same as `enter` | Find: next row (`shift+tab` previous). Form: next field |
+| `esc` | Clears the text and leaves the filter | Closes find, or cancels the form |
+
+On the list with a filter applied, `esc` clears the filter and `/` opens it again with its text. The filter row stays visible while a filter is applied (see Filtering).
+
+### Keys
+
+| Key | Alternates | Does |
+|---|---|---|
+| `j` / `k` | `↓` / `↑` | Move through rows or fields, in `move` |
+| `ctrl+j` / `ctrl+k` | `ctrl+n` / `ctrl+p`, `↓` / `↑` | Pick the next or previous row in a finder, while typing |
+| `esc` | `ctrl+[` | Leave: `back`, `close`, `clear`, or `cancel` |
+| `enter` | `ctrl+m` | The action the footer names |
+| `tab` | `ctrl+i` | Next field, the detail pane, or keep a filter |
+| `ctrl+u` | | While typing: delete before the cursor. `ctrl+k` never deletes. |
+| `q` | `ctrl+c` | Quit, from the dashboard list. `esc` at the root never quits. |
+
+Why three pick sets: each multiplexer and terminal takes some `ctrl` pairs for itself, and a different pair on each. Binding all three means one always arrives. `ctrl+[`, `ctrl+m`, and `ctrl+i` are `esc`, `enter`, and `tab` on most terminals; under the kitty keyboard protocol and tmux extended keys they arrive as keys of their own, so grove binds them too.
+
+### Footer
+
+Every screen's key line has one format: `<mode> · <keys> <verb> · ...`. A key pair is joined with a slash: `↑↓/jk move`, `↑↓/ctrl+jk pick`. The leave key comes last.
+
+| Verb | Means |
+|---|---|
+| `move` | Move the cursor through rows or fields |
+| `pick` | Move through results or suggestions in a finder |
+| `scroll` | Scroll a pane that has no cursor |
+| `change` | Change a value |
+| `enter <verb>` | The action, named: `switch`, `create`, `review`, `save` |
+| `esc back` | Return focus within a screen (the detail pane to the list) |
+| `esc close` | Close a screen or overlay (find, settings, a browser, help) |
+| `esc clear` | Remove a filter |
+| `esc cancel` | Drop what you started (the form, a prompt, a text edit) |
+| `tab <verb>` | `next` field, `detail` pane, `keep` a filter |
+
+When a footer does not fit, it takes a second line where the screen allows one; then hints drop from the right, one at a time. The mode word, the `enter` hint, and the leave key never drop. Panels with their own key line (the form, find, prompts) take the same format. The form and find reserve a second row only at widths where their longest line needs it, so the line never moves while you work.
+
+### Focus
+
+One `❯` is on screen, in the focused pane. When the New Worktree form has focus, the list beside or above it draws no `❯` and no selection bar; the selected row keeps its bold name, at full contrast. Inside the form only the focused field has `❯`; the highlighted suggestion has a lighter `›`. The focused pane's border or title rule is in the accent color with a bold title, as the focused detail pane's is. (Find and the centered prompts draw over a dimmed screen; the dimmed list behind them keeps its row marked.)
+
 ## Dashboard Layout
 
 The dashboard adjusts to your terminal width:
@@ -69,7 +132,7 @@ Selecting a worktree updates the detail panel with:
 
 ### Footer
 
-A compact hint bar at the bottom shows essential keybindings. Press `?` to open a scrollable, context-sensitive help overlay with the full reference for the current view.
+A compact hint bar at the bottom shows essential keybindings, in the format the Input model section sets: `move · ↑↓/jk move · enter switch · ␣ find · tab detail · / filter · g goto · ? help · q quit`. It takes two lines on a narrow terminal. The full reference, with every alternate key, is `keyboard shortcuts` in `?`.
 
 ### Upgrade badge
 
@@ -113,7 +176,7 @@ Toast levels:
 | `1`–`9` | Switch to the worktree pinned to that slot |
 | `m` then `1`–`9` | Pin the selected worktree to a slot (`m 0` unpins) |
 | `-` | Switch to the previous worktree (as `grove last`); its row shows `↩` |
-| `tab` / `l` | Detail: focus the panel at 110+ columns, or open the full-screen sheet below that |
+| `tab` / `l` | Detail: focus the panel at 110+ columns, or open the full-screen sheet below that (`ctrl+i` works as `tab`) |
 | `B` | Open the selected worktree's associated PR in the browser |
 | `n` | Create new worktree |
 | `d` | Delete selected worktree |
@@ -129,10 +192,11 @@ Toast levels:
 | `O` | Reverse the sort |
 | `r` | Refresh worktree list |
 | `v` | Show or hide the commit message line |
-| `/` | Filter list |
+| `/` | Filter list (see Filtering) |
 | `space` | Find: search worktrees, actions, and loaded PRs and issues (see Find below) |
 | `?` | Find, limited to actions: every dashboard action with its key. `keyboard shortcuts` there opens the full key reference. |
-| `q` / `esc` | Quit |
+| `esc` | Clear an applied filter; otherwise nothing |
+| `q` / `ctrl+c` | Quit, with no confirm |
 
 #### Detail Panel (when focused)
 
@@ -148,7 +212,7 @@ Press `tab` or `l` from the dashboard to move focus into the detail panel so you
 
 ### Overlay / Wizard Keys
 
-The New Worktree form uses its own keys, listed in its section below.
+The New Worktree form uses its own keys, listed in its section below. `esc`, `enter`, and `tab` also accept `ctrl+[`, `ctrl+m`, and `ctrl+i` (see Input model).
 
 | Key | Action |
 |-----|--------|
@@ -156,7 +220,7 @@ The New Worktree form uses its own keys, listed in its section below.
 | `esc` | Cancel / close overlay |
 | `backspace` | Go back one step |
 | `tab` / `shift+tab` | Next / previous field (settings) |
-| `↑` / `↓` | Navigate list |
+| `↑` / `↓`, `k` / `j` | Move through the list |
 | `space` | Toggle selection / checkbox |
 | `y` | Confirm (delete overlay) |
 | `n` | Cancel (delete overlay) |
@@ -165,7 +229,7 @@ The New Worktree form uses its own keys, listed in its section below.
 
 Each overlay opens over the dimmed view beneath it, except the New Worktree form, which docks beside or under the list. Press `esc` to close or cancel.
 
-`esc` goes back exactly one level. An overlay opened from the PR or issue browser returns there, and the dashboard cursor returns to the worktree it was on.
+`esc` goes back exactly one level. At the dashboard root it only clears an applied filter; it never quits (`q` and `ctrl+c` do). An overlay opened from the PR or issue browser returns there, and the dashboard cursor returns to the worktree it was on.
 
 ### New Worktree (`n`)
 
@@ -183,7 +247,7 @@ The form's key line replaces the footer. The form keeps one size for a given ter
  ── New worktree ──────────────────────────────
  ❯ Branch  leaks
              ci/check-leaks            existing
-           ❯ + new "leaks"            from main
+           › + new "leaks"            from main
 
    Base    main
    Name    leaks
@@ -191,7 +255,7 @@ The form's key line replaces the footer. The form keeps one size for a given ter
            session myapp-leaks
 
  ✓ ready
- ↑↓ pick · tab next · enter create · esc back
+ type · ↑↓/ctrl+jk pick · tab next · enter create · esc cancel
 ```
 
 - **Branch:** type to search local and remote branches. Each row says whether the branch exists, is remote, or is already in use by a worktree. A name that matches nothing is created as a new branch, from the base the `+ new` row names.
@@ -203,11 +267,11 @@ Suggestions open under the field you are in: Branch or Base. The status line say
 | Key | Action |
 |---|---|
 | `tab` / `shift+tab` | Next / previous field (`tab` on Branch accepts the highlighted row) |
-| `↓` / `↑` | Move through the focused field's suggestions |
+| `ctrl+j` / `ctrl+k`, `ctrl+n` / `ctrl+p`, `↓` / `↑` | Move through the focused field's suggestions |
 | `enter` | Create, or switch to an in-use branch's worktree |
-| `esc` | Close (does nothing while creating) |
+| `esc` | Cancel and close (does nothing while creating) |
 
-The key line drops `tab next`, then `↑↓ pick`, when the form is too narrow for all of it.
+The key line takes two rows in the right pane, where one is too narrow for it; under the list it fits on one. While the form has focus the list keeps its rows but draws no `❯` (see Focus).
 
 The PR browser opens this form (`n`) with the PR's branch filled in. The issue browser fills in the branch `issue-N`. From either browser the form docks beside or under that browser's list, the same way.
 
@@ -241,7 +305,7 @@ Opens the New Worktree form in Copy mode for the selected worktree. Use it to tr
 
 - **Branch:** starts as `<branch>-copy`. It must be a new branch; it is cut from the selected worktree's HEAD.
 - **Name:** follows the branch until you edit it.
-- **Changes:** appears only when the worktree has uncommitted changes. Use `←` / `→` or `space` on this row:
+- **Changes:** appears only when the worktree has uncommitted changes. Use `←` / `→`, `h` / `l`, or `space` on this row (it has no text cursor, so the key line says `move`):
   - **copy** (default): apply the changes to both worktrees.
   - **move:** apply them to the copy and clean the source.
   - **leave:** the copy starts clean; the source keeps its changes.
@@ -296,7 +360,7 @@ A full-screen panel for the project's grove config. Every change is written to `
    ○ refuse       Do not move
    ○ auto-stash   Stash the files, then move
 
-  ↑↓/jk field · ←→/hl change · saves as you go · u undo · esc close
+  move · ↑↓/jk move · ←→/hl change · saves as you go · u undo · esc close
 ```
 
 - **The list** has one row per field: a plain label, then the value exactly as the file spells it. Behavior groups its fields under two headings.
@@ -318,13 +382,13 @@ A full-screen panel for the project's grove config. Every change is written to `
 | `space` | Switch a true/false field |
 | `enter` | Edit a text or list field |
 | `u` | Undo the last change: writes the value before it, and moves to that field |
-| `1`-`4`, `ctrl+n` / `ctrl+p` | Go to a section; each section keeps its own cursor |
+| `1`-`4`, `H` / `L` | Go to a section, or the previous / next one; each section keeps its own cursor |
 | `?` | Key reference |
 | `esc` | Close |
 
-**Editing a text or list field.** `enter` opens the value for typing in the context panel. Every key types, digits and letters too, so the tabs drop their numbers and the footer shows only `enter save · esc cancel`. `enter` checks the value with the same rules config loading uses (a folder pattern needs `{project}` and `{name}` once each, the default branch cannot be empty) and writes it only when it passes; otherwise the reason shows under the value. `esc` drops the edit. A list is typed as names separated by commas.
+**Editing a text or list field.** `enter` opens the value for typing in the context panel. Every key types, digits and letters too, so the tabs drop their numbers and the footer shows only `type · enter save · esc cancel`. `enter` checks the value with the same rules config loading uses (a folder pattern needs `{project}` and `{name}` once each, the default branch cannot be empty) and writes it only when it passes; otherwise the reason shows under the value. `esc` drops the edit. A list is typed as names separated by commas.
 
-**Project name and Folder pattern.** Grove reads a worktree's short name from its folder name with these two values, and changing them does not rename folders. So when the dashboard lists worktrees besides root, the context panel warns under the description: `⚠ This project has 2 worktrees besides root. Changing this does not rename their folders. Grove will stop recognizing them by their short names.` The count comes from the dashboard's list. Committing a changed value then takes a second `enter`: the first one writes nothing, the status line reads `Press enter again to change. esc keeps "myapp".`, and the footer shows only `enter change · esc cancel`. The second `enter` writes it as any edit does. `esc` goes back to the edit with the typed text, and any other key goes back to the edit and types. A refused value never reaches this step, and an unchanged value, a project with root alone, every other field, and `u` write at once. When the context panel is short of rows, the help under the value gives way first, then the description; the warning and the status line stay whole.
+**Project name and Folder pattern.** Grove reads a worktree's short name from its folder name with these two values, and changing them does not rename folders. So when the dashboard lists worktrees besides root, the context panel warns under the description: `⚠ This project has 2 worktrees besides root. Changing this does not rename their folders. Grove will stop recognizing them by their short names.` The count comes from the dashboard's list. Committing a changed value then takes a second `enter`: the first one writes nothing, the status line reads `Press enter again to change. esc keeps "myapp".`, and the footer shows only `type · enter change · esc cancel`. The second `enter` writes it as any edit does. `esc` goes back to the edit with the typed text, and any other key goes back to the edit and types. A refused value never reaches this step, and an unchanged value, a project with root alone, every other field, and `u` write at once. When the context panel is short of rows, the help under the value gives way first, then the description; the warning and the status line stay whole.
 
 The frame has one layout at a given size: every section and every field put the rule on the same row. Narrow terminals show only the active tab's name and wrap the context panel's text; a title and key too long for one line put the key on the next.
 
@@ -351,13 +415,13 @@ Each PR shows:
 - Worktree badge if you already have a worktree checked out on that branch
 
 Controls:
-- `↑` / `↓` — Navigate
-- `tab` — Toggle PR detail preview (rendered markdown body)
-- `enter` — Open the PR review (see below)
-- `n` — Create a new worktree from the PR branch
-- `B` — Open the selected PR in your default browser
-- Type to filter by title, branch, author, or number
-- `esc` — Close
+- `↑` / `↓`, `k` / `j`: Move
+- `tab`: Toggle PR detail preview (rendered markdown body)
+- `enter`: Open the PR review (see below)
+- `n`: Create a new worktree from the PR branch
+- `B`: Open the selected PR in your default browser
+- `/`: Filter by title, branch, author, or number (see Filtering)
+- `esc`: Clear an applied filter, else close
 
 ### PR Review (`enter` on a PR)
 
@@ -387,7 +451,7 @@ The files tab (`4`) shows one file at a time: its path and counts, then each hun
 | `t` | Show or hide the rail; the choice holds when the terminal is resized |
 | `enter` | Open the file in `$VISUAL` or `$EDITOR` (else `vi`) at the first line in view, in the worktree checked out on the PR's branch; grove resumes when the editor exits |
 | `B` | Open the PR in the browser |
-| `esc` | Back |
+| `esc` | Close: back to where you opened it |
 
 The editor's line flag follows its name: `+N file` for vi, Neovim, Helix, Nano, Emacs and the like; `-g file:N` for VS Code, Cursor and VSCodium; `file:N` for Sublime Text and Zed; `--line N file` for JetBrains IDEs. A PR whose branch has no worktree here says so; `n` in the PR browser creates one.
 
@@ -402,12 +466,12 @@ Each issue shows:
 - Author, age, labels
 
 Controls:
-- `↑` / `↓` — Navigate
-- `tab` — Toggle issue detail preview (rendered markdown body)
-- `enter` — Create a new worktree for the issue
-- `B` — Open the selected issue in your default browser
-- Type to filter by title, author, number, or labels
-- `esc` — Close
+- `↑` / `↓`, `k` / `j`: Move
+- `tab`: Toggle issue detail preview (rendered markdown body)
+- `enter`: Create a new worktree for the issue
+- `B`: Open the selected issue in your default browser
+- `/`: Filter by title, author, number, or labels (see Filtering)
+- `esc`: Clear an applied filter, else close
 
 ## Sort Modes
 
@@ -441,7 +505,7 @@ Under herdr the dashboard keeps track of which coding agents need you. Under tmu
 | worktrees | alias, branch | switches to it |
 | pull requests, issues | number, title, branch | opens the browser with the cursor on it |
 
-Matching is fuzzy, matched letters are highlighted, and a synonym that matched is shown beside the action (`copy worktree · fork`). PRs and issues come only from data already loaded this session: Find never calls `gh`. `ctrl+j` / `ctrl+k` or the arrows move; `esc` closes. The box keeps its size and position while you type.
+Matching is fuzzy, matched letters are highlighted, and a synonym that matched is shown beside the action (`copy worktree · fork`). PRs and issues come only from data already loaded this session: Find never calls `gh`. While you type, `ctrl+j` / `ctrl+k`, `ctrl+n` / `ctrl+p`, the arrows, and `tab` / `shift+tab` move through the results; `enter` runs the highlighted one; `esc` closes. The box keeps its size and position while you type.
 
 `?` opens the same box limited to actions. Searching `messages` (or `warnings`, `errors`, `log`) opens the session's warnings and errors, newest first: toasts disappear after a few seconds, these stay until you quit.
 
@@ -463,7 +527,16 @@ Pins are saved per project in `.grove/ui_prefs.json` (`pins`). Renaming or delet
 
 ## Filtering
 
-Press `/` to activate the list filter. Type to narrow by worktree name or branch. Results update as you type. Press `esc` to clear the filter and return to normal navigation.
+The dashboard list, the PR browser, and the issue browser filter the same way (see Input model, Filter).
+
+- `/` opens the filter: the footer says `type`, and letters, digits, and `/` type. Results update as you type. No key moves the rows while you type.
+- `enter` or `tab` keeps the filter and returns to the list in `move`.
+- `esc` while typing clears the text and leaves the filter.
+- On the list with a filter applied, `esc` clears it and `/` opens it again with its text.
+
+Each list draws a filter row as its first row, under the header: `Filter: auth  4 of 23 · esc clear` while a filter is applied, the prompt and the text cursor while you type. With no filter, the dashboard keeps that row blank, and the PR and issue browsers show `N open` there, so the list does not move when a filter opens or closes.
+
+A worktree created while a filter is applied is selected. If the filter hides it, the filter is cleared, as `g a` does.
 
 Pin keys (`1`–`9`) work with a filter applied, since slots do not depend on row position. While you are typing in the filter they type.
 
@@ -506,6 +579,8 @@ Every dashboard key is an `Action` in `internal/tui/actions.go`: its keys, label
 | `internal/tui/messages_view.go` | Session message history overlay; long entries wrap under their text |
 | `internal/tui/provision_report.go` | After create or copy: the warning toast and message history lines for files not copied, a failed registration, or a required hook |
 | `internal/tui/actions.go` | The dashboard action table (keys, labels, synonyms, footer order) |
+| `internal/tui/help_v2.go` | The footer: mode word, hints, leave key, and the drop order (`Footer`, `fitFooter`) |
+| `internal/tui/keys.go` | The key map, with `ctrl+[`, `ctrl+m`, `ctrl+i`, and the finder pick keys (`finderDown`, `finderUp`) |
 | `internal/tui/strip.go` | Docked strips (`g` goto, `m` pin) drawn above the footer |
 | `internal/tui/goto_agent.go` | `g a`: the next agent needing you |
 | `internal/tui/poll.go` | The 3-second herdr agent poll: tick, generation, applying results |

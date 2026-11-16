@@ -63,10 +63,7 @@ func renderDeleteV2(s *DeleteState, width int) string {
 	b.WriteString(checkboxLine + "\n\n")
 
 	// Footer with action consequences
-	footer := Styles.HelpKey.Render("y") + Styles.HelpDesc.Render(" confirm") + "  " +
-		Styles.HelpKey.Render("n") + Styles.HelpDesc.Render(" cancel") + "  " +
-		Styles.HelpKey.Render("space") + Styles.HelpDesc.Render(" toggle branch")
-	b.WriteString(footer)
+	b.WriteString(promptKeys(moveFooter(Hint{"esc/n", "cancel"}, Hint{"y", "confirm"}, Hint{"space", "toggle branch"}), innerWidth, ""))
 
 	return Styles.OverlayBorderDanger.Width(overlayWidth).Render(
 		Styles.OverlayTitle.Render("Delete Worktree") + "\n\n" + b.String(),

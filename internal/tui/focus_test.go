@@ -74,7 +74,7 @@ func TestDashboard_FocusedHintsWithPR(t *testing.T) {
 	items[m.list.Index()] = item
 	m.list.SetItems(items)
 
-	hints := m.dashboardDetailFocusedHints()
+	hints := m.dashboardDetailFooter().Hints
 	found := false
 	for _, h := range hints {
 		if h.Key == "B" {
@@ -89,7 +89,7 @@ func TestDashboard_FocusedHintsWithPR(t *testing.T) {
 
 func TestDashboard_FocusedHintsWithoutPR(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(120, 40))
-	hints := m.dashboardDetailFocusedHints()
+	hints := m.dashboardDetailFooter().Hints
 	for _, h := range hints {
 		if h.Key == "B" {
 			t.Error("hints should NOT include B when item has no AssociatedPR")

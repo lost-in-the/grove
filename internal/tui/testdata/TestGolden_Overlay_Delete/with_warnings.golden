@@ -16,9 +16,9 @@
 [2m             [m│                                                   │[2m              [m
 [2m             [m│  [ ] Also delete branch feature-auth              │[2m              [m
 [2m             [m│                                                   │[2m              [m
-[2m             [m│  [1my[m confirm  [1mn[m cancel  [1mspace[m toggle branch         │[2m              [m
+[2m             [m│  move · [1my[m confirm                                 │[2m              [m
+[2m             [m│  [1mspace[m toggle branch · [1mesc/n[m cancel               │[2m              [m
 [2m             [m│                                                   │[2m              [m
-[2m             [m╰───────────────────────────────────────────────────╯[2m              [m
-[2m root · test commit for root                                                    [m
-[2m  ↑↓ navigate · enter switch · ␣ find                                           [m
-[2m  tab detail · / filter · g goto · ? help                                       [m
+[2m root · test [m╰───────────────────────────────────────────────────╯[2m              [m
+[2m  move · ↑↓/jk move · enter switch · ␣ find                                     [m
+[2m  tab detail · / filter · g goto · ? help · q quit                              [m

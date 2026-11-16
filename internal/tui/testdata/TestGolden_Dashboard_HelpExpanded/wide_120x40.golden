@@ -3,38 +3,38 @@
 [2m ❯ ● root                                                       0s      │                                               [m
 [2m   ○ feature-au[m╭────────────────────────────────────────────────────────────────────────────────────────╮[2m               [m
 [2m   ○ fix-bug   [m│                                                                                        │[2m               [m
-[2m   ● testing   [m│   [1mNavigation[m                                                                           │[2m               [m
-[2m   ○ refactor  [m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
-[2m               [m│   [1m↑/k ↓/j[m                       Move up / down                                         │[2m               [m
-[2m               [m│   [1mg[m                             Goto strip (g top, p PRs, i issues, c config, u        │[2m               [m
-[2m               [m│   upgrade, d local diff, a agent under herdr)                                          │[2m               [m
-[2m               [m│   [1mgg / G[m                        Top / bottom of list                                   │[2m               [m
-[2m               [m│   [1mctrl+d / ctrl+u[m               Half page down / up                                    │[2m               [m
-[2m               [m│   [1menter[m                         Switch to selected worktree                            │[2m               [m
-[2m               [m│   [1mU[m                             Switch and bring the stack                             │[2m               [m
-[2m               [m│   [1m1-9[m                           Switch to the pinned worktree                          │[2m               [m
-[2m               [m│   [1mm 1-9[m                         Pin selected to a slot (m 0 unpins)                    │[2m               [m
-[2m               [m│   [1m-[m                             Switch to the previous worktree                        │[2m               [m
-[2m               [m│   [1m/[m                             Filter worktrees                                       │[2m               [m
-[2m               [m│   [1mtab / l[m                       Detail (panel at 110+ columns, else full screen)       │[2m               [m
+[2m   ● testing   [m│   [1mMoving and typing[m                                                                    │[2m               [m
+[2m   ○ refactor  [m│   j/k move. While you type, hold ctrl.                                                 │[2m               [m
+[2m               [m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
+[2m               [m│   [1mmove / type[m                   The footer's first word: letters are commands, or      │[2m               [m
+[2m               [m│   they type                                                                            │[2m               [m
+[2m               [m│   [1m↑/k ↓/j[m                       Move through rows or fields                            │[2m               [m
+[2m               [m│   [1mesc / ctrl+[[m                  Leave: back, close, clear, or cancel                   │[2m               [m
+[2m               [m│   [1menter / ctrl+m[m                The action the footer names                            │[2m               [m
+[2m               [m│   [1mtab / ctrl+i[m                  The tab key; ctrl+[, ctrl+m, and ctrl+i arrive as      │[2m               [m
+[2m               [m│   their own keys under some terminals                                                  │[2m               [m
+[2m               [m│   [1mctrl+u[m                        While typing: delete before the cursor (ctrl+k never   │[2m               [m
+[2m               [m│   deletes)                                                                             │[2m               [m
+[2m               [m│   [1mq / ctrl+c[m                    Quit, from the list                                    │[2m               [m
 [2m               [m│                                                                                        │[2m               [m
-[2m               [m│   [1mDetail Panel (when focused)[m                                                          │[2m               [m
+[2m               [m│   [1mFilter (/)[m                                                                           │[2m               [m
+[2m               [m│   Narrows the list in place.                                                           │[2m               [m
 [2m               [m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
-[2m               [m│   [1m↑/k ↓/j[m                       Scroll up / down                                       │[2m               [m
-[2m               [m│   [1mg / G[m                         Jump to top / bottom                                   │[2m               [m
-[2m               [m│   [1mctrl+u / ctrl+d[m               Half page up / down                                    │[2m               [m
-[2m               [m│   [1mB[m                             Open associated PR in browser                          │[2m               [m
-[2m               [m│   [1mtab / esc / h[m                 Return to list                                         │[2m               [m
+[2m               [m│   [1menter / tab[m                   Keep the filter and go back to the list                │[2m               [m
+[2m               [m│   [1mesc[m                           While typing: clear it. On the list: clear an          │[2m               [m
+[2m               [m│   applied filter                                                                       │[2m               [m
+[2m               [m│   [1m/[m                             Edit the applied filter                                │[2m               [m
 [2m               [m│                                                                                        │[2m               [m
-[2m               [m│   [1mWorktree Actions[m                                                                     │[2m               [m
+[2m               [m│   [1mFind (space) and the form's Branch and Base[m                                          │[2m               [m
+[2m               [m│   Three key sets, so one always gets through.                                          │[2m               [m
 [2m               [m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
-[2m               [m│   [1mn[m                             Create new worktree                                    │[2m               [m
-[2m               [m│   [1md[m                             Delete worktree                                        │[2m               [m
+[2m               [m│   [1m↑↓, ctrl+j/k, ctrl+n/p[m        Pick the next / previous row                           │[2m               [m
+[2m               [m│   [1mtab / shift+tab[m               Find only: next / previous row (in the form they       │[2m               [m
 [2m               [m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
-[2m               [m│    [1m↑↓[m scroll · [1mesc[m close                                                               │[2m               [m
+[2m               [m│    move · [1m↑↓/jk[m scroll · [1mesc[m close                                                     │[2m               [m
 [2m               [m│                                                                                        │[2m               [m
 [2m               [m╰────────────────────────────────────────────────────────────────────────────────────────╯[2m               [m
 [2m                                                                        │                                               [m
 [2m                                                                        │                                               [m
 [2m                                                                        │                                               [m
-[2m  ↑↓ navigate · enter switch · ␣ find · tab detail · / filter · g goto · ? help                                         [m
+[2m  move · ↑↓/jk move · enter switch · ␣ find · tab detail · / filter · g goto · ? help · q quit                          [m

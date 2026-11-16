@@ -285,7 +285,7 @@ func TestBranchForm_PreviewShowsFolderAndSession(t *testing.T) {
 
 func TestBranchForm_KeyLineIsNotOnTheEdge(t *testing.T) {
 	out := strings.Join(panelLines(newBranchForm(testFormOptions()), branchFormLayout(80, 8, 78)), "\n")
-	if !strings.Contains(out, "esc back") {
+	if !strings.Contains(out, "esc cancel") {
 		t.Errorf("key line missing at 80x8:\n%s", out)
 	}
 }
@@ -365,14 +365,9 @@ func screenLines(t *testing.T, m Model) []string {
 	return lines
 }
 
-func cursorRow(lines []string, name string) int {
-	for i, l := range lines {
-		if strings.Contains(l, "❯ ") && strings.Contains(l, name) {
-			return i
-		}
-	}
-	return -1
-}
+// cursorRow is the row of the list's selected worktree. With the form open
+// the list draws no cursor arrow, so the row is found by its unique name.
+func cursorRow(lines []string, name string) int { return lineIndex(lines, name) }
 
 func TestDockedForm_WideKeepsListBesideIt(t *testing.T) {
 	m := newTestModel(uniqueItems(8), withSize(120, 40), selectRow(3), withForm(formCaseNamed(t, "new_branch")))
@@ -395,7 +390,7 @@ func TestDockedForm_WideKeepsListBesideIt(t *testing.T) {
 	if !strings.Contains(lines[title], "│") {
 		t.Errorf("no divider between the list and the form on %q", lines[title])
 	}
-	if lineIndex(lines, "navigate") >= 0 {
+	if lineIndex(lines, "q quit") >= 0 {
 		t.Errorf("the dashboard footer is still drawn under the form:\n%s", strings.Join(lines, "\n"))
 	}
 }
@@ -410,10 +405,10 @@ func TestDockedForm_NarrowKeepsListAboveIt(t *testing.T) {
 	if title != m.height-formPanelRows {
 		t.Errorf("form title on row %d, want %d (docked at the bottom)", title, m.height-formPanelRows)
 	}
-	if last := lines[len(lines)-1]; !strings.Contains(last, "esc back") {
-		t.Errorf("last line = %q, want the form's key line", last)
+	if keys := strings.Join(lines[len(lines)-2:], "\n"); !strings.Contains(keys, "esc cancel") {
+		t.Errorf("last lines = %q, want the form's key line", keys)
 	}
-	if n := strings.Count(strings.Join(lines, "\n"), "esc back"); n != 1 {
+	if n := strings.Count(strings.Join(lines, "\n"), "esc cancel"); n != 1 {
 		t.Errorf("%d key lines on screen, want 1", n)
 	}
 }
@@ -508,7 +503,7 @@ func TestGolden_BranchForm_OverPRBrowser(t *testing.T) {
 }
 
 // The help overlay and the footer hints describe the form as its key line
-// does: arrows to pick, a Name field, no ctrl keys.
+// does: every pick key, a Name field.
 func TestBranchFormHelp_MatchesTheKeyLine(t *testing.T) {
 	var text strings.Builder
 	for _, sec := range helpSectionsBranchForm {
@@ -517,35 +512,39 @@ func TestBranchFormHelp_MatchesTheKeyLine(t *testing.T) {
 			text.WriteString(it.key + " " + it.desc + "\n")
 		}
 	}
-	for _, h := range NewHelpFooter().CompactHints(ViewBranchForm) {
+	for _, h := range NewHelpFooter().CompactFooter(ViewBranchForm).Hints {
 		text.WriteString(h.Key + " " + h.Description + "\n")
 	}
 	got := text.String()
-	if strings.Contains(got, "ctrl") || strings.Contains(strings.ToLower(got), "alias") {
-		t.Errorf("help mentions a ctrl key or an alias:\n%s", got)
+	if strings.Contains(strings.ToLower(got), "alias") {
+		t.Errorf("help mentions an alias:\n%s", got)
 	}
-	for _, want := range []string{"↑/↓", "Name"} {
+	for _, want := range []string{"↑/↓", "ctrl+j", "ctrl+n", "↑↓/ctrl+jk pick", "Name"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("help is missing %q:\n%s", want, got)
 		}
 	}
 }
 
-// The key line fits the pane: whole at 120 columns, and at the 110-column
-// split it keeps enter and esc, dropping tab before the arrows.
+// The key line fits the pane in its two rows, whole, from the 44-column
+// floor to the 160-column right pane.
 func TestBranchForm_KeyLineFitsThePane(t *testing.T) {
 	s := newBranchForm(testFormOptions())
+	two := "type · ↑↓/ctrl+jk pick\ntab next · enter create · esc cancel"
 	tests := []struct {
 		lay  formLayout
 		want string
 	}{
-		{branchFormLayout(120, 40, 70), "↑↓ pick · tab next · enter create · esc back"},
-		{branchFormLayout(110, 40, 64), "↑↓ pick · enter create · esc back"},
-		{branchFormLayout(44, 24, 42), "↑↓ pick · enter create · esc back"},
+		{branchFormLayout(160, 50, 94), "type a branch name\ntype · ↑↓/ctrl+jk pick · tab next · enter create · esc cancel"},
+		{branchFormLayout(80, 24, 78), "type a branch name\ntype · ↑↓/ctrl+jk pick · tab next · enter create · esc cancel"},
+		{branchFormLayout(120, 40, 70), two},
+		{branchFormLayout(110, 40, 64), two},
+		{branchFormLayout(44, 24, 42), two},
 	}
 	for _, tt := range tests {
 		lines := panelLines(s, tt.lay)
-		if got := strings.TrimRight(lines[len(lines)-1], " "); got != tt.want {
+		got := strings.TrimRight(lines[len(lines)-2], " ") + "\n" + strings.TrimRight(lines[len(lines)-1], " ")
+		if got != tt.want {
 			t.Errorf("width %d: key line %q, want %q", tt.lay.Width, got, tt.want)
 		}
 	}

@@ -21,4 +21,4 @@
    {project} is the project name, {name} the worktree's short name.             
    Each appears once. Other characters: letters, digits, . _ -                  
                                                                                 
-  [1m↑↓/jk[m field · [1menter[m edit · saves as you go · [1mesc[m close                        
+  move · [1m↑↓/jk[m move · [1menter[m edit · saves as you go · [1mesc[m close                  

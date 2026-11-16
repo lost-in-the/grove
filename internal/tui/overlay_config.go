@@ -218,10 +218,17 @@ func (m Model) handleConfigKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	n := len(s.Fields[s.Tab])
-	switch k := msg.String(); k {
-	case "ctrl+n":
+	k := msg.String()
+	switch {
+	case key.Matches(msg, m.keys.Tab):
+		k = "tab"
+	case key.Matches(msg, m.keys.Enter):
+		k = "enter"
+	}
+	switch k {
+	case "L":
 		s.Tab = (s.Tab + 1) % ConfigTabCount
-	case "ctrl+p":
+	case "H":
 		s.Tab = (s.Tab + ConfigTabCount - 1) % ConfigTabCount
 	case "1", "2", "3", "4":
 		s.Tab = ConfigTab(k[0] - '1')
@@ -348,7 +355,7 @@ func (s *ConfigState) setFlash(note string) tea.Cmd {
 
 // startEdit opens the focused text field for typing, holding its value.
 func (s *ConfigState) startEdit() tea.Cmd {
-	in := textinput.New()
+	in := newTextInput()
 	in.Prompt = "▏"
 	in.CharLimit = 500
 	in.SetValue(s.focused().Value)

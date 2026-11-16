@@ -18,6 +18,7 @@ const (
 	// field. Copy and Switch fit in the same rows.
 	formBodyRows = 5 + formSuggestRows
 	// formInnerRows adds a blank row, the status line, and the key line.
+	// Where the key line needs two rows, it takes the blank row's place.
 	formInnerRows = formBodyRows + 3
 	// formPanelRows adds the title rule on top.
 	formPanelRows = 1 + formInnerRows
@@ -71,7 +72,14 @@ func renderBranchForm(s *BranchFormState, lay formLayout, spinner string) string
 	body = windowLines(body, bodyRows, focus)
 
 	msg, kind := s.status()
-	lines := append(body, "", formStatusStyle(kind).Render(msg), s.renderKeyLine(inner))
+	keyRows := s.keyRows(inner)
+	keys := renderKeyLine(s.keyFooter(), inner, keyRows)
+	keys = append(keys, make([]string, max(0, keyRows-len(keys)))...)
+	if keyRows == 1 {
+		body = append(body, "")
+	}
+	lines := append(body, formStatusStyle(kind).Render(msg))
+	lines = append(lines, keys...)
 	if len(lines) > rows {
 		lines = lines[len(lines)-rows:]
 	}
@@ -102,38 +110,6 @@ func formStatusStyle(kind formStatusKind) lipgloss.Style {
 	return Styles.DetailDim
 }
 
-// renderKeyLine draws the key line in the footer's style, on one line of at
-// most width cells. When the whole line does not fit, tab goes first, then
-// the arrows: enter and esc always stay.
-func (s *BranchFormState) renderKeyLine(width int) string {
-	hints := s.keyHints()
-	line := joinHints(hints)
-	for _, drop := range []string{"tab", "↑↓"} {
-		if lipgloss.Width(line) <= width {
-			break
-		}
-		kept := hints[:0:0]
-		for _, h := range hints {
-			if h.Key != drop {
-				kept = append(kept, h)
-			}
-		}
-		hints, line = kept, joinHints(kept)
-	}
-	return line
-}
-
-func joinHints(hints []Hint) string {
-	parts := make([]string, len(hints))
-	for i, h := range hints {
-		parts[i] = Styles.HelpKey.Render(h.Key) + " " + Styles.HelpDesc.Render(h.Description)
-		if h.Key == "" {
-			parts[i] = Styles.HelpDesc.Render(h.Description)
-		}
-	}
-	return strings.Join(parts, Styles.HelpSep.Render(" · "))
-}
-
 // padCells truncates or pads s to exactly n terminal cells.
 func padCells(s string, n int) string {
 	s = ansi.Truncate(s, n, "…")
@@ -155,6 +131,10 @@ func windowLines(lines []string, rows, focus int) []string {
 	start := max(0, min(focus-rows/2, len(lines)-rows))
 	return lines[start : start+rows]
 }
+
+// suggestionMark marks the highlighted suggestion: lighter than the ❯ on
+// the focused field, so the form shows one cursor arrow.
+const suggestionMark = "› "
 
 func (s *BranchFormState) label(name string, f formField) string {
 	marker := "  "
@@ -307,7 +287,7 @@ func (s *BranchFormState) suggestionLines(indent string, inner int) []string {
 		x := sg[start+i]
 		cursor := "  "
 		if start+i == s.Pick {
-			cursor = Styles.ListCursor.Render("❯ ")
+			cursor = Styles.ListCursor.Render(suggestionMark)
 		}
 		name := x.Branch
 		if x.New {
@@ -356,22 +336,26 @@ func (m Model) branchFormLayout() formLayout {
 }
 
 // formListAt renders view v's header and its list at w x rows with the
-// cursor row in view, or ok false when v has no list to keep.
+// cursor row in view, or ok false when v has no list to keep. The form has
+// focus, so the list draws no cursor arrow.
 func (m Model) formListAt(v ActiveView, w, rows int) (header, body string, ok bool) {
 	switch v {
 	case ViewDashboard:
 		l := m.list
 		idx := l.Index()
-		l.SetSize(w, rows)
+		d := m.rowDelegate()
+		d.Unfocused = true
+		l.SetDelegate(d)
+		l.SetSize(w, max(1, rows-1)) // under the filter row
 		l.Select(idx)
-		return m.buildDashboardHeader().View(m.width), l.View(), true
+		return m.buildDashboardHeader().View(m.width), m.dashboardListView(l), true
 	case ViewPRs:
 		if m.prState != nil {
-			return renderContextHeader("Pull Requests", m.projectName, m.width), renderPRList(m.prState, w, m.spinner.View(), rows, 1), true
+			return renderContextHeader("Pull Requests", m.projectName, m.width), renderPRList(m.prState, w, m.spinner.View(), rows, 1, false), true
 		}
 	case ViewIssues:
 		if m.issueState != nil {
-			return renderContextHeader("Issues", m.projectName, m.width), renderIssueList(m.issueState, w, m.spinner.View(), rows, 1), true
+			return renderContextHeader("Issues", m.projectName, m.width), renderIssueList(m.issueState, w, m.spinner.View(), rows, 1, false), true
 		}
 	}
 	return "", "", false

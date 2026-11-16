@@ -375,17 +375,17 @@ func TestConfig_QuestionMarkOpensHelp(t *testing.T) {
 
 func TestConfig_SectionKeys(t *testing.T) {
 	m := openConfigWith(t, 80, 24, nil)
-	m = sendConfigKeys(t, m, "ctrl+n")
+	m = sendConfigKeys(t, m, "L")
 	if m.configState.Tab != ConfigTabBehavior {
-		t.Errorf("ctrl+n: section %s, want Behavior", tabName(m.configState.Tab))
+		t.Errorf("L: section %s, want Behavior", tabName(m.configState.Tab))
 	}
-	m = sendConfigKeys(t, m, "ctrl+p", "ctrl+p")
+	m = sendConfigKeys(t, m, "H", "H")
 	if m.configState.Tab != ConfigTabProtection {
-		t.Errorf("ctrl+p twice from Behavior: section %s, want Protection", tabName(m.configState.Tab))
+		t.Errorf("H twice from Behavior: section %s, want Protection", tabName(m.configState.Tab))
 	}
-	m = sendConfigKeys(t, m, "ctrl+n")
+	m = sendConfigKeys(t, m, "L")
 	if m.configState.Tab != ConfigTabGeneral {
-		t.Errorf("ctrl+n from Protection: section %s, want General", tabName(m.configState.Tab))
+		t.Errorf("L from Protection: section %s, want General", tabName(m.configState.Tab))
 	}
 	for k, want := range map[string]ConfigTab{"3": ConfigTabPlugins, "4": ConfigTabProtection, "2": ConfigTabBehavior, "1": ConfigTabGeneral} {
 		if m = sendConfigKeys(t, m, k); m.configState.Tab != want {
@@ -403,7 +403,7 @@ func TestConfig_SectionsKeepTheirCursor(t *testing.T) {
 	if focusedKey(m) != "plugins.docker.enabled" {
 		t.Errorf("a section not visited yet should start at its first field, got %s", focusedKey(m))
 	}
-	m = sendConfigKeys(t, m, "ctrl+p")
+	m = sendConfigKeys(t, m, "H")
 	if focusedKey(m) != m.configState.Fields[ConfigTabBehavior][2].Key {
 		t.Errorf("back in Behavior: focus %s, want its third field", focusedKey(m))
 	}
@@ -462,7 +462,7 @@ func TestConfig_SectionKeysWorkOnATextField(t *testing.T) {
 	steps := []struct {
 		key  string
 		want ConfigTab
-	}{{"2", ConfigTabBehavior}, {"1", ConfigTabGeneral}, {"ctrl+n", ConfigTabBehavior}, {"ctrl+p", ConfigTabGeneral}, {"4", ConfigTabProtection}}
+	}{{"2", ConfigTabBehavior}, {"1", ConfigTabGeneral}, {"L", ConfigTabBehavior}, {"H", ConfigTabGeneral}, {"4", ConfigTabProtection}}
 	for _, s := range steps {
 		if m = sendConfigKeys(t, m, s.key); m.configState.Tab != s.want {
 			t.Errorf("%s on a text field: section %s, want %s", s.key, tabName(m.configState.Tab), tabName(s.want))

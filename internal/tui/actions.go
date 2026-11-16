@@ -59,8 +59,8 @@ func findAction(layer, k string) (Action, bool) {
 // it matters.
 func dashboardActions() []Action {
 	return []Action{
-		{ID: "list.navigate", Keys: []string{"up", "k", "down", "j"}, Display: "↑↓", Label: "navigate", Footer: 1},
-		{ID: "worktree.switch", Keys: []string{"enter"}, Label: "switch to worktree", Short: "switch", Footer: 2,
+		{ID: "list.navigate", Keys: []string{"up", "k", "down", "j"}, Display: "↑↓/jk", Label: "move", Footer: 1},
+		{ID: "worktree.switch", Keys: []string{"enter", "ctrl+m"}, Label: "switch to worktree", Short: "switch", Footer: 2,
 			Synonyms: []string{"go to", "open", "cd"},
 			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { return m.handleDashboardEnterKey() }},
 		{ID: "worktree.switch_up", Keys: []string{"U"}, Label: "switch and bring the stack", Short: "switch + up",
@@ -72,7 +72,7 @@ func dashboardActions() []Action {
 		{ID: "omni.open", Keys: []string{"space"}, Display: "␣", Label: "find", Footer: 3,
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) { return m.openOmni(omniScopeAll) }},
 		{ID: "list.filter", Keys: []string{"/"}, Label: "filter", Footer: 5, Synonyms: []string{"search"}},
-		{ID: "detail.open", Keys: []string{"tab", "l"}, Label: "show detail", Short: "detail", Footer: 4,
+		{ID: "detail.open", Keys: []string{"tab", "ctrl+i", "l"}, Label: "show detail", Short: "detail", Footer: 4,
 			Synonyms: []string{"details", "info"},
 			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { m.openDetail(); return m, nil }},
 		{ID: "list.sort", Keys: []string{"o"}, Label: "change sort", Short: "sort",
@@ -100,14 +100,14 @@ func dashboardActions() []Action {
 			}},
 		{ID: "app.quit", Keys: []string{"q"}, Label: "quit", Synonyms: []string{"exit"},
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) { return m, tea.Quit }},
-		{ID: "app.back", Keys: []string{"esc"}, Label: "back",
+		// At the root esc only clears an applied filter: q and ctrl+c quit.
+		{ID: "app.back", Keys: []string{"esc", "ctrl+["}, Label: "back",
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) {
-				// With a filter applied, esc clears it instead of quitting.
 				if m.list.FilterState() == list.FilterApplied {
 					m.list.ResetFilter()
-					return m, nil
+					m.updateDetailContent()
 				}
-				return m, tea.Quit
+				return m, nil
 			}},
 
 		{ID: "worktree.delete", Enabled: notMainOrProtected, Keys: []string{"d"}, Label: "delete worktree",

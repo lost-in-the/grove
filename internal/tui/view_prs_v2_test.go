@@ -55,7 +55,7 @@ func TestFormatCommitCount(t *testing.T) {
 
 func TestRenderPRList_Loading(t *testing.T) {
 	s := &PRViewState{Loading: true}
-	got := renderPRList(s, 80, "⠋", 20, 3)
+	got := renderPRList(s, 80, "⠋", 20, 3, true)
 	assertContains(t, got, "Loading PRs")
 }
 
@@ -67,7 +67,7 @@ func TestRenderPRList_WithItems(t *testing.T) {
 		},
 		FilterInput: newFilterInput(""),
 	}
-	got := renderPRList(s, 80, "⠋", 20, 3)
+	got := renderPRList(s, 80, "⠋", 20, 3, true)
 	assertContains(t, got, "#10")
 	assertContains(t, got, "Add login")
 	assertContains(t, got, "#20")
@@ -85,7 +85,7 @@ func TestRenderPRList_Filtered(t *testing.T) {
 		},
 		FilterInput: fi,
 	}
-	got := renderPRList(s, 80, "", 20, 3)
+	got := renderPRList(s, 80, "", 20, 3, true)
 	assertContains(t, got, "of")
 }
 

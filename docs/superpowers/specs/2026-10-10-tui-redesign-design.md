@@ -294,6 +294,8 @@ Phase 4 rebinds the list to `pgup`/`pgdown` and `home`/`end` only. That leaves `
 
 ### 6.4 View-local keys
 
+> **2026-11-16:** the PR and issue browsers filter with `/`, not by typing: "type to filter" below is stale. One input model now covers every view (`docs/TUI.md`, Input model): `j`/`k` move, and while you type you hold `ctrl`. Finders (omni, the form's Branch and Base) pick with `ctrl+j`/`ctrl+k`, `ctrl+n`/`ctrl+p`, and the arrows, all three; omni also takes `tab`/`shift+tab`. Config switches sections with `1`-`4` and `H`/`L`, no longer `ctrl+n`/`ctrl+p`. `esc`, `enter`, and `tab` also accept `ctrl+[`, `ctrl+m`, and `ctrl+i`.
+
 | View | Keys |
 |---|---|
 | PR browser | `j/k`, `⏎` open review, `n` new worktree from PR, `B` browser, type to filter, `esc` back |
@@ -442,7 +444,7 @@ Each registry action carries plain-language synonyms, so a remembered nearby wor
 
 ## 10. Branch form (N7)
 
-> **2026-11-16:** the form is docked, not floating. It sits in the detail pane's place at 110+ columns and at the bottom of the screen below that, so the list stays in view; it takes the whole screen when fewer than 3 list rows would remain. Suggestions open under the focused field, Base shows only for a new branch, "Alias" is now "Name", and the key line reads `↑↓ pick · tab next · enter create · esc back`. This supersedes the width, position, and anchoring rules in 10.4, and the frame in 10.2. See `docs/TUI.md`.
+> **2026-11-16:** the form is docked, not floating. It sits in the detail pane's place at 110+ columns and at the bottom of the screen below that, so the list stays in view; it takes the whole screen when fewer than 3 list rows would remain. Suggestions open under the focused field, Base shows only for a new branch, "Alias" is now "Name", and the key line reads `type · ↑↓/ctrl+jk pick · tab next · enter create · esc cancel` (the input model, 6.4). This supersedes the width, position, and anchoring rules in 10.4, and the frame in 10.2. See `docs/TUI.md`.
 
 ### 10.1 Why
 
@@ -523,7 +525,7 @@ From a PR or issue row, Branch and Alias are prefilled.
 - Pushed as a full-screen frame. The border and 60 to 80 column cap go away.
 - **One huh form per section** (General, Behavior, Plugins, Protection). Grove owns section switching, because huh 2.0.3 does not expose the active group.
 - **Header:** `<project> ▸ settings`, with `● n unsaved` at the right edge when dirty. The next row holds the section tabs `[1] general  [2] behavior  [3] plugins  [4] protection`, with the active tab raised.
-- **Section keys:** `ctrl+n` / `ctrl+p` move between sections from anywhere. `1`-`4` jump directly only when the focused field is not a text input, since digits must stay typeable.
+- **Section keys:** `ctrl+n` / `ctrl+p` move between sections from anywhere. **2026-11-16:** now `H` / `L`; finders own `ctrl+n` / `ctrl+p` (6.4). `1`-`4` jump directly only when the focused field is not a text input, since digits must stay typeable.
 - **Fixed height:** each form uses `WithHeight(h)`, `WithShowHelp(false)`, and `WithShowErrors(false)`. Grove draws the help line and `Form.Errors()` itself. Without this, huh's footer changes the height.
 - **Field descriptions** come from the existing `ConfigField.Description`.
 - **Dirty tracking fix:** compare each value to the value loaded from disk. Today it compares to the default (`syncConfigField` in `overlay_config.go`), so any non-default setting opens as dirty.
@@ -635,6 +637,7 @@ flowchart TD
 - **Frame:** view id, list cursor, list scroll offset, and a pointer to that view's state.
 - **Push** saves the current cursor and scroll. **Pop** restores them.
 - `esc` pops exactly one frame. At the root it keeps today's behavior: clear the filter, then quit.
+  > **2026-11-16:** at the root `esc` clears an applied filter, else does nothing. It never quits; `q` and `ctrl+c` quit, with no confirm.
 - Replace the flat `activeView` field and the roughly 44 hardcoded `esc → Dashboard` assignments across `model.go`, `overlay_*.go`, `view_*.go`, and `helpers.go`.
 - Fold the `helpOverlay` and `updateOverlay` flags into the stack. One navigation system only.
 - The model is passed by value through `Update`. Keep stack frames small: ints and pointers, no deep copies.

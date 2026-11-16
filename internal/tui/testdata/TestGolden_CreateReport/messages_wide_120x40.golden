@@ -29,7 +29,7 @@
 [2m                              [m│                                                          │[2m                              [m
 [2m                              [m│                                                          │[2m                              [m
 [2m                              [m│                                                          │[2m                              [m
-[2m                              [m│  ↑↓ scroll · esc close                                   │[2m                              [m
+[2m                              [m│  move · [1m↑↓/jk[m scroll · [1mesc[m close                         │[2m                              [m
 [2m                              [m│                                                          │[2m                              [m
 [2m                              [m╰──────────────────────────────────────────────────────────╯[2m                              [m
 [2m                                                                        │                                               [m
@@ -37,4 +37,4 @@
 [2m                                                                        │                                               [m
 [2m                                                                        │                                               [m
 [2m                                                                        │                                               [m
-[2m  ↑↓ navigate · enter switch · ␣ find · tab detail · / filter · g goto · ? help                                         [m
+[2m  move · ↑↓/jk move · enter switch · ␣ find · tab detail · / filter · g goto · ? help · q quit                          [m

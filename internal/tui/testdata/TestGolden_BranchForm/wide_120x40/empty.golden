@@ -1,7 +1,7 @@
  [1m[1mtest-project[m · 5 worktrees · ⬍ name                                                                                1/5[m 
                                                                         │ ──[1m New worktree [m───────────────────────────── 
- ❯ ● [1mroot[m                                                       0s      │ ❯ Branch  [37m[m[7;37mt[m[38;5;240mype to search or create[m[38;5;240m           [m 
-   ○ feature-auth                                              60m      │           ❯ main                 in use: root 
+   ● [1mroot[m                                                       0s      │ ❯ Branch  [37m[m[7;37mt[m[38;5;240mype to search or create[m[38;5;240m           [m 
+   ○ feature-auth                                              60m      │           › main                 in use: root 
    ○ fix-bug                                                    2h      │             feature/auth         in use: auth 
    ● testing                                                    3h      │             fix/login                existing 
    ○ refactor                                                   4h      │             remote-only                remote 
@@ -9,9 +9,9 @@
                                                                         │   Name    [37m[m[37m[m [37m                                  [m 
                                                                         │                                               
                                                                         │                                               
-                                                                        │                                               
                                                                         │ type a branch name                            
-                                                                        │ [1m↑↓[m pick · [1mtab[m next · [1menter[m create · [1mesc[m back  
+                                                                        │ type · [1m↑↓/ctrl+jk[m pick                        
+                                                                        │ [1mtab[m next · [1menter[m create · [1mesc[m cancel          
                                                                         │                                               
                                                                         │                                               
                                                                         │                                               

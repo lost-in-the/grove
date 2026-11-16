@@ -1,7 +1,7 @@
  [1m[1mtest-project[m · 5 worktrees · ⬍ name                                                                                1/5[m 
                                                                         │ ──[1m New worktree [m───────────────────────────── 
- ❯ ● [1mroot[m                                                       0s      │ ❯ Branch  [37m[mabc-12[7;37m [m                             
-   ○ feature-auth                                              60m      │           ❯ + new "abc-12"          from main 
+   ● [1mroot[m                                                       0s      │ ❯ Branch  [37m[mabc-12[7;37m [m                             
+   ○ feature-auth                                              60m      │           › + new "abc-12"          from main 
    ○ fix-bug                                                    2h      │                                               
    ● testing                                                    3h      │                                               
    ○ refactor                                                   4h      │                                               
@@ -9,9 +9,9 @@
                                                                         │   Name    [37m[m[37mabc-12[m [37m                            [m 
                                                                         │           folder grove-abc-12                 
                                                                         │           session grove-abc-12                
-                                                                        │                                               
                                                                         │ ✓ ready                                       
-                                                                        │ [1m↑↓[m pick · [1mtab[m next · [1menter[m create · [1mesc[m back  
+                                                                        │ type · [1m↑↓/ctrl+jk[m pick                        
+                                                                        │ [1mtab[m next · [1menter[m create · [1mesc[m cancel          
                                                                         │                                               
                                                                         │                                               
                                                                         │                                               

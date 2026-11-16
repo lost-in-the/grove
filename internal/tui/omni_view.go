@@ -83,7 +83,7 @@ func (m Model) omniSourceFor() omniSource {
 
 // openOmni pushes omni over the current view. It never fetches.
 func (m Model) openOmni(scope omniScope) (tea.Model, tea.Cmd) {
-	in := textinput.New()
+	in := newTextInput()
 	in.Prompt = ""
 	in.Placeholder = "type a worktree, action, or #PR"
 	if scope == omniScopeActions {
@@ -112,13 +112,13 @@ func (m Model) handleOmniKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.omni = nil
 		m.popView()
 		return m, nil
-	case k == "down" || k == "ctrl+j":
+	case finderDown(k) || key.Matches(msg, m.keys.Tab):
 		s.Cursor = min(s.Cursor+1, max(0, len(s.rows())-1))
 		return m, nil
-	case k == "up" || k == "ctrl+k":
+	case finderUp(k) || key.Matches(msg, m.keys.ShiftTab):
 		s.Cursor = max(0, s.Cursor-1)
 		return m, nil
-	case k == "enter":
+	case key.Matches(msg, m.keys.Enter):
 		return m.chooseOmni()
 	}
 	return m, m.typeOmni(msg)
@@ -204,7 +204,10 @@ func omniFrameSize(termW, termH int) (int, int) {
 func renderOmni(s *OmniState, termW, termH int) string {
 	w, h := omniFrameSize(termW, termH)
 	inner := w - 4
-	bodyRows := h - 5 // border, input, status, key line
+	// The key line is the same at every keystroke, so its rows depend only
+	// on the width and the frame keeps its size.
+	keys := renderKeyLine(typeFooter(Hint{"esc", "close"}, Hint{"↑↓/ctrl+jk", "pick"}, Hint{"enter", "choose"}), inner, 2)
+	bodyRows := h - 4 - len(keys) // border, input, status, key line
 
 	title := "Find"
 	if s.Scope == omniScopeActions {
@@ -220,10 +223,10 @@ func renderOmni(s *OmniState, termW, termH int) string {
 	}
 	body = windowLines(body, bodyRows, s.Cursor)
 
-	status, keys := omniStatus(s)
 	lines := []string{Styles.OverlayTitle.Render(title), Styles.HelpKey.Render("␣ ▏") + s.Input.View()}
 	lines = append(lines, body...)
-	lines = append(lines, Styles.DetailDim.Render(status), Styles.Footer.Render(keys))
+	lines = append(lines, Styles.DetailDim.Render(omniStatus(s)))
+	lines = append(lines, keys...)
 	for i, l := range lines {
 		lines[i] = " " + padCells(l, inner) + " "
 	}
@@ -279,27 +282,26 @@ func litRunes(s string, hits []int, base lipgloss.Style) string {
 }
 
 // omniStatus says what enter does for the selected row.
-func omniStatus(s *OmniState) (string, string) {
-	keys := "⏎ choose · ctrl+j/k move · esc back"
+func omniStatus(s *OmniState) string {
 	it, ok := s.selected()
 	if !ok {
 		if strings.TrimSpace(s.Input.Value()) == "" {
-			return "type to search", keys
+			return "type to search"
 		}
-		return "no matches", keys
+		return "no matches"
 	}
 	switch it.Kind {
 	case omniWorktree:
 		if it.Current {
-			return "⏎ stays on " + it.Label, keys
+			return "⏎ stays on " + it.Label
 		}
-		return "⏎ switches to " + it.Label, keys
+		return "⏎ switches to " + it.Label
 	case omniAction:
-		return "⏎ runs " + it.Label, keys
+		return "⏎ runs " + it.Label
 	case omniPR:
-		return "⏎ opens pull request " + it.Detail, keys
+		return "⏎ opens pull request " + it.Detail
 	case omniIssue:
-		return "⏎ opens issue " + it.Detail, keys
+		return "⏎ opens issue " + it.Detail
 	}
-	return "", keys
+	return ""
 }

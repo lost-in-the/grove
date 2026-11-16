@@ -28,6 +28,10 @@ type rowDelegate struct {
 	AgentAware bool              // draw the agent column
 	Secondary  string
 	Now        func() time.Time
+	// Unfocused draws the selected row without the cursor and the
+	// selection bar, for a list beside a focused panel. Its alias stays
+	// bold, so the row can still be found.
+	Unfocused bool
 }
 
 // NewDashboardRowDelegate returns the dashboard's row delegate, for tools
@@ -102,8 +106,9 @@ func (d rowDelegate) Render(w io.Writer, m list.Model, index int, listItem list.
 	width := m.Width()
 	l := d.layout(m)
 	selected := index == m.Index()
+	lit := selected && !d.Unfocused
 	st := func(s lipgloss.Style) lipgloss.Style {
-		if selected {
+		if lit {
 			return s.Background(Colors.SelectionBg)
 		}
 		return s
@@ -132,7 +137,7 @@ func (d rowDelegate) Render(w io.Writer, m list.Model, index int, listItem list.
 		left.WriteString(pad(agentGlyph(item.AgentStatus, st), rowLeadW))
 	}
 	switch {
-	case selected:
+	case lit:
 		left.WriteString(st(Styles.ListCursor).Render("❯") + sp)
 	case d.LastActive != "" && !item.IsCurrent && item.displayName() == d.LastActive:
 		left.WriteString(st(Styles.TextMuted).Render("↩") + sp)

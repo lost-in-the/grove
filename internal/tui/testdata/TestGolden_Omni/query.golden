@@ -19,6 +19,6 @@
 [2m            [m│                                                      │[2m            [m
 [2m            [m│                                                      │[2m            [m
 [2m            [m│ ⏎ switches to fix-bug                                │[2m            [m
-[2m root · test[m│ ⏎ choose · ctrl+j/k move · esc back                  │[2m            [m
-[2m  ↑↓ navigat[m╰──────────────────────────────────────────────────────╯[2m            [m
-[2m  tab detail · / filter · g goto · ? help                                       [m
+[2m root · test[m│ type · [1m↑↓/ctrl+jk[m pick · [1menter[m choose · [1mesc[m close    │[2m            [m
+[2m  move · ↑↓/[m╰──────────────────────────────────────────────────────╯[2m            [m
+[2m  tab detail · / filter · g goto · ? help · q quit                              [m

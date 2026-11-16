@@ -642,17 +642,14 @@ func TestBranchFormModes_KeyLines(t *testing.T) {
 		s    *BranchFormState
 		want string
 	}{
-		{"new", n, "↑↓ pick · tab next · enter create · esc back"},
-		{"new, on Name", name, "tab next · enter create · esc back"},
-		{"copy", c, "tab next · enter copy · esc back"},
-		{"copy, on Changes", changes, "←→ change · tab next · enter copy · esc back"},
-		{"switch", sw, "↑↓ pick · enter switch · esc back"},
+		{"new", n, "type · ↑↓/ctrl+jk pick · tab next · enter create · esc cancel"},
+		{"new, on Name", name, "type · tab next · enter create · esc cancel"},
+		{"copy", c, "type · tab next · enter copy · esc cancel"},
+		{"copy, on Changes", changes, "move · ←→/hl change · tab next · enter copy · esc cancel"},
+		{"switch", sw, "type · ↑↓/ctrl+jk pick · enter switch · esc cancel"},
 	} {
 		if got := tt.s.keyLine(); got != tt.want {
 			t.Errorf("%s: key line = %q, want %q", tt.name, got, tt.want)
-		}
-		if strings.Contains(tt.s.keyLine(), "ctrl") {
-			t.Errorf("%s: key line advertises a ctrl key: %q", tt.name, tt.s.keyLine())
 		}
 	}
 }
@@ -1016,7 +1013,7 @@ func TestCopyForm_DetachedSourceSaysSo(t *testing.T) {
 
 func TestExistsPrompt_OffersCopy(t *testing.T) {
 	out := ansi.Strip(renderExistingWorktreePrompt(&ExistingWorktreePrompt{WorktreeName: "auth", Branch: "feature/auth", ItemLabel: "PR #42"}, 120))
-	if !strings.Contains(out, "[n] copy") || strings.Contains(out, "fork") {
+	if !strings.Contains(out, "n copy") || strings.Contains(out, "fork") {
 		t.Errorf("exists prompt should offer copy, not fork:\n%s", out)
 	}
 }

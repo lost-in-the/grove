@@ -160,7 +160,7 @@ func newBranchForm(opts branchFormOptions) *BranchFormState {
 }
 
 func newFormInput(placeholder string) textinput.Model {
-	ti := textinput.New()
+	ti := newTextInput()
 	ti.Prompt = ""
 	ti.Placeholder = placeholder
 	ti.CharLimit = 100
@@ -644,15 +644,21 @@ func (s *BranchFormState) status() (string, formStatusKind) {
 	return "✓ ready", formStatusReady
 }
 
-// keyHints are the form's keys for its state. ctrl+j and ctrl+k also move
-// the pick, but only the arrows are shown.
-func (s *BranchFormState) keyHints() []Hint {
+// keyFooter is the form's key line for its state.
+func (s *BranchFormState) keyFooter() Footer {
 	if s.Busy {
-		return []Hint{{"", "wait for this to finish"}}
+		return Footer{Hints: []Hint{{"", "wait for this to finish"}}}
 	}
 	if s.Log != nil {
-		return []Hint{{"", "any key to edit"}, {"esc", "back"}}
+		return moveFooter(Hint{"esc", "cancel"}, Hint{"", "any key to edit"})
 	}
+	return s.keyFooterFor(s.Focus)
+}
+
+// keyFooterFor is the key line with field f focused. The Changes field has
+// no text cursor, so the form is in move mode there.
+func (s *BranchFormState) keyFooterFor(f formField) Footer {
+	leave := Hint{"esc", "cancel"}
 	verb := "create"
 	switch {
 	case s.Mode == formModeCopy:
@@ -661,28 +667,55 @@ func (s *BranchFormState) keyHints() []Hint {
 		verb = "switch"
 	}
 	var hints []Hint
-	if s.hasSuggestions(s.Focus) {
-		hints = append(hints, Hint{"↑↓", "pick"})
+	if s.hasSuggestions(f) {
+		hints = append(hints, Hint{"↑↓/ctrl+jk", "pick"})
 	}
-	if s.Focus == fieldChanges {
-		hints = append(hints, Hint{"←→", "change"})
+	if f == fieldChanges {
+		hints = append(hints, Hint{"←→/hl", "change"})
 	}
-	if len(s.fieldOrder()) > 1 {
+	if len(s.fieldOrder()) > 1 || f == fieldChanges {
 		hints = append(hints, Hint{"tab", "next"})
 	}
-	return append(hints, Hint{"enter", verb}, Hint{"esc", "back"})
+	hints = append(hints, Hint{"enter", verb})
+	if f == fieldChanges {
+		return moveFooter(leave, hints...)
+	}
+	return typeFooter(leave, hints...)
 }
 
-// keyLine is the key line as plain text.
+// keyRows is how many rows the key line takes at width: two when the
+// widest line the mode can show needs them. It does not depend on the
+// focused field or the changes check, so the status line never moves.
+func (s *BranchFormState) keyRows(width int) int {
+	fields := map[formMode][]formField{
+		formModeNew:    {fieldBranch, fieldBase, fieldAlias},
+		formModeCopy:   {fieldBranch, fieldAlias, fieldChanges},
+		formModeSwitch: {fieldBranch},
+	}[s.Mode]
+	for _, f := range fields {
+		if len(renderKeyLine(s.keyFooterFor(f), width, 2)) > 1 {
+			return 2
+		}
+	}
+	return 1
+}
+
+// keyLine is the key line as plain text, on one line.
 func (s *BranchFormState) keyLine() string {
-	parts := make([]string, 0, 5)
-	for _, h := range s.keyHints() {
-		parts = append(parts, strings.TrimSpace(h.Key+" "+h.Description))
+	f := s.keyFooter()
+	var parts []string
+	if f.Mode != modeNone {
+		parts = append(parts, string(f.Mode))
+	}
+	for _, h := range append(f.Hints, f.Leave) {
+		if p := strings.TrimSpace(h.Key + " " + h.Description); p != "" {
+			parts = append(parts, p)
+		}
 	}
 	return strings.Join(parts, " · ")
 }
 
-// handleKey applies one key. Navigation keys are explicit strings, never the
+// handleKey applies one key. Pick keys are explicit strings, never the
 // global Up/Down bindings, because those include j and k, which must type.
 func (s *BranchFormState) handleKey(msg tea.KeyPressMsg, keys KeyMap) (formResult, tea.Cmd) {
 	if s.Busy {
@@ -698,18 +731,18 @@ func (s *BranchFormState) handleKey(msg tea.KeyPressMsg, keys KeyMap) (formResul
 	switch k := msg.String(); {
 	case key.Matches(msg, keys.Escape):
 		return formCancel, nil
-	case k == "tab":
+	case key.Matches(msg, keys.Tab):
 		s.acceptPick()
 		return formContinue, s.moveFocus(1)
-	case k == "shift+tab":
+	case key.Matches(msg, keys.ShiftTab):
 		return formContinue, s.moveFocus(-1)
-	case k == "up" || k == "ctrl+k":
+	case finderUp(k):
 		s.movePick(-1)
 		return formContinue, nil
-	case k == "down" || k == "ctrl+j":
+	case finderDown(k):
 		s.movePick(1)
 		return formContinue, nil
-	case k == "enter":
+	case key.Matches(msg, keys.Enter):
 		if (s.Focus == fieldBranch || s.Focus == fieldBase) && (s.Mode != formModeSwitch || s.switchPickApplies()) {
 			s.acceptPick()
 		}
@@ -721,9 +754,9 @@ func (s *BranchFormState) handleKey(msg tea.KeyPressMsg, keys KeyMap) (formResul
 	}
 	if s.Focus == fieldChanges {
 		switch msg.String() {
-		case "left":
+		case "left", "h":
 			s.cycleChanges(-1)
-		case "right", "space":
+		case "right", "l", "space":
 			s.cycleChanges(1)
 		}
 		return formContinue, nil

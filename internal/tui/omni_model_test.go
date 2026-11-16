@@ -244,7 +244,7 @@ func TestOmni_StatusOnCurrentWorktree(t *testing.T) {
 			m.omni.Cursor = i
 		}
 	}
-	if st, _ := omniStatus(m.omni); st != "⏎ stays on root" {
+	if st := omniStatus(m.omni); st != "⏎ stays on root" {
 		t.Errorf("status = %q", st)
 	}
 }

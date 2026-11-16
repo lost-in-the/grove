@@ -59,7 +59,7 @@ func renderBulk(s *BulkState) string {
 
 	if len(s.Items) == 0 {
 		b.WriteString(Styles.DetailDim.Render("No worktrees to clean up.") + "\n")
-		b.WriteString("\n" + Styles.Footer.Render("[esc] close"))
+		b.WriteString("\n" + keyLine(moveFooter(Hint{"esc", "close"}), 72))
 		return Styles.OverlayBorderDanger.Render(
 			Styles.OverlayTitle.Render("Bulk Delete") + "\n\n" + b.String(),
 		)
@@ -103,7 +103,8 @@ func renderBulk(s *BulkState) string {
 			fmt.Sprintf("⚠ %d selected worktree(s) have uncommitted changes — deleting discards them", n)) + "\n")
 	}
 
-	b.WriteString("\n" + Styles.Footer.Render("[space] toggle  [enter] delete selected  [esc] cancel"))
+	b.WriteString("\n" + promptKeys(moveFooter(Hint{"esc", "cancel"},
+		Hint{"↑↓/jk", "move"}, Hint{"space", "toggle"}, Hint{"enter", "delete selected"}), 72, ""))
 
 	return Styles.OverlayBorderDanger.Render(
 		Styles.OverlayTitle.Render("Bulk Delete") + "\n\n" + b.String(),

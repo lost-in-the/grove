@@ -171,10 +171,8 @@ func TestExistsPromptFork_EscReturnsToPRBrowser(t *testing.T) {
 // esc in the focused detail pane returns to the list, so the hint says so.
 func TestDetailFocusedHints_EscReturnsToList(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(120, 40))
-	for _, h := range m.dashboardDetailFocusedHints() {
-		if h.Key == "esc" && h.Description != "list" {
-			t.Errorf("esc hint = %q, want %q", h.Description, "list")
-		}
+	if leave := m.dashboardDetailFooter().Leave; leave != (Hint{"esc/tab", "back"}) {
+		t.Errorf("leave hint = %+v, want esc/tab back", leave)
 	}
 }
 
