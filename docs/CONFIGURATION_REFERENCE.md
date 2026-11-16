@@ -1006,7 +1006,7 @@ These are read at runtime and never written to config files.
 | `GROVE_SHELL` | `1` | Set by shell integration. Enables the directive protocol (cd:, env:, tmux-attach:, tmux-attach-cc:). |
 | `GROVE_SHELL_VERSION` | integer | Set by shell integration. Binary warns if shell is outdated. |
 | `GROVE_TUI` | `0` to disable | Set to `0` to disable TUI mode. Bare `grove` shows help instead. Default: enabled. |
-| `GROVE_AGENT_MODE` | any non-empty | Forces isolated Docker strategy and suppresses tmux for AI agent workloads. In external mode with `[plugins.docker.external.agent] enabled = true`, `grove to` never touches the stack, and `grove to --up` prints an `agent mode:` notice on stderr instead of moving it. `grove up --isolated` starts a stack for the worktree. To suppress tmux alone for one invocation, use `--no-tmux` on `grove to` / `grove new` instead. |
+| `GROVE_AGENT_MODE` | any non-empty | Forces isolated Docker strategy and suppresses tmux for AI agent workloads. In external mode with `[plugins.docker.external.agent] enabled = true`, `grove to` never touches the stack, and `grove to --up` does not move it (if the target has no isolated stack yet, it prints an `agent mode:` notice on stderr). `grove up --isolated` starts a stack for the worktree. To suppress tmux alone for one invocation, use `--no-tmux` on `grove to` / `grove new` instead. |
 | `GROVE_LOG` | `1` or path | Enable command-level logging. `1` writes to `~/.grove/grove.log`. |
 | `GROVE_DEBUG` | `1` or path | Enable TUI debug logging. `1` writes to `~/.grove-debug.log`. |
 | `GROVE_NO_COLOR` | any non-empty | Disable all colored output. Also respected: `NO_COLOR`. |

@@ -12,6 +12,11 @@ import (
 // localStrategy implements the docker mode for projects with their own docker-compose file.
 type localStrategy struct {
 	cfg *config.Config
+
+	// Test seams for the compose calls the switch hooks make. Nil means the
+	// real Up and Down.
+	upFn   func(worktreePath string, detach bool) error
+	downFn func(worktreePath string) error
 }
 
 func newLocalStrategy(cfg *config.Config) *localStrategy {
@@ -19,7 +24,7 @@ func newLocalStrategy(cfg *config.Config) *localStrategy {
 }
 
 func (s *localStrategy) OnPreSwitch(ctx *hooks.Context) error {
-	worktreePath := s.getWorktreePath(ctx.PrevWorktree)
+	worktreePath := s.switchPath(ctx.PrevWorktreePath, ctx.PrevWorktree)
 	if !hasDockerCompose(worktreePath) {
 		return nil
 	}
@@ -32,7 +37,7 @@ func (s *localStrategy) OnPreSwitch(ctx *hooks.Context) error {
 }
 
 func (s *localStrategy) OnPostSwitch(ctx *hooks.Context) error {
-	worktreePath := s.getWorktreePath(ctx.Worktree)
+	worktreePath := s.switchPath(ctx.WorktreePath, ctx.Worktree)
 	if !hasDockerCompose(worktreePath) {
 		return nil
 	}
@@ -41,7 +46,8 @@ func (s *localStrategy) OnPostSwitch(ctx *hooks.Context) error {
 		return nil
 	}
 
-	return s.up(worktreePath, false)
+	// Detached: a switch must finish, not wait on the services.
+	return s.up(worktreePath, true)
 }
 
 func (s *localStrategy) OnPostCreate(_ *hooks.Context) error {
@@ -138,10 +144,16 @@ func (s *localStrategy) Restart(worktreePath string, service string) error {
 }
 
 func (s *localStrategy) down(worktreePath string) error {
+	if s.downFn != nil {
+		return s.downFn(worktreePath)
+	}
 	return s.Down(worktreePath)
 }
 
 func (s *localStrategy) up(worktreePath string, detach bool) error {
+	if s.upFn != nil {
+		return s.upFn(worktreePath, detach)
+	}
 	return s.Up(worktreePath, detach)
 }
 
@@ -151,6 +163,16 @@ func (s *localStrategy) getAutoStart() bool {
 
 func (s *localStrategy) getAutoStop() bool {
 	return dockerAutoStop(s.cfg, false)
+}
+
+// switchPath is the worktree a switch hook acts on: the exact path the hook
+// was given, or one rebuilt from the name when the caller sent none. A name
+// alone can match a different worktree.
+func (s *localStrategy) switchPath(path, name string) string {
+	if path != "" {
+		return path
+	}
+	return s.getWorktreePath(name)
 }
 
 func (s *localStrategy) getWorktreePath(name string) string {

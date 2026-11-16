@@ -71,7 +71,8 @@ func writeAgentHelp(cmd *cobra.Command) {
   - Set GROVE_AGENT_MODE=1 to prevent tmux from taking over your terminal
   - By default grove to does not touch the stack ([switch] container_switch = "auto" or "prompt"
     changes that). With agent stacks enabled, grove to --up leaves the stack where
-    it is (a human may be using it) and prints an 'agent mode:' notice on stderr.
+    it is (a human may be using it). If the target has no isolated stack yet, it
+    also prints an 'agent mode:' notice on stderr.
     Run grove up --isolated before running tests
   - grove new emits cd:/path directives — parse these to know where the worktree was created
 

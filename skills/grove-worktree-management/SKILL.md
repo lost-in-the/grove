@@ -46,8 +46,9 @@ export GROVE_TUI=0               # disable dashboard
 > `grove new`. To fully disable tmux, set `[tmux] mode = "off"` in config.
 >
 > **Docker effect:** in external Docker mode with `[plugins.docker.external.agent] enabled = true`,
-> `grove to` never moves the stack (a human may be using it). `grove to --up` prints an
-> `agent mode:` notice on stderr and the stack stays on its previous worktree.
+> `grove to` never moves the stack (a human may be using it). `grove to --up` leaves the
+> stack on its previous worktree. If the target has no isolated stack yet, it also prints an
+> `agent mode:` notice on stderr.
 > Run `grove up --isolated` in the worktree before running tests.
 
 ## Command Quick Reference
