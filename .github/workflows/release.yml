@@ -62,12 +62,13 @@ jobs:
   # artifacts), so `needs: goreleaser` is purely an ordering/success gate.
   #
   # The tap's default branch only accepts changes through a pull request, so
-  # scripts/update-homebrew-tap.sh opens one and merges it (auto-merge, else a
-  # direct merge, else a warning naming the PR to merge by hand). It is
-  # idempotent, so a re-run reuses the branch and PR, or does nothing once the
-  # tap is current. TAP_GITHUB_TOKEN needs Contents and Pull requests write on
-  # lost-in-the/homebrew-tap. scripts/test-update-homebrew-tap.sh exercises it
-  # in CI against a fake API.
+  # scripts/update-homebrew-tap.sh opens one. It never merges it: a person
+  # merges the PR by hand, from the link in the job's notice and step summary.
+  # The script is idempotent, so a re-run reuses the branch and PR, or does
+  # nothing once the tap is current. TAP_GITHUB_TOKEN needs Contents and Pull
+  # requests write on lost-in-the/homebrew-tap, to push the branch and open the
+  # PR. scripts/test-update-homebrew-tap.sh exercises the script in CI against
+  # a fake API.
   homebrew:
     name: Update Homebrew formula
     needs: goreleaser

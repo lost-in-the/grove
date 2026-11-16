@@ -39,81 +39,75 @@ st() { curl -fsS "$API/__state" | jq -r "$1"; }
 cfg() { jq -n --rawfile f "$1" "{main_formula: \$f} + $2"; }
 run() {
   TAP_GITHUB_TOKEN=t GITHUB_API="$API" TARBALL_URL="file://$WORK/source.tar.gz" \
-    MERGE_RETRY_DELAY=0 "$SCRIPT" v0.11.0 >"$WORK/out.txt" 2>&1
+    "$SCRIPT" v0.11.0 >"$WORK/out.txt" 2>&1
   echo $?
 }
 out() { cat "$WORK/out.txt"; }
 
-echo "1. fresh release, auto-merge available"
-reset "$(cfg "$WORK/old.rb" '{automerge: "ok"}')"
+# The script never merges. Count the requests that would: the GraphQL
+# auto-merge mutation and the direct merge.
+merge_calls() { st '[.calls[] | select(test("graphql|/merge$"))] | length'; }
+PR_URL="https://github.com/lost-in-the/homebrew-tap/pull/6"
+unset TAP_MERGE
+export GITHUB_STEP_SUMMARY="$WORK/summary.txt"
+
+echo "1. fresh release: the pull request is opened and left for a person"
+: > "$WORK/summary.txt"
+reset "$(cfg "$WORK/old.rb" '{}')"
 rc=$(run)
 [ "$rc" = 0 ] && ok "exits 0" || bad "exits 0 (got $rc)" "$(out)"
 [ "$(st '.files["grove-0.11.0"]')" = "$NEW" ] && ok "branch carries the rendered formula" || bad "branch formula"
 [ "$(st '.files.main')" = "$OLD" ] && ok "main untouched (no direct write)" || bad "main was written"
 [ "$(st '.pulls | length')" = 1 ] && ok "one pull request" || bad "pull requests: $(st '.pulls | length')"
 [ "$(st '.pulls[0].title')" = "grove 0.11.0" ] && ok "titled 'grove 0.11.0'" || bad "title"
-[ "$(st '.automerge | length')" = 1 ] && ok "auto-merge requested" || bad "auto-merge"
-grep -q "will merge automatically" "$WORK/out.txt" && ok "says it will auto-merge" || bad "message" "$(out)"
+[ "$(merge_calls)" = 0 ] && ok "no auto-merge or merge request reached the API" || bad "merge calls: $(st '.calls')"
+grep -q "^::notice::.*${PR_URL}.*manual merge" "$WORK/out.txt" && ok "notice names the pull request and the manual merge" || bad "notice" "$(out)"
+grep -q "::warning::" "$WORK/out.txt" && bad "must not warn: nothing went wrong" "$(out)" || ok "no warning"
+grep -q "${PR_URL}.*manual merge" "$WORK/summary.txt" && ok "step summary says the same" || bad "summary" "$(cat "$WORK/summary.txt")"
 
-echo "2. re-run with the branch and PR already there"
+echo "2. re-run with the branch and pull request already there"
 before_puts=$(st '[.calls[] | select(startswith("PUT"))] | length')
 rc=$(run)
 [ "$rc" = 0 ] && ok "exits 0" || bad "exits 0 (got $rc)" "$(out)"
 [ "$(st '[.calls[] | select(startswith("PUT"))] | length')" = "$before_puts" ] && ok "no second commit" || bad "committed again"
 [ "$(st '.pulls | length')" = 1 ] && ok "pull request reused, not duplicated" || bad "duplicated PR"
-grep -q "Reusing branch" "$WORK/out.txt" && grep -q "Reusing open pull request" "$WORK/out.txt" && ok "reports the reuse" || bad "reuse message" "$(out)"
+grep -q "Reusing branch" "$WORK/out.txt" && grep -q "Reusing open pull request ${PR_URL}" "$WORK/out.txt" && ok "reports the reuse" || bad "reuse message" "$(out)"
+[ "$(merge_calls)" = 0 ] && ok "still no merge request" || bad "merge calls: $(st '.calls')"
 
-echo "3. auto-merge unavailable (the tap's setting): merged directly"
-reset "$(cfg "$WORK/old.rb" '{automerge: "fail", merge: "ok"}')"
+echo "3. tap already at this formula"
+reset "$(cfg "$WORK/new.rb" '{}')"
 rc=$(run)
 [ "$rc" = 0 ] && ok "exits 0" || bad "exits 0 (got $rc)" "$(out)"
-[ "$(st '.files.main')" = "$NEW" ] && ok "the tap's main now has the formula (via the PR)" || bad "main not updated"
-[ "$(st '.merged_title')" = "grove 0.11.0 (#6)" ] && ok "squash title 'grove 0.11.0 (#6)'" || bad "title: $(st '.merged_title')"
-grep -q "merged https://github.com/lost-in-the/homebrew-tap/pull/6" "$WORK/out.txt" && ok "says it merged" || bad "message" "$(out)"
-rc=$(run)
-[ "$rc" = 0 ] && grep -q "nothing to do" "$WORK/out.txt" && ok "a re-run after the merge is a no-op" || bad "re-run" "$(out)"
-
-echo "3b. not mergeable yet (GitHub still computing), then merged"
-reset "$(cfg "$WORK/old.rb" '{automerge: "fail", merge: "notyet"}')"
-rc=$(run)
-[ "$rc" = 0 ] && [ "$(st '.files.main')" = "$NEW" ] && ok "retries until mergeable" || bad "retry" "$(out)"
-
-echo "3c. never mergeable (e.g. a review now required)"
-reset "$(cfg "$WORK/old.rb" '{automerge: "fail", merge: "never"}')"
-rc=$(run)
-[ "$rc" = 0 ] && ok "still exits 0 — the PR is the deliverable" || bad "exits 0 (got $rc)" "$(out)"
-grep -q "::warning::Homebrew: merge https://github.com/lost-in-the/homebrew-tap/pull/6" "$WORK/out.txt" && ok "warns with the PR to merge" || bad "warning" "$(out)"
-grep -q "not mergeable" "$WORK/out.txt" && ok "names why" || bad "reason missing" "$(out)"
-[ "$(st '.files.main')" = "$OLD" ] && ok "main untouched" || bad "main changed"
-
-echo "3d. token may not merge"
-reset "$(cfg "$WORK/old.rb" '{automerge: "fail", merge: "forbidden"}')"
-rc=$(run)
-[ "$rc" = 0 ] && grep -q "::warning::.*HTTP 403" "$WORK/out.txt" && ok "warns with the status, PR left open" || bad "forbidden merge" "$(out)"
-[ "$(st '.merge_attempts')" = 1 ] && ok "does not retry a refusal" || bad "retried a 403: $(st '.merge_attempts')"
-
-echo "4. tap already at this formula"
-reset "$(cfg "$WORK/new.rb" '{automerge: "ok"}')"
-rc=$(run)
-[ "$rc" = 0 ] && ok "exits 0" || bad "exits 0 (got $rc)"
-[ "$(st '[.calls[] | select(startswith("POST"))] | length')" = 0 ] && ok "no branch, PR, or merge calls" || bad "made calls: $(st '.calls')"
+[ "$(st '[.calls[] | select(startswith("POST"))] | length')" = 0 ] && ok "no branch or pull request calls" || bad "made calls: $(st '.calls')"
 grep -q "nothing to do" "$WORK/out.txt" && ok "says nothing to do" || bad "message" "$(out)"
 
+echo "4. TAP_MERGE=merge in the environment is ignored"
+: > "$WORK/summary.txt"
+reset "$(cfg "$WORK/old.rb" '{}')"
+export TAP_MERGE=merge
+rc=$(run)
+unset TAP_MERGE
+[ "$rc" = 0 ] && ok "exits 0" || bad "exits 0 (got $rc)" "$(out)"
+[ "$(st '.pulls | length')" = 1 ] && ok "pull request opened" || bad "pull requests: $(st '.pulls | length')"
+[ "$(merge_calls)" = 0 ] && ok "no merge request reached the API" || bad "merge calls: $(st '.calls')"
+[ "$(st '.files.main')" = "$OLD" ] && ok "main untouched" || bad "main changed"
+grep -q "^::notice::.*manual merge" "$WORK/out.txt" && ok "still asks for a manual merge" || bad "notice" "$(out)"
+
 echo "5. token cannot write"
-reset "$(cfg "$WORK/old.rb" '{automerge: "ok", put_status: 403}')"
+reset "$(cfg "$WORK/old.rb" '{put_status: 403}')"
 rc=$(run)
 [ "$rc" != 0 ] && ok "fails" || bad "should fail"
 grep -q "::error::unexpected HTTP 403" "$WORK/out.txt" && ok "names the HTTP status" || bad "error" "$(out)"
 [ "$(st '.pulls | length')" = 0 ] && ok "opens no PR for an empty branch" || bad "opened a PR"
 
 echo "6. reading the tap's formula fails (must not be taken for 'no file')"
-reset "$(cfg "$WORK/old.rb" '{automerge: "ok", contents_status: 500}')"
+reset "$(cfg "$WORK/old.rb" '{contents_status: 500}')"
 rc=$(run)
 [ "$rc" != 0 ] && ok "fails" || bad "should fail" "$(out)"
 [ "$(st '[.calls[] | select(startswith("POST"))] | length')" = 0 ] && ok "goes no further" || bad "carried on: $(st '.calls')"
 
 echo "7. source tarball missing"
-reset "$(cfg "$WORK/old.rb" '{automerge: "ok"}')"
+reset "$(cfg "$WORK/old.rb" '{}')"
 TAP_GITHUB_TOKEN=t GITHUB_API="$API" TARBALL_URL="file://$WORK/nope.tar.gz" "$SCRIPT" v0.11.0 >"$WORK/out.txt" 2>&1; rc=$?
 [ "$rc" != 0 ] && grep -q "could not download the source tarball" "$WORK/out.txt" && ok "fails before touching the tap" || bad "tarball failure" "$(out)"
 [ "$(st '.calls | length')" = 0 ] && ok "no API calls" || bad "calls: $(st '.calls')"

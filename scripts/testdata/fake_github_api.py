@@ -4,9 +4,10 @@ Used by scripts/test-update-homebrew-tap.sh; the release job it tests only runs
 on a tag push, so this is the only place its logic runs before a release.
 
 POST /__reset with a JSON config resets state; GET /__state dumps it.
-Config keys: main_formula (text), automerge ("ok"|"fail"), merge ("ok"|
-"notyet"|"never"|"forbidden"), put_status (int), contents_status (int, for GET
-contents on the default branch).
+Config keys: main_formula (text), put_status (int), contents_status (int, for
+GET contents on the default branch).
+A request the script should never make (a merge, say) gets a 404 and still
+shows up in the recorded calls.
 
 The tap's rule is modelled: a direct write to main is refused with 409.
 """
@@ -23,7 +24,7 @@ lock = threading.Lock()
 def reset(cfg):
     state.clear()
     state.update(cfg=cfg, refs={"main": "base0"}, files={"main": cfg.get("main_formula")},
-                 pulls=[], calls=[], automerge=[])
+                 pulls=[], calls=[])
 
 
 def blob_sha(text):
@@ -97,30 +98,10 @@ class H(BaseHTTPRequestHandler):
                 if method == "POST":
                     b = self.body()
                     n = len(state["pulls"]) + 6
-                    pr = {"number": n, "node_id": f"PR_{n}", "head": b["head"], "state": "open",
+                    pr = {"number": n, "head": b["head"], "state": "open",
                           "html_url": f"https://github.com/{TAP}/pull/{n}", "title": b["title"]}
                     state["pulls"].append(pr)
                     return self.reply(201, pr)
-            if method == "PUT" and u.path.startswith(f"/repos/{TAP}/pulls/") and u.path.endswith("/merge"):
-                n = int(u.path.split("/")[-2])
-                pr = next(p for p in state["pulls"] if p["number"] == n)
-                mode = cfg.get("merge", "ok")
-                state.setdefault("merge_attempts", 0)
-                state["merge_attempts"] += 1
-                if mode == "forbidden":
-                    return self.reply(403, {"message": "Resource not accessible by personal access token"})
-                if mode == "never" or (mode == "notyet" and state["merge_attempts"] <= 2):
-                    return self.reply(405, {"message": "Pull Request is not mergeable"})
-                state["files"]["main"] = state["files"][pr["head"]]
-                pr["state"] = "closed"; pr["merged"] = True
-                state["merged_title"] = self.body().get("commit_title")
-                return self.reply(200, {"merged": True})
-            if method == "POST" and u.path == "/graphql":
-                b = self.body()
-                if cfg.get("automerge") == "ok":
-                    state["automerge"].append(b["variables"])
-                    return self.reply(200, {"data": {"enablePullRequestAutoMerge": {"pullRequest": {"number": 1}}}})
-                return self.reply(200, {"errors": [{"message": "Auto merge is not allowed for this repository"}]})
             return self.reply(404, {"message": f"fake has no {method} {u.path}"})
 
     def do_GET(self): self.handle_any("GET")
