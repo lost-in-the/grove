@@ -55,10 +55,10 @@ func TestResolveBackend(t *testing.T) {
 			want: BackendHerdr,
 		},
 		{
-			name: "auto outside both prefers tmux for backward compatibility",
+			name: "auto outside both prefers herdr when both are installed",
 			pref: BackendAuto,
 			env:  Env{TmuxAvailable: true, HerdrAvailable: true},
-			want: BackendTmux,
+			want: BackendHerdr,
 		},
 		{
 			name: "auto falls back to herdr when tmux is missing",

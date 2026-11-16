@@ -163,8 +163,9 @@ my-app-main: 1 windows
 ## Multiplexer Backends
 
 Every command below that "creates a tmux session", "switches sessions", or
-"kills a session" acts on whichever multiplexer `[mux] backend` resolved to —
-tmux (default) or [herdr](https://herdr.dev). The command contracts are
+"kills a session" acts on whichever multiplexer `[mux] backend` resolved to:
+[herdr](https://herdr.dev) or tmux (`auto` prefers the one grove is running
+inside, then herdr when both are installed). The command contracts are
 identical across backends; the specs say "tmux" for historical reasons.
 User-facing surfaces name the resolved backend (the `grove ls` column, TUI
 badges, `grove here`'s label), and machine output uses the neutral `"session"`

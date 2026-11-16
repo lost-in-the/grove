@@ -118,6 +118,15 @@ func canonicalGonePath(p string) string {
 	return p
 }
 
+// SamePath reports whether two paths name the same directory, comparing
+// canonicalized forms. herdr reports canonical paths (/private/tmp) while
+// grove may hold the spelling the user reached a checkout by (/tmp), so
+// string equality calls one directory two. Either side may no longer exist;
+// an empty path never matches.
+func SamePath(a, b string) bool {
+	return a != "" && b != "" && canonicalPath(a) == canonicalPath(b)
+}
+
 // within reports whether path is dir or lies beneath it, comparing
 // canonicalized forms. Either side may no longer exist.
 func within(path, dir string) bool {

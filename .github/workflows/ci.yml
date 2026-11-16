@@ -99,8 +99,8 @@ jobs:
     env:
       # Pinned release and its published SHA-256 (distribution/latest.json in
       # herdrdev/herdr). Bump both together.
-      HERDR_VERSION: 0.9.1
-      HERDR_SHA256: 2a02fed16beb651ef006e1d43f048f652ca4dc58ad053cd2d44450563d5c54b7
+      HERDR_VERSION: 0.9.5
+      HERDR_SHA256: 14d9e8bc8b4a9e0118d77c32266f76d461f09b40342eb23752960bd89f59929d
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

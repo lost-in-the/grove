@@ -19,6 +19,7 @@ import (
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/mux"
 )
 
 // newTestWriter returns a *cli.Writer backed by a bytes.Buffer for capturing
@@ -1627,6 +1628,161 @@ func TestDoctorActionSummary(t *testing.T) {
 		})
 		if len(doctorActions) != 0 {
 			t.Errorf("optional check must not record an action, got %v", doctorActions)
+		}
+	})
+}
+
+// ── multiplexer checks ─────────────────────────────────────────────────────
+
+func TestMissingMuxBinary(t *testing.T) {
+	tests := []struct {
+		name         string
+		this, active mux.Backend
+		wantLevel    doctorLevel
+		wantContains string
+	}{
+		{"tmux missing while herdr is active", mux.BackendTmux, mux.BackendHerdr, doctorLevelInfo, "herdr is the active backend"},
+		{"herdr missing while tmux is active", mux.BackendHerdr, mux.BackendTmux, doctorLevelInfo, "tmux is the active backend"},
+		{"herdr missing but selected", mux.BackendHerdr, mux.BackendHerdr, doctorLevelError, "[mux] backend"},
+		{"tmux missing but selected", mux.BackendTmux, mux.BackendTmux, doctorLevelError, "[mux] backend"},
+		{"tmux missing with sessions off", mux.BackendTmux, mux.BackendOff, doctorLevelAdvisory, "tmux or herdr"},
+		{"herdr missing with sessions off", mux.BackendHerdr, mux.BackendOff, doctorLevelAdvisory, "tmux or herdr"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			level, msg := missingMuxBinary(tt.this, tt.active)
+			if level != tt.wantLevel {
+				t.Errorf("level = %v, want %v (message %q)", level, tt.wantLevel, msg)
+			}
+			if !strings.Contains(msg, tt.wantContains) {
+				t.Errorf("message = %q, want it to contain %q", msg, tt.wantContains)
+			}
+			if !strings.Contains(msg, string(tt.this)+" not found") {
+				t.Errorf("message = %q, want it to name the missing binary", msg)
+			}
+			if strings.Contains(msg, "alternative to") {
+				t.Errorf("message = %q ranks one backend under the other", msg)
+			}
+		})
+	}
+}
+
+func TestReportMuxBinary(t *testing.T) {
+	found := func() (string, error) { return "herdr 0.9.5", nil }
+	missing := func() (string, error) { return "", errMuxBinaryNotFound }
+
+	t.Run("a binary that is not needed is not an error line", func(t *testing.T) {
+		var buf bytes.Buffer
+		ok := reportMuxBinary(newTestWriter(&buf), "Tmux", mux.BackendTmux, mux.BackendHerdr, missing)
+		if !ok {
+			t.Error("a missing binary of the inactive backend failed the run")
+		}
+		if strings.Contains(buf.String(), "✗") {
+			t.Errorf("output = %q, want no error mark", buf.String())
+		}
+	})
+
+	t.Run("the selected backend's missing binary fails the run", func(t *testing.T) {
+		doctorActions = nil
+		var buf bytes.Buffer
+		ok := reportMuxBinary(newTestWriter(&buf), "Herdr", mux.BackendHerdr, mux.BackendHerdr, missing)
+		if ok {
+			t.Error("the selected backend's missing binary passed")
+		}
+		if len(doctorActions) != 1 {
+			t.Errorf("doctorActions = %v, want the missing backend listed", doctorActions)
+		}
+		doctorActions = nil
+	})
+
+	t.Run("with sessions off a missing binary is advisory", func(t *testing.T) {
+		doctorActions = nil
+		var buf bytes.Buffer
+		ok := reportMuxBinary(newTestWriter(&buf), "Tmux", mux.BackendTmux, mux.BackendOff, missing)
+		if !ok || len(doctorActions) != 0 {
+			t.Errorf("ok = %v, doctorActions = %v, want an advisory line only", ok, doctorActions)
+		}
+	})
+
+	t.Run("a found binary reports its version", func(t *testing.T) {
+		var buf bytes.Buffer
+		if ok := reportMuxBinary(newTestWriter(&buf), "Herdr", mux.BackendHerdr, mux.BackendTmux, found); !ok {
+			t.Error("a found binary failed the run")
+		}
+		if !strings.Contains(buf.String(), "herdr 0.9.5") {
+			t.Errorf("output = %q, want the version", buf.String())
+		}
+	})
+}
+
+func TestHerdrVersionWarning(t *testing.T) {
+	if got := herdrVersionWarning("herdr 0.9.5\n"); got != "" {
+		t.Errorf("herdrVersionWarning(0.9.5) = %q, want none", got)
+	}
+	got := herdrVersionWarning("herdr 0.7.3")
+	for _, want := range []string{"0.7.3", mux.HerdrMinVersion} {
+		if !strings.Contains(got, want) {
+			t.Errorf("herdrVersionWarning(0.7.3) = %q, want it to contain %q", got, want)
+		}
+	}
+}
+
+func TestControlModeCheckApplies(t *testing.T) {
+	tests := []struct {
+		backend  mux.Backend
+		terminal bool
+		want     bool
+	}{
+		{mux.BackendTmux, true, true},
+		{mux.BackendTmux, false, false},
+		{mux.BackendHerdr, true, false},
+		{mux.BackendOff, true, false},
+	}
+	for _, tt := range tests {
+		if got := controlModeCheckApplies(tt.backend, tt.terminal); got != tt.want {
+			t.Errorf("controlModeCheckApplies(%q, %v) = %v, want %v", tt.backend, tt.terminal, got, tt.want)
+		}
+	}
+}
+
+func TestHerdrServerVerdict(t *testing.T) {
+	yes, no := true, false
+
+	t.Run("a current server passes without a warning", func(t *testing.T) {
+		detail, warning, err := herdrServerVerdict(mux.HerdrServerStatus{Running: true, Version: "0.9.5", Compatible: &yes, ServerBinaryStale: &no})
+		if err != nil || warning != "" || !strings.Contains(detail, "0.9.5") {
+			t.Errorf("verdict = %q, %q, %v, want a pass naming the version", detail, warning, err)
+		}
+	})
+
+	t.Run("a server older than the CLI but compatible passes with a warning", func(t *testing.T) {
+		detail, warning, err := herdrServerVerdict(mux.HerdrServerStatus{Running: true, Version: "0.9.4", Compatible: &yes, ServerBinaryStale: &yes})
+		if err != nil {
+			t.Fatalf("verdict error = %v, want a pass: the server is still usable", err)
+		}
+		if !strings.Contains(detail, "0.9.4") {
+			t.Errorf("detail = %q, want the server's version", detail)
+		}
+		for _, want := range []string{"0.9.4", "restart"} {
+			if !strings.Contains(warning, want) {
+				t.Errorf("warning = %q, want it to contain %q", warning, want)
+			}
+		}
+	})
+
+	t.Run("a stopped server fails", func(t *testing.T) {
+		if _, _, err := herdrServerVerdict(mux.HerdrServerStatus{}); err == nil || !strings.Contains(err.Error(), "no herdr server running") {
+			t.Errorf("verdict error = %v, want the stopped-server message", err)
+		}
+	})
+
+	t.Run("an incompatible server fails, stale or not", func(t *testing.T) {
+		_, warning, err := herdrServerVerdict(mux.HerdrServerStatus{Running: true, Version: "0.8.0", Compatible: &no, ServerBinaryStale: &yes})
+		if err == nil || !strings.Contains(err.Error(), "different protocols") {
+			t.Errorf("verdict error = %v, want the protocol message", err)
+		}
+		if warning != "" {
+			t.Errorf("warning = %q, want none: the failure already says to restart", warning)
 		}
 	})
 }

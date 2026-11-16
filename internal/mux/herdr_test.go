@@ -111,7 +111,9 @@ func (f *fakeHerdr) called(fragments ...string) bool {
 }
 
 // Real herdr 0.9.1 responses, captured against a live server with paths
-// rewritten to /repos. Fixtures are the contract grove codes against: an
+// rewritten to /repos. On 0.9.5 the same calls answer with the same fields,
+// plus an argv0 per process that grove does not read. Fixtures are the
+// contract grove codes against: an
 // invented shape is how two bugs lived undetected — `pane run` prints nothing
 // on success, and `pane process-info` nests its process list under
 // process_info — because the fakes answered the way grove expected instead of
@@ -1708,5 +1710,157 @@ func TestHerdrSendCommandReachesAnAdoptedWorkspace(t *testing.T) {
 	}
 	if !f.called("--session", "other", "pane", "run", "w7:p1", "claude") {
 		t.Errorf("SendCommand did not run in the adopted workspace's session; calls: %v", f.calls)
+	}
+}
+
+// Real `herdr status server --json` output from 0.9.5, bare JSON with no
+// envelope, with the socket path replaced. The stale variant is the running
+// capture with the server's version and server_binary_stale edited: producing
+// it for real needs two herdr builds side by side.
+const (
+	herdrStatusRunningJSON = `{"status":"running","running":true,"version":"0.9.5","protocol":22,"capabilities":{"live_handoff":true,"detached_server_daemon":false,"endpoint_protocol_generation":1,"surface_interest":true,"health_check":true,"ssh_agent_registration":true},"compatible":true,"endpoint_compatible":true,"socket":"/home/user/.config/herdr/herdr.sock","session":null,"restart_needed":false,"server_binary_stale":false}`
+
+	herdrStatusStaleJSON = `{"status":"running","running":true,"version":"0.9.4","protocol":22,"capabilities":{"live_handoff":true,"detached_server_daemon":false,"endpoint_protocol_generation":1,"surface_interest":true,"health_check":true,"ssh_agent_registration":true},"compatible":true,"endpoint_compatible":true,"socket":"/home/user/.config/herdr/herdr.sock","session":null,"restart_needed":false,"server_binary_stale":true}`
+
+	herdrStatusNotRunningJSON = `{"status":"not_running","running":false,"version":null,"protocol":null,"capabilities":null,"compatible":null,"endpoint_compatible":null,"socket":"/home/user/.config/herdr/herdr.sock","session":null,"restart_needed":false,"server_binary_stale":false}`
+
+	// herdr 0.8.0 reports neither endpoint_compatible nor server_binary_stale.
+	herdrStatusLegacyJSON = `{"status":"running","running":true,"version":"0.8.0","protocol":19,"compatible":true,"socket":"/home/user/.config/herdr/herdr.sock","session":null,"restart_needed":false}`
+)
+
+func TestParseHerdrServerStatus(t *testing.T) {
+	cases := []struct {
+		name               string
+		json               string
+		running, usable    bool
+		stale              bool
+		endpointCompatible *bool
+		version            string
+	}{
+		{"running", herdrStatusRunningJSON, true, true, false, boolPtr(true), "0.9.5"},
+		{"running an older build than the CLI", herdrStatusStaleJSON, true, true, true, boolPtr(true), "0.9.4"},
+		{"not running", herdrStatusNotRunningJSON, false, false, false, nil, ""},
+		{"herdr without the newer fields", herdrStatusLegacyJSON, true, true, false, nil, "0.8.0"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			status, err := parseHerdrServerStatus([]byte(tc.json + "\n"))
+			if err != nil {
+				t.Fatalf("parseHerdrServerStatus() error = %v", err)
+			}
+			if status.Running != tc.running || status.Usable() != tc.usable {
+				t.Errorf("Running = %v, Usable() = %v, want %v, %v", status.Running, status.Usable(), tc.running, tc.usable)
+			}
+			if status.Stale() != tc.stale {
+				t.Errorf("Stale() = %v, want %v", status.Stale(), tc.stale)
+			}
+			if status.Version != tc.version {
+				t.Errorf("Version = %q, want %q", status.Version, tc.version)
+			}
+			switch got := status.EndpointCompatible; {
+			case got == nil && tc.endpointCompatible == nil:
+			case got == nil || tc.endpointCompatible == nil || *got != *tc.endpointCompatible:
+				t.Errorf("EndpointCompatible = %v, want %v", got, tc.endpointCompatible)
+			}
+		})
+	}
+}
+
+func boolPtr(b bool) *bool { return &b }
+
+// Labels are not unique, so closing an orphan by a label lookup could close a
+// different workspace that shares it.
+func TestHerdrKillSessionClosesExactlyThatWorkspace(t *testing.T) {
+	f := newFakeHerdr()
+	f.responses["workspace close"] = herdrCloseOKJSON
+
+	if err := f.backend().KillSession(Session{ID: "w7", Name: "grove-testing", Path: "/repos/grove-gone"}); err != nil {
+		t.Fatalf("KillSession() error = %v", err)
+	}
+	if !f.called("workspace", "close", "w7") {
+		t.Errorf("KillSession did not close w7; calls: %v", f.calls)
+	}
+	if f.called("workspace", "list") {
+		t.Errorf("KillSession looked the session up again; calls: %v", f.calls)
+	}
+	if f.called("--group") || f.called("worktree", "remove") {
+		t.Errorf("KillSession reached past one workspace; calls: %v", f.calls)
+	}
+}
+
+func TestHerdrKillSessionExplainsAGroupCloseRefusal(t *testing.T) {
+	f := newFakeHerdr()
+	f.responses["workspace close"] = herdrGroupCloseRequiredJSON
+	f.errs["workspace close"] = errors.New("exit status 1")
+
+	err := f.backend().KillSession(Session{ID: "w1", Name: "grove"})
+	if err == nil || !strings.Contains(err.Error(), "worktree workspaces open") {
+		t.Fatalf("KillSession() error = %v, want an explanation of the group refusal", err)
+	}
+}
+
+func TestHerdrKillSessionRefusesASessionWithoutAnID(t *testing.T) {
+	f := newFakeHerdr()
+
+	if err := f.backend().KillSession(Session{Name: "grove-testing"}); err == nil {
+		t.Fatal("KillSession() error = nil, want a refusal")
+	}
+	if len(f.calls) != 0 {
+		t.Errorf("KillSession called herdr without a workspace id: %v", f.calls)
+	}
+}
+
+// herdr reports canonical paths, so a worktree reached through a symlinked
+// directory would look drifted to a caller comparing strings.
+func TestHerdrPaneInfoReportsTheTargetPathWhenThePaneIsThere(t *testing.T) {
+	real := t.TempDir()
+	if resolved, err := filepath.EvalSymlinks(real); err == nil {
+		real = resolved
+	}
+	checkout := filepath.Join(real, "grove-testing")
+	if err := os.Mkdir(checkout, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	viaLink := filepath.Join(link, "grove-testing")
+
+	f := newFakeHerdr()
+	f.responses["workspace list"] = strings.ReplaceAll(workspaceListJSON, "/repos/grove-testing", checkout)
+	f.responses["pane list"] = strings.ReplaceAll(herdrPaneListJSON, "/repos/grove-testing", checkout)
+	f.responses["pane process-info"] = herdrProcessInfoBashJSON
+
+	info, err := f.backend().PaneInfo(Target{Name: "grove-testing", Path: viaLink})
+	if err != nil {
+		t.Fatalf("PaneInfo() error = %v", err)
+	}
+	if info.CurrentPath != viaLink {
+		t.Errorf("CurrentPath = %q, want the target's own spelling %q", info.CurrentPath, viaLink)
+	}
+}
+
+func TestHerdrTooOld(t *testing.T) {
+	cases := []struct {
+		output      string
+		wantVersion string
+		wantTooOld  bool
+	}{
+		{"herdr 0.9.5\n", "0.9.5", false}, // real `herdr --version` output
+		{"herdr 0.8.0", "0.8.0", false},
+		{"herdr 0.7.9", "0.7.9", true},
+		{"herdr 0.10.0", "0.10.0", false},
+		{"herdr 1.0.0", "1.0.0", false},
+		{"herdr 0.7.12-preview.2", "0.7.12-preview.2", true},
+		{"herdr 0.9.0-preview.1", "0.9.0-preview.1", false},
+		{"something unexpected", "", false},
+		{"", "", false},
+	}
+	for _, tc := range cases {
+		version, tooOld := HerdrTooOld(tc.output)
+		if version != tc.wantVersion || tooOld != tc.wantTooOld {
+			t.Errorf("HerdrTooOld(%q) = %q, %v, want %q, %v", tc.output, version, tooOld, tc.wantVersion, tc.wantTooOld)
+		}
 	}
 }

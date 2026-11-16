@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`--here`** on `grove to`, `last`, `new`, `fork`, `open`, and `fetch`: stay in the shell or pane you are in for this run. Grove only changes directory and creates no session. Hooks still run.
 - **`--no-hooks`** on `grove to` and `grove last`: skip hooks and the dirty check for this run. `--peek` is now short for `--here --no-hooks` and behaves as before. `grove last` gains `--peek` too.
 - The config panel in the dashboard has an `open_in` field.
+- `grove doctor` warns when herdr is older than 0.8.0, and when the running herdr server is a different version than the installed herdr CLI (herdr's `server_binary_stale`).
 
 ### Changed
 - **One vocabulary for where you land.** The placement is `session` (the worktree's own session: a tmux session or a herdr workspace) or `here` (the shell or pane you are in). `[session] open_in` now takes `"session"` (default) or `"here"`. The old values `"new"` and `"current"` still work; `grove doctor` and `grove config` name the value to change to. The full table is in `docs/COMMAND_SPECIFICATIONS.md`.
@@ -22,9 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `grove new`, `spawn`, `open`, `fork`, `fetch`, and `adopt` now exit 14 when a configured file was not copied or linked. The worktree is kept. Before, they exited 0.
 - A config that fails to load now stops commands that create or adopt a worktree. Before, they ran on defaults and skipped `copy_files`, symlinks, and hooks.
 - `copy_files` and `symlink_files` entries with `*`, `?`, or `[`, and any entry that is absolute or uses `..`, now fail config validation.
+- `[mux] backend = "auto"` now picks herdr when grove runs inside neither multiplexer and both tmux and herdr are installed. Before, it picked tmux. Inside tmux or herdr, the one you are in still wins. Set `backend = "tmux"` to keep tmux.
+- `grove doctor` treats tmux and herdr as peers. A missing binary is an information line when the other backend is active, and a failure when it is the backend set in `[mux] backend`. The iTerm2 control mode check runs only under the tmux backend.
+- The herdr backend is verified against herdr 0.9.5, and CI runs the live suite on it.
 
 ### Fixed
 - `grove fetch` no longer creates a session when `[session] open_in = "here"`.
+- `grove repair` no longer decides by label alone that a herdr workspace is orphaned. A relabelled workspace of a live worktree is not offered, and neither is a workspace of another repository whose label starts with this project's name. An orphan is closed by its workspace id, so a second workspace with the same label is left alone. The messages name the active backend. tmux sessions are matched by name as before.
+- Under herdr, `grove to` no longer sees a worktree reached through a symlinked directory as drifted, so it no longer sends a `cd` to a shell that is already there.
 - A missing `copy_files` or symlink source is no longer silent. Stderr names each entry (`Not copied: config/secret.key (missing in the main worktree)`) and says how to fix it. This holds with `--json` too.
 - `--json` on `new`, `spawn`, `fork`, and `open` now includes `provisioned` and `file_setup`, so a script can tell a file was not copied.
 - File setup now runs even when state registration fails, and the failure is reported. The old hint to run `grove repair` did not copy files.
