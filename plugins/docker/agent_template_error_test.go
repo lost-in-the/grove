@@ -80,7 +80,7 @@ func TestExportedEnvNames_NoValueSeparator(t *testing.T) {
 }
 
 func TestExportedEnvNames_NeverIncludesValues(t *testing.T) {
-	env := []string{"APP_DIR=/Users/leah/secret/worktree/path"}
+	env := []string{"APP_DIR=/Users/dev/code/secret/worktree/path"}
 
 	got := exportedEnvNames(env)
 

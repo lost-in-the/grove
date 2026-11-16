@@ -19,7 +19,7 @@ func TestCreateWorktreeCmd_RemoteBranch_UsesCreateFromBranch(t *testing.T) {
 		{"init", "-b", "main"},
 		{"config", "commit.gpgsign", "false"},
 		{"config", "user.name", "Test"},
-		{"config", "user.email", "t@t.com"},
+		{"config", "user.email", "t@example.com"},
 	} {
 		cmd := exec.Command("git", args...)
 		cmd.Dir = dir
