@@ -1,0 +1,40 @@
+ [1m[1mtest-project[m ▸ [1msettings[m                                                                                               [m 
+  [1] general   [1m[2] behavior[m   [3] plugins   [4] protection                                                             
+                                                                                                                        
+  [1mMoving between worktrees[m                         │  [1mFolder pattern[m  naming.pattern                                    
+   Uncommitted files      warn                     │  How grove names a new worktree's folder. Session names always use 
+   Docker stack           off                      │  {project}-{name}.                                                 
+   Where you land         session                  │                                                                    
+   Sessions               auto                     │   Value    [1m{project}-{name}[m                                        
+                                                   │   Default  {project}-{name}                                        
+  [1mNames[m                                            │   {project} is the project name, {name} the worktree's short name. 
+ ❯ [1mFolder pattern       [m  {project}-{name}         │   Each appears once. Other characters: letters, digits, . _ -      
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+  [1m↑↓/jk[m field · [1menter[m edit · saves as you go · [1mesc[m close                                                                

@@ -10,7 +10,7 @@
                                                                                 
                                                                                 
  ────────────────────────────────────────────────────────────────────────────── 
-  [1mStack up on arrival[m                                 plugins.docker.auto_start 
+  [1mStack up on arrival[m  plugins.docker.auto_start                                
   Whether the stack comes up on the worktree you arrive at. Only when the stack 
   follows a move: Docker stack is prompt or auto, or --up.                      
                                                                                 
@@ -21,4 +21,4 @@
                                                                                 
                                                                                 
                                                                                 
-  [1m↑↓[m field · [1m←→[m change · saves as you go · [1mesc[m close                            
+  [1m↑↓/jk[m field · [1m←→/hl[m change · saves as you go · [1mesc[m close                      

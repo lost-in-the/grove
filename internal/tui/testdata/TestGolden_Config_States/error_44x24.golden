@@ -10,7 +10,7 @@
   [1mNames[m                                     
    Folder pattern         {project}-{name}  
  ────────────────────────────────────────── 
-  [1mUncommitted files[m   switch.dirty_handling 
+  [1mUncommitted files[m  switch.dirty_handling  
    ● [1mwarn      [m   Tell you, then move       
                   (default)                 
    ○ ignore       Move, say nothing         
@@ -20,5 +20,5 @@
                   move                      
   Not saved: open .grove/config.toml:       
   permission denied                         
-  [1m↑↓[m field · [1m←→[m change                      
+  [1m↑↓/jk[m field · [1m←→/hl[m change                
   saves as you go · [1mesc[m close               

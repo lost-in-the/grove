@@ -1,0 +1,50 @@
+ [1m[1mtest-project[m ▸ [1msettings[m                                                                                                                                       [m 
+  [1] general   [1m[2] behavior[m   [3] plugins   [4] protection                                                                                                     
+                                                                                                                                                                
+  [1mMoving between worktrees[m                         │  [1mUncommitted files[m  switch.dirty_handling                                                                  
+ ❯ [1mUncommitted files    [m  warn                     │  What grove does when the worktree you leave has uncommitted files.                                        
+   Docker stack           off                      │                                                                                                            
+   Where you land         session                  │   ● [1mwarn      [m   Tell you, then move (default)                                                             
+   Sessions               auto                     │   ○ ignore       Move, say nothing                                                                         
+                                                   │   ○ prompt       Ask first                                                                                 
+  [1mNames[m                                            │   ○ refuse       Do not move                                                                               
+   Folder pattern         {project}-{name}         │   ○ auto-stash   Stash the files, then move                                                                
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+                                                   │                                                                                                            
+  [1m↑↓/jk[m field · [1m←→/hl[m change · saves as you go · [1mesc[m close                                                                                                      

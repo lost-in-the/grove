@@ -262,7 +262,7 @@ A full-screen panel for the project's grove config. Every change is written to `
   Names
    Folder pattern         {project}-{name}
  ──────────────────────────────────────────────────────────────────────────────
-  Uncommitted files                                       switch.dirty_handling
+  Uncommitted files  switch.dirty_handling
   What grove does when the worktree you leave has uncommitted files.
 
    ○ warn         Tell you, then move (default)
@@ -271,11 +271,11 @@ A full-screen panel for the project's grove config. Every change is written to `
    ○ refuse       Do not move
    ○ auto-stash   Stash the files, then move
 
-  ↑↓ field · ←→ change · saves as you go · u undo · esc close
+  ↑↓/jk field · ←→/hl change · saves as you go · u undo · esc close
 ```
 
 - **The list** has one row per field: a plain label, then the value exactly as the file spells it. Behavior groups its fields under two headings.
-- **The context panel** under the rule explains the focused field: its label, its key in the file, what it does, and every choice with its meaning. The current choice has `●`, the default says `(default)`. A text or list field shows its value, its default, and what to type.
+- **The context panel** under the rule explains the focused field: its label with its key in the file right after it, what it does, and every choice with its meaning. The current choice has `●`, the default says `(default)`. A text or list field shows its value, its default, and what to type.
 - **The header** says `✓ saved` for a few seconds after a write, and `✗ not saved` when a write fails. A failed write changes nothing on disk, and the panel shows the error under the field.
 
 | Section | Fields (key) |
@@ -299,7 +299,9 @@ A full-screen panel for the project's grove config. Every change is written to `
 
 **Editing a text or list field.** `enter` opens the value for typing in the context panel. Every key types, digits and letters too, so the tabs drop their numbers and the footer shows only `enter save · esc cancel`. `enter` checks the value with the same rules config loading uses (a folder pattern needs `{project}` and `{name}` once each, the default branch cannot be empty) and writes it only when it passes; otherwise the reason shows under the value. `esc` drops the edit. A list is typed as names separated by commas.
 
-The frame has one layout at a given size: every section and every field put the rule on the same row. Narrow terminals show only the active tab's name and wrap the context panel's text.
+The frame has one layout at a given size: every section and every field put the rule on the same row. Narrow terminals show only the active tab's name and wrap the context panel's text; a title and key too long for one line put the key on the next.
+
+At 110 columns and up (the dashboard's split width, `splitWidth`) the list and the context panel sit side by side, as the dashboard's list and detail do. The list is a column of 44 to 56 cells, and a value too long for it ends in `…` (the context panel shows it whole). The context panel is to its right, past the dashboard's divider, and wraps at 76 columns however wide the terminal is. The header, tabs, and footer stay full width.
 
 ### Bulk Delete (`a`)
 
@@ -488,7 +490,7 @@ Every dashboard key is an `Action` in `internal/tui/actions.go`: its keys, label
 | `internal/tui/worktree_list.go` | The dashboard list constructor (`newWorktreeList`) |
 | `internal/tui/config_fields.go` | The settings fields: label, key, description, choices and their meanings, default, validation |
 | `internal/tui/overlay_config.go` | The settings panel's state and keys: writes each change at once (`saveProjectConfig`), undo, text edits |
-| `internal/tui/config_view.go` | The settings frame: list, rule, context panel, footer, one layout per size (`configLayout`) |
+| `internal/tui/config_view.go` | The settings frame: list, then the context panel under a rule or beside a divider, footer, one layout per size (`configLayout`) |
 
 ### List View Modes
 The `v` key toggles the commit message line at runtime and saves the choice in `.grove/ui_prefs.json` (`compact_mode`). `tui.compact_list = false` in config starts with two lines when no choice is saved.

@@ -10,7 +10,7 @@
                                                                                 
                                                                                 
  ────────────────────────────────────────────────────────────────────────────── 
-  [1mProject name[m                                                     project_name 
+  [1mProject name[m  project_name                                                    
   The {project} part of worktree folder and session names.                      
                                                                                 
    Value    [1mmyapp[m                                                               
@@ -21,4 +21,4 @@
                                                                                 
                                                                                 
                                                                                 
-  [1m↑↓[m field · [1menter[m edit · saves as you go · [1mesc[m close                           
+  [1m↑↓/jk[m field · [1menter[m edit · saves as you go · [1mesc[m close                        

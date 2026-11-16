@@ -10,7 +10,7 @@
                                                                                 
                                                                                 
  [38;2;150;156;180m──────────────────────────────────────────────────────────────────────────────[m 
-  [1;38;2;255;255;255mStack up on arrival[m                                 [38;2;150;156;180mplugins.docker.auto_start[m 
+  [1;38;2;255;255;255mStack up on arrival[m  [38;2;150;156;180mplugins.docker.auto_start[m                                
   [38;2;205;214;244mWhether the stack comes up on the worktree you arrive at. Only when the stack[m 
   [38;2;205;214;244mfollows a move: Docker stack is prompt or auto, or --up.[m                      
                                                                                 
@@ -21,4 +21,4 @@
                                                                                 
                                                                                 
                                                                                 
-  [1;38;2;167;139;250m↑↓[m [38;2;150;156;180mfield[m[38;2;150;156;180m · [m[1;38;2;167;139;250m←→[m [38;2;150;156;180mchange[m[38;2;150;156;180m · [m[38;2;150;156;180msaves as you go[m[38;2;150;156;180m · [m[1;38;2;167;139;250mesc[m [38;2;150;156;180mclose[m                            
+  [1;38;2;167;139;250m↑↓/jk[m [38;2;150;156;180mfield[m[38;2;150;156;180m · [m[1;38;2;167;139;250m←→/hl[m [38;2;150;156;180mchange[m[38;2;150;156;180m · [m[38;2;150;156;180msaves as you go[m[38;2;150;156;180m · [m[1;38;2;167;139;250mesc[m [38;2;150;156;180mclose[m                      

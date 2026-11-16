@@ -10,7 +10,7 @@
   [1mNames[m                                                                         
  ❯ [1mFolder pattern       [m  {project}-{name}                                      
  ────────────────────────────────────────────────────────────────────────────── 
-  [1mFolder pattern[m                                                 naming.pattern 
+  [1mFolder pattern[m  naming.pattern                                                
   How grove names a new worktree's folder. Session names always use             
   {project}-{name}.                                                             
                                                                                 
@@ -21,4 +21,4 @@
                                                                                 
                                                                                 
                                                                                 
-  [1m↑↓[m field · [1menter[m edit · saves as you go · [1mesc[m close                           
+  [1m↑↓/jk[m field · [1menter[m edit · saves as you go · [1mesc[m close                        

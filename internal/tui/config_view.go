@@ -15,20 +15,35 @@ var configSectionNames = [ConfigTabCount]string{"general", "behavior", "plugins"
 // field's context.
 const configValueLabelW = 9
 
+// Side by side, the list is a column of configColumnMin to configColumnMax
+// cells, with configColumnValueW for the value; a longer value ends in an
+// ellipsis there, since the context panel shows it whole. The context panel
+// is at most configMeasure wide, its one-cell indent included, so its text
+// stays readable on a wide terminal.
+const (
+	configColumnMin    = 44
+	configColumnMax    = 56
+	configColumnValueW = 24
+	configMeasure      = 76
+)
+
 // configLayout is the frame's geometry at the terminal size. It depends on
 // the size and the fields only, so every section and every focused field
 // share it.
 type configLayout struct {
-	inner   int // width inside the frame's one-cell padding
-	labelW  int // the list's label column
-	listH   int // rows for the list: the tallest section's
-	ctxH    int // rows for the context panel
+	inner   int  // width inside the frame's one-cell padding
+	wide    bool // the list and the context panel side by side
+	labelW  int  // the list's label column
+	listW   int  // the list's width, and its selection bar's
+	listH   int  // rows for the list: the tallest section's, or the column's
+	ctxW    int  // the context panel's width
+	ctxH    int  // rows for the context panel
 	footerH int
 }
 
 func (m Model) configLayout() configLayout {
 	s := m.configState
-	l := configLayout{inner: max(20, m.width-2)}
+	l := configLayout{inner: max(20, m.width-2), wide: isWideLayout(m.width)}
 	for _, fields := range s.Fields {
 		for _, f := range fields {
 			l.labelW = max(l.labelW, lipgloss.Width(f.Label))
@@ -40,7 +55,15 @@ func (m Model) configLayout() configLayout {
 	for _, hints := range configFooterVariants() {
 		l.footerH = max(l.footerH, lipgloss.Height(m.helpFooter.RenderCompactWithHints(hints, m.width-4)))
 	}
-	l.ctxH = max(0, m.height-1-2-l.listH-1-l.footerH)
+	body := max(0, m.height-1-2-l.footerH) // under the header, the tabs, and a blank
+	if l.wide {
+		l.listW = min(configColumnMax, max(configColumnMin, 2+l.labelW+2+configColumnValueW))
+		l.ctxW = min(configMeasure, l.inner-l.listW-3) // the divider takes 3 cells
+		l.listH, l.ctxH = body, body
+		return l
+	}
+	l.listW, l.ctxW = l.inner, l.inner
+	l.ctxH = max(0, body-l.listH-1)
 	return l
 }
 
@@ -86,11 +109,11 @@ func (s *ConfigState) configHints() []Hint {
 }
 
 func configFieldHints(t ConfigFieldType, canUndo bool) []Hint {
-	change := Hint{"←→", "change"}
+	change := Hint{"←→/hl", "change"}
 	if t == ConfigString || t == ConfigList {
 		change = Hint{"enter", "edit"}
 	}
-	hints := []Hint{{"↑↓", "field"}, change, {"", "saves as you go"}}
+	hints := []Hint{{"↑↓/jk", "field"}, change, {"", "saves as you go"}}
 	if canUndo {
 		hints = append(hints, Hint{"u", "undo"})
 	}
@@ -114,7 +137,8 @@ func (m Model) configFooter() string {
 }
 
 // renderConfigFrame draws the settings panel: header, section tabs, the
-// list, a rule, and the focused field's context, then the footer.
+// list, and the focused field's context, then the footer. The context sits
+// beside the list at the dashboard's split width, else under a rule.
 func (m Model) renderConfigFrame() string {
 	s := m.configState
 	l := m.configLayout()
@@ -124,16 +148,23 @@ func (m Model) renderConfigFrame() string {
 	switch {
 	case s.Err != nil:
 		list = []string{" " + Styles.ErrorText.Render("Settings did not load.")}
-		ctx = wrapStyled(s.Err.Error(), l.inner-1, Styles.ErrorText)
+		ctx = wrapStyled(s.Err.Error(), l.ctxW-1, Styles.ErrorText)
 	case s.focused() == nil:
 		list = []string{" " + Styles.DetailDim.Render("Loading settings…")}
 	default:
 		list = s.listLines(l)
 		ctx = s.contextLines(l)
 	}
-	lines = append(lines, padRows(list, l.listH)...)
-	lines = append(lines, Styles.TextMuted.Render(strings.Repeat("─", l.inner)))
-	lines = append(lines, padRows(ctx, l.ctxH)...)
+	if l.wide {
+		left := lipgloss.NewStyle().Width(l.listW).Render(strings.Join(padRows(list, l.listH), "\n"))
+		right := strings.Join(padRows(ctx, l.ctxH), "\n")
+		lines = append(lines, lipgloss.JoinHorizontal(lipgloss.Top,
+			left, renderVerticalDivider(l.listH, Colors.SurfaceDim), right))
+	} else {
+		lines = append(lines, padRows(list, l.listH)...)
+		lines = append(lines, Styles.TextMuted.Render(strings.Repeat("─", l.inner)))
+		lines = append(lines, padRows(ctx, l.ctxH)...)
+	}
 
 	body := lipgloss.NewStyle().Padding(0, 1).Render(strings.Join(lines, "\n"))
 	footer := m.configFooter()
@@ -297,10 +328,10 @@ func (s *ConfigState) listRow(f ConfigField, selected bool, l configLayout) stri
 	if value == "" {
 		value, valueStyle = f.Empty, st(Styles.TextMuted)
 	}
-	valueW := max(1, l.inner-2-l.labelW-2)
+	valueW := max(1, l.listW-2-l.labelW-2)
 	row := cursor + label.Render(padCells(f.Label, l.labelW)) + st(lipgloss.NewStyle()).Render("  ") +
 		valueStyle.Render(ansi.Truncate(value, valueW, "…"))
-	if gap := l.inner - lipgloss.Width(row); gap > 0 {
+	if gap := l.listW - lipgloss.Width(row); gap > 0 {
 		row += st(lipgloss.NewStyle()).Render(strings.Repeat(" ", gap))
 	}
 	return row
@@ -310,12 +341,12 @@ func (s *ConfigState) listRow(f ConfigField, selected bool, l configLayout) stri
 // then its choices or its value, cut to fit the panel.
 func (s *ConfigState) contextLines(l configLayout) []string {
 	f := s.focused()
-	w := l.inner - 1
+	w := l.ctxW - 1
 
 	label, keyText := Styles.TextBright.Render(f.Label), Styles.TextMuted.Render(f.Key)
 	head := []string{" " + label}
-	if gap := w - lipgloss.Width(f.Label) - lipgloss.Width(f.Key); gap >= 2 {
-		head[0] += strings.Repeat(" ", gap) + keyText
+	if lipgloss.Width(f.Label)+2+lipgloss.Width(f.Key) <= w {
+		head[0] += "  " + keyText
 	} else {
 		head = append(head, " "+keyText)
 	}

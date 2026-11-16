@@ -399,7 +399,7 @@ var helpSectionsSync = []helpSection{
 }
 
 var helpSectionsConfig = []helpSection{
-	{title: "Settings", note: "Each change is written to .grove/config.toml at once. The panel under the list explains the focused field.", items: []helpEntry{
+	{title: "Settings", note: "Each change is written to .grove/config.toml at once. The panel beside or under the list explains the focused field.", items: []helpEntry{
 		{"↑/k ↓/j", "Previous / next field"},
 		{"tab / shift+tab", "Next / previous field"},
 		{"←/h →/l", "Change a choice or a true/false field"},

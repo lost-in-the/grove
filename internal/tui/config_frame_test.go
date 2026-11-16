@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -26,6 +27,37 @@ func ruleRow(t *testing.T, view string) int {
 	return -1
 }
 
+// dividerCol is the column of the divider between the list and the context
+// panel in the two-column layout, or -1 when the frame is stacked. It checks
+// the divider runs unbroken from the first body row to the footer.
+func dividerCol(t *testing.T, m Model) int {
+	t.Helper()
+	lines := strings.Split(stripAnsi(m.viewString()), "\n")
+	top := 3 // header, tabs, blank
+	col := slices.Index([]rune(lines[top]), '│')
+	if col < 0 {
+		return -1
+	}
+	bottom := m.height - m.configLayout().footerH
+	for i := top; i < bottom; i++ {
+		if r := []rune(lines[i]); col >= len(r) || r[col] != '│' {
+			t.Errorf("divider breaks at row %d:\n%s", i, stripAnsi(m.viewString()))
+			break
+		}
+	}
+	return col
+}
+
+// bodyMark is where the list ends: the rule's row when stacked, the
+// divider's column when side by side.
+func bodyMark(t *testing.T, m Model) string {
+	t.Helper()
+	if col := dividerCol(t, m); col >= 0 {
+		return fmt.Sprintf("divider at column %d", col)
+	}
+	return fmt.Sprintf("rule on row %d", ruleRow(t, m.viewString()))
+}
+
 // checkConfigFrame checks the frame fills the terminal exactly and no line
 // is wider than it.
 func checkConfigFrame(t *testing.T, m Model, w, h int, label string) {
@@ -42,25 +74,26 @@ func checkConfigFrame(t *testing.T, m Model, w, h int, label string) {
 }
 
 // One layout at a given size: every section, every focused field, and an
-// edit in progress put the rule on the same row and fill the terminal.
+// edit in progress put the rule on the same row (or the divider on the same
+// column) and fill the terminal.
 func TestConfig_LayoutStableAcrossSectionsAndFields(t *testing.T) {
-	for _, size := range [][2]int{{80, 24}, {120, 40}, {44, 24}} {
+	for _, size := range [][2]int{{80, 24}, {120, 40}, {44, 24}, {160, 50}, {270, 80}} {
 		w, h := size[0], size[1]
 		m := openConfigWith(t, w, h, nil)
-		rule := ruleRow(t, m.viewString())
+		mark := bodyMark(t, m)
 		for tab := ConfigTab(0); tab < ConfigTabCount; tab++ {
 			m = sendConfigKeys(t, m, string(rune('1'+tab)))
 			for i, f := range m.configState.Fields[tab] {
 				label := fmt.Sprintf("%dx%d %s", w, h, f.Key)
 				checkConfigFrame(t, m, w, h, label)
-				if got := ruleRow(t, m.viewString()); got != rule {
-					t.Errorf("%s: rule on row %d, want %d", label, got, rule)
+				if got := bodyMark(t, m); got != mark {
+					t.Errorf("%s: %s, want %s", label, got, mark)
 				}
 				if f.Type == ConfigString || f.Type == ConfigList {
 					edit := sendConfigKeys(t, m, "enter")
 					checkConfigFrame(t, edit, w, h, label+" editing")
-					if got := ruleRow(t, edit.viewString()); got != rule {
-						t.Errorf("%s editing: rule on row %d, want %d", label, got, rule)
+					if got := bodyMark(t, edit); got != mark {
+						t.Errorf("%s editing: %s, want %s", label, got, mark)
 					}
 				}
 				if i < len(m.configState.Fields[tab])-1 {
@@ -108,7 +141,7 @@ func TestConfig_FooterMatchesTheField(t *testing.T) {
 	footer := func(m Model) string { return stripAnsi(m.configFooter()) }
 
 	m = focusField(t, m, "switch.dirty_handling")
-	if f := footer(m); !strings.Contains(f, "←→ change") || strings.Contains(f, "enter edit") || strings.Contains(f, "u undo") {
+	if f := footer(m); !strings.Contains(f, "←→/hl change") || strings.Contains(f, "enter edit") || strings.Contains(f, "u undo") {
 		t.Errorf("on a choice, nothing changed yet: %q", f)
 	}
 	m = sendConfigKeys(t, m, "l")
@@ -122,6 +155,154 @@ func TestConfig_FooterMatchesTheField(t *testing.T) {
 	m = sendConfigKeys(t, m, "enter")
 	if f := footer(m); !strings.Contains(f, "enter save") || !strings.Contains(f, "esc cancel") || strings.Contains(f, "↑↓") {
 		t.Errorf("while editing: %q", f)
+	}
+}
+
+// j/k and h/l work as well as the arrows, so the footer names them, joined
+// with a slash as the other footers join a key pair. While a field is being
+// typed in, they type, so they are not named then.
+func TestConfig_FooterShowsVimKeys(t *testing.T) {
+	m := openConfigWith(t, 80, 24, nil)
+	footer := func(m Model) string { return stripAnsi(m.configFooter()) }
+
+	m = focusField(t, m, "switch.dirty_handling")
+	if f := footer(m); !strings.Contains(f, "↑↓/jk field") || !strings.Contains(f, "←→/hl change") {
+		t.Errorf("on a choice: %q", f)
+	}
+	m = focusField(t, m, "naming.pattern")
+	if f := footer(m); !strings.Contains(f, "↑↓/jk field") || !strings.Contains(f, "enter edit") || strings.Contains(f, "hl") {
+		t.Errorf("on a text field: %q", f)
+	}
+	m = sendConfigKeys(t, m, "enter")
+	if f := footer(m); strings.Contains(f, "jk") || strings.Contains(f, "hl") {
+		t.Errorf("while editing, j and k type: %q", f)
+	}
+}
+
+// At the narrowest width every hint still shows, in the footer's reserved
+// lines, on every kind of field and after a change.
+func TestConfig_FooterFitsAt44(t *testing.T) {
+	m := openConfigWith(t, 44, 24, nil)
+	m = writeIgnoringDisk(t, focusField(t, m, "switch.dirty_handling"), "l")
+	for _, key := range []string{"switch.dirty_handling", "naming.pattern"} {
+		m = focusField(t, m, key)
+		f := m.configFooter()
+		if got, want := lipgloss.Height(f), m.configLayout().footerH; got != want {
+			t.Errorf("%s: footer is %d lines, reserved %d", key, got, want)
+		}
+		plain := stripAnsi(f)
+		for _, hint := range []string{"↑↓/jk field", "saves as you go", "u undo", "esc close"} {
+			if !strings.Contains(plain, hint) {
+				t.Errorf("%s: footer lacks %q:\n%s", key, hint, plain)
+			}
+		}
+	}
+}
+
+// contextTitle is the context panel's first line and the one after it,
+// without styling or the list column.
+func contextTitle(t *testing.T, m Model) (string, string) {
+	t.Helper()
+	lines := strings.Split(stripAnsi(m.viewString()), "\n")
+	first := 3
+	if col := dividerCol(t, m); col >= 0 {
+		cut := func(l string) string { return strings.TrimSpace(string([]rune(l)[col+1:])) }
+		return cut(lines[first]), cut(lines[first+1])
+	}
+	first = ruleRow(t, m.viewString()) + 1
+	return strings.TrimSpace(lines[first]), strings.TrimSpace(lines[first+1])
+}
+
+// The config key sits right after the title, two spaces on, wherever the
+// panel is; when both do not fit, the key takes the next line.
+func TestConfig_KeyFollowsTitle(t *testing.T) {
+	for _, size := range [][2]int{{80, 24}, {120, 40}, {270, 80}, {44, 24}} {
+		m := openConfigWith(t, size[0], size[1], nil)
+		m = focusField(t, m, "switch.dirty_handling")
+		if got, _ := contextTitle(t, m); got != "Uncommitted files  switch.dirty_handling" {
+			t.Errorf("%dx%d: title line %q", size[0], size[1], got)
+		}
+	}
+	m := openConfigWith(t, 44, 24, nil)
+	m = focusField(t, m, "plugins.docker.auto_stop")
+	if title, next := contextTitle(t, m); title != "Stack down on leaving" || next != "plugins.docker.auto_stop" {
+		t.Errorf("44x24: want the key under the title, got %q then %q", title, next)
+	}
+}
+
+// The panel goes side by side at the dashboard's split width; below it the
+// list, rule, and context stack. 80 columns stacks.
+func TestConfig_LayoutByWidth(t *testing.T) {
+	for _, c := range []struct {
+		w, h int
+		wide bool
+	}{
+		{44, 24, false}, {80, 24, false}, {splitWidth - 1, 40, false},
+		{splitWidth, 40, true}, {120, 40, true}, {160, 50, true}, {270, 80, true},
+	} {
+		m := openConfigWith(t, c.w, c.h, nil)
+		if got := dividerCol(t, m) >= 0; got != c.wide {
+			t.Errorf("%dx%d: two columns %v, want %v:\n%s", c.w, c.h, got, c.wide, stripAnsi(m.viewString()))
+		}
+		if !c.wide {
+			ruleRow(t, m.viewString())
+		}
+	}
+}
+
+// When stacked, the rule sits right under the tallest section's list,
+// however tall the terminal.
+func TestConfig_StackedRuleUnderTallestList(t *testing.T) {
+	for _, h := range []int{24, 60} {
+		m := openConfigWith(t, 100, h, nil)
+		tallest := 0
+		for _, fields := range m.configState.Fields {
+			tallest = max(tallest, len(configListShape(fields)))
+		}
+		if got, want := ruleRow(t, m.viewString()), 3+tallest; got != want {
+			t.Errorf("100x%d: rule on row %d, want %d", h, got, want)
+		}
+	}
+}
+
+// Side by side, the list is a modest column whatever the width: the
+// selection bar spans it only, a long value ends in an ellipsis there, and
+// the context wraps at a readable measure.
+func TestConfig_WideColumns(t *testing.T) {
+	long := "~/projects/a/very/long/folder/that/does/not/fit/in/the/list"
+	for _, w := range []int{120, 270} {
+		m := openConfigWith(t, w, 50, func(c *config.Config) { c.ProjectsDir = long })
+		m = focusField(t, m, "projects_dir")
+		col := dividerCol(t, m)
+		if col < 44 || col > 58 {
+			t.Errorf("%d wide: divider at column %d, want the list 44 to 56 wide", w, col)
+		}
+		l := m.configLayout()
+		sel := m.configState.listRow(*m.configState.focused(), true, l)
+		if got := lipgloss.Width(sel); got != l.listW {
+			t.Errorf("%d wide: selected row is %d cells, want the list's %d", w, got, l.listW)
+		}
+		lines := strings.Split(stripAnsi(m.viewString()), "\n")
+		var row string
+		for _, line := range lines {
+			if strings.Contains(line, "❯") {
+				row = string([]rune(line)[:col])
+			}
+		}
+		if !strings.Contains(row, "…") {
+			t.Errorf("%d wide: long value not cut with an ellipsis: %q", w, row)
+		}
+		var ctx strings.Builder
+		for i, line := range lines[3 : m.height-l.footerH] {
+			right := strings.TrimRight(string([]rune(line)[col+2:]), " ") // past the divider's padding
+			if got := lipgloss.Width(right); got > configMeasure {
+				t.Errorf("%d wide: context row %d is %d cells, past the measure: %q", w, i, got, right)
+			}
+			ctx.WriteString(strings.ReplaceAll(right, " ", ""))
+		}
+		if !strings.Contains(ctx.String(), long) {
+			t.Errorf("%d wide: context lacks the full value:\n%s", w, stripAnsi(m.viewString()))
+		}
 	}
 }
 
@@ -194,6 +375,7 @@ func goldenConfig(t *testing.T, size termSize, key string) Model {
 
 func TestGolden_Config(t *testing.T) {
 	wide := termSize{"wide_120x40", 120, 40}
+	wider := termSize{"wide_160x50", 160, 50}
 	narrow := termSize{"narrow_44x24", 44, 24}
 	cases := []struct {
 		name string
@@ -207,6 +389,11 @@ func TestGolden_Config(t *testing.T) {
 		{"behavior_44x24", narrow, "switch.dirty_handling"},
 		{"behavior_120x40", wide, "switch.dirty_handling"},
 		{"text_field_80x24", sizeStandard, "naming.pattern"},
+		{"text_field_120x40", wide, "naming.pattern"},
+		{"behavior_160x50", wider, "switch.dirty_handling"},
+		{"text_field_160x50", wider, "naming.pattern"},
+		{"protection_44x24", narrow, "protection.protected"},
+		{"plugins_44x24", narrow, "plugins.docker.auto_stop"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

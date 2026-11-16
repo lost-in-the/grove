@@ -10,7 +10,7 @@
                                                                                 
                                                                                 
  ────────────────────────────────────────────────────────────────────────────── 
-  [1mProtected worktrees[m                                      protection.protected 
+  [1mProtected worktrees[m  protection.protected                                     
   Grove will not delete or rename these, or switch their branch. grove rm needs 
   --force --unprotect.                                                          
                                                                                 
@@ -21,4 +21,4 @@
                                                                                 
                                                                                 
                                                                                 
-  [1m↑↓[m field · [1menter[m edit · saves as you go · [1mesc[m close                           
+  [1m↑↓/jk[m field · [1menter[m edit · saves as you go · [1mesc[m close                        

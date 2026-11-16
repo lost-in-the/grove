@@ -10,7 +10,7 @@
   [1mNames[m                                                                         
    Folder pattern         {project}-{name}                                      
  ────────────────────────────────────────────────────────────────────────────── 
-  [1mUncommitted files[m                                       switch.dirty_handling 
+  [1mUncommitted files[m  switch.dirty_handling                                      
   What grove does when the worktree you leave has uncommitted files.            
                                                                                 
    ● [1mwarn      [m   Tell you, then move (default)                                 
@@ -21,4 +21,4 @@
                                                                                 
                                                                                 
                                                                                 
-  [1m↑↓[m field · [1m←→[m change · saves as you go · [1mesc[m close                            
+  [1m↑↓/jk[m field · [1m←→/hl[m change · saves as you go · [1mesc[m close                      
