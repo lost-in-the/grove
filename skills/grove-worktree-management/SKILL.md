@@ -55,8 +55,8 @@ export GROVE_TUI=0               # disable dashboard
 
 | Command | Purpose | `--json` | Mutates | Aliases |
 |---------|---------|:--------:|:-------:|---------|
-| `grove new [name]` | Create worktree + branch + tmux; `--up` also brings the stack | — | ✓ | `spawn`, `n` |
-| `grove to [name]` | Move to a worktree; does not touch the stack by default (`[switch] container_switch` set to `auto` or `prompt` changes that). `--up` also brings it, `--peek` skips hooks/tmux | — | ✓ | `switch`, `t` |
+| `grove new [name]` | Create worktree + branch + its session; `--up` also brings the stack, `--here` skips the session | — | ✓ | `spawn`, `n` |
+| `grove to [name]` | Move to a worktree; does not touch the stack by default (`[switch] container_switch` set to `auto` or `prompt` changes that). `--up` also brings it, `--here` stays in this shell, `--no-hooks` skips hooks, `--peek` is short for `--here --no-hooks` | — | ✓ | `switch`, `t` |
 | `grove fetch <pr\|issue>/<n>` | Worktree from GitHub PR/issue (needs `gh`) | — | ✓ | `f` |
 | `grove ls` | List all worktrees | ✓ | — | `list`, `l` |
 | `grove here` | Current worktree status | ✓ | — | `h` |
@@ -82,9 +82,9 @@ export GROVE_TUI=0               # disable dashboard
 ## Critical Rules
 
 - **Worktree naming:** directories default to `{project}-{name}`; projects can override via `[naming] pattern` in `.grove/config.toml`. `grove ls` shows short names; tmux sessions always use canonical `{project}-{name}`.
-- **Read-only switching:** `grove to <name> --peek` — skips hooks and tmux. Safe for PR review.
+- **Read-only switching:** `grove to <name> --peek` is short for `--here --no-hooks`: it stays in this shell and skips hooks. Safe for PR review.
 - **Shell directives:** Without `GROVE_SHELL=1`, grove emits `cd:`, `tmux-attach:`, `env:` lines raw. Filter them: `grove to x 2>&1 | grep -vE '^(cd:|tmux-attach(-cc)?:|env:)'`
-- **`grove new` and tmux:** `GROVE_AGENT_MODE=1` does NOT suppress tmux session creation in `grove new` — pass `--no-tmux` for that, or set `[tmux] mode = "off"` in config.
+- **`grove new` and sessions:** `GROVE_AGENT_MODE=1` does NOT suppress session creation in `grove new`. Pass `--here` for that, or set `[session] open_in = "here"` in config.
 - **herdr:** grove may drive [herdr](https://herdr.dev) instead of tmux (`[mux] backend` in `.grove/config.toml`, or automatically inside a herdr pane). Commands work the same. Never run `herdr worktree create` / `herdr worktree remove` on grove's behalf — they bypass grove's naming and protection rules; use `grove new` / `grove rm`.
 - **Session state in JSON:** `grove ls --json` (`.worktrees[].session`) and `grove here --json` (`.session.status`) report `attached` / `detached` / `none` under tmux and `active` / `open` / `none` under herdr. Grove before 0.11.0 named this field `tmux`. Under herdr, `grove ls --json` also gives an `agent` field (`idle` / `working` / `blocked` / `done`) — the quickest way to find a worktree whose agent is waiting on input.
 - **Trust:** `.grove/hooks.toml` runs as `sh -c` with full env. Run `grove doctor` and check hooks before `grove new`/`grove fetch` in an unfamiliar repo.

@@ -282,7 +282,8 @@ The `grove` binary only prints `cd:` and `tmux-attach:` directives when it detec
 `tmux-attach:` directives are only acted on when the wrapper detects the directive in output. Ensure:
 1. `tmux` is installed and in `$PATH`
 2. `grove install zsh/bash` was run after installing tmux
-3. The tmux mode in config is not set to `off` (`grove config` → Behavior → `tmux_mode`)
+3. The session mode in config is not set to `off` (`grove config` → Behavior → `session_mode`)
+4. The placement is `session`, not `here` (`grove config` → Behavior → `open_in`). With `here`, or with `--here`, grove only changes directory
 
 ### iTerm2 control mode (`tmux -CC`)
 

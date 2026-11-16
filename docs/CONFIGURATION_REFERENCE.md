@@ -254,13 +254,14 @@ Configures `grove open` command behavior (opening a shell session in a worktree)
 # Default: $SHELL
 command = "/bin/zsh"               # string
 
-# Where a worktree lands when you switch to it.
-#   "new"     — give it a session of its own and move there. Under tmux that
-#               is its tmux session; under herdr its workspace.
-#   "current" — keep the shell you are already in and just change directory.
+# The placement: where you land when you open a worktree.
+#   "session" : the worktree's own session. Grove creates it if needed and
+#               moves you to it. Under tmux that is its tmux session; under
+#               herdr its workspace.
+#   "here"    : the shell or pane you are in. Grove only changes directory.
 #               No session is created, nothing is switched.
-# Default: "new"
-open_in = "new"                    # "new" | "current"
+# Default: "session"
+open_in = "session"                # "session" | "here"
 
 # Whether to open the session in a tmux popup instead of a new window.
 # Default: false
@@ -275,18 +276,23 @@ popup_width = "80%"                # string
 popup_height = "80%"               # string
 ```
 
-**`open_in` vs `[tmux] mode` vs `--peek`.** They answer different questions and
-compose rather than compete:
+**`open_in` vs `[tmux] mode` vs the flags.** They answer different questions:
 
 | | Question it answers |
 |---|---|
 | `[tmux] mode` | *Whether* grove manages sessions at all (`auto` / `manual` / `off`) |
-| `[session] open_in` | *Where the worktree lands* when it does — a new session, or the shell you are in |
-| `--peek` | The one-shot form of `open_in = "current"`, and additionally skips hooks |
+| `[session] open_in` | *Where you land* on every run: `session` or `here` |
+| `--here` | Land `here` for one run |
+| `--no-hooks` | Skip hooks and the dirty check for one run |
+| `--peek` | Short for `--here --no-hooks` |
 
-`open_in = "current"` still fires pre/post-switch hooks and still runs Docker
-side effects; only the session placement changes. `--peek` is the flag to reach
-for when you want neither.
+`open_in = "here"` and `--here` still fire pre/post-switch hooks and still run
+Docker side effects. Only the placement changes. The full table, per backend,
+is in [COMMAND_SPECIFICATIONS.md](COMMAND_SPECIFICATIONS.md#placement).
+
+**Old values.** `open_in = "new"` means `"session"` and `open_in = "current"`
+means `"here"`. Both still load. `grove doctor` and `grove config` name the
+value to change to.
 
 ---
 
@@ -983,8 +989,8 @@ on_failure  = "ignore"
 2. **Wrong file location** — hooks must be in `.grove/hooks.toml` (project) or
    `~/.config/grove/hooks.toml` (global). A file named `hooks.toml` in the repo root is ignored.
 
-3. **Using `--peek`** — `grove to <name> --peek` skips all hooks (and tmux) by design. Remove
-   `--peek` for a full switch with hooks.
+3. **Using `--peek` or `--no-hooks`**: both skip all hooks by design. Remove the flag for a
+   full switch with hooks. To stay in your shell and still run hooks, use `--here`.
 
 4. **Branch matches a skip pattern** — check `[[overrides]]` entries in your hooks file.
    An override with `skip_hooks = true` silences all hooks for matching branches:

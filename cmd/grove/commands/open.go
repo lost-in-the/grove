@@ -19,14 +19,16 @@ var (
 	openNoPopup  bool
 	openJSON     bool
 	openNoDocker bool
+	openHere     bool
 )
 
 func init() {
 	openCmd.Flags().BoolVar(&openNoCreate, "no-create", false, "Only attach to existing worktree, error if not found")
 	openCmd.Flags().StringVar(&openCommand, "command", "", "Override session command")
-	openCmd.Flags().BoolVar(&openNoPopup, "no-popup", false, "Skip popup, use tmux switch/attach instead")
+	openCmd.Flags().BoolVar(&openNoPopup, "no-popup", false, "Skip popup, switch or attach to the session instead")
 	openCmd.Flags().BoolVarP(&openJSON, "json", "j", false, "Output as JSON")
 	openCmd.Flags().BoolVar(&openNoDocker, "no-docker", false, "Skip Docker auto-start")
+	addHereFlag(openCmd, &openHere)
 	rootCmd.AddCommand(openCmd)
 }
 
@@ -36,8 +38,13 @@ var openCmd = &cobra.Command{
 	Aliases:           []string{"o"},
 	Short:             "Open a worktree session (create if needed)",
 	ValidArgsFunction: completeWorktreeNames,
-	Long: `Open a worktree by creating it if needed, ensuring a tmux session exists,
+	Long: `Open a worktree by creating it if needed, ensuring its session exists,
 launching the configured session command, and attaching.
+
+Use --here to stay in the shell or pane you are in: the worktree is created
+if needed, and grove only changes directory. No session is created and the
+session command does not run. To do that every time, set
+[session] open_in = "here".
 
 This is idempotent — safe to run repeatedly. If the worktree and session
 already exist, it reattaches without recreating.
@@ -146,11 +153,11 @@ Examples:
 			log.Printf("failed to touch worktree %q: %v", displayName, err)
 		}
 
-		// Step 2: Ensure tmux session exists — unless agent mode / tmux "off"
-		// suppresses it (grove open outside tmux would otherwise run a blocking
-		// attach and take over an agent's terminal, the thing agent mode exists
-		// to prevent).
-		tmuxMode := resolveTmuxMode(ctx.Config, false, false)
+		// Step 2: Ensure the session exists, unless agent mode, a "here"
+		// placement, or mode "off" suppresses it (grove open outside the
+		// multiplexer would otherwise run a blocking attach and take over an
+		// agent's terminal, the thing agent mode exists to prevent).
+		tmuxMode := resolveTmuxMode(ctx.Config, openHere)
 
 		m := ctx.Mux()
 		if tmuxMode == tmuxModeOff || !m.Available() {

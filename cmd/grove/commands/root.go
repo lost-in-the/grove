@@ -74,10 +74,10 @@ func finishDashboard(ctx *GroveContext, exit tui.Exit) error {
 var rootCmd = &cobra.Command{
 	Use:   "grove",
 	Short: "Zero-friction worktree management",
-	Long: `Grove is a zero-friction worktree + tmux manager for developers.
+	Long: `Grove is a zero-friction worktree + session manager for developers.
 
 It provides fast context switching between git worktrees with automatic
-tmux session management. Every command completes in less than 500ms.
+session management under tmux or herdr. Every command completes in less than 500ms.
 
 GETTING STARTED: Add shell integration to your ~/.zshrc or ~/.bashrc:
   eval "$(grove install zsh)"   # or bash

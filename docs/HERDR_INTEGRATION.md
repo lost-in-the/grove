@@ -397,6 +397,12 @@ available binary, tmux winning ties. The `[tmux]` block keeps working;
 `tmux.mode = "off"` still maps to `backend = "off"`
 (`Config.EffectiveMuxBackend()`).
 
+Placement uses the same two words on both backends. `session` is the
+worktree's own session: a tmux session under tmux, a workspace under herdr.
+`here` is the shell or pane you are in. Set it with `[session] open_in` or,
+for one run, `--here`. The per-backend table is in
+[COMMAND_SPECIFICATIONS.md](COMMAND_SPECIFICATIONS.md#placement).
+
 ---
 
 ## The herdr plugin

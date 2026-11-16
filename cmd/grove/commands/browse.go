@@ -232,7 +232,7 @@ func browseIssuesFzf(cmd *cobra.Command, ctx *GroveContext) error {
 		return nil
 	}
 
-	return fetchItem(ctx, "issue", number)
+	return fetchItem(ctx, "issue", number, false)
 }
 
 func browsePRsFzf(cmd *cobra.Command, ctx *GroveContext) error {
@@ -279,7 +279,7 @@ func browsePRsFzf(cmd *cobra.Command, ctx *GroveContext) error {
 		return nil
 	}
 
-	return fetchItem(ctx, "pr", number)
+	return fetchItem(ctx, "pr", number, false)
 }
 
 // browseURLOutput is the JSON output for grove browse --json.

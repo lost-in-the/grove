@@ -298,7 +298,7 @@ var helpSectionsDashboard = []helpSection{
 		{"c", "Open configuration"},
 	}},
 	{title: "CLI Companions", note: "Commands with more options than TUI shortcuts:", items: []helpEntry{
-		{"grove to <name> --peek", "Switch without hooks (read-only)"},
+		{"grove to <name> --peek", "Look: stay here, skip hooks"},
 		{"grove fork <name> --move-wip", "Fork with uncommitted changes"},
 		{"grove test <name>", "Run tests in another worktree"},
 		{"grove diff <name>", "Diff against another worktree"},

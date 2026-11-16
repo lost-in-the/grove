@@ -182,8 +182,8 @@ func TestPopulateConfigFields(t *testing.T) {
 
 	// Behavior tab
 	behavior := fields[ConfigTabBehavior]
-	if len(behavior) != 4 {
-		t.Errorf("expected 4 Behavior fields, got %d", len(behavior))
+	if len(behavior) != 5 {
+		t.Errorf("expected 5 Behavior fields, got %d", len(behavior))
 	}
 	// The branch form replaced the branch-exists notice, so these settings
 	// no longer do anything and must not be offered.
@@ -235,6 +235,50 @@ func TestPopulateConfigFields_ContainerSwitch(t *testing.T) {
 		if !strings.Contains(field.Description, "Stack follows every move") {
 			t.Errorf("description %q does not say what the setting does in the stack vocabulary", field.Description)
 		}
+	}
+}
+
+func behaviorField(t *testing.T, cfg *config.Config, key string) ConfigField {
+	t.Helper()
+	for _, f := range populateConfigFields(cfg)[ConfigTabBehavior] {
+		if f.Key == key {
+			return f
+		}
+	}
+	t.Fatalf("the Behavior tab does not offer %s", key)
+	return ConfigField{}
+}
+
+func TestPopulateConfigFields_OpenIn(t *testing.T) {
+	for _, tc := range []struct{ configured, want string }{
+		{"", "session"},
+		{"session", "session"},
+		{"here", "here"},
+		{"new", "session"},
+		{"current", "here"},
+	} {
+		cfg := config.LoadDefaults()
+		cfg.Session.OpenIn = tc.configured
+
+		field := behaviorField(t, cfg, "session.open_in")
+		if field.Value != tc.want || field.Loaded != tc.want {
+			t.Errorf("configured %q: Value/Loaded = %q/%q, want %q", tc.configured, field.Value, field.Loaded, tc.want)
+		}
+		if field.Type != ConfigEnum || !slices.Equal(field.Options, []string{"session", "here"}) {
+			t.Errorf("open_in = %v %v, want an enum of session, here", field.Type, field.Options)
+		}
+	}
+}
+
+// The mode applies to whichever multiplexer is active, so the panel must not
+// present it as a tmux setting. Only the TOML key keeps the old section name.
+func TestPopulateConfigFields_SessionModeIsBackendNeutral(t *testing.T) {
+	field := behaviorField(t, config.LoadDefaults(), "tmux.mode")
+	if field.Label != "session_mode" {
+		t.Errorf("label = %q, want session_mode", field.Label)
+	}
+	if strings.Contains(strings.ToLower(field.Description), "tmux") {
+		t.Errorf("description %q names tmux", field.Description)
 	}
 }
 

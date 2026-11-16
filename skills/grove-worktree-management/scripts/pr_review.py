@@ -6,7 +6,7 @@ Steps:
   1. Check if a worktree for PR #N already exists (via `grove ls --json`).
   2. If not: run `grove fetch pr/{N}` to create the worktree.
   3. Locate the new worktree name in `grove ls --json`.
-  4. Run `grove to <name> --peek` to switch without hooks or tmux.
+  4. Run `grove to <name> --peek` to switch without hooks or a session.
   5. Emit a structured JSON result.
 
 In --dry-run mode: prints the commands that would run without executing them.
@@ -218,7 +218,7 @@ def main() -> None:
     output["worktree_path"] = wt_path
 
     # -----------------------------------------------------------------------
-    # Step 3: Switch with --peek (no hooks, no tmux)
+    # Step 3: Switch with --peek (no hooks, no session)
     # -----------------------------------------------------------------------
     if wt_name:
         peek_cmd = ["grove", "to", wt_name, "--peek"]

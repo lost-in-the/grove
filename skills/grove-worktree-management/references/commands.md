@@ -7,7 +7,7 @@ Read this file when you need the complete command surface including rarely-used 
 | Canonical | Aliases | `--json` | Mutates | Description |
 |-----------|---------|:--------:|:-------:|-------------|
 | `grove new [name]` | `spawn`, `n` | — | ✓ | Create worktree + branch + tmux session; `--up` also brings the stack |
-| `grove to [name]` | `switch`, `t` | — | ✓ | Move to a worktree; does not touch the stack by default (`[switch] container_switch` set to `auto` or `prompt` changes that). `--up` also brings it, `--peek` skips hooks and tmux |
+| `grove to [name]` | `switch`, `t` | — | ✓ | Move to a worktree; does not touch the stack by default (`[switch] container_switch` set to `auto` or `prompt` changes that). `--up` also brings it, `--here` stays in this shell, `--no-hooks` skips hooks, `--peek` is short for `--here --no-hooks` |
 | `grove fetch <ref>` | `f` | — | ✓ | Create worktree from PR (`pr/N`) or issue (`issue/N`); requires `gh` CLI |
 | `grove ls` | `list`, `l` | ✓ | — | List all worktrees with status, branch, tmux, containers |
 | `grove here` | `h` | ✓ | — | Current worktree status (name, branch, SHA, changes, tmux, agent slot) |
@@ -52,7 +52,9 @@ Read this file when you need the complete command surface including rarely-used 
 
 **`grove to` flags:**
 - `--up` (`-u`) — also bring the stack to the worktree you move to. Same flag on `grove last` and `grove new`. Without it, `grove to` never touches Docker (unless `[switch] container_switch` is `auto` or `prompt`).
-- `--peek` — read-only move: skips pre/post_switch hooks and does not attach tmux. Safe for PR review and parallel inspection.
+- `--here`: placement "here" for this run: stay in the shell or pane you are in, change directory only. Hooks still run. Also on `last`, `new`, `fork`, `open`, `fetch`.
+- `--no-hooks`: skip pre/post_switch hooks and the dirty check. Cannot combine with `--up`.
+- `--peek`: short for `--here --no-hooks`. Safe for PR review and parallel inspection.
 
 **`grove trim` flags:**
 - `--all` — skip confirmation prompts and remove all stale worktrees at once. Use carefully.

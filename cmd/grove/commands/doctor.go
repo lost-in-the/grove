@@ -215,6 +215,10 @@ Examples:
 				}) && allPassed
 			}
 
+			runOptionalCheck(w, "Config spelling", func() (string, error) {
+				return checkOpenInSpelling(cfg)
+			})
+
 			// Check: config symlinks across worktrees (auto-removed under --fix,
 			// with the check re-evaluated so the verdict reflects the cleanup).
 			allPassed = runFixableCheck(w, "Config symlinks", func() (string, error) {
@@ -1067,6 +1071,15 @@ func checkStrayBackup(groveDir string) (string, error) {
 		)
 	}
 	return "no stray backup directory", nil
+}
+
+// checkOpenInSpelling reports an old [session] open_in value. The old values
+// still work, so this is a notice and never fails doctor.
+func checkOpenInSpelling(cfg *config.Config) (string, error) {
+	if renamed, old := cfg.OpenInRename(); old {
+		return "", fmt.Errorf("[session] open_in = %q is an old spelling that still works. Change it to open_in = %q", cfg.Session.OpenIn, renamed)
+	}
+	return "up to date", nil
 }
 
 // doctorMux resolves the multiplexer for the "Herdr server" check.

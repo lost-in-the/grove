@@ -83,7 +83,7 @@ func TestNewJSON_MissingCopySourceExitsNonZero(t *testing.T) {
 	repo := testhelper.SetupRailsFixture(t)
 	writeExternalConfig(t, repo, `copy_files = ["config/secret.key", "config/database.yml"]`)
 
-	res := runGrove(t, binary, repo, "new", "newwork", "--json", "--no-switch", "--no-tmux")
+	res := runGrove(t, binary, repo, "new", "newwork", "--json", "--no-switch", "--here")
 
 	if res.code != exitcode.CreatedNotProvisioned {
 		t.Fatalf("exit code = %d, want %d\nstderr: %s", res.code, exitcode.CreatedNotProvisioned, res.stderr)
@@ -121,7 +121,7 @@ func TestNewJSON_AllFilesCopiedIsProvisioned(t *testing.T) {
 	repo := testhelper.SetupRailsFixture(t)
 	writeExternalConfig(t, repo, `copy_files = ["config/database.yml"]`)
 
-	res := runGrove(t, binary, repo, "new", "newwork", "--json", "--no-switch", "--no-tmux")
+	res := runGrove(t, binary, repo, "new", "newwork", "--json", "--no-switch", "--here")
 	if res.code != 0 {
 		t.Fatalf("exit code = %d\nstderr: %s", res.code, res.stderr)
 	}
@@ -139,7 +139,7 @@ func TestNew_ConfigThatFailsToLoadCreatesNoWorktree(t *testing.T) {
 	repo := testhelper.SetupRailsFixture(t)
 	writeExternalConfig(t, repo, `copy_files = ["config/*.key"]`)
 
-	res := runGrove(t, binary, repo, "new", "newwork", "--json", "--no-switch", "--no-tmux")
+	res := runGrove(t, binary, repo, "new", "newwork", "--json", "--no-switch", "--here")
 
 	if res.code == 0 {
 		t.Fatalf("exit code = 0, want non-zero\nstdout: %s", res.stdout)

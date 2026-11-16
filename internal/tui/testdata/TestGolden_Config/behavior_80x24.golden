@@ -7,8 +7,8 @@
  ┃   prompt                                                                     
  ┃   refuse                                                                     
                                                                                 
-   [1mtmux_mode[m                                                                    
-   Tmux session behavior                                                        
+   [1msession_mode[m                                                                 
+   Sessions: auto (attach), manual (print the command), off (none)              
    > auto                                                                       
      manual                                                                     
      off                                                                        

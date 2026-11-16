@@ -295,10 +295,12 @@ Columns:
 ```bash
 grove to <name>
 grove to <name> --up      # also bring the stack to <name>
-grove to <name> --peek    # lightweight, skips hooks
+grove to <name> --here      # stay in this shell: cd only, hooks still run
+grove to <name> --no-hooks  # skip hooks and the dirty check
+grove to <name> --peek      # short for --here --no-hooks
 ```
 
-> **AGENT WARNING — tmux takeover.** By default, `grove to` attaches the terminal to the target tmux session. In an agent context this takes over the terminal. See §7 Agent Strategy Guide for how to prevent this.
+> **AGENT WARNING: session takeover.** By default, `grove to` attaches the terminal to the target session. In an agent context this takes over the terminal. See §7 Agent Strategy Guide for how to prevent this.
 
 `grove to` moves you and never touches the Docker stack. Two things can move: you, and the stack. `grove up` brings the stack to the worktree you are in. `--up` does both in one step. To make every move bring the stack, set `[switch] container_switch = "auto"` (the default is `"off"`).
 
@@ -309,7 +311,7 @@ What happens (full move):
 4. Emits `tmux-attach:{session}` directive — shell wrapper attaches tmux
 5. In external Docker mode, prints on stderr where the stack is: `Stack: on main (not here). Run `grove up` to bring it.` `--json` carries `stack_on` and `stack_here` instead.
 
-`--peek` skips all hooks and tmux. Use it for quick inspection or when hooks are expensive. It cannot combine with `--up`.
+Where you land is the placement: `session` (the worktree's own session, the default) or `here` (the shell you are in). `--here` picks `here` for one run and still runs hooks. `--no-hooks` skips hooks and the dirty check. `--peek` is short for `--here --no-hooks`. Use it for quick inspection or when hooks are expensive. `--no-hooks` and `--peek` cannot combine with `--up`.
 
 Hooks fired: `pre_switch`, `post_switch`
 

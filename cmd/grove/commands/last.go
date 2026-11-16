@@ -12,10 +12,7 @@ import (
 	"github.com/lost-in-the/grove/internal/output"
 )
 
-var (
-	lastJSON bool
-	lastUp   bool
-)
+var lastFlags switchFlags
 
 var lastCmd = &cobra.Command{
 	Use:     "last",
@@ -23,7 +20,10 @@ var lastCmd = &cobra.Command{
 	Short:   "Move to the previous worktree",
 	Long: `Move to the last worktree you were working in.
 
-Like 'grove to', this moves you only. Use --up to also bring the stack.`,
+Like 'grove to', this moves you only. Use --up to also bring the stack.
+
+The placement flags work as they do on 'grove to': --here stays in the shell
+or pane you are in, --no-hooks skips hooks, and --peek is short for both.`,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		stderr := cli.NewStderr()
 
@@ -41,7 +41,7 @@ Like 'grove to', this moves you only. Use --up to also bring the stack.`,
 			// must be validated against this project's worktrees below.
 			lastSession, serr := mux.GetLastSession()
 			if serr != nil || lastSession == "" {
-				return noPreviousWorktree(stderr, lastJSON)
+				return noPreviousWorktree(stderr, lastFlags.json)
 			}
 			usedLegacyFallback = true
 
@@ -63,7 +63,7 @@ Like 'grove to', this moves you only. Use --up to also bring the stack.`,
 			// A stale global session from another project (the legacy fallback)
 			// isn't an error — there's simply nothing to switch back to here.
 			if usedLegacyFallback {
-				return noPreviousWorktree(stderr, lastJSON)
+				return noPreviousWorktree(stderr, lastFlags.json)
 			}
 			return fmt.Errorf("last worktree '%s' not found", lastWorktree)
 		}
@@ -73,7 +73,7 @@ Like 'grove to', this moves you only. Use --up to also bring the stack.`,
 		// correct --json ordering (no tmux relocation before the JSON is
 		// emitted) all included, none of which the old lightweight epilogue did
 		// (B19/B20).
-		return performSwitch(ctx, targetTree.DisplayName(), switchOptions{JSON: lastJSON, Up: lastUp})
+		return performSwitch(ctx, targetTree.DisplayName(), lastFlags.options())
 	}),
 }
 
@@ -98,7 +98,6 @@ func noPreviousWorktree(stderr io.Writer, jsonMode bool) error {
 }
 
 func init() {
-	lastCmd.Flags().BoolVarP(&lastJSON, "json", "j", false, "Output as JSON with switch_to field")
-	lastCmd.Flags().BoolVarP(&lastUp, "up", "u", false, "Also bring the stack to the worktree you move to")
+	lastFlags.register(lastCmd)
 	rootCmd.AddCommand(lastCmd)
 }

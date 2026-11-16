@@ -63,7 +63,7 @@ func TestRenameCmdHelp(t *testing.T) {
 		text  string
 	}{
 		{"directory", "directory"},
-		{"tmux session", "tmux session"},
+		{"session", "session"},
 		{"protected", "Protected"},
 	}
 

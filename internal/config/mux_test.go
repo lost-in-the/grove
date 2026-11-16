@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValidateMuxBackend(t *testing.T) {
 	for _, backend := range []string{"", "auto", "tmux", "herdr", "off"} {
@@ -97,20 +100,79 @@ func TestMergeCarriesSessionOpenIn(t *testing.T) {
 	// floor. Only an end-to-end read catches that, so pin it here.
 	base := LoadDefaults()
 	override := &Config{}
-	override.Session.OpenIn = OpenInCurrent
+	override.Session.OpenIn = OpenInHere
 
 	merged := mergeConfigs(base, override)
 
-	if merged.Session.OpenIn != OpenInCurrent {
-		t.Errorf("Session.OpenIn = %q, want %q", merged.Session.OpenIn, OpenInCurrent)
+	if merged.Session.OpenIn != OpenInHere {
+		t.Errorf("Session.OpenIn = %q, want %q", merged.Session.OpenIn, OpenInHere)
 	}
-	if got := merged.EffectiveOpenIn(); got != OpenInCurrent {
-		t.Errorf("EffectiveOpenIn() = %q, want %q", got, OpenInCurrent)
+	if got := merged.EffectiveOpenIn(); got != OpenInHere {
+		t.Errorf("EffectiveOpenIn() = %q, want %q", got, OpenInHere)
 	}
 }
 
-func TestEffectiveOpenInDefaultsToNew(t *testing.T) {
-	if got := (&Config{}).EffectiveOpenIn(); got != OpenInNew {
-		t.Errorf("EffectiveOpenIn() = %q, want %q for an unset value", got, OpenInNew)
+func TestEffectiveOpenIn(t *testing.T) {
+	tests := []struct {
+		name   string
+		openIn string
+		want   string
+	}{
+		{name: "unset means session", openIn: "", want: OpenInSession},
+		{name: "session", openIn: "session", want: OpenInSession},
+		{name: "here", openIn: "here", want: OpenInHere},
+		{name: "old spelling new means session", openIn: "new", want: OpenInSession},
+		{name: "old spelling current means here", openIn: "current", want: OpenInHere},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{}
+			cfg.Session.OpenIn = tt.openIn
+			if got := cfg.EffectiveOpenIn(); got != tt.want {
+				t.Errorf("EffectiveOpenIn() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestOpenInRename(t *testing.T) {
+	tests := []struct {
+		openIn  string
+		wantNew string
+		wantOld bool
+	}{
+		{openIn: "", wantOld: false},
+		{openIn: "session", wantOld: false},
+		{openIn: "here", wantOld: false},
+		{openIn: "new", wantNew: "session", wantOld: true},
+		{openIn: "current", wantNew: "here", wantOld: true},
+	}
+	for _, tt := range tests {
+		cfg := &Config{}
+		cfg.Session.OpenIn = tt.openIn
+		gotNew, gotOld := cfg.OpenInRename()
+		if gotNew != tt.wantNew || gotOld != tt.wantOld {
+			t.Errorf("OpenInRename() with open_in=%q = (%q, %v), want (%q, %v)", tt.openIn, gotNew, gotOld, tt.wantNew, tt.wantOld)
+		}
+	}
+}
+
+func TestValidateOpenIn(t *testing.T) {
+	for _, v := range []string{"", "session", "here", "new", "current"} {
+		cfg := LoadDefaults()
+		cfg.Session.OpenIn = v
+		if err := Validate(cfg); err != nil {
+			t.Errorf("Validate(open_in=%q) = %v, want nil", v, err)
+		}
+	}
+
+	cfg := LoadDefaults()
+	cfg.Session.OpenIn = "pane"
+	err := Validate(cfg)
+	if err == nil {
+		t.Fatal("Validate(open_in=\"pane\") = nil, want an error")
+	}
+	if want := "session.open_in must be one of: session, here"; !strings.Contains(err.Error(), want) {
+		t.Errorf("error = %q, want it to contain %q", err, want)
 	}
 }

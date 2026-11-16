@@ -185,6 +185,50 @@ These behaviors differ by backend:
 Session naming is unchanged: tmux session names and herdr workspace labels both
 use the canonical `{project}-{name}` form regardless of the directory pattern.
 
+### Placement
+
+Placement is where you land when you open a worktree. Grove has two
+placements, and the words are the same on every backend.
+
+| Placement | Meaning | tmux | herdr | off |
+|---|---|---|---|---|
+| `session` (default) | The worktree's own session. Grove creates it if needed and moves you to it. | The tmux session `{project}-{name}`. Inside tmux: `switch-client`. Outside tmux: attach (`mode = "auto"`) or print the attach command (`mode = "manual"`). | The herdr workspace for the checkout, created or adopted. Inside herdr: `workspace focus`. Outside herdr: focus, then attach (`auto`) or print `Run: herdr` (`manual`, or under shell integration). | There is no session. Same result as `here`. |
+| `here` | The shell or pane you are in. Grove only changes directory. | No session is created, switched to, or attached. The `cd:` directive is the whole move. | Same as tmux. | Same as tmux. |
+
+"off" means `[mux] backend = "off"`, `[tmux] mode = "off"`, or no multiplexer
+installed.
+
+Hooks are a separate choice from placement:
+
+| Side effects | Hooks | Dirty check | Stack |
+|---|---|---|---|
+| default | `pre_switch` and `post_switch` run | runs (`switch.dirty_handling`) | follows only with `--up` or `container_switch` |
+| `--no-hooks` | skipped | skipped | never touched |
+
+How to say each one:
+
+| You want | Every run | One run |
+|---|---|---|
+| Placement `session` | `[session] open_in = "session"` (default) | no flag |
+| Placement `here` | `[session] open_in = "here"` | `--here` |
+| No hooks | not a setting | `--no-hooks` |
+| `here` and no hooks | not a setting | `--peek` (short for `--here --no-hooks`) |
+
+`--here` is on `to`, `last`, `new`, `fork`, `open`, and `fetch`. `--no-hooks`
+and `--peek` are on `to` and `last`. `--up` works through the hooks, so it
+cannot be combined with `--no-hooks` or `--peek`.
+
+`GROVE_AGENT_MODE` never relocates your client: `to`, `last`, and `open` land
+`here`. `grove new` and `grove fork` still create the detached session.
+
+Old spellings still work:
+
+| Old | Now | Notice |
+|---|---|---|
+| `open_in = "new"` | `open_in = "session"` | `grove doctor` and `grove config` name the new value |
+| `open_in = "current"` | `open_in = "here"` | `grove doctor` and `grove config` name the new value |
+| `--no-tmux` (on `to` and `new`) | `--here` | hidden from help; prints a deprecation line on stderr |
+
 See [HERDR_INTEGRATION.md](HERDR_INTEGRATION.md) for the full design.
 
 ---
@@ -335,7 +379,7 @@ NAME            BRANCH          STATUS     TMUX        PATH
 
 ### grove new
 
-**Purpose:** Create a new worktree with associated tmux session and Docker stack.
+**Purpose:** Create a new worktree with its session and Docker stack.
 
 **Aliases:** `spawn` (implies `--json` output), `n`
 
@@ -355,8 +399,11 @@ Flags:
       --mirror <ref>         Create environment worktree tracking a remote branch (e.g., origin/main)
   -u, --up                   Also bring the stack to the new worktree (per-invocation auto_up)
       --no-docker            Skip bringing the stack, even with auto_up (cannot combine with --up)
+      --here                 Stay in the shell or pane you are in: change directory only, no session
   -n, --no-switch            Stay in current worktree after creation
 ```
+
+`--here` sets the [placement](#placement) for this run. No session is created. Docker and hooks still run.
 
 `--mirror`, `--from`, `--branch`, and `--from-branch` are mutually exclusive — pick the one that matches your intent.
 
@@ -489,9 +536,12 @@ Arguments:
 Flags:
       --no-create     Only attach to existing worktree, error if not found
       --command <cmd>  Override session command
-      --no-popup       Skip popup, use tmux switch/attach instead
+      --no-popup       Skip popup, switch or attach to the session instead
+      --here           Stay in the shell or pane you are in: change directory only, no session
   -j, --json           Output as JSON
 ```
+
+`--here` sets the [placement](#placement) for this run. The worktree is created if needed. No session is created and the session command does not run.
 
 **Behavior:**
 
@@ -556,7 +606,7 @@ When `grove open` creates the worktree, it reports files that were not copied or
 
 ### grove to
 
-**Purpose:** Move to an existing worktree, activating its tmux session. `grove to` moves you only. It never touches the Docker stack unless you ask (`--up`, or `container_switch` set to `auto` or `prompt`). `switch` is an alias of `to`.
+**Purpose:** Move to an existing worktree. By default you land in its session; see [Placement](#placement). `grove to` moves you only. It never touches the Docker stack unless you ask (`--up`, or `container_switch` set to `auto` or `prompt`). `switch` is an alias of `to`.
 
 Two things can move: you, and the stack. `grove to` moves you. `grove up` brings the stack to the worktree you are in. `grove to <name> --up` does both.
 
@@ -570,9 +620,12 @@ Arguments:
 Flags:
   -j, --json      Output as JSON with switch_to field
   -u, --up        Also bring the stack to the worktree you move to (forces container_switch = "auto" for this call)
-      --peek      Lightweight move: skip hooks and tmux (no session side effects). Cannot combine with --up
-      --no-tmux   Skip tmux session creation/switch/attach for this invocation
+      --here      Stay in the shell or pane you are in: change directory only, no session
+      --no-hooks  Skip hooks and the dirty check for this run. Cannot combine with --up
+      --peek      Look without side effects: short for --here --no-hooks. Cannot combine with --up
 ```
+
+`--no-tmux` is the old spelling of `--here`. It still works, is hidden from help, and prints a deprecation line on stderr.
 
 **Behavior:**
 
@@ -581,29 +634,29 @@ Flags:
    - Fall back to full name match
    - Error if worktree is stale (directory missing)
 
-2. **Check dirty state** (unless `--peek`):
+2. **Check dirty state** (unless `--no-hooks` or `--peek`):
    - Inspect the *current* worktree for uncommitted changes (`git status --porcelain`)
    - Behavior controlled by `switch.dirty_handling` in `.grove/config.toml`:
      - `"prompt"` (default): In interactive mode (TTY), show dirty files and ask "Switch anyway?". In non-interactive mode, fall back to refuse behavior
      - `"auto-stash"`: Automatically run `git stash push -m "grove: auto-stash before switch to {name}"`, then proceed
      - `"refuse"`: Block the switch, list dirty files, suggest committing/stashing or changing config
    - If the dirty check itself fails (e.g., git error), treat the worktree as clean and proceed — never block the user on a failed status check
-   - `--peek` always bypasses dirty checks (peek is a lightweight switch with no side effects)
+   - `--no-hooks` and `--peek` always bypass the dirty check (the run has no side effects)
 
-3. **Handle tmux session** (skipped entirely with `--peek`, `--no-tmux`, or `GROVE_AGENT_MODE`):
+3. **Handle the session** (skipped entirely when the placement is `here`: `--here`, `--peek`, `open_in = "here"`, or `GROVE_AGENT_MODE`). The steps below name the tmux commands; herdr does the same through `workspace focus`:
    - If session exists and inside tmux: `tmux switch-client -t {session}`
    - If session exists and outside tmux: `tmux attach -t {session}` (or `tmux -CC attach` in iTerm2 when `control_mode` is enabled)
    - If session doesn't exist: Create it, then attach/switch
 
-4. **Fire pre-switch hooks** (unless `--peek`):
+4. **Fire pre-switch hooks** (unless `--no-hooks` or `--peek`):
    - Whether the stack follows the move is controlled by `switch.container_switch`. `--up` forces `"auto"` for one call:
      - `"off"` (default): The Docker plugin's switch hooks do not run. No env file write, no env directive, no stop or start, in every Docker mode. Other plugins' hooks and `hooks.toml` hooks still fire.
      - `"auto"`: The stack follows every move (respects `auto_start`/`auto_stop`).
      - `"prompt"`: Ask before the stack follows. Falls back to `auto` in non-interactive sessions.
 
-5. **Switch tmux session** (if inside tmux, and neither `--peek` nor `--no-tmux` nor `GROVE_AGENT_MODE` is set): `tmux switch-client -t {session}`
+5. **Switch session** (if inside the multiplexer and the placement is `session`): `tmux switch-client -t {session}`
 
-6. **Fire post-switch hooks** (bring the stack up, etc.) before tmux switch so progress is visible in current session (unless `--peek`). The `container_switch` gate from step 4 applies here too.
+6. **Fire post-switch hooks** (bring the stack up, etc.) before the session switch so progress is visible in current session (unless `--no-hooks` or `--peek`). The `container_switch` gate from step 4 applies here too.
 
 7. **Change directory:**
    - If inside tmux: session switch handles navigation
@@ -718,15 +771,16 @@ Please be more specific.
 | Dirty worktree, auto-stash mode | Stash changes automatically, proceed with switch |
 | Dirty worktree, prompt mode (TTY) | Show dirty files, ask user to confirm, abort or proceed |
 | Dirty worktree, prompt mode (non-TTY) | Fall back to refuse behavior (exit 1) |
-| Dirty worktree with `--peek` | Bypass dirty check entirely, proceed with switch |
-| `--peek` or `--no-tmux` | No tmux session is created, switched, or attached; cd directive still emitted |
+| Dirty worktree with `--no-hooks` or `--peek` | Bypass dirty check entirely, proceed with switch |
+| `--here` or `--peek` | No session is created, switched to, or attached; cd directive still emitted |
+| `--no-hooks` without `--here` | You land in the session as usual; no hook runs and the dirty check is skipped |
 | Dirty check fails (git error) | Treat as clean, proceed with switch |
 | container_switch = "off" (default) | `to` does nothing to Docker, including the env file in external mode |
 | container_switch = "auto" | The stack follows every `to`, as before this setting defaulted to "off" |
 | container_switch = "prompt" (TTY) | Ask before the stack follows; user can decline |
 | container_switch = "prompt" (non-TTY) | Fall back to auto behavior |
 | `--up` | Forces `auto` for this call, whatever the setting |
-| `--up` with `--peek` | Error: the flags cannot be combined |
+| `--up` with `--peek` or `--no-hooks` | Error: the flags cannot be combined |
 | iTerm2 + control_mode enabled | Use `tmux -CC attach` for native window integration |
 
 **Directory Drift Detection:**
@@ -1221,6 +1275,9 @@ grove last [flags]
 Flags:
   -j, --json   Output as JSON with a switch_to field
   -u, --up     Also bring the stack to the worktree you move to (forces container_switch = "auto")
+      --here      Stay in the shell or pane you are in: change directory only, no session
+      --no-hooks  Skip hooks and the dirty check for this run. Cannot combine with --up
+      --peek      Look without side effects: short for --here --no-hooks. Cannot combine with --up
 ```
 
 **Behavior:**
@@ -1229,7 +1286,7 @@ Flags:
 2. If empty, fall back to the legacy global session file (`~/.config/grove/last_session`)
    as a *hint only* — it is cross-project, so the resolved name is validated against this
    project's worktrees before use.
-3. If a worktree is resolved: equivalent to `grove to <last>`, including the Stack line, the `--up` flag, and the `container_switch` gate.
+3. If a worktree is resolved: equivalent to `grove to <last>`, including the Stack line, the `--up` flag, the [placement](#placement) flags, and the `container_switch` gate.
 4. If nothing is recorded, or the legacy hint doesn't resolve to a worktree in this project:
    graceful no-op — print a hint and exit 0 (running `grove last` before any in-project switch
    is not an error, and it must never chase another project's session).
@@ -1635,8 +1692,11 @@ Flags:
       --copy-wip              Copy uncommitted changes to both worktrees
       --no-wip                Fork starts clean (leave changes in current)
   -n, --no-switch             Stay in current worktree after forking
+      --here                  Stay in the shell or pane you are in: change directory only, no session
   -j, --json                  Output as JSON
 ```
+
+`--here` sets the [placement](#placement) for this run. No session is created for the fork.
 
 **Behavior:**
 
@@ -2344,7 +2404,7 @@ Found 2 worktree(s) eligible for cleanup:
   old-feature (feature/auth) - 45 days since last access [dirty]
   experiment (experiment) - 32 days since last access
 
-This will permanently remove 2 worktree(s) and their associated tmux sessions.
+This will permanently remove 2 worktree(s) and their sessions.
 Type 'yes' to confirm: yes
 
   Removed 'old-feature'

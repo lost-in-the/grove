@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "Can you review PR #42 in this repo without disrupting my current work?",
-      "expected_output": "Agent uses `grove fetch pr/42` to create a worktree, then `grove to <name> --peek` to switch without hooks or tmux, reviews the PR, and offers to run `grove rm` when done.",
+      "expected_output": "Agent uses `grove fetch pr/42` to create a worktree, then `grove to <name> --peek` to switch without hooks or a session, reviews the PR, and offers to run `grove rm` when done.",
       "files": []
     },
     {

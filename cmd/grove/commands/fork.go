@@ -22,6 +22,7 @@ var (
 	forkNoWIP      bool
 	forkNoSwitch   bool
 	forkJSON       bool
+	forkHere       bool
 )
 
 // ForkResult represents the JSON output for grove fork.
@@ -47,6 +48,10 @@ var forkCmd = &cobra.Command{
 
 The new branch name will be {current-branch}-{name} unless --branch-name is specified.
 By default, prompts to handle uncommitted changes. Use --move-wip, --copy-wip, or --no-wip to skip prompt.
+
+The fork gets its own session and you are moved to it. Use --here to stay in
+the shell or pane you are in: no session is created, and grove only changes
+directory. To do that every time, set [session] open_in = "here".
 
 Examples:
   grove fork feature-auth        # Fork into new worktree with branch main-feature-auth
@@ -261,9 +266,9 @@ Examples:
 
 		projectName := mgr.GetProjectName()
 
-		// Create the multiplexer session, unless [session] open_in = "current"
-		// says the worktree belongs in the shell already running.
-		if m := ctx.Mux(); m.Available() && !openInCurrent(ctx.Config) {
+		// Create the session, unless a "here" placement says the worktree
+		// belongs in the shell already running.
+		if m := ctx.Mux(); m.Available() && !landsHere(ctx.Config, forkHere) {
 			target := muxTarget(mgr, name, newTree.Path)
 			if managed, err := ensureSession(m, target, stderr); err != nil {
 				cli.Warning(stderr, "Failed to create session: %v", err)
@@ -292,11 +297,11 @@ Examples:
 			return nil
 		}
 
-		// Switch to new worktree unless --no-switch. Agent mode and tmux mode
-		// "off" suppress the client switch (terminal takeover) — same policy
-		// as `grove new` and `grove to`.
+		// Switch to new worktree unless --no-switch. Agent mode, a "here"
+		// placement, and mode "off" suppress the client switch, the same
+		// policy as `grove new` and `grove to`.
 		if !forkNoSwitch {
-			suppressTmux := resolveTmuxMode(ctx.Config, false, false) == tmuxModeOff
+			suppressTmux := resolveTmuxMode(ctx.Config, forkHere) == tmuxModeOff
 			sessionName := worktree.TmuxSessionName(projectName, name)
 			if !switchToWorktree(ctx, stderr, parentName, name, sessionName, newTree.Path, suppressTmux) {
 				emitCdOrExplain(stderr, newTree.Path)
@@ -317,6 +322,7 @@ func init() {
 	forkCmd.Flags().BoolVar(&forkNoWIP, "no-wip", false, "Fork starts clean (leave changes in current)")
 	forkCmd.Flags().BoolVar(&forkNoSwitch, "no-switch", false, "Stay in current worktree")
 	forkCmd.Flags().BoolVarP(&forkJSON, "json", "j", false, "Output as JSON")
+	addHereFlag(forkCmd, &forkHere)
 
 	// Mark WIP flags as mutually exclusive
 	forkCmd.MarkFlagsMutuallyExclusive("move-wip", "copy-wip", "no-wip")

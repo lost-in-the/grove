@@ -10,13 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **PR review.** `enter` on a pull request (in the PR browser or in Find) opens a full-screen review with four tabs. The files tab shows the diff file by file with line numbers, a folder rail with `+/-` counts (`t` shows or hides it), `J` / `K` between files, `v` to mark a file viewed (kept across restarts until the file changes), and `z` to fold runs of removed lines. The review opens on the conversation: comments, reviews, and review threads in order, with a check summary; `enter` on a thread opens its file at its line. The commits tab lists the PR's commits, and `enter` shows one commit's files (`a` returns to all). The checks tab lists every check, failing first. `enter` in the files tab opens the file in your editor at the line in view.
 - **Local diff.** `g d` on the dashboard (or `d` in the focused detail pane) reviews the selected worktree's changes against its merge-base with the default branch, committed and uncommitted, in the same frame, without `gh`. Control characters in a diff are shown as symbols, never sent to the terminal.
+- **`--here`** on `grove to`, `last`, `new`, `fork`, `open`, and `fetch`: stay in the shell or pane you are in for this run. Grove only changes directory and creates no session. Hooks still run.
+- **`--no-hooks`** on `grove to` and `grove last`: skip hooks and the dirty check for this run. `--peek` is now short for `--here --no-hooks` and behaves as before. `grove last` gains `--peek` too.
+- The config panel in the dashboard has an `open_in` field.
 
 ### Changed
+- **One vocabulary for where you land.** The placement is `session` (the worktree's own session: a tmux session or a herdr workspace) or `here` (the shell or pane you are in). `[session] open_in` now takes `"session"` (default) or `"here"`. The old values `"new"` and `"current"` still work; `grove doctor` and `grove config` name the value to change to. The full table is in `docs/COMMAND_SPECIFICATIONS.md`.
+- `--no-tmux` is now a hidden alias of `--here` on `grove to` and `grove new`. It still works and prints a deprecation line on stderr.
+- `--up` cannot be combined with `--no-hooks`, as it already could not with `--peek`.
+- Help text for `to`, `last`, `new`, `fork`, `open`, `fetch`, `join`, `rm`, `rename`, and `trim` no longer says "tmux" where it means the active multiplexer. The config panel field `tmux_mode` is now labeled `session_mode`.
 - `grove new`, `spawn`, `open`, `fork`, `fetch`, and `adopt` now exit 14 when a configured file was not copied or linked. The worktree is kept. Before, they exited 0.
 - A config that fails to load now stops commands that create or adopt a worktree. Before, they ran on defaults and skipped `copy_files`, symlinks, and hooks.
 - `copy_files` and `symlink_files` entries with `*`, `?`, or `[`, and any entry that is absolute or uses `..`, now fail config validation.
 
 ### Fixed
+- `grove fetch` no longer creates a session when `[session] open_in = "here"`.
 - A missing `copy_files` or symlink source is no longer silent. Stderr names each entry (`Not copied: config/secret.key (missing in the main worktree)`) and says how to fix it. This holds with `--json` too.
 - `--json` on `new`, `spawn`, `fork`, and `open` now includes `provisioned` and `file_setup`, so a script can tell a file was not copied.
 - File setup now runs even when state registration fails, and the failure is reported. The old hint to run `grove repair` did not copy files.

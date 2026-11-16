@@ -73,7 +73,7 @@ func TestExtractQuotedName(t *testing.T) {
 		want string
 	}{
 		{name: "state entry", desc: "State entry 'feature-x' points to missing directory: /tmp/x", want: "feature-x"},
-		{name: "tmux session", desc: "Tmux session 'grove-web-checkout' has no corresponding worktree", want: "grove-web-checkout"},
+		{name: "tmux session", desc: "Session 'grove-web-checkout' has no corresponding worktree", want: "grove-web-checkout"},
 		{name: "no quotes", desc: "no quoted name here", want: ""},
 		{name: "single quote only", desc: "only one 'quote here", want: ""},
 	}

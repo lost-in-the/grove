@@ -57,13 +57,11 @@ func Validate(cfg *Config) error {
 		return fmt.Errorf("tui.list_secondary must be one of: branch, dir, off (got %q)", cfg.TUI.ListSecondary)
 	}
 
-	validOpenIn := map[string]bool{
-		"":            true,
-		OpenInNew:     true,
-		OpenInCurrent: true,
-	}
-	if !validOpenIn[cfg.Session.OpenIn] {
-		return fmt.Errorf("session.open_in must be one of: new, current (got %q)", cfg.Session.OpenIn)
+	_, oldOpenIn := cfg.OpenInRename()
+	switch {
+	case cfg.Session.OpenIn == "", cfg.Session.OpenIn == OpenInSession, cfg.Session.OpenIn == OpenInHere, oldOpenIn:
+	default:
+		return fmt.Errorf("session.open_in must be one of: session, here (got %q)", cfg.Session.OpenIn)
 	}
 
 	// Validate tmux mode

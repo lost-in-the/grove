@@ -186,7 +186,7 @@ func withConfigOverlay() testOpt {
 		}
 		cs.Fields[ConfigTabBehavior] = []ConfigField{
 			{Key: "switch.dirty_handling", Label: "dirty_handling", Value: "auto-stash", Loaded: "auto-stash", Type: ConfigEnum, Options: []string{"auto-stash", "prompt", "refuse"}, Description: "How to handle dirty worktree on switch"},
-			{Key: "tmux.mode", Label: "tmux_mode", Value: "auto", Loaded: "auto", Type: ConfigEnum, Options: []string{"auto", "manual", "off"}, Description: "Tmux session behavior"},
+			{Key: "tmux.mode", Label: "session_mode", Value: "auto", Loaded: "auto", Type: ConfigEnum, Options: []string{"auto", "manual", "off"}, Description: "Sessions: auto (attach), manual (print the command), off (none)"},
 		}
 		cs.Fields[ConfigTabPlugins] = []ConfigField{
 			{Key: "plugins.docker.enabled", Label: "docker_enabled", Value: "true", Loaded: "true", Type: ConfigBool, Description: "Enable Docker plugin"},

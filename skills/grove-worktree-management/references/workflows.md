@@ -27,7 +27,7 @@ grove last
 grove rm pr-42
 ```
 
-`--peek` means no `pre_switch` or `post_switch` hooks fire during the switch. The worktree files are fully accessible; you just don't get hook-driven side effects (migrations, asset builds, etc.).
+`--peek` is short for `--here --no-hooks`: you stay in your shell, and no `pre_switch` or `post_switch` hooks fire during the switch. The worktree files are fully accessible; you just don't get hook-driven side effects (migrations, asset builds, etc.).
 
 ---
 

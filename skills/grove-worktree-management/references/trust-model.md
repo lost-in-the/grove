@@ -49,7 +49,7 @@ Before running `grove new` or `grove fetch` in an unfamiliar repository:
 
 When you need to inspect a worktree without running hooks:
 
-- `grove to <name> --peek` — switches filesystem context but skips ALL pre/post_switch hooks and does not attach tmux. Safe for reading files, running `grep`, or examining state.
+- `grove to <name> --peek`: switches filesystem context but skips ALL pre/post_switch hooks and does not attach a session (short for `--here --no-hooks`). Safe for reading files, running `grep`, or examining state.
 - `grove test <name>` — runs tests in another worktree's directory but does NOT run switch hooks. Only the test runner itself runs.
 
 ## Further Reading

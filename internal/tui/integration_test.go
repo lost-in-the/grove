@@ -984,7 +984,7 @@ working_dir = "main"
 	go func() {
 		defer close(ch)
 		cfg := &config.Config{}
-		cfg.Session.OpenIn = config.OpenInCurrent // no session
+		cfg.Session.OpenIn = config.OpenInHere // no session
 		runPostCreateStreaming(ch, mgr, stateMgr, cfg, repo, "live", wt)
 	}()
 	var lines []string

@@ -20,26 +20,24 @@ func TestEffectiveTmuxMode(t *testing.T) {
 		name      string
 		mode      string
 		agentMode bool
-		noTmux    bool
-		peek      bool
+		here      bool
 		want      string
 	}{
 		{name: "auto mode unchanged", mode: tmuxModeAuto, want: tmuxModeAuto},
 		{name: "manual mode unchanged", mode: "manual", want: "manual"},
 		{name: "off mode unchanged", mode: tmuxModeOff, want: tmuxModeOff},
 		{name: "agent mode forces off", mode: tmuxModeAuto, agentMode: true, want: tmuxModeOff},
-		{name: "no-tmux forces off", mode: tmuxModeAuto, noTmux: true, want: tmuxModeOff},
-		{name: "peek forces off", mode: tmuxModeAuto, peek: true, want: tmuxModeOff},
-		{name: "peek forces off in manual mode", mode: "manual", peek: true, want: tmuxModeOff},
-		{name: "all overrides together", mode: tmuxModeAuto, agentMode: true, noTmux: true, peek: true, want: tmuxModeOff},
+		{name: "here forces off", mode: tmuxModeAuto, here: true, want: tmuxModeOff},
+		{name: "here forces off in manual mode", mode: "manual", here: true, want: tmuxModeOff},
+		{name: "all overrides together", mode: tmuxModeAuto, agentMode: true, here: true, want: tmuxModeOff},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := effectiveTmuxMode(tt.mode, tt.agentMode, tt.noTmux, tt.peek)
+			got := effectiveTmuxMode(tt.mode, tt.agentMode, tt.here)
 			if got != tt.want {
-				t.Errorf("effectiveTmuxMode(%q, %v, %v, %v) = %q, want %q",
-					tt.mode, tt.agentMode, tt.noTmux, tt.peek, got, tt.want)
+				t.Errorf("effectiveTmuxMode(%q, %v, %v) = %q, want %q",
+					tt.mode, tt.agentMode, tt.here, got, tt.want)
 			}
 		})
 	}
@@ -70,16 +68,19 @@ func TestResolveTmuxModeHonorsOpenIn(t *testing.T) {
 		name     string
 		openIn   string
 		tmuxMode string
+		here     bool
 		want     string
 	}{
 		{name: "unset keeps the configured mode", openIn: "", tmuxMode: tmuxModeAuto, want: tmuxModeAuto},
-		{name: "new keeps the configured mode", openIn: config.OpenInNew, tmuxMode: tmuxModeAuto, want: tmuxModeAuto},
-		{name: "new keeps manual", openIn: config.OpenInNew, tmuxMode: "manual", want: "manual"},
-		// "current" means the worktree lands in the shell already running, so
-		// there is no session to create, switch to, or ready — whatever the
-		// configured mode says.
-		{name: "current suppresses auto", openIn: config.OpenInCurrent, tmuxMode: tmuxModeAuto, want: tmuxModeOff},
-		{name: "current suppresses manual", openIn: config.OpenInCurrent, tmuxMode: "manual", want: tmuxModeOff},
+		{name: "session keeps the configured mode", openIn: config.OpenInSession, tmuxMode: tmuxModeAuto, want: tmuxModeAuto},
+		{name: "session keeps manual", openIn: config.OpenInSession, tmuxMode: "manual", want: "manual"},
+		{name: "old spelling new keeps the configured mode", openIn: "new", tmuxMode: tmuxModeAuto, want: tmuxModeAuto},
+		// "here" means you stay in the shell already running, so there is no
+		// session to create, switch to, or ready, whatever the mode says.
+		{name: "here suppresses auto", openIn: config.OpenInHere, tmuxMode: tmuxModeAuto, want: tmuxModeOff},
+		{name: "here suppresses manual", openIn: config.OpenInHere, tmuxMode: "manual", want: tmuxModeOff},
+		{name: "old spelling current suppresses auto", openIn: "current", tmuxMode: tmuxModeAuto, want: tmuxModeOff},
+		{name: "--here suppresses auto for one run", openIn: config.OpenInSession, tmuxMode: tmuxModeAuto, here: true, want: tmuxModeOff},
 	}
 
 	for _, tt := range tests {
@@ -88,9 +89,9 @@ func TestResolveTmuxModeHonorsOpenIn(t *testing.T) {
 			cfg.Session.OpenIn = tt.openIn
 			cfg.Tmux.Mode = tt.tmuxMode
 
-			if got := resolveTmuxMode(cfg, false, false); got != tt.want {
-				t.Errorf("resolveTmuxMode(open_in=%q, mode=%q) = %q, want %q",
-					tt.openIn, tt.tmuxMode, got, tt.want)
+			if got := resolveTmuxMode(cfg, tt.here); got != tt.want {
+				t.Errorf("resolveTmuxMode(open_in=%q, mode=%q, here=%v) = %q, want %q",
+					tt.openIn, tt.tmuxMode, tt.here, got, tt.want)
 			}
 		})
 	}
@@ -104,21 +105,21 @@ func TestShouldRepointStack(t *testing.T) {
 		follows    bool
 		configured string
 		ok         bool
-		peek       bool
+		noHooks    bool
 		want       bool
 	}{
 		{name: "stack on another worktree", external: true, follows: true, configured: "/work/myapp-main", ok: true, want: true},
 		{name: "stack on the target", external: true, follows: true, configured: target, ok: true, want: false},
 		{name: "trailing slash on the target", external: true, follows: true, configured: target + "/", ok: true, want: false},
 		{name: "env var unset", external: true, follows: true, ok: false, want: true},
-		{name: "other worktree but peek", external: true, follows: true, configured: "/work/myapp-main", ok: true, peek: true, want: false},
+		{name: "other worktree but --no-hooks", external: true, follows: true, configured: "/work/myapp-main", ok: true, noHooks: true, want: false},
 		{name: "other worktree but the stack does not follow a move", external: true, follows: false, configured: "/work/myapp-main", ok: true, want: false},
 		{name: "env var unset but the stack does not follow a move", external: true, follows: false, ok: false, want: false},
 		{name: "not external", external: false, follows: true, configured: "/work/myapp-main", ok: true, want: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := shouldRepointStack(tt.external, tt.follows, tt.configured, tt.ok, target, tt.peek); got != tt.want {
+			if got := shouldRepointStack(tt.external, tt.follows, tt.configured, tt.ok, target, tt.noHooks); got != tt.want {
 				t.Errorf("shouldRepointStack() = %v, want %v", got, tt.want)
 			}
 		})
@@ -326,7 +327,7 @@ func TestSelfSwitchStackEvents(t *testing.T) {
 		up         bool
 		configured string
 		ok         bool
-		peek       bool
+		noHooks    bool
 		want       []string
 	}{
 		{name: "--up with the stack on another worktree repoints", external: true, follows: true, up: true, configured: "/work/myapp-main", ok: true, want: repoint},
@@ -336,11 +337,11 @@ func TestSelfSwitchStackEvents(t *testing.T) {
 		{name: "no --up in local mode does nothing", want: nil},
 		{name: "container_switch auto with the stack already here does nothing", external: true, follows: true, configured: target, ok: true, want: nil},
 		{name: "container_switch auto with the stack elsewhere repoints", external: true, follows: true, configured: "/work/myapp-main", ok: true, want: repoint},
-		{name: "--peek never fires hooks", external: true, follows: true, up: true, configured: target, ok: true, peek: true, want: nil},
+		{name: "--no-hooks never fires hooks", external: true, follows: true, up: true, configured: target, ok: true, noHooks: true, want: nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := selfSwitchStackEvents(tt.external, tt.follows, tt.up, tt.configured, tt.ok, target, tt.peek)
+			got := selfSwitchStackEvents(tt.external, tt.follows, tt.up, tt.configured, tt.ok, target, tt.noHooks)
 			if !slices.Equal(got, tt.want) {
 				t.Errorf("selfSwitchStackEvents() = %v, want %v", got, tt.want)
 			}

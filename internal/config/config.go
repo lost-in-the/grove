@@ -31,15 +31,17 @@ func (t TestConfig) IncludeDepsValue() bool {
 // SessionConfig controls session command behavior for grove open
 type SessionConfig struct {
 	Command string `toml:"command"`
-	// OpenIn decides where a worktree lands: "new" (default) creates or
-	// adopts its own session and relocates the client to it, "current" reuses
-	// the shell you are standing in and only changes directory.
+	// OpenIn is the placement: where you land when you open a worktree.
+	// "session" (default) is the worktree's own session, "here" is the shell
+	// or pane you are in, with only a directory change.
 	//
-	// It is backend-neutral. Under tmux "new" means the worktree's session;
-	// under herdr it means the worktree's workspace. It is distinct from
-	// [tmux] mode, which decides *whether* grove manages sessions at all —
-	// OpenIn only decides where the worktree lands when it does. --peek is the
-	// one-shot form, and additionally skips hooks.
+	// It is backend-neutral: the worktree's own session is a tmux session
+	// under tmux and a workspace under herdr. It is distinct from [tmux] mode,
+	// which decides whether grove manages sessions at all. --here is the
+	// one-run form.
+	//
+	// The file may still say "new" or "current", so read it through
+	// EffectiveOpenIn.
 	OpenIn      string `toml:"open_in"`
 	Popup       *bool  `toml:"popup"`
 	PopupWidth  string `toml:"popup_width"`
@@ -48,19 +50,35 @@ type SessionConfig struct {
 
 // Session open_in values.
 const (
-	// OpenInNew creates or adopts the worktree's own session.
-	OpenInNew = "new"
-	// OpenInCurrent reuses the calling shell and only changes directory.
-	OpenInCurrent = "current"
+	// OpenInSession lands in the worktree's own session.
+	OpenInSession = "session"
+	// OpenInHere stays in the calling shell and only changes directory.
+	OpenInHere = "here"
 )
 
-// EffectiveOpenIn returns the configured session placement, defaulting to
-// "new" so existing installs keep behaving exactly as they did.
+// openInOldSpellings maps the open_in values grove used before "session" and
+// "here" to their replacements. They still work.
+var openInOldSpellings = map[string]string{
+	"new":     OpenInSession,
+	"current": OpenInHere,
+}
+
+// EffectiveOpenIn returns the configured placement, defaulting to "session".
 func (c *Config) EffectiveOpenIn() string {
 	if c.Session.OpenIn == "" {
-		return OpenInNew
+		return OpenInSession
+	}
+	if renamed, old := c.OpenInRename(); old {
+		return renamed
 	}
 	return c.Session.OpenIn
+}
+
+// OpenInRename reports whether open_in uses an old spelling, and the value
+// that replaces it.
+func (c *Config) OpenInRename() (string, bool) {
+	renamed, old := openInOldSpellings[c.Session.OpenIn]
+	return renamed, old
 }
 
 // Config represents the complete grove configuration

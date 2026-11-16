@@ -41,22 +41,23 @@ func writeAgentHelp(cmd *cobra.Command) {
 # Binary: %s
 # Project: %s
 # Shell: set GROVE_SHELL=1 for directive output (cd:, tmux-attach:, env:)
-# Agent mode: set GROVE_AGENT_MODE=1 to suppress tmux attachment (and see Docker note below)
+# Agent mode: set GROVE_AGENT_MODE=1 to suppress session attachment (and see Docker note below)
 
 ## Environment
-  GROVE_AGENT_MODE=1       Suppress tmux attachment; with agent stacks enabled, the stack is never
+  GROVE_AGENT_MODE=1       Suppress session attachment; with agent stacks enabled, the stack is never
                            moved (run grove up --isolated for a stack that serves the worktree)
   GROVE_NONINTERACTIVE=1   Skip interactive prompts
   GROVE_SHELL=1            Enable directive output
 
 ## Common Commands
-  grove new <name>          Create worktree + branch + tmux session
+  grove new <name>          Create worktree + branch + its session
   grove ls                  List worktrees (table)
   grove ls --json           List worktrees (JSON, machine-readable)
   grove to <name>           Move to worktree (does not touch the stack by default)
   grove to <name> --up      Move and bring the stack
-  grove to <name> --peek    Move without hooks or tmux (lightweight)
-  grove to <name> --no-tmux Move with hooks but without tmux
+  grove to <name> --here    Stay in this shell: change directory only, hooks still run
+  grove to <name> --no-hooks  Skip hooks and the dirty check
+  grove to <name> --peek    Short for --here --no-hooks (no side effects)
   grove up                  Bring the stack to this worktree
   grove down                Stop the stack
   grove fetch pr/<N>        Create worktree from GitHub PR
@@ -68,7 +69,7 @@ func writeAgentHelp(cmd *cobra.Command) {
 ## Agent Tips
   - Call the binary directly, not the shell function
   - Use --json flag on ls/new/to for machine-readable output
-  - Set GROVE_AGENT_MODE=1 to prevent tmux from taking over your terminal
+  - Set GROVE_AGENT_MODE=1 to prevent a session from taking over your terminal
   - By default grove to does not touch the stack ([switch] container_switch = "auto" or "prompt"
     changes that). With agent stacks enabled, grove to --up leaves the stack where
     it is (a human may be using it). If the target has no isolated stack yet, it

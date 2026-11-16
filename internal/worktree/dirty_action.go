@@ -12,9 +12,10 @@ const (
 
 // ResolveDirtyAction determines what to do when switching away from a worktree
 // based on the configured dirty handling mode, current state, and environment.
-func ResolveDirtyAction(dirtyHandling string, isDirty, isPeek, isInteractive bool) DirtyAction {
-	// Peek mode always allows — it's a lightweight switch that skips hooks
-	if isPeek {
+func ResolveDirtyAction(dirtyHandling string, isDirty, noHooks, isInteractive bool) DirtyAction {
+	// A --no-hooks run changes nothing but where you are, so it never stashes,
+	// prompts, or refuses.
+	if noHooks {
 		return DirtyAllow
 	}
 

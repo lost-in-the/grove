@@ -26,15 +26,16 @@ var (
 	newFromBranch string // Check out an existing branch in the new worktree
 	newDirty      bool   // Carry over `git diff HEAD` from the current worktree
 	newNoSwitch   bool   // Skip auto-switching to the new worktree
-	newNoTmux     bool   // Skip tmux session creation/switch
+	newHere       bool   // Placement "here": no session is created or switched to
 )
 
 var newCmd = &cobra.Command{
 	Annotations: map[string]string{createsWorktreesAnnotation: "true"},
 	Use:         "new [name]",
 	Aliases:     []string{"spawn", "n"},
-	Short:       "Create a new worktree and tmux session",
-	Long: `Create a new git worktree with the specified name and create a tmux session for it.
+	Short:       "Create a new worktree and its session",
+	Long: `Create a new git worktree with the specified name, create its session, and
+move you to it.
 
 The worktree will be created in the parent directory of the current repository.
 A new branch with the same name will be created automatically.
@@ -45,8 +46,9 @@ Creating a worktree never moves the stack by itself. Use --up to bring the
 stack to the new worktree, or set auto_up = true under [plugins.docker] to do
 it every time. --no-docker skips it even when auto_up is set.
 
-Use --no-tmux to skip tmux entirely for this invocation: no session is
-created and your tmux client is not switched. Docker and hooks still run.
+Use --here to stay in the shell or pane you are in: no session is created,
+and grove only changes directory. Docker and hooks still run. To do that
+every time, set [session] open_in = "here".
 
 Use --mirror to create an environment worktree that tracks a remote branch.
 Environment worktrees are read-only and can be synced with 'grove sync'.
@@ -58,7 +60,7 @@ worktree. Useful when promoting an in-progress branch from your main checkout
 into its own worktree.
 
 Examples:
-  grove new feature-auth                          # Create worktree + tmux session
+  grove new feature-auth                          # Create worktree + its session
   grove new feature-auth --branch custom-branch   # Use custom branch name
   grove new feature-auth --from develop            # Branch from develop
   grove new feature-auth --up                      # Also bring the stack
@@ -256,16 +258,15 @@ Examples:
 
 		projectName := mgr.GetProjectName()
 
-		// Create the session if a multiplexer is available (skip with --no-tmux;
-		// agent mode intentionally still creates the detached session — see
-		// AGENTS.md).
+		// Create the session if a multiplexer is available. Agent mode
+		// intentionally still creates the detached session (see AGENTS.md).
 		//
-		// [session] open_in = "current" does suppress it. Agent mode and tmux
-		// mode "off" only say "don't relocate my client", and a detached
-		// session is still useful to them; open_in is a statement about where
-		// the worktree lands, and answering "the shell I'm already in" with a
-		// second one elsewhere is not that.
-		if m := ctx.Mux(); !newNoTmux && m.Available() && !openInCurrent(ctx.Config) {
+		// A "here" placement does suppress it. Agent mode and mode "off" only
+		// say "don't relocate my client", and a detached session is still
+		// useful to them; "here" is a statement about where the worktree
+		// lands, and answering "the shell I'm already in" with a second one
+		// elsewhere is not that.
+		if m := ctx.Mux(); m.Available() && !landsHere(ctx.Config, newHere) {
 			target := muxTarget(mgr, name, wt.Path)
 			if managed, err := ensureSession(m, target, w); err != nil {
 				if !newJSON {
@@ -303,10 +304,10 @@ Examples:
 			currentWorktreeName = mgr.DisplayNameForPath(currentPath)
 		}
 
-		// Switch to new worktree unless --no-switch. Agent mode, --no-tmux,
-		// and tmux mode "off" suppress the client switch (terminal takeover).
+		// Switch to new worktree unless --no-switch. Agent mode, a "here"
+		// placement, and mode "off" suppress the client switch.
 		if !newNoSwitch {
-			suppressTmux := resolveTmuxMode(ctx.Config, newNoTmux, false) == tmuxModeOff
+			suppressTmux := resolveTmuxMode(ctx.Config, newHere) == tmuxModeOff
 			sessionName := worktree.TmuxSessionName(projectName, name)
 			if !switchToWorktree(ctx, stderr, currentWorktreeName, name, sessionName, wt.Path, suppressTmux) {
 				emitCdOrExplain(stderr, wt.Path)
@@ -375,7 +376,8 @@ func init() {
 	newCmd.Flags().BoolVar(&newNoDocker, "no-docker", false, "Skip Docker auto-start")
 	newCmd.Flags().BoolVarP(&newUp, "up", "u", false, "Also bring the stack to the new worktree (per-invocation auto_up)")
 	newCmd.MarkFlagsMutuallyExclusive("up", "no-docker")
-	newCmd.Flags().BoolVar(&newNoTmux, "no-tmux", false, "Skip tmux session creation/switch for this invocation")
+	addHereFlag(newCmd, &newHere)
+	addDeprecatedNoTmuxFlag(newCmd, &newHere)
 	newCmd.Flags().BoolVarP(&newNoSwitch, "no-switch", "n", false, "Stay in current worktree after creation")
 	newCmd.MarkFlagsMutuallyExclusive("mirror", "from")
 	newCmd.MarkFlagsMutuallyExclusive("mirror", "branch")

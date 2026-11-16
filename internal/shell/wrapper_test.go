@@ -241,7 +241,7 @@ func TestWrapper_ToCommand_ParsesCdDirective(t *testing.T) {
 func TestWrapper_NewCommand_ParsesCdDirective(t *testing.T) {
 	binPath := buildFakeGrove(t)
 
-	// "grove new" emits a cd: directive when outside tmux (or --no-tmux).
+	// "grove new" emits a cd: directive when outside tmux (or with --here).
 	// Regression test: "new" was missing from the wrapper's capture case
 	// list, so the directive printed raw and the shell never cd'd.
 	targetDir := "/tmp/fakegrove-myfeature"

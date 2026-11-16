@@ -278,11 +278,13 @@ See [docs/TUI.md](docs/TUI.md) for the full reference — overlays, PR browser, 
 | Command | What it does |
 |---------|-------------|
 | `grove ls` | List all worktrees — name, branch, status, tmux state |
-| `grove new <name>` | Create a worktree + branch + tmux session (`--branch`, `--from`) |
+| `grove new <name>` | Create a worktree + branch + its session (`--branch`, `--from`) |
 | `grove adopt [path]` | Bootstrap a git worktree that grove doesn't know about |
-| `grove to <name>` | Move to a worktree: directory, hooks, tmux. Does not touch the stack by default (see `[switch] container_switch`) |
+| `grove to <name>` | Move to a worktree: its session, hooks. Does not touch the stack by default (see `[switch] container_switch`) |
 | `grove to <name> --up` | Move and bring the stack to that worktree |
-| `grove to <name> --peek` | Lightweight move: skip hooks and tmux |
+| `grove to <name> --here` | Stay in the shell or pane you are in: change directory only. Hooks still run |
+| `grove to <name> --no-hooks` | Skip hooks and the dirty check |
+| `grove to <name> --peek` | Look without side effects: short for `--here --no-hooks` |
 | `grove up` / `grove down` | Bring the stack to the worktree you are in / stop the stack |
 | `grove here` | Show current worktree: branch, SHA, age, status |
 | `grove which` | Show where you are and the state of the stack (alias: `status`) |

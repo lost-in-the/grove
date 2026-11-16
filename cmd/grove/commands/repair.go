@@ -114,8 +114,8 @@ Examples:
 					if _, exists := gitWorktreeByName[wtName]; !exists {
 						issues = append(issues, RepairIssue{
 							Type:        "orphan_tmux",
-							Description: fmt.Sprintf("Tmux session '%s' has no corresponding worktree", session.Name),
-							Action:      fmt.Sprintf("Kill tmux session '%s'", session.Name),
+							Description: fmt.Sprintf("Session '%s' has no corresponding worktree", session.Name),
+							Action:      fmt.Sprintf("Kill session '%s'", session.Name),
 						})
 					}
 				}
@@ -225,7 +225,7 @@ Examples:
 					continue
 				}
 				confirmed, err := cli.Confirm(
-					fmt.Sprintf("Kill tmux session '%s'? (may belong to a different project sharing this name prefix)", sessionName),
+					fmt.Sprintf("Kill session '%s'? (may belong to a different project sharing this name prefix)", sessionName),
 					false,
 				)
 				if err != nil && !errors.Is(err, cli.ErrPromptCanceled) {
@@ -239,7 +239,7 @@ Examples:
 					fmt.Fprintf(os.Stderr, "  Failed to kill session '%s': %v\n", sessionName, err)
 					failed++
 				} else {
-					fmt.Fprintf(os.Stderr, "  Killed tmux session '%s'\n", sessionName)
+					fmt.Fprintf(os.Stderr, "  Killed session '%s'\n", sessionName)
 					issue.Resolved = true
 					repaired++
 				}
@@ -299,7 +299,7 @@ func sessionWorktreeName(projectName, sessionName string) (string, bool) {
 }
 
 // extractQuotedName extracts the first single-quoted token from a description string.
-// Used for both worktree names ("State entry 'name' ...") and session names ("Tmux session 'name' ...").
+// Used for both worktree names ("State entry 'name' ...") and session names ("Session 'name' ...").
 func extractQuotedName(desc string) string {
 	start := strings.Index(desc, "'")
 	if start < 0 {

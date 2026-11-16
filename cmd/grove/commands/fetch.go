@@ -59,7 +59,7 @@ func createFetchedWorktree(mgr *worktree.Manager, itemType, worktreeName, branch
 	return mgr.Create(worktreeName, branchName)
 }
 
-func setupFetchedWorktree(ctx *GroveContext, mgr *worktree.Manager, w *cli.Writer, worktreeName, branchName string) error {
+func setupFetchedWorktree(ctx *GroveContext, mgr *worktree.Manager, w *cli.Writer, worktreeName, branchName string, here bool) error {
 	// Run the same bootstrap as `grove new`/`grove open`: git excludes,
 	// state registration, file setup, post-create hooks, docker auto-start.
 	// Fetched worktrees previously only registered state, leaving them
@@ -69,7 +69,7 @@ func setupFetchedWorktree(ctx *GroveContext, mgr *worktree.Manager, w *cli.Write
 		return err
 	}
 
-	if m := ctx.Mux(); m.Available() {
+	if m := ctx.Mux(); m.Available() && !landsHere(ctx.Config, here) {
 		target := muxTarget(mgr, worktreeName, wt.Path)
 		if managed, err := ensureSession(m, target, w); err != nil {
 			cli.Warning(w, "Failed to create session: %v", err)
@@ -100,7 +100,8 @@ func setupFetchedWorktree(ctx *GroveContext, mgr *worktree.Manager, w *cli.Write
 
 // fetchItem creates a worktree from a GitHub PR or issue.
 // itemType must be "pr" or "issue". Called by both `grove fetch` and `grove prs`/`grove issues`.
-func fetchItem(ctx *GroveContext, itemType string, number int) error {
+// here is the --here flag: no session is created for the new worktree.
+func fetchItem(ctx *GroveContext, itemType string, number int, here bool) error {
 	if err := ctx.RequireConfig("create the worktree"); err != nil {
 		return err
 	}
@@ -137,7 +138,7 @@ func fetchItem(ctx *GroveContext, itemType string, number int) error {
 		cli.Success(w, "Created worktree '%s' with new branch '%s'", worktreeName, branchName)
 	}
 
-	return setupFetchedWorktree(ctx, mgr, w, worktreeName, branchName)
+	return setupFetchedWorktree(ctx, mgr, w, worktreeName, branchName, here)
 }
 
 var fetchCmd = &cobra.Command{
@@ -153,7 +154,11 @@ Examples:
   grove fetch is/456     # Shorthand for issue
 
 The worktree name will be automatically generated from the issue/PR metadata.
-For PRs, the remote branch will be checked out.`,
+For PRs, the remote branch will be checked out.
+
+The worktree gets its own session. Use --here to skip the session: grove
+only changes directory. To do that every time, set
+[session] open_in = "here".`,
 	Args: cobra.ExactArgs(1),
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		// Parse argument: pr/123 or issue/456
@@ -181,10 +186,13 @@ For PRs, the remote branch will be checked out.`,
 			return fmt.Errorf("invalid number %q: %w", numberStr, err)
 		}
 
-		return fetchItem(ctx, itemType, number)
+		return fetchItem(ctx, itemType, number, fetchHere)
 	}),
 }
 
+var fetchHere bool
+
 func init() {
+	addHereFlag(fetchCmd, &fetchHere)
 	rootCmd.AddCommand(fetchCmd)
 }

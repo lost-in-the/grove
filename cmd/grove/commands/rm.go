@@ -23,8 +23,8 @@ var (
 var rmCmd = &cobra.Command{
 	Use:     "rm [name]",
 	Aliases: []string{"remove", "delete"},
-	Short:   "Remove a worktree and its tmux session",
-	Long: `Remove a git worktree by name and kill its associated tmux session.
+	Short:   "Remove a worktree and its session",
+	Long: `Remove a git worktree by name and close its session.
 
 This will delete the worktree directory and remove the git worktree reference.
 By default, you'll be prompted to delete the associated branch.
