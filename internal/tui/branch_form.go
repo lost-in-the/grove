@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -59,13 +60,17 @@ type formIntent struct {
 	Stash   bool
 }
 
+// formStatusKind is what the status line says about enter. A blocker is a
+// state enter cannot act on; a hint only asks for input.
 type formStatusKind int
 
 const (
-	formStatusHint formStatusKind = iota
-	formStatusReady
-	formStatusInfo
-	formStatusError
+	formStatusHint    formStatusKind = iota // asks for input; nothing is wrong
+	formStatusReady                         // enter does what the footer names
+	formStatusNotice                        // enter does something other than create
+	formStatusBusy                          // the action is running
+	formStatusBlocker                       // enter cannot act until a field changes
+	formStatusError                         // the last attempt failed; enter retries
 )
 
 type formSuggestion struct {
@@ -492,6 +497,14 @@ func pickDefaultBase(configured, detected, mainBranch string, known func(string)
 	return "main"
 }
 
+// takeEnterPick takes the highlighted suggestion where enter does: in Branch
+// and Base, and in Switch mode only when the pick applies.
+func (s *BranchFormState) takeEnterPick() {
+	if (s.Focus == fieldBranch || s.Focus == fieldBase) && (s.Mode != formModeSwitch || s.switchPickApplies()) {
+		s.acceptPick()
+	}
+}
+
 // acceptPick copies the highlighted suggestion into the focused field.
 func (s *BranchFormState) acceptPick() {
 	sg := s.suggestions()
@@ -523,8 +536,10 @@ func (s *BranchFormState) validate() (formField, string, bool) {
 		return fieldBranch, "", true
 	}
 	if !s.known(b) {
-		base := s.baseValue()
-		if base == "" || !s.known(base) {
+		switch base := s.baseValue(); {
+		case base == "":
+			return fieldBase, "type a base branch", false
+		case !s.known(base):
 			return fieldBase, fmt.Sprintf("base branch %q not found", base), false
 		}
 	}
@@ -549,10 +564,10 @@ func (s *BranchFormState) validateAlias() (formField, string, bool) {
 // returned, and when it failed, so changes are never handled blind.
 func (s *BranchFormState) validateWIP() (formField, string, bool) {
 	if s.wipErr != nil {
-		return s.Focus, "could not check for uncommitted changes: " + s.wipErr.Error(), false
+		return fieldChanges, "could not check for uncommitted changes: " + s.wipErr.Error(), false
 	}
 	if !s.wipDone {
-		return s.Focus, "checking for uncommitted changes…", false
+		return fieldChanges, "checking for uncommitted changes…", false
 	}
 	return fieldBranch, "", true
 }
@@ -614,7 +629,7 @@ func (s *BranchFormState) intent() formIntent {
 
 func (s *BranchFormState) status() (string, formStatusKind) {
 	if s.Busy {
-		return s.busyVerb(), formStatusInfo
+		return s.busyVerb(), formStatusBusy
 	}
 	if s.Status != "" {
 		return s.Status, formStatusError
@@ -624,12 +639,15 @@ func (s *BranchFormState) status() (string, formStatusKind) {
 		if _, msg, ok := s.validateWIP(); !ok {
 			return msg, formStatusHint
 		}
-		return "enter switches to " + sg[s.Pick].Branch, formStatusInfo
+		return "enter switches to " + sg[s.Pick].Branch, formStatusNotice
 	}
 	if w := s.inUse[s.branchValue()]; s.Mode == formModeNew && w != nil {
-		return fmt.Sprintf("in use by %s · enter switches there", w.ShortName), formStatusInfo
+		return fmt.Sprintf("in use by %s · enter switches there", w.ShortName), formStatusNotice
 	}
-	if _, msg, ok := s.validate(); !ok {
+	if f, msg, ok := s.validate(); !ok {
+		if s.blocks(f) {
+			return msg, formStatusBlocker
+		}
 		return msg, formStatusHint
 	}
 	if s.HasWIP {
@@ -644,7 +662,36 @@ func (s *BranchFormState) status() (string, formStatusKind) {
 	return "✓ ready", formStatusReady
 }
 
-// keyFooter is the form's key line for its state.
+// blocks reports whether invalid field f stops enter: the field is filled
+// in, and taking the highlighted suggestion, as enter does, would not make
+// the form valid. An empty field and a changes check still running only ask
+// for input.
+func (s *BranchFormState) blocks(f formField) bool {
+	switch {
+	case f == fieldChanges:
+		if s.wipErr == nil {
+			return false
+		}
+	case strings.TrimSpace(s.input(f).Value()) == "":
+		return false
+	}
+	after := *s
+	after.takeEnterPick()
+	_, _, ok := after.validate()
+	return !ok
+}
+
+// faultField is the field a blocker blames, when the status is a blocker.
+func (s *BranchFormState) faultField() (formField, bool) {
+	if _, kind := s.status(); kind != formStatusBlocker {
+		return noField, false
+	}
+	f, _, _ := s.validate()
+	return f, true
+}
+
+// keyFooter is the form's key line for its state. On a blocker it offers
+// no enter: enter cannot act until a field changes.
 func (s *BranchFormState) keyFooter() Footer {
 	if s.Busy {
 		return Footer{Hints: []Hint{{"", "wait for this to finish"}}}
@@ -652,12 +699,14 @@ func (s *BranchFormState) keyFooter() Footer {
 	if s.Log != nil {
 		return moveFooter(Hint{"esc", "cancel"}, Hint{"", "any key to edit"})
 	}
-	return s.keyFooterFor(s.Focus)
+	_, kind := s.status()
+	return s.keyFooterFor(s.Focus, kind != formStatusBlocker)
 }
 
-// keyFooterFor is the key line with field f focused. The Changes field has
-// no text cursor, so the form is in move mode there.
-func (s *BranchFormState) keyFooterFor(f formField) Footer {
+// keyFooterFor is the key line with field f focused, with the enter hint
+// when withEnter. The Changes field has no text cursor, so the form is in
+// move mode there.
+func (s *BranchFormState) keyFooterFor(f formField, withEnter bool) Footer {
 	leave := Hint{"esc", "cancel"}
 	verb := "create"
 	switch {
@@ -676,7 +725,9 @@ func (s *BranchFormState) keyFooterFor(f formField) Footer {
 	if len(s.fieldOrder()) > 1 || f == fieldChanges {
 		hints = append(hints, Hint{"tab", "next"})
 	}
-	hints = append(hints, Hint{"enter", verb})
+	if withEnter {
+		hints = append(hints, Hint{"enter", verb})
+	}
 	if f == fieldChanges {
 		return moveFooter(leave, hints...)
 	}
@@ -685,7 +736,8 @@ func (s *BranchFormState) keyFooterFor(f formField) Footer {
 
 // keyRows is how many rows the key line takes at width: two when the
 // widest line the mode can show needs them. It does not depend on the
-// focused field or the changes check, so the status line never moves.
+// focused field, the changes check, or a blocker, so the status line never
+// moves.
 func (s *BranchFormState) keyRows(width int) int {
 	fields := map[formMode][]formField{
 		formModeNew:    {fieldBranch, fieldBase, fieldAlias},
@@ -693,7 +745,7 @@ func (s *BranchFormState) keyRows(width int) int {
 		formModeSwitch: {fieldBranch},
 	}[s.Mode]
 	for _, f := range fields {
-		if len(renderKeyLine(s.keyFooterFor(f), width, 2)) > 1 {
+		if len(renderKeyLine(s.keyFooterFor(f, true), width, 2)) > 1 {
 			return 2
 		}
 	}
@@ -743,10 +795,11 @@ func (s *BranchFormState) handleKey(msg tea.KeyPressMsg, keys KeyMap) (formResul
 		s.movePick(1)
 		return formContinue, nil
 	case key.Matches(msg, keys.Enter):
-		if (s.Focus == fieldBranch || s.Focus == fieldBase) && (s.Mode != formModeSwitch || s.switchPickApplies()) {
-			s.acceptPick()
-		}
+		s.takeEnterPick()
 		if f, _, ok := s.validate(); !ok {
+			if !slices.Contains(s.fieldOrder(), f) {
+				return formContinue, nil // the changes check: no field to fix
+			}
 			return formContinue, s.setFocus(f)
 		}
 		s.Status = ""

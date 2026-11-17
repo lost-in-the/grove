@@ -55,6 +55,17 @@ func formCases() []formCase {
 			press(s, "enter")
 			return s
 		}},
+		{"base_missing", func() *BranchFormState {
+			s := newBranchForm(testFormOptions())
+			typeKeys(s, "abc-12")
+			press(s, "tab")
+			for range "main" {
+				press(s, "backspace")
+			}
+			typeKeys(s, "nope")
+			press(s, "tab")
+			return s
+		}},
 		{"error", func() *BranchFormState {
 			s := newBranchForm(testFormOptions())
 			s.Branch.SetValue("abc-12")
@@ -473,8 +484,8 @@ var (
 		size  termSize
 		cases []string
 	}{
-		{sizeStandard, []string{"empty", "new_branch", "base_focused", "existing_branch", "in_use", "name_taken", "error", "creating", "copy_checking", "copy_dirty", "switch_clean", "switch_dirty"}},
-		{sizeWide, []string{"empty", "new_branch", "base_focused", "existing_branch", "creating", "copy_dirty", "switch_dirty"}},
+		{sizeStandard, []string{"empty", "new_branch", "base_focused", "existing_branch", "in_use", "name_taken", "base_missing", "error", "creating", "copy_checking", "copy_dirty", "switch_clean", "switch_dirty"}},
+		{sizeWide, []string{"empty", "new_branch", "base_focused", "existing_branch", "name_taken", "base_missing", "creating", "copy_dirty", "switch_dirty"}},
 		{sizeWide160, []string{"new_branch"}},
 		{sizeTiny, []string{"new_branch"}},
 		{sizeShort, []string{"new_branch"}},

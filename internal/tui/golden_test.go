@@ -27,6 +27,17 @@ func TestGolden_Dashboard(t *testing.T) {
 	}
 }
 
+// The standing line when grove cannot move you: in the filter row, so no
+// list row moves.
+func TestGolden_Dashboard_CannotMove(t *testing.T) {
+	for _, size := range []termSize{sizeStandard, sizeWide} {
+		t.Run(size.name, func(t *testing.T) {
+			m := goldenModel(t, size, withItems(5), withCannotMove())
+			golden.RequireEqual(t, []byte(m.viewString()))
+		})
+	}
+}
+
 func TestGolden_Dashboard_Empty(t *testing.T) {
 	m := goldenModel(t, sizeStandard, withItems(0))
 	golden.RequireEqual(t, []byte(m.viewString()))

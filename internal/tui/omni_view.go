@@ -300,15 +300,15 @@ func omniStatus(s *OmniState) string {
 	switch it.Kind {
 	case omniWorktree:
 		if it.Current {
-			return "⏎ stays on " + it.Label
+			return "enter stays on " + it.Label
 		}
-		return "⏎ switches to " + it.Label
+		return "enter switches to " + it.Label
 	case omniAction:
-		return "⏎ runs " + it.Label
+		return "enter runs " + it.Label
 	case omniPR:
-		return "⏎ opens pull request " + it.Detail
+		return "enter opens pull request " + it.Detail
 	case omniIssue:
-		return "⏎ opens issue " + it.Detail
+		return "enter opens issue " + it.Detail
 	}
 	return ""
 }

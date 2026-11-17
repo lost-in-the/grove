@@ -11,10 +11,11 @@ import (
 
 // HelpOverlay renders context-sensitive help as a scrollable overlay.
 type HelpOverlay struct {
-	ForView   ActiveView
-	viewport  viewport.Model
-	cache     map[ActiveView]string
-	lastWidth int
+	ForView    ActiveView
+	CannotMove bool // lead the dashboard's reference with how to fix it
+	viewport   viewport.Model
+	cache      map[ActiveView]string
+	lastWidth  int
 }
 
 // NewHelpOverlay creates a HelpOverlay with an empty cache.
@@ -45,7 +46,7 @@ func (h *HelpOverlay) Open(view ActiveView, width, height int) {
 
 	rendered, ok := h.cache[view]
 	if !ok {
-		rendered = renderHelpContent(view, textWidth)
+		rendered = renderHelpSections(h.sectionsFor(view), textWidth)
 		h.cache[view] = rendered
 	}
 
@@ -129,9 +130,23 @@ type helpLayout struct {
 	evenBg   color.Color
 }
 
-// renderHelpContent builds styled help text with manual two-column layout.
-func renderHelpContent(view ActiveView, width int) string {
+// sectionsFor is the reference for view, led on the dashboard by why grove
+// cannot move you when it cannot.
+func (h *HelpOverlay) sectionsFor(view ActiveView) []helpSection {
 	sections := helpSectionsFor(view)
+	if h.CannotMove && (view == ViewDashboard || view == ViewHelp) {
+		sections = append([]helpSection{helpSectionCannotMove}, sections...)
+	}
+	return sections
+}
+
+// renderHelpContent builds styled help text for view.
+func renderHelpContent(view ActiveView, width int) string {
+	return renderHelpSections(helpSectionsFor(view), width)
+}
+
+// renderHelpSections builds styled help text with manual two-column layout.
+func renderHelpSections(sections []helpSection, width int) string {
 	layout := computeHelpLayout(sections, width)
 
 	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(Colors.Primary).Padding(0, 1)

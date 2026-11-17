@@ -150,6 +150,32 @@ The opt-outs that silence other grove update notices
 (`GROVE_NO_UPDATE_NOTIFIER=1` and friends) hide the badge. `g u` still opens
 and reports the cached release.
 
+### When grove cannot move you
+
+grove moves you to a worktree by switching a tmux or herdr session, or by changing directory through the `grove` shell function. At start the dashboard checks both: a session backend that is on and installed (`[mux] backend` not `off`, `open_in` not `here`), or a shell function that is listening (`GROVE_SHELL=1`, or a `GROVE_CD_FILE` that exists). When neither is there, the dashboard's filter row reads:
+
+    ⚠ grove cannot move you from here: shell integration is not loaded
+
+This happens inside the herdr desktop app, where `auto` resolves to `off`, when you run the binary by its path instead of through the `grove` function, and in a shell opened before grove was set up. The line sits in the filter row, so no list row moves; it truncates with `…` on a narrow list, and sits after the filter text while a filter is applied. `keyboard shortcuts` in `?` leads with the fix: `eval "$(grove install zsh)"` (or bash) in your shell config, then a new shell.
+
+Everything else works. `enter`, the pins, go to, and the move after creating a worktree still close the dashboard; grove then prints why it could not move you, and the `cd '<path>'` to run, on stderr:
+
+```
+⚠ grove could not move you: no session could be switched, and shell integration is not loaded.
+  Directory changes go through the grove shell function.
+  Running the binary by its path skips that function.
+  A shell opened before grove was set up needs a new shell.
+
+  To load it, add this to ~/.zshrc or ~/.bashrc, then open a new shell:
+    eval "$(grove install zsh)"   # for zsh
+    eval "$(grove install bash)"  # for bash
+
+  To change directory now:
+    cd '/path/to/myapp-feature'
+```
+
+Every CLI command that would change your directory prints the same text, with the first line `grove could not change your directory: shell integration is not loaded.` `U` runs `grove to --up`, so it prints the CLI's version.
+
 ### Toast Notifications
 
 Short-lived notifications appear in the top-right corner of the screen, above everything else, after operations complete. They auto-dismiss after 3 seconds and fade as they expire.
@@ -264,6 +290,18 @@ The form's key line replaces the footer. The form keeps one size for a given ter
 
 Suggestions open under the field you are in: Branch or Base. The status line says what `enter` will do. If the branch is already in use, `enter` switches to that worktree instead of creating one. A name already used by another worktree is an error.
 
+The status line has one of these kinds:
+
+| Kind | Looks like | Footer | When |
+|---|---|---|---|
+| Hint | `type a branch name`, muted | `enter <verb>` | A field is empty, the changes check is still running, or `enter` would take the highlighted suggestion and fix it |
+| Ready | `✓ ready`, success color | `enter <verb>` | `enter` does what the footer names |
+| Notice | `in use by auth · enter switches there`, warning color | `enter switch` | `enter` does something other than create |
+| Blocker | `✗ name "auth" is taken by auth`, error color | no `enter` | `enter` cannot act until a field changes |
+| Failed | `✗ failed to create worktree: …`, error color | `enter <verb>` | The last attempt failed; `enter` tries again |
+
+A blocker also marks the field at fault, focused or not: its label reads `Name ✗`, `Base ✗`, or `Branch ✗` in the error color. `enter` on a blocker moves focus to that field. The blockers are a taken or invalid name (`name contains invalid characters`, `"root" is reserved for the main worktree`), a base branch that does not exist, and, in Copy and Switch mode, the branches and the failed changes check listed there.
+
 | Key | Action |
 |---|---|
 | `tab` / `shift+tab` | Next / previous field (`tab` on Branch accepts the highlighted row) |
@@ -310,7 +348,7 @@ Opens the New Worktree form in Copy mode for the selected worktree. Use it to tr
   - **move:** apply them to the copy and clean the source.
   - **leave:** the copy starts clean; the source keeps its changes.
 
-`enter` waits until the uncommitted-changes check finishes. The CLI equivalent is `grove fork`.
+`enter` waits until the uncommitted-changes check finishes. Blockers: a branch that already exists (`branch "fix/login" already exists`, on Branch), a taken or invalid Name, and a failed changes check (`could not check for uncommitted changes: …`, with `check failed` on Changes). The CLI equivalent is `grove fork`.
 
 ### Switch Branch (`b`)
 
@@ -319,7 +357,7 @@ Opens the form in Switch mode, to change which branch the selected worktree has 
 - **Branch:** suggestions list local branches that no worktree has checked out.
 - **Changes:** if the worktree has uncommitted changes, they are stashed (`git stash`) before switching.
 
-`enter` waits until the uncommitted-changes check finishes.
+`enter` waits until the uncommitted-changes check finishes. Blockers, all on Branch: the branch it is already on, a branch another worktree has checked out (`main is checked out in root`), a branch with no local copy, and a failed changes check. Partial text is not a blocker: `enter` takes the highlighted branch, and the status line says `enter switches to fix/login`.
 
 > The main worktree and protected worktrees cannot have their branch changed.
 
@@ -536,7 +574,7 @@ The dashboard list, the PR browser, and the issue browser filter the same way (s
 - `esc` while typing clears the text and leaves the filter.
 - On the list with a filter applied, `esc` clears it and `/` opens it again with its text.
 
-Each list draws a filter row as its first row, under the header: `Filter: auth  4 of 23 · esc clear` while a filter is applied, the prompt and the text cursor while you type. With no filter, the dashboard keeps that row blank, and the PR and issue browsers show `N open` there, so the list does not move when a filter opens or closes.
+Each list draws a filter row as its first row, under the header: `Filter: auth  4 of 23 · esc clear` while a filter is applied, the prompt and the text cursor while you type. With no filter, the dashboard keeps that row blank (or shows the line from When grove cannot move you), and the PR and issue browsers show `N open` there, so the list does not move when a filter opens or closes.
 
 A worktree created while a filter is applied is selected. If the filter hides it, the filter is cleared, as `g a` does.
 
@@ -590,7 +628,8 @@ Every dashboard key is an `Action` in `internal/tui/actions.go`: its keys, label
 | `internal/tui/pins_view.go` | Pin and `-` keys, and the `m` strip |
 | `internal/tui/age.go` | Commit age, rounded like git's relative dates (`shortAge`) |
 | `internal/tui/view_stack.go` | View stack: frames, push and pop, cursor restore |
-| `internal/tui/branch_form.go` | The New, Copy, and Switch form: fields, suggestions, validation, keys |
+| `internal/tui/move_check.go` | Whether an exit can move you (`canMoveUser`), the move after exit (`moveAfterExit`), and the standing notice |
+| `internal/tui/branch_form.go` | The New, Copy, and Switch form: fields, suggestions, validation, status kinds (`status`, `blocks`), keys |
 | `internal/tui/branch_form_view.go` | The form's docked layout (`branchFormLayout`), its rows, and docking it beside or under the list (`renderDockedForm`) |
 | `internal/tui/compositor.go` | Draws an overlay over a dimmed background (`composeOverlay`) and toasts on top (`composeLayerAt`) |
 | `internal/tui/worktree_list.go` | The dashboard list constructor (`newWorktreeList`) |

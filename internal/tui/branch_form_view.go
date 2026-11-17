@@ -78,7 +78,7 @@ func renderBranchForm(s *BranchFormState, lay formLayout, spinner string) string
 	if keyRows == 1 {
 		body = append(body, "")
 	}
-	lines := append(body, formStatusStyle(kind).Render(msg))
+	lines := append(body, formStatusLine(msg, kind))
 	lines = append(lines, keys...)
 	if len(lines) > rows {
 		lines = lines[len(lines)-rows:]
@@ -98,13 +98,22 @@ func formRule(title string, width int) string {
 	return rule.Render("──") + Styles.DetailTitle.Render(label) + rule.Render(strings.Repeat("─", right))
 }
 
+// formStatusLine renders the status line. A blocker and a failure carry
+// the ✗ glyph, so they read as errors without color.
+func formStatusLine(msg string, kind formStatusKind) string {
+	if kind == formStatusBlocker || kind == formStatusError {
+		msg = "✗ " + msg
+	}
+	return formStatusStyle(kind).Render(msg)
+}
+
 func formStatusStyle(kind formStatusKind) lipgloss.Style {
 	switch kind {
-	case formStatusError:
+	case formStatusBlocker, formStatusError:
 		return Styles.ErrorText
 	case formStatusReady:
 		return Styles.SuccessText
-	case formStatusInfo:
+	case formStatusNotice, formStatusBusy:
 		return Styles.WarningText
 	}
 	return Styles.DetailDim
@@ -136,10 +145,16 @@ func windowLines(lines []string, rows, focus int) []string {
 // the focused field, so the form shows one cursor arrow.
 const suggestionMark = "› "
 
+// label is a field's label column. The field a blocker blames reads
+// "Name ✗" in the error token, whether or not it has focus. Changes says
+// "check failed" in its value instead.
 func (s *BranchFormState) label(name string, f formField) string {
 	marker := "  "
 	if s.Focus == f {
 		marker = Styles.ListCursor.Render("❯ ")
+	}
+	if fault, ok := s.faultField(); ok && fault == f && f != fieldChanges {
+		return marker + Styles.ErrorText.Render(fmt.Sprintf("%-8s", name+" ✗"))
 	}
 	return marker + Styles.DetailLabel.Render(fmt.Sprintf("%-8s", name))
 }

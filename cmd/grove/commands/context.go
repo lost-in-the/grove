@@ -227,7 +227,7 @@ func emitExcludesMigrationNotice() {
 func warnOutdatedShellIntegration() {
 	if v := os.Getenv("GROVE_SHELL_VERSION"); v != "" {
 		if shellVer, err := strconv.Atoi(v); err == nil && shellVer < shell.ShellVersion {
-			fmt.Fprintf(os.Stderr, "grove: shell integration outdated (v%d, current v%d) — run: grove setup\n", shellVer, shell.ShellVersion)
+			fmt.Fprintf(os.Stderr, "grove: shell integration is outdated (v%d, current v%d): run grove setup\n", shellVer, shell.ShellVersion)
 		}
 	}
 }

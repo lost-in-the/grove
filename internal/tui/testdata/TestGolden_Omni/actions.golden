@@ -18,7 +18,7 @@
 [2m            [m│                  pull requests                     p │[2m            [m
 [2m            [m│                  issues                            i │[2m            [m
 [2m            [m│                  config                            c │[2m            [m
-[2m            [m│ ⏎ runs switch to worktree                            │[2m            [m
+[2m            [m│ enter runs switch to worktree                        │[2m            [m
 [2m root · test[m│ type · [1m↑↓/ctrl+jk[m pick · [1menter[m choose · [1mesc[m close    │[2m            [m
 [2m  move · ↑↓/[m╰──────────────────────────────────────────────────────╯[2m            [m
 [2m  tab detail · / filter · g more · ? help · q quit                              [m

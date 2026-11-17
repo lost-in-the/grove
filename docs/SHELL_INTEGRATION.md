@@ -263,6 +263,10 @@ For zsh, registration requires `compinit` to have run **before** the grove eval 
 (( $+functions[compdef] )) && echo "compinit loaded" || echo "compinit NOT loaded — move it above the grove line"
 ```
 
+### The dashboard says `grove cannot move you from here`
+
+The dashboard found no session to switch and no shell function to change directory. It shows that line under the header before you pick a worktree, and after you pick one it prints the `cd` to run on stderr. Running the binary by its path skips the `grove` function, and so does a shell opened before the eval line was added. Run `type grove` to check, then add `eval "$(grove install zsh)"` (or bash) and open a new shell. The same explanation follows any CLI command that would change your directory without the function.
+
 ### TUI closes but doesn't change directory
 
 The TUI uses a temp file (`GROVE_CD_FILE`) for directory handoff. If the temp directory is full or unwritable, the handoff silently fails. Check:

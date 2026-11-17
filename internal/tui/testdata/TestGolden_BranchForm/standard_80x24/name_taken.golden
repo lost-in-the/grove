@@ -12,7 +12,7 @@
  ──[1m New worktree [m────────────────────────────────────────────────────────────── 
    Branch  [37m[m[37mfix/auth[m [37m                                                           [m 
    Base    [37m[m[37mmain[m [37m                                                               [m 
- ❯ Name    [37m[mauth[7;37m [m                                                                
+ ❯ Name ✗  [37m[mauth[7;37m [m                                                                
            folder grove-auth                                                    
            session grove-auth                                                   
                                                                                 
@@ -20,5 +20,5 @@
                                                                                 
                                                                                 
                                                                                 
- name "auth" is taken by auth                                                   
- type · [1mtab[m next · [1menter[m create · [1mesc[m cancel                                    
+ ✗ name "auth" is taken by auth                                                 
+ type · [1mtab[m next · [1mesc[m cancel                                                   

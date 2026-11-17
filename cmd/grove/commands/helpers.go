@@ -250,14 +250,7 @@ func emitCdOrExplain(stderr *cli.Writer, path string) {
 	if cli.CdDirective(path) {
 		return
 	}
-	cli.Faint(stderr, "Note: Directory switching requires shell integration.")
-	cli.Faint(stderr, "Add this to your shell config (~/.zshrc or ~/.bashrc):")
-	_, _ = fmt.Fprintf(stderr, "\n")
-	cli.Faint(stderr, "  eval \"$(grove install zsh)\"   # for zsh")
-	cli.Faint(stderr, "  eval \"$(grove install bash)\"  # for bash")
-	_, _ = fmt.Fprintf(stderr, "\n")
-	cli.Faint(stderr, "To change directory manually:")
-	cli.Faint(stderr, "  cd %s", path)
+	cli.ExplainNoCd(stderr, path)
 }
 
 // switchToWorktree runs the shared switch epilogue used by new/fork

@@ -739,16 +739,10 @@ func handleDirectoryDrift(m mux.Multiplexer, target mux.Target, worktreePath, on
 		// parent directory plus the naming pattern (and externally created
 		// worktrees can live anywhere), so it may legally contain single
 		// quotes — escape them with the standard '\'' idiom.
-		if err := m.SendCommand(target, "cd "+shellSingleQuote(worktreePath)); err != nil {
+		if err := m.SendCommand(target, "cd "+cli.ShellQuote(worktreePath)); err != nil {
 			log.Printf("failed to reset directory in session %q: %v", target.Name, err)
 		}
 	}
-}
-
-// shellSingleQuote wraps s in single quotes for safe interpolation into a
-// POSIX shell command line, escaping embedded single quotes with '\”.
-func shellSingleQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func init() {

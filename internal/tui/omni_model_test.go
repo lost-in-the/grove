@@ -222,7 +222,7 @@ func TestOmni_RowsAlignAcrossGroups(t *testing.T) {
 	m = typeOmni(m, "fix")
 	col := -1
 	for _, line := range strings.Split(ansi.Strip(renderOmni(m.omni, 120, 40)), "\n") {
-		if strings.Contains(line, "⏎") {
+		if strings.Contains(line, omniStatus(m.omni)) {
 			continue // the status line repeats a label
 		}
 		for _, label := range []string{"Fix the thing", "Fix login", "fix-bug"} {
@@ -246,7 +246,7 @@ func TestOmni_StatusOnCurrentWorktree(t *testing.T) {
 			m.omni.Cursor = i
 		}
 	}
-	if st := omniStatus(m.omni); st != "⏎ stays on root" {
+	if st := omniStatus(m.omni); st != "enter stays on root" {
 		t.Errorf("status = %q", st)
 	}
 }
@@ -301,5 +301,28 @@ func TestOmni_NamedGoTo(t *testing.T) {
 	lines = strings.Split(ansi.Strip(renderOmni(a.omni, 120, 40)), "\n")
 	if !strings.Contains(lines[1], "Actions") || !strings.Contains(lines[2], "Actions: ") {
 		t.Errorf("actions scope title %q input %q, want Actions and an Actions: prompt", lines[1], lines[2])
+	}
+}
+
+// The status line spells the key as a word, as every footer does.
+func TestOmni_StatusSpellsEnter(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m = sendMsg(m, prsFetchedMsg{prs: []*tracker.PullRequest{{Number: 1, Title: "Fix the thing"}}})
+	m = sendMsg(m, issuesFetchedMsg{issues: []*tracker.Issue{{Number: 2, Title: "Fix login"}}})
+	m = sendKey(m, "space")
+	m = typeOmni(m, "f")
+	kinds := map[omniKind]bool{}
+	for i, r := range m.omni.rows() {
+		m.omni.Cursor = i
+		if _, ok := m.omni.selected(); !ok {
+			continue
+		}
+		kinds[r.Item.Kind] = true
+		if st := omniStatus(m.omni); !strings.HasPrefix(st, "enter ") || strings.Contains(st, "⏎") {
+			t.Errorf("status = %q, want it to start with enter", st)
+		}
+	}
+	if len(kinds) < 3 {
+		t.Errorf("covered %d row kinds, want worktrees, actions, PRs, and issues", len(kinds))
 	}
 }

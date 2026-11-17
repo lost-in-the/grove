@@ -134,6 +134,7 @@ type Model struct {
 	switchTo            string
 	switchToDisplayName string // display name for tmux session naming
 	switchForceUp       bool   // U: the caller moves you and brings the stack (see Exit)
+	cannotMove          bool   // no session and no shell function: an exit cannot move you
 	err                 error
 
 	// Layout
@@ -1718,10 +1719,14 @@ func (m Model) renderStackedBody() string {
 }
 
 // dashboardListView is l under its filter row, which is blank when no
-// filter is open. l is the dashboard list, sized by the caller.
+// filter is open and grove can move you. l is the dashboard list, sized by
+// the caller.
 func (m Model) dashboardListView(l list.Model) string {
 	typing := l.FilterState() == list.Filtering
 	row := filterRow(filterInputView(l.FilterInput, typing), typing, l.FilterValue(), len(l.VisibleItems()), len(l.Items()))
+	if m.cannotMove {
+		row = strings.TrimLeft(row+"  "+moveNotice(), " ")
+	}
 	return ansi.Truncate(row, l.Width(), "…") + "\n" + l.View()
 }
 
@@ -1882,7 +1887,7 @@ func RunPRs(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, 
 	defer tuilog.Close()
 
 	maybeRefreshUpdateCache()
-	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...).ConfigureForPRs()
+	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...).ConfigureForPRs().checkCanMove()
 	return runModel(model)
 }
 
@@ -1893,7 +1898,7 @@ func RunIssues(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot strin
 	defer tuilog.Close()
 
 	maybeRefreshUpdateCache()
-	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...).ConfigureForIssues()
+	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...).ConfigureForIssues().checkCanMove()
 	return runModel(model)
 }
 
@@ -1904,7 +1909,7 @@ func Run(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, plu
 	defer tuilog.Close()
 
 	maybeRefreshUpdateCache()
-	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...)
+	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...).checkCanMove()
 	return runModel(model)
 }
 
@@ -1923,13 +1928,8 @@ func maybeRefreshUpdateCache() {
 // handleTmuxSwitch creates/switches to the multiplexer session for the target
 // worktree. Returns true if a session switch happened (caller should skip cd).
 func (m *Model) handleTmuxSwitch(switchPath string) bool {
-	tmuxMode := "auto"
-	if m.cfg != nil && m.cfg.Tmux.Mode != "" {
-		tmuxMode = m.cfg.Tmux.Mode
-	}
-
 	mx := muxFor(m.cfg)
-	if tmuxMode == "off" || sessionsSuppressed(m.cfg) || !mx.Available() || m.switchToDisplayName == "" {
+	if !sessionSwitchUsable(m.cfg, mx) || m.switchToDisplayName == "" {
 		return false
 	}
 
@@ -2024,22 +2024,7 @@ func runModel(model Model) (Exit, error) {
 		return exit, nil
 	}
 
-	// Handle tmux session switching first — if it succeeds, skip cd
-	// to avoid changing the OLD session's directory
-	if !m.handleTmuxSwitch(exit.Path) {
-		// Route through cli.CdDirective: it prefers a pre-existing
-		// GROVE_CD_FILE (never recreating a stale one — B27 hardening) and
-		// falls back to a cd: line on stdout under GROVE_SHELL; a cd-file
-		// write failure degrades to that fallback instead of failing
-		// runModel.
-		separateFromAltScreen()
-		if cli.CdDirective(exit.Path) {
-			tuilog.Printf("runModel: emitted cd directive for switchTo=%q", exit.Path)
-		} else {
-			tuilog.Printf("runModel: switchTo=%q but no usable GROVE_CD_FILE or GROVE_SHELL — cannot switch", exit.Path)
-		}
-	}
-
+	m.moveAfterExit(exit.Path, cli.NewStderr())
 	return exit, nil
 }
 

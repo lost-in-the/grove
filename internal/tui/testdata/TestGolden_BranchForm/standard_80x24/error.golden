@@ -20,5 +20,5 @@
            folder grove-abc-12                                                  
            session grove-abc-12                                                 
                                                                                 
- failed to create worktree: something went wrong in git                         
+ ✗ failed to create worktree: something went wrong in git                       
  type · [1m↑↓/ctrl+jk[m pick · [1mtab[m next · [1menter[m create · [1mesc[m cancel                  
