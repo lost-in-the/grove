@@ -11,7 +11,7 @@ func TestHelpFooterCompactHints(t *testing.T) {
 		view     ActiveView
 		wantKeys []string
 	}{
-		{"Dashboard hints", ViewDashboard, []string{"↑↓/jk", "enter", "␣", "tab", "/", "g", "?", "q"}},
+		{"Dashboard hints", ViewDashboard, []string{"↑↓/jk", "enter", "space", "tab", "/", "g", "?", "q"}},
 		{"Issues hints", ViewIssues, []string{"↑↓/jk", "enter", "/", "esc"}},
 		{"Create hints", ViewBranchForm, []string{"enter", "esc"}},
 		{"Delete hints", ViewDelete, []string{"y", "esc/n", "space"}},

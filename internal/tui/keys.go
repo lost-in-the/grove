@@ -210,7 +210,7 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("b"),
 			key.WithHelp("b", "branch"),
 		),
-		Top:          key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "goto")),
+		Top:          key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "more")),
 		Bottom:       key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "bottom")),
 		HalfPageDown: key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "half page down")),
 		HalfPageUp:   key.NewBinding(key.WithKeys("ctrl+u"), key.WithHelp("ctrl+u", "half page up")),
@@ -221,6 +221,6 @@ func DefaultKeyMap() KeyMap {
 		Slots:        key.NewBinding(key.WithKeys("1", "2", "3", "4", "5", "6", "7", "8", "9"), key.WithHelp("1-9", "pinned worktree")),
 		LastActive:   key.NewBinding(key.WithKeys("-"), key.WithHelp("-", "previous worktree")),
 		OpenPR:       key.NewBinding(key.WithKeys("B"), key.WithHelp("B", "open PR in browser")),
-		Omni:         key.NewBinding(key.WithKeys("space"), key.WithHelp("␣", "find")),
+		Omni:         key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "go to")),
 	}
 }

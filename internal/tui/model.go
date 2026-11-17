@@ -348,8 +348,7 @@ func (m Model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 		m.branchForm.setWidth(m.branchFormLayout().innerWidth())
 	}
 	if m.omni != nil {
-		w, _ := omniFrameSize(m.width, m.height)
-		m.omni.Input.SetWidth(max(4, w-8))
+		setOmniInputWidth(&m.omni.Input, m.width, m.height)
 	}
 	tuilog.Printf("WindowSizeMsg: %dx%d, list size: %dx%d", msg.Width, msg.Height, m.list.Width(), m.list.Height())
 	if !wasReady && m.cfgLoadErr != nil {

@@ -78,7 +78,8 @@ func omniActionsFrom(all []Action) []Action {
 	return out
 }
 
-// omniResults groups the matches for query (spec 9.1, 9.3).
+// omniResults groups the matches for query (spec 9.1, 9.3). Places come
+// before actions, so space, a few letters, enter goes where grove to would.
 func omniResults(query string, scope omniScope, src omniSource) []omniGroup {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -92,10 +93,10 @@ func omniResults(query string, scope omniScope, src omniSource) []omniGroup {
 		return nonEmpty(actions)
 	}
 	return nonEmpty(
-		actions,
 		omniGroup{"worktrees", top(matchWorktrees(query, src.Worktrees), true)},
 		omniGroup{"pull requests", top(matchPRs(query, src.PRs), true)},
 		omniGroup{"issues", top(matchIssues(query, src.Issues), true)},
+		actions,
 	)
 }
 

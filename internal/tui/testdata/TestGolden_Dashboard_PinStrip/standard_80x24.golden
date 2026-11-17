@@ -20,5 +20,5 @@
  fix-bug · test commit for fix-bug                                              
  [1mm[m pin to slot · fix-bug is selected                                            
   [1m1[m root   [1m2[m ·   [1m3[m ·   [1m4[m ·   [1m5[m ·   [1m6[m ·   [1m7[m ·   [1m8[m ·   [1m9[m ·   [1m0[m unpin   [1mesc[m close  
-  move · [1m↑↓/jk[m move · [1menter[m switch · [1m␣[m find                                     
-  [1mtab[m detail · [1m/[m filter · [1mg[m goto · [1m?[m help · [1mq[m quit                              
+  move · [1m↑↓/jk[m move · [1menter[m switch · [1mspace[m go to                                
+  [1mtab[m detail · [1m/[m filter · [1mg[m more · [1m?[m help · [1mq[m quit                              

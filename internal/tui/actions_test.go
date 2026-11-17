@@ -133,8 +133,8 @@ func TestDispatch_DisabledActionIsConsumed(t *testing.T) {
 func TestFooter_DashboardHintsFromRegistry(t *testing.T) {
 	// Spec 5.1: ? lists every action, so the footer keeps only the way in.
 	want := []Hint{
-		{"↑↓/jk", "move"}, {"enter", "switch"}, {"␣", "find"}, {"tab", "detail"},
-		{"/", "filter"}, {"g", "goto"}, {"?", "help"},
+		{"↑↓/jk", "move"}, {"enter", "switch"}, {"space", "go to"}, {"tab", "detail"},
+		{"/", "filter"}, {"g", "more"}, {"?", "help"},
 	}
 	if got := NewHelpFooter().CompactFooter(ViewDashboard).Hints; !reflect.DeepEqual(got, want) {
 		t.Errorf("footer = %v, want %v", got, want)

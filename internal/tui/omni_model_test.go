@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -246,5 +248,58 @@ func TestOmni_StatusOnCurrentWorktree(t *testing.T) {
 	}
 	if st := omniStatus(m.omni); st != "⏎ stays on root" {
 		t.Errorf("status = %q", st)
+	}
+}
+
+// Places come first, as with grove to <name>: when a query matches a
+// worktree and an action, enter goes to the worktree.
+func TestOmni_QueryMatchingWorktreeAndActionGoesToWorktree(t *testing.T) {
+	m := newTestModel(withItems(5), withSize(120, 40))
+	m = sendKey(m, "space")
+	m = typeOmni(m, "re")
+	var kinds []omniKind
+	for _, r := range m.omni.rows() {
+		kinds = append(kinds, r.Item.Kind)
+	}
+	if !slices.Contains(kinds, omniAction) || !slices.Contains(kinds, omniWorktree) {
+		t.Fatalf("query re: kinds %v, want both a worktree and an action", kinds)
+	}
+	if it, _ := m.omni.selected(); it.Kind != omniWorktree || it.Label != "refactor" {
+		t.Fatalf("highlighted %+v, want the worktree refactor", it)
+	}
+	next, cmd := pressKey(m, "enter")
+	if next.switchTo != "/tmp/test-project-refactor" || !isQuit(cmd) {
+		t.Errorf("switchTo %q quit %v, want refactor", next.switchTo, isQuit(cmd))
+	}
+}
+
+// The ? scope lists actions only, with the first action highlighted.
+func TestOmni_ActionsScopeListsOnlyActions(t *testing.T) {
+	m := newTestModel(withItems(5), withSize(120, 40))
+	m = sendKey(m, "?")
+	m = typeOmni(m, "re")
+	if got := groupNames(m.omni.groups); !reflect.DeepEqual(got, []string{"actions"}) {
+		t.Fatalf("groups = %v, want actions only", got)
+	}
+	if it, _ := m.omni.selected(); it.Kind != omniAction {
+		t.Errorf("highlighted %+v, want an action", it)
+	}
+}
+
+func TestOmni_NamedGoTo(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m = sendKey(m, "space")
+	lines := strings.Split(ansi.Strip(renderOmni(m.omni, 120, 40)), "\n")
+	if !strings.Contains(lines[1], "Go to") {
+		t.Errorf("title line %q, want Go to", lines[1])
+	}
+	if !strings.Contains(lines[2], "Go to: worktree, #PR, or action") {
+		t.Errorf("input line %q, want the Go to: prompt and its placeholder", lines[2])
+	}
+
+	a := sendKey(newTestModel(withItems(3), withSize(120, 40)), "?")
+	lines = strings.Split(ansi.Strip(renderOmni(a.omni, 120, 40)), "\n")
+	if !strings.Contains(lines[1], "Actions") || !strings.Contains(lines[2], "Actions: ") {
+		t.Errorf("actions scope title %q input %q, want Actions and an Actions: prompt", lines[1], lines[2])
 	}
 }

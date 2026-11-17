@@ -425,6 +425,7 @@ Pressing `m` shows every slot with its worktree, so the alias is visible next to
 - Fuzzy matching with `sahilm/fuzzy` (already in the module graph; promote it to a direct dependency).
 - Highlight matched characters by rune offset, not byte offset.
 - Each group shows at most 5 results. Group order: actions, worktrees, PRs and issues.
+- Note (2026-11-16): group order is now worktrees, PRs, issues, actions. The screen is named go to, after `grove to <name>`, so `space`, a few letters, `enter` lands on a matching worktree. This section gave no reason for putting actions first. The empty-query groups and the `?` scope are unchanged.
 - `⏎` on a worktree switches to it. On an action, it runs on the target. On a PR, it pushes the review view.
 - Matching runs in memory and must render each keystroke well within one frame for 200 items.
 

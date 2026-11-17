@@ -3,7 +3,7 @@
 [2m ❯ ● root      [m│  [1mMessages[m                                      │[2m       0s      [m
 [2m   ○ feature-au[m│                                                │[2m      60m      [m
 [2m   ○ fix-bug   [m│  60s  ⚠ Created feature. 3 files not copied.   │[2m       2h      [m
-[2m               [m│         See ␣ messages.                        │[2m               [m
+[2m               [m│         See space messages.                    │[2m               [m
 [2m               [m│  60s  ⚠ Not copied: .env (missing in the main  │[2m               [m
 [2m               [m│         worktree)                              │[2m               [m
 [2m               [m│  60s  ⚠ Not copied: config/master.key          │[2m               [m

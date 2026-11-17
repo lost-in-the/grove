@@ -24,10 +24,10 @@ type provisionReport struct {
 }
 
 // seeMessages points to the message history the way the footer writes a key
-// and its action ("␣ find"): Find (␣), then its "messages" action. The
+// and its action ("space go to"): go to, then its "messages" action. The
 // history has no key of its own. The no-break space keeps the key and its
 // action on one line when the message history wraps.
-const seeMessages = "See ␣\u00a0messages."
+const seeMessages = "See space\u00a0messages."
 
 // newProvisionReport builds the report for err. verb opens the toast
 // ("Created"); name and path are the new worktree's. ok is false for an error

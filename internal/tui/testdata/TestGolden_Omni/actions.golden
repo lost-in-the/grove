@@ -2,7 +2,7 @@
 [2m                                                                                [m
 [2m ❯ ● root   [m╭──────────────────────────────────────────────────────╮[2m    0s      [m
 [2m   ○ feature[m│ [1mActions[m                                              │[2m   60m      [m
-[2m   ○ fix-bug[m│ [1m␣ ▏[37;22;7mt[38;5;240;27mype an action                                   [m │[2m    2h      [m
+[2m   ○ fix-bug[m│ [37mActions: [7mn[38;5;240;27mame or synonym                            [m │[2m    2h      [m
 [2m   ● testing[m│ actions        ❯ switch to worktree            enter │[2m    3h      [m
 [2m   ○ refacto[m│                  switch and bring the stack        U │[2m    4h      [m
 [2m            [m│                  new worktree                      n │[2m            [m
@@ -21,4 +21,4 @@
 [2m            [m│ ⏎ runs switch to worktree                            │[2m            [m
 [2m root · test[m│ type · [1m↑↓/ctrl+jk[m pick · [1menter[m choose · [1mesc[m close    │[2m            [m
 [2m  move · ↑↓/[m╰──────────────────────────────────────────────────────╯[2m            [m
-[2m  tab detail · / filter · g goto · ? help · q quit                              [m
+[2m  tab detail · / filter · g more · ? help · q quit                              [m

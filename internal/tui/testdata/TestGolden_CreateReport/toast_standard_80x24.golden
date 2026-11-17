@@ -1,6 +1,6 @@
- [1mtest-project[m · 3 workt╭───────────────────────────────────────────────────────╮
-                       │ ⚠ Created feature. 1 file not copied. See ␣ messages. │
- ❯ ● [1mroot[m              ╰───────────────────────────────────────────────────────╯
+ [1mtest-project[m · 3 w╭───────────────────────────────────────────────────────────╮
+                   │ ⚠ Created feature. 1 file not copied. See space messages. │
+ ❯ ● [1mroot[m          ╰───────────────────────────────────────────────────────────╯
    ○ feature-auth                                                      60m
    ○ fix-bug                                                            2h
 
@@ -20,5 +20,5 @@
 
 
  root · test commit for root
-  move · [1m↑↓/jk[m move · [1menter[m switch · [1m␣[m find
-  [1mtab[m detail · [1m/[m filter · [1mg[m goto · [1m?[m help · [1mq[m quit
+  move · [1m↑↓/jk[m move · [1menter[m switch · [1mspace[m go to
+  [1mtab[m detail · [1m/[m filter · [1mg[m more · [1m?[m help · [1mq[m quit

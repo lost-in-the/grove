@@ -69,7 +69,7 @@ func dashboardActions() []Action {
 		{ID: "worktree.new", Keys: []string{"n"}, Label: "new worktree", Short: "new",
 			Synonyms: []string{"create", "add", "new worktree"},
 			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { return m.handleDashboardNewKey() }},
-		{ID: "omni.open", Keys: []string{"space"}, Display: "␣", Label: "find", Footer: 3,
+		{ID: "omni.open", Keys: []string{"space"}, Label: "go to", Footer: 3,
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) { return m.openOmni(omniScopeAll) }},
 		{ID: "list.filter", Keys: []string{"/"}, Label: "filter", Footer: 5, Synonyms: []string{"search"}},
 		{ID: "detail.open", Keys: []string{"tab", "ctrl+i", "l"}, Label: "show detail", Short: "detail", Footer: 4,
@@ -81,7 +81,7 @@ func dashboardActions() []Action {
 				m.sortMode = m.sortMode.Next(m.agentAware)
 				return m, m.applySortToList()
 			}},
-		{ID: "goto.open", Keys: []string{"g"}, Label: "goto", Footer: 6,
+		{ID: "goto.open", Keys: []string{"g"}, Label: "more", Footer: 6,
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) {
 				m.pendingG = true
 				m.updateLayout()

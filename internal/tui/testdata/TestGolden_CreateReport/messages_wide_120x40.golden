@@ -9,7 +9,7 @@
 [2m                              [m│  [1mMessages[m                                                │[2m                              [m
 [2m                              [m│                                                          │[2m                              [m
 [2m                              [m│  60s  ⚠ Created feature. 3 files not copied. See         │[2m                              [m
-[2m                              [m│         ␣ messages.                                      │[2m                              [m
+[2m                              [m│         space messages.                                  │[2m                              [m
 [2m                              [m│  60s  ⚠ Not copied: .env (missing in the main worktree)  │[2m                              [m
 [2m                              [m│  60s  ⚠ Not copied: config/master.key (missing in the    │[2m                              [m
 [2m                              [m│         main worktree)                                   │[2m                              [m
@@ -37,4 +37,4 @@
 [2m                                                                        │                                               [m
 [2m                                                                        │                                               [m
 [2m                                                                        │                                               [m
-[2m  move · ↑↓/jk move · enter switch · ␣ find · tab detail · / filter · g goto · ? help · q quit                          [m
+[2m  move · ↑↓/jk move · enter switch · space go to · tab detail · / filter · g more · ? help · q quit                     [m

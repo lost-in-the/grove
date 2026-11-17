@@ -20,5 +20,5 @@
 [2m             [m╰───────────────────────────────────────────────────╯[2m              [m
 [2m                                                                                [m
 [2m root · test commit for root                                                    [m
-[2m  move · ↑↓/jk move · enter switch · ␣ find                                     [m
-[2m  tab detail · / filter · g goto · ? help · q quit                              [m
+[2m  move · ↑↓/jk move · enter switch · space go to                                [m
+[2m  tab detail · / filter · g more · ? help · q quit                              [m

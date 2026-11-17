@@ -270,9 +270,9 @@ var helpSectionKeys = []helpSection{
 		{"esc", "While typing: clear it. On the list: clear an applied filter"},
 		{"/", "Edit the applied filter"},
 	}},
-	{title: "Find (space) and the form's Branch and Base", note: "Three key sets, so one always gets through.", items: []helpEntry{
+	{title: "Go to (space) and the form's Branch and Base", note: "Three key sets, so one always gets through.", items: []helpEntry{
 		{"↑↓, ctrl+j/k, ctrl+n/p", "Pick the next / previous row"},
-		{"tab / shift+tab", "Find only: next / previous row (in the form they change field)"},
+		{"tab / shift+tab", "Go to only: next / previous row (in the form they change field)"},
 		{"enter", "Run the highlighted row"},
 	}},
 }
@@ -280,7 +280,7 @@ var helpSectionKeys = []helpSection{
 var helpSectionsDashboard = append(helpSectionKeys[:len(helpSectionKeys):len(helpSectionKeys)], []helpSection{
 	{title: "Navigation", items: []helpEntry{
 		{"↑/k ↓/j", "Move up / down"},
-		{"g", "Goto strip (g top, p PRs, i issues, c config, u upgrade, d local diff, a agent under herdr)"},
+		{"g", "More: g top, p pull requests, i issues, c config, u upgrade, d local diff, a agent under herdr"},
 		{"gg / G", "Top / bottom of list"},
 		{"ctrl+d / ctrl+u", "Half page down / up"},
 		{"enter", "Switch to selected worktree"},

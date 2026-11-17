@@ -25,11 +25,11 @@
 [2m               [m│   applied filter                                                                       │[2m               [m
 [2m               [m│   [1m/[m                             Edit the applied filter                                │[2m               [m
 [2m               [m│                                                                                        │[2m               [m
-[2m               [m│   [1mFind (space) and the form's Branch and Base[m                                          │[2m               [m
+[2m               [m│   [1mGo to (space) and the form's Branch and Base[m                                         │[2m               [m
 [2m               [m│   Three key sets, so one always gets through.                                          │[2m               [m
 [2m               [m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
 [2m               [m│   [1m↑↓, ctrl+j/k, ctrl+n/p[m        Pick the next / previous row                           │[2m               [m
-[2m               [m│   [1mtab / shift+tab[m               Find only: next / previous row (in the form they       │[2m               [m
+[2m               [m│   [1mtab / shift+tab[m               Go to only: next / previous row (in the form they      │[2m               [m
 [2m               [m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
 [2m               [m│    move · [1m↑↓/jk[m scroll · [1mesc[m close                                                     │[2m               [m
 [2m               [m│                                                                                        │[2m               [m
@@ -37,4 +37,4 @@
 [2m                                                                        │                                               [m
 [2m                                                                        │                                               [m
 [2m                                                                        │                                               [m
-[2m  move · ↑↓/jk move · enter switch · ␣ find · tab detail · / filter · g goto · ? help · q quit                          [m
+[2m  move · ↑↓/jk move · enter switch · space go to · tab detail · / filter · g more · ? help · q quit                     [m

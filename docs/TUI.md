@@ -33,12 +33,12 @@ The footer's first word names the mode, so it is always on screen.
 
 | | Filter | Finder |
 |---|---|---|
-| Where | `/` on the dashboard list, the PR browser, and the issue browser | Find (`space`, `?`), and the form's Branch and Base fields |
+| Where | `/` on the dashboard list, the PR browser, and the issue browser | Go to (`space`, `?`), and the form's Branch and Base fields |
 | Typing | Narrows the list in place | Lists results or suggestions under the field |
 | Rows while typing | Do not move | `ctrl+j`/`ctrl+k`, `ctrl+n`/`ctrl+p`, and the arrows move them |
 | `enter` | Keeps the filter, back to `move` on the list | Acts on the highlighted row |
-| `tab` | Same as `enter` | Find: next row (`shift+tab` previous). Form: next field |
-| `esc` | Clears the text and leaves the filter | Closes find, or cancels the form |
+| `tab` | Same as `enter` | Go to: next row (`shift+tab` previous). Form: next field |
+| `esc` | Clears the text and leaves the filter | Closes go to, or cancels the form |
 
 On the list with a filter applied, `esc` clears the filter and `/` opens it again with its text. The filter row stays visible while a filter is applied (see Filtering).
 
@@ -58,7 +58,7 @@ Why three pick sets: each multiplexer and terminal takes some `ctrl` pairs for i
 
 ### Footer
 
-Every screen's key line has one format: `<mode> · <keys> <verb> · ...`. A key pair is joined with a slash: `↑↓/jk move`, `↑↓/ctrl+jk pick`. The leave key comes last.
+Every screen's key line has one format: `<mode> · <keys> <verb> · ...`. A key pair is joined with a slash: `↑↓/jk move`, `↑↓/ctrl+jk pick`. The leave key comes last. Keys are spelled as words, never as a glyph: `space go to`, `space toggle`.
 
 | Verb | Means |
 |---|---|
@@ -68,16 +68,16 @@ Every screen's key line has one format: `<mode> · <keys> <verb> · ...`. A key 
 | `change` | Change a value |
 | `enter <verb>` | The action, named: `switch`, `create`, `review`, `save` |
 | `esc back` | Return focus within a screen (the detail pane to the list) |
-| `esc close` | Close a screen or overlay (find, settings, a browser, help) |
+| `esc close` | Close a screen or overlay (go to, settings, a browser, help) |
 | `esc clear` | Remove a filter |
 | `esc cancel` | Drop what you started (the form, a prompt, a text edit) |
 | `tab <verb>` | `next` field, `detail` pane, `keep` a filter |
 
-When a footer does not fit, it takes a second line where the screen allows one; then hints drop from the right, one at a time. The mode word, the `enter` hint, and the leave key never drop. Panels with their own key line (the form, find, prompts) take the same format. The form and find reserve a second row only at widths where their longest line needs it, so the line never moves while you work.
+When a footer does not fit, it takes a second line where the screen allows one; then hints drop from the right, one at a time. The mode word, the `enter` hint, and the leave key never drop. Panels with their own key line (the form, go to, prompts) take the same format. The form and go to reserve a second row only at widths where their longest line needs it, so the line never moves while you work.
 
 ### Focus
 
-One `❯` is on screen, in the focused pane. When the New Worktree form has focus, the list beside or above it draws no `❯` and no selection bar; the selected row keeps its bold name, at full contrast. Inside the form only the focused field has `❯`; the highlighted suggestion has a lighter `›`. The focused pane's border or title rule is in the accent color with a bold title, as the focused detail pane's is. (Find and the centered prompts draw over a dimmed screen; the dimmed list behind them keeps its row marked.)
+One `❯` is on screen, in the focused pane. When the New Worktree form has focus, the list beside or above it draws no `❯` and no selection bar; the selected row keeps its bold name, at full contrast. Inside the form only the focused field has `❯`; the highlighted suggestion has a lighter `›`. The focused pane's border or title rule is in the accent color with a bold title, as the focused detail pane's is. (Go to and the centered prompts draw over a dimmed screen; the dimmed list behind them keeps its row marked.)
 
 ## Dashboard Layout
 
@@ -132,7 +132,7 @@ Selecting a worktree updates the detail panel with:
 
 ### Footer
 
-A compact hint bar at the bottom shows essential keybindings, in the format the Input model section sets: `move · ↑↓/jk move · enter switch · ␣ find · tab detail · / filter · g goto · ? help · q quit`. It takes two lines on a narrow terminal. The full reference, with every alternate key, is `keyboard shortcuts` in `?`.
+A compact hint bar at the bottom shows essential keybindings, in the format the Input model section sets: `move · ↑↓/jk move · enter switch · space go to · tab detail · / filter · g more · ? help · q quit`. It takes two lines on a narrow terminal. The full reference, with every alternate key, is `keyboard shortcuts` in `?`.
 
 ### Upgrade badge
 
@@ -167,7 +167,7 @@ Toast levels:
 |-----|--------|
 | `↑` / `k` | Move up |
 | `↓` / `j` | Move down |
-| `g` | Open the goto strip: `g` top of list, `p` pull requests, `i` issues, `c` config, `u` upgrade grove, `d` a local diff of the selected worktree (see PR Review), and under herdr `a` the next agent needing you. Any other key closes it. |
+| `g` | Open the more strip: `g` top of list, `p` pull requests, `i` issues, `c` config, `u` upgrade grove, `d` a local diff of the selected worktree (see PR Review), and under herdr `a` the next agent needing you. Any other key closes it. |
 | `g` `g` / `G` | Top / bottom of the list |
 | `ctrl+d` / `ctrl+u` | Half a page down / up |
 | `pgdown` / `pgup`, `home` / `end` | Page down / up, first / last page |
@@ -193,8 +193,8 @@ Toast levels:
 | `r` | Refresh worktree list |
 | `v` | Show or hide the commit message line |
 | `/` | Filter list (see Filtering) |
-| `space` | Find: search worktrees, actions, and loaded PRs and issues (see Find below) |
-| `?` | Find, limited to actions: every dashboard action with its key. `keyboard shortcuts` there opens the full key reference. |
+| `space` | Go to: worktrees, loaded PRs and issues, and actions, as `grove to <name>` does for worktrees (see Go to below) |
+| `?` | Go to, limited to actions: every dashboard action with its key. `keyboard shortcuts` there opens the full key reference. |
 | `esc` | Clear an applied filter; otherwise nothing |
 | `q` / `ctrl+c` | Quit, with no confirm |
 
@@ -407,7 +407,7 @@ Select multiple worktrees for deletion in one operation. The main worktree, prot
 
 Fetches open pull requests from GitHub (requires `gh` CLI installed and authenticated).
 
-The last list grove fetched is saved in the user cache directory (`~/.cache/grove/prs/` on Linux). `p` shows it at once with `cached · refreshing` above it, and replaces it when the new list arrives, keeping the selected PR. If the refresh fails, the saved list stays and the line reads `refresh failed:` with the reason. Find's PR results also use the saved list.
+The last list grove fetched is saved in the user cache directory (`~/.cache/grove/prs/` on Linux). `p` shows it at once with `cached · refreshing` above it, and replaces it when the new list arrives, keeping the selected PR. If the refresh fails, the saved list stays and the line reads `refresh failed:` with the reason. Go to's PR results also use the saved list.
 
 Each PR shows:
 - PR number + title + branch name
@@ -425,7 +425,7 @@ Controls:
 
 ### PR Review (`enter` on a PR)
 
-A full-screen review of one pull request, opened from the PR browser or from a PR result in Find. The header names the PR; the tab row reads `[1] conversation  [2] commits  [3] checks  [4] files` with each tab's count once its data has loaded. `esc` goes back to where you opened it.
+A full-screen review of one pull request, opened from the PR browser or from a PR result in go to. The header names the PR; the tab row reads `[1] conversation  [2] commits  [3] checks  [4] files` with each tab's count once its data has loaded. `esc` goes back to where you opened it.
 
 Opening a review fetches the PR's detail, diff, and review comments in the background with `gh`. Each loads on its own, so a failed diff still leaves the other tabs. A PR that has not changed since you last opened it in this session opens at once. Without `gh`, the frame shows one `gh required` panel.
 
@@ -495,19 +495,21 @@ Under herdr the dashboard keeps track of which coding agents need you. Under tmu
 - **`g a`:** moves to the next blocked agent below the cursor, wrapping; with none blocked, to the next done one; with neither, it says `no agents need you`. If the filter hides the target, the filter is cleared.
 - **Poll:** every 3 seconds the dashboard asks herdr for agent state (one `herdr workspace list`). Only the session and agent columns change. Under attention sort the rows re-sort and the cursor stays on the same worktree; while you are typing a filter they wait, and catch up on the next poll. A failed poll keeps the last known state and logs a warning.
 
-## Find
+## Go to
 
-`space` opens a search box over the current screen. Before you type it shows agents that need you (under herdr), pinned worktrees, and recently used ones. As you type it lists, in order:
+`space` opens a box titled `Go to` over the current screen, with the prompt `Go to: ` in the form of the filter row's `Filter: `. Before you type it shows agents that need you (under herdr), pinned worktrees, and recently used ones. As you type it lists, in order, with the first row highlighted:
 
 | Group | Matched on | `enter` |
 |---|---|---|
-| actions | label, plain-language synonyms (`fork`, `checkout`, `trash`) | runs it on the worktree that was selected when you opened Find |
 | worktrees | alias, branch | switches to it |
 | pull requests, issues | number, title, branch | opens the browser with the cursor on it |
+| actions | label, plain-language synonyms (`fork`, `checkout`, `trash`) | runs it on the worktree that was selected when you opened go to |
 
-Matching is fuzzy, matched letters are highlighted, and a synonym that matched is shown beside the action (`copy worktree · fork`). PRs and issues come only from data already loaded this session: Find never calls `gh`. While you type, `ctrl+j` / `ctrl+k`, `ctrl+n` / `ctrl+p`, the arrows, and `tab` / `shift+tab` move through the results; `enter` runs the highlighted one; `esc` closes. The box keeps its size and position while you type.
+Places come before actions, so `space`, a few letters, `enter` goes to a worktree when one matches, as `grove to <name>` does.
 
-`?` opens the same box limited to actions. Searching `messages` (or `warnings`, `errors`, `log`) opens the session's warnings and errors, newest first: toasts disappear after a few seconds, these stay until you quit.
+Matching is fuzzy, matched letters are highlighted, and a synonym that matched is shown beside the action (`copy worktree · fork`). PRs and issues come only from data already loaded this session: go to never calls `gh`. While you type, `ctrl+j` / `ctrl+k`, `ctrl+n` / `ctrl+p`, the arrows, and `tab` / `shift+tab` move through the results; `enter` runs the highlighted one; `esc` closes. The box keeps its size and position while you type.
+
+`?` opens the same box limited to actions, titled `Actions`. Searching `messages` (or `warnings`, `errors`, `log`) opens the session's warnings and errors, newest first: toasts disappear after a few seconds, these stay until you quit.
 
 ## Pins
 
@@ -574,14 +576,14 @@ Every dashboard key is an `Action` in `internal/tui/actions.go`: its keys, label
 | `internal/tui/row_layout.go` | Column widths and the shed order (`layoutColumns`, `middleTruncate`) |
 | `internal/tui/responsive.go` | Width tiers: guard under 44, list with a selection line, split at 110 |
 | `internal/tui/detail_sheet.go` | The full-screen detail sheet and the selection line |
-| `internal/tui/omni.go` | Find: sources, fuzzy matching, result groups (`omniResults`) |
-| `internal/tui/omni_view.go` | The Find overlay: state, keys, fixed frame |
+| `internal/tui/omni.go` | Go to (code name omni): sources, fuzzy matching, result groups (`omniResults`) |
+| `internal/tui/omni_view.go` | The go to overlay: state, keys, fixed frame |
 | `internal/tui/messages_view.go` | Session message history overlay; long entries wrap under their text |
 | `internal/tui/provision_report.go` | After create or copy: the warning toast and message history lines for files not copied, a failed registration, or a required hook |
 | `internal/tui/actions.go` | The dashboard action table (keys, labels, synonyms, footer order) |
 | `internal/tui/help_v2.go` | The footer: mode word, hints, leave key, and the drop order (`Footer`, `fitFooter`) |
 | `internal/tui/keys.go` | The key map, with `ctrl+[`, `ctrl+m`, `ctrl+i`, and the finder pick keys (`finderDown`, `finderUp`) |
-| `internal/tui/strip.go` | Docked strips (`g` goto, `m` pin) drawn above the footer |
+| `internal/tui/strip.go` | Docked strips (`g` more, `m` pin) drawn above the footer |
 | `internal/tui/goto_agent.go` | `g a`: the next agent needing you |
 | `internal/tui/poll.go` | The 3-second herdr agent poll: tick, generation, applying results |
 | `internal/tui/pins.go` | Pin rules (`pinSet`): pin, unpin, move, rename, prune |

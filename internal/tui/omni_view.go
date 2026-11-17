@@ -84,13 +84,13 @@ func (m Model) omniSourceFor() omniSource {
 // openOmni pushes omni over the current view. It never fetches.
 func (m Model) openOmni(scope omniScope) (tea.Model, tea.Cmd) {
 	in := newTextInput()
-	in.Prompt = ""
-	in.Placeholder = "type a worktree, action, or #PR"
+	in.Prompt = "Go to: "
+	in.Placeholder = "worktree, #PR, or action"
 	if scope == omniScopeActions {
-		in.Placeholder = "type an action"
+		in.Prompt = "Actions: "
+		in.Placeholder = "name or synonym"
 	}
-	w, _ := omniFrameSize(m.width, m.height)
-	in.SetWidth(max(4, w-8))
+	setOmniInputWidth(&in, m.width, m.height)
 	s := &OmniState{Scope: scope, Input: in, src: m.omniSourceFor()}
 	if item, ok := m.selectedItem(); ok {
 		s.Target = item.Path
@@ -192,6 +192,13 @@ func (m Model) chooseOmni() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// setOmniInputWidth fits the input, prompt and cursor included, inside the
+// frame's padding.
+func setOmniInputWidth(in *textinput.Model, termW, termH int) {
+	w, _ := omniFrameSize(termW, termH)
+	in.SetWidth(max(4, w-5-lipgloss.Width(in.Prompt)))
+}
+
 // omniFrameSize is omni's frame size. It depends only on the terminal, so
 // typing never changes it.
 func omniFrameSize(termW, termH int) (int, int) {
@@ -209,7 +216,7 @@ func renderOmni(s *OmniState, termW, termH int) string {
 	keys := renderKeyLine(typeFooter(Hint{"esc", "close"}, Hint{"↑↓/ctrl+jk", "pick"}, Hint{"enter", "choose"}), inner, 2)
 	bodyRows := h - 4 - len(keys) // border, input, status, key line
 
-	title := "Find"
+	title := "Go to"
 	if s.Scope == omniScopeActions {
 		title = "Actions"
 	}
@@ -223,7 +230,7 @@ func renderOmni(s *OmniState, termW, termH int) string {
 	}
 	body = windowLines(body, bodyRows, s.Cursor)
 
-	lines := []string{Styles.OverlayTitle.Render(title), Styles.HelpKey.Render("␣ ▏") + s.Input.View()}
+	lines := []string{Styles.OverlayTitle.Render(title), s.Input.View()}
 	lines = append(lines, body...)
 	lines = append(lines, Styles.DetailDim.Render(omniStatus(s)))
 	lines = append(lines, keys...)

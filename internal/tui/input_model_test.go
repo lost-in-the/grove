@@ -405,7 +405,7 @@ func TestFooter_ModeWordFirst(t *testing.T) {
 		want string
 	}{
 		{"dashboard", func() Model { return newTestModel(withItems(5), withSize(160, 40)) },
-			"move · ↑↓/jk move · enter switch · ␣ find · tab detail · / filter · g goto · ? help · q quit"},
+			"move · ↑↓/jk move · enter switch · space go to · tab detail · / filter · g more · ? help · q quit"},
 		{"dashboard typing a filter", func() Model {
 			return typeText(sendKey(newTestModel(withItems(5), withSize(160, 40)), "/"), "fe")
 		}, "type · enter/tab keep · esc clear"},
@@ -607,5 +607,63 @@ func TestFinders_KeepPickAt44(t *testing.T) {
 		if view := stripAnsi(m.viewString()); !strings.Contains(view, "↑↓/ctrl+jk pick") {
 			t.Errorf("%s at 44 dropped the pick keys:\n%s", name, view)
 		}
+	}
+}
+
+// The space key is spelled "space" everywhere: the ␣ glyph read as nothing.
+func TestUI_NoSpaceGlyph(t *testing.T) {
+	const glyph = "␣"
+	var screens []string
+	for _, w := range []int{44, 80, 160} {
+		m := newTestModel(withItems(5), withSize(w, 24))
+		screens = append(screens, m.viewString())
+		g := m
+		g.pendingG = true
+		g.updateLayout()
+		screens = append(screens, g.viewString())
+		screens = append(screens, sendKey(m, "space").viewString(), sendKey(m, "?").viewString())
+	}
+	for _, s := range screens {
+		if strings.Contains(s, glyph) {
+			t.Errorf("screen shows %s:\n%s", glyph, stripAnsi(s))
+		}
+	}
+	for _, a := range dashboardActions() {
+		if strings.Contains(a.display()+a.Label+a.Short, glyph) {
+			t.Errorf("action %s shows %s", a.ID, glyph)
+		}
+	}
+	for _, b := range DefaultKeyMap().ShortHelp() {
+		if strings.Contains(b.Help().Key+b.Help().Desc, glyph) {
+			t.Errorf("key help %q shows %s", b.Help().Key, glyph)
+		}
+	}
+	if strings.Contains(seeMessages, glyph) {
+		t.Errorf("toast pointer %q shows %s", seeMessages, glyph)
+	}
+}
+
+// The g strip is "more": "go to" names the space screen only.
+func TestUI_GStripIsMore(t *testing.T) {
+	m := newTestModel(withItems(5), withSize(160, 40))
+	if f := footerText(m.viewString(), 1); !strings.Contains(f, "g more") || strings.Contains(f, "goto") {
+		t.Errorf("footer %q, want g more", f)
+	}
+	m.pendingG = true
+	m.updateLayout()
+	if strip := stripAnsi(strings.Join(m.gStripLines(), "\n")); !strings.HasPrefix(strings.TrimSpace(strip), "g more") {
+		t.Errorf("strip %q, want it titled g more", strip)
+	}
+	found := false
+	for _, sec := range helpSectionsDashboard {
+		for _, e := range sec.items {
+			if strings.Contains(strings.ToLower(e.desc), "goto") {
+				t.Errorf("help entry %q still says goto", e.desc)
+			}
+			found = found || (e.key == "g" && strings.HasPrefix(e.desc, "More:"))
+		}
+	}
+	if !found {
+		t.Error("help has no g entry starting More:")
 	}
 }

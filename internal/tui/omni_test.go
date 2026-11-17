@@ -44,13 +44,13 @@ func labels(g omniGroup) []string {
 
 func TestOmniResults_GroupsAndOrder(t *testing.T) {
 	gs := omniResults("re", omniScopeAll, omniTestSource())
-	if got := groupNames(gs); !reflect.DeepEqual(got, []string{"actions", "worktrees", "pull requests", "issues"}) {
+	if got := groupNames(gs); !reflect.DeepEqual(got, []string{"worktrees", "pull requests", "issues", "actions"}) {
 		t.Fatalf("groups = %v", got)
 	}
-	if l := labels(gs[0]); !slices.Contains(l, "rename worktree") {
+	if l := labels(gs[3]); !slices.Contains(l, "rename worktree") {
 		t.Errorf("actions = %v, want rename worktree among them", l)
 	}
-	if l := labels(gs[1]); len(l) == 0 || l[0] != "refactor" {
+	if l := labels(gs[0]); len(l) == 0 || l[0] != "refactor" {
 		t.Errorf("worktrees = %v, want refactor", l)
 	}
 	for _, g := range gs {

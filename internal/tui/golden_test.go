@@ -438,7 +438,8 @@ func TestGolden_Dashboard_GStrip(t *testing.T) {
 	}
 }
 
-// Omni over the dashboard: empty, with a query, and scoped to actions.
+// Omni over the dashboard: empty, with a query, with a query that matches
+// worktrees and actions, and scoped to actions.
 func TestGolden_Omni(t *testing.T) {
 	cases := map[string]func(m *Model){
 		"empty": func(m *Model) {
@@ -450,6 +451,12 @@ func TestGolden_Omni(t *testing.T) {
 			next, _ := m.openOmni(omniScopeAll)
 			*m = next.(Model)
 			m.omni.Input.SetValue("fix")
+			m.omni.refresh()
+		},
+		"worktree_and_action": func(m *Model) {
+			next, _ := m.openOmni(omniScopeAll)
+			*m = next.(Model)
+			m.omni.Input.SetValue("re")
 			m.omni.refresh()
 		},
 		"actions": func(m *Model) {
