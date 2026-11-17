@@ -114,6 +114,9 @@ Examples:
 		// on has to be installed, so a missing binary is graded against the
 		// backend the project resolves to.
 		m := doctorMux()
+		if warning := herdrAppWarning(mux.InsideHerdrApp(), m.Backend()); warning != "" {
+			cli.Warning(w, "Herdr app: %s", warning)
+		}
 
 		// Check: tmux available
 		allPassed = reportMuxBinary(w, "Tmux", mux.BackendTmux, m.Backend(), func() (string, error) {
@@ -1144,6 +1147,22 @@ func reportMuxBinary(w *cli.Writer, name string, this, active mux.Backend, versi
 		runInfo(w, name, msg)
 	}
 	return true
+}
+
+// herdrAppWarning says what grove does inside a pane of the herdr desktop
+// app, which it cannot drive: the app runs on herdr-core, and the herdr
+// backend talks to the herdr server.
+func herdrAppWarning(insideApp bool, active mux.Backend) string {
+	switch {
+	case !insideApp:
+		return ""
+	case active == mux.BackendHerdr:
+		return "this pane is in the herdr app, but [mux] backend = \"herdr\" drives the herdr server. Sessions grove makes will not appear in the app"
+	case active == mux.BackendOff:
+		return "grove cannot drive the herdr app yet, so every move lands here (only the directory changes). Set [mux] backend to use tmux or the herdr server"
+	default:
+		return ""
+	}
 }
 
 // herdrVersionWarning returns a warning when `herdr --version` names a herdr

@@ -1786,3 +1786,19 @@ func TestHerdrServerVerdict(t *testing.T) {
 		}
 	})
 }
+
+func TestHerdrAppWarning(t *testing.T) {
+	if got := herdrAppWarning(false, mux.BackendOff); got != "" {
+		t.Errorf("outside the herdr app: got %q, want none", got)
+	}
+	got := herdrAppWarning(true, mux.BackendOff)
+	for _, want := range []string{"herdr app", "here"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("inside the herdr app with no backend: %q, want it to contain %q", got, want)
+		}
+	}
+	got = herdrAppWarning(true, mux.BackendHerdr)
+	if !strings.Contains(got, "will not appear in the app") {
+		t.Errorf("inside the herdr app on the herdr backend: %q, want it to say sessions will not appear in the app", got)
+	}
+}

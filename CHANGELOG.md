@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A config that fails to load now stops commands that create or adopt a worktree. Before, they ran on defaults and skipped `copy_files`, symlinks, and hooks.
 - `copy_files` and `symlink_files` entries with `*`, `?`, or `[`, and any entry that is absolute or uses `..`, now fail config validation.
 - `[mux] backend = "auto"` now picks herdr when grove runs inside neither multiplexer and both tmux and herdr are installed. Before, it picked tmux. Inside tmux or herdr, the one you are in still wins. Set `backend = "tmux"` to keep tmux.
+- Inside a pane of the herdr desktop app, `[mux] backend = "auto"` resolves to `off`, so every move lands here. The app runs on herdr-core, which grove cannot drive yet. Before, grove could make workspaces on the herdr server that the app never showed. `grove doctor` says which case you are in.
 - `grove doctor` treats tmux and herdr as peers. A missing binary is an information line when the other backend is active, and a failure when it is the backend set in `[mux] backend`. The iTerm2 control mode check runs only under the tmux backend.
 - The herdr backend is verified against herdr 0.9.5, and CI runs the live suite on it.
 

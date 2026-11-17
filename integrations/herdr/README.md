@@ -3,6 +3,9 @@
 A [herdr](https://herdr.dev) plugin that keeps grove's state in sync with
 worktrees created or removed through herdr.
 
+It is a plugin for the herdr server. The herdr desktop app runs on `herdr-core`
+and uses JavaScript mods, so this plugin does not load there.
+
 Note the direction: `plugins/` in this repo holds plugins that extend *grove*
 (docker, tracker). This one runs the other way — it extends *herdr*, and grove
 is the thing being invoked.

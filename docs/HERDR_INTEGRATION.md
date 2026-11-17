@@ -7,6 +7,28 @@ against a pinned headless herdr 0.9.5. `[mux] backend = "herdr"` selects it;
 `auto` picks it when grove is running inside a herdr pane, and outside any
 multiplexer whenever herdr is installed.
 
+## The herdr desktop app is not supported yet
+
+There are two herdr runtimes, and they share no state:
+
+| | herdr server (this document) | herdr desktop app |
+|---|---|---|
+| Runs on | its own server and socket | `herdr-core` |
+| Structure | workspaces, tabs, panes | spaces, tabs, panes |
+| Extensions | TOML plugins | JavaScript mods |
+| A pane's environment | `HERDR_ENV`, `HERDR_WORKSPACE_ID`, ... | `HC_TERMINAL_ID`, `HC_TERMINAL_SOCKET`, `HC_SCOPE` |
+| Commands | `herdr workspace ...` | `herdr-app ...`, `hc ...` |
+
+Grove's herdr backend drives the herdr server only. Inside a pane of the
+desktop app:
+
+- `[mux] backend = "auto"` resolves to `off`. Every move lands here: grove
+  changes directory and makes no session. Being inside tmux, or inside a herdr
+  server pane, still wins.
+- `[mux] backend = "herdr"` still drives the herdr server. Workspaces grove
+  makes there do not appear in the app. `grove doctor` says so.
+- Grove's herdr plugin does not load in the app.
+
 [Herdr](https://herdr.dev) is a terminal multiplexer built for coding agents: a
 background server owns real terminals, clients attach to render them, and panes
 survive detach. Same shape as tmux, but mouse-first and agent-aware — it detects

@@ -153,6 +153,10 @@ nothing useful. Outside both, grove uses whichever binary is installed, and
 herdr when both are. Set `backend = "tmux"` to keep tmux on a machine that has
 both.
 
+Inside a pane of the herdr desktop app (`HC_TERMINAL_ID` is set) and outside
+both multiplexers, `auto` resolves to `off`. The app runs on herdr-core, which
+grove cannot drive yet. See [Herdr Integration](HERDR_INTEGRATION.md).
+
 An explicit backend is honored even when its binary is missing — grove reports
 that rather than silently driving a different multiplexer than you asked for.
 
