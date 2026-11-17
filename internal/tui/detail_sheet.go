@@ -12,9 +12,13 @@ import (
 )
 
 // openDetail shows the selected worktree's detail: at 110+ columns it
-// focuses the docked pane; below that it opens the full-screen sheet.
+// focuses the docked pane, showing it if t hid it; below that it opens the
+// full-screen sheet.
 func (m *Model) openDetail() {
 	if isWideLayout(m.width) {
+		if m.sidebarHidden {
+			m.setSidebarHidden(false)
+		}
 		m.detailFocused = true
 		m.refreshDetailForFocus()
 		return

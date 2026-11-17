@@ -335,10 +335,14 @@ func (m Model) formBelow() ActiveView {
 }
 
 // formListWidth is the list column of view v at split widths, which the
-// form docks beside. 0 means v has no list for the form to keep in view.
+// form docks beside. 0 means the form docks under v instead: v has no list
+// to keep in view, or the dashboard's sidebar is hidden.
 func (m Model) formListWidth(v ActiveView) int {
 	switch v {
 	case ViewDashboard:
+		if m.sidebarHidden {
+			return 0
+		}
 		return m.list.Width()
 	case ViewPRs, ViewIssues:
 		return contextListWidth(m.width)

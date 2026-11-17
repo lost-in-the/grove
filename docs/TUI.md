@@ -85,7 +85,7 @@ The dashboard adjusts to your terminal width:
 
 | Width | Layout |
 |---|---|
-| 110+ columns | The list, with the detail panel docked on the right. `tab` or `l` focuses it; `esc`, `h`, or `tab` return. |
+| 110+ columns | The list, with the detail panel docked on the right. `tab` or `l` focuses it; `esc`, `h`, or `tab` return. `t` hides the panel, leaving the list and summary line of 44 to 109 columns, and shows it again; `tab` or `l` also shows it. The choice is saved per project in `.grove/ui_prefs.json` (`sidebar_hidden`). |
 | 44 to 109 | The list, with a one-line summary of the selected worktree above the footer (`alias · ⎇ branch · commit subject`). `tab` or `l` opens the detail as a full-screen sheet; `esc`, `h`, or `tab` return. |
 | under 44 | One line: `grove needs ≥44 columns`. Nothing is lost; widening restores the same screen. |
 
@@ -169,7 +169,7 @@ Selecting a worktree updates the detail panel with:
 
 ### Footer
 
-A compact hint bar at the bottom shows essential keybindings, in the format the Input model section sets: `move · ↑↓/jk move · enter switch · space go to · tab detail · / filter · v detailed · g more · ? help · q quit`. `v` names the list mode it switches to: `v detailed` in compact, `v compact` in detailed. It takes two lines under 114 columns. When two lines are not enough, hints drop from the right: `? help` first (gone at 60 columns), then `g more` (gone at 50), then `v` and `/ filter` (gone at 44). The full reference, with every alternate key, is `keyboard shortcuts` in `?`.
+A compact hint bar at the bottom shows essential keybindings, in the format the Input model section sets: `move · ↑↓/jk move · enter switch · space go to · tab detail · / filter · v detailed · g more · ? help · q quit`. `v` names the list mode it switches to: `v detailed` in compact, `v compact` in detailed. `t sidebar` joins after `v` only when the footer stays on one line with it (about 126 columns and up); `t` works at every width from 110. It takes two lines under 114 columns. When two lines are not enough, hints drop from the right: `? help` first (gone at 60 columns), then `g more` (gone at 50), then `v` and `/ filter` (gone at 44). The full reference, with every alternate key, is `keyboard shortcuts` in `?`.
 
 ### Upgrade badge
 
@@ -255,6 +255,7 @@ Toast levels:
 | `O` | Reverse the sort |
 | `r` | Refresh worktree list |
 | `v` | Switch the list between compact and detailed |
+| `t` | Show or hide the detail panel at 110+ columns (does nothing below that) |
 | `/` | Filter list (see Filtering) |
 | `space` | Go to: worktrees, loaded PRs and issues, and actions, as `grove to <name>` does for worktrees (see Go to below) |
 | `?` | Go to, limited to actions: every dashboard action with its key. `keyboard shortcuts` there opens the full key reference. |
@@ -301,7 +302,7 @@ One form, three fields. It docks into the screen, so the list you opened it from
 | Terminal | Where the form sits |
 |---|---|
 | 110+ columns | The right pane, in the detail panel's place. The list keeps its width. |
-| Under 110 columns | The bottom of the screen, full width. The list is shorter and scrolls to keep the cursor row. |
+| Under 110 columns, or the detail panel hidden with `t` | The bottom of the screen, full width. The list is shorter and scrolls to keep the cursor row. |
 | Under 110 columns and under 17 rows (too short to keep 3 list rows) | The whole screen. |
 
 The form's key line replaces the footer. The form keeps one size for a given terminal size: typing, suggestions, and errors never change its height.

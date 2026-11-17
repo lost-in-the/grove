@@ -405,12 +405,12 @@ func TestFooter_ModeWordFirst(t *testing.T) {
 		want string
 	}{
 		{"dashboard", func() Model { return newTestModel(withItems(5), withSize(160, 40)) },
-			"move · ↑↓/jk move · enter switch · space go to · tab detail · / filter · v detailed · g more · ? help · q quit"},
+			"move · ↑↓/jk move · enter switch · space go to · tab detail · / filter · v detailed · t sidebar · g more · ? help · q quit"},
 		{"dashboard typing a filter", func() Model {
 			return typeText(sendKey(newTestModel(withItems(5), withSize(160, 40)), "/"), "fe")
 		}, "type · enter/tab keep · esc clear"},
 		{"detail focused", func() Model { return sendKey(newTestModel(withItems(5), withSize(160, 40)), "tab") },
-			"move · ↑↓/jk scroll · g/G top/bottom · esc/tab back"},
+			"move · ↑↓/jk scroll · g/G top/bottom · t sidebar · esc/tab back"},
 		{"prs", func() Model { return newTestModel(withItems(3), withSize(160, 40), withPRData()) },
 			"move · ↑↓/jk move · enter review · n new worktree · B open in browser · tab detail · / filter · esc close"},
 		{"prs filter applied", func() Model {

@@ -80,6 +80,15 @@ func dashboardActions() []Action {
 				m.toggleListMode()
 				return m, nil
 			}},
+		{ID: "layout.sidebar", Keys: []string{"t"}, Label: "show or hide the sidebar", Short: "sidebar", Footer: 7,
+			Synonyms: []string{"sidebar", "detail pane", "panel", "hide detail"},
+			Run: func(m Model, _ string) (tea.Model, tea.Cmd) {
+				if isWideLayout(m.width) {
+					m.helpFooter.SetHighlight("t")
+				}
+				m.toggleSidebar()
+				return m, nil
+			}},
 		{ID: "detail.open", Keys: []string{"tab", "ctrl+i", "l"}, Label: "show detail", Short: "detail", Footer: 4,
 			Synonyms: []string{"details", "info"},
 			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { m.openDetail(); return m, nil }},
@@ -89,7 +98,7 @@ func dashboardActions() []Action {
 				m.sortMode = m.sortMode.Next(m.agentAware)
 				return m, m.applySortToList()
 			}},
-		{ID: "goto.open", Keys: []string{"g"}, Label: "more", Footer: 7,
+		{ID: "goto.open", Keys: []string{"g"}, Label: "more", Footer: 8,
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) {
 				m.pendingG = true
 				m.updateLayout()
@@ -97,7 +106,7 @@ func dashboardActions() []Action {
 			}},
 		// ? runs from handleKey in every view; its entry feeds the footer
 		// and keeps the key map and this table in step.
-		{ID: "app.help", Keys: []string{"?"}, Label: "help", Footer: 8},
+		{ID: "app.help", Keys: []string{"?"}, Label: "help", Footer: 9},
 		{ID: "app.messages", Label: "messages", Synonyms: []string{"warnings", "errors", "log", "history"},
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) { return m.openMessages() }},
 		{ID: "app.shortcuts", Label: "keyboard shortcuts", Synonyms: []string{"help", "keys", "cli commands"},
@@ -239,10 +248,14 @@ func (m Model) openUpgrade() (tea.Model, tea.Cmd) {
 }
 
 // dashboardFooterHints are the footer-marked actions, in footer order. v is
-// labeled with toggle, the list mode it switches to.
-func dashboardFooterHints(toggle string) []Hint {
+// labeled with toggle, the list mode it switches to. t is offered only when
+// sidebar is set (sidebarHintFits at 110+ columns).
+func dashboardFooterHints(toggle string, sidebar bool) []Hint {
 	var marked []Action
 	for _, a := range dashboardActions() {
+		if a.ID == "layout.sidebar" && !sidebar {
+			continue
+		}
 		if a.Footer > 0 {
 			marked = append(marked, a)
 		}
@@ -267,4 +280,11 @@ func dashboardFooterHints(toggle string) []Hint {
 func notMainOrProtected(m Model) bool {
 	item, ok := m.selectedItem()
 	return ok && !item.IsMain && !item.IsProtected
+}
+
+// sidebarHintFits reports whether the dashboard footer, with v labeled
+// toggle, keeps to one line of width cells with t sidebar in it. A list row
+// is worth more than the hint, so it never makes the footer wrap.
+func sidebarHintFits(toggle string, width int) bool {
+	return fitsOneLine(moveFooter(Hint{"q", "quit"}, dashboardFooterHints(toggle, true)...), width)
 }

@@ -25,6 +25,9 @@ type HelpFooter struct {
 	// listToggle is the list mode v switches to, for the dashboard footer;
 	// "" reads as "detailed". The model keeps it current.
 	listToggle string
+	// sidebarKey offers t in the dashboard footer: 110+ columns, where
+	// there is a pane to show or hide, and only when it fits on one line.
+	sidebarKey bool
 }
 
 // NewHelpFooter creates a HelpFooter.
@@ -108,7 +111,7 @@ func (h *HelpFooter) CompactFooter(view ActiveView) Footer {
 		if toggle == "" {
 			toggle = "detailed"
 		}
-		return moveFooter(Hint{"q", "quit"}, dashboardFooterHints(toggle)...)
+		return moveFooter(Hint{"q", "quit"}, dashboardFooterHints(toggle, h.sidebarKey)...)
 	case ViewIssues:
 		return moveFooter(Hint{"esc", "close"},
 			Hint{"↑↓/jk", "move"}, Hint{"enter", "new worktree"}, Hint{"B", "open in browser"},
@@ -165,6 +168,12 @@ func (h *HelpFooter) Render(f Footer, width int) string {
 // panels that carry their own key line (the form, find, prompts).
 func renderKeyLine(f Footer, width, maxLines int) []string {
 	return fitFooter(f, width, maxLines, func(string) bool { return false })
+}
+
+// fitsOneLine reports whether f fits one line of width cells with every
+// hint kept.
+func fitsOneLine(f Footer, width int) bool {
+	return fitParts(f.parts(f.Hints, func(string) bool { return false }), width, 1) != nil
 }
 
 // keyLine is f on one line of width cells.

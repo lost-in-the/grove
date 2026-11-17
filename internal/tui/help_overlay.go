@@ -330,6 +330,7 @@ var helpSectionsDashboard = append(helpSectionKeys[:len(helpSectionKeys):len(hel
 		{"o", "Cycle sort (name → age → dirty)"},
 		{"O", "Reverse sort"},
 		{"v", "Compact or detailed list"},
+		{"t", "Show or hide the sidebar"},
 		{"r", "Refresh worktree list"},
 		{"c", "Open configuration"},
 	}},

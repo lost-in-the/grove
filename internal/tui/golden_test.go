@@ -410,6 +410,23 @@ func TestGolden_ListModes(t *testing.T) {
 	}
 }
 
+// Both list modes at 120 columns with t's sidebar hidden: the list is full
+// width over the selection line.
+func TestGolden_ListModes_SidebarHidden(t *testing.T) {
+	for _, mode := range []struct {
+		name string
+		opt  func() testOpt
+	}{{"compact", withCompact}, {"detailed", withDetailed}} {
+		t.Run(mode.name, func(t *testing.T) {
+			m := goldenModel(t, sizeWide, mode.opt(), withListFixture(false), func(m *Model) {
+				m.sidebarHidden = true
+				m.updateLayout()
+			})
+			golden.RequireEqual(t, []byte(m.viewString()))
+		})
+	}
+}
+
 // The list modes in color, to check each element's token.
 func TestGolden_Themed_ListModes(t *testing.T) {
 	for _, mode := range []struct {

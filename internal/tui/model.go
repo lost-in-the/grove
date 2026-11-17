@@ -142,6 +142,9 @@ type Model struct {
 	// compactChoice is the list mode chosen with v or tui.compact_list: true
 	// compact, false detailed. nil lets the layout decide (listDetailed).
 	compactChoice *bool
+	// sidebarHidden is t's choice to hide the docked detail pane at 110+
+	// columns (sidebar_hidden in ui_prefs.json).
+	sidebarHidden bool
 
 	// agentAware is true when the first fetch reported the herdr backend.
 	// It is decided once, so columns never appear or vanish mid-session.
@@ -174,12 +177,14 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 	s := GroveSpinner()
 
 	var configCompact, prefCompact *bool
+	sidebarHidden := false
 	if cfg != nil {
 		configCompact = cfg.TUI.CompactList
 	}
 	pins := pinSet{}
 	if prefs := loadUIPrefs(projectRoot); prefs != nil {
 		prefCompact = prefs.CompactMode
+		sidebarHidden = prefs.SidebarHidden != nil && *prefs.SidebarHidden
 		for slot, alias := range prefs.Pins {
 			pins[slot] = alias
 		}
@@ -214,6 +219,7 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		keys:                keys,
 		list:                l,
 		compactChoice:       startupListChoice(configCompact, prefCompact),
+		sidebarHidden:       sidebarHidden,
 		pins:                pins,
 		now:                 time.Now,
 		lastActive:          lastWorktreeName(stateMgr),
@@ -364,10 +370,11 @@ func (m Model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 }
 
 // reconcileDetailWithWidth keeps the detail mode right for the width tier:
-// pane focus exists only at 110+, the full-screen sheet only below it.
+// pane focus exists only while the pane is shown, the full-screen sheet
+// only below 110 columns.
 func (m *Model) reconcileDetailWithWidth() {
 	wide := isWideLayout(m.width)
-	if !wide && m.detailFocused {
+	if !m.sidebarShown() && m.detailFocused {
 		m.detailFocused = false
 		m.refreshDetailForFocus()
 	}
@@ -847,6 +854,7 @@ func (m *Model) updateLayout() {
 	}
 
 	m.helpFooter.listToggle = m.listToggleLabel()
+	m.helpFooter.sidebarKey = isWideLayout(m.width) && sidebarHintFits(m.helpFooter.listToggle, m.width-4)
 	headRows := 1 + m.rowDelegate().headRows() // the filter row, and compact's heading
 
 	headerHeight := 1 // status bar
@@ -855,8 +863,7 @@ func (m *Model) updateLayout() {
 
 	contentWidth := m.width - 2 // body padding (1 char each side)
 
-	useSideBySide := isWideLayout(m.width)
-	if useSideBySide {
+	if m.sidebarShown() {
 		// List gets 60% of content width, detail gets the remainder. The
 		// filter row sits above the list.
 		listWidth := contentWidth * 60 / 100
@@ -877,6 +884,36 @@ func (m *Model) updateLayout() {
 	m.refreshDelegate()
 
 	m.help.SetWidth(contentWidth)
+}
+
+// sidebarShown reports whether the dashboard docks the detail pane beside
+// the list: 110+ columns, unless t hid it.
+func (m Model) sidebarShown() bool {
+	return isWideLayout(m.width) && !m.sidebarHidden
+}
+
+// toggleSidebar shows or hides the docked pane. Below 110 columns there is
+// no pane, so it does nothing and the saved choice stands.
+func (m *Model) toggleSidebar() {
+	if isWideLayout(m.width) {
+		m.setSidebarHidden(!m.sidebarHidden)
+	}
+}
+
+// setSidebarHidden applies and saves the sidebar choice, keeping the
+// selected row. A hidden pane cannot keep focus.
+func (m *Model) setSidebarHidden(hidden bool) {
+	m.sidebarHidden = hidden
+	if err := updateUIPrefs(m.projectRoot, func(p *UIPrefs) { p.SidebarHidden = &hidden }); err != nil {
+		tuilog.Printf("warning: failed to save UI prefs: %v", err)
+	}
+	if hidden {
+		m.detailFocused = false
+	}
+	idx := m.list.Index()
+	m.updateLayout()
+	m.list.Select(idx)
+	m.refreshDetailForFocus()
 }
 
 // toggleListMode switches compact and detailed and saves the choice
@@ -1151,6 +1188,10 @@ func (m Model) handleDashboardDetailKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd
 	if key.Matches(msg, m.keys.Escape) || key.Matches(msg, m.keys.Tab) || msg.String() == "h" {
 		m.detailFocused = false
 		m.refreshDetailForFocus()
+		return m, nil
+	}
+	if key.Matches(msg, m.keys.Sidebar) {
+		m.toggleSidebar()
 		return m, nil
 	}
 	if key.Matches(msg, m.keys.Quit) {
@@ -1664,8 +1705,6 @@ func (m Model) renderDashboard() string {
 	m.header = m.buildDashboardHeader()
 	statusBar := m.header.View(m.width)
 
-	body := m.renderDashboardBody()
-
 	var footer string
 	switch {
 	case m.detailFocused:
@@ -1679,6 +1718,8 @@ func (m Model) renderDashboard() string {
 		footer = strip + "\n" + footer
 	}
 
+	footerLines := strings.Count(footer, "\n") + 1
+	body := m.renderDashboardBody(m.height - 1 - footerLines)
 	body = lipgloss.NewStyle().Padding(0, 1).Render(body)
 	body = m.clampBodyToHeight(body, footer)
 	if body == "" {
@@ -1715,19 +1756,23 @@ func (m Model) buildDashboardHeader() Header {
 	return h
 }
 
-// renderDashboardBody renders the list and detail panels in side-by-side or stacked layout.
-func (m Model) renderDashboardBody() string {
-	if isWideLayout(m.width) {
-		return m.renderSideBySideBody()
+// renderDashboardBody renders the list and detail panels in side-by-side or
+// stacked layout, in rows lines between the header and the footer.
+func (m Model) renderDashboardBody(rows int) string {
+	if m.sidebarShown() {
+		return m.renderSideBySideBody(rows)
 	}
 	return m.renderStackedBody()
 }
 
-func (m Model) renderSideBySideBody() string {
+// renderSideBySideBody draws the divider down all rows: the list is sized
+// for the dashboard footer, and a shorter footer (pane focused, filter
+// typing) leaves rows under it that the divider still spans.
+func (m Model) renderSideBySideBody(rows int) string {
 	listWidth := m.list.Width()
 	d := m.rowDelegate()
 	listContent := lipgloss.NewStyle().Width(listWidth).Render(m.dashboardListView(m.list, d))
-	divider := renderVerticalDivider(m.list.Height()+1+d.headRows(), Colors.SurfaceDim)
+	divider := renderVerticalDivider(max(rows, m.list.Height()+1+d.headRows()), Colors.SurfaceDim)
 	detailView := m.renderDetailPanel()
 	return lipgloss.JoinHorizontal(lipgloss.Top, listContent, divider, detailView)
 }
@@ -1848,7 +1893,15 @@ func (m Model) dashboardDetailFooter() Footer {
 	if item, ok := m.selectedItem(); ok && item.AssociatedPR != nil {
 		extra = append(extra, Hint{"B", "open in browser"})
 	}
-	return detailFooter(Hint{"esc/tab", "back"}, extra...)
+	f := detailFooter(Hint{"esc/tab", "back"}, extra...)
+	if !isWideLayout(m.width) {
+		return f // the sheet: t does nothing below 110 columns
+	}
+	withT := detailFooter(Hint{"esc/tab", "back"}, append(extra, Hint{"t", "sidebar"})...)
+	if fitsOneLine(withT, m.width-4) {
+		return withT
+	}
+	return f
 }
 
 // clampLines pads or trims s to exactly n lines.

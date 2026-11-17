@@ -40,6 +40,7 @@ type KeyMap struct {
 
 	// View mode
 	ViewMode key.Binding
+	Sidebar  key.Binding
 
 	// Switch and bring the stack
 	SwitchUp key.Binding
@@ -189,6 +190,10 @@ func DefaultKeyMap() KeyMap {
 		ViewMode: key.NewBinding(
 			key.WithKeys("v"),
 			key.WithHelp("v", "compact or detailed"),
+		),
+		Sidebar: key.NewBinding(
+			key.WithKeys("t"),
+			key.WithHelp("t", "sidebar"),
 		),
 		Fork: key.NewBinding(
 			key.WithKeys("f"),
