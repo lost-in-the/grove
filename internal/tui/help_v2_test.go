@@ -11,20 +11,21 @@ func TestHelpFooterCompactHints(t *testing.T) {
 		view     ActiveView
 		wantKeys []string
 	}{
-		{"Dashboard hints", ViewDashboard, []string{"↑↓", "enter", "␣", "tab", "/", "g", "?"}},
-		{"Issues hints", ViewIssues, []string{"↑↓", "enter", "/", "esc"}},
+		{"Dashboard hints", ViewDashboard, []string{"↑↓/jk", "enter", "space", "tab", "/", "g", "?", "q"}},
+		{"Issues hints", ViewIssues, []string{"↑↓/jk", "enter", "/", "esc"}},
 		{"Create hints", ViewBranchForm, []string{"enter", "esc"}},
-		{"Delete hints", ViewDelete, []string{"y", "n", "space"}},
+		{"Delete hints", ViewDelete, []string{"y", "esc/n", "space"}},
 		{"Bulk hints", ViewBulk, []string{"space", "enter", "esc"}},
-		{"PRs hints", ViewPRs, []string{"enter", "esc", "↑↓"}},
-		{"Sync hints", ViewSync, []string{"enter", "esc", "↑↓"}},
-		{"Config hints", ViewConfig, []string{"tab", "ctrl+n/p", "esc"}},
+		{"PRs hints", ViewPRs, []string{"enter", "esc", "↑↓/jk"}},
+		{"Sync hints", ViewSync, []string{"enter", "esc", "↑↓/jk"}},
+		{"Config hints", ViewConfig, []string{"↑↓/jk", "esc"}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			hf := NewHelpFooter()
-			hints := hf.CompactHints(tt.view)
+			f := hf.CompactFooter(tt.view)
+			hints := append(f.Hints, f.Leave)
 			// Each expected key must appear in at least one hint
 			for _, wantKey := range tt.wantKeys {
 				found := false
@@ -51,8 +52,8 @@ func TestHelpFooterRenderCompact(t *testing.T) {
 	}
 
 	// Should contain key hints as visible text
-	if !strings.Contains(result, "navigate") {
-		t.Error("expected 'navigate' in compact footer")
+	if !strings.HasPrefix(stripAnsi(result), "  move · ↑↓/jk move") {
+		t.Errorf("expected the mode word, then the move hint: %q", stripAnsi(result))
 	}
 	if !strings.Contains(result, "?") {
 		t.Error("expected '?' key hint in compact footer")

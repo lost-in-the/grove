@@ -262,6 +262,7 @@ var hereCmd = &cobra.Command{
 func init() {
 	hereCmd.Flags().BoolVarP(&hereQuiet, "quiet", "q", false, "Just print the worktree name")
 	hereCmd.Flags().BoolVarP(&hereJSON, "json", "j", false, "Output as JSON")
+	hereCmd.MarkFlagsMutuallyExclusive("json", "quiet")
 	hereCmd.Flags().BoolVar(&hereCheckMount, "check-mount", false, "Compare the worktree the stack is on with what the running containers mount; exits non-zero on drift")
 	hereCmd.Flags().BoolVar(&hereRequireCurrent, "require-current", false, "With --check-mount, also exit non-zero if you are not in the worktree the stack is on")
 	rootCmd.AddCommand(hereCmd)

@@ -782,11 +782,10 @@ func TestQuitKeys(t *testing.T) {
 	}
 }
 
-func TestEscQuitsDashboard(t *testing.T) {
+func TestEscDoesNotQuitDashboard(t *testing.T) {
 	m := newTestModel(withItems(1), withSize(80, 24))
-	_, cmd := m.Update(makeKeyMsg("esc"))
-	if cmd == nil {
-		t.Error("expected quit cmd from esc on dashboard")
+	if _, cmd := m.Update(makeKeyMsg("esc")); isQuit(cmd) {
+		t.Error("esc at the dashboard root quit; only q and ctrl+c quit")
 	}
 }
 

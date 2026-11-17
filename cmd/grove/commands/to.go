@@ -19,18 +19,49 @@ import (
 	"github.com/lost-in-the/grove/plugins/docker"
 )
 
-var (
-	toJSON   bool
-	toPeek   bool
-	toNoTmux bool
-	toUp     bool
-)
+var toFlags switchFlags
 
-// switchOptions are the per-invocation flags shared by `grove to` and `grove last`.
+// switchFlags are the flags `grove to` and `grove last` share. Registering
+// them in one place keeps the two commands from drifting apart.
+type switchFlags struct {
+	json    bool
+	here    bool
+	noHooks bool
+	peek    bool
+	up      bool
+}
+
+func (f *switchFlags) register(cmd *cobra.Command) {
+	cmd.Flags().BoolVarP(&f.json, "json", "j", false, jsonSwitchHelp)
+	addHereFlag(cmd, &f.here)
+	cmd.Flags().BoolVar(&f.noHooks, "no-hooks", false, "Skip hooks and the dirty check for this run")
+	cmd.Flags().BoolVar(&f.peek, "peek", false, "Look without side effects: short for --here --no-hooks")
+	cmd.Flags().BoolVarP(&f.up, "up", "u", false, "Also bring the stack to the worktree you move to")
+	// --up works through the switch hooks, so it cannot be combined with a
+	// flag that skips them.
+	cmd.MarkFlagsMutuallyExclusive("up", "peek")
+	cmd.MarkFlagsMutuallyExclusive("up", "no-hooks")
+}
+
+func (f switchFlags) options() switchOptions {
+	return switchOptions{
+		JSON:    f.json,
+		Here:    f.here || f.peek,
+		NoHooks: f.noHooks || f.peek,
+		Up:      f.up,
+	}
+}
+
+// switchOptions are the per-invocation choices of a switch. Placement (Here)
+// and side effects (NoHooks) are independent.
 type switchOptions struct {
-	JSON   bool
-	Peek   bool
-	NoTmux bool
+	JSON bool
+	// Here stays in the calling shell: no session is created, switched to, or
+	// attached.
+	Here bool
+	// NoHooks skips the switch hooks and the dirty gate, so the run changes
+	// nothing but where you are.
+	NoHooks bool
 	// Up brings the stack to the target as well: it forces container_switch to
 	// "auto" for this invocation. Without it the setting decides, and its
 	// default ("off") means a switch never touches Docker.
@@ -125,20 +156,28 @@ var toCmd = &cobra.Command{
 	Use:     "to [name]",
 	Aliases: []string{"switch", "t"},
 	Short:   "Move to a worktree",
-	Long: `Move to a worktree by name. If a tmux session exists for the worktree, switch to it.
-If no tmux session exists, create one.
+	Long: `Move to a worktree by name.
+
+Where you land is the placement. There are two:
+
+  session   The worktree's own session (a tmux session or a herdr
+            workspace). Grove creates it if needed and moves you to it.
+            This is the default.
+  here      The shell or pane you are in. Grove only changes directory.
+
+Set the placement for every move with [session] open_in = "session" or
+"here". Use --here to stay here for one run. With no multiplexer, every move
+lands here.
+
+Hooks are a separate choice. They run on every move unless you pass
+--no-hooks, which also skips the dirty check. --peek is short for
+--here --no-hooks: a look at a worktree with no side effects.
 
 This moves you only. It does not touch the Docker stack. Run 'grove up' to
 bring the stack to the worktree you are in, or use --up to move and bring the
 stack in one step. To make every move bring the stack, set
-[switch] container_switch = "auto".
-
-Use --peek for a lightweight move that skips hooks and tmux entirely
-(no tmux client relocation). Useful for code review or quick file checks.
-
-Use --no-tmux to switch without creating, switching, or attaching tmux
-sessions — hooks still fire. Useful for automation running inside an
-existing tmux session.
+[switch] container_switch = "auto". --up needs the hooks, so it cannot be
+combined with --no-hooks or --peek.
 
 When using shell integration, this will also change your current directory.`,
 	Args:              cobra.MaximumNArgs(1),
@@ -159,8 +198,21 @@ When using shell integration, this will also change your current directory.`,
 			return fmt.Errorf("worktree name cannot be empty")
 		}
 
-		return performSwitch(ctx, name, switchOptions{JSON: toJSON, Peek: toPeek, NoTmux: toNoTmux, Up: toUp})
+		return performSwitch(ctx, name, toFlags.options())
 	}),
+}
+
+// uncommittedNotice is the line dirty_handling = "warn" prints about the
+// worktree being left. A count of zero means the files could not be listed.
+func uncommittedNotice(worktreeName string, files int) string {
+	switch files {
+	case 0:
+		return fmt.Sprintf("%s has uncommitted changes", worktreeName)
+	case 1:
+		return fmt.Sprintf("%s has 1 uncommitted file", worktreeName)
+	default:
+		return fmt.Sprintf("%s has %d uncommitted files", worktreeName, files)
+	}
 }
 
 // findSwitchTarget resolves the worktree a switch goes to: by path when one is
@@ -174,13 +226,13 @@ func findSwitchTarget(mgr *worktree.Manager, name, path string) (*worktree.Workt
 
 // performSwitch executes the full switch-to-worktree flow shared by `grove to`
 // and `grove last`: resolve the target, honor dirty handling, fire pre/post
-// switch hooks, manage the tmux session, and emit the cd/attach directives.
+// switch hooks, manage the session, and emit the cd/attach directives.
 // The JSON result is emitted before the tmux client is relocated, so a machine
 // caller (--json) never has its terminal moved (B20); sharing this flow also
 // gives `grove last` the hooks and dirty handling it previously skipped (B19).
 // opts holds the per-invocation flags.
 func performSwitch(ctx *GroveContext, name string, opts switchOptions) error {
-	jsonOut, peek, noTmux := opts.JSON, opts.Peek, opts.NoTmux
+	jsonOut, here, noHooks := opts.JSON, opts.Here, opts.NoHooks
 	stderr := cli.NewStderr()
 	hookConfig := switchConfigForStack(ctx.Config, opts.Up)
 
@@ -219,7 +271,7 @@ func performSwitch(ctx *GroveContext, name string, opts switchOptions) error {
 		// container_switch of auto/prompt) is the way to bring it here. --up
 		// also starts a stack that is already here but down.
 		configured, configuredOK := docker.ConfiguredWorktreePath(ctx.Config)
-		if events := selfSwitchStackEvents(ctx.Config.IsExternalDockerMode(), stackFollowsSwitch(hookConfig), opts.Up, configured, configuredOK, targetTree.Path, peek); len(events) > 0 {
+		if events := selfSwitchStackEvents(ctx.Config.IsExternalDockerMode(), stackFollowsSwitch(hookConfig), opts.Up, configured, configuredOK, targetTree.Path, noHooks); len(events) > 0 {
 			runStackSwitchHooks(ctx, hookConfig, mgr, targetTree, configured, events, jsonOut, stderr)
 		}
 
@@ -227,7 +279,7 @@ func performSwitch(ctx *GroveContext, name string, opts switchOptions) error {
 		if jsonOut {
 			return output.PrintJSON(switchResult(targetTree, stack))
 		}
-		if !peek {
+		if peeking := here && noHooks; !peeking {
 			cli.Info(stderr, "Already in '%s'", targetTree.DisplayName())
 		}
 		reportStack(stderr, stack, jsonOut)
@@ -239,7 +291,7 @@ func performSwitch(ctx *GroveContext, name string, opts switchOptions) error {
 		// Inside it there is nothing to do — the client is already there.
 		if !ctx.Mux().Inside() {
 			emitCdOrExplain(stderr, targetTree.Path)
-			return selfSwitchTmuxEpilogue(ctx, mgr, targetTree, stderr, noTmux, peek)
+			return selfSwitchTmuxEpilogue(ctx, mgr, targetTree, stderr, here)
 		}
 		return nil
 	}
@@ -263,15 +315,18 @@ func performSwitch(ctx *GroveContext, name string, opts switchOptions) error {
 			log.Printf("failed to check dirty state: %v", wipErr)
 			// Treat check failure as clean to avoid blocking the user
 		}
-		action := worktree.ResolveDirtyAction(ctx.Config.Switch.DirtyHandling, hasDirty, peek, cli.IsInteractive())
+		action := worktree.ResolveDirtyAction(ctx.Config.Switch.DirtyHandling, hasDirty, noHooks, cli.IsInteractive())
 		switch action {
+		case worktree.DirtyWarn:
+			files, _ := wip.ListWIPFiles()
+			cli.Warning(stderr, "%s", uncommittedNotice(prevWorktree, len(files)))
 		case worktree.DirtyRefuse:
 			files, _ := wip.ListWIPFiles()
 			msg := fmt.Sprintf("worktree '%s' has uncommitted changes", prevWorktree)
 			if len(files) > 0 {
 				msg += ":\n  " + strings.Join(files, "\n  ")
 			}
-			msg += "\n\nCommit or stash your changes, or set dirty_handling = \"auto-stash\" in .grove/config.toml"
+			msg += "\n\nCommit or stash your changes, or set dirty_handling = \"warn\" in .grove/config.toml"
 			return fmt.Errorf("%s", msg)
 		case worktree.DirtyStash:
 			stashMsg := fmt.Sprintf("grove: auto-stash before switch to %s", name)
@@ -325,7 +380,7 @@ func performSwitch(ctx *GroveContext, name string, opts switchOptions) error {
 		}()
 	}
 
-	// Build hook context (used by pre/post-switch hooks unless --peek). Worktree
+	// Build hook context (used by pre/post-switch hooks unless --no-hooks). Worktree
 	// is the resolved short name — Find also matches by branch or directory, so
 	// the raw argument could name something that isn't the worktree (B21).
 	hookCtx := &hooks.Context{
@@ -350,12 +405,11 @@ func performSwitch(ctx *GroveContext, name string, opts switchOptions) error {
 		NewPath:  targetTree.Path,
 		PrevPath: prevWorktreePath,
 	}
-	if !peek {
+	if !noHooks {
 		switchHooks = loadConfigHookExecutor(stderr, ctx.ProjectRoot)
 	}
 
-	// Fire pre-switch hooks (skip when --peek)
-	if !peek {
+	if !noHooks {
 		if !jsonOut {
 			cli.Step(stderr, "Switching to '%s'...", name)
 		}
@@ -383,7 +437,7 @@ func performSwitch(ctx *GroveContext, name string, opts switchOptions) error {
 	}
 
 	cfg := ctx.Config
-	tmuxMode := resolveTmuxMode(cfg, noTmux, peek)
+	tmuxMode := resolveTmuxMode(cfg, here)
 
 	// Handle the multiplexer session (unless mode is "off")
 	var target mux.Target
@@ -432,7 +486,7 @@ func performSwitch(ctx *GroveContext, name string, opts switchOptions) error {
 	// so the user sees Docker progress in the current session. After the
 	// tmux switch the old session's stderr is no longer visible.
 	// Also fire before the JSON return so machine consumers get hooks too.
-	if !peek {
+	if !noHooks {
 		if hooks.HasHooks(hooks.EventPostSwitch) && stackFollowsSwitch(hookConfig) {
 			cli.Step(stderr, "Bringing the stack up...")
 		}
@@ -515,9 +569,9 @@ func performSwitch(ctx *GroveContext, name string, opts switchOptions) error {
 // shouldRepointStack reports whether a self-switch (`grove to <current>`) runs
 // the Docker switch hooks. It needs three things: external mode, a stack that
 // follows a move (--up, or container_switch auto/prompt), and a stack that is
-// not already on the target (unset counts). --peek never has side effects.
-func shouldRepointStack(external, follows bool, configured string, configuredOK bool, target string, peek bool) bool {
-	if !external || !follows || peek {
+// not already on the target (unset counts). --no-hooks never has side effects.
+func shouldRepointStack(external, follows bool, configured string, configuredOK bool, target string, noHooks bool) bool {
+	if !external || !follows || noHooks {
 		return false
 	}
 	return !configuredOK || filepath.Clean(configured) != filepath.Clean(target)
@@ -530,11 +584,11 @@ func shouldRepointStack(external, follows bool, configured string, configuredOK 
 // --up and nothing to repoint (the stack is already here, or local mode has no
 // env file) only post-switch fires: it starts a stack that is down, and
 // pre-switch would stop one that is up. Without --up that case stays a no-op.
-func selfSwitchStackEvents(external, follows, up bool, configured string, configuredOK bool, target string, peek bool) []string {
-	if shouldRepointStack(external, follows, configured, configuredOK, target, peek) {
+func selfSwitchStackEvents(external, follows, up bool, configured string, configuredOK bool, target string, noHooks bool) []string {
+	if shouldRepointStack(external, follows, configured, configuredOK, target, noHooks) {
 		return []string{hooks.EventPreSwitch, hooks.EventPostSwitch}
 	}
-	if up && !peek {
+	if up && !noHooks {
 		return []string{hooks.EventPostSwitch}
 	}
 	return nil
@@ -596,12 +650,12 @@ func runStackSwitchHooks(ctx *GroveContext, hookConfig *config.Config, mgr *work
 	}
 }
 
-// selfSwitchTmuxEpilogue ensures the target worktree's tmux session exists and
-// is reachable when `grove to <current>` runs outside tmux — mirroring the
+// selfSwitchTmuxEpilogue ensures the target worktree's session exists and is
+// reachable when `grove to <current>` runs outside the multiplexer, mirroring the
 // session handling a real switch performs, minus hooks/dirty/state (which a
 // self-switch deliberately skips, B18).
-func selfSwitchTmuxEpilogue(ctx *GroveContext, mgr *worktree.Manager, targetTree *worktree.Worktree, stderr *cli.Writer, noTmux, peek bool) error {
-	tmuxMode := resolveTmuxMode(ctx.Config, noTmux, peek)
+func selfSwitchTmuxEpilogue(ctx *GroveContext, mgr *worktree.Manager, targetTree *worktree.Worktree, stderr *cli.Writer, here bool) error {
+	tmuxMode := resolveTmuxMode(ctx.Config, here)
 	m := ctx.Mux()
 	if tmuxMode == tmuxModeOff || !m.Available() {
 		return nil
@@ -636,34 +690,26 @@ func selfSwitchTmuxEpilogue(ctx *GroveContext, mgr *worktree.Manager, targetTree
 	return nil
 }
 
-// effectiveTmuxMode returns the tmux mode after per-invocation overrides.
-// Agent mode suppresses tmux to prevent terminal takeover; --no-tmux does the
-// same for a single invocation without implying agent Docker isolation; --peek
-// is observational and must never relocate the caller's tmux client (#105).
-func effectiveTmuxMode(mode string, agentMode, noTmux, peek bool) string {
-	if agentMode || noTmux || peek {
+// effectiveTmuxMode returns the session mode after per-invocation overrides.
+// Agent mode turns session handling off to prevent terminal takeover. A "here"
+// placement does the same without implying agent Docker isolation.
+func effectiveTmuxMode(mode string, agentMode, here bool) string {
+	if agentMode || here {
 		return tmuxModeOff
 	}
 	return mode
 }
 
-// resolveTmuxMode returns the effective tmux mode for this invocation: the
+// resolveTmuxMode returns the effective session mode for this invocation: the
 // configured mode (defaulting to "auto" when unset) filtered through the
-// per-invocation suppressors. Shared by performSwitch and `grove open` so
-// the defaulting rule can't drift between them.
-func resolveTmuxMode(cfg *config.Config, noTmux, peek bool) string {
+// placement. Shared by performSwitch and `grove open` so the defaulting rule
+// can't drift between them. Hooks do not depend on it.
+func resolveTmuxMode(cfg *config.Config, here bool) string {
 	mode := cfg.Tmux.Mode
 	if mode == "" {
 		mode = tmuxModeAuto
 	}
-	// [session] open_in = "current" is the standing form of "don't relocate
-	// me": the worktree lands in the shell already running, so there is no
-	// session to create or switch to. Unlike --peek it does not skip hooks —
-	// those gate on peek directly, not on the mode this returns.
-	if cfg.EffectiveOpenIn() == config.OpenInCurrent {
-		return tmuxModeOff
-	}
-	return effectiveTmuxMode(mode, cfg.AgentMode, noTmux, peek)
+	return effectiveTmuxMode(mode, cfg.AgentMode, landsHere(cfg, here))
 }
 
 // handleDirectoryDrift detects if a session's active pane has drifted from the
@@ -675,7 +721,7 @@ func handleDirectoryDrift(m mux.Multiplexer, target mux.Target, worktreePath, on
 		return
 	}
 
-	if pane.CurrentPath == worktreePath {
+	if mux.SamePath(pane.CurrentPath, worktreePath) {
 		return
 	}
 
@@ -693,23 +739,14 @@ func handleDirectoryDrift(m mux.Multiplexer, target mux.Target, worktreePath, on
 		// parent directory plus the naming pattern (and externally created
 		// worktrees can live anywhere), so it may legally contain single
 		// quotes — escape them with the standard '\'' idiom.
-		if err := m.SendCommand(target, "cd "+shellSingleQuote(worktreePath)); err != nil {
+		if err := m.SendCommand(target, "cd "+cli.ShellQuote(worktreePath)); err != nil {
 			log.Printf("failed to reset directory in session %q: %v", target.Name, err)
 		}
 	}
 }
 
-// shellSingleQuote wraps s in single quotes for safe interpolation into a
-// POSIX shell command line, escaping embedded single quotes with '\”.
-func shellSingleQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
 func init() {
-	toCmd.Flags().BoolVarP(&toJSON, "json", "j", false, "Output as JSON with switch_to field")
-	toCmd.Flags().BoolVar(&toPeek, "peek", false, "Lightweight move: skip hooks and tmux (no session side effects)")
-	toCmd.Flags().BoolVarP(&toUp, "up", "u", false, "Also bring the stack to the worktree you move to")
-	toCmd.MarkFlagsMutuallyExclusive("up", "peek")
-	toCmd.Flags().BoolVar(&toNoTmux, "no-tmux", false, "Skip tmux session creation/switch/attach for this invocation")
+	toFlags.register(toCmd)
+	addDeprecatedNoTmuxFlag(toCmd, &toFlags.here)
 	rootCmd.AddCommand(toCmd)
 }

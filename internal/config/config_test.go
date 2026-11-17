@@ -16,8 +16,8 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.DefaultBranch != "main" {
 		t.Errorf("Expected default branch 'main', got '%s'", cfg.DefaultBranch)
 	}
-	if cfg.Switch.DirtyHandling != "prompt" {
-		t.Errorf("Expected default dirty handling 'prompt', got '%s'", cfg.Switch.DirtyHandling)
+	if cfg.Switch.DirtyHandling != "warn" {
+		t.Errorf("Expected default dirty handling 'warn', got '%s'", cfg.Switch.DirtyHandling)
 	}
 }
 
@@ -369,6 +369,28 @@ skip_branch_notice = true
 				}
 				if !strings.Contains(content, "skip_branch_notice = true") {
 					t.Errorf("existing key should be preserved, got:\n%s", content)
+				}
+			},
+		},
+		{
+			// The section is everything before the last dot: a key under
+			// [plugins.docker] is replaced there, not added as a second,
+			// conflicting docker.enabled under [plugins].
+			name: "update a key in a nested section",
+			initial: `[plugins.docker]
+enabled = true
+`,
+			updates: map[string]string{"plugins.docker.enabled": "false"},
+			validate: func(t *testing.T, content string) {
+				var got struct{ Plugins PluginsConfig }
+				if _, err := toml.Decode(content, &got); err != nil {
+					t.Fatalf("invalid TOML: %v\n%s", err, content)
+				}
+				if e := got.Plugins.Docker.Enabled; e == nil || *e {
+					t.Errorf("enabled should read back false:\n%s", content)
+				}
+				if strings.Contains(content, "[plugins]") {
+					t.Errorf("no [plugins] section should be added:\n%s", content)
 				}
 			},
 		},
@@ -1830,7 +1852,7 @@ enabled = false
 		t.Errorf("Plugins.Docker.Enabled = %v, want global false", cfg.Plugins.Docker.Enabled)
 	}
 	// And defaults still fill fields no layer set.
-	if cfg.Switch.DirtyHandling != "prompt" {
-		t.Errorf("Switch.DirtyHandling = %q, want default %q", cfg.Switch.DirtyHandling, "prompt")
+	if cfg.Switch.DirtyHandling != "warn" {
+		t.Errorf("Switch.DirtyHandling = %q, want default %q", cfg.Switch.DirtyHandling, "warn")
 	}
 }

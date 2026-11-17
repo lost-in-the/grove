@@ -33,6 +33,9 @@ type Worktree struct {
 	ShortName        string // Short name without project prefix
 	IsPrunable       bool   // Whether the worktree directory is missing (stale)
 	IsLocked         bool   // Whether git has the worktree locked (grove must not force-delete it)
+	// OffPattern: the folder name does not follow the naming pattern, so the
+	// short name is the whole folder name. Never set on the main worktree.
+	OffPattern bool
 }
 
 // Manager handles git worktree operations
@@ -658,16 +661,17 @@ func newWorktreeEntry(path, mainPath, projectName, namePattern string) *Worktree
 	name := filepath.Base(path)
 	isMain := (path == mainPath)
 
-	shortName := name
+	shortName, matched := name, true
 	if !isMain {
-		shortName, _ = shortNameFromFull(name, projectName, namePattern)
+		shortName, matched = shortNameFromFull(name, projectName, namePattern)
 	}
 
 	return &Worktree{
-		Path:      path,
-		Name:      name,
-		IsMain:    isMain,
-		ShortName: shortName,
+		Path:       path,
+		Name:       name,
+		IsMain:     isMain,
+		ShortName:  shortName,
+		OffPattern: !matched,
 	}
 }
 

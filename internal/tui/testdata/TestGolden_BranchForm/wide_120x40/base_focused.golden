@@ -1,0 +1,40 @@
+ [1m[1mtest-project[m · 5 worktrees · ⬍ name                                                                                1/5[m 
+                                                                        │ ──[1m New worktree [m───────────────────────────── 
+     NAME         BRANCH                               STATE  AGE       │   Branch  [37m[m[37mabc-12[m [37m                            [m 
+   ● [1mroot[m         root ·····································   0s       │ ❯ Base    [37m[mf[7;37m [m                                  
+   ○ feature-auth feature-auth ·····························  60m       │           › feature/auth         in use: auth 
+   ○ fix-bug      fix-bug ··································   2h       │             fix/login                existing 
+   ● testing      testing ··································   3h       │                                               
+   ○ refactor     refactor ·································   4h       │                                               
+                                                                        │   Name    [37m[m[37mabc-12[m [37m                            [m 
+                                                                        │           folder grove-abc-12                 
+                                                                        │           session grove-abc-12                
+                                                                        │ base branch "f" not found                     
+                                                                        │ type · [1m↑↓/ctrl+jk[m pick                        
+                                                                        │ [1mtab[m next · [1menter[m create · [1mesc[m cancel          
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               

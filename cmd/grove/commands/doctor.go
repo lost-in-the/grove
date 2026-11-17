@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -59,7 +60,8 @@ Examples:
   grove doctor my-feature     # audit one worktree
   grove doctor --all          # audit every registered worktree
   grove doctor my-feature --fix   # restore missing entries in one worktree`,
-	Args: cobra.MaximumNArgs(1),
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: completeWorktreeNames,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		w := cli.NewStdout()
 
@@ -108,27 +110,40 @@ Examples:
 			return strings.TrimSpace(strings.TrimPrefix(string(out), "git version ")), nil
 		}) && allPassed
 
+		// The two multiplexers are peers: only the one sessions actually run
+		// on has to be installed, so a missing binary is graded against the
+		// backend the project resolves to.
+		m := doctorMux()
+		if warning := herdrAppWarning(mux.InsideHerdrApp(), m.Backend()); warning != "" {
+			cli.Warning(w, "Herdr app: %s", warning)
+		}
+
 		// Check: tmux available
-		runOptionalCheck(w, "Tmux", func() (string, error) {
+		allPassed = reportMuxBinary(w, "Tmux", mux.BackendTmux, m.Backend(), func() (string, error) {
 			out, err := cmdexec.Output(context.TODO(), "tmux", []string{"-V"}, "", cmdexec.Tmux)
 			if err != nil {
-				return "", fmt.Errorf("tmux not found in PATH (optional, needed for session management)")
+				return "", errMuxBinaryNotFound
 			}
 			return strings.TrimSpace(string(out)), nil
-		})
+		}) && allPassed
 
 		// Check: herdr available
-		runOptionalCheck(w, "Herdr", func() (string, error) {
+		herdrVersion := ""
+		allPassed = reportMuxBinary(w, "Herdr", mux.BackendHerdr, m.Backend(), func() (string, error) {
 			bin := mux.HerdrBinary()
 			if _, err := exec.LookPath(bin); err != nil {
-				return "", fmt.Errorf("herdr not found in PATH (optional, alternative to tmux for session management)")
+				return "", errMuxBinaryNotFound
 			}
 			out, err := cmdexec.Output(context.TODO(), bin, []string{"--version"}, "", cmdexec.Herdr)
 			if err != nil {
 				return "", fmt.Errorf("herdr found but `herdr --version` failed: %v", err)
 			}
-			return strings.TrimSpace(string(out)), nil
-		})
+			herdrVersion = strings.TrimSpace(string(out))
+			return herdrVersion, nil
+		}) && allPassed
+		if warning := herdrVersionWarning(herdrVersion); warning != "" {
+			cli.Warning(w, "Herdr: %s", warning)
+		}
 
 		// Check: herdr server usable. Only meaningful once herdr is the
 		// resolved backend — grove's session calls need a live server that
@@ -137,27 +152,24 @@ Examples:
 		// match, so after an upgrade the old server keeps running but refuses
 		// every call until it is restarted; a bare listing can't tell that
 		// apart from "unreachable", herdr's own status report can.
-		if m := doctorMux(); m.Backend() == mux.BackendHerdr {
+		if m.Backend() == mux.BackendHerdr {
+			staleWarning := ""
 			runOptionalCheck(w, "Herdr server", func() (string, error) {
 				status, err := mux.ProbeHerdrServer()
 				if err != nil {
 					return "", fmt.Errorf("herdr server unreachable: %v", err)
 				}
-				switch {
-				case !status.Running:
-					return "", fmt.Errorf("no herdr server running — start one with `herdr`, or grove will fall back to plain directory switching")
-				case !status.Usable():
-					// Usually the CLI was just upgraded and the old server is
-					// still running; herdr's JSON API needs an exact protocol
-					// match either way.
-					return "", fmt.Errorf("herdr server %s and the installed herdr CLI speak different protocols — after an upgrade, restart the server (`herdr server stop`, then `herdr`); if the CLI is the older one, update it. Until then grove falls back to plain directory switching", status.Version)
-				}
-				return fmt.Sprintf("reachable (herdr %s)", status.Version), nil
+				detail, warning, err := herdrServerVerdict(status)
+				staleWarning = warning
+				return detail, err
 			})
+			if staleWarning != "" {
+				cli.Warning(w, "Herdr server: %s", staleWarning)
+			}
 		}
 
 		// Check: aggressive-resize warning for iTerm2 control mode
-		if tmux.IsControlModeTerminal() {
+		if controlModeCheckApplies(m.Backend(), tmux.IsControlModeTerminal()) {
 			runOptionalCheck(w, "Tmux control mode", func() (string, error) {
 				out, err := cmdexec.Output(context.TODO(), "tmux", []string{"show-option", "-gv", "aggressive-resize"}, "", cmdexec.Tmux)
 				if err == nil && strings.TrimSpace(string(out)) == "on" {
@@ -214,6 +226,10 @@ Examples:
 					return "loaded", nil
 				}) && allPassed
 			}
+
+			runOptionalCheck(w, "Config spelling", func() (string, error) {
+				return checkOpenInSpelling(cfg)
+			})
 
 			// Check: config symlinks across worktrees (auto-removed under --fix,
 			// with the check re-evaluated so the verdict reflects the cleanup).
@@ -1069,7 +1085,120 @@ func checkStrayBackup(groveDir string) (string, error) {
 	return "no stray backup directory", nil
 }
 
-// doctorMux resolves the multiplexer for the "Herdr server" check.
+// checkOpenInSpelling reports an old [session] open_in value. The old values
+// still work, so this is a notice and never fails doctor.
+func checkOpenInSpelling(cfg *config.Config) (string, error) {
+	if renamed, old := cfg.OpenInRename(); old {
+		return "", fmt.Errorf("[session] open_in = %q is an old spelling that still works. Change it to open_in = %q", cfg.Session.OpenIn, renamed)
+	}
+	return "up to date", nil
+}
+
+// doctorLevel is how loud doctor is about one finding.
+type doctorLevel int
+
+const (
+	// doctorLevelInfo is a fact that needs no action.
+	doctorLevelInfo doctorLevel = iota
+	// doctorLevelAdvisory shows as a failed line without failing the run.
+	doctorLevelAdvisory
+	// doctorLevelError fails the run and lands in the action list.
+	doctorLevelError
+)
+
+// errMuxBinaryNotFound is what a multiplexer's version probe returns when the
+// binary is not installed; reportMuxBinary words that case itself.
+var errMuxBinaryNotFound = errors.New("multiplexer binary not found")
+
+// missingMuxBinary grades a missing multiplexer binary against the backend
+// sessions resolve to. Missing the active backend's binary is the only case
+// that breaks anything: that backend was selected in config, since auto never
+// resolves to a binary that is absent.
+func missingMuxBinary(this, active mux.Backend) (doctorLevel, string) {
+	switch active {
+	case this:
+		return doctorLevelError, fmt.Sprintf("%s not found in PATH, and it is the selected backend ([mux] backend). Install it, or set [mux] backend to \"auto\"", this)
+	case mux.BackendTmux, mux.BackendHerdr:
+		return doctorLevelInfo, fmt.Sprintf("%s not found in PATH (not needed: %s is the active backend)", this, active)
+	default:
+		return doctorLevelAdvisory, fmt.Sprintf("%s not found in PATH (optional: sessions need tmux or herdr)", this)
+	}
+}
+
+// reportMuxBinary prints one multiplexer's availability and reports whether
+// the run still passes.
+func reportMuxBinary(w *cli.Writer, name string, this, active mux.Backend, version func() (string, error)) bool {
+	detail, err := version()
+	if err == nil {
+		cli.Success(w, "%s (%s)", name, detail)
+		return true
+	}
+	if !errors.Is(err, errMuxBinaryNotFound) {
+		cli.Error(w, "%s: %v", name, err)
+		return true
+	}
+	level, msg := missingMuxBinary(this, active)
+	switch level {
+	case doctorLevelError:
+		return runCheck(w, name, func() (string, error) { return "", errors.New(msg) })
+	case doctorLevelAdvisory:
+		cli.Error(w, "%s: %s", name, msg)
+	default:
+		runInfo(w, name, msg)
+	}
+	return true
+}
+
+// herdrAppWarning says what grove does inside a pane of the herdr desktop
+// app, which it cannot drive: the app runs on herdr-core, and the herdr
+// backend talks to the herdr server.
+func herdrAppWarning(insideApp bool, active mux.Backend) string {
+	switch {
+	case !insideApp:
+		return ""
+	case active == mux.BackendHerdr:
+		return "this pane is in the herdr app, but [mux] backend = \"herdr\" drives the herdr server. Sessions grove makes will not appear in the app"
+	case active == mux.BackendOff:
+		return "grove cannot drive the herdr app yet, so every move lands here (only the directory changes). Set [mux] backend to use tmux or the herdr server"
+	default:
+		return ""
+	}
+}
+
+// herdrVersionWarning returns a warning when `herdr --version` names a herdr
+// older than grove is verified against, and "" otherwise.
+func herdrVersionWarning(versionOutput string) string {
+	version, tooOld := mux.HerdrTooOld(versionOutput)
+	if !tooOld {
+		return ""
+	}
+	return fmt.Sprintf("herdr %s is older than %s, the oldest version grove is tested against. Update it with `herdr update`", version, mux.HerdrMinVersion)
+}
+
+// controlModeCheckApplies reports whether the tmux control-mode check is
+// worth running: control mode is a tmux feature, so not under another backend.
+func controlModeCheckApplies(backend mux.Backend, controlModeTerminal bool) bool {
+	return backend == mux.BackendTmux && controlModeTerminal
+}
+
+// herdrServerVerdict turns herdr's own server status into a doctor line: the
+// detail of a pass, a warning to print beside a pass, or the failure.
+func herdrServerVerdict(status mux.HerdrServerStatus) (detail, warning string, err error) {
+	switch {
+	case !status.Running:
+		return "", "", fmt.Errorf("no herdr server running. Start one with `herdr`, or grove will fall back to plain directory switching")
+	case !status.Usable():
+		// Usually the CLI was just upgraded and the old server is still
+		// running; herdr's JSON API needs an exact protocol match either way.
+		return "", "", fmt.Errorf("herdr server %s and the installed herdr CLI speak different protocols. After an upgrade, restart the server (`herdr server stop`, then `herdr`); if the CLI is the older one, update it. Until then grove falls back to plain directory switching", status.Version)
+	}
+	if status.Stale() {
+		warning = fmt.Sprintf("the running server is herdr %s, a different version than the installed herdr CLI. It still works. To run the installed version, restart the server (`herdr server stop`, then `herdr`)", status.Version)
+	}
+	return fmt.Sprintf("reachable (herdr %s)", status.Version), warning, nil
+}
+
+// doctorMux resolves the multiplexer for the system tier's session checks.
 //
 // The system tier runs anywhere, including outside a grove project, so it
 // falls back to environment detection. But when a project *is* discoverable its

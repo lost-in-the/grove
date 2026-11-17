@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -20,8 +21,8 @@ var (
 	forkMoveWIP    bool
 	forkCopyWIP    bool
 	forkNoWIP      bool
-	forkNoSwitch   bool
-	forkJSON       bool
+	forkFlags      createFlags
+	forkHere       bool
 )
 
 // ForkResult represents the JSON output for grove fork.
@@ -47,6 +48,10 @@ var forkCmd = &cobra.Command{
 
 The new branch name will be {current-branch}-{name} unless --branch-name is specified.
 By default, prompts to handle uncommitted changes. Use --move-wip, --copy-wip, or --no-wip to skip prompt.
+
+The fork gets its own session and you are moved to it. Use --here to stay in
+the shell or pane you are in: no session is created, and grove only changes
+directory. To do that every time, set [session] open_in = "here".
 
 Examples:
   grove fork feature-auth        # Fork into new worktree with branch main-feature-auth
@@ -110,7 +115,7 @@ Examples:
 			if err == nil && ws != nil && ws.Mirror != "" {
 				// For environment worktrees, fork from the mirror's HEAD
 				baseRef = ws.Mirror
-				if !forkJSON {
+				if !forkFlags.json {
 					cli.Info(w, "Forking from environment worktree (mirror: %s)", ws.Mirror)
 				}
 			}
@@ -124,9 +129,7 @@ Examples:
 
 		// Check if branch already exists
 		if err := cmdexec.Run(context.TODO(), "git", []string{"-C", currentTree.Path, "show-ref", "--verify", "--quiet", "refs/heads/" + newBranchName}, "", cmdexec.GitLocal); err == nil {
-			// Branch exists
-			cli.Error(stderr, "branch '%s' already exists", newBranchName)
-			os.Exit(exitcode.ResourceExists)
+			return exitcode.With(exitcode.ResourceExists, fmt.Errorf("branch '%s' already exists", newBranchName))
 		}
 
 		// Handle WIP (work-in-progress)
@@ -191,8 +194,7 @@ Examples:
 
 		// Create branch from base reference
 		if output, err := cmdexec.CombinedOutput(context.TODO(), "git", []string{"-C", currentTree.Path, "branch", newBranchName, baseRef}, "", cmdexec.GitLocal); err != nil {
-			cli.Error(stderr, "git operation failed: %s", output)
-			os.Exit(exitcode.GitOperationFailed)
+			return exitcode.With(exitcode.GitOperationFailed, fmt.Errorf("git operation failed: %s", strings.TrimSpace(string(output))))
 		}
 
 		// Create worktree
@@ -208,7 +210,7 @@ Examples:
 			return fmt.Errorf("failed to find created worktree")
 		}
 
-		if !forkJSON {
+		if !forkFlags.json {
 			cli.Success(w, "Created worktree '%s' with branch '%s'", name, newBranchName)
 		}
 
@@ -220,14 +222,14 @@ Examples:
 				cli.Warning(stderr, "Failed to apply changes to fork: %v", err)
 				cli.Warning(stderr, "Changes are preserved in the source worktree")
 			} else {
-				if forkCopyWIP && !forkJSON {
+				if forkCopyWIP && !forkFlags.json {
 					cli.Success(w, "Copied uncommitted changes to fork")
 				}
 				// Reset source worktree only after successful patch application
 				if forkMoveWIP {
 					if err := worktree.NewWIPHandler(currentTree.Path).Discard(); err != nil {
 						cli.Warning(stderr, "changes applied to fork but failed to clean source: %v", err)
-					} else if !forkJSON {
+					} else if !forkFlags.json {
 						cli.Success(w, "Moved uncommitted changes to fork")
 					}
 				}
@@ -241,7 +243,7 @@ Examples:
 		// post_create B32 gap slipped in). Output routing matches
 		// setupCreatedWorktree: nil in JSON mode so stdout stays machine-clean.
 		var bootstrapWriter *cli.Writer
-		if !forkJSON {
+		if !forkFlags.json {
 			bootstrapWriter = w
 		}
 		res, bootErr := worktree.Bootstrap(ctx.State, ctx.Config, worktree.BootstrapOpts{
@@ -259,21 +261,23 @@ Examples:
 			return bootErr
 		}
 
+		autoStartDocker(w, ctx.Config, newTree.Path, forkFlags.up, forkFlags.noDocker, forkFlags.json)
+
 		projectName := mgr.GetProjectName()
 
-		// Create the multiplexer session, unless [session] open_in = "current"
-		// says the worktree belongs in the shell already running.
-		if m := ctx.Mux(); m.Available() && !openInCurrent(ctx.Config) {
+		// Create the session, unless a "here" placement says the worktree
+		// belongs in the shell already running.
+		if m := ctx.Mux(); m.Available() && !landsHere(ctx.Config, forkHere) {
 			target := muxTarget(mgr, name, newTree.Path)
 			if managed, err := ensureSession(m, target, stderr); err != nil {
 				cli.Warning(stderr, "Failed to create session: %v", err)
-			} else if managed && !forkJSON {
+			} else if managed && !forkFlags.json {
 				reportEnsured(w, m, target)
 			}
 		}
 
 		// JSON output mode
-		if forkJSON {
+		if forkFlags.json {
 			result := ForkResult{
 				Name:    name,
 				Branch:  newBranchName,
@@ -282,7 +286,7 @@ Examples:
 				Created: true,
 			}
 			result.Provisioned, result.FileSetup = prov.jsonFields()
-			if !forkNoSwitch {
+			if !forkFlags.noSwitch {
 				result.SwitchTo = newTree.Path
 			}
 			if err := output.PrintJSON(result); err != nil {
@@ -292,11 +296,11 @@ Examples:
 			return nil
 		}
 
-		// Switch to new worktree unless --no-switch. Agent mode and tmux mode
-		// "off" suppress the client switch (terminal takeover) — same policy
-		// as `grove new` and `grove to`.
-		if !forkNoSwitch {
-			suppressTmux := resolveTmuxMode(ctx.Config, false, false) == tmuxModeOff
+		// Switch to new worktree unless --no-switch. Agent mode, a "here"
+		// placement, and mode "off" suppress the client switch, the same
+		// policy as `grove new` and `grove to`.
+		if !forkFlags.noSwitch {
+			suppressTmux := resolveTmuxMode(ctx.Config, forkHere) == tmuxModeOff
 			sessionName := worktree.TmuxSessionName(projectName, name)
 			if !switchToWorktree(ctx, stderr, parentName, name, sessionName, newTree.Path, suppressTmux) {
 				emitCdOrExplain(stderr, newTree.Path)
@@ -315,8 +319,8 @@ func init() {
 	forkCmd.Flags().BoolVar(&forkMoveWIP, "move-wip", false, "Move uncommitted changes to fork")
 	forkCmd.Flags().BoolVar(&forkCopyWIP, "copy-wip", false, "Copy uncommitted changes to both")
 	forkCmd.Flags().BoolVar(&forkNoWIP, "no-wip", false, "Fork starts clean (leave changes in current)")
-	forkCmd.Flags().BoolVar(&forkNoSwitch, "no-switch", false, "Stay in current worktree")
-	forkCmd.Flags().BoolVarP(&forkJSON, "json", "j", false, "Output as JSON")
+	forkFlags.registerAll(forkCmd)
+	addHereFlag(forkCmd, &forkHere)
 
 	// Mark WIP flags as mutually exclusive
 	forkCmd.MarkFlagsMutuallyExclusive("move-wip", "copy-wip", "no-wip")

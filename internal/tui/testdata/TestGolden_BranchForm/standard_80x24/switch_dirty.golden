@@ -1,14 +1,24 @@
-╭──────────────────────────────────────────────────────╮
-│ [1mSwitch branch of auth[m                                │
-│ ❯ Branch  [37m[m[7;37mt[m[38;5;240mype to search local branches[m[38;5;240m             [m │
-│           ❯ fix/login                          local │
-│                                                      │
-│                                                      │
-│                                                      │
-│   In      auth                                       │
-│   Now     feature/auth                               │
-│                                                      │
-│   Changes stash 1 file before switching              │
-│ type a branch name                                   │
-│ ⏎ switch · ctrl+j/k pick · esc back                  │
-╰──────────────────────────────────────────────────────╯
+ [1m[1mtest-project[m · 5 worktrees · ⬍ name                                        1/5[m 
+                                                                                
+   ● [1mroot[m │ test-project-root/ ·····································   0s       
+     ⎇ root                                                                     
+                                                                                
+   ○ [1mfeature-auth[m │ test-project-feature-auth/ ·····················  60m       
+     ⎇ feature-auth                                                             
+                                                                                
+                                                                                
+                                                                                
+   [38;2;151;151;151m•[m[38;2;60;60;60m•[m[38;2;60;60;60m•[m                                                                          
+ ──[1m Switch branch of auth [m───────────────────────────────────────────────────── 
+ ❯ Branch  [37m[m[7;37mt[m[38;5;240mype to search local branches[m[38;5;240m                                       [m 
+           › fix/login                                                    local 
+                                                                                
+                                                                                
+                                                                                
+   In      auth                                                                 
+   Now     feature/auth                                                         
+   Changes stash 1 file before switching                                        
+                                                                                
+                                                                                
+ type a branch name                                                             
+ type · [1m↑↓/ctrl+jk[m pick · [1menter[m switch · [1mesc[m cancel                             

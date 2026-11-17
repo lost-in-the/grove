@@ -9,24 +9,24 @@ func TestResolveDirtyAction(t *testing.T) {
 		name          string
 		dirtyHandling string
 		isDirty       bool
-		isPeek        bool
+		noHooks       bool
 		isInteractive bool
 		want          DirtyAction
 	}{
-		// Peek always allows, regardless of dirty state or config
+		// --no-hooks always allows, regardless of dirty state or config
 		{
-			name:          "peek skips dirty handling even when dirty",
+			name:          "--no-hooks skips dirty handling even when dirty",
 			dirtyHandling: "refuse",
 			isDirty:       true,
-			isPeek:        true,
+			noHooks:       true,
 			isInteractive: true,
 			want:          DirtyAllow,
 		},
 		{
-			name:          "peek skips dirty handling when clean",
+			name:          "--no-hooks skips dirty handling when clean",
 			dirtyHandling: "refuse",
 			isDirty:       false,
-			isPeek:        true,
+			noHooks:       true,
 			isInteractive: false,
 			want:          DirtyAllow,
 		},
@@ -36,7 +36,7 @@ func TestResolveDirtyAction(t *testing.T) {
 			name:          "refuse allows clean worktree",
 			dirtyHandling: "refuse",
 			isDirty:       false,
-			isPeek:        false,
+			noHooks:       false,
 			isInteractive: true,
 			want:          DirtyAllow,
 		},
@@ -44,7 +44,7 @@ func TestResolveDirtyAction(t *testing.T) {
 			name:          "auto-stash allows clean worktree",
 			dirtyHandling: "auto-stash",
 			isDirty:       false,
-			isPeek:        false,
+			noHooks:       false,
 			isInteractive: true,
 			want:          DirtyAllow,
 		},
@@ -52,7 +52,7 @@ func TestResolveDirtyAction(t *testing.T) {
 			name:          "prompt allows clean worktree",
 			dirtyHandling: "prompt",
 			isDirty:       false,
-			isPeek:        false,
+			noHooks:       false,
 			isInteractive: true,
 			want:          DirtyAllow,
 		},
@@ -62,7 +62,7 @@ func TestResolveDirtyAction(t *testing.T) {
 			name:          "refuse blocks dirty worktree",
 			dirtyHandling: "refuse",
 			isDirty:       true,
-			isPeek:        false,
+			noHooks:       false,
 			isInteractive: true,
 			want:          DirtyRefuse,
 		},
@@ -70,7 +70,7 @@ func TestResolveDirtyAction(t *testing.T) {
 			name:          "refuse blocks dirty worktree non-interactive",
 			dirtyHandling: "refuse",
 			isDirty:       true,
-			isPeek:        false,
+			noHooks:       false,
 			isInteractive: false,
 			want:          DirtyRefuse,
 		},
@@ -80,7 +80,7 @@ func TestResolveDirtyAction(t *testing.T) {
 			name:          "auto-stash stashes dirty worktree",
 			dirtyHandling: "auto-stash",
 			isDirty:       true,
-			isPeek:        false,
+			noHooks:       false,
 			isInteractive: true,
 			want:          DirtyStash,
 		},
@@ -88,7 +88,7 @@ func TestResolveDirtyAction(t *testing.T) {
 			name:          "auto-stash stashes dirty worktree non-interactive",
 			dirtyHandling: "auto-stash",
 			isDirty:       true,
-			isPeek:        false,
+			noHooks:       false,
 			isInteractive: false,
 			want:          DirtyStash,
 		},
@@ -98,7 +98,7 @@ func TestResolveDirtyAction(t *testing.T) {
 			name:          "prompt prompts on dirty interactive",
 			dirtyHandling: "prompt",
 			isDirty:       true,
-			isPeek:        false,
+			noHooks:       false,
 			isInteractive: true,
 			want:          DirtyPrompt,
 		},
@@ -106,9 +106,56 @@ func TestResolveDirtyAction(t *testing.T) {
 			name:          "prompt refuses on dirty non-interactive",
 			dirtyHandling: "prompt",
 			isDirty:       true,
-			isPeek:        false,
+			noHooks:       false,
 			isInteractive: false,
 			want:          DirtyRefuse,
+		},
+
+		// Warn mode never blocks, with or without a terminal
+		{
+			name:          "warn warns on dirty interactive",
+			dirtyHandling: "warn",
+			isDirty:       true,
+			isInteractive: true,
+			want:          DirtyWarn,
+		},
+		{
+			name:          "warn warns on dirty non-interactive",
+			dirtyHandling: "warn",
+			isDirty:       true,
+			isInteractive: false,
+			want:          DirtyWarn,
+		},
+		{
+			name:          "warn allows clean worktree",
+			dirtyHandling: "warn",
+			isDirty:       false,
+			isInteractive: true,
+			want:          DirtyAllow,
+		},
+		{
+			name:          "--no-hooks skips the warning",
+			dirtyHandling: "warn",
+			isDirty:       true,
+			noHooks:       true,
+			isInteractive: true,
+			want:          DirtyAllow,
+		},
+
+		// Ignore mode moves without a word
+		{
+			name:          "ignore allows dirty interactive",
+			dirtyHandling: "ignore",
+			isDirty:       true,
+			isInteractive: true,
+			want:          DirtyAllow,
+		},
+		{
+			name:          "ignore allows dirty non-interactive",
+			dirtyHandling: "ignore",
+			isDirty:       true,
+			isInteractive: false,
+			want:          DirtyAllow,
 		},
 
 		// Unknown config value defaults to refuse (safety fallback)
@@ -116,7 +163,7 @@ func TestResolveDirtyAction(t *testing.T) {
 			name:          "unknown handling defaults to refuse",
 			dirtyHandling: "bogus",
 			isDirty:       true,
-			isPeek:        false,
+			noHooks:       false,
 			isInteractive: true,
 			want:          DirtyRefuse,
 		},
@@ -124,10 +171,10 @@ func TestResolveDirtyAction(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ResolveDirtyAction(tt.dirtyHandling, tt.isDirty, tt.isPeek, tt.isInteractive)
+			got := ResolveDirtyAction(tt.dirtyHandling, tt.isDirty, tt.noHooks, tt.isInteractive)
 			if got != tt.want {
-				t.Errorf("ResolveDirtyAction(%q, dirty=%v, peek=%v, interactive=%v) = %v, want %v",
-					tt.dirtyHandling, tt.isDirty, tt.isPeek, tt.isInteractive, got, tt.want)
+				t.Errorf("ResolveDirtyAction(%q, dirty=%v, noHooks=%v, interactive=%v) = %v, want %v",
+					tt.dirtyHandling, tt.isDirty, tt.noHooks, tt.isInteractive, got, tt.want)
 			}
 		})
 	}

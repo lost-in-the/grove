@@ -83,7 +83,7 @@ func TestNewJSON_MissingCopySourceExitsNonZero(t *testing.T) {
 	repo := testhelper.SetupRailsFixture(t)
 	writeExternalConfig(t, repo, `copy_files = ["config/secret.key", "config/database.yml"]`)
 
-	res := runGrove(t, binary, repo, "new", "newwork", "--json", "--no-switch", "--no-tmux")
+	res := runGrove(t, binary, repo, "new", "newwork", "--json", "--no-switch", "--here")
 
 	if res.code != exitcode.CreatedNotProvisioned {
 		t.Fatalf("exit code = %d, want %d\nstderr: %s", res.code, exitcode.CreatedNotProvisioned, res.stderr)
@@ -121,7 +121,7 @@ func TestNewJSON_AllFilesCopiedIsProvisioned(t *testing.T) {
 	repo := testhelper.SetupRailsFixture(t)
 	writeExternalConfig(t, repo, `copy_files = ["config/database.yml"]`)
 
-	res := runGrove(t, binary, repo, "new", "newwork", "--json", "--no-switch", "--no-tmux")
+	res := runGrove(t, binary, repo, "new", "newwork", "--json", "--no-switch", "--here")
 	if res.code != 0 {
 		t.Fatalf("exit code = %d\nstderr: %s", res.code, res.stderr)
 	}
@@ -139,25 +139,27 @@ func TestNew_ConfigThatFailsToLoadCreatesNoWorktree(t *testing.T) {
 	repo := testhelper.SetupRailsFixture(t)
 	writeExternalConfig(t, repo, `copy_files = ["config/*.key"]`)
 
-	res := runGrove(t, binary, repo, "new", "newwork", "--json", "--no-switch", "--no-tmux")
+	res := runGrove(t, binary, repo, "new", "newwork", "--json", "--no-switch", "--here")
 
 	if res.code == 0 {
 		t.Fatalf("exit code = 0, want non-zero\nstdout: %s", res.stdout)
 	}
-	if !strings.Contains(res.stderr, `copy_files[0]: "config/*.key" has a glob character`) {
-		t.Errorf("stderr does not name the bad entry:\n%s", res.stderr)
+	// --json is set, so the one error is the JSON error object on stderr.
+	doc := lastJSONError(t, res.stderr)
+	if doc.Code != res.code {
+		t.Errorf(`"code" = %d, exit code = %d: they must match`, doc.Code, res.code)
 	}
 	if res.stdout != "" {
 		t.Errorf("stdout = %q, want empty (no worktree, no result)", res.stdout)
 	}
-	if n := strings.Count(res.stderr, `"config/*.key" has a glob character`); n != 1 {
-		t.Errorf("the reason appears %d times on stderr, want once:\n%s", n, res.stderr)
+	if n := strings.Count(doc.Message, `"config/*.key" has a glob character`); n != 1 {
+		t.Errorf("the reason appears %d times in the message, want once:\n%s", n, doc.Message)
 	}
 	if strings.Contains(res.stderr, "using defaults") {
 		t.Errorf("stderr says it is using defaults, but the command refused to:\n%s", res.stderr)
 	}
-	if !strings.Contains(res.stderr, "Error: grove did not create the worktree: the config failed to load: plugins.docker.external.copy_files[0]") {
-		t.Errorf("stderr lacks the single error line:\n%s", res.stderr)
+	if !strings.HasPrefix(doc.Message, "grove did not create the worktree: the config failed to load: plugins.docker.external.copy_files[0]") {
+		t.Errorf("message does not say why no worktree was created:\n%s", doc.Message)
 	}
 	if _, err := os.Stat(filepath.Join(filepath.Dir(repo), "myapp-newwork")); !os.IsNotExist(err) {
 		t.Errorf("a worktree directory exists after a failed config load (stat err = %v)", err)

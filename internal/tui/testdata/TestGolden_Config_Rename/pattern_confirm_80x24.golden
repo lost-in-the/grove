@@ -1,0 +1,24 @@
+ [1m[1mtest-project[m ▸ [1msettings[m                                                       [m 
+  general   [1mbehavior[m   plugins   protection                                     
+                                                                                
+  [1mMoving between worktrees[m                                                      
+   Uncommitted files      warn                                                  
+   Docker stack           off                                                   
+   Where you land         session                                               
+   Sessions               auto                                                  
+                                                                                
+  [1mNames[m                                                                         
+ ❯ [1mFolder pattern       [m  {project}-{name}                                      
+ ────────────────────────────────────────────────────────────────────────────── 
+  [1mFolder pattern[m  naming.pattern                                                
+  How grove names a new worktree's folder. Session names always use             
+  {project}-{name}.                                                             
+  ⚠ This project has 2 worktrees besides root. Changing this does not rename    
+    their folders. Grove will stop recognizing them by their short names.       
+                                                                                
+   Value    [37m▏[m{project}.{name}[7;37m [m                                                  
+   Default  {project}-{name}                                                    
+   {project} is the project name, {name} the worktree's short name.             
+   Each appears once. Other characters: letters, digits, . _ -                  
+  Press enter again to change. esc keeps "{project}-{name}".                    
+  type · [1menter[m change · [1mesc[m cancel                                              

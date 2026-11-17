@@ -95,6 +95,11 @@ func (m Model) handleIssueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	// Normal mode (not filtering, list focused)
 	switch {
+	case key.Matches(msg, m.keys.Escape) && s.FilterInput.Value() != "":
+		s.FilterInput.SetValue("")
+		s.Cursor = 0
+		return m, nil
+
 	case key.Matches(msg, m.keys.Escape):
 		m.popView()
 		m.issueState = nil
@@ -152,7 +157,8 @@ func (m Model) openCreateWizardForIssue(issue *tracker.Issue) (tea.Model, tea.Cm
 }
 
 // renderIssueItemList renders a scrollable list of issue items with cursor, scroll window, and overflow indicator.
-func renderIssueItemList(issues []*tracker.Issue, cursor int, scrollSize int, contentWidth int) string {
+// focused false draws no cursor arrow, as renderPRItemList.
+func renderIssueItemList(issues []*tracker.Issue, cursor int, scrollSize int, contentWidth int, focused bool) string {
 	var b strings.Builder
 	if len(issues) == 0 {
 		b.WriteString(Styles.DetailDim.Render("  (no matching issues)") + "\n")
@@ -165,7 +171,7 @@ func renderIssueItemList(issues []*tracker.Issue, cursor int, scrollSize int, co
 		issue := issues[i]
 
 		cur := "  "
-		if i == cursor {
+		if i == cursor && focused {
 			cur = Styles.ListCursor.Render("❯ ")
 		}
 
@@ -261,7 +267,7 @@ func (m Model) renderIssuePanel() string {
 		contextLabel: "Issues",
 		footer:       m.renderIssueFooter(),
 		renderList: func(width int, spinnerView string, maxHeight int) string {
-			return renderIssueList(s, width, spinnerView, maxHeight)
+			return m.renderIssueList(s, width, spinnerView, maxHeight, 3, !s.DetailFocused && s.ExistsPrompt == nil && m.activeView() == ViewIssues)
 		},
 		renderDetail: func(width, height int) string {
 			if s.Loading {
@@ -282,7 +288,8 @@ func (m Model) renderIssuePanel() string {
 }
 
 // renderIssueList renders the issue list content for the panel layout.
-func renderIssueList(s *IssueViewState, width int, spinnerView string, maxHeight int) string {
+// It shows at least minSlots issues, as renderPRList does.
+func (m Model) renderIssueList(s *IssueViewState, width int, spinnerView string, maxHeight, minSlots int, focused bool) string {
 	var b strings.Builder
 
 	if s.Loading {
@@ -299,10 +306,10 @@ func renderIssueList(s *IssueViewState, width int, spinnerView string, maxHeight
 	total := len(s.Issues)
 
 	// Filter/count bar
-	renderFilterBar(&b, s.FilterInput.View(), s.Filtering, filter, len(filtered), total)
+	m.renderFilterBar(&b, s.FilterInput, s.Filtering, filter, len(filtered), total, width)
 
-	displaySlots, contentWidth := calcDisplaySlots(strings.Count(b.String(), "\n"), maxHeight, width)
-	b.WriteString(renderIssueItemList(filtered, s.Cursor, displaySlots, contentWidth))
+	displaySlots, contentWidth := calcDisplaySlots(strings.Count(b.String(), "\n"), maxHeight, width, minSlots)
+	b.WriteString(renderIssueItemList(filtered, s.Cursor, displaySlots, contentWidth, focused))
 
 	return b.String()
 }
@@ -377,9 +384,8 @@ func (m *Model) openSelectedIssueURL(filtered []*tracker.Issue) {
 
 // renderIssueFooter returns context-aware footer hints for the issue view.
 func (m Model) renderIssueFooter() string {
-	s := m.issueState
-	if s != nil && s.DetailFocused {
-		return m.helpFooter.RenderCompactWithHints(detailFocusedHints(), m.width-4)
+	if m.issueState == nil {
+		return m.helpFooter.RenderCompact(ViewIssues, m.width-4)
 	}
-	return m.helpFooter.RenderCompact(ViewIssues, m.width-4)
+	return m.helpFooter.Render(browserFooter(m.helpFooter.CompactFooter(ViewIssues), m.issueState.Filtering, m.issueState.DetailFocused, m.issueState.FilterInput.Value()), m.width-4)
 }

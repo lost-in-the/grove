@@ -20,7 +20,7 @@ func LoadDefaults() *Config {
 		ProjectsDir:   projectsDir,
 		DefaultBranch: "main",
 		Switch: SwitchConfig{
-			DirtyHandling:   "prompt",
+			DirtyHandling:   "warn",
 			ContainerSwitch: "off",
 		},
 		Naming: NamingConfig{

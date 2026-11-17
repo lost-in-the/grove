@@ -1,0 +1,24 @@
+ [1m[1mtest-project[m ▸ [1msettings[m                   [m 
+  [1]   [2]   [3]   [1m[4] protection[m          
+                                            
+ ❯ [1mProtected worktrees  [m  main, staging     
+   No incoming changes    none              
+                                            
+                                            
+                                            
+                                            
+                                            
+                                            
+ ────────────────────────────────────────── 
+  [1mProtected worktrees[m  protection.protected 
+  Grove will not delete or rename these, or 
+  switch their branch. grove rm needs       
+  --force --unprotect.                      
+                                            
+   Value    [1mmain, staging[m                   
+   Default  none                            
+   Short worktree names, separated by       
+   commas: main, staging                    
+                                            
+  move · [1m↑↓/jk[m move                         
+  [1menter[m edit · saves as you go · [1mesc[m close  

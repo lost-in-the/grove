@@ -12,7 +12,7 @@ func TestGStrip_ShowsActions(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(120, 40))
 	m = sendKey(m, "g")
 	out := ansi.Strip(m.viewString())
-	for _, want := range []string{" g goto", "g top of list", "p pull requests", "i issues", "c config", "u upgrade grove", "esc close"} {
+	for _, want := range []string{" g more", "g top of list", "p pull requests", "i issues", "c config", "u upgrade grove", "esc close"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("g strip missing %q:\n%s", want, out)
 		}

@@ -18,7 +18,6 @@ func TestToast_ShowingOneStartsTheTick(t *testing.T) {
 	}{
 		{"empty pin slot", makeKeyMsg("3")},
 		{"no previous worktree", makeKeyMsg("-")},
-		{"config save failed after close", configSavedMsg{err: errTest}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

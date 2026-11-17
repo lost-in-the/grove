@@ -17,9 +17,9 @@ default_base_branch = "main"
 # =============================================================================
 
 [switch]
-# Default: "prompt"
-# Options: prompt, auto-stash, refuse
-dirty_handling = "auto-stash"
+# Default: "warn"
+# Options: warn, ignore, prompt, refuse, auto-stash
+dirty_handling = "warn"
 
 # =============================================================================
 # Tmux Integration

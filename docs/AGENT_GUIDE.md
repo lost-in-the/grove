@@ -28,9 +28,10 @@ Reference for AI agents helping users install, configure, or use Grove. Develope
 
 ## Multiplexer backends
 
-Grove drives tmux by default and [herdr](https://herdr.dev) when
-`[mux] backend = "herdr"` (or under `auto`, when grove is running inside a herdr
-pane — `HERDR_ENV=1`). Everything in this guide works the same either way.
+Grove drives [herdr](https://herdr.dev) or tmux, chosen by `[mux] backend`.
+Under `auto` (the default) the multiplexer grove is running inside wins
+(`HERDR_ENV=1`, then `TMUX`). Outside both, grove uses whichever is installed,
+and herdr when both are. Everything in this guide works the same either way.
 
 Two things are worth knowing as an agent:
 
@@ -195,7 +196,7 @@ If you installed grove via Homebrew, ensure `eval "$(brew shellenv)"` is in `~/.
 
 ```bash
 grove version
-# grove v1.x.x
+# grove 0.12.0 darwin/arm64   (version, then OS/architecture)
 
 type grove
 # grove is a shell function
@@ -295,10 +296,12 @@ Columns:
 ```bash
 grove to <name>
 grove to <name> --up      # also bring the stack to <name>
-grove to <name> --peek    # lightweight, skips hooks
+grove to <name> --here      # stay in this shell: cd only, hooks still run
+grove to <name> --no-hooks  # skip hooks and the dirty check
+grove to <name> --peek      # short for --here --no-hooks
 ```
 
-> **AGENT WARNING — tmux takeover.** By default, `grove to` attaches the terminal to the target tmux session. In an agent context this takes over the terminal. See §7 Agent Strategy Guide for how to prevent this.
+> **AGENT WARNING: session takeover.** By default, `grove to` attaches the terminal to the target session. In an agent context this takes over the terminal. See §7 Agent Strategy Guide for how to prevent this.
 
 `grove to` moves you and never touches the Docker stack. Two things can move: you, and the stack. `grove up` brings the stack to the worktree you are in. `--up` does both in one step. To make every move bring the stack, set `[switch] container_switch = "auto"` (the default is `"off"`).
 
@@ -309,7 +312,7 @@ What happens (full move):
 4. Emits `tmux-attach:{session}` directive — shell wrapper attaches tmux
 5. In external Docker mode, prints on stderr where the stack is: `Stack: on main (not here). Run `grove up` to bring it.` `--json` carries `stack_on` and `stack_here` instead.
 
-`--peek` skips all hooks and tmux. Use it for quick inspection or when hooks are expensive. It cannot combine with `--up`.
+Where you land is the placement: `session` (the worktree's own session, the default) or `here` (the shell you are in). `--here` picks `here` for one run and still runs hooks. `--no-hooks` skips hooks and the dirty check. `--peek` is short for `--here --no-hooks`. Use it for quick inspection or when hooks are expensive. `--no-hooks` and `--peek` cannot combine with `--up`.
 
 Hooks fired: `pre_switch`, `post_switch`
 
@@ -629,8 +632,10 @@ Config is loaded in layers (later overrides earlier):
 
 [switch]
 # What to do when switching away from a dirty worktree
-# "prompt" (default) | "auto-stash" | "refuse"
-dirty_handling = "prompt"
+# "warn" (default) | "ignore" | "prompt" | "refuse" | "auto-stash"
+# "auto-stash" leaves the stash parked after the move. Git stashes are shared
+# across all worktrees.
+dirty_handling = "warn"
 
 [naming]
 # Worktree directory naming template
@@ -796,8 +801,8 @@ Recommended `.grove/config.toml` additions for projects that agents use:
 
 ```toml
 [switch]
-# Agents should not be blocked by dirty worktrees
-dirty_handling = "auto-stash"
+# The default never blocks an agent: it prints one line on stderr and moves
+dirty_handling = "warn"
 
 [tmux]
 # Agents should not attach to tmux sessions
@@ -1009,7 +1014,7 @@ Two worktrees running containers that bind the same host ports:
 If a session exists with a worktree name but the worktree was removed manually:
 ```bash
 grove repair
-# Detects and resolves state inconsistencies including orphaned tmux sessions
+# Detects and resolves state inconsistencies including orphaned sessions (tmux or herdr)
 ```
 
 Or clean manually:

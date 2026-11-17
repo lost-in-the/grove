@@ -18,12 +18,13 @@ var attachJSON bool
 var attachCmd = &cobra.Command{
 	Use:     "join [name]",
 	Aliases: []string{"attach", "a", "j"},
-	Short:   "Join a tmux session for a worktree",
-	Long: `Join (attach to) or create a tmux session for a worktree without changing the
+	Short:   "Join a worktree's session",
+	Long: `Join (attach to) or create a worktree's session without changing the
 current shell directory. If no name is given, uses the current worktree.
 
-This is a tmux-only command — it does not emit cd: directives.`,
-	Args: cobra.MaximumNArgs(1),
+This is a session-only command: it does not emit cd: directives.`,
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: completeWorktreeNames,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		stderr := cli.NewStderr()
 

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -100,7 +101,7 @@ func (c *GroveContext) RequireConfig(action string) error {
 }
 
 // RequireGroveContext wraps a command function to require grove project context.
-// If not in a grove project, prints an error and exits with code 10.
+// Outside a grove project it returns an error that exits with code 10.
 func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveContext) error) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		groveDir, err := grove.IsGroveProject()
@@ -115,9 +116,7 @@ func RequireGroveContext(fn func(cmd *cobra.Command, args []string, ctx *GroveCo
 
 		if groveDir == "" {
 			cwd, _ := os.Getwd()
-			printNoGroveDiagnosis(cwd)
-			os.Exit(exitcode.NotGroveProject)
-			return nil // unreachable
+			return errNotGroveProject(cwd)
 		}
 
 		migrateGroveExcludes(groveDir)
@@ -228,31 +227,53 @@ func emitExcludesMigrationNotice() {
 func warnOutdatedShellIntegration() {
 	if v := os.Getenv("GROVE_SHELL_VERSION"); v != "" {
 		if shellVer, err := strconv.Atoi(v); err == nil && shellVer < shell.ShellVersion {
-			fmt.Fprintf(os.Stderr, "grove: shell integration outdated (v%d, current v%d) — run: grove setup\n", shellVer, shell.ShellVersion)
+			fmt.Fprintf(os.Stderr, "grove: shell integration is outdated (v%d, current v%d): run grove setup\n", shellVer, shell.ShellVersion)
 		}
 	}
 }
 
-// printNoGroveDiagnosis prints the "not a grove project" diagnosis for cwd to
-// stderr. Shared by RequireGroveContext and the bare-grove TUI path so the
-// wording cannot drift between the CLI and TUI entry points.
-func printNoGroveDiagnosis(cwd string) {
-	stderr := cli.NewStderr()
+// noGroveDiagnosis says why cwd is not a grove project: a headline and the
+// lines that tell the user what to do. Shared by RequireGroveContext and the
+// bare-grove TUI path so the wording cannot drift between them.
+func noGroveDiagnosis(cwd string) (headline string, hints []string) {
 	diag := grove.DiagnoseNoGrove(cwd)
 
 	switch diag.Reason {
 	case grove.ReasonNotGitRepo:
-		cli.Error(stderr, "not a grove project — not inside a git repository")
+		return "not a grove project — not inside a git repository", nil
 	case grove.ReasonMainWorktreeMissingGrove:
-		cli.Error(stderr, "not a grove project — main worktree has no .grove directory")
-		fmt.Fprintln(os.Stderr)
-		cli.Faint(stderr, "Run 'grove init' from the main worktree:")
-		cli.Faint(stderr, "  cd %s && grove init", diag.MainWorktreePath)
+		return "not a grove project — main worktree has no .grove directory", []string{
+			"Run 'grove init' from the main worktree:",
+			fmt.Sprintf("  cd %s && grove init", diag.MainWorktreePath),
+		}
 	default:
-		cli.Error(stderr, "not a grove project")
+		return "not a grove project", []string{
+			"Run 'grove init' to initialize a new grove project,",
+			"or change to a directory containing a .grove folder.",
+		}
+	}
+}
+
+// errNotGroveProject is the diagnosis as an error that exits 10. Returning it
+// lets the central handler in Run print it as text, or as JSON under --json.
+func errNotGroveProject(cwd string) error {
+	headline, hints := noGroveDiagnosis(cwd)
+	if len(hints) > 0 {
+		headline += "\n\n" + strings.Join(hints, "\n")
+	}
+	return exitcode.With(exitcode.NotGroveProject, errors.New(headline))
+}
+
+// printNoGroveDiagnosis prints the diagnosis for cwd to stderr.
+func printNoGroveDiagnosis(cwd string) {
+	stderr := cli.NewStderr()
+	headline, hints := noGroveDiagnosis(cwd)
+	cli.Error(stderr, "%s", headline)
+	if len(hints) > 0 {
 		fmt.Fprintln(os.Stderr)
-		cli.Faint(stderr, "Run 'grove init' to initialize a new grove project,")
-		cli.Faint(stderr, "or change to a directory containing a .grove folder.")
+	}
+	for _, hint := range hints {
+		cli.Faint(stderr, "%s", hint)
 	}
 }
 

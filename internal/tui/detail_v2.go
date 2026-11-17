@@ -81,6 +81,17 @@ func renderGitSection(item *WorktreeItem, width int) []string {
 	branchVal := Styles.DetailValue.Render(truncate(item.Branch, width-labelWidth-2))
 	rows = append(rows, metadataLabel("Branch")+branchVal)
 
+	if folder := item.folder(); folder != "" {
+		room := width - labelWidth - 2 - 1 // the 1 is the "/"
+		style, note := Styles.DetailValue, ""
+		if item.FolderOffPattern {
+			style, note = Styles.StatusWarning, " · not the folder pattern"
+			room -= lipgloss.Width(note)
+		}
+		folderVal := style.Render(middleTruncate(folder, max(1, room))+"/") + Styles.DetailDim.Render(note)
+		rows = append(rows, metadataLabel("Folder")+folderVal)
+	}
+
 	if item.Commit != "" {
 		commitVal := Styles.DetailValue.Render(item.Commit)
 		if item.CommitAge != "" {

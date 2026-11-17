@@ -1,8 +1,9 @@
- [1mtest-project[m · 3 worktrees · ⬍ name    ╭──────────────────────────────────────────────────────────────────────────────╮
-                                        │ ⚠ Created feature-checkout-redesign-v2-x. 1 file not copied. See ␣ messages. │
- ❯ ● [1mroot[m                               ╰──────────────────────────────────────────────────────────────────────────────╯
-   ○ feature-auth                                              60m      │
-   ○ fix-bug                                                    2h      │
+ [1mtest-project[m · 3 worktrees · ⬍ name╭──────────────────────────────────────────────────────────────────────────────────╮
+                                    │ ⚠ Created feature-checkout-redesign-v2-x. 1 file not copied. See space messages. │
+     NAME         BRANCH            ╰──────────────────────────────────────────────────────────────────────────────────╯
+ ❯ ● [1mroot[m         root ·····································   0s       │
+   ○ feature-auth feature-auth ·····························  60m       │
+   ○ fix-bug      fix-bug ··································   2h       │
                                                                         │
                                                                         │
                                                                         │
@@ -36,5 +37,4 @@
                                                                         │
                                                                         │
                                                                         │
-                                                                        │
-  [1m↑↓[m navigate · [1menter[m switch · [1m␣[m find · [1mtab[m detail · [1m/[m filter · [1mg[m goto · [1m?[m help
+  move · [1m↑↓/jk[m move · [1menter[m switch · [1mspace[m go to · [1mtab[m detail · [1m/[m filter · [1mv[m detailed · [1mg[m more · [1m?[m help · [1mq[m quit

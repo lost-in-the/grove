@@ -21,7 +21,7 @@ Read this file before running `grove new`, `grove fetch`, or `grove to` in a rep
 
 These commands never run hooks and are safe to use in any repo without inspection:
 
-- `grove ls` — reads git and tmux state only
+- `grove ls` — reads git and session state only
 - `grove here` — reads current worktree state only
 - `grove context` — reads git history and tracking info only
 - `grove ps` — reads Docker state only
@@ -49,7 +49,7 @@ Before running `grove new` or `grove fetch` in an unfamiliar repository:
 
 When you need to inspect a worktree without running hooks:
 
-- `grove to <name> --peek` — switches filesystem context but skips ALL pre/post_switch hooks and does not attach tmux. Safe for reading files, running `grep`, or examining state.
+- `grove to <name> --peek`: switches filesystem context but skips ALL pre/post_switch hooks and does not attach a session (short for `--here --no-hooks`). Safe for reading files, running `grep`, or examining state.
 - `grove test <name>` — runs tests in another worktree's directory but does NOT run switch hooks. Only the test runner itself runs.
 
 ## Further Reading

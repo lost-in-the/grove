@@ -10,8 +10,9 @@ import (
 
 // UIPrefs stores user preferences that persist across TUI sessions.
 type UIPrefs struct {
-	CompactMode *bool             `json:"compact_mode,omitempty"`
-	Pins        map[string]string `json:"pins,omitempty"` // slot "1".."9" -> alias
+	CompactMode   *bool             `json:"compact_mode,omitempty"`
+	SidebarHidden *bool             `json:"sidebar_hidden,omitempty"`
+	Pins          map[string]string `json:"pins,omitempty"` // slot "1".."9" -> alias
 	// Viewed is the PR review's viewed marks: PR number -> path -> fileHash.
 	Viewed map[string]map[string]string `json:"viewed,omitempty"`
 }

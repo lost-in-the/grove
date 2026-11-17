@@ -1,24 +1,24 @@
  [1m[1mtest-project[m ▸ [1msettings[m                                                       [m 
   [1] general   [2] behavior   [3] plugins   [1m[4] protection[m                     
                                                                                 
- ┃ [1mprotected[m                                                                    
- ┃ Protected worktrees (comma-separated)                                        
- ┃ > main, staging[7m [m                                                             
+ ❯ [1mProtected worktrees  [m  main, staging                                         
+   No incoming changes    none                                                  
                                                                                 
                                                                                 
                                                                                 
                                                                                 
                                                                                 
                                                                                 
+ ────────────────────────────────────────────────────────────────────────────── 
+  [1mProtected worktrees[m  protection.protected                                     
+  Grove will not delete or rename these, or switch their branch. grove rm needs 
+  --force --unprotect.                                                          
+                                                                                
+   Value    [1mmain, staging[m                                                       
+   Default  none                                                                
+   Short worktree names, separated by commas: main, staging                     
                                                                                 
                                                                                 
                                                                                 
                                                                                 
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-  [1mtab[m next field · [1mctrl+n/p[m section · [1mesc[m close                                 
+  move · [1m↑↓/jk[m move · [1menter[m edit · saves as you go · [1mesc[m close                  

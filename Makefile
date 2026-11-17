@@ -7,7 +7,8 @@ BUILD_DIR=./bin
 VERSION_PKG=github.com/lost-in-the/grove/internal/version
 GIT_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-LDFLAGS=-X $(VERSION_PKG).Commit=$(GIT_COMMIT) -X $(VERSION_PKG).BuildDate=$(BUILD_DATE)
+GIT_VERSION=$(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//')
+LDFLAGS=-X $(VERSION_PKG).Commit=$(GIT_COMMIT) -X $(VERSION_PKG).BuildDate=$(BUILD_DATE) $(if $(GIT_VERSION),-X $(VERSION_PKG).Version=$(GIT_VERSION))
 
 # Default target
 .DEFAULT_GOAL := help

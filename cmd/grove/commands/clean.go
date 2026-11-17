@@ -182,7 +182,7 @@ Examples:
 		// cli.ReadLine handles Ctrl+C/ESC and falls back to cooked-mode read for
 		// piped stdin, so scripted `echo yes | grove trim` still works.
 		_, _ = fmt.Fprintln(w)
-		cli.Warning(w, "This will permanently remove %d worktree(s) and their associated tmux sessions.", len(cleanable))
+		cli.Warning(w, "This will permanently remove %d worktree(s) and their sessions.", len(cleanable))
 
 		response, err := cli.ReadLine("Type 'yes' to confirm: ")
 		if err != nil || response != "yes" {

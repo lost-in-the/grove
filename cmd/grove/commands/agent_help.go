@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -41,22 +42,23 @@ func writeAgentHelp(cmd *cobra.Command) {
 # Binary: %s
 # Project: %s
 # Shell: set GROVE_SHELL=1 for directive output (cd:, tmux-attach:, env:)
-# Agent mode: set GROVE_AGENT_MODE=1 to suppress tmux attachment (and see Docker note below)
+# Agent mode: set GROVE_AGENT_MODE=1 to suppress session attachment (and see Docker note below)
 
 ## Environment
-  GROVE_AGENT_MODE=1       Suppress tmux attachment; with agent stacks enabled, the stack is never
+  GROVE_AGENT_MODE=1       Suppress session attachment; with agent stacks enabled, the stack is never
                            moved (run grove up --isolated for a stack that serves the worktree)
   GROVE_NONINTERACTIVE=1   Skip interactive prompts
   GROVE_SHELL=1            Enable directive output
 
 ## Common Commands
-  grove new <name>          Create worktree + branch + tmux session
+  grove new <name>          Create worktree + branch + its session
   grove ls                  List worktrees (table)
   grove ls --json           List worktrees (JSON, machine-readable)
   grove to <name>           Move to worktree (does not touch the stack by default)
   grove to <name> --up      Move and bring the stack
-  grove to <name> --peek    Move without hooks or tmux (lightweight)
-  grove to <name> --no-tmux Move with hooks but without tmux
+  grove to <name> --here    Stay in this shell: change directory only, hooks still run
+  grove to <name> --no-hooks  Skip hooks and the dirty check
+  grove to <name> --peek    Short for --here --no-hooks (no side effects)
   grove up                  Bring the stack to this worktree
   grove down                Stop the stack
   grove fetch pr/<N>        Create worktree from GitHub PR
@@ -67,19 +69,33 @@ func writeAgentHelp(cmd *cobra.Command) {
 
 ## Agent Tips
   - Call the binary directly, not the shell function
-  - Use --json flag on ls/new/to for machine-readable output
-  - Set GROVE_AGENT_MODE=1 to prevent tmux from taking over your terminal
+  - Use --json (-j) for machine-readable output. Errors are then JSON on stderr.
+    --json works on: %s
+  - Set GROVE_AGENT_MODE=1 to prevent a session from taking over your terminal
   - By default grove to does not touch the stack ([switch] container_switch = "auto" or "prompt"
     changes that). With agent stacks enabled, grove to --up leaves the stack where
     it is (a human may be using it). If the target has no isolated stack yet, it
     also prints an 'agent mode:' notice on stderr.
     Run grove up --isolated before running tests
-  - grove new emits cd:/path directives — parse these to know where the worktree was created
+  - grove new <name> --json prints switch_to: the path of the new worktree. The cd:/path
+    directive is only printed when GROVE_SHELL=1
 
 ## Full Documentation
   grove --help              All commands
   docs/AGENT_GUIDE.md       Comprehensive agent reference
-`, binPath, project)
+`, binPath, project, strings.Join(jsonCommandNames(), ", "))
+}
+
+// jsonCommandNames lists every command that takes --json, read from the
+// commands themselves so the reference cannot go stale.
+func jsonCommandNames() []string {
+	var names []string
+	for _, c := range rootCmd.Commands() {
+		if c.Flags().Lookup("json") != nil {
+			names = append(names, c.Name())
+		}
+	}
+	return names
 }
 
 func init() {

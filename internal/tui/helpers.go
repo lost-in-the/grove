@@ -8,6 +8,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	lipgloss "charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/lost-in-the/grove/internal/worktree"
 )
@@ -22,23 +23,51 @@ const (
 	reviewChangesRequested = "CHANGES_REQUESTED"
 )
 
-// renderFilterBar writes the filter/count bar used by list views (Issues, PRs).
-// When filtering is active or a filter is set, it shows the filter input view
-// with a "N of M" count. Otherwise it shows "N open" or an empty line.
-func renderFilterBar(b *strings.Builder, filterView string, filtering bool, filter string, filteredCount, totalCount int) {
-	if filtering || filter != "" {
-		b.WriteString(filterView)
-		if filter != "" {
-			fmt.Fprintf(b, "  %s", Styles.DetailDim.Render(fmt.Sprintf("%d of %d", filteredCount, totalCount)))
-		}
-		b.WriteString("\n\n")
-	} else {
-		if totalCount > 0 {
-			b.WriteString(Styles.DetailDim.Render(fmt.Sprintf("%d open", totalCount)) + "\n\n")
-		} else {
-			b.WriteString("\n\n")
+// filterRow is a list's filter row: the input, then, once there is text,
+// how many rows it shows, and, once applied, how to clear it. It is "" when
+// no filter is open. Every list with a filter draws it as its first row.
+func filterRow(input string, typing bool, filter string, shown, total int) string {
+	if !typing && filter == "" {
+		return ""
+	}
+	row := input
+	if filter != "" {
+		row += "  " + Styles.DetailDim.Render(fmt.Sprintf("%d of %d", shown, total))
+		if !typing {
+			row += Styles.HelpSep.Render(" · ") + Styles.HelpKey.Render("esc") + " " + Styles.HelpDesc.Render("clear")
 		}
 	}
+	return row
+}
+
+// filterInputView is a filter's input as its row shows it: with the text
+// cursor while you type, else the prompt and the text alone.
+func filterInputView(in textinput.Model, typing bool) string {
+	if !typing {
+		return in.Prompt + in.Value()
+	}
+	in.SetWidth(0) // the dashboard list pads it to its width; the count follows the text
+	return in.View()
+}
+
+// renderFilterBar writes the filter/count bar used by list views (Issues, PRs).
+// When filtering is active or a filter is set, it shows the filter row.
+// Otherwise it shows "N open" or an empty line. The second, normally blank
+// row holds the move notice without shifting the items or hiding the filter.
+func (m Model) renderFilterBar(b *strings.Builder, in textinput.Model, filtering bool, filter string, filteredCount, totalCount, width int) {
+	if row := filterRow(filterInputView(in, filtering), filtering, filter, filteredCount, totalCount); row != "" {
+		b.WriteString(ansi.Truncate(row, width, "…") + "\n")
+	} else {
+		if totalCount > 0 {
+			b.WriteString(Styles.DetailDim.Render(fmt.Sprintf("%d open", totalCount)) + "\n")
+		} else {
+			b.WriteString("\n")
+		}
+	}
+	if m.cannotMove {
+		b.WriteString(ansi.Truncate(moveNotice(), width, "…"))
+	}
+	b.WriteString("\n")
 }
 
 func truncate(s string, max int) string {
@@ -134,16 +163,14 @@ func padRight(s string, n int) string {
 
 // calcDisplaySlots computes how many 3-line item slots fit in the remaining
 // height after headerLines have been rendered, and a clamped content width.
+// It shows at least minSlots items, even when they overflow maxHeight.
 // Used by both renderPRList and renderIssueList.
-func calcDisplaySlots(headerLines, maxHeight, width int) (slots, contentWidth int) {
+func calcDisplaySlots(headerLines, maxHeight, width, minSlots int) (slots, contentWidth int) {
 	availableLines := maxHeight - headerLines
 	if availableLines < 3 {
 		availableLines = 3
 	}
-	slots = (availableLines + 1) / 3
-	if slots < 3 {
-		slots = 3
-	}
+	slots = max((availableLines+1)/3, minSlots)
 	contentWidth = width - 2
 	if contentWidth < 40 {
 		contentWidth = 40
@@ -151,10 +178,23 @@ func calcDisplaySlots(headerLines, maxHeight, width int) (slots, contentWidth in
 	return slots, contentWidth
 }
 
+// newTextInput is every grove text field. ctrl+k moves in finders, so it
+// never deletes to the end of the line; ctrl+u still deletes before the
+// cursor.
+func newTextInput() textinput.Model {
+	ti := textinput.New()
+	unbindDeleteAfterCursor(&ti)
+	return ti
+}
+
+func unbindDeleteAfterCursor(ti *textinput.Model) {
+	ti.KeyMap.DeleteAfterCursor.SetEnabled(false)
+}
+
 // newFilterInput creates a configured textinput for list filtering.
 // All list filter inputs share the same prompt and char limit; only placeholder varies.
 func newFilterInput(placeholder string) textinput.Model {
-	ti := textinput.New()
+	ti := newTextInput()
 	ti.Prompt = "Filter: "
 	ti.Placeholder = placeholder
 	ti.CharLimit = 100
@@ -163,14 +203,15 @@ func newFilterInput(placeholder string) textinput.Model {
 
 // handleListFilterKey handles key routing when a list view's filter input is
 // active. Returns the updated textinput, cursor, tea.Cmd, and whether filtering
-// should stop (true when Escape or Enter is pressed).
+// should stop: esc clears the filter, enter and tab keep it. No key moves
+// the rows while you type.
 func handleListFilterKey(msg tea.KeyPressMsg, keys KeyMap, ti textinput.Model, cursor int) (textinput.Model, int, tea.Cmd, bool) {
 	switch {
 	case key.Matches(msg, keys.Escape):
 		ti.Blur()
 		ti.SetValue("")
 		return ti, 0, nil, true
-	case key.Matches(msg, keys.Enter):
+	case key.Matches(msg, keys.Enter), key.Matches(msg, keys.Tab):
 		ti.Blur()
 		return ti, cursor, nil, true
 	default:
@@ -203,7 +244,7 @@ func renderExistingWorktreePrompt(p *ExistingWorktreePrompt, width int) string {
 	b.WriteString(d.indent + "  → " + Styles.SuccessText.Render(p.WorktreeName) + "\n")
 
 	content := b.String()
-	footer := "\n" + Styles.Footer.Render(d.indent+"[enter] go to worktree  [n] copy  [esc] back")
+	footer := "\n" + promptKeys(moveFooter(Hint{"esc", "cancel"}, Hint{"enter", "go to worktree"}, Hint{"n", "copy"}), d.inner, d.indent)
 
 	return Styles.OverlayBorder.Width(d.overlay).Render(
 		Styles.OverlayTitle.Render("Worktree Exists") + "\n\n" + padToHeight(content, 8) + footer,

@@ -17,24 +17,22 @@ import (
 )
 
 var (
-	newJSON       bool
+	newFlags      createFlags
 	newMirror     string // Remote branch to mirror (e.g., "origin/main")
-	newNoDocker   bool   // Skip auto-starting Docker
-	newUp         bool   // Bring the stack up for the new worktree
 	newBranch     string // Override branch name
 	newFrom       string // Create branch from this ref
 	newFromBranch string // Check out an existing branch in the new worktree
 	newDirty      bool   // Carry over `git diff HEAD` from the current worktree
-	newNoSwitch   bool   // Skip auto-switching to the new worktree
-	newNoTmux     bool   // Skip tmux session creation/switch
+	newHere       bool   // Placement "here": no session is created or switched to
 )
 
 var newCmd = &cobra.Command{
 	Annotations: map[string]string{createsWorktreesAnnotation: "true"},
 	Use:         "new [name]",
 	Aliases:     []string{"spawn", "n"},
-	Short:       "Create a new worktree and tmux session",
-	Long: `Create a new git worktree with the specified name and create a tmux session for it.
+	Short:       "Create a new worktree and its session",
+	Long: `Create a new git worktree with the specified name, create its session, and
+move you to it.
 
 The worktree will be created in the parent directory of the current repository.
 A new branch with the same name will be created automatically.
@@ -45,8 +43,9 @@ Creating a worktree never moves the stack by itself. Use --up to bring the
 stack to the new worktree, or set auto_up = true under [plugins.docker] to do
 it every time. --no-docker skips it even when auto_up is set.
 
-Use --no-tmux to skip tmux entirely for this invocation: no session is
-created and your tmux client is not switched. Docker and hooks still run.
+Use --here to stay in the shell or pane you are in: no session is created,
+and grove only changes directory. Docker and hooks still run. To do that
+every time, set [session] open_in = "here".
 
 Use --mirror to create an environment worktree that tracks a remote branch.
 Environment worktrees are read-only and can be synced with 'grove sync'.
@@ -58,7 +57,7 @@ worktree. Useful when promoting an in-progress branch from your main checkout
 into its own worktree.
 
 Examples:
-  grove new feature-auth                          # Create worktree + tmux session
+  grove new feature-auth                          # Create worktree + its session
   grove new feature-auth --branch custom-branch   # Use custom branch name
   grove new feature-auth --from develop            # Branch from develop
   grove new feature-auth --up                      # Also bring the stack
@@ -70,7 +69,7 @@ Examples:
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		// spawn alias implies JSON output
 		if cmd.CalledAs() == "spawn" {
-			newJSON = true
+			newFlags.json = true
 		}
 
 		if err := ctx.RequireConfig("create the worktree"); err != nil {
@@ -131,8 +130,8 @@ Examples:
 		// dirty checks. If a non-standard or prunable worktree owns the name,
 		// the eventual git worktree add will surface it.
 		if mgr.PathExists(name) {
-			return fmt.Errorf("worktree '%s' already exists\n\nOptions:\n  • Switch to it: grove to %s\n  • Remove it first: grove rm %s\n  • Use different name: grove new %s-v2",
-				name, name, name, name)
+			return exitcode.With(exitcode.ResourceExists, fmt.Errorf("worktree '%s' already exists\n\nOptions:\n  • Switch to it: grove to %s\n  • Remove it first: grove rm %s\n  • Use different name: grove new %s-v2",
+				name, name, name, name))
 		}
 
 		// Resolve the branch the worktree will actually be created on up front,
@@ -173,9 +172,8 @@ Examples:
 
 			// Verify the remote branch exists
 			if err := cmdexec.Run(context.TODO(), "git", []string{"-C", ctx.ProjectRoot, "rev-parse", "--verify", mirror}, "", cmdexec.GitLocal); err != nil {
-				cli.Error(stderr, "remote branch '%s' not found", mirror)
-				cli.Faint(stderr, "Run 'git fetch' and verify the branch exists")
-				os.Exit(exitcode.ResourceNotFound)
+				return exitcode.With(exitcode.ResourceNotFound,
+					fmt.Errorf("remote branch '%s' not found\nRun 'git fetch' and verify the branch exists", mirror))
 			}
 
 			// branchName is env/{name} (resolveNewBranch). Must actually create
@@ -189,7 +187,7 @@ Examples:
 				return fmt.Errorf("failed to create environment worktree: %w", err)
 			}
 
-			if !newJSON {
+			if !newFlags.json {
 				cli.Success(w, "Created environment worktree '%s' tracking %s", name, mirror)
 			}
 		} else if newFromBranch != "" {
@@ -203,7 +201,7 @@ Examples:
 				return fmt.Errorf("failed to create worktree from branch %q: %w", newFromBranch, err)
 			}
 
-			if !newJSON {
+			if !newFlags.json {
 				cli.Success(w, "Created worktree '%s' from branch '%s'", name, newFromBranch)
 			}
 		} else {
@@ -219,7 +217,7 @@ Examples:
 				}
 			}
 
-			if !newJSON {
+			if !newFlags.json {
 				cli.Success(w, "Created worktree '%s'", name)
 			}
 		}
@@ -228,9 +226,9 @@ Examples:
 		wt, prov, err := setupCreatedWorktree(ctx, mgr, name, branchName, worktreeSetupOpts{
 			IsEnvironment: isEnvironment,
 			Mirror:        mirror,
-			NoDocker:      newNoDocker,
-			Up:            newUp,
-			JSONOutput:    newJSON,
+			NoDocker:      newFlags.noDocker,
+			Up:            newFlags.up,
+			JSONOutput:    newFlags.json,
 		}, w)
 		if err != nil {
 			return err
@@ -243,41 +241,40 @@ Examples:
 		// inspect and re-apply manually.
 		if newDirty {
 			if len(dirtyPatch) == 0 {
-				if !newJSON {
+				if !newFlags.json {
 					cli.Info(w, "--dirty: no uncommitted changes to transfer")
 				}
 			} else if err := applyDirtyPatch(wt.Path, dirtyPatch); err != nil {
 				cli.Warning(stderr, "--dirty: failed to apply patch to new worktree: %v", err)
 				cli.Faint(stderr, "The patch is intact in your current worktree; resolve manually and re-apply.")
-			} else if !newJSON {
+			} else if !newFlags.json {
 				cli.Success(w, "Transferred uncommitted changes (--dirty)")
 			}
 		}
 
 		projectName := mgr.GetProjectName()
 
-		// Create the session if a multiplexer is available (skip with --no-tmux;
-		// agent mode intentionally still creates the detached session — see
-		// AGENTS.md).
+		// Create the session if a multiplexer is available. Agent mode
+		// intentionally still creates the detached session (see AGENTS.md).
 		//
-		// [session] open_in = "current" does suppress it. Agent mode and tmux
-		// mode "off" only say "don't relocate my client", and a detached
-		// session is still useful to them; open_in is a statement about where
-		// the worktree lands, and answering "the shell I'm already in" with a
-		// second one elsewhere is not that.
-		if m := ctx.Mux(); !newNoTmux && m.Available() && !openInCurrent(ctx.Config) {
+		// A "here" placement does suppress it. Agent mode and mode "off" only
+		// say "don't relocate my client", and a detached session is still
+		// useful to them; "here" is a statement about where the worktree
+		// lands, and answering "the shell I'm already in" with a second one
+		// elsewhere is not that.
+		if m := ctx.Mux(); m.Available() && !landsHere(ctx.Config, newHere) {
 			target := muxTarget(mgr, name, wt.Path)
 			if managed, err := ensureSession(m, target, w); err != nil {
-				if !newJSON {
+				if !newFlags.json {
 					cli.Warning(w, "Failed to create session: %v", err)
 				}
-			} else if managed && !newJSON {
+			} else if managed && !newFlags.json {
 				reportEnsured(w, m, target)
 			}
 		}
 
 		// JSON output mode — return early to avoid cd: directive collision
-		if newJSON {
+		if newFlags.json {
 			result := output.NewWorktreeResult{
 				Name:    name,
 				Branch:  branchName,
@@ -285,7 +282,7 @@ Examples:
 				Created: true,
 			}
 			result.Provisioned, result.FileSetup = prov.jsonFields()
-			if !newNoSwitch {
+			if !newFlags.noSwitch {
 				result.SwitchTo = wt.Path
 			}
 			if err := output.PrintJSON(result); err != nil {
@@ -303,10 +300,10 @@ Examples:
 			currentWorktreeName = mgr.DisplayNameForPath(currentPath)
 		}
 
-		// Switch to new worktree unless --no-switch. Agent mode, --no-tmux,
-		// and tmux mode "off" suppress the client switch (terminal takeover).
-		if !newNoSwitch {
-			suppressTmux := resolveTmuxMode(ctx.Config, newNoTmux, false) == tmuxModeOff
+		// Switch to new worktree unless --no-switch. Agent mode, a "here"
+		// placement, and mode "off" suppress the client switch.
+		if !newFlags.noSwitch {
+			suppressTmux := resolveTmuxMode(ctx.Config, newHere) == tmuxModeOff
 			sessionName := worktree.TmuxSessionName(projectName, name)
 			if !switchToWorktree(ctx, stderr, currentWorktreeName, name, sessionName, wt.Path, suppressTmux) {
 				emitCdOrExplain(stderr, wt.Path)
@@ -366,17 +363,14 @@ func resolveNewBranch(name, mirror, fromBranch, branch string) string {
 }
 
 func init() {
-	newCmd.Flags().BoolVarP(&newJSON, "json", "j", false, "Output as JSON with switch_to field")
+	newFlags.registerAll(newCmd)
 	newCmd.Flags().StringVarP(&newBranch, "branch", "b", "", "Branch name to create (default: worktree name)")
 	newCmd.Flags().StringVarP(&newFrom, "from", "f", "", "Create branch from this ref (default: HEAD)")
 	newCmd.Flags().StringVar(&newFromBranch, "from-branch", "", "Check out an existing branch in the new worktree (no new branch created)")
-	newCmd.Flags().BoolVar(&newDirty, "dirty", false, "Carry over `git diff HEAD` from the current worktree (requires --from-branch)")
+	newCmd.Flags().BoolVar(&newDirty, "dirty", false, "Carry over 'git diff HEAD' from the current worktree (requires --from-branch)")
 	newCmd.Flags().StringVar(&newMirror, "mirror", "", "Create environment worktree tracking a remote branch (e.g., origin/main)")
-	newCmd.Flags().BoolVar(&newNoDocker, "no-docker", false, "Skip Docker auto-start")
-	newCmd.Flags().BoolVarP(&newUp, "up", "u", false, "Also bring the stack to the new worktree (per-invocation auto_up)")
-	newCmd.MarkFlagsMutuallyExclusive("up", "no-docker")
-	newCmd.Flags().BoolVar(&newNoTmux, "no-tmux", false, "Skip tmux session creation/switch for this invocation")
-	newCmd.Flags().BoolVarP(&newNoSwitch, "no-switch", "n", false, "Stay in current worktree after creation")
+	addHereFlag(newCmd, &newHere)
+	addDeprecatedNoTmuxFlag(newCmd, &newHere)
 	newCmd.MarkFlagsMutuallyExclusive("mirror", "from")
 	newCmd.MarkFlagsMutuallyExclusive("mirror", "branch")
 	newCmd.MarkFlagsMutuallyExclusive("mirror", "from-branch")

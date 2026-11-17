@@ -250,6 +250,33 @@ detached
 	}
 }
 
+// A folder is off the pattern when grove could not read a short name from
+// it: its name is then the whole folder name. The main checkout never is.
+func TestParseWorktreeList_FolderOffPattern(t *testing.T) {
+	input := "worktree /home/user/myapp\nbranch refs/heads/main\n\n" +
+		"worktree /home/user/myapp-checkout\nbranch refs/heads/feat/checkout\n\n" +
+		"worktree /home/user/legacy-api\nbranch refs/heads/feat/api-v2\n\n" +
+		"worktree /home/user/myapp.dotted\nbranch refs/heads/dotted\n"
+	for _, c := range []struct {
+		pattern string
+		want    map[string]bool
+	}{
+		{DefaultNamePattern, map[string]bool{"myapp": false, "checkout": false, "legacy-api": true, "myapp.dotted": true}},
+		{"{project}.{name}", map[string]bool{"myapp": false, "myapp-checkout": true, "legacy-api": true, "dotted": false}},
+	} {
+		trees := parseWorktreeList(input, "/home/user/myapp", "myapp", c.pattern)
+		for _, tree := range trees {
+			want, ok := c.want[tree.ShortName]
+			if !ok {
+				t.Fatalf("%s: unexpected short name %q for %s", c.pattern, tree.ShortName, tree.Path)
+			}
+			if tree.OffPattern != want {
+				t.Errorf("%s: %s OffPattern = %v, want %v", c.pattern, tree.Path, tree.OffPattern, want)
+			}
+		}
+	}
+}
+
 func TestWorktreeCreate(t *testing.T) {
 	// Skip if git is not available
 	if _, err := exec.LookPath("git"); err != nil {

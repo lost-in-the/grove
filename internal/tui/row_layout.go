@@ -9,79 +9,101 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// Fixed dashboard row columns, in cells (spec 5.1).
+// Fixed dashboard row columns, in cells.
 const (
 	rowLeadW       = 2  // pin, agent, cursor, and status each take 2
 	rowCountsW     = 11 // ↑n ↓n ~n, right-aligned
-	rowCountsTight = 5  // one collapsed count, e.g. ↓123
+	rowCountsTight = 5  // one collapsed count, e.g. ↓123; also "STATE"
 	rowAgeW        = 4  // git-style age, up to "11mo"
-	rowTailW       = 4  // session and container glyphs
-	rowAliasFloor  = 16
-	rowChipMin     = 10 // "⎇ " plus enough of the branch to recognize
-	rowAliasCap    = 32 // longer aliases truncate rather than shed columns
+	// rowTailW is the session glyph, a gap, the container glyph, a gap, and
+	// one cell kept blank for a pull request mark.
+	rowTailW = 5
+
+	rowNameFloor = 12 // compact name column: a third of the list, at least this
+	rowNameCap   = 32 // and at most this
+	rowNameMin   = 8  // narrowest name column, when the list is narrow or names are short
+	rowSecondMin = 12 // compact branch column before anything else gives way
 )
 
-// rowLayout is the shape every dashboard row takes at one list width. It is
-// decided once per list, so columns line up from row to row.
-type rowLayout struct {
-	Lead      int  // optional lead columns before the cursor: pin, agent
-	AliasW    int  // alias column width
-	ChipW     int  // chip column width; 0 when the chip is shed
-	Collapsed bool // counts show only the strongest signal
+// compactLayout is the shape every compact row takes at one list width. It
+// is decided once per list, so columns line up from row to row. A row is:
+// lead, cursor, status, name, gap, branch, gap, state, gap, age, gap, tail.
+type compactLayout struct {
+	Lead      int  // agent column cells: 0, or rowLeadW under herdr
+	NameW     int  // name column, the ≠ mark included
+	Second    bool // a branch (or folder) column; false when list_secondary is off
+	SecondW   int
+	StateW    int
+	Collapsed bool // the state shows only the strongest count
 	ShowAge   bool
 }
 
-// countsW is the counts column width for the layout.
-func (l rowLayout) countsW() int {
-	if l.Collapsed {
-		return rowCountsTight
+// fixed is the row width without the branch column's own cells.
+func (l compactLayout) fixed() int {
+	w := l.Lead + 2*rowLeadW + l.NameW + 1 + l.StateW + 1 + rowTailW
+	if l.Second {
+		w++
 	}
-	return rowCountsW
-}
-
-// total is the row width the layout uses: lead, cursor, and status columns,
-// then alias, chip, counts, age, and tail, each after a one-cell gap.
-func (l rowLayout) total() int {
-	w := (l.Lead+2)*rowLeadW + l.AliasW
-	if l.ChipW > 0 {
-		w += 1 + l.ChipW
-	}
-	w += 1 + l.countsW()
 	if l.ShowAge {
 		w += 1 + rowAgeW
 	}
-	return w + 1 + rowTailW
+	return w
 }
 
-// layoutColumns applies the shed order (spec 5.2) for a list width: drop
-// the chip, then the age, then collapse the counts, then truncate the alias
-// down to 16 cells. lead is the number of optional lead columns (pin,
-// agent); maxAlias is the widest alias in the list.
-func layoutColumns(width, lead, maxAlias int, anyChip bool) rowLayout {
-	need := min(max(maxAlias, rowAliasFloor), rowAliasCap)
-	l := rowLayout{Lead: lead, ShowAge: true}
-	room := func() int {
-		l.AliasW, l.ChipW = 0, 0
-		return width - l.total()
+// total is the row width the layout uses.
+func (l compactLayout) total() int { return l.fixed() + l.SecondW }
+
+// layoutCompact sizes the compact columns for a list width. The name column
+// is a third of the width, between rowNameFloor and rowNameCap, and no
+// wider than the longest name needs (at least rowNameMin); the branch column
+// takes the rest. When the branch column would drop under rowSecondMin, the
+// state collapses to its strongest count, then the age goes, then the name
+// column narrows to rowNameMin. With second false (list_secondary off) the
+// name column takes the branch column's room.
+func layoutCompact(width, lead, longestName, stateW int, second bool) compactLayout {
+	l := compactLayout{Lead: lead, Second: second, ShowAge: true, StateW: min(max(stateW, rowCountsTight), rowCountsW)}
+	if !second {
+		l.NameW = max(rowNameMin, width-l.fixed())
+		return l
 	}
-	r := room()
-	if r < need && l.ShowAge {
+	l.NameW = min(min(max(width/3, rowNameFloor), rowNameCap), max(longestName, rowNameMin))
+	room := func() int { return width - l.fixed() }
+	if room() < rowSecondMin && l.StateW > rowCountsTight {
+		l.StateW, l.Collapsed = rowCountsTight, true
+	}
+	if room() < rowSecondMin {
 		l.ShowAge = false
-		r = room()
 	}
-	if r < need {
-		l.Collapsed = true
-		r = room()
+	if short := rowSecondMin - room(); short > 0 {
+		l.NameW = max(rowNameMin, l.NameW-short)
 	}
-	// The cap only governs shedding: with room to spare, a long alias
-	// gets its full width.
-	l.AliasW = max(rowAliasFloor, min(max(maxAlias, rowAliasFloor), r))
-	// The chip is first to go: it shows only while nothing else has shed
-	// and the alias has all it needs, so it never squeezes the alias.
-	if spare := r - l.AliasW - 1; anyChip && l.ShowAge && !l.Collapsed && l.AliasW >= need && spare >= rowChipMin {
-		l.ChipW = spare
-	}
+	l.SecondW = max(0, room())
 	return l
+}
+
+// countsWidth is the width of rowCounts(ahead, behind, dirty, false),
+// computed without building the string.
+func countsWidth(ahead, behind, dirty int) int {
+	w, n := 0, 0
+	for _, c := range [3]int{ahead, behind, dirty} {
+		if c > 0 {
+			w += 1 + digits(c)
+			n++
+		}
+	}
+	if n > 1 {
+		w += n - 1
+	}
+	return w
+}
+
+func digits(n int) int {
+	d := 1
+	for n >= 10 {
+		n /= 10
+		d++
+	}
+	return d
 }
 
 // rowCounts formats ahead, behind, and dirty counts. Full form lists all
@@ -117,19 +139,21 @@ var ticketID = regexp.MustCompile(`^[A-Za-z]+-\d+`)
 // middleTruncate shortens s to at most w cells by cutting from the middle.
 // It keeps the last "-" segment and as much of the head as fits, trimmed
 // back to a "-" boundary but never shorter than a leading ticket id, so
-// "abc-1349-migrate-the-read-path" becomes "abc-1349-migrate-…-path".
+// "abc-1349-migrate-the-read-path" becomes "abc-1349-migrate-…-path". When
+// keeping the last segment would leave the head less than half, it cuts
+// evenly instead (cutMiddle).
 func middleTruncate(s string, w int) string {
 	if lipgloss.Width(s) <= w {
 		return s
 	}
 	i := strings.LastIndex(s, "-")
 	if i <= 0 {
-		return ansi.Truncate(s, w, "…")
+		return cutMiddle(s, w)
 	}
 	tail := s[i:]
 	budget := w - 1 - lipgloss.Width(tail)
-	if budget < 1 {
-		return ansi.Truncate(s, w, "…")
+	if budget < max(1, (w-1)/2) {
+		return cutMiddle(s, w)
 	}
 	head := ansi.Truncate(s, budget, "")
 	// Trim back to a "-" boundary when that costs only a few cells, never
@@ -138,4 +162,35 @@ func middleTruncate(s string, w int) string {
 		head = head[:j+1]
 	}
 	return head + "…" + tail
+}
+
+// cutMiddle shortens s to at most w display cells, keeping its start and
+// its end around "…". The end gets the odd cell.
+func cutMiddle(s string, w int) string {
+	sw := lipgloss.Width(s)
+	switch {
+	case sw <= w:
+		return s
+	case w <= 0:
+		return ""
+	case w == 1:
+		return "…"
+	}
+	head := ansi.Truncate(s, (w-1)/2, "")
+	keep := w - 1 - lipgloss.Width(head)
+	tail := ansi.TruncateLeft(s, sw-keep, "")
+	for lipgloss.Width(tail) > keep {
+		_, size := firstRune(tail)
+		tail = tail[size:]
+	}
+	return head + "…" + tail
+}
+
+func firstRune(s string) (rune, int) {
+	for i, r := range s {
+		if i > 0 {
+			return r, i
+		}
+	}
+	return 0, len(s)
 }

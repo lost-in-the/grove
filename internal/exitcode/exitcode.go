@@ -2,6 +2,8 @@
 // These codes provide consistent error handling across all Grove commands.
 package exitcode
 
+import "errors"
+
 const (
 	// ResourceNotFound indicates a requested resource (worktree, branch, etc.) was not found.
 	ResourceNotFound = 1
@@ -56,3 +58,28 @@ const (
 	// printed, with "provisioned": false, so a script learns the path.
 	CreatedNotProvisioned = 14
 )
+
+// Error is an error that carries the exit code the process should end with.
+// A command returns one when the default (1) is not the right code.
+type Error struct {
+	Code int
+	Err  error
+}
+
+func (e *Error) Error() string { return e.Err.Error() }
+
+func (e *Error) Unwrap() error { return e.Err }
+
+// With attaches an exit code to err.
+func With(code int, err error) error {
+	return &Error{Code: code, Err: err}
+}
+
+// From returns the exit code err asks for, or 1 when it names none.
+func From(err error) int {
+	var coded *Error
+	if errors.As(err, &coded) {
+		return coded.Code
+	}
+	return 1
+}

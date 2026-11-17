@@ -53,8 +53,8 @@ func TestViewHelpOverlay(t *testing.T) {
 	m = typeOmni(m, "keyboard")
 	m = sendKey(m, "enter")
 	v := m.viewString()
-	if !strings.Contains(v, "Navigation") {
-		t.Error("expected 'Navigation' section in help overlay")
+	if !strings.Contains(v, "Moving and typing") {
+		t.Error("expected the input model's section first in the help overlay")
 	}
 	if !strings.Contains(v, "scroll") {
 		t.Error("expected scroll hint in help overlay")

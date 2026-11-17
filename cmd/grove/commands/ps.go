@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -33,8 +34,8 @@ var psCmd = &cobra.Command{
 	Short:   "Show active stacks",
 	Long: `List all active Docker stacks, their reference IDs, and URLs.
 
-Each stack started with 'grove up --isolated' or auto-started by 'grove new'
-runs its own containers independently.
+Each stack started with 'grove up --isolated', or by 'grove new' with --up or
+auto_up = true, runs its own containers independently.
 
 Examples:
   grove ps          # Show active stacks
@@ -43,10 +44,9 @@ Examples:
 		w := cli.NewStdout()
 
 		slots, err := docker.ListStackSlots(ctx.Config)
-		if err != nil {
+		if errors.Is(err, docker.ErrAgentStackNotConfigured) {
 			if psJSON {
-				output.PrintJSONError(exitcode.ExternalCommandFailed, fmt.Sprintf("failed to list stacks: %v", err))
-				return nil
+				return output.PrintJSON([]psSlotOutput{})
 			}
 			cli.Info(w, "Stacks not configured for this project")
 			cli.Faint(w, "")
@@ -57,6 +57,9 @@ Examples:
 			cli.Faint(w, "  services = [\"app\"]")
 			cli.Faint(w, "  template_path = \"agent-stacks/template.yml\"")
 			return nil
+		}
+		if err != nil {
+			return exitcode.With(exitcode.ExternalCommandFailed, fmt.Errorf("failed to list stacks: %w", err))
 		}
 
 		if psJSON {

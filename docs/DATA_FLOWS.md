@@ -14,7 +14,7 @@ Config
   Alias         string           # default: "w"
   ProjectsDir   string           # default: ~/projects
   DefaultBranch string           # default: "main"
-  Switch        SwitchConfig     # dirty_handling: "prompt" | "auto-stash" | "refuse"
+  Switch        SwitchConfig     # dirty_handling: "warn" | "ignore" | "prompt" | "refuse" | "auto-stash"
   Naming        NamingConfig     # pattern: "{project}-{name}" (worktree directory template)
   Tmux          TmuxConfig       # mode: "auto" | "manual" | "off", prefix: ""
   Plugins       PluginsConfig    # docker plugin config
@@ -499,7 +499,7 @@ Every tmux session with the project prefix should correspond to an existing work
 
 ### INV-4: Config Validation
 
-Config must pass `Validate()`: non-empty alias and default_branch, valid enum values for `dirty_handling` (auto-stash/prompt/refuse), `tmux.mode` (auto/manual/off), `docker.mode` (local/external). External docker mode requires path, env_var, and services.
+Config must pass `Validate()`: non-empty alias and default_branch, valid enum values for `dirty_handling` (warn/ignore/prompt/refuse/auto-stash), `tmux.mode` (auto/manual/off), `docker.mode` (local/external). External docker mode requires path, env_var, and services.
 
 **Enforced by:** `Validate()` called at the end of every `Load()`.
 

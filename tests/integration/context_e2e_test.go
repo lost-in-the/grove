@@ -10,6 +10,7 @@ package integration_test
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -165,4 +166,39 @@ func jsonKeys(m map[string]interface{}) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// Outside a grove project the central error handler reports the failure, so
+// --json callers get JSON and both modes exit 10.
+func TestOutsideGroveProject_ExitsTenInTextAndJSON(t *testing.T) {
+	binary := buildGroveBinary(t)
+	emptyDir := t.TempDir()
+
+	_, stderr, err := groveIn(emptyDir, binary, "ls")
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 10 {
+		t.Fatalf("grove ls: err = %v, want exit code 10\n%s", err, stderr)
+	}
+	if !strings.Contains(stderr, "not a grove project — not inside a git repository") {
+		t.Errorf("text error lost its message:\n%s", stderr)
+	}
+
+	stdout, stderr, err := groveIn(emptyDir, binary, "ls", "--json")
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 10 {
+		t.Fatalf("grove ls --json: err = %v, want exit code 10\n%s", err, stderr)
+	}
+	if stdout != "" {
+		t.Errorf("grove ls --json wrote to stdout on failure: %q", stdout)
+	}
+	var result struct {
+		Error   bool   `json:"error"`
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal([]byte(stderr), &result); err != nil {
+		t.Fatalf("stderr is not JSON: %v\n%s", err, stderr)
+	}
+	if !result.Error || result.Code != 10 || !strings.Contains(result.Message, "not a grove project") {
+		t.Errorf("JSON error = %+v, want error with code 10 and the not-a-grove-project message", result)
+	}
 }

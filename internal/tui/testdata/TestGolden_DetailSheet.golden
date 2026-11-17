@@ -2,6 +2,7 @@
  ╭─ [1mfeature-auth[m ───────────────────────────────────────────────────────────╮   
  │── Git ─────────────────────────────────────────────────────────────────  │   
  │Branch    feature-auth                                                    │   
+ │Folder    test-project-feature-auth/                                      │   
  │Commit    abc1234 · 2 hours ago                                           │   
  │Remote    not tracking                                                    │   
  │                                                                          │   
@@ -20,5 +21,4 @@
                                                                                 
                                                                                 
                                                                                 
-                                                                                
-  [1m↑↓[m scroll · [1mg/G[m top/bottom · [1mtab[m list · [1mesc[m list                              
+  move · [1m↑↓/jk[m scroll · [1mg/G[m top/bottom · [1mesc/tab[m back                           

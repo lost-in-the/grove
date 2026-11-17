@@ -263,6 +263,10 @@ For zsh, registration requires `compinit` to have run **before** the grove eval 
 (( $+functions[compdef] )) && echo "compinit loaded" || echo "compinit NOT loaded — move it above the grove line"
 ```
 
+### The dashboard says `grove cannot move you from here`
+
+The dashboard found no session to switch and no shell function to change directory. It shows that line under the header before you pick a worktree, and after you pick one it prints the `cd` to run on stderr. Running the binary by its path skips the `grove` function, and so does a shell opened before the eval line was added. Run `type grove` to check, then add `eval "$(grove install zsh)"` (or bash) and open a new shell. The same explanation follows any CLI command that would change your directory without the function.
+
 ### TUI closes but doesn't change directory
 
 The TUI uses a temp file (`GROVE_CD_FILE`) for directory handoff. If the temp directory is full or unwritable, the handoff silently fails. Check:
@@ -282,7 +286,8 @@ The `grove` binary only prints `cd:` and `tmux-attach:` directives when it detec
 `tmux-attach:` directives are only acted on when the wrapper detects the directive in output. Ensure:
 1. `tmux` is installed and in `$PATH`
 2. `grove install zsh/bash` was run after installing tmux
-3. The tmux mode in config is not set to `off` (`grove config` → Behavior → `tmux_mode`)
+3. The session mode in config is not set to `off` (`grove config` → Behavior → `session_mode`)
+4. The placement is `session`, not `here` (`grove config` → Behavior → `open_in`). With `here`, or with `--here`, grove only changes directory
 
 ### iTerm2 control mode (`tmux -CC`)
 

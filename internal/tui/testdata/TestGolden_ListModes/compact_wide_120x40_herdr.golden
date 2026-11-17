@@ -1,0 +1,40 @@
+ [1m[1mtest-project[m · 5 worktrees · ! 1 blocked · ✓ 1 done · ⬍ name                                                       2/5[m 
+                                                                        │ ╭─ [1mcheckout[m ──────────────────────────────╮   
+       NAME                    BRANCH                  STATE  AGE       │ │── Git ────────────────────────────────  │   
+     ● root                    main ················· ↓12 ~1   3w ⬢ ◆   │ │Branch    feat/checkout-redesign         │   
+ ! ❯ ● [1mcheckout[m                feat/che…-redesign ······ ~13   2d ⬡     │ │Folder    myapp-checkout/                │   
+ ✓   ○ fix-login               fix/login-timeout ···········   5h ⬡     │ │Remote    not tracking                   │   
+ ▸   ● legacy-api ≠            feat/api…agination ···· ↑3 ~2  24h ⬡     │ │                                         │   
+     ● payments-reconci…-audit agent/payme…-x7k2p · ↑1 ↓2 ~4  8mo ⬡     │ │── Status ─────────────────────────────  │   
+                                                                        │ │Working   ● dirty (13 files)             │   
+                                                                        │ │Herdr     ⬡ open workspace               │   
+                                                                        │ │Agent     ◆ blocked                      │   
+                                                                        │ │                                         │   
+                                                                        │ │── Changes ────────────────────────────  │   
+                                                                        │ ╰─────────────────────────────────────────╯   
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+  move · [1m↑↓/jk[m move · [1menter[m switch · [1mspace[m go to · [1mtab[m detail · [1m/[m filter · [1mv[m detailed · [1mg[m more · [1m?[m help · [1mq[m quit        

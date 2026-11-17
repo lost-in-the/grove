@@ -5,6 +5,7 @@ type DirtyAction int
 
 const (
 	DirtyAllow  DirtyAction = iota // Proceed with switch
+	DirtyWarn                      // Say what is left behind, then proceed
 	DirtyStash                     // Auto-stash changes before switching
 	DirtyPrompt                    // Ask the user interactively
 	DirtyRefuse                    // Block the switch
@@ -12,9 +13,10 @@ const (
 
 // ResolveDirtyAction determines what to do when switching away from a worktree
 // based on the configured dirty handling mode, current state, and environment.
-func ResolveDirtyAction(dirtyHandling string, isDirty, isPeek, isInteractive bool) DirtyAction {
-	// Peek mode always allows — it's a lightweight switch that skips hooks
-	if isPeek {
+func ResolveDirtyAction(dirtyHandling string, isDirty, noHooks, isInteractive bool) DirtyAction {
+	// A --no-hooks run changes nothing but where you are, so it never warns,
+	// stashes, prompts, or refuses.
+	if noHooks {
 		return DirtyAllow
 	}
 
@@ -25,6 +27,10 @@ func ResolveDirtyAction(dirtyHandling string, isDirty, isPeek, isInteractive boo
 
 	// Dirty worktree: resolve based on config
 	switch dirtyHandling {
+	case "warn":
+		return DirtyWarn
+	case "ignore":
+		return DirtyAllow
 	case "refuse":
 		return DirtyRefuse
 	case "auto-stash":

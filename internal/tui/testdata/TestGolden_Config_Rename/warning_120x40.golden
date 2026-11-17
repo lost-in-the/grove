@@ -1,0 +1,40 @@
+ [1m[1mtest-project[m ▸ [1msettings[m                                                                                               [m 
+  [1m[1] general[m   [2] behavior   [3] plugins   [4] protection                                                             
+                                                                                                                        
+ ❯ [1mProject name         [m  myapp                    │  [1mProject name[m  project_name                                        
+   Projects folder        ~/projects               │  The {project} part of worktree folder and session names.          
+   Default branch         main                     │  ⚠ This project has 2 worktrees besides root. Changing this does   
+                                                   │    not rename their folders. Grove will stop recognizing them by   
+                                                   │    their short names.                                              
+                                                   │                                                                    
+                                                   │   Value    [1mmyapp[m                                                   
+                                                   │   Default  the repo name                                           
+                                                   │   Empty: the repo name from the git remote, else the folder name.  
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+                                                   │                                                                    
+  move · [1m↑↓/jk[m move · [1menter[m edit · saves as you go · [1mesc[m close                                                          

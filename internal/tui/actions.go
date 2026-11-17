@@ -59,8 +59,8 @@ func findAction(layer, k string) (Action, bool) {
 // it matters.
 func dashboardActions() []Action {
 	return []Action{
-		{ID: "list.navigate", Keys: []string{"up", "k", "down", "j"}, Display: "↑↓", Label: "navigate", Footer: 1},
-		{ID: "worktree.switch", Keys: []string{"enter"}, Label: "switch to worktree", Short: "switch", Footer: 2,
+		{ID: "list.navigate", Keys: []string{"up", "k", "down", "j"}, Display: "↑↓/jk", Label: "move", Footer: 1},
+		{ID: "worktree.switch", Keys: []string{"enter", "ctrl+m"}, Label: "switch to worktree", Short: "switch", Footer: 2,
 			Synonyms: []string{"go to", "open", "cd"},
 			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { return m.handleDashboardEnterKey() }},
 		{ID: "worktree.switch_up", Keys: []string{"U"}, Label: "switch and bring the stack", Short: "switch + up",
@@ -69,10 +69,27 @@ func dashboardActions() []Action {
 		{ID: "worktree.new", Keys: []string{"n"}, Label: "new worktree", Short: "new",
 			Synonyms: []string{"create", "add", "new worktree"},
 			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { return m.handleDashboardNewKey() }},
-		{ID: "omni.open", Keys: []string{"space"}, Display: "␣", Label: "find", Footer: 3,
+		{ID: "omni.open", Keys: []string{"space"}, Label: "go to", Footer: 3,
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) { return m.openOmni(omniScopeAll) }},
 		{ID: "list.filter", Keys: []string{"/"}, Label: "filter", Footer: 5, Synonyms: []string{"search"}},
-		{ID: "detail.open", Keys: []string{"tab", "l"}, Label: "show detail", Short: "detail", Footer: 4,
+		// The footer names the mode v switches to (listToggleLabel).
+		{ID: "list.density", Keys: []string{"v"}, Label: "compact or detailed list", Footer: 6,
+			Synonyms: []string{"density", "compact", "detailed", "view mode", "list mode"},
+			Run: func(m Model, _ string) (tea.Model, tea.Cmd) {
+				m.helpFooter.SetHighlight("v")
+				m.toggleListMode()
+				return m, nil
+			}},
+		{ID: "layout.sidebar", Keys: []string{"t"}, Label: "show or hide the sidebar", Short: "sidebar", Footer: 7,
+			Synonyms: []string{"sidebar", "detail pane", "panel", "hide detail"},
+			Run: func(m Model, _ string) (tea.Model, tea.Cmd) {
+				if isWideLayout(m.width) {
+					m.helpFooter.SetHighlight("t")
+				}
+				m.toggleSidebar()
+				return m, nil
+			}},
+		{ID: "detail.open", Keys: []string{"tab", "ctrl+i", "l"}, Label: "show detail", Short: "detail", Footer: 4,
 			Synonyms: []string{"details", "info"},
 			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { m.openDetail(); return m, nil }},
 		{ID: "list.sort", Keys: []string{"o"}, Label: "change sort", Short: "sort",
@@ -81,7 +98,7 @@ func dashboardActions() []Action {
 				m.sortMode = m.sortMode.Next(m.agentAware)
 				return m, m.applySortToList()
 			}},
-		{ID: "goto.open", Keys: []string{"g"}, Label: "goto", Footer: 6,
+		{ID: "goto.open", Keys: []string{"g"}, Label: "more", Footer: 8,
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) {
 				m.pendingG = true
 				m.updateLayout()
@@ -89,7 +106,7 @@ func dashboardActions() []Action {
 			}},
 		// ? runs from handleKey in every view; its entry feeds the footer
 		// and keeps the key map and this table in step.
-		{ID: "app.help", Keys: []string{"?"}, Label: "help", Footer: 7},
+		{ID: "app.help", Keys: []string{"?"}, Label: "help", Footer: 9},
 		{ID: "app.messages", Label: "messages", Synonyms: []string{"warnings", "errors", "log", "history"},
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) { return m.openMessages() }},
 		{ID: "app.shortcuts", Label: "keyboard shortcuts", Synonyms: []string{"help", "keys", "cli commands"},
@@ -100,14 +117,14 @@ func dashboardActions() []Action {
 			}},
 		{ID: "app.quit", Keys: []string{"q"}, Label: "quit", Synonyms: []string{"exit"},
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) { return m, tea.Quit }},
-		{ID: "app.back", Keys: []string{"esc"}, Label: "back",
+		// At the root esc only clears an applied filter: q and ctrl+c quit.
+		{ID: "app.back", Keys: []string{"esc", "ctrl+["}, Label: "back",
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) {
-				// With a filter applied, esc clears it instead of quitting.
 				if m.list.FilterState() == list.FilterApplied {
 					m.list.ResetFilter()
-					return m, nil
+					m.updateDetailContent()
 				}
-				return m, tea.Quit
+				return m, nil
 			}},
 
 		{ID: "worktree.delete", Enabled: notMainOrProtected, Keys: []string{"d"}, Label: "delete worktree",
@@ -147,13 +164,6 @@ func dashboardActions() []Action {
 				m.helpFooter.SetHighlight("r")
 				m.loading = true
 				return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
-			}},
-		{ID: "list.density", Keys: []string{"v"}, Label: "show or hide commit messages",
-			Synonyms: []string{"density", "compact", "view mode"},
-			Run: func(m Model, _ string) (tea.Model, tea.Cmd) {
-				m.helpFooter.SetHighlight("v")
-				m.toggleCompactMode()
-				return m, nil
 			}},
 		{ID: "list.sort_reverse", Keys: []string{"O"}, Label: "reverse sort",
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) {
@@ -215,11 +225,10 @@ func dashboardActions() []Action {
 	}
 }
 
-// openConfig opens the config editor.
+// openConfig opens the settings panel.
 func (m Model) openConfig() (tea.Model, tea.Cmd) {
 	m.pushView(ViewConfig)
 	m.configState = NewConfigState()
-	m.configState.resize(m.configFormSize())
 	return m, loadConfigCmd()
 }
 
@@ -238,10 +247,15 @@ func (m Model) openUpgrade() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// dashboardFooterHints are the footer-marked actions, in footer order.
-func dashboardFooterHints() []Hint {
+// dashboardFooterHints are the footer-marked actions, in footer order. v is
+// labeled with toggle, the list mode it switches to. t is offered only when
+// sidebar is set (sidebarHintFits at 110+ columns).
+func dashboardFooterHints(toggle string, sidebar bool) []Hint {
 	var marked []Action
 	for _, a := range dashboardActions() {
+		if a.ID == "layout.sidebar" && !sidebar {
+			continue
+		}
 		if a.Footer > 0 {
 			marked = append(marked, a)
 		}
@@ -250,7 +264,10 @@ func dashboardFooterHints() []Hint {
 	hints := make([]Hint, len(marked))
 	for i, a := range marked {
 		label := a.Label
-		if a.Short != "" {
+		switch {
+		case a.ID == "list.density":
+			label = toggle
+		case a.Short != "":
 			label = a.Short
 		}
 		hints[i] = Hint{a.display(), label}
@@ -263,4 +280,11 @@ func dashboardFooterHints() []Hint {
 func notMainOrProtected(m Model) bool {
 	item, ok := m.selectedItem()
 	return ok && !item.IsMain && !item.IsProtected
+}
+
+// sidebarHintFits reports whether the dashboard footer, with v labeled
+// toggle, keeps to one line of width cells with t sidebar in it. A list row
+// is worth more than the hint, so it never makes the footer wrap.
+func sidebarHintFits(toggle string, width int) bool {
+	return fitsOneLine(moveFooter(Hint{"q", "quit"}, dashboardFooterHints(toggle, true)...), width)
 }

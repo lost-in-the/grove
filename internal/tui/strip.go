@@ -48,7 +48,7 @@ func (m Model) gStripLines() []string {
 		}
 	}
 	entries = append(entries, stripEntry{"esc", "close"})
-	return stripLines(stripTitle("g", "goto"), entries, m.width-2)
+	return stripLines(stripTitle("g", "more"), entries, m.width-2)
 }
 
 // openStripLines is whichever strip is open, or nil.

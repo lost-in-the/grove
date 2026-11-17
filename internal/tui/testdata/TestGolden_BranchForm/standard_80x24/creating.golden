@@ -1,14 +1,24 @@
-╭──────────────────────────────────────────────────────╮
-│ [1mNew worktree[m                                         │
-│ ⠋ Creating worktree 'abc-12'...                      │
-│                                                      │
-│                                                      │
-│                                                      │
-│                                                      │
-│                                                      │
-│                                                      │
-│                                                      │
-│                                                      │
-│ creating…                                            │
-│ wait for this to finish                              │
-╰──────────────────────────────────────────────────────╯
+ [1m[1mtest-project[m · 5 worktrees · ⬍ name                                        1/5[m 
+                                                                                
+   ● [1mroot[m │ test-project-root/ ·····································   0s       
+     ⎇ root                                                                     
+                                                                                
+   ○ [1mfeature-auth[m │ test-project-feature-auth/ ·····················  60m       
+     ⎇ feature-auth                                                             
+                                                                                
+                                                                                
+                                                                                
+   [38;2;151;151;151m•[m[38;2;60;60;60m•[m[38;2;60;60;60m•[m                                                                          
+ ──[1m New worktree [m────────────────────────────────────────────────────────────── 
+ ⠋ Creating worktree 'abc-12'...                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ creating…                                                                      
+ wait for this to finish                                                        

@@ -40,7 +40,8 @@ func formatNumber(n int) string {
 }
 
 // renderPRItemList renders a scrollable list of PR items with cursor, scroll window, and overflow indicator.
-func renderPRItemList(prs []*tracker.PullRequest, cursor int, scrollSize int, contentWidth int, worktreeBranches map[string]string) string {
+// focused false draws no cursor arrow, for a list beside a focused panel.
+func renderPRItemList(prs []*tracker.PullRequest, cursor int, scrollSize int, contentWidth int, worktreeBranches map[string]string, focused bool) string {
 	var b strings.Builder
 	if len(prs) == 0 {
 		b.WriteString(Styles.DetailDim.Render("  (no matching PRs)") + "\n")
@@ -53,7 +54,7 @@ func renderPRItemList(prs []*tracker.PullRequest, cursor int, scrollSize int, co
 		pr := prs[i]
 
 		cur := "  "
-		if i == cursor {
+		if i == cursor && focused {
 			cur = Styles.ListCursor.Render("❯ ")
 		}
 
@@ -111,7 +112,7 @@ func (m Model) renderPRPanel() string {
 		contextLabel: "Pull Requests",
 		footer:       m.renderPRFooter(),
 		renderList: func(width int, spinnerView string, maxHeight int) string {
-			return renderPRList(s, width, spinnerView, maxHeight)
+			return m.renderPRList(s, width, spinnerView, maxHeight, 3, !s.DetailFocused && s.ExistsPrompt == nil && m.activeView() == ViewPRs)
 		},
 		renderDetail: func(width, height int) string {
 			if s.Loading {
@@ -133,7 +134,9 @@ func (m Model) renderPRPanel() string {
 
 // renderPRList renders the PR list content for the panel layout.
 // It handles loading/creating states, the filter bar, and the scrollable item list.
-func renderPRList(s *PRViewState, width int, spinnerView string, maxHeight int) string {
+// It shows at least minSlots PRs; the docked branch form passes 1 so a short
+// list still fits its rows, and focused false, since the form has focus.
+func (m Model) renderPRList(s *PRViewState, width int, spinnerView string, maxHeight, minSlots int, focused bool) string {
 	var b strings.Builder
 
 	if s.Loading {
@@ -153,10 +156,10 @@ func renderPRList(s *PRViewState, width int, spinnerView string, maxHeight int) 
 	total := len(s.PRs)
 
 	// Filter/count bar
-	renderFilterBar(&b, s.FilterInput.View(), s.Filtering, filter, len(filtered), total)
+	m.renderFilterBar(&b, s.FilterInput, s.Filtering, filter, len(filtered), total, width)
 
-	displaySlots, contentWidth := calcDisplaySlots(strings.Count(b.String(), "\n"), maxHeight, width)
-	b.WriteString(renderPRItemList(filtered, s.Cursor, displaySlots, contentWidth, s.WorktreeBranches))
+	displaySlots, contentWidth := calcDisplaySlots(strings.Count(b.String(), "\n"), maxHeight, width, minSlots)
+	b.WriteString(renderPRItemList(filtered, s.Cursor, displaySlots, contentWidth, s.WorktreeBranches, focused))
 
 	return b.String()
 }
@@ -251,22 +254,25 @@ func (m Model) renderPRDetailViewport(pr *tracker.PullRequest, width, height int
 
 // renderPRFooter returns context-aware footer hints for the PR view.
 func (m Model) renderPRFooter() string {
-	s := m.prState
-	if s != nil && s.DetailFocused {
-		return m.helpFooter.RenderCompactWithHints(detailFocusedHints(), m.width-4)
+	if m.prState == nil {
+		return m.helpFooter.RenderCompact(ViewPRs, m.width-4)
 	}
-	return m.helpFooter.RenderCompact(ViewPRs, m.width-4)
+	return m.helpFooter.Render(browserFooter(m.helpFooter.CompactFooter(ViewPRs), m.prState.Filtering, m.prState.DetailFocused, m.prState.FilterInput.Value()), m.width-4)
 }
 
-// detailFocusedHints returns hints for when a detail panel is focused (shared by PRs and Issues).
-func detailFocusedHints() []Hint {
-	return []Hint{
-		{"↑↓", "scroll"},
-		{"g/G", "top/bottom"},
-		{"B", "open in browser"},
-		{"tab", "list"},
-		{"esc", "back"},
+// browserFooter is a PR or issue browser's footer for its state: typing
+// the filter, the detail pane focused, or the list, where esc first clears
+// an applied filter.
+func browserFooter(list Footer, typing, detail bool, filter string) Footer {
+	switch {
+	case typing:
+		return filterTypingFooter()
+	case detail:
+		return detailFooter(Hint{"esc/tab", "back"}, Hint{"B", "open in browser"})
+	case filter != "":
+		list.Leave = Hint{"esc", "clear"}
 	}
+	return list
 }
 
 // contextPanelConfig holds the varying parts of a context panel layout.
@@ -277,6 +283,9 @@ type contextPanelConfig struct {
 	renderDetail  func(width, height int) string
 	separatorName string
 }
+
+// contextListWidth is the PR and issue list column at split widths.
+func contextListWidth(termW int) int { return (termW - 2) * 40 / 100 }
 
 // renderContextPanel renders a full-screen panel layout shared by Issues and PRs.
 // Both views use identical layout logic (header, side-by-side vs stacked, toast,
@@ -292,7 +301,7 @@ func (m Model) renderContextPanel(cfg contextPanelConfig) string {
 
 	var body string
 	if useSideBySide {
-		listWidth := bodyWidth * 40 / 100
+		listWidth := contextListWidth(m.width)
 		dividerWidth := 3
 		detailWidth := bodyWidth - listWidth - dividerWidth
 

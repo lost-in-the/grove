@@ -57,7 +57,7 @@ func setupSwitchRepo(t *testing.T, binary, hooksToml string) (string, func(dir, 
 	run(repo, "git", "add", ".grove")
 	run(repo, "git", "commit", "-m", "grove files")
 
-	run(repo, binary, "new", "feat", "--no-tmux")
+	run(repo, binary, "new", "feat", "--here")
 	return repo, run
 }
 
@@ -81,7 +81,7 @@ func TestTo_AbortRollbackPopsOwnStash(t *testing.T) {
 
 	testhelper.WriteFile(t, filepath.Join(repo, "a.txt"), "modified\n")
 
-	cmd := exec.Command(binary, "to", "feat", "--no-tmux")
+	cmd := exec.Command(binary, "to", "feat", "--here")
 	cmd.Dir = repo
 	cmd.Env = testhelper.GitEnv()
 	out, err := cmd.CombinedOutput()
@@ -200,7 +200,7 @@ func TestTo_SelfSwitchEmitsCdFromSubdir(t *testing.T) {
 	testhelper.Must(t, os.MkdirAll(sub, 0755))
 	_ = run // repo already set up
 
-	cmd := exec.Command(binary, "to", "root", "--no-tmux")
+	cmd := exec.Command(binary, "to", "root", "--here")
 	cmd.Dir = sub
 	cmd.Env = append(testhelper.GitEnv(), "GROVE_SHELL=1", "GROVE_SHELL_VERSION=9")
 	out, err := cmd.CombinedOutput()

@@ -27,6 +27,10 @@ func testFormOptions() branchFormOptions {
 
 func typeInto(t *testing.T, s *BranchFormState, text string) {
 	t.Helper()
+	typeKeys(s, text)
+}
+
+func typeKeys(s *BranchFormState, text string) {
 	for _, r := range text {
 		s.handleKey(tea.KeyPressMsg{Code: r, Text: string(r)}, DefaultKeyMap())
 	}
@@ -78,7 +82,7 @@ func TestBranchForm_InUseBranchSwitches(t *testing.T) {
 	if in.Kind != intentSwitchTo || in.Target == nil || in.Target.ShortName != "auth" {
 		t.Fatalf("intent = %+v, want switch to auth", in)
 	}
-	if msg, _ := s.status(); msg != "in use by auth · ⏎ switches there" {
+	if msg, _ := s.status(); msg != "in use by auth · enter switches there" {
 		t.Errorf("status = %q", msg)
 	}
 	if press(s, "enter") != formSubmit {
@@ -116,8 +120,8 @@ func TestBranchForm_ClearedAliasStaysEmpty(t *testing.T) {
 	if got := s.aliasValue(); got != "" {
 		t.Fatalf("alias = %q, want empty after clearing", got)
 	}
-	if msg, kind := s.status(); kind != formStatusHint || msg != "type an alias" {
-		t.Errorf("status = %q (%v), want hint 'type an alias'", msg, kind)
+	if msg, kind := s.status(); kind != formStatusHint || msg != "type a name" {
+		t.Errorf("status = %q (%v), want hint 'type a name'", msg, kind)
 	}
 }
 
@@ -148,7 +152,7 @@ func TestBranchForm_ExistingBranchSkipsBase(t *testing.T) {
 	typeInto(t, s, "fix/login")
 	press(s, "tab")
 	if s.Focus != fieldAlias {
-		t.Errorf("focus after tab = %v, want alias (base is n/a for an existing branch)", s.Focus)
+		t.Errorf("focus after tab = %v, want Name (no Base for an existing branch)", s.Focus)
 	}
 	if in := s.intent(); in.Kind != intentCreateExisting || in.Branch != "fix/login" {
 		t.Errorf("intent = %+v, want create from existing fix/login", in)
@@ -182,8 +186,8 @@ func TestBranchForm_DuplicateAliasIsAnError(t *testing.T) {
 	if press(s, "enter") != formContinue {
 		t.Fatal("a taken alias must not submit")
 	}
-	if msg, _ := s.status(); !strings.Contains(msg, "taken by auth") {
-		t.Errorf("status = %q, want it to name the worktree using the alias", msg)
+	if msg, _ := s.status(); msg != `name "auth" is taken by auth` {
+		t.Errorf("status = %q, want it to name the worktree using the name", msg)
 	}
 }
 
@@ -270,12 +274,12 @@ func TestBranchForm_KeyLineNamesTheAction(t *testing.T) {
 	if s.title() != "New worktree" {
 		t.Errorf("title = %q", s.title())
 	}
-	if !strings.HasPrefix(s.keyLine(), "⏎ create") {
-		t.Errorf("key line = %q, want it to start with ⏎ create", s.keyLine())
+	if !strings.Contains(s.keyLine(), "enter create") {
+		t.Errorf("key line = %q, want enter create", s.keyLine())
 	}
 	typeInto(t, s, "feature/auth")
-	if !strings.HasPrefix(s.keyLine(), "⏎ switch") {
-		t.Errorf("key line = %q, want ⏎ switch for an in-use branch", s.keyLine())
+	if !strings.Contains(s.keyLine(), "enter switch") {
+		t.Errorf("key line = %q, want enter switch for an in-use branch", s.keyLine())
 	}
 	s.Busy = true
 	if s.keyLine() != "wait for this to finish" {
@@ -412,19 +416,6 @@ func TestBranchForm_EnterAcceptsMovedPick(t *testing.T) {
 	}
 }
 
-func TestBranchForm_PlaceholderAndLongInputRender(t *testing.T) {
-	s := newBranchForm(testFormOptions())
-	s.setWidth(80, 24)
-	if out := ansi.Strip(renderBranchForm(s, 80, 24, "⠋")); !strings.Contains(out, "type to search or create") {
-		t.Errorf("placeholder missing:\n%s", out)
-	}
-	long := strings.Repeat("x", 70) + "-tail"
-	typeInto(t, s, long)
-	if out := ansi.Strip(renderBranchForm(s, 80, 24, "⠋")); !strings.Contains(out, "x-tail") {
-		t.Errorf("the end of a long branch name is not visible:\n%s", out)
-	}
-}
-
 func TestBranchFormPaste_FillsFocusedField(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(120, 40))
 	m = sendKey(m, "n")
@@ -462,7 +453,7 @@ func TestBranchForm_FailedCreationShowsLogUntilAKey(t *testing.T) {
 	s.Log.AddLine("Creating worktree 'abc-12'...")
 	s.Log.SetDone(errTestBoom)
 	s.setCreatingDone("fatal: a very long git error that the status line cannot hold in full")
-	out := ansi.Strip(renderBranchForm(s, 80, 24, "⠋"))
+	out := strings.Join(panelLines(s, branchFormLayout(80, 24, 78)), "\n")
 	if !strings.Contains(out, "Creating worktree 'abc-12'") {
 		t.Errorf("activity log hidden after a failure:\n%s", out)
 	}
@@ -636,17 +627,45 @@ func TestSwitchForm_StashesWhenDirty(t *testing.T) {
 }
 
 func TestBranchFormModes_KeyLines(t *testing.T) {
-	c := newCopyForm(testFormOptions(), testSource())
-	if !strings.HasPrefix(c.keyLine(), "⏎ copy") {
-		t.Errorf("copy key line = %q", c.keyLine())
-	}
-	sw := newSwitchForm(testFormOptions(), testSource())
-	if !strings.HasPrefix(sw.keyLine(), "⏎ switch") {
-		t.Errorf("switch key line = %q", sw.keyLine())
-	}
 	n := newBranchForm(testFormOptions())
-	if n.keyLine() != "⏎ create · tab field · ctrl+j/k pick · esc back" {
-		t.Errorf("new key line changed: %q", n.keyLine())
+	c := newCopyForm(testFormOptions(), testSource())
+	sw := newSwitchForm(testFormOptions(), testSource())
+	name := newBranchForm(testFormOptions())
+	typeInto(t, name, "abc-12")
+	press(name, "tab")
+	press(name, "tab")
+	changes := newCopyForm(testFormOptions(), testSource())
+	changes.setWIP("/r/auth", true, []string{"a.go"}, nil)
+	changes.setFocus(fieldChanges)
+	for _, tt := range []struct {
+		name string
+		s    *BranchFormState
+		want string
+	}{
+		{"new", n, "type · ↑↓/ctrl+jk pick · tab next · enter create · esc cancel"},
+		{"new, on Name", name, "type · tab next · enter create · esc cancel"},
+		{"copy", c, "type · tab next · enter copy · esc cancel"},
+		{"copy, on Changes", changes, "move · ←→/hl change · tab next · enter copy · esc cancel"},
+		{"switch", sw, "type · ↑↓/ctrl+jk pick · enter switch · esc cancel"},
+	} {
+		if got := tt.s.keyLine(); got != tt.want {
+			t.Errorf("%s: key line = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
+// ctrl+j and ctrl+k still move the pick, though the key line shows only the
+// arrows.
+func TestBranchForm_CtrlJKMovePick(t *testing.T) {
+	s := newBranchForm(testFormOptions())
+	press(s, "ctrl+j")
+	press(s, "ctrl+j")
+	if s.Pick != 2 {
+		t.Errorf("pick after ctrl+j twice = %d, want 2", s.Pick)
+	}
+	press(s, "ctrl+k")
+	if s.Pick != 1 {
+		t.Errorf("pick after ctrl+k = %d, want 1", s.Pick)
 	}
 }
 
@@ -848,9 +867,9 @@ func TestBranchForm_BusyVerbShownOnce(t *testing.T) {
 	s.Branch.SetValue("abc-12")
 	s.syncAlias()
 	s.Busy = true
-	s.Log = NewActivityLog(formLogWidth(80), 6)
+	s.Log = NewActivityLog(40, 6)
 	s.Log.AddLine("Creating worktree 'abc-12'...")
-	out := ansi.Strip(renderBranchForm(s, 80, 24, "⠋"))
+	out := strings.Join(panelLines(s, branchFormLayout(80, 24, 78)), "\n")
 	if n := strings.Count(out, "creating…"); n != 1 {
 		t.Errorf("creating… appears %d times, want 1:\n%s", n, out)
 	}
@@ -863,11 +882,11 @@ func TestBranchForm_BusyLogTailVisibleWhenShort(t *testing.T) {
 	s.Branch.SetValue("abc-12")
 	s.syncAlias()
 	s.Busy = true
-	s.Log = NewActivityLog(formLogWidth(80), 6)
+	s.Log = NewActivityLog(40, 6)
 	for _, l := range []string{"one", "two", "three", "four", "newest step"} {
 		s.Log.AddLine(l)
 	}
-	out := ansi.Strip(renderBranchForm(s, 80, 10, "⠋"))
+	out := strings.Join(panelLines(s, branchFormLayout(80, 8, 78)), "\n")
 	if !strings.Contains(out, "⠋ newest step") {
 		t.Errorf("newest log line scrolled out of view:\n%s", out)
 	}
@@ -898,7 +917,7 @@ func TestSwitchForm_StatusNamesThePick(t *testing.T) {
 		t.Errorf("empty: status = %q", msg)
 	}
 	typeInto(t, s, "fi")
-	if msg, _ := s.status(); msg != "⏎ switches to fix/login" {
+	if msg, _ := s.status(); msg != "enter switches to fix/login" {
 		t.Errorf("partial: status = %q", msg)
 	}
 	typeInto(t, s, "x/login")
@@ -974,7 +993,7 @@ func TestSwitchForm_ExplicitPickOnEmptySubmits(t *testing.T) {
 	s := newSwitchForm(testFormOptions(), testSource())
 	s.setWIP("/r/auth", false, nil, nil)
 	press(s, "ctrl+j")
-	if msg, _ := s.status(); msg != "⏎ switches to fix/login" {
+	if msg, _ := s.status(); msg != "enter switches to fix/login" {
 		t.Errorf("status = %q", msg)
 	}
 	if press(s, "enter") != formSubmit || s.intent().Branch != "fix/login" {
@@ -986,8 +1005,7 @@ func TestCopyForm_DetachedSourceSaysSo(t *testing.T) {
 	src := testSource()
 	src.Branch = ""
 	s := newCopyForm(testFormOptions(), src)
-	s.setWidth(120, 40)
-	out := ansi.Strip(renderBranchForm(s, 120, 40, "⠋"))
+	out := strings.Join(panelLines(s, branchFormLayout(120, 40, 70)), "\n")
 	if !strings.Contains(out, "auth · detached HEAD") {
 		t.Errorf("From row does not name a detached source:\n%s", out)
 	}
@@ -995,7 +1013,7 @@ func TestCopyForm_DetachedSourceSaysSo(t *testing.T) {
 
 func TestExistsPrompt_OffersCopy(t *testing.T) {
 	out := ansi.Strip(renderExistingWorktreePrompt(&ExistingWorktreePrompt{WorktreeName: "auth", Branch: "feature/auth", ItemLabel: "PR #42"}, 120))
-	if !strings.Contains(out, "[n] copy") || strings.Contains(out, "fork") {
+	if !strings.Contains(out, "n copy") || strings.Contains(out, "fork") {
 		t.Errorf("exists prompt should offer copy, not fork:\n%s", out)
 	}
 }

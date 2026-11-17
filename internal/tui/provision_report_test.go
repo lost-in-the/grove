@@ -49,10 +49,10 @@ func TestHandleCreationDone_ReportsProvisioningFailures(t *testing.T) {
 		history []string // after the toast, in display order
 	}{
 		{"one file", fileErr(failed(worktree.FieldCopyFiles, "config/secret.key")),
-			"Created feature. 1 file not copied. See ␣\u00a0messages.",
+			"Created feature. 1 file not copied. See space\u00a0messages.",
 			[]string{"Not copied: config/secret.key (missing in the main worktree)", remedy(1)}},
 		{"several files", fileErr(failed(worktree.FieldCopyFiles, ".env"), failed(worktree.FieldCopyFiles, "config/master.key"), failed(worktree.FieldCopyFiles, "config/secret.key")),
-			"Created feature. 3 files not copied. See ␣\u00a0messages.",
+			"Created feature. 3 files not copied. See space\u00a0messages.",
 			[]string{
 				"Not copied: .env (missing in the main worktree)",
 				"Not copied: config/master.key (missing in the main worktree)",
@@ -60,21 +60,21 @@ func TestHandleCreationDone_ReportsProvisioningFailures(t *testing.T) {
 				remedy(3),
 			}},
 		{"links only", fileErr(failed(worktree.FieldSymlinkFiles, ".tool-versions"), failed(worktree.FieldSymlinkDirs, "node_modules")),
-			"Created feature. 2 files not linked. See ␣\u00a0messages.",
+			"Created feature. 2 files not linked. See space\u00a0messages.",
 			[]string{
 				"Not linked: .tool-versions (missing in the main worktree)",
 				"Not linked: node_modules (missing in the main worktree)",
 				remedy(2),
 			}},
 		{"copied and linked", fileErr(failed(worktree.FieldCopyFiles, ".env"), failed(worktree.FieldSymlinkDirs, "node_modules")),
-			"Created feature. 2 files not set up. See ␣\u00a0messages.",
+			"Created feature. 2 files not set up. See space\u00a0messages.",
 			[]string{
 				"Not copied: .env (missing in the main worktree)",
 				"Not linked: node_modules (missing in the main worktree)",
 				remedy(2),
 			}},
 		{"state", errStateFailed,
-			"Created feature, but grove could not register it. See ␣\u00a0messages.",
+			"Created feature, but grove could not register it. See space\u00a0messages.",
 			[]string{
 				"Not registered: state.json is read-only",
 				"The worktree exists, but grove could not register it. Run `grove adopt /src/myapp-feature`.",
@@ -111,7 +111,7 @@ func TestHandleForkComplete_ReportsFileFailuresAsCopy(t *testing.T) {
 
 	m = sendMsg(m, forkCompleteMsg{name: "feature", path: "/src/myapp-feature", err: fileErr(failed(worktree.FieldCopyFiles, "config/secret.key"))})
 
-	if got, want := m.toast.Message(), "Copied to feature. 1 file not copied. See ␣\u00a0messages."; got != want {
+	if got, want := m.toast.Message(), "Copied to feature. 1 file not copied. See space\u00a0messages."; got != want {
 		t.Errorf("toast = %q, want %q", got, want)
 	}
 	if h := history(m); len(h) != 3 || h[1] != "Not copied: config/secret.key (missing in the main worktree)" || h[2] != remedy(1) {
@@ -229,11 +229,11 @@ func TestProvisionToast_FitsAt80Columns(t *testing.T) {
 		wholeName      bool
 	}{
 		{"files, short name", "feature", fileErr(failed(worktree.FieldCopyFiles, "config/secret.key")),
-			". 1 file not copied. See ␣\u00a0messages.", true},
+			". 1 file not copied. See space\u00a0messages.", true},
 		{"files, 30-character name", long, fileErr(failed(worktree.FieldCopyFiles, "config/secret.key")),
-			". 1 file not copied. See ␣\u00a0messages.", true},
+			". 1 file not copied. See space\u00a0messages.", false},
 		{"state, 30-character name", long, errStateFailed,
-			", but grove could not register it. See ␣\u00a0messages.", false},
+			", but grove could not register it. See space\u00a0messages.", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := newTestModel(withItems(1), withSize(80, 24))

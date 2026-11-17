@@ -14,10 +14,10 @@ import (
 var renameCmd = &cobra.Command{
 	Use:   "rename [old] [new]",
 	Short: "Rename a worktree",
-	Long: `Rename a git worktree, updating its directory, state entry, and tmux session.
+	Long: `Rename a git worktree, updating its directory, state entry, and session.
 
 The worktree directory is moved from {project}-{old} to {project}-{new},
-the state entry is re-keyed, and any associated tmux session is renamed.
+the state entry is re-keyed, and its session is renamed.
 
 Protected and main worktrees cannot be renamed.
 

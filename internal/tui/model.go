@@ -15,6 +15,7 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	lipgloss "charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/config"
@@ -133,11 +134,17 @@ type Model struct {
 	switchTo            string
 	switchToDisplayName string // display name for tmux session naming
 	switchForceUp       bool   // U: the caller moves you and brings the stack (see Exit)
+	cannotMove          bool   // no session and no shell function: an exit cannot move you
 	err                 error
 
 	// Layout
 	width, height int
-	compactMode   bool // true = one-line rows, false = rows with the commit message
+	// compactChoice is the list mode chosen with v or tui.compact_list: true
+	// compact, false detailed. nil lets the layout decide (listDetailed).
+	compactChoice *bool
+	// sidebarHidden is t's choice to hide the docked detail pane at 110+
+	// columns (sidebar_hidden in ui_prefs.json).
+	sidebarHidden bool
 
 	// agentAware is true when the first fetch reported the herdr backend.
 	// It is decided once, so columns never appear or vanish mid-session.
@@ -170,19 +177,19 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 	s := GroveSpinner()
 
 	var configCompact, prefCompact *bool
+	sidebarHidden := false
 	if cfg != nil {
 		configCompact = cfg.TUI.CompactList
 	}
 	pins := pinSet{}
 	if prefs := loadUIPrefs(projectRoot); prefs != nil {
 		prefCompact = prefs.CompactMode
+		sidebarHidden = prefs.SidebarHidden != nil && *prefs.SidebarHidden
 		for slot, alias := range prefs.Pins {
 			pins[slot] = alias
 		}
 	}
-	compact := startupCompact(configCompact, prefCompact)
-
-	l := newWorktreeList(rowDelegate{TwoLine: !compact, Secondary: listSecondary(cfg)})
+	l := newWorktreeList(rowDelegate{Secondary: listSecondary(cfg)})
 
 	h := help.New()
 
@@ -211,7 +218,8 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		cfgLoadErr:          cfgErr,
 		keys:                keys,
 		list:                l,
-		compactMode:         compact,
+		compactChoice:       startupListChoice(configCompact, prefCompact),
+		sidebarHidden:       sidebarHidden,
 		pins:                pins,
 		now:                 time.Now,
 		lastActive:          lastWorktreeName(stateMgr),
@@ -314,8 +322,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleSyncComplete(msg)
 	case configLoadedMsg:
 		return m.handleConfigLoaded(msg)
-	case configSavedMsg:
-		return m.handleConfigSaved(msg)
+	case configFlashDoneMsg:
+		return m.handleConfigFlashDone(msg)
 	case renameCompleteMsg:
 		return m.handleRenameComplete(msg)
 	case checkoutCompleteMsg:
@@ -344,14 +352,10 @@ func (m Model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.ready = true
 	m.updateLayout()
 	if m.branchForm != nil {
-		m.branchForm.setWidth(m.width, m.height)
+		m.branchForm.setWidth(m.branchFormLayout().innerWidth())
 	}
 	if m.omni != nil {
-		w, _ := omniFrameSize(m.width, m.height)
-		m.omni.Input.SetWidth(max(4, w-8))
-	}
-	if m.configState != nil {
-		m.configState.resize(m.configFormSize())
+		setOmniInputWidth(&m.omni.Input, m.width, m.height)
 	}
 	tuilog.Printf("WindowSizeMsg: %dx%d, list size: %dx%d", msg.Width, msg.Height, m.list.Width(), m.list.Height())
 	if !wasReady && m.cfgLoadErr != nil {
@@ -366,10 +370,11 @@ func (m Model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 }
 
 // reconcileDetailWithWidth keeps the detail mode right for the width tier:
-// pane focus exists only at 110+, the full-screen sheet only below it.
+// pane focus exists only while the pane is shown, the full-screen sheet
+// only below 110 columns.
 func (m *Model) reconcileDetailWithWidth() {
 	wide := isWideLayout(m.width)
-	if !wide && m.detailFocused {
+	if !m.sidebarShown() && m.detailFocused {
 		m.detailFocused = false
 		m.refreshDetailForFocus()
 	}
@@ -427,13 +432,7 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 	m.loading = false
 
 	if m.pendingSelect != "" {
-		for i, li := range listItems {
-			if item, ok := li.(WorktreeItem); ok && item.ShortName == m.pendingSelect {
-				m.list.Select(i)
-				tuilog.Printf("pendingSelect: highlighted %q at index %d, path=%q", m.pendingSelect, i, item.Path)
-				break
-			}
-		}
+		m.selectNewWorktree(m.pendingSelect)
 		m.pendingSelect = ""
 	}
 
@@ -467,6 +466,33 @@ func (m Model) handleWorktreesFetched(msg worktreesFetchedMsg) (tea.Model, tea.C
 		lookupPRsCmd(branches),
 		fetchDetailMetricsCmd(m.detailMetricsGen, msg.items, ResolveDefaultBranch(m.cfg)),
 	)
+}
+
+// selectNewWorktree selects the worktree named name after a fetch. SetItems
+// filters an applied filter again only later, in a command, so the filter is
+// run here at once to select by visible row; a filter that hides the new
+// worktree is cleared, as g a clears one that hides its target.
+func (m *Model) selectNewWorktree(name string) {
+	if m.list.FilterState() == list.FilterApplied {
+		m.list.SetFilterText(m.list.FilterValue())
+	}
+	find := func() int {
+		for i, li := range m.list.VisibleItems() {
+			if item, ok := li.(WorktreeItem); ok && item.ShortName == name {
+				return i
+			}
+		}
+		return -1
+	}
+	i := find()
+	if i < 0 && m.list.FilterState() != list.Unfiltered {
+		m.list.ResetFilter()
+		i = find()
+	}
+	if i >= 0 {
+		m.list.Select(i)
+		tuilog.Printf("pendingSelect: highlighted %q at visible row %d", name, i)
+	}
 }
 
 func (m Model) handleDetailMetricsLoaded(msg detailMetricsLoadedMsg) (tea.Model, tea.Cmd) {
@@ -731,44 +757,6 @@ func (m Model) handleSyncComplete(msg syncCompleteMsg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
 }
 
-func (m Model) handleConfigLoaded(msg configLoadedMsg) (tea.Model, tea.Cmd) {
-	if m.configState != nil {
-		if msg.err != nil {
-			m.configState.Err = msg.err
-		} else {
-			m.configState.Config = msg.cfg
-			m.configState.Fields = populateConfigFields(msg.cfg)
-
-			return m, m.configState.buildForms(m.configFormSize())
-		}
-	}
-	return m, nil
-}
-
-func (m Model) handleConfigSaved(msg configSavedMsg) (tea.Model, tea.Cmd) {
-	if msg.err != nil {
-		if m.configState != nil {
-			m.configState.Err = msg.err
-		} else {
-			m.toast.Show(NewToast("Config save failed: "+msg.err.Error(), ToastError))
-		}
-		return m, nil
-	}
-	if m.configState != nil {
-		m.popToRoot()
-		m.configState = nil
-	}
-	m.toast.Show(NewToast("Configuration saved", ToastSuccess))
-	if cfg, err := config.Load(); err != nil {
-		tuilog.Printf("error: config reload after save failed: %v", err)
-		m.toast.Show(NewToast("Saved but reload failed — restart TUI to apply", ToastWarning))
-	} else {
-		m.cfg = cfg
-		m.refreshDelegate() // tui.list_secondary and density settings
-	}
-	return m, nil
-}
-
 func (m Model) handleRenameComplete(msg renameCompleteMsg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	m.popToRoot()
@@ -819,6 +807,12 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	if m.list.FilterState() == list.Filtering {
 		m.pendingG = false
+		// The list keeps a filter only when it has text; enter and tab on
+		// an empty one still go back to the list.
+		if m.list.FilterValue() == "" && (key.Matches(msg, m.keys.Enter) || key.Matches(msg, m.keys.Tab)) {
+			m.list.ResetFilter()
+			return m, nil
+		}
 		prevIdx := m.list.Index()
 		var cmd tea.Cmd
 		m.list, cmd = m.list.Update(msg)
@@ -832,8 +826,8 @@ func (m Model) handleKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleDefault(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.layoutView() == ViewConfig && m.configState != nil && m.configState.form() != nil {
-		return m.handleConfigFormMsg(msg)
+	if m.layoutView() == ViewConfig && m.configState != nil && m.configState.editing {
+		return m.handleConfigInputMsg(msg)
 	}
 
 	var cmd tea.Cmd
@@ -859,27 +853,30 @@ func (m *Model) updateLayout() {
 		return
 	}
 
+	m.helpFooter.listToggle = m.listToggleLabel()
+	m.helpFooter.sidebarKey = isWideLayout(m.width) && sidebarHintFits(m.helpFooter.listToggle, m.width-4)
+	headRows := 1 + m.rowDelegate().headRows() // the filter row, and compact's heading
+
 	headerHeight := 1 // status bar
 	footerHeight := m.helpFooter.CompactHeight(m.layoutView(), m.width-4) + m.stripHeight()
 	available := m.height - headerHeight - footerHeight
 
 	contentWidth := m.width - 2 // body padding (1 char each side)
 
-	listHeaderHeight := 0
-
-	useSideBySide := isWideLayout(m.width)
-	if useSideBySide {
-		// List gets 60% of content width, detail gets the remainder
+	if m.sidebarShown() {
+		// List gets 60% of content width, detail gets the remainder. The
+		// filter row sits above the list.
 		listWidth := contentWidth * 60 / 100
 		dividerWidth := 3 // " │ "
 		detailWidth := contentWidth - listWidth - dividerWidth
-		m.list.SetSize(listWidth, available-listHeaderHeight)
+		m.list.SetSize(listWidth, max(1, available-headRows))
 		m.detail.SetWidth(detailWidth)
 		m.detail.SetHeight(available)
 	} else {
-		// The list takes everything but the selection line. The detail
-		// viewport is sized for the full-screen sheet.
-		m.list.SetSize(contentWidth, max(1, available-1))
+		// The list takes everything but the rows above it and the
+		// selection line. The detail viewport is sized for the full-screen
+		// sheet.
+		m.list.SetSize(contentWidth, max(1, available-headRows-1))
 		m.detail.SetWidth(contentWidth)
 		m.detail.SetHeight(max(3, available))
 	}
@@ -889,35 +886,79 @@ func (m *Model) updateLayout() {
 	m.help.SetWidth(contentWidth)
 }
 
-// toggleCompactMode switches between V1 (compact) and V2 (two-line) delegates.
-func (m *Model) toggleCompactMode() {
-	m.compactMode = !m.compactMode
+// sidebarShown reports whether the dashboard docks the detail pane beside
+// the list: 110+ columns, unless t hid it.
+func (m Model) sidebarShown() bool {
+	return isWideLayout(m.width) && !m.sidebarHidden
+}
 
-	// Persist preference (best-effort, don't block on errors)
-	newVal := m.compactMode
-	if err := updateUIPrefs(m.projectRoot, func(p *UIPrefs) { p.CompactMode = &newVal }); err != nil {
+// toggleSidebar shows or hides the docked pane. Below 110 columns there is
+// no pane, so it does nothing and the saved choice stands.
+func (m *Model) toggleSidebar() {
+	if isWideLayout(m.width) {
+		m.setSidebarHidden(!m.sidebarHidden)
+	}
+}
+
+// setSidebarHidden applies and saves the sidebar choice, keeping the
+// selected row. A hidden pane cannot keep focus.
+func (m *Model) setSidebarHidden(hidden bool) {
+	m.sidebarHidden = hidden
+	if err := updateUIPrefs(m.projectRoot, func(p *UIPrefs) { p.SidebarHidden = &hidden }); err != nil {
 		tuilog.Printf("warning: failed to save UI prefs: %v", err)
 	}
-
-	m.refreshDelegate()
+	if hidden {
+		m.detailFocused = false
+	}
+	idx := m.list.Index()
 	m.updateLayout()
+	m.list.Select(idx)
+	m.refreshDetailForFocus()
+}
+
+// toggleListMode switches compact and detailed and saves the choice
+// (compact_mode in ui_prefs.json, the key the commit-line toggle used: true
+// was one line, so it still means compact).
+func (m *Model) toggleListMode() {
+	compact := m.listDetailed()
+	m.compactChoice = &compact
+	if err := updateUIPrefs(m.projectRoot, func(p *UIPrefs) { p.CompactMode = &compact }); err != nil {
+		tuilog.Printf("warning: failed to save UI prefs: %v", err)
+	}
+	idx := m.list.Index()
+	m.updateLayout()
+	m.list.Select(idx)
 	m.updateDetailContent()
 }
 
-// startupCompact decides the starting density: a saved preference, else the
-// tui.compact_list config, else one-line rows (spec 5.4).
-func startupCompact(config, pref *bool) bool {
-	switch {
-	case pref != nil:
-		return *pref
-	case config != nil:
-		return *config
+// startupListChoice is the mode chosen before this session: a saved
+// preference, else tui.compact_list, else nil for the layout to decide.
+func startupListChoice(config, pref *bool) *bool {
+	if pref != nil {
+		return pref
 	}
-	return true
+	return config
 }
 
-// listSecondary is the text after the alias: "branch" (default), "dir", or
-// "off" (tui.list_secondary).
+// listDetailed reports whether the list draws detailed rows: the chosen
+// mode, else compact beside the detail pane and detailed alone.
+func (m Model) listDetailed() bool {
+	if m.compactChoice != nil {
+		return !*m.compactChoice
+	}
+	return !isWideLayout(m.width)
+}
+
+// listToggleLabel is the mode v switches to, as the footer names it.
+func (m Model) listToggleLabel() string {
+	if m.listDetailed() {
+		return "compact"
+	}
+	return "detailed"
+}
+
+// listSecondary is compact mode's second column: "branch" (default), "dir",
+// or "off" (tui.list_secondary).
 func listSecondary(cfg *config.Config) string {
 	if cfg == nil || cfg.TUI.ListSecondary == "" {
 		return "branch"
@@ -932,13 +973,14 @@ func (m *Model) rowDelegate() rowDelegate {
 		pinOf[alias] = slot
 	}
 	return rowDelegate{
-		TwoLine:    !m.compactMode,
+		Detailed:   m.listDetailed(),
 		Pins:       len(m.pins) > 0,
 		PinOf:      pinOf,
 		LastActive: m.lastActive,
 		AgentAware: m.agentAware,
 		Secondary:  listSecondary(m.cfg),
 		Now:        m.now,
+		Unfocused:  m.detailFocused || m.activeView() != ViewDashboard,
 	}
 }
 
@@ -1147,6 +1189,10 @@ func (m Model) handleDashboardDetailKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd
 	if key.Matches(msg, m.keys.Escape) || key.Matches(msg, m.keys.Tab) || msg.String() == "h" {
 		m.detailFocused = false
 		m.refreshDetailForFocus()
+		return m, nil
+	}
+	if key.Matches(msg, m.keys.Sidebar) {
+		m.toggleSidebar()
 		return m, nil
 	}
 	if key.Matches(msg, m.keys.Quit) {
@@ -1516,7 +1562,8 @@ func (m Model) withToast(screen string) string {
 
 // renderFrame renders frame i of the view stack; -1 is the dashboard root.
 // Overlay frames draw over the frame beneath them, so an overlay opened
-// from the PR browser shows the PR browser behind it.
+// from the PR browser shows the PR browser behind it. The branch form docks
+// into the frame beneath it instead, so that frame's list stays in view.
 func (m Model) renderFrame(i int) string {
 	v := ViewDashboard
 	if i >= 0 {
@@ -1547,13 +1594,18 @@ func (m Model) renderFrame(i int) string {
 			return m.renderPRReviewFrame()
 		}
 		return m.renderFrame(i - 1)
+	case ViewBranchForm:
+		if m.branchForm != nil {
+			return m.renderDockedForm(i - 1)
+		}
+		return m.renderFrame(i - 1)
 	}
 	overlay := m.renderOverlay(v)
 	if overlay == "" {
 		return m.renderFrame(i - 1)
 	}
-	if v == ViewBranchForm || v == ViewOmni {
-		return composeOverlayAt(m.renderFrame(i-1), overlay, m.width, m.height, formTop)
+	if v == ViewOmni {
+		return composeOverlayAt(m.renderFrame(i-1), overlay, m.width, m.height, omniTop)
 	}
 	return composeOverlay(m.renderFrame(i-1), overlay, m.width, m.height)
 }
@@ -1565,10 +1617,6 @@ func (m Model) renderOverlay(v ActiveView) string {
 	case ViewDelete:
 		if m.deleteState != nil {
 			return renderDeleteV2(m.deleteState, m.width)
-		}
-	case ViewBranchForm:
-		if m.branchForm != nil {
-			return renderBranchForm(m.branchForm, m.width, m.height, m.spinner.View())
 		}
 	case ViewOmni:
 		if m.omni != nil {
@@ -1643,7 +1691,7 @@ func (m Model) viewHasTextInput() bool {
 	case ViewBranchForm, ViewRename, ViewOmni:
 		return true
 	case ViewConfig:
-		return m.configState != nil && m.configState.focusOnInput()
+		return m.configState != nil && m.configState.editing
 	case ViewPRs:
 		return m.prState != nil && m.prState.Filtering
 	case ViewIssues:
@@ -1658,18 +1706,21 @@ func (m Model) renderDashboard() string {
 	m.header = m.buildDashboardHeader()
 	statusBar := m.header.View(m.width)
 
-	body := m.renderDashboardBody()
-
 	var footer string
-	if m.detailFocused {
-		footer = m.helpFooter.RenderCompactWithHints(m.dashboardDetailFocusedHints(), m.width-4)
-	} else {
+	switch {
+	case m.detailFocused:
+		footer = m.helpFooter.Render(m.dashboardDetailFooter(), m.width-4)
+	case m.list.FilterState() == list.Filtering:
+		footer = m.helpFooter.Render(filterTypingFooter(), m.width-4)
+	default:
 		footer = m.helpFooter.RenderCompact(ViewDashboard, m.width-4)
 	}
 	if strip := m.renderOpenStrip(); strip != "" {
 		footer = strip + "\n" + footer
 	}
 
+	footerLines := strings.Count(footer, "\n") + 1
+	body := m.renderDashboardBody(m.height - 1 - footerLines)
 	body = lipgloss.NewStyle().Padding(0, 1).Render(body)
 	body = m.clampBodyToHeight(body, footer)
 	if body == "" {
@@ -1706,25 +1757,49 @@ func (m Model) buildDashboardHeader() Header {
 	return h
 }
 
-// renderDashboardBody renders the list and detail panels in side-by-side or stacked layout.
-func (m Model) renderDashboardBody() string {
-	if isWideLayout(m.width) {
-		return m.renderSideBySideBody()
+// renderDashboardBody renders the list and detail panels in side-by-side or
+// stacked layout, in rows lines between the header and the footer.
+func (m Model) renderDashboardBody(rows int) string {
+	if m.sidebarShown() {
+		return m.renderSideBySideBody(rows)
 	}
 	return m.renderStackedBody()
 }
 
-func (m Model) renderSideBySideBody() string {
+// renderSideBySideBody draws the divider down all rows: the list is sized
+// for the dashboard footer, and a shorter footer (pane focused, filter
+// typing) leaves rows under it that the divider still spans.
+func (m Model) renderSideBySideBody(rows int) string {
 	listWidth := m.list.Width()
-	listContent := lipgloss.NewStyle().Width(listWidth).Render(m.list.View())
-	divider := renderVerticalDivider(m.list.Height(), Colors.SurfaceDim)
+	d := m.rowDelegate()
+	listContent := lipgloss.NewStyle().Width(listWidth).Render(m.dashboardListView(m.list, d))
+	divider := renderVerticalDivider(max(rows, m.list.Height()+1+d.headRows()), Colors.SurfaceDim)
 	detailView := m.renderDetailPanel()
 	return lipgloss.JoinHorizontal(lipgloss.Top, listContent, divider, detailView)
 }
 
 func (m Model) renderStackedBody() string {
 	bodyWidth := m.width - 2
-	return lipgloss.JoinVertical(lipgloss.Left, m.list.View(), m.renderSelectionLine(bodyWidth))
+	return lipgloss.JoinVertical(lipgloss.Left, m.dashboardListView(m.list, m.rowDelegate()), m.renderSelectionLine(bodyWidth))
+}
+
+// dashboardListView is l under its filter row, which is blank when no
+// filter is open and grove can move you, and under compact mode's heading
+// row. l is the dashboard list drawn with d, sized by the caller.
+func (m Model) dashboardListView(l list.Model, d rowDelegate) string {
+	// Focus can change without a layout update. Install it on the view's
+	// copy so an overlay or detail pane never leaves a second cursor behind.
+	l.SetDelegate(d)
+	typing := l.FilterState() == list.Filtering
+	row := filterRow(filterInputView(l.FilterInput, typing), typing, l.FilterValue(), len(l.VisibleItems()), len(l.Items()))
+	if m.cannotMove {
+		row = strings.TrimLeft(row+"  "+moveNotice(), " ")
+	}
+	row = ansi.Truncate(row, l.Width(), "…")
+	if h := d.heading(l); h != "" {
+		row += "\n" + h
+	}
+	return row + "\n" + l.View()
 }
 
 // clampBodyToHeight trims the body so statusBar + body + footer fits exactly m.height lines.
@@ -1815,17 +1890,22 @@ func renderDetailV2Focused(item *WorktreeItem, width int) string {
 	return card
 }
 
-// dashboardDetailFocusedHints returns hints for when the dashboard detail panel is focused.
-func (m Model) dashboardDetailFocusedHints() []Hint {
-	hints := []Hint{
-		{"↑↓", "scroll"},
-		{"g/G", "top/bottom"},
-	}
+// dashboardDetailFooter is the footer of the focused detail pane and the
+// detail sheet.
+func (m Model) dashboardDetailFooter() Footer {
+	var extra []Hint
 	if item, ok := m.selectedItem(); ok && item.AssociatedPR != nil {
-		hints = append(hints, Hint{"B", "open PR"})
+		extra = append(extra, Hint{"B", "open in browser"})
 	}
-	hints = append(hints, Hint{"tab", "list"}, Hint{"esc", "list"})
-	return hints
+	f := detailFooter(Hint{"esc/tab", "back"}, extra...)
+	if !isWideLayout(m.width) {
+		return f // the sheet: t does nothing below 110 columns
+	}
+	withT := detailFooter(Hint{"esc/tab", "back"}, append(extra, Hint{"t", "sidebar"})...)
+	if fitsOneLine(withT, m.width-4) {
+		return withT
+	}
+	return f
 }
 
 // clampLines pads or trims s to exactly n lines.
@@ -1887,7 +1967,7 @@ func RunPRs(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, 
 	defer tuilog.Close()
 
 	maybeRefreshUpdateCache()
-	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...).ConfigureForPRs()
+	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...).ConfigureForPRs().checkCanMove()
 	return runModel(model)
 }
 
@@ -1898,7 +1978,7 @@ func RunIssues(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot strin
 	defer tuilog.Close()
 
 	maybeRefreshUpdateCache()
-	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...).ConfigureForIssues()
+	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...).ConfigureForIssues().checkCanMove()
 	return runModel(model)
 }
 
@@ -1909,7 +1989,7 @@ func Run(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string, plu
 	defer tuilog.Close()
 
 	maybeRefreshUpdateCache()
-	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...)
+	model := NewModel(mgr, stateMgr, projectRoot, pluginMgr...).checkCanMove()
 	return runModel(model)
 }
 
@@ -1928,13 +2008,8 @@ func maybeRefreshUpdateCache() {
 // handleTmuxSwitch creates/switches to the multiplexer session for the target
 // worktree. Returns true if a session switch happened (caller should skip cd).
 func (m *Model) handleTmuxSwitch(switchPath string) bool {
-	tmuxMode := "auto"
-	if m.cfg != nil && m.cfg.Tmux.Mode != "" {
-		tmuxMode = m.cfg.Tmux.Mode
-	}
-
 	mx := muxFor(m.cfg)
-	if tmuxMode == "off" || sessionsSuppressed(m.cfg) || !mx.Available() || m.switchToDisplayName == "" {
+	if !sessionSwitchUsable(m.cfg, mx) || m.switchToDisplayName == "" {
 		return false
 	}
 
@@ -2029,22 +2104,7 @@ func runModel(model Model) (Exit, error) {
 		return exit, nil
 	}
 
-	// Handle tmux session switching first — if it succeeds, skip cd
-	// to avoid changing the OLD session's directory
-	if !m.handleTmuxSwitch(exit.Path) {
-		// Route through cli.CdDirective: it prefers a pre-existing
-		// GROVE_CD_FILE (never recreating a stale one — B27 hardening) and
-		// falls back to a cd: line on stdout under GROVE_SHELL; a cd-file
-		// write failure degrades to that fallback instead of failing
-		// runModel.
-		separateFromAltScreen()
-		if cli.CdDirective(exit.Path) {
-			tuilog.Printf("runModel: emitted cd directive for switchTo=%q", exit.Path)
-		} else {
-			tuilog.Printf("runModel: switchTo=%q but no usable GROVE_CD_FILE or GROVE_SHELL — cannot switch", exit.Path)
-		}
-	}
-
+	m.moveAfterExit(exit.Path, cli.NewStderr())
 	return exit, nil
 }
 

@@ -530,7 +530,7 @@ func afterCreateBootstrap(ch chan<- creationEvent, cfg *config.Config, projectNa
 // ensureCreatedSession creates the session for a dashboard-created worktree.
 // It runs after bootstrap so hooks (docker Up, bundle install) have run by the
 // time the user attaches, mirroring the CLI order. [session] open_in =
-// "current" suppresses it, matching `grove new`: the worktree lands in the
+// "here" suppresses it, matching `grove new`: the worktree lands in the
 // shell the user is already in. A variable so tests can observe it.
 var ensureCreatedSession = func(ch chan<- creationEvent, cfg *config.Config, projectName, projectRoot, name, path string) {
 	if m := muxFor(cfg); m.Available() && !sessionsSuppressed(cfg) {

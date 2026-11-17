@@ -20,13 +20,13 @@ func muxTargetFor(projectName, repoRoot, worktreeName, path string) mux.Target {
 	}
 }
 
-// sessionsSuppressed reports whether [session] open_in = "current" opted this
+// sessionsSuppressed reports whether [session] open_in = "here" opted this
 // project out of session management: the worktree lands in the shell already
 // running, so the dashboard must neither create sessions nor relocate the
 // client — mirroring the CLI's resolveTmuxMode / `grove new` gates, which
 // honor the same setting.
 func sessionsSuppressed(cfg *config.Config) bool {
-	return cfg != nil && cfg.EffectiveOpenIn() == config.OpenInCurrent
+	return cfg != nil && cfg.EffectiveOpenIn() == config.OpenInHere
 }
 
 // muxFor resolves the multiplexer backend from a dashboard config.

@@ -65,8 +65,8 @@ working_dir = "new"
 	run(repo, "git", "add", ".grove")
 	run(repo, "git", "commit", "-m", "grove project files")
 
-	run(repo, binary, "new", "feat", "--no-tmux")
-	run(repo, binary, "to", "feat", "--no-tmux")
+	run(repo, binary, "new", "feat", "--here")
+	run(repo, binary, "to", "feat", "--here")
 
 	wt := filepath.Join(base, "proj-feat")
 	for _, marker := range []string{"pre_switch_ran.txt", "post_switch_ran.txt"} {
@@ -122,12 +122,12 @@ func TestTo_AbortedSwitchRestoresAutoStash(t *testing.T) {
 	run(repo, "git", "add", ".grove")
 	run(repo, "git", "commit", "-m", "grove files")
 
-	run(repo, binary, "new", "feat", "--no-tmux")
+	run(repo, binary, "new", "feat", "--here")
 
 	// Dirty the main worktree, then attempt the switch that must abort.
 	testhelper.WriteFile(t, filepath.Join(repo, "a.txt"), "modified\n")
 
-	cmd := exec.Command(binary, "to", "feat", "--no-tmux")
+	cmd := exec.Command(binary, "to", "feat", "--here")
 	cmd.Dir = repo
 	cmd.Env = env
 	out, err := cmd.CombinedOutput()
@@ -195,11 +195,11 @@ func TestTo_AbortedPostSwitchRestoresAutoStash(t *testing.T) {
 	run(repo, "git", "add", ".grove")
 	run(repo, "git", "commit", "-m", "grove files")
 
-	run(repo, binary, "new", "feat", "--no-tmux")
+	run(repo, binary, "new", "feat", "--here")
 
 	testhelper.WriteFile(t, filepath.Join(repo, "a.txt"), "modified\n")
 
-	cmd := exec.Command(binary, "to", "feat", "--no-tmux")
+	cmd := exec.Command(binary, "to", "feat", "--here")
 	cmd.Dir = repo
 	cmd.Env = env
 	out, err := cmd.CombinedOutput()

@@ -607,6 +607,18 @@ func TestNewModel_Integration(t *testing.T) {
 	}
 }
 
+func TestSidebar_StartupLoadsThePreference(t *testing.T) {
+	repo := setupRailsFixture(t)
+	yes := true
+	if err := updateUIPrefs(repo, func(p *UIPrefs) { p.SidebarHidden = &yes }); err != nil {
+		t.Fatal(err)
+	}
+	mgr, stateMgr := newTestManagers(t, repo)
+	if m := NewModel(mgr, stateMgr, repo); !m.sidebarHidden {
+		t.Error("NewModel did not load sidebar_hidden")
+	}
+}
+
 func TestInit_ReturnsFetchCmd(t *testing.T) {
 	repo := setupRailsFixture(t)
 	mgr, stateMgr := newTestManagers(t, repo)
@@ -984,7 +996,7 @@ working_dir = "main"
 	go func() {
 		defer close(ch)
 		cfg := &config.Config{}
-		cfg.Session.OpenIn = config.OpenInCurrent // no session
+		cfg.Session.OpenIn = config.OpenInHere // no session
 		runPostCreateStreaming(ch, mgr, stateMgr, cfg, repo, "live", wt)
 	}()
 	var lines []string

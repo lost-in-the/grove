@@ -1,0 +1,24 @@
+ [1m[1mtest-project[m ▸ [1msettings[m                                                       [m 
+  [1] general   [1m[2] behavior[m   [3] plugins   [4] protection                     
+                                                                                
+  [1mMoving between worktrees[m                                                      
+   Uncommitted files      warn                                                  
+   Docker stack           off                                                   
+   Where you land         session                                               
+   Sessions               auto                                                  
+                                                                                
+  [1mNames[m                                                                         
+ ❯ [1mFolder pattern       [m  {project}-{name}                                      
+ ────────────────────────────────────────────────────────────────────────────── 
+  [1mFolder pattern[m  naming.pattern                                                
+  How grove names a new worktree's folder. Session names always use             
+  {project}-{name}.                                                             
+  ⚠ This project has 2 worktrees besides root. Changing this does not rename    
+    their folders. Grove will stop recognizing them by their short names.       
+                                                                                
+   Value    [1m{project}-{name}[m                                                    
+   Default  {project}-{name}                                                    
+   {project} is the project name, {name} the worktree's short name.             
+   Each appears once. Other characters: letters, digits, . _ -                  
+                                                                                
+  move · [1m↑↓/jk[m move · [1menter[m edit · saves as you go · [1mesc[m close                  

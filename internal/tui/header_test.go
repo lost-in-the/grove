@@ -88,6 +88,8 @@ func TestHeaderView_MinimumWidth(t *testing.T) {
 	}
 }
 
+var ansiStripRE = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
 // stripAnsi removes ANSI escape codes for plain text comparison.
 func stripAnsi(s string) string {
 	var result strings.Builder

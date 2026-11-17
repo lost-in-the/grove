@@ -1,0 +1,24 @@
+ [1m[1mtest-project[m · 5 worktrees · ⬍ name    2/5[m 
+                                            
+     ● [1mroot[m │ myapp/ ···········   3w ⬢ ◆   
+       ⎇ main   ↓12 ~1                      
+                                            
+ 2 ❯ ● [1mcheckout[m │ myapp…ckout/ ·   2d ⬡     
+       ⎇ feat/checkout-redesign   ~13       
+                                            
+     ○ [1mfix-login[m │ myap…login/ ·   5h       
+       ⎇ fix/login-timeout                  
+                                            
+     ● [1mlegacy-api[m │ lega…-api/ ·  24h       
+       ⎇ feat/api-v2-pagination   ↑3 ~2     
+                                            
+     ● [1mpayments-reconciliation-audit[m        
+       ⎇ agent/payments-reconci…-x7k2p   ↓2 
+                                            
+                                            
+                                            
+                                            
+                                            
+ checkout · ⎇ feat/checkout-redesign · red… 
+  move · [1m↑↓/jk[m move · [1menter[m switch          
+  [1mspace[m go to · [1mtab[m detail · [1mq[m quit         

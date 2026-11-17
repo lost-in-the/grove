@@ -182,3 +182,35 @@ func TestIndexAgentFor(t *testing.T) {
 		t.Errorf("AgentFor(no agent) = %q, want %q", got, AgentUnreported)
 	}
 }
+
+func TestSamePath(t *testing.T) {
+	real := t.TempDir()
+	checkout := filepath.Join(real, "grove-testing")
+	if err := os.Mkdir(checkout, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		a, b string
+		want bool
+	}{
+		{"identical", checkout, checkout, true},
+		{"through a symlinked parent", checkout, filepath.Join(link, "grove-testing"), true},
+		{"trailing separator", checkout, checkout + string(filepath.Separator), true},
+		{"a removed directory through a symlinked parent", filepath.Join(real, "gone"), filepath.Join(link, "gone"), true},
+		{"different directories", checkout, real, false},
+		{"empty never matches", "", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SamePath(tt.a, tt.b); got != tt.want {
+				t.Errorf("SamePath(%q, %q) = %v, want %v", tt.a, tt.b, got, tt.want)
+			}
+		})
+	}
+}

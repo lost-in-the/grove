@@ -28,7 +28,9 @@ var adoptCmd = &cobra.Command{
 
 Use when a worktree was created with 'git worktree add' instead of 'grove new':
 the worktree exists, but grove never ran its bootstrap (state registration,
-git excludes, post-create hooks, docker auto-start).
+git excludes, configured files, post-create hooks).
+
+Adopting never moves the stack. Run 'grove up' in the worktree to bring it.
 
 If [path] is omitted, the current directory is adopted.
 

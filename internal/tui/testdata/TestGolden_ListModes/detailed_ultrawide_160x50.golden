@@ -1,0 +1,50 @@
+ [1m[1mtest-project[m · 5 worktrees · ⬍ name                                                                                                                        2/5[m 
+                                                                                                │ ╭─ [1mcheckout[m ──────────────────────────────────────────────╮   
+     ● [1mroot[m │ myapp/ ·······························································   3w ⬢ ◆   │ │── Git ────────────────────────────────────────────────  │   
+       ⎇ main   ↓12 ~1                                                                          │ │Branch    feat/checkout-redesign                         │   
+                                                                                                │ │Folder    myapp-checkout/                                │   
+ 2 ❯ ● [1mcheckout[m │ myapp-checkout/ ··················································   2d ⬡     │ │Remote    not tracking                                   │   
+       ⎇ feat/checkout-redesign   ~13                                                           │ │                                                         │   
+                                                                                                │ │── Status ─────────────────────────────────────────────  │   
+     ○ [1mfix-login[m │ myapp-fix-login/ ················································   5h       │ │Working   ● dirty (13 files)                             │   
+       ⎇ fix/login-timeout                                                                      │ │Session   ⬡ detached session                             │   
+                                                                                                │ │                                                         │   
+     ● [1mlegacy-api[m │ legacy-api/ ····················································  24h       │ │── Changes ────────────────────────────────────────────  │   
+       ⎇ feat/api-v2-pagination   ↑3 ~2                                                         │ ╰─────────────────────────────────────────────────────────╯   
+                                                                                                │                                                               
+     ● [1mpayments-reconciliation-audit[m │ myapp-payments-reconciliation-audit/ ········  8mo       │                                                               
+       ⎇ agent/payments-reconciliation-audit-x7k2p   ↑1 ↓2 ~4                                   │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+                                                                                                │                                                               
+  move · [1m↑↓/jk[m move · [1menter[m switch · [1mspace[m go to · [1mtab[m detail · [1m/[m filter · [1mv[m compact · [1mt[m sidebar · [1mg[m more · [1m?[m help · [1mq[m quit                                     

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/help"
@@ -32,7 +33,6 @@ func newTestModel(opts ...testOpt) Model {
 		help:        h,
 		toast:       NewToastModel(),
 		now:         func() time.Time { return testNow },
-		compactMode: true,
 		helpFooter:  NewHelpFooter(),
 		helpOverlay: NewHelpOverlay(),
 		detail:      viewport.New(viewport.WithWidth(80), viewport.WithHeight(20)),
@@ -122,6 +122,10 @@ func makeKeyMsg(keyStr string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyUp}
 	case "down":
 		return tea.KeyPressMsg{Code: tea.KeyDown}
+	case "left":
+		return tea.KeyPressMsg{Code: tea.KeyLeft}
+	case "right":
+		return tea.KeyPressMsg{Code: tea.KeyRight}
 	case "pgdown":
 		return tea.KeyPressMsg{Code: tea.KeyPgDown}
 	case "pgup":
@@ -143,6 +147,11 @@ func makeKeyMsg(keyStr string) tea.KeyPressMsg {
 	case "shift+tab":
 		return tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
 	default:
+		// ctrl plus one character, as the kitty protocol and tmux extended
+		// keys deliver ctrl+[, ctrl+m, and ctrl+i: apart from esc, enter, tab.
+		if rest, ok := strings.CutPrefix(keyStr, "ctrl+"); ok && len([]rune(rest)) == 1 {
+			return tea.KeyPressMsg{Code: []rune(rest)[0], Mod: tea.ModCtrl}
+		}
 		// Printable character(s)
 		runes := []rune(keyStr)
 		if len(runes) == 1 {

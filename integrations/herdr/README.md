@@ -3,6 +3,9 @@
 A [herdr](https://herdr.dev) plugin that keeps grove's state in sync with
 worktrees created or removed through herdr.
 
+It is a plugin for the herdr server. The herdr desktop app runs on `herdr-core`
+and uses JavaScript mods, so this plugin does not load there.
+
 Note the direction: `plugins/` in this repo holds plugins that extend *grove*
 (docker, tracker). This one runs the other way — it extends *herdr*, and grove
 is the thing being invoked.
@@ -20,7 +23,7 @@ so its bootstrap never runs either — no state, no excludes, no post-create
 hooks, no docker. If you remove one through herdr, grove's record of it goes
 stale the same way. Nothing in grove can notice either on its own.
 
-Verified against herdr 0.8.0 and 0.9.1.
+Verified against herdr 0.8.0, 0.9.1 and 0.9.5.
 
 There is deliberately **no dashboard pane**. herdr's sidebar already lists every
 worktree as a workspace, so a grove picker inside herdr duplicates the primary

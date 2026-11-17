@@ -1,8 +1,13 @@
 package commands
 
 import (
+	"fmt"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 
+	"github.com/lost-in-the/grove/internal/shell"
 	"github.com/lost-in-the/grove/internal/tui"
 )
 
@@ -60,5 +65,48 @@ func TestDecideBareAction(t *testing.T) {
 					tt.isTTY, tt.tuiDisabled, tt.inProject, got, tt.want)
 			}
 		})
+	}
+}
+
+// After U the dashboard leaves the move to grove to --up, so the CLI's own
+// explanation covers a missing shell function there too.
+func TestFinishDashboard_UpWithoutShellIntegrationExplains(t *testing.T) {
+	t.Setenv("GROVE_SHELL", "")
+	t.Setenv("GROVE_CD_FILE", "")
+	ctx := browseTestContext(t)
+	ctx.Config.Mux.Backend = "off"
+	t.Chdir(ctx.ProjectRoot)
+
+	var err error
+	stderr := captureStderr(t, func() {
+		err = finishDashboard(ctx, tui.Exit{Path: ctx.ProjectRoot, Name: filepath.Base(ctx.ProjectRoot), Up: true})
+	})
+
+	if err != nil {
+		t.Fatalf("finishDashboard() error = %v", err)
+	}
+	for _, want := range []string{
+		"grove could not change your directory: shell integration is not loaded.",
+		"cd '" + ctx.ProjectRoot + "'",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("stderr is missing %q:\n%s", want, stderr)
+		}
+	}
+}
+
+// The start-up nudge uses the dashboard's words for shell integration, with
+// no dash.
+func TestWarnOutdatedShellIntegration_Wording(t *testing.T) {
+	t.Setenv("GROVE_SHELL_VERSION", "1")
+	got := captureStderr(t, warnOutdatedShellIntegration)
+	want := fmt.Sprintf("grove: shell integration is outdated (v1, current v%d): run grove setup\n", shell.ShellVersion)
+	if got != want {
+		t.Errorf("stderr = %q, want %q", got, want)
+	}
+
+	t.Setenv("GROVE_SHELL_VERSION", strconv.Itoa(shell.ShellVersion))
+	if got := captureStderr(t, warnOutdatedShellIntegration); got != "" {
+		t.Errorf("stderr = %q for a current shell function, want nothing", got)
 	}
 }

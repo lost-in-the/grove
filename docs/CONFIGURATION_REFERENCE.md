@@ -79,17 +79,21 @@ default_base_branch = "main"       # string
 
 ### [switch]
 
-Controls behavior when switching to a worktree that has uncommitted changes in the current one.
+Controls what `grove to` and `grove last` do when the worktree you are leaving has uncommitted changes. Uncommitted files stay in the worktree you leave, so the default only tells you about them.
 
 ```toml
 [switch]
-# How to handle a dirty working tree on switch.
-# "prompt"     — ask the user what to do (default)
-# "auto-stash" — stash changes before switching (restored automatically only if
-#                the switch aborts; after a completed switch, run `git stash pop`
-#                in that worktree to take the changes back up)
-# "refuse"     — abort the switch if changes are present
-dirty_handling = "prompt"          # string: prompt | auto-stash | refuse
+# What to do when the worktree you are leaving has uncommitted changes.
+# "warn"       : print one line on stderr (`feature has 3 uncommitted files`),
+#                then move (default)
+# "ignore"     : say nothing, move
+# "prompt"     : ask before moving; with no terminal to ask on, refuse
+# "refuse"     : stop the move
+# "auto-stash" : stash the changes, then move. The stash stays parked after the
+#                move: run `git stash pop` in that worktree to get the changes
+#                back. Git stashes are shared across all worktrees. The stash is
+#                restored for you only if the move aborts.
+dirty_handling = "warn"            # string: warn | ignore | prompt | refuse | auto-stash
 
 # Whether `grove to` and `grove last` bring the Docker stack along with you.
 # "off"    — a move never touches the stack: no env file write, no start, no stop,
@@ -136,7 +140,7 @@ Selects which terminal multiplexer grove drives.
 [mux]
 # Which multiplexer manages worktree sessions.
 # "auto"  — prefer the multiplexer grove is already running inside; otherwise
-#           use whichever binary is installed, tmux winning ties (default)
+#           use whichever binary is installed, herdr winning ties (default)
 # "tmux"  — always drive tmux
 # "herdr" — always drive herdr (https://herdr.dev)
 # "off"   — disable session management entirely
@@ -145,8 +149,13 @@ backend = "auto"                   # string: auto | tmux | herdr | off
 
 Under `auto`, grove checks `HERDR_ENV` then `TMUX` to see where it is running,
 because relocating a client in a multiplexer the user is not looking at does
-nothing useful. Outside both, tmux wins ties so existing installs keep their
-behavior when herdr merely happens to be present.
+nothing useful. Outside both, grove uses whichever binary is installed, and
+herdr when both are. Set `backend = "tmux"` to keep tmux on a machine that has
+both.
+
+Inside a pane of the herdr desktop app (`HC_TERMINAL_ID` is set) and outside
+both multiplexers, `auto` resolves to `off`. The app runs on herdr-core, which
+grove cannot drive yet. See [Herdr Integration](HERDR_INTEGRATION.md).
 
 An explicit backend is honored even when its binary is missing — grove reports
 that rather than silently driving a different multiplexer than you asked for.
@@ -182,7 +191,7 @@ predates herdr support.
 [tmux]
 # When to attach/create sessions.
 # "auto"   — create and attach sessions automatically (default)
-# "manual" — never auto-attach; use `grove attach` explicitly
+# "manual": never auto-attach; use `grove join` explicitly
 # "off"    — disable session management entirely (also forces [mux] backend off)
 mode = "auto"                      # string: auto | manual | off
 
@@ -254,13 +263,14 @@ Configures `grove open` command behavior (opening a shell session in a worktree)
 # Default: $SHELL
 command = "/bin/zsh"               # string
 
-# Where a worktree lands when you switch to it.
-#   "new"     — give it a session of its own and move there. Under tmux that
-#               is its tmux session; under herdr its workspace.
-#   "current" — keep the shell you are already in and just change directory.
+# The placement: where you land when you open a worktree.
+#   "session" : the worktree's own session. Grove creates it if needed and
+#               moves you to it. Under tmux that is its tmux session; under
+#               herdr its workspace.
+#   "here"    : the shell or pane you are in. Grove only changes directory.
 #               No session is created, nothing is switched.
-# Default: "new"
-open_in = "new"                    # "new" | "current"
+# Default: "session"
+open_in = "session"                # "session" | "here"
 
 # Whether to open the session in a tmux popup instead of a new window.
 # Default: false
@@ -275,18 +285,32 @@ popup_width = "80%"                # string
 popup_height = "80%"               # string
 ```
 
-**`open_in` vs `[tmux] mode` vs `--peek`.** They answer different questions and
-compose rather than compete:
+**`open_in` vs `[tmux] mode` vs the flags.** They answer different questions:
 
 | | Question it answers |
 |---|---|
 | `[tmux] mode` | *Whether* grove manages sessions at all (`auto` / `manual` / `off`) |
-| `[session] open_in` | *Where the worktree lands* when it does — a new session, or the shell you are in |
-| `--peek` | The one-shot form of `open_in = "current"`, and additionally skips hooks |
+| `[session] open_in` | *Where you land* on every run: `session` or `here` |
+| `--here` | Land `here` for one run |
+| `--no-hooks` | Skip hooks and the dirty check for one run |
+| `--peek` | Short for `--here --no-hooks` |
 
-`open_in = "current"` still fires pre/post-switch hooks and still runs Docker
-side effects; only the session placement changes. `--peek` is the flag to reach
-for when you want neither.
+`open_in = "here"` and `--here` still fire pre/post-switch hooks and still run
+Docker side effects. Only the placement changes. The full table, per backend,
+is in [COMMAND_SPECIFICATIONS.md](COMMAND_SPECIFICATIONS.md#placement).
+
+**Old values.** `open_in = "new"` means `"session"` and `open_in = "current"`
+means `"here"`. Both still load. `grove doctor` and `grove config` name the
+value to change to.
+
+**Older grove binaries.** grove 0.11.0 and older know only `"new"` and
+`"current"`: a file with `open_in = "session"` or `"here"` fails to load there,
+and that grove runs on defaults for the whole file. The settings panel (`c`)
+does not write a value equal to the built-in default when no config file sets
+the key, which keeps a fresh file readable. It cannot help with a non-default
+value: `open_in = "here"` still breaks an older grove that reads the same
+file. Where two versions share a project, keep the old word (`"current"`) in
+the file until every machine runs the newer grove.
 
 ---
 
@@ -331,15 +355,18 @@ default_branch_action = "split"    # string: split | fork
 # Default: "last_segment"
 worktree_name_from_branch = "last_segment"  # string: last_segment
 
-# One-line dashboard rows. false adds the commit message under each row.
+# The dashboard list's mode: true is compact (one line per worktree, in
+# columns), false is detailed (name and folder, then branch and state).
 # A choice saved with `v` in the TUI takes precedence.
-# Default: true
+# Default: unset, so the layout decides: compact when the detail panel sits
+# beside the list (110 columns and up), detailed when it does not.
 compact_list = true                # bool
 
-# Text after the alias on each dashboard row:
-# "branch" — `⎇ branch`, only when its last segment differs from the alias
-# "dir"    — the worktree's directory name
-# "off"    — nothing
+# Compact mode's second column, after the name:
+# "branch" : the branch (heading BRANCH)
+# "dir"    : the worktree's folder name (heading FOLDER)
+# "off"    : no second column; the name column takes its room
+# Detailed mode shows the folder and the branch, and ignores this key.
 # Default: "branch"
 list_secondary = "branch"          # string: branch | dir | off
 ```
@@ -597,7 +624,23 @@ Hooks are defined in a separate file from main config.
 ### Global vs Project Hook Override
 
 By default, global and project hooks **merge** (global runs first, project appends). Use
-`override_<event> = true` to replace global hooks for a specific event:
+`override_<event> = true` to replace global hooks for a specific event.
+
+There is one key per event. Each is a boolean under `[hooks]` in the project
+`.grove/hooks.toml`, and defaults to `false`. In the global file the keys have no effect.
+
+| Key | Global hooks it drops |
+|-----|-----------------------|
+| `override_pre_create` | `[[hooks.pre_create]]` |
+| `override_post_create` | `[[hooks.post_create]]` |
+| `override_pre_switch` | `[[hooks.pre_switch]]` |
+| `override_post_switch` | `[[hooks.post_switch]]` |
+| `override_pre_remove` | `[[hooks.pre_remove]]` |
+| `override_post_remove` | `[[hooks.post_remove]]` |
+
+A key set to `true` with no project hooks for that event means no hooks run for it.
+
+Example:
 
 ```toml
 # ~/.config/grove/hooks.toml (global — applies to all projects)
@@ -983,8 +1026,8 @@ on_failure  = "ignore"
 2. **Wrong file location** — hooks must be in `.grove/hooks.toml` (project) or
    `~/.config/grove/hooks.toml` (global). A file named `hooks.toml` in the repo root is ignored.
 
-3. **Using `--peek`** — `grove to <name> --peek` skips all hooks (and tmux) by design. Remove
-   `--peek` for a full switch with hooks.
+3. **Using `--peek` or `--no-hooks`**: both skip all hooks by design. Remove the flag for a
+   full switch with hooks. To stay in your shell and still run hooks, use `--here`.
 
 4. **Branch matches a skip pattern** — check `[[overrides]]` entries in your hooks file.
    An override with `skip_hooks = true` silences all hooks for matching branches:
@@ -1069,9 +1112,6 @@ mode = "auto"
 project_name = "rails-app"
 default_base_branch = "main"
 
-[switch]
-dirty_handling = "auto-stash"
-
 [tmux]
 mode = "auto"
 on_switch = "reset"
@@ -1105,9 +1145,6 @@ symlink_dirs  = ["storage"]
 # .grove/config.toml — high-concurrency agent workloads with isolated stacks
 
 project_name = "my-app"
-
-[switch]
-dirty_handling = "auto-stash"
 
 [tmux]
 mode = "off"          # tmux suppressed; agents don't need sessions

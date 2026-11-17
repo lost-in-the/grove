@@ -144,15 +144,15 @@ func (m Model) handlePRReviewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case s.Tab == 4 && k == "v" && s.ScopedSHA != "":
 		m.toast.Show(NewToast("viewed marks apply to the whole PR; a shows all commits", ToastInfo))
-	case s.Tab == 4 && k == "enter" && len(s.Files) > 0 && !s.LoadingScope:
+	case s.Tab == 4 && key.Matches(msg, m.keys.Enter) && len(s.Files) > 0 && !s.LoadingScope:
 		return m.openInEditor()
 	case s.Tab == 4 && len(s.Files) > 0 && !s.LoadingScope:
 		m.handleFilesKey(k)
-	case s.Tab == 2 && k == "enter":
+	case s.Tab == 2 && key.Matches(msg, m.keys.Enter):
 		if c := s.Cursor[2]; s.Detail != nil && c < len(s.Detail.Commits) {
 			return m.scopeToCommit(s.Detail.Commits[c])
 		}
-	case s.Tab == 1 && k == "enter":
+	case s.Tab == 1 && key.Matches(msg, m.keys.Enter):
 		if c := s.Cursor[1]; c < len(s.conv) && s.conv[c].kind == convThread {
 			m.jumpToThread(s.conv[c])
 		}
@@ -289,22 +289,24 @@ func (s *PRReviewState) tabCounts() [4]string {
 
 // prReviewFooter shows the active tab's keys.
 func (m Model) prReviewFooter() string {
-	hints := []Hint{{"j/k", "move"}, {"1-4", "tab"}, {"B", "browser"}, {"esc", "back"}}
+	leave := Hint{"esc", "close"}
+	move, tab, browser := Hint{"↑↓/jk", "move"}, Hint{"1-4", "tab"}, Hint{"B", "open in browser"}
+	f := moveFooter(leave, move, tab, browser)
 	switch m.prReview.Tab {
 	case 1:
-		hints = []Hint{{"j/k", "move"}, {"enter", "go to line"}, {"1-4", "tab"}, {"B", "browser"}, {"esc", "back"}}
+		f = moveFooter(leave, move, Hint{"enter", "go to line"}, tab, browser)
 	case 2:
-		hints = []Hint{{"j/k", "move"}, {"enter", "its files"}, {"1-4", "tab"}, {"B", "browser"}, {"esc", "back"}}
+		f = moveFooter(leave, move, Hint{"enter", "its files"}, tab, browser)
 	case 4:
-		hints = m.helpFooter.CompactHints(ViewPRReview)
+		f = m.helpFooter.CompactFooter(ViewPRReview)
 		if m.prReview.Local != nil {
-			hints = []Hint{{"J/K", "file"}, {"enter", "editor"}, {"z", "fold"}, {"t", "rail"}, {"esc", "back"}}
+			f = moveFooter(leave, Hint{"J/K", "file"}, Hint{"enter", "editor"}, Hint{"z", "fold"}, Hint{"t", "rail"})
 		}
 		if m.prReview.ScopedSHA != "" {
-			hints = append([]Hint{{"a", "all commits"}}, hints...)
+			f.Hints = append([]Hint{{"a", "all commits"}}, f.Hints...)
 		}
 	}
-	return m.helpFooter.RenderCompactWithHints(hints, m.width-4)
+	return m.helpFooter.Render(f, m.width-4)
 }
 
 // prReviewBodySize is the size of the frame's body: the terminal minus the

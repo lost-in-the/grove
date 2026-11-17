@@ -1,6 +1,6 @@
 [2m test-project · 3 worktrees · ⬍ name                               ⭡99.0.0  1/3 [m
 [2m                                                                                [m
-[2m ❯ ● root                                                               0s      [m
+[2m   ● root │ test-project-root/ ·····································   0s       [m
 [2m   [m╭────────────────────────────────────────────────────────────────────────╮[2m   [m
 [2m   [m│                                                                        │[2m   [m
 [2m   [m│  [1m⭡ Update available[m                                                    │[2m   [m
@@ -15,10 +15,10 @@
 [2m   [m│  [38;2;150;156;180mChangelog:  [38;2;96;165;250;4mhttps://example.com/release[m                               │[2m   [m
 [2m   [m│                                                                        │[2m   [m
 [2m   [m│  [38;2;69;71;90m────────────────────────────────────────────────────────────────────[m  │[2m   [m
-[2m   [m│    [1mesc[m close                                                           │[2m   [m
+[2m   [m│    move · [1mesc[m close                                                    │[2m   [m
 [2m   [m│                                                                        │[2m   [m
 [2m   [m╰────────────────────────────────────────────────────────────────────────╯[2m   [m
 [2m                                                                                [m
 [2m root · test commit for root                                                    [m
-[2m  ↑↓ navigate · enter switch · ␣ find                                           [m
-[2m  tab detail · / filter · g goto · ? help                                       [m
+[2m  move · ↑↓/jk move · enter switch · space go to · tab detail                   [m
+[2m  / filter · v compact · g more · ? help · q quit                               [m

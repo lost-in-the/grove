@@ -232,7 +232,7 @@ func browseIssuesFzf(cmd *cobra.Command, ctx *GroveContext) error {
 		return nil
 	}
 
-	return fetchItem(ctx, "issue", number)
+	return fetchItem(ctx, "issue", number, false, createFlags{})
 }
 
 func browsePRsFzf(cmd *cobra.Command, ctx *GroveContext) error {
@@ -279,7 +279,7 @@ func browsePRsFzf(cmd *cobra.Command, ctx *GroveContext) error {
 		return nil
 	}
 
-	return fetchItem(ctx, "pr", number)
+	return fetchItem(ctx, "pr", number, false, createFlags{})
 }
 
 // browseURLOutput is the JSON output for grove browse --json.
@@ -423,6 +423,7 @@ func init() {
 	issuesCmd.Flags().String("assignee", "", "Filter by assignee")
 	issuesCmd.Flags().String("author", "", "Filter by author")
 	issuesCmd.Flags().Int("limit", 30, "Maximum number of issues to fetch")
+	registerStateCompletion(issuesCmd)
 
 	// PRs flags
 	prsCmd.Flags().Bool("fzf", false, "Use fzf for selection instead of TUI")
@@ -431,11 +432,19 @@ func init() {
 	prsCmd.Flags().String("assignee", "", "Filter by assignee")
 	prsCmd.Flags().String("author", "", "Filter by author")
 	prsCmd.Flags().Int("limit", 30, "Maximum number of PRs to fetch")
+	registerStateCompletion(prsCmd)
 
 	// Browse flags
-	browseCmd.Flags().Bool("json", false, "Output the URL as JSON without opening the browser")
+	browseCmd.Flags().BoolP("json", "j", false, "Output the URL as JSON without opening the browser")
 
 	rootCmd.AddCommand(issuesCmd)
 	rootCmd.AddCommand(prsCmd)
 	rootCmd.AddCommand(browseCmd)
+}
+
+// registerStateCompletion completes the values --state takes.
+func registerStateCompletion(cmd *cobra.Command) {
+	// The flag was registered just before this call, so this cannot fail.
+	_ = cmd.RegisterFlagCompletionFunc("state", cobra.FixedCompletions(
+		[]string{"open", "closed", "all"}, cobra.ShellCompDirectiveNoFileComp))
 }

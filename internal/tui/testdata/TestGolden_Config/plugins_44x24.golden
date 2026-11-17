@@ -1,0 +1,24 @@
+ [1m[1mtest-project[m ▸ [1msettings[m                   [m 
+  [1]   [2]   [1m[3] plugins[m   [4]             
+                                            
+   Docker plugin          true              
+   Stack up on arrival    true              
+ ❯ [1mStack down on leaving[m  false             
+                                            
+                                            
+                                            
+                                            
+                                            
+ ────────────────────────────────────────── 
+  [1mStack down on leaving[m                     
+  plugins.docker.auto_stop                  
+  Whether the stack goes down on the        
+  worktree you leave. Only when the stack   
+  follows a move: Docker stack is prompt or 
+  auto, or --up.                            
+                                            
+   ○ true    Take the stack down on the     
+             worktree you leave             
+   ● [1mfalse[m   Leave it up (default)          
+  move · [1m↑↓/jk[m move · [1m←→/hl[m change          
+  saves as you go · [1mesc[m close               

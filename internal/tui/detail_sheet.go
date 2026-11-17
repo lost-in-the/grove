@@ -12,9 +12,13 @@ import (
 )
 
 // openDetail shows the selected worktree's detail: at 110+ columns it
-// focuses the docked pane; below that it opens the full-screen sheet.
+// focuses the docked pane, showing it if t hid it; below that it opens the
+// full-screen sheet.
 func (m *Model) openDetail() {
 	if isWideLayout(m.width) {
+		if m.sidebarHidden {
+			m.setSidebarHidden(false)
+		}
 		m.detailFocused = true
 		m.refreshDetailForFocus()
 		return
@@ -60,7 +64,7 @@ func (m Model) handleDetailSheetKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // and the scroll hints.
 func (m Model) renderDetailSheet() string {
 	statusBar := m.buildDashboardHeader().View(m.width)
-	footer := m.helpFooter.RenderCompactWithHints(m.dashboardDetailFocusedHints(), m.width-4)
+	footer := m.helpFooter.Render(m.dashboardDetailFooter(), m.width-4)
 	body := lipgloss.NewStyle().Padding(0, 1).Render(m.detail.View())
 	body = m.clampBodyToHeight(body, footer)
 	return lipgloss.JoinVertical(lipgloss.Left, statusBar, body, footer)

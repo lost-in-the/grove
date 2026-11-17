@@ -1,0 +1,24 @@
+ [1m[1mtest-project[m ▸ [1msettings[m        ✗ not saved[m 
+  [1]   [1m[2] behavior[m   [3]   [4]            
+                                            
+  [1mMoving between worktrees[m                  
+ ❯ [1mUncommitted files    [m  warn              
+   Docker stack           off               
+   Where you land         session           
+   Sessions               auto              
+                                            
+  [1mNames[m                                     
+   Folder pattern         {project}-{name}  
+ ────────────────────────────────────────── 
+  [1mUncommitted files[m  switch.dirty_handling  
+   ● [1mwarn      [m   Tell you, then move       
+                  (default)                 
+   ○ ignore       Move, say nothing         
+   ○ prompt       Ask first                 
+   ○ refuse       Do not move               
+   ○ auto-stash   Stash the files, then     
+                  move                      
+  Not saved: open .grove/config.toml:       
+  permission denied                         
+  move · [1m↑↓/jk[m move · [1m←→/hl[m change          
+  saves as you go · [1mesc[m close               

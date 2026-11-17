@@ -5,8 +5,8 @@
 > and [`CLAUDE.md`](CLAUDE.md) for codebase rules.
 
 Grove is a Go CLI that manages git worktrees with terminal-multiplexer + Docker
-integration. tmux is the default; [herdr](https://herdr.dev) is supported via
-`[mux] backend`. Every
+integration. The multiplexer is [herdr](https://herdr.dev) or tmux, chosen by
+`[mux] backend`; `auto` prefers herdr when both are installed. Every
 command completes in <500ms. Always prefer `--json` flags — all status output is
 machine-parseable.
 
@@ -31,14 +31,14 @@ export GROVE_NONINTERACTIVE=1    # auto-accept all prompts
 export GROVE_TUI=0               # disable dashboard; bare `grove` prints usage
 ```
 
-> `GROVE_AGENT_MODE=1` suppresses tmux attachment in `grove to` but **not** session
+> `GROVE_AGENT_MODE=1` suppresses session attachment in `grove to` but **not** session
 > creation in `grove new` — and it also forces the isolated Docker strategy. In
 > external Docker mode with `[plugins.docker.external.agent] enabled = true`, `grove to`
 > never moves the stack (a human may be using it). `grove to <name> --up` leaves the
 > stack on its previous worktree. If the target has no isolated stack yet, it also prints an
 > `agent mode:` notice on stderr.
 > Run `grove up --isolated` in the worktree before running tests. For
-> per-invocation tmux suppression without the Docker coupling, pass `--no-tmux` to
+> a per-invocation "stay here" without the Docker coupling, pass `--here` to
 > `grove to` / `grove new` (on `new` it also skips session creation). To fully
 > disable session management entirely, set `[tmux] mode = "off"` (or
 > `[mux] backend = "off"`) in `.grove/config.toml`.
@@ -60,9 +60,9 @@ export GROVE_TUI=0               # disable dashboard; bare `grove` prints usage
 
 | Command | Purpose | `--json` | Mutates |
 |---------|---------|:--------:|:-------:|
-| `grove new [name]` | Create worktree + branch + tmux; `--up` also brings the stack (aliases: `spawn`, `n`) | — | ✓ |
-| `grove to [name]` | Move to a worktree; does not touch Docker by default (`[switch] container_switch` set to `auto` or `prompt` changes that). `--up` also brings the stack, `--peek` skips hooks/tmux, `--no-tmux` skips tmux only (aliases: `switch`, `t`) | — | ✓ |
-| `grove fetch <pr\|issue>/<n>` | Create worktree from GitHub PR/issue; needs `gh` (aliases: `f`) | — | ✓ |
+| `grove new [name]` | Create worktree + branch + tmux; `--up` also brings the stack (aliases: `spawn`, `n`) | ✓ | ✓ |
+| `grove to [name]` | Move to a worktree; does not touch Docker by default (`[switch] container_switch` set to `auto` or `prompt` changes that). `--up` also brings the stack, `--here` stays in this shell (hooks still run), `--no-hooks` skips hooks and the dirty check, `--peek` is short for `--here --no-hooks` (aliases: `switch`, `t`) | ✓ | ✓ |
+| `grove fetch <pr\|issue>/<n>` | Create worktree from GitHub PR/issue; needs `gh` (aliases: `f`) | ✓ | ✓ |
 | `grove ls` | List all worktrees in this project (aliases: `list`, `l`) | ✓ | — |
 | `grove here` | Current worktree status (aliases: `h`) | ✓ | — |
 | `grove context` | Rich status: ahead/behind, stash count, recent commits | ✓ | — |
@@ -123,7 +123,7 @@ allowing any worktree creation or switching. Do not assume a repo's hooks are sa
 ```bash
 grove fetch pr/42          # creates worktree pr-42-<title-slug> (needs `gh`)
                            # fetch prints the generated name — use that, don't guess it
-grove to pr-42-fix-login-bug --peek # cd only — skips hooks and tmux entirely
+grove to pr-42-fix-login-bug --peek # cd only: short for --here --no-hooks
 # read files, run grep, etc.
 grove rm pr-42-fix-login-bug        # teardown
 ```

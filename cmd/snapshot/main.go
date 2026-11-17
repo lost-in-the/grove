@@ -30,7 +30,8 @@ func main() {
 	}
 
 	// Create a bubbles/list with the dashboard's row delegate
-	l := list.New(listItems, tui.NewDashboardRowDelegate(false), width, len(items)+2)
+	d := tui.NewDashboardRowDelegate(false)
+	l := list.New(listItems, d, width, len(items)+2)
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)
@@ -38,6 +39,7 @@ func main() {
 	l.SetShowPagination(false)
 
 	fmt.Printf("=== Grove TUI Snapshot (width=%d) ===\n\n", width)
+	fmt.Println(d.Heading(l))
 	fmt.Println(l.View())
 }
 

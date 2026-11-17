@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/lost-in-the/grove/internal/cli"
 	"github.com/lost-in-the/grove/internal/cmdexec"
 	"github.com/lost-in-the/grove/internal/config"
@@ -97,10 +99,23 @@ func loadSessionIndex(ctx *GroveContext) *mux.Index {
 	return mux.NewIndex(sessions)
 }
 
-// openInCurrent reports whether the project asked for worktrees to land in the
-// shell that is already running rather than in a session of their own.
-func openInCurrent(cfg *config.Config) bool {
-	return cfg != nil && cfg.EffectiveOpenIn() == config.OpenInCurrent
+// landsHere reports whether the placement is "here": the shell that is already
+// running, not the worktree's own session. The --here flag asks for it for one
+// run, [session] open_in = "here" for every run.
+func landsHere(cfg *config.Config, here bool) bool {
+	return here || (cfg != nil && cfg.EffectiveOpenIn() == config.OpenInHere)
+}
+
+func addHereFlag(cmd *cobra.Command, here *bool) {
+	cmd.Flags().BoolVar(here, "here", false, "Stay in the shell or pane you are in: change directory only, no session")
+}
+
+// addDeprecatedNoTmuxFlag keeps --no-tmux working as the old spelling of
+// --here on the commands that had it.
+func addDeprecatedNoTmuxFlag(cmd *cobra.Command, here *bool) {
+	cmd.Flags().BoolVar(here, "no-tmux", false, "Old spelling of --here")
+	// The flag was registered on the line above, so this cannot fail.
+	_ = cmd.Flags().MarkDeprecated("no-tmux", "use --here")
 }
 
 // ensureSession creates or adopts the target's session and reports whether the
@@ -235,14 +250,7 @@ func emitCdOrExplain(stderr *cli.Writer, path string) {
 	if cli.CdDirective(path) {
 		return
 	}
-	cli.Faint(stderr, "Note: Directory switching requires shell integration.")
-	cli.Faint(stderr, "Add this to your shell config (~/.zshrc or ~/.bashrc):")
-	_, _ = fmt.Fprintf(stderr, "\n")
-	cli.Faint(stderr, "  eval \"$(grove install zsh)\"   # for zsh")
-	cli.Faint(stderr, "  eval \"$(grove install bash)\"  # for bash")
-	_, _ = fmt.Fprintf(stderr, "\n")
-	cli.Faint(stderr, "To change directory manually:")
-	cli.Faint(stderr, "  cd %s", path)
+	cli.ExplainNoCd(stderr, path)
 }
 
 // switchToWorktree runs the shared switch epilogue used by new/fork
@@ -253,7 +261,7 @@ func emitCdOrExplain(stderr *cli.Writer, path string) {
 // actually switched; callers emit the cd-directive fallback when it wasn't.
 //
 // suppressTmux must be true when the client must not be relocated (agent
-// mode, --no-tmux, tmux mode "off") — compute it via effectiveTmuxMode.
+// mode, a "here" placement, mode "off"). Compute it via resolveTmuxMode.
 func switchToWorktree(ctx *GroveContext, stderr *cli.Writer, prevName, targetName, sessionName, targetPath string, suppressTmux bool) bool {
 	// ProjectRoot is the main checkout, which is what herdr needs as the
 	// source repo when it has to create the session here.
@@ -277,7 +285,7 @@ func switchToWorktree(ctx *GroveContext, stderr *cli.Writer, prevName, targetNam
 		}
 
 		// Switch the session, creating it first when missing (e.g. killed
-		// by hand, or the worktree was entered with --no-tmux). Failures
+		// by hand, or the worktree was entered with --here). Failures
 		// degrade to the cd-directive fallback instead of aborting.
 		if !suppressTmux && m.Available() && m.Inside() {
 			// Short carries the display name so a session created here labels

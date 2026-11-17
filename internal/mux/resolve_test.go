@@ -55,10 +55,34 @@ func TestResolveBackend(t *testing.T) {
 			want: BackendHerdr,
 		},
 		{
-			name: "auto outside both prefers tmux for backward compatibility",
+			name: "auto outside both prefers herdr when both are installed",
 			pref: BackendAuto,
 			env:  Env{TmuxAvailable: true, HerdrAvailable: true},
+			want: BackendHerdr,
+		},
+		{
+			name: "auto inside the herdr app does not drive the classic herdr server",
+			pref: BackendAuto,
+			env:  Env{InsideHerdrApp: true, TmuxAvailable: true, HerdrAvailable: true},
+			want: BackendOff,
+		},
+		{
+			name: "auto inside tmux inside the herdr app uses tmux",
+			pref: BackendAuto,
+			env:  Env{InsideHerdrApp: true, InsideTmux: true, TmuxAvailable: true, HerdrAvailable: true},
 			want: BackendTmux,
+		},
+		{
+			name: "auto inside classic herdr inside the herdr app uses herdr",
+			pref: BackendAuto,
+			env:  Env{InsideHerdrApp: true, InsideHerdr: true, HerdrAvailable: true},
+			want: BackendHerdr,
+		},
+		{
+			name: "an explicit herdr preference holds inside the herdr app",
+			pref: BackendHerdr,
+			env:  Env{InsideHerdrApp: true, HerdrAvailable: true},
+			want: BackendHerdr,
 		},
 		{
 			name: "auto falls back to herdr when tmux is missing",

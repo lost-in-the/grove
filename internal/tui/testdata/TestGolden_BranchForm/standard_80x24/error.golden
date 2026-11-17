@@ -1,14 +1,24 @@
-╭──────────────────────────────────────────────────────╮
-│ [1mNew worktree[m                                         │
-│ ❯ Branch  [37m[mabc-12[7;37m [m                                    │
-│           ❯ + new "abc-12"             new from main │
-│                                                      │
-│                                                      │
-│                                                      │
-│   Base    [37m[m[37mmain[m [37m                                     [m │
-│   Alias   [37m[m[37mabc-12[m [37m                                   [m │
-│           → grove-abc-12 · session grove-abc-12      │
-│                                                      │
-│ failed to create worktree: something went wrong in … │
-│ ⏎ create · tab field · ctrl+j/k pick · esc back      │
-╰──────────────────────────────────────────────────────╯
+ [1m[1mtest-project[m · 5 worktrees · ⬍ name                                        1/5[m 
+                                                                                
+   ● [1mroot[m │ test-project-root/ ·····································   0s       
+     ⎇ root                                                                     
+                                                                                
+   ○ [1mfeature-auth[m │ test-project-feature-auth/ ·····················  60m       
+     ⎇ feature-auth                                                             
+                                                                                
+                                                                                
+                                                                                
+   [38;2;151;151;151m•[m[38;2;60;60;60m•[m[38;2;60;60;60m•[m                                                                          
+ ──[1m New worktree [m────────────────────────────────────────────────────────────── 
+ ❯ Branch  [37m[mabc-12[7;37m [m                                                              
+           › + new "abc-12"                                           from main 
+                                                                                
+                                                                                
+                                                                                
+   Base    [37m[m[37mmain[m [37m                                                               [m 
+   Name    [37m[m[37mabc-12[m [37m                                                             [m 
+           folder grove-abc-12                                                  
+           session grove-abc-12                                                 
+                                                                                
+ ✗ failed to create worktree: something went wrong in git                       
+ type · [1m↑↓/ctrl+jk[m pick · [1mtab[m next · [1menter[m create · [1mesc[m cancel                  

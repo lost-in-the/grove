@@ -56,7 +56,7 @@ func (u *UpdateOverlay) View(width, height int) string {
 	}
 
 	footerRule := updateOverlayRuleStyle.Render(strings.Repeat("─", textWidth))
-	footerKeys := "  " + Styles.HelpKey.Render("esc") + " " + Styles.HelpDesc.Render("close")
+	footerKeys := "  " + keyLine(moveFooter(Hint{"esc", "close"}), textWidth-2)
 
 	// Align all values at the same column. "Changelog:" is 10 chars; pad
 	// labels so values start at column 12 (matches the previous layout).

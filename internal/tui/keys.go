@@ -40,6 +40,7 @@ type KeyMap struct {
 
 	// View mode
 	ViewMode key.Binding
+	Sidebar  key.Binding
 
 	// Switch and bring the stack
 	SwitchUp key.Binding
@@ -66,6 +67,12 @@ type KeyMap struct {
 	Omni         key.Binding
 }
 
+// finderDown and finderUp are the keys that move through a finder's rows
+// while you type. Each pair is taken by some multiplexer or terminal, so all
+// three are bound and one always arrives.
+func finderDown(k string) bool { return k == "down" || k == "ctrl+j" || k == "ctrl+n" }
+func finderUp(k string) bool   { return k == "up" || k == "ctrl+k" || k == "ctrl+p" }
+
 // ShortHelp returns keybindings for the short help view (help.KeyMap interface).
 func (k KeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{k.Enter, k.SwitchUp, k.New, k.Delete, k.Rename, k.Fork, k.Checkout, k.Sync, k.Config, k.PRs, k.Issues, k.Sort, k.Filter, k.Help, k.Quit}
@@ -91,8 +98,11 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("down", "j"),
 			key.WithHelp("↓/j", "down"),
 		),
+		// ctrl+m, ctrl+[, and ctrl+i are enter, esc, and tab on most
+		// terminals, but the kitty keyboard protocol and tmux extended keys
+		// send them as keys of their own.
 		Enter: key.NewBinding(
-			key.WithKeys("enter"),
+			key.WithKeys("enter", "ctrl+m"),
 			key.WithHelp("enter", "switch"),
 		),
 		New: key.NewBinding(
@@ -120,7 +130,7 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("q", "quit"),
 		),
 		Escape: key.NewBinding(
-			key.WithKeys("esc"),
+			key.WithKeys("esc", "ctrl+["),
 			key.WithHelp("esc", "back"),
 		),
 		Back: key.NewBinding(
@@ -128,7 +138,7 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("backspace", "back"),
 		),
 		Tab: key.NewBinding(
-			key.WithKeys("tab"),
+			key.WithKeys("tab", "ctrl+i"),
 			key.WithHelp("tab", "detail"),
 		),
 		ShiftTab: key.NewBinding(
@@ -179,7 +189,11 @@ func DefaultKeyMap() KeyMap {
 		),
 		ViewMode: key.NewBinding(
 			key.WithKeys("v"),
-			key.WithHelp("v", "compact"),
+			key.WithHelp("v", "compact or detailed"),
+		),
+		Sidebar: key.NewBinding(
+			key.WithKeys("t"),
+			key.WithHelp("t", "sidebar"),
 		),
 		Fork: key.NewBinding(
 			key.WithKeys("f"),
@@ -201,7 +215,7 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("b"),
 			key.WithHelp("b", "branch"),
 		),
-		Top:          key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "goto")),
+		Top:          key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "more")),
 		Bottom:       key.NewBinding(key.WithKeys("G"), key.WithHelp("G", "bottom")),
 		HalfPageDown: key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "half page down")),
 		HalfPageUp:   key.NewBinding(key.WithKeys("ctrl+u"), key.WithHelp("ctrl+u", "half page up")),
@@ -212,6 +226,6 @@ func DefaultKeyMap() KeyMap {
 		Slots:        key.NewBinding(key.WithKeys("1", "2", "3", "4", "5", "6", "7", "8", "9"), key.WithHelp("1-9", "pinned worktree")),
 		LastActive:   key.NewBinding(key.WithKeys("-"), key.WithHelp("-", "previous worktree")),
 		OpenPR:       key.NewBinding(key.WithKeys("B"), key.WithHelp("B", "open PR in browser")),
-		Omni:         key.NewBinding(key.WithKeys("space"), key.WithHelp("␣", "find")),
+		Omni:         key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "go to")),
 	}
 }

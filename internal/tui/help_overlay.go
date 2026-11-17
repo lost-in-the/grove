@@ -11,10 +11,11 @@ import (
 
 // HelpOverlay renders context-sensitive help as a scrollable overlay.
 type HelpOverlay struct {
-	ForView   ActiveView
-	viewport  viewport.Model
-	cache     map[ActiveView]string
-	lastWidth int
+	ForView    ActiveView
+	CannotMove bool // lead the dashboard's reference with how to fix it
+	viewport   viewport.Model
+	cache      map[ActiveView]string
+	lastWidth  int
 }
 
 // NewHelpOverlay creates a HelpOverlay with an empty cache.
@@ -45,7 +46,7 @@ func (h *HelpOverlay) Open(view ActiveView, width, height int) {
 
 	rendered, ok := h.cache[view]
 	if !ok {
-		rendered = renderHelpContent(view, textWidth)
+		rendered = renderHelpSections(h.sectionsFor(view), textWidth)
 		h.cache[view] = rendered
 	}
 
@@ -80,10 +81,7 @@ func (h *HelpOverlay) View(width, height int) string {
 	vpContent := h.viewport.View()
 	footerRule := lipgloss.NewStyle().Foreground(Colors.SurfaceBorder).
 		Render(strings.Repeat("─", textWidth))
-	footerKeys := "  " +
-		Styles.HelpKey.Render("↑↓") + " " + Styles.HelpDesc.Render("scroll") +
-		Styles.HelpSep.Render(" · ") +
-		Styles.HelpKey.Render("esc") + " " + Styles.HelpDesc.Render("close")
+	footerKeys := "  " + keyLine(moveFooter(Hint{"esc", "close"}, Hint{"↑↓/jk", "scroll"}), textWidth-2)
 	content := vpContent + "\n" + footerRule + "\n" + footerKeys
 
 	return Styles.OverlayBorderInfo.
@@ -132,9 +130,23 @@ type helpLayout struct {
 	evenBg   color.Color
 }
 
-// renderHelpContent builds styled help text with manual two-column layout.
-func renderHelpContent(view ActiveView, width int) string {
+// sectionsFor is the reference for view, led on the dashboard by why grove
+// cannot move you when it cannot.
+func (h *HelpOverlay) sectionsFor(view ActiveView) []helpSection {
 	sections := helpSectionsFor(view)
+	if h.CannotMove && (view == ViewDashboard || view == ViewHelp) {
+		sections = append([]helpSection{helpSectionCannotMove}, sections...)
+	}
+	return sections
+}
+
+// renderHelpContent builds styled help text for view.
+func renderHelpContent(view ActiveView, width int) string {
+	return renderHelpSections(helpSectionsFor(view), width)
+}
+
+// renderHelpSections builds styled help text with manual two-column layout.
+func renderHelpSections(sections []helpSection, width int) string {
 	layout := computeHelpLayout(sections, width)
 
 	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(Colors.Primary).Padding(0, 1)
@@ -256,10 +268,34 @@ func helpSectionsFor(view ActiveView) []helpSection {
 	}
 }
 
-var helpSectionsDashboard = []helpSection{
+// helpSectionKeys is the input model (docs/TUI.md): the same keys on
+// every screen, with every alternate.
+var helpSectionKeys = []helpSection{
+	{title: "Moving and typing", note: "j/k move. While you type, hold ctrl.", items: []helpEntry{
+		{"move / type", "The footer's first word: letters are commands, or they type"},
+		{"↑/k ↓/j", "Move through rows or fields"},
+		{"esc / ctrl+[", "Leave: back, close, clear, or cancel"},
+		{"enter / ctrl+m", "The action the footer names"},
+		{"tab / ctrl+i", "The tab key; ctrl+[, ctrl+m, and ctrl+i arrive as their own keys under some terminals"},
+		{"ctrl+u", "While typing: delete before the cursor (ctrl+k never deletes)"},
+		{"q / ctrl+c", "Quit, from the list"},
+	}},
+	{title: "Filter (/)", note: "Narrows the list in place.", items: []helpEntry{
+		{"enter / tab", "Keep the filter and go back to the list"},
+		{"esc", "While typing: clear it. On the list: clear an applied filter"},
+		{"/", "Edit the applied filter"},
+	}},
+	{title: "Go to (space) and the form's Branch and Base", note: "Three key sets, so one always gets through.", items: []helpEntry{
+		{"↑↓, ctrl+j/k, ctrl+n/p", "Pick the next / previous row"},
+		{"tab / shift+tab", "Go to only: next / previous row (in the form they change field)"},
+		{"enter", "Run the highlighted row"},
+	}},
+}
+
+var helpSectionsDashboard = append(helpSectionKeys[:len(helpSectionKeys):len(helpSectionKeys)], []helpSection{
 	{title: "Navigation", items: []helpEntry{
 		{"↑/k ↓/j", "Move up / down"},
-		{"g", "Goto strip (g top, p PRs, i issues, c config, u upgrade, d local diff, a agent under herdr)"},
+		{"g", "More: g top, p pull requests, i issues, c config, u upgrade, d local diff, a agent under herdr"},
 		{"gg / G", "Top / bottom of list"},
 		{"ctrl+d / ctrl+u", "Half page down / up"},
 		{"enter", "Switch to selected worktree"},
@@ -293,18 +329,19 @@ var helpSectionsDashboard = []helpSection{
 	{title: "Display", items: []helpEntry{
 		{"o", "Cycle sort (name → age → dirty)"},
 		{"O", "Reverse sort"},
-		{"v", "Show or hide commit messages"},
+		{"v", "Compact or detailed list"},
+		{"t", "Show or hide the sidebar"},
 		{"r", "Refresh worktree list"},
 		{"c", "Open configuration"},
 	}},
 	{title: "CLI Companions", note: "Commands with more options than TUI shortcuts:", items: []helpEntry{
-		{"grove to <name> --peek", "Switch without hooks (read-only)"},
+		{"grove to <name> --peek", "Look: stay here, skip hooks"},
 		{"grove fork <name> --move-wip", "Fork with uncommitted changes"},
 		{"grove test <name>", "Run tests in another worktree"},
 		{"grove diff <name>", "Diff against another worktree"},
 		{"grove doctor", "Health check for grove setup"},
 	}},
-}
+}...)
 
 var helpSectionsDelete = []helpSection{
 	{title: "Delete Worktree", note: "Remove a worktree and optionally its git branch.", items: []helpEntry{
@@ -316,10 +353,10 @@ var helpSectionsDelete = []helpSection{
 }
 
 var helpSectionsBranchForm = []helpSection{
-	{title: "Branch Form", note: "New (n), copy (f), and switch branch (b) share this form. It shows what enter will do.", items: []helpEntry{
-		{"tab / shift+tab", "Next / previous field"},
-		{"ctrl+j / ctrl+k", "Move through suggestions"},
-		{"←/→ / space", "Choose what happens to uncommitted changes (copy)"},
+	{title: "Branch Form", note: "New (n), copy (f), and switch branch (b) share this form. Name is the worktree's short name; the form shows the folder and session it makes, and what enter will do.", items: []helpEntry{
+		{"tab / shift+tab", "Next / previous field (tab on Branch takes the highlighted row)"},
+		{"↑/↓, ctrl+j/k, ctrl+n/p", "Move through the focused field's suggestions"},
+		{"←/h →/l / space", "Choose what happens to uncommitted changes (copy)"},
 		{"enter", "Create, copy, or switch"},
 		{"esc", "Close"},
 	}},
@@ -399,12 +436,21 @@ var helpSectionsSync = []helpSection{
 }
 
 var helpSectionsConfig = []helpSection{
-	{title: "Configuration", note: "Edit grove settings. Changes saved to .grove/config.toml.", items: []helpEntry{
+	{title: "Settings", note: "Each change is written to .grove/config.toml at once. The panel beside or under the list explains the focused field.", items: []helpEntry{
+		{"↑/k ↓/j", "Previous / next field"},
 		{"tab / shift+tab", "Next / previous field"},
-		{"enter", "Next field; next section from the last field; closes from protection"},
-		{"ctrl+n / ctrl+p", "Next / previous section"},
-		{"1-4", "Jump to a section (not while typing in a text field)"},
-		{"esc", "Close; asks to save unsaved changes"},
+		{"←/h →/l", "Change a choice or a true/false field"},
+		{"space", "Switch a true/false field"},
+		{"enter", "Edit a text or list field"},
+		{"u", "Undo the last change"},
+		{"1-4", "Go to a section"},
+		{"H / L", "Previous / next section"},
+		{"esc", "Close"},
+	}},
+	{title: "While editing a field", items: []helpEntry{
+		{"enter", "Save the value"},
+		{"esc", "Cancel the edit"},
+		{"other keys", "Type, digits too"},
 	}},
 }
 

@@ -58,7 +58,8 @@ Examples:
   grove sync              # Sync current environment worktree
   grove sync production   # Sync specific environment worktree
   grove sync --all        # Sync all environment worktrees`,
-	Args: cobra.MaximumNArgs(1),
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: completeWorktreeNames,
 	RunE: RequireGroveContext(func(cmd *cobra.Command, args []string, ctx *GroveContext) error {
 		w := cli.NewStdout()
 		stderr := cli.NewStderr()
@@ -103,7 +104,8 @@ Examples:
 					Synced:  []SyncedWorktree{},
 					Skipped: []SkippedSync{{Name: currentName, Reason: "not an environment worktree"}},
 				}, exitcode.ConstraintViolated,
-					"Error: current worktree '%s' is not an environment worktree\nUse 'grove sync <name>' to specify an environment worktree, or --all\n", currentName)
+					fmt.Sprintf("current worktree '%s' is not an environment worktree", currentName),
+					"Use 'grove sync <name>' to specify an environment worktree, or --all")
 			}
 			targets = []string{currentName}
 		}
@@ -125,7 +127,7 @@ Examples:
 				// exit 0), matching the not-an-environment case below. Under
 				// --all a stale state entry is simply skipped.
 				if !syncAll {
-					syncExit(result, exitcode.ResourceNotFound, "Error: worktree '%s' not found\n", name)
+					syncExit(result, exitcode.ResourceNotFound, fmt.Sprintf("worktree '%s' not found", name))
 				}
 				continue
 			}
@@ -136,7 +138,7 @@ Examples:
 					Reason: "not an environment worktree",
 				})
 				if !syncAll {
-					syncExit(result, exitcode.ConstraintViolated, "Error: '%s' is not an environment worktree\n", name)
+					syncExit(result, exitcode.ConstraintViolated, fmt.Sprintf("'%s' is not an environment worktree", name))
 				}
 				continue
 			}
@@ -237,16 +239,19 @@ Examples:
 	}),
 }
 
-// syncExit terminates sync with a non-zero exit code, emitting the JSON
-// result document first when --json is active — a bare os.Exit used to
-// swallow the document entirely, leaving machine consumers with empty stdout
-// on exactly the error paths they need to detect (same convention as
-// printApplyJSONError). In human mode the message goes to stderr instead.
-func syncExit(result SyncResult, code int, format string, args ...any) {
+// syncExit ends sync with a non-zero exit code. With --json the result
+// document still goes to stdout, so a script sees what was skipped, and the
+// error goes to stderr in the shape every command uses. Without --json the
+// message and hints go to stderr as text.
+func syncExit(result SyncResult, code int, message string, hints ...string) {
 	if syncJSON {
 		_ = output.PrintJSON(result)
+		output.PrintJSONError(code, message, hints...)
 	} else {
-		fmt.Fprintf(os.Stderr, format, args...)
+		fmt.Fprintf(os.Stderr, "Error: %s\n", message)
+		for _, hint := range hints {
+			fmt.Fprintln(os.Stderr, hint)
+		}
 	}
 	os.Exit(code)
 }

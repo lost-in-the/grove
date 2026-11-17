@@ -307,7 +307,7 @@ func renderSyncSourceStep(s *SyncState, d overlayDims, b *strings.Builder) strin
 		}
 	}
 
-	return "\n" + Styles.Footer.Render(d.indent+"↑↓ navigate  enter select  esc cancel")
+	return "\n" + promptKeys(moveFooter(Hint{"esc", "cancel"}, Hint{"↑↓/jk", "move"}, Hint{"enter", "select"}), d.inner, d.indent)
 }
 
 func renderSyncSourceItem(d overlayDims, b *strings.Builder, idx, selected int, src WorktreeWIPInfo) {
@@ -345,7 +345,7 @@ func renderSyncPreviewStep(s *SyncState, d overlayDims, b *strings.Builder) stri
 		b.WriteString(d.indent + "  " + f + "\n")
 	}
 
-	return "\n" + Styles.Footer.Render(d.indent+"enter confirm  backspace back  esc cancel")
+	return "\n" + promptKeys(moveFooter(Hint{"esc", "cancel"}, Hint{"enter", "confirm"}, Hint{"backspace", "back"}), d.inner, d.indent)
 }
 
 func renderSyncConfirmStep(s *SyncState, d overlayDims, b *strings.Builder) string {
@@ -358,7 +358,7 @@ func renderSyncConfirmStep(s *SyncState, d overlayDims, b *strings.Builder) stri
 	b.WriteString(d.indent + Styles.DetailLabel.Render("Files:  ") + Styles.DetailValue.Render(fmt.Sprintf("%d", len(src.Files))) + "\n")
 	b.WriteString("\n" + Styles.SuccessText.Render(d.indent+"Ready to sync.") + "\n")
 
-	return "\n" + Styles.Footer.Render(d.indent+"[enter] sync  [backspace] back  [esc] cancel")
+	return "\n" + promptKeys(moveFooter(Hint{"esc", "cancel"}, Hint{"enter", "sync"}, Hint{"backspace", "back"}), d.inner, d.indent)
 }
 
 // syncOverlayMinLines is the fixed content height for the sync wizard.

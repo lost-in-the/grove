@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lost-in-the/grove/internal/config"
 	"github.com/lost-in-the/grove/internal/theme"
 	"github.com/lost-in-the/grove/plugins/tracker"
 )
@@ -174,28 +175,18 @@ func withSyncOverlay() testOpt {
 	}
 }
 
-// withConfigOverlay sets up the config overlay with deterministic fields.
+// withConfigOverlay opens the settings panel on a fixed config, so every
+// section has real fields and values.
 func withConfigOverlay() testOpt {
 	return func(m *Model) {
 		m.setViewForTest(ViewConfig)
+		cfg := config.LoadDefaults()
+		cfg.ProjectName = "myapp"
+		cfg.ProjectsDir = "~/projects"
+		cfg.Protection.Protected = []string{"main", "staging"}
 		cs := NewConfigState()
-		cs.Fields[ConfigTabGeneral] = []ConfigField{
-			{Key: "project_name", Label: "project_name", Value: "grove-cli", Loaded: "grove-cli", Type: ConfigString, Description: "Project name"},
-			{Key: "projects_dir", Label: "projects_dir", Value: "/home/dev/projects", Loaded: "/home/dev/projects", Type: ConfigString, Description: "Where worktrees are created"},
-			{Key: "default_base_branch", Label: "default_branch", Value: "main", Loaded: "main", Type: ConfigString, Description: "Base branch for new worktrees"},
-		}
-		cs.Fields[ConfigTabBehavior] = []ConfigField{
-			{Key: "switch.dirty_handling", Label: "dirty_handling", Value: "auto-stash", Loaded: "auto-stash", Type: ConfigEnum, Options: []string{"auto-stash", "prompt", "refuse"}, Description: "How to handle dirty worktree on switch"},
-			{Key: "tmux.mode", Label: "tmux_mode", Value: "auto", Loaded: "auto", Type: ConfigEnum, Options: []string{"auto", "manual", "off"}, Description: "Tmux session behavior"},
-		}
-		cs.Fields[ConfigTabPlugins] = []ConfigField{
-			{Key: "plugins.docker.enabled", Label: "docker_enabled", Value: "true", Loaded: "true", Type: ConfigBool, Description: "Enable Docker plugin"},
-		}
-		cs.Fields[ConfigTabProtection] = []ConfigField{
-			{Key: "protection.protected", Label: "protected", Value: "main, staging", Loaded: "main, staging", Type: ConfigList, Description: "Protected worktrees (comma-separated)"},
-		}
+		cs.load(cfg)
 		m.configState = cs
-		cs.buildForms(m.configFormSize())
 	}
 }
 
@@ -226,11 +217,15 @@ func withSortMode(mode SortMode) testOpt {
 	}
 }
 
-// withTwoLine switches the model to rows with the commit message.
-func withTwoLine() testOpt {
+// withDetailed chooses detailed rows, as v does.
+func withDetailed() testOpt { return withListChoice(false) }
+
+// withCompact chooses compact rows, as v does.
+func withCompact() testOpt { return withListChoice(true) }
+
+func withListChoice(compact bool) testOpt {
 	return func(m *Model) {
-		m.compactMode = false
-		m.refreshDelegate()
+		m.compactChoice = &compact
 		m.updateLayout()
 	}
 }

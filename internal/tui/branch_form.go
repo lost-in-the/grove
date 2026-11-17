@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -59,13 +60,17 @@ type formIntent struct {
 	Stash   bool
 }
 
+// formStatusKind is what the status line says about enter. A blocker is a
+// state enter cannot act on; a hint only asks for input.
 type formStatusKind int
 
 const (
-	formStatusHint formStatusKind = iota
-	formStatusReady
-	formStatusInfo
-	formStatusError
+	formStatusHint    formStatusKind = iota // asks for input; nothing is wrong
+	formStatusReady                         // enter does what the footer names
+	formStatusNotice                        // enter does something other than create
+	formStatusBusy                          // the action is running
+	formStatusBlocker                       // enter cannot act until a field changes
+	formStatusError                         // the last attempt failed; enter retries
 )
 
 type formSuggestion struct {
@@ -160,7 +165,7 @@ func newBranchForm(opts branchFormOptions) *BranchFormState {
 }
 
 func newFormInput(placeholder string) textinput.Model {
-	ti := textinput.New()
+	ti := newTextInput()
 	ti.Prompt = ""
 	ti.Placeholder = placeholder
 	ti.CharLimit = 100
@@ -369,7 +374,7 @@ func (s *BranchFormState) suggestions() []formSuggestion {
 		q := s.branchValue()
 		out := s.matchBranches(q)
 		if q != "" && !s.known(q) {
-			out = append(out, formSuggestion{Branch: q, Note: "new from " + s.baseValue(), New: true})
+			out = append(out, formSuggestion{Branch: q, Note: "from " + s.baseValue(), New: true})
 		}
 		return out
 	case fieldBase:
@@ -468,11 +473,10 @@ func (s *BranchFormState) defaultPick() int {
 	return 0
 }
 
-// setWidth sizes the text inputs to the frame, so a long value scrolls to
-// keep the cursor visible instead of running past the border.
-func (s *BranchFormState) setWidth(termW, termH int) {
-	w, _ := branchFormSize(termW, termH)
-	iw := max(4, w-4-formLabelWidth-1)
+// setWidth sizes the text inputs to the form's line width, so a long value
+// scrolls to keep the cursor visible instead of running past the edge.
+func (s *BranchFormState) setWidth(inner int) {
+	iw := max(4, inner-formLabelWidth-1)
 	s.Branch.SetWidth(iw)
 	s.Base.SetWidth(iw)
 	s.Alias.SetWidth(iw)
@@ -491,6 +495,14 @@ func pickDefaultBase(configured, detected, mainBranch string, known func(string)
 		return mainBranch
 	}
 	return "main"
+}
+
+// takeEnterPick takes the highlighted suggestion where enter does: in Branch
+// and Base, and in Switch mode only when the pick applies.
+func (s *BranchFormState) takeEnterPick() {
+	if (s.Focus == fieldBranch || s.Focus == fieldBase) && (s.Mode != formModeSwitch || s.switchPickApplies()) {
+		s.acceptPick()
+	}
 }
 
 // acceptPick copies the highlighted suggestion into the focused field.
@@ -524,8 +536,10 @@ func (s *BranchFormState) validate() (formField, string, bool) {
 		return fieldBranch, "", true
 	}
 	if !s.known(b) {
-		base := s.baseValue()
-		if base == "" || !s.known(base) {
+		switch base := s.baseValue(); {
+		case base == "":
+			return fieldBase, "type a base branch", false
+		case !s.known(base):
 			return fieldBase, fmt.Sprintf("base branch %q not found", base), false
 		}
 	}
@@ -535,13 +549,13 @@ func (s *BranchFormState) validate() (formField, string, bool) {
 func (s *BranchFormState) validateAlias() (formField, string, bool) {
 	a := s.aliasValue()
 	if a == "" {
-		return fieldAlias, "type an alias", false
+		return fieldAlias, "type a name", false
 	}
 	if msg := ValidateWorktreeName(a); msg != "" {
 		return fieldAlias, msg, false
 	}
 	if dup := checkDuplicateWorktree(a, s.opts.Worktrees); dup != nil {
-		return fieldAlias, fmt.Sprintf("alias %q is taken by %s", a, dup.ShortName), false
+		return fieldAlias, fmt.Sprintf("name %q is taken by %s", a, dup.ShortName), false
 	}
 	return fieldBranch, "", true
 }
@@ -550,10 +564,10 @@ func (s *BranchFormState) validateAlias() (formField, string, bool) {
 // returned, and when it failed, so changes are never handled blind.
 func (s *BranchFormState) validateWIP() (formField, string, bool) {
 	if s.wipErr != nil {
-		return s.Focus, "could not check for uncommitted changes: " + s.wipErr.Error(), false
+		return fieldChanges, "could not check for uncommitted changes: " + s.wipErr.Error(), false
 	}
 	if !s.wipDone {
-		return s.Focus, "checking for uncommitted changes…", false
+		return fieldChanges, "checking for uncommitted changes…", false
 	}
 	return fieldBranch, "", true
 }
@@ -615,7 +629,7 @@ func (s *BranchFormState) intent() formIntent {
 
 func (s *BranchFormState) status() (string, formStatusKind) {
 	if s.Busy {
-		return s.busyVerb(), formStatusInfo
+		return s.busyVerb(), formStatusBusy
 	}
 	if s.Status != "" {
 		return s.Status, formStatusError
@@ -625,12 +639,15 @@ func (s *BranchFormState) status() (string, formStatusKind) {
 		if _, msg, ok := s.validateWIP(); !ok {
 			return msg, formStatusHint
 		}
-		return "⏎ switches to " + sg[s.Pick].Branch, formStatusInfo
+		return "enter switches to " + sg[s.Pick].Branch, formStatusNotice
 	}
 	if w := s.inUse[s.branchValue()]; s.Mode == formModeNew && w != nil {
-		return fmt.Sprintf("in use by %s · ⏎ switches there", w.ShortName), formStatusInfo
+		return fmt.Sprintf("in use by %s · enter switches there", w.ShortName), formStatusNotice
 	}
-	if _, msg, ok := s.validate(); !ok {
+	if f, msg, ok := s.validate(); !ok {
+		if s.blocks(f) {
+			return msg, formStatusBlocker
+		}
 		return msg, formStatusHint
 	}
 	if s.HasWIP {
@@ -645,33 +662,112 @@ func (s *BranchFormState) status() (string, formStatusKind) {
 	return "✓ ready", formStatusReady
 }
 
-func (s *BranchFormState) keyLine() string {
-	if s.Busy {
-		return "wait for this to finish"
-	}
-	if s.Log != nil {
-		return "any key to edit · esc back"
-	}
-	act := "⏎ create"
+// blocks reports whether invalid field f stops enter: the field is filled
+// in, and taking the highlighted suggestion, as enter does, would not make
+// the form valid. An empty field and a changes check still running only ask
+// for input.
+func (s *BranchFormState) blocks(f formField) bool {
 	switch {
-	case s.Mode == formModeCopy:
-		act = "⏎ copy"
-	case s.Mode == formModeSwitch, s.inUse[s.branchValue()] != nil:
-		act = "⏎ switch"
+	case f == fieldChanges:
+		if s.wipErr == nil {
+			return false
+		}
+	case strings.TrimSpace(s.input(f).Value()) == "":
+		return false
 	}
-	parts := []string{act}
-	if len(s.fieldOrder()) > 1 {
-		parts = append(parts, "tab field")
-	}
-	if s.Focus == fieldChanges {
-		parts = append(parts, "←/→ changes")
-	} else if s.Mode != formModeCopy {
-		parts = append(parts, "ctrl+j/k pick")
-	}
-	return strings.Join(append(parts, "esc back"), " · ")
+	after := *s
+	after.takeEnterPick()
+	_, _, ok := after.validate()
+	return !ok
 }
 
-// handleKey applies one key. Navigation keys are explicit strings, never the
+// faultField is the field a blocker blames, when the status is a blocker.
+func (s *BranchFormState) faultField() (formField, bool) {
+	if _, kind := s.status(); kind != formStatusBlocker {
+		return noField, false
+	}
+	f, _, _ := s.validate()
+	return f, true
+}
+
+// keyFooter is the form's key line for its state. On a blocker it offers
+// no enter: enter cannot act until a field changes.
+func (s *BranchFormState) keyFooter() Footer {
+	if s.Busy {
+		return Footer{Hints: []Hint{{"", "wait for this to finish"}}}
+	}
+	if s.Log != nil {
+		return moveFooter(Hint{"esc", "cancel"}, Hint{"", "any key to edit"})
+	}
+	_, kind := s.status()
+	return s.keyFooterFor(s.Focus, kind != formStatusBlocker)
+}
+
+// keyFooterFor is the key line with field f focused, with the enter hint
+// when withEnter. The Changes field has no text cursor, so the form is in
+// move mode there.
+func (s *BranchFormState) keyFooterFor(f formField, withEnter bool) Footer {
+	leave := Hint{"esc", "cancel"}
+	verb := "create"
+	switch {
+	case s.Mode == formModeCopy:
+		verb = "copy"
+	case s.Mode == formModeSwitch, s.inUse[s.branchValue()] != nil:
+		verb = "switch"
+	}
+	var hints []Hint
+	if s.hasSuggestions(f) {
+		hints = append(hints, Hint{"↑↓/ctrl+jk", "pick"})
+	}
+	if f == fieldChanges {
+		hints = append(hints, Hint{"←→/hl", "change"})
+	}
+	if len(s.fieldOrder()) > 1 || f == fieldChanges {
+		hints = append(hints, Hint{"tab", "next"})
+	}
+	if withEnter {
+		hints = append(hints, Hint{"enter", verb})
+	}
+	if f == fieldChanges {
+		return moveFooter(leave, hints...)
+	}
+	return typeFooter(leave, hints...)
+}
+
+// keyRows is how many rows the key line takes at width: two when the
+// widest line the mode can show needs them. It does not depend on the
+// focused field, the changes check, or a blocker, so the status line never
+// moves.
+func (s *BranchFormState) keyRows(width int) int {
+	fields := map[formMode][]formField{
+		formModeNew:    {fieldBranch, fieldBase, fieldAlias},
+		formModeCopy:   {fieldBranch, fieldAlias, fieldChanges},
+		formModeSwitch: {fieldBranch},
+	}[s.Mode]
+	for _, f := range fields {
+		if len(renderKeyLine(s.keyFooterFor(f, true), width, 2)) > 1 {
+			return 2
+		}
+	}
+	return 1
+}
+
+// keyLine is the key line as plain text, on one line.
+func (s *BranchFormState) keyLine() string {
+	f := s.keyFooter()
+	var parts []string
+	if f.Mode != modeNone {
+		parts = append(parts, string(f.Mode))
+	}
+	for _, h := range append(f.Hints, f.Leave) {
+		if p := strings.TrimSpace(h.Key + " " + h.Description); p != "" {
+			parts = append(parts, p)
+		}
+	}
+	return strings.Join(parts, " · ")
+}
+
+// handleKey applies one key. Pick keys are explicit strings, never the
 // global Up/Down bindings, because those include j and k, which must type.
 func (s *BranchFormState) handleKey(msg tea.KeyPressMsg, keys KeyMap) (formResult, tea.Cmd) {
 	if s.Busy {
@@ -687,22 +783,23 @@ func (s *BranchFormState) handleKey(msg tea.KeyPressMsg, keys KeyMap) (formResul
 	switch k := msg.String(); {
 	case key.Matches(msg, keys.Escape):
 		return formCancel, nil
-	case k == "tab":
+	case key.Matches(msg, keys.Tab):
 		s.acceptPick()
 		return formContinue, s.moveFocus(1)
-	case k == "shift+tab":
+	case key.Matches(msg, keys.ShiftTab):
 		return formContinue, s.moveFocus(-1)
-	case k == "up" || k == "ctrl+k":
+	case finderUp(k):
 		s.movePick(-1)
 		return formContinue, nil
-	case k == "down" || k == "ctrl+j":
+	case finderDown(k):
 		s.movePick(1)
 		return formContinue, nil
-	case k == "enter":
-		if (s.Focus == fieldBranch || s.Focus == fieldBase) && (s.Mode != formModeSwitch || s.switchPickApplies()) {
-			s.acceptPick()
-		}
+	case key.Matches(msg, keys.Enter):
+		s.takeEnterPick()
 		if f, _, ok := s.validate(); !ok {
+			if !slices.Contains(s.fieldOrder(), f) {
+				return formContinue, nil // the changes check: no field to fix
+			}
 			return formContinue, s.setFocus(f)
 		}
 		s.Status = ""
@@ -710,9 +807,9 @@ func (s *BranchFormState) handleKey(msg tea.KeyPressMsg, keys KeyMap) (formResul
 	}
 	if s.Focus == fieldChanges {
 		switch msg.String() {
-		case "left":
+		case "left", "h":
 			s.cycleChanges(-1)
-		case "right", "space":
+		case "right", "l", "space":
 			s.cycleChanges(1)
 		}
 		return formContinue, nil
@@ -800,10 +897,10 @@ func (m Model) branchFormOptionsFor() branchFormOptions {
 	}
 }
 
-// openBranchForm opens the form in New mode over the current view.
+// openBranchForm opens the form in New mode, docked into the current view.
 func (m Model) openBranchForm(p branchFormPrefill) (tea.Model, tea.Cmd) {
 	s := newBranchForm(m.branchFormOptionsFor())
-	s.setWidth(m.width, m.height)
+	s.setWidth(m.branchFormLayout().innerWidth())
 	cmd := s.applyPrefill(p)
 	if cmd == nil {
 		cmd = s.focusCmd()
@@ -817,7 +914,7 @@ func (m Model) openBranchForm(p branchFormPrefill) (tea.Model, tea.Cmd) {
 // uncommitted-changes check that enter waits for.
 func (m Model) openCopyForm(source WorktreeItem) (tea.Model, tea.Cmd) {
 	s := newCopyForm(m.branchFormOptionsFor(), source)
-	s.setWidth(m.width, m.height)
+	s.setWidth(m.branchFormLayout().innerWidth())
 	m.branchForm = s
 	m.pushView(ViewBranchForm)
 	return m, tea.Batch(s.focusCmd(), wipCheckCmd(source.Path))
@@ -827,7 +924,7 @@ func (m Model) openCopyForm(source WorktreeItem) (tea.Model, tea.Cmd) {
 // uncommitted-changes check that enter waits for.
 func (m Model) openSwitchForm(target WorktreeItem) (tea.Model, tea.Cmd) {
 	s := newSwitchForm(m.branchFormOptionsFor(), target)
-	s.setWidth(m.width, m.height)
+	s.setWidth(m.branchFormLayout().innerWidth())
 	m.branchForm = s
 	m.pushView(ViewBranchForm)
 	return m, tea.Batch(s.focusCmd(), wipCheckCmd(target.Path))
@@ -867,7 +964,7 @@ func (m Model) submitBranchForm(s *BranchFormState) (tea.Model, tea.Cmd) {
 		}
 		s.Busy = true
 		s.Status = ""
-		s.Log = NewActivityLog(formLogWidth(m.width), 6)
+		s.Log = NewActivityLog(m.branchFormLayout().innerWidth(), 6)
 		existing, newBranch := "", ""
 		if in.Kind == intentCreateExisting {
 			existing = in.Branch
@@ -882,13 +979,13 @@ func (m Model) submitBranchForm(s *BranchFormState) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		s.Busy, s.Status = true, ""
-		s.Log = NewActivityLog(formLogWidth(m.width), 6)
+		s.Log = NewActivityLog(m.branchFormLayout().innerWidth(), 6)
 		s.Log.AddLine(fmt.Sprintf("Copying %s to %s on branch %s...", in.Target.ShortName, in.Alias, in.Branch))
 		return m, tea.Batch(m.spinner.Tick, forkWorktreeCmd(m.worktreeMgr, m.stateMgr, m.cfg, m.projectRoot,
 			forkRequest{Source: *in.Target, Name: in.Alias, Branch: in.Branch, HasWIP: s.HasWIP, WIP: in.WIP}))
 	case intentSwitchBranch:
 		s.Busy, s.Status = true, ""
-		s.Log = NewActivityLog(formLogWidth(m.width), 6)
+		s.Log = NewActivityLog(m.branchFormLayout().innerWidth(), 6)
 		s.Log.AddLine(fmt.Sprintf("Switching %s to branch %s...", in.Target.ShortName, in.Branch))
 		return m, tea.Batch(m.spinner.Tick, checkoutBranchCmd(in.Target.Path, in.Branch, in.Stash))
 	}

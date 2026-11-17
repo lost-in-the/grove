@@ -1,0 +1,40 @@
+ [1m[1mtest-project[m · 5 worktrees · ⬍ name                                                                                1/5[m 
+ ⚠ grove cannot move you from here: shell integration is not loaded     │                                               
+     NAME         BRANCH                               STATE  AGE       │                                               
+ ❯ ● [1mroot[m         root ·····································   0s       │                                               
+   ○ feature-auth feature-auth ·····························  60m       │                                               
+   ○ fix-bug      fix-bug ··································   2h       │                                               
+   ● testing      testing ··································   3h       │                                               
+   ○ refactor     refactor ·································   4h       │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+                                                                        │                                               
+  move · [1m↑↓/jk[m move · [1menter[m switch · [1mspace[m go to · [1mtab[m detail · [1m/[m filter · [1mv[m detailed · [1mg[m more · [1m?[m help · [1mq[m quit        

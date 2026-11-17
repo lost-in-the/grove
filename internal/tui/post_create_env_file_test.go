@@ -31,7 +31,7 @@ func TestDashboardCreate_LeavesExternalEnvFile(t *testing.T) {
 	}
 	// Sessions are not under test: without this the bootstrap creates a real
 	// detached session when a multiplexer is installed.
-	cfg.Session.OpenIn = config.OpenInCurrent
+	cfg.Session.OpenIn = config.OpenInHere
 	plugin := docker.New()
 	if err := plugin.Init(cfg); err != nil {
 		t.Skipf("docker plugin unavailable: %v", err)

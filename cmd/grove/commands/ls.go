@@ -393,5 +393,6 @@ func init() {
 	lsCmd.Flags().BoolVarP(&lsPaths, "paths", "p", false, "Show full paths only (scriptable output)")
 	lsCmd.Flags().BoolVarP(&lsJSON, "json", "j", false, "Output as JSON")
 	lsCmd.Flags().BoolVarP(&lsQuiet, "quiet", "q", false, "Names only, one per line")
+	lsCmd.MarkFlagsMutuallyExclusive("json", "quiet")
 	rootCmd.AddCommand(lsCmd)
 }

@@ -24,6 +24,7 @@ const (
 type Env struct {
 	InsideTmux     bool
 	InsideHerdr    bool
+	InsideHerdrApp bool
 	TmuxAvailable  bool
 	HerdrAvailable bool
 }
@@ -50,8 +51,10 @@ func ParseBackend(s string) (Backend, error) {
 // Under auto, the multiplexer grove is already running inside wins, because
 // relocating a client in a multiplexer the user is not looking at is useless.
 // herdr beats tmux there: running herdr inside tmux is a normal setup, and the
-// inner multiplexer owns the panes. Outside both, tmux wins ties so existing
-// installs keep their behavior when herdr is merely present.
+// inner multiplexer owns the panes. Outside both, herdr wins ties: it is the
+// primary backend, and installing it alongside tmux is a choice to use it.
+// Inside the herdr desktop app, and inside neither multiplexer, auto resolves
+// to off: see the case below.
 func ResolveBackend(pref Backend, env Env) Backend {
 	switch pref {
 	case BackendOff, BackendTmux, BackendHerdr:
@@ -63,10 +66,15 @@ func ResolveBackend(pref Backend, env Env) Backend {
 		return BackendHerdr
 	case env.InsideTmux && env.TmuxAvailable:
 		return BackendTmux
-	case env.TmuxAvailable:
-		return BackendTmux
+	case env.InsideHerdrApp:
+		// The desktop app runs on herdr-core, a different runtime from the
+		// herdr server this package drives. Sessions made there would be
+		// invisible to the person looking at the app.
+		return BackendOff
 	case env.HerdrAvailable:
 		return BackendHerdr
+	case env.TmuxAvailable:
+		return BackendTmux
 	default:
 		return BackendOff
 	}

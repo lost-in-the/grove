@@ -2,17 +2,18 @@ package tui
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/huh/v2"
 
 	"github.com/lost-in-the/grove/internal/config"
+	"github.com/lost-in-the/grove/internal/tuilog"
 )
 
-// ConfigTab identifies which tab is active in the config overlay.
+// ConfigTab identifies which section of the settings panel is shown.
 type ConfigTab int
 
 const (
@@ -33,60 +34,43 @@ const (
 	ConfigList
 )
 
-// ConfigField represents a single editable config field.
-type ConfigField struct {
-	Key         string // TOML key path, e.g. "tmux.mode"
-	Label       string // display name
-	Value       string // current value as string
-	Loaded      string // value loaded from disk; Value differs when changed
-	Type        ConfigFieldType
-	Options     []string // for Enum type
-	Description string   // help text
-	Placeholder string   // shown when value is empty (defaults to "(empty)")
+// configUndoLimit is how many changes u can step back through.
+const configUndoLimit = 20
+
+// configChange is one write u can take back: the field and the value it
+// had before.
+type configChange struct {
+	tab   ConfigTab
+	index int
+	prev  string
 }
 
-// ConfigState holds the state for the config editor: one huh form per
-// section, of which grove shows the active one (spec 11).
+// ConfigState is the settings panel: a list of fields per section, the
+// focused one explained below it. Every change is written at once, so there
+// is nothing unsaved.
 type ConfigState struct {
-	Tab        ConfigTab       // active section
-	Fields     [][]ConfigField // fields per section; the forms bind to their values
-	Err        error
-	Confirming bool           // save confirmation prompt active
-	Config     *config.Config // loaded config
+	Tab    ConfigTab
+	Fields [][]ConfigField
+	Err    error          // the config did not load
+	Config *config.Config // the loaded config, kept current with each write
 
-	Forms      [ConfigTabCount]*huh.Form // nil until the config loads
-	FormValues *configFormValues         // bool bindings shared by the forms
-	formW      int                       // size the forms are built at
-	formH      int
-	arrived    bool                    // section changed, no key sent to it yet
-	focus      func(huh.Field) tea.Cmd // nil means Field.Focus; tests record the call
-}
+	builtin [][]ConfigField // the fields as grove's built-in defaults fill them
 
-// form is the active section's form, or nil before the config loads.
-func (s *ConfigState) form() *huh.Form { return s.Forms[s.Tab] }
+	cursor [ConfigTabCount]int
 
-// focusOnInput reports whether a text input has focus, so digits and ?
-// must type rather than act.
-func (s *ConfigState) focusOnInput() bool {
-	if s.form() == nil {
-		return false
-	}
-	_, ok := s.form().GetFocusedField().(*huh.Input)
-	return ok
-}
+	editing bool // a text field's value is being typed
+	input   textinput.Model
+	editErr string // why the typed value was not written
+	// confirming: the typed value would leave other worktrees' folders
+	// unmatched, so enter must be pressed again to write it.
+	confirming bool
 
-// unsaved counts the fields whose value differs from the one loaded from
-// disk. Call syncConfigFormValues first so bools are current.
-func (s *ConfigState) unsaved() int {
-	n := 0
-	for _, fields := range s.Fields {
-		for _, f := range fields {
-			if f.Value != f.Loaded {
-				n++
-			}
-		}
-	}
-	return n
+	saveErr    error  // the last write failed
+	saveErrKey string // the field it failed for
+	flash      string // "saved", "undone", "nothing to undo"
+	flashGen   int    // matches the timer that clears flash
+
+	undo []configChange
 }
 
 // NewConfigState creates an empty ConfigState.
@@ -97,16 +81,33 @@ func NewConfigState() *ConfigState {
 	}
 }
 
+// load fills the panel from cfg.
+func (s *ConfigState) load(cfg *config.Config) {
+	s.Config = cfg
+	s.Fields = populateConfigFields(cfg)
+	s.builtin = populateConfigFields(config.LoadDefaults())
+	s.cursor = [ConfigTabCount]int{}
+	s.editing, s.confirming = false, false
+}
+
+// focused is the field under the cursor, or nil before the config loads.
+func (s *ConfigState) focused() *ConfigField {
+	fields := s.Fields[s.Tab]
+	if len(fields) == 0 {
+		return nil
+	}
+	return &fields[s.cursor[s.Tab]]
+}
+
 // configLoadedMsg is sent after loading config.
 type configLoadedMsg struct {
 	cfg *config.Config
 	err error
 }
 
-// configSavedMsg is sent after saving config.
-type configSavedMsg struct {
-	err error
-}
+// configFlashDoneMsg clears the header note gen set, unless a later write
+// replaced it.
+type configFlashDoneMsg struct{ gen int }
 
 // loadConfigCmd loads the configuration.
 func loadConfigCmd() tea.Cmd {
@@ -116,28 +117,16 @@ func loadConfigCmd() tea.Cmd {
 	}
 }
 
-// configUpdates is the TOML value of every changed field, keyed by its
-// config key.
-func configUpdates(state *ConfigState) map[string]string {
-	updates := make(map[string]string)
-	for _, tabFields := range state.Fields {
-		for _, field := range tabFields {
-			if field.Value == field.Loaded {
-				continue
-			}
-			val := field.Value
-			// Quote string values for TOML with proper escaping
-			switch field.Type {
-			case ConfigString, ConfigEnum:
-				val = tomlString(val)
-			case ConfigList:
-				val = tomlList(val)
-			}
-			updates[field.Key] = val
-		}
-	}
-	return updates
-}
+// saveProjectConfig writes keys to the project's .grove/config.toml, leaving
+// the rest of the file as it was. Tests point it at a temp project.
+var saveProjectConfig = config.SetProjectConfigValues
+
+// configKeySet reports whether the global or the project config file sets a
+// key.
+var configKeySet = config.KeyDefinedInFiles
+
+// noteDefaultNotWritten is the header note when a change needed no write.
+const noteDefaultNotWritten = "already the default, nothing written"
 
 // tomlString quotes s as a TOML basic string. strconv.Quote is close, but
 // its \a, \v, and \x escapes are not TOML: other control characters get
@@ -175,169 +164,11 @@ func tomlString(s string) string {
 // tomlList turns a comma-separated list into a TOML array of strings,
 // dropping empty items.
 func tomlList(list string) string {
-	var items []string
-	for _, item := range strings.Split(list, ",") {
-		if item = strings.TrimSpace(item); item != "" {
-			items = append(items, tomlString(item))
-		}
+	items := splitList(list)
+	for i, item := range items {
+		items[i] = tomlString(item)
 	}
 	return "[" + strings.Join(items, ", ") + "]"
-}
-
-// saveConfigCmd saves the changed fields. The updates are worked out here,
-// not in the command, which runs on another goroutine.
-func saveConfigCmd(state *ConfigState) tea.Cmd {
-	updates := configUpdates(state)
-	return func() tea.Msg {
-		if len(updates) == 0 {
-			return configSavedMsg{}
-		}
-		return configSavedMsg{err: config.SetProjectConfigValues(updates)}
-	}
-}
-
-// populateConfigFields maps a Config struct to field arrays per tab.
-func populateConfigFields(cfg *config.Config) [][]ConfigField {
-	fields := make([][]ConfigField, ConfigTabCount)
-
-	// General tab
-	fields[ConfigTabGeneral] = []ConfigField{
-		{
-			Key:         "project_name",
-			Label:       "project_name",
-			Value:       cfg.ProjectName,
-			Loaded:      cfg.ProjectName,
-			Type:        ConfigString,
-			Description: "Project name",
-		},
-		{
-			Key:         "projects_dir",
-			Label:       "projects_dir",
-			Value:       cfg.ProjectsDir,
-			Loaded:      cfg.ProjectsDir,
-			Type:        ConfigString,
-			Description: "Where worktrees are created",
-		},
-		{
-			Key:         "default_base_branch",
-			Label:       "default_branch",
-			Value:       cfg.DefaultBranch,
-			Loaded:      cfg.DefaultBranch,
-			Type:        ConfigString,
-			Description: "Base branch for new worktrees",
-		},
-	}
-
-	// Behavior tab
-	tmuxMode := cfg.Tmux.Mode
-	if tmuxMode == "" {
-		tmuxMode = "auto"
-	}
-	containerSwitch := cfg.Switch.ContainerSwitch
-	if containerSwitch == "" {
-		containerSwitch = "off"
-	}
-	fields[ConfigTabBehavior] = []ConfigField{
-		{
-			Key:         "switch.dirty_handling",
-			Label:       "dirty_handling",
-			Value:       cfg.Switch.DirtyHandling,
-			Loaded:      cfg.Switch.DirtyHandling,
-			Type:        ConfigEnum,
-			Options:     []string{"auto-stash", "prompt", "refuse"},
-			Description: "How to handle dirty worktree on switch",
-		},
-		{
-			Key:         "switch.container_switch",
-			Label:       "container_switch",
-			Value:       containerSwitch,
-			Loaded:      containerSwitch,
-			Type:        ConfigEnum,
-			Options:     []string{"off", "prompt", "auto"},
-			Description: "Stack follows every move: off, prompt (ask first), auto (always)",
-		},
-		{
-			Key:         "tmux.mode",
-			Label:       "tmux_mode",
-			Value:       tmuxMode,
-			Loaded:      tmuxMode,
-			Type:        ConfigEnum,
-			Options:     []string{"auto", "manual", "off"},
-			Description: "Tmux session behavior: auto-attach, print instructions, or skip",
-		},
-		{
-			Key:         "naming.pattern",
-			Label:       "naming_pattern",
-			Value:       cfg.Naming.Pattern,
-			Loaded:      cfg.Naming.Pattern,
-			Type:        ConfigString,
-			Description: "Worktree directory template; {project} and {name} each exactly once",
-		},
-	}
-
-	// Plugins tab
-	dockerEnabled := boolTrue
-	dockerAutoStart := boolTrue
-	dockerAutoStop := boolFalse
-	if cfg.Plugins.Docker.Enabled != nil {
-		dockerEnabled = fmt.Sprintf("%v", *cfg.Plugins.Docker.Enabled)
-	}
-	if cfg.Plugins.Docker.AutoStart != nil {
-		dockerAutoStart = fmt.Sprintf("%v", *cfg.Plugins.Docker.AutoStart)
-	}
-	if cfg.Plugins.Docker.AutoStop != nil {
-		dockerAutoStop = fmt.Sprintf("%v", *cfg.Plugins.Docker.AutoStop)
-	}
-	fields[ConfigTabPlugins] = []ConfigField{
-		{
-			Key:         "plugins.docker.enabled",
-			Label:       "docker_enabled",
-			Value:       dockerEnabled,
-			Loaded:      dockerEnabled,
-			Type:        ConfigBool,
-			Description: "Enable Docker plugin",
-		},
-		{
-			Key:         "plugins.docker.auto_start",
-			Label:       "docker_auto_start",
-			Value:       dockerAutoStart,
-			Loaded:      dockerAutoStart,
-			Type:        ConfigBool,
-			Description: "Bring the stack up when it follows a move",
-		},
-		{
-			Key:         "plugins.docker.auto_stop",
-			Label:       "docker_auto_stop",
-			Value:       dockerAutoStop,
-			Loaded:      dockerAutoStop,
-			Type:        ConfigBool,
-			Description: "Take the stack down when it follows a move away",
-		},
-	}
-
-	// Protection tab
-	fields[ConfigTabProtection] = []ConfigField{
-		{
-			Key:         "protection.protected",
-			Label:       "protected",
-			Value:       strings.Join(cfg.Protection.Protected, ", "),
-			Loaded:      strings.Join(cfg.Protection.Protected, ", "),
-			Type:        ConfigList,
-			Description: "Protected worktrees (comma-separated)",
-			Placeholder: "(none — add worktree names)",
-		},
-		{
-			Key:         "protection.immutable",
-			Label:       "immutable",
-			Value:       strings.Join(cfg.Protection.Immutable, ", "),
-			Loaded:      strings.Join(cfg.Protection.Immutable, ", "),
-			Type:        ConfigList,
-			Description: "Immutable worktrees (comma-separated)",
-			Placeholder: "(none — add worktree names)",
-		},
-	}
-
-	return fields
 }
 
 // tabName returns the display name for a config tab.
@@ -356,191 +187,291 @@ func tabName(tab ConfigTab) string {
 	}
 }
 
-// handleConfigKey handles key input for the config editor.
-func (m Model) handleConfigKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+// handleConfigLoaded fills the panel, or keeps the load error to show.
+func (m Model) handleConfigLoaded(msg configLoadedMsg) (tea.Model, tea.Cmd) {
 	if m.configState == nil {
+		return m, nil
+	}
+	if msg.err != nil {
+		m.configState.Err = msg.err
+		return m, nil
+	}
+	m.configState.Err = nil
+	m.configState.load(msg.cfg)
+	return m, nil
+}
+
+func (m Model) handleConfigFlashDone(msg configFlashDoneMsg) (tea.Model, tea.Cmd) {
+	if s := m.configState; s != nil && msg.gen == s.flashGen {
+		s.flash = ""
+	}
+	return m, nil
+}
+
+// handleConfigKey handles key input for the settings panel.
+func (m Model) handleConfigKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	s := m.configState
+	if s == nil {
 		m.popView()
 		return m, nil
 	}
-
-	s := m.configState
-
-	// Handle confirmation prompt keys
-	if s.Confirming {
-		switch {
-		case key.Matches(msg, m.keys.Enter):
-			// Save and close
-			m.popView()
-			m.configState = nil
-			return m, saveConfigCmd(s)
-		case key.Matches(msg, m.keys.Escape):
-			// Discard and close
-			m.popView()
-			m.configState = nil
-			return m, nil
-		}
-		return m, nil
+	if s.editing {
+		return m.handleConfigEditKey(msg)
 	}
-
 	if key.Matches(msg, m.keys.Escape) {
-		return m.leaveConfig()
-	}
-
-	// Section keys (spec 11): ctrl+n / ctrl+p anywhere, before the form,
-	// whose selects would take them as down and up; digits only off text
-	// inputs, where they must type.
-	switch k := msg.String(); {
-	case k == "ctrl+n":
-		return m, s.switchSection((s.Tab + 1) % ConfigTabCount)
-	case k == "ctrl+p":
-		return m, s.switchSection((s.Tab + ConfigTabCount - 1) % ConfigTabCount)
-	case len(k) == 1 && k >= "1" && k <= "4" && !s.focusOnInput():
-		return m, s.switchSection(ConfigTab(k[0] - '1'))
-	}
-
-	if s.form() != nil {
-		s.arrived = false
-		return m.updateConfigForm(msg)
-	}
-	return m, nil
-}
-
-// leaveConfig closes the editor, first asking to save when anything
-// changed. updateConfigForm syncs the bools after every form message, so
-// the fields are already current.
-func (m Model) leaveConfig() (tea.Model, tea.Cmd) {
-	if m.configState.unsaved() > 0 {
-		m.configState.Confirming = true
-		return m, nil
-	}
-	m.popView()
-	m.configState = nil
-	return m, nil
-}
-
-// handleConfigFormMsg forwards non-key messages (focus moves, cursor blink)
-// to the active section's form. huh finishes a form through one of these,
-// so it goes through the same completion check as keys.
-//
-// A form sends its own huh messages only in answer to a key. So between a
-// section change and the first key sent to the new section, a huh message
-// is the previous section's, such as the rest of a finish begun by enter;
-// passing it on would move the new form's focus or finish it too.
-func (m Model) handleConfigFormMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.configState == nil || m.configState.form() == nil {
-		return m, nil
-	}
-	if m.configState.arrived && fromHuh(msg) {
-		return m, nil
-	}
-	return m.updateConfigForm(msg)
-}
-
-// huhPkg is huh's package path; its follow-up messages are unexported.
-var huhPkg = reflect.TypeFor[huh.Form]().PkgPath()
-
-// fromHuh reports whether msg is one of huh's own messages.
-func fromHuh(msg tea.Msg) bool {
-	t := reflect.TypeOf(msg)
-	return t != nil && t.PkgPath() == huhPkg
-}
-
-// updateConfigForm sends a message to the active form. Finishing a section
-// (enter on its last field) moves to the next; finishing the last one
-// leaves as esc does.
-func (m Model) updateConfigForm(msg tea.Msg) (tea.Model, tea.Cmd) {
-	s := m.configState
-	model, cmd := s.form().Update(msg)
-	if f, ok := model.(*huh.Form); ok {
-		s.Forms[s.Tab] = f
-	}
-	m.syncConfigFormValues() // keeps the unsaved count current
-
-	switch s.form().State {
-	case huh.StateCompleted:
-		// A completed form ignores input; rebuild it so the section can be
-		// revisited with its current values. It is hidden from here on, so
-		// its commands are dropped.
-		s.rebuildForm(s.Tab)
-		if s.Tab == ConfigTabCount-1 {
-			return m.leaveConfig()
-		}
-		return m, s.switchSection(s.Tab + 1)
-	case huh.StateAborted:
 		m.popView()
 		m.configState = nil
 		return m, nil
 	}
+	f := s.focused()
+	if f == nil {
+		return m, nil
+	}
+	n := len(s.Fields[s.Tab])
+	k := msg.String()
+	switch {
+	case key.Matches(msg, m.keys.Tab):
+		k = "tab"
+	case key.Matches(msg, m.keys.Enter):
+		k = "enter"
+	}
+	switch k {
+	case "L":
+		s.Tab = (s.Tab + 1) % ConfigTabCount
+	case "H":
+		s.Tab = (s.Tab + ConfigTabCount - 1) % ConfigTabCount
+	case "1", "2", "3", "4":
+		s.Tab = ConfigTab(k[0] - '1')
+	case "down", "j":
+		s.cursor[s.Tab] = min(n-1, s.cursor[s.Tab]+1)
+	case "up", "k":
+		s.cursor[s.Tab] = max(0, s.cursor[s.Tab]-1)
+	case "tab":
+		s.cursor[s.Tab] = (s.cursor[s.Tab] + 1) % n
+	case "shift+tab":
+		s.cursor[s.Tab] = (s.cursor[s.Tab] + n - 1) % n
+	case "right", "l":
+		return m, m.stepConfigChoice(1)
+	case "left", "h":
+		return m, m.stepConfigChoice(-1)
+	case "space":
+		if f.Type == ConfigBool {
+			return m, m.stepConfigChoice(1)
+		}
+	case "enter":
+		if f.Type == ConfigString || f.Type == ConfigList {
+			return m, s.startEdit()
+		}
+	case "u":
+		return m, m.undoConfigChange()
+	}
+	return m, nil
+}
+
+// stepConfigChoice moves a choice or true/false field by delta options,
+// wrapping, and writes it.
+func (m *Model) stepConfigChoice(delta int) tea.Cmd {
+	s := m.configState
+	f := s.focused()
+	if f.Type != ConfigEnum && f.Type != ConfigBool {
+		return nil
+	}
+	cur := 0
+	for i, o := range f.Options {
+		if o.Value == f.Value {
+			cur = i
+		}
+	}
+	n := len(f.Options)
+	next := f.Options[(cur+delta+n)%n].Value
+	return m.changeConfigField(s.Tab, s.cursor[s.Tab], next, "saved")
+}
+
+// changeConfigField writes value to one field and, when that works,
+// records the old value for undo.
+func (m *Model) changeConfigField(tab ConfigTab, index int, value, note string) tea.Cmd {
+	s := m.configState
+	prev := s.Fields[tab][index].Value
+	wrote, err := m.writeConfigField(tab, index, value)
+	if err != nil {
+		return nil
+	}
+	if !wrote {
+		note = noteDefaultNotWritten
+	}
+	s.undo = append(s.undo, configChange{tab: tab, index: index, prev: prev})
+	if len(s.undo) > configUndoLimit {
+		s.undo = s.undo[1:]
+	}
+	return s.setFlash(note)
+}
+
+// writeConfigField validates value as config loading would, writes that one
+// key, and only then shows it. Like the pins, the write happens here rather
+// than in a command, so writes land in the order they were made. A value
+// equal to the built-in default is not written when no config file sets the
+// key (isBuiltinUnset); wrote then reports false.
+func (m *Model) writeConfigField(tab ConfigTab, index int, value string) (wrote bool, err error) {
+	s := m.configState
+	f := &s.Fields[tab][index]
+	if err := f.validate(s.Config, value); err != nil {
+		return false, err
+	}
+	wrote = !s.isBuiltinUnset(tab, index, value)
+	if wrote {
+		if err := saveProjectConfig(map[string]string{f.Key: f.tomlValue(value)}); err != nil {
+			s.saveErr, s.saveErrKey = err, f.Key
+			s.flash = ""
+			return false, err
+		}
+	}
+	s.saveErr, s.saveErrKey = nil, ""
+	f.Value = value
+	if s.Config != nil && f.set != nil {
+		next := *s.Config
+		f.set(&next, value)
+		s.Config = &next
+	}
+	m.reloadConfig()
+	return wrote, nil
+}
+
+// isBuiltinUnset reports whether value is grove's built-in default for the
+// field and neither config file sets its key, so writing it changes nothing
+// except what an older grove has to parse. A failed check counts as set.
+func (s *ConfigState) isBuiltinUnset(tab ConfigTab, index int, value string) bool {
+	if int(tab) >= len(s.builtin) || index >= len(s.builtin[tab]) || s.builtin[tab][index].Value != value {
+		return false
+	}
+	set, err := configKeySet(s.Fields[tab][index].Key)
+	if err != nil {
+		tuilog.Printf("warning: could not read the config files for %s: %v", s.Fields[tab][index].Key, err)
+		return false
+	}
+	return !set
+}
+
+// reloadConfig picks up the written file for the rest of the TUI, such as
+// the row layout.
+func (m *Model) reloadConfig() {
+	cfg, err := config.Load()
+	if err != nil {
+		tuilog.Printf("error: config reload after save failed: %v", err)
+		return
+	}
+	m.cfg = cfg
+	m.refreshDelegate()
+}
+
+// undoConfigChange writes back the value before the newest change and
+// moves to its field. A failed write keeps the step.
+func (m *Model) undoConfigChange() tea.Cmd {
+	s := m.configState
+	if len(s.undo) == 0 {
+		return s.setFlash("nothing to undo")
+	}
+	c := s.undo[len(s.undo)-1]
+	s.Tab, s.cursor[c.tab] = c.tab, c.index
+	if _, err := m.writeConfigField(c.tab, c.index, c.prev); err != nil {
+		return nil
+	}
+	s.undo = s.undo[:len(s.undo)-1]
+	return s.setFlash("undone")
+}
+
+// setFlash shows note in the header until the toast timeout passes.
+func (s *ConfigState) setFlash(note string) tea.Cmd {
+	s.flashGen++
+	s.flash = note
+	gen := s.flashGen
+	return tea.Tick(DefaultToastDuration, func(time.Time) tea.Msg { return configFlashDoneMsg{gen: gen} })
+}
+
+// startEdit opens the focused text field for typing, holding its value.
+func (s *ConfigState) startEdit() tea.Cmd {
+	in := newTextInput()
+	in.Prompt = "▏"
+	in.CharLimit = 500
+	in.SetValue(s.focused().Value)
+	in.CursorEnd()
+	s.input, s.editing, s.editErr, s.confirming = in, true, "", false
+	return s.input.Focus()
+}
+
+// otherWorktreeCount is how many worktrees the dashboard lists besides
+// root: the ones whose short names hang on the project name and the
+// folder pattern.
+func (m Model) otherWorktreeCount() int {
+	n := 0
+	for _, li := range m.list.Items() {
+		if item, ok := li.(WorktreeItem); ok && !item.IsMain {
+			n++
+		}
+	}
+	return n
+}
+
+// handleConfigEditKey sends keys to the field being typed in: enter writes
+// the value, esc drops the edit, and every other key types. In the confirm
+// step, enter writes, esc goes back to the edit, and any other key goes
+// back to the edit and types.
+func (m Model) handleConfigEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	s := m.configState
+	confirming := s.confirming
+	s.confirming = false
+	switch {
+	case key.Matches(msg, m.keys.Escape):
+		if !confirming {
+			s.editing, s.editErr = false, ""
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Enter):
+		return m, m.commitConfigEdit(confirming)
+	}
+	s.editErr = ""
+	var cmd tea.Cmd
+	s.input, cmd = s.input.Update(msg)
 	return m, cmd
 }
 
-// switchSection makes tab the active section. Only the active form gets
-// messages, so a hidden text input's cursor blink stops; focusing the field
-// arrived at again restarts it (huh's selects and confirms do not blink, and
-// their Focus returns nil). huh 2.0.3 draws a focused input's cursor
-// regardless, so this guards against a huh change rather than a visible bug.
-// Tests set s.focus to see the call, so they do not cover Field.Focus itself.
-func (s *ConfigState) switchSection(tab ConfigTab) tea.Cmd {
-	s.arrived = s.arrived || tab != s.Tab
-	s.Tab = tab
-	f := s.form()
-	if f == nil {
+// commitConfigEdit writes the typed value. An invalid one, or a failed
+// write, keeps the edit open with the reason. A change to the project name
+// or folder pattern, with other worktrees, waits until confirmed.
+func (m *Model) commitConfigEdit(confirmed bool) tea.Cmd {
+	s := m.configState
+	f := s.focused()
+	value := strings.TrimSpace(s.input.Value())
+	if f.Type == ConfigList {
+		value = strings.Join(splitList(value), ", ")
+	}
+	if value == f.Value {
+		s.editing = false
 		return nil
 	}
-	if s.focus != nil {
-		return s.focus(f.GetFocusedField())
+	if err := f.validate(s.Config, value); err != nil {
+		s.editErr = err.Error()
+		return nil
 	}
-	return f.GetFocusedField().Focus()
-}
-
-// buildForms builds every section's form at the editor's size and returns
-// the shown form's commands.
-func (s *ConfigState) buildForms(width, height int) tea.Cmd {
-	s.formW, s.formH = width, height
-	s.FormValues = newConfigFormValues()
-	var cmd tea.Cmd
-	for tab := ConfigTab(0); tab < ConfigTabCount; tab++ {
-		if c := s.rebuildForm(tab); tab == s.Tab {
-			cmd = c
-		}
+	if f.renamesWorktrees && !confirmed && m.otherWorktreeCount() > 0 {
+		s.confirming = true
+		return nil
 	}
+	cmd := m.changeConfigField(s.Tab, s.cursor[s.Tab], value, "saved")
+	if s.saveErr != nil && s.saveErrKey == f.Key {
+		return nil
+	}
+	s.editing = false
 	return cmd
 }
 
-// rebuildForm builds one section's form from the fields' current values.
-// Init focuses its first field at once; the commands it returns refresh
-// the fields, start the cursor blink, and ask the terminal for its size.
-// They are only worth running for the shown form: switchSection restarts
-// the blink when a hidden one is shown, and grove sizes the forms itself.
-func (s *ConfigState) rebuildForm(tab ConfigTab) tea.Cmd {
-	s.Forms[tab] = buildSectionForm(s.Fields[tab], s.FormValues, s.formW, s.formH)
-	return s.Forms[tab].Init()
-}
-
-// syncConfigFormValues reads the bool bindings back into their fields.
-func (m *Model) syncConfigFormValues() {
+// handleConfigInputMsg passes the cursor blink and pasted text to the field
+// being typed in.
+func (m Model) handleConfigInputMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	s := m.configState
-	if s == nil || s.FormValues == nil {
-		return
+	if _, ok := msg.(tea.PasteMsg); ok {
+		s.confirming = false
 	}
-
-	for tabIdx := range s.Fields {
-		for fieldIdx := range s.Fields[tabIdx] {
-			syncConfigField(&s.Fields[tabIdx][fieldIdx], s)
-		}
-	}
-}
-
-// syncConfigField updates a bool field from its binding. String, enum, and
-// list fields bind straight to Value.
-func syncConfigField(f *ConfigField, s *ConfigState) {
-	if f.Type == ConfigBool {
-		if bPtr, ok := s.FormValues.bools[f.Key]; ok {
-			if *bPtr {
-				f.Value = boolTrue
-			} else {
-				f.Value = boolFalse
-			}
-		}
-	}
+	var cmd tea.Cmd
+	s.input, cmd = s.input.Update(msg)
+	return m, cmd
 }

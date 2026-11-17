@@ -82,7 +82,7 @@ func TestProgram_HelpOverlay(t *testing.T) {
 	// Wait for help overlay text
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
 		s := stripANSI(string(bts))
-		return regexp.MustCompile(`(?i)keybindings|navigation`).MatchString(s)
+		return regexp.MustCompile(`Moving and typing`).MatchString(s)
 	}, teatest.WithDuration(5*time.Second))
 
 	// esc closes the overlay (? and esc are the only accepted close keys); then q quits
@@ -91,7 +91,7 @@ func TestProgram_HelpOverlay(t *testing.T) {
 	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
 }
 
-func TestProgram_HelpOverlay_QuestionMarkToggles(t *testing.T) {
+func TestProgram_ActionPicker_EscapeCloses(t *testing.T) {
 	repo := setupRailsFixture(t)
 	tm := newTestProgram(t, repo)
 
@@ -105,18 +105,18 @@ func TestProgram_HelpOverlay_QuestionMarkToggles(t *testing.T) {
 	tm.Send(tea.KeyPressMsg{Code: '?', Text: "?"})
 
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
-		return regexp.MustCompile(`type an action`).MatchString(stripANSI(string(bts)))
+		return regexp.MustCompile(`Actions`).MatchString(stripANSI(string(bts)))
 	}, teatest.WithDuration(5*time.Second))
 
-	// esc closes it; the prompt disappears
+	// esc closes the picker; q must then quit the dashboard, not type into
+	// its input. Inspect the final model instead of matching an absence in
+	// incremental terminal output.
 	tm.Send(tea.KeyPressMsg{Code: tea.KeyEscape})
-
-	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
-		return !regexp.MustCompile(`type an action`).MatchString(stripANSI(string(bts)))
-	}, teatest.WithDuration(5*time.Second))
-
 	tm.Send(tea.KeyPressMsg{Code: 'q', Text: "q"})
-	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
+	final := tm.FinalModel(t, teatest.WithFinalTimeout(3*time.Second)).(Model)
+	if final.activeView() != ViewDashboard {
+		t.Fatalf("after esc: view %v, want dashboard", final.activeView())
+	}
 }
 
 // TestProgram_HelpOverlay_SpaceDoesNotClose is intentionally omitted.
@@ -126,7 +126,7 @@ func TestProgram_HelpOverlay_QuestionMarkToggles(t *testing.T) {
 // active. Asserting "overlay still present" via WaitFor is not reliably possible
 // without a full-screen snapshot API. The regression (space closing the overlay)
 // is instead guarded by the unit-level key routing in handleKey and by the fact
-// that TestProgram_HelpOverlay_QuestionMarkToggles verifies the overlay's
+// that TestProgram_ActionPicker_EscapeCloses verifies the action picker's
 // open/closed state machine end-to-end.
 
 func TestProgram_UpdateOverlay_OpensOnGUWhenAvailable(t *testing.T) {

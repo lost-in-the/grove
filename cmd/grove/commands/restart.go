@@ -17,7 +17,7 @@ var restartCmd = &cobra.Command{
 	Use:     "kick [services...]",
 	Aliases: []string{"restart", "k"},
 	Short:   "Restart the stack's services",
-	Long: `Kick (restart) the stack's services.
+	Long: `Restart the stack's services.
 
 If no service is specified, restarts all services. Multiple services may be
 listed and are each restarted.
@@ -53,7 +53,7 @@ Examples:
 		// Restart service(s) — no spinner: docker compose writes its own progress
 		stderr := cli.NewStderr()
 		if len(args) == 0 {
-			cli.Step(stderr, "Restarting containers...")
+			cli.Step(stderr, "Restarting all services...")
 			if err := plugin.Restart(root, ""); err != nil {
 				return fmt.Errorf("failed to restart: %w", err)
 			}

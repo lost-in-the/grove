@@ -1,8 +1,53 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 )
+
+func TestListCursorFollowsFocus(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		opts []testOpt
+	}{
+		{"compact", []testOpt{withItems(5), withCompact()}},
+		{"detailed", []testOpt{withItems(5), withDetailed()}},
+		{"prs", []testOpt{withItems(3), withPRData()}},
+		{"issues", []testOpt{withItems(3), withIssueData()}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newTestModel(append(tc.opts, withSize(120, 40))...)
+			check := func(want int) {
+				t.Helper()
+				if got := strings.Count(stripAnsi(m.viewString()), "❯"); got != want {
+					t.Fatalf("got %d cursors, want %d:\n%s", got, want, stripAnsi(m.viewString()))
+				}
+			}
+			check(1)
+			m = sendKey(m, "tab")
+			check(0)
+			m = sendKey(m, "esc")
+			check(1)
+			if tc.name == "prs" || tc.name == "issues" {
+				prompt := &ExistingWorktreePrompt{Branch: "main", WorktreeName: "root"}
+				if m.prState != nil {
+					m.prState.ExistsPrompt = prompt
+				} else {
+					m.issueState.ExistsPrompt = prompt
+				}
+				check(0)
+				m = sendKey(m, "esc")
+				check(1)
+			}
+			if tc.name == "compact" || tc.name == "detailed" {
+				m = sendKey(m, "space")
+				check(1) // only the go-to result owns the cursor
+				m = sendKey(m, "esc")
+				check(1)
+			}
+		})
+	}
+}
 
 // --- Dashboard focus tests ---
 
@@ -74,7 +119,7 @@ func TestDashboard_FocusedHintsWithPR(t *testing.T) {
 	items[m.list.Index()] = item
 	m.list.SetItems(items)
 
-	hints := m.dashboardDetailFocusedHints()
+	hints := m.dashboardDetailFooter().Hints
 	found := false
 	for _, h := range hints {
 		if h.Key == "B" {
@@ -89,7 +134,7 @@ func TestDashboard_FocusedHintsWithPR(t *testing.T) {
 
 func TestDashboard_FocusedHintsWithoutPR(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(120, 40))
-	hints := m.dashboardDetailFocusedHints()
+	hints := m.dashboardDetailFooter().Hints
 	for _, h := range hints {
 		if h.Key == "B" {
 			t.Error("hints should NOT include B when item has no AssociatedPR")

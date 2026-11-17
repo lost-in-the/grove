@@ -80,13 +80,13 @@ func TestHelpKeepsFooterOfViewBeneath(t *testing.T) {
 // on top of the delete box and hides it, so the delete box is checked in the
 // frame beneath help.
 func TestRenderFrame_HelpOverDeleteDrawsDeleteBeneath(t *testing.T) {
-	m := goldenModel(t, sizeUltraWide, withItems(5), withTwoLine(), withDeleteOverlay())
+	m := goldenModel(t, sizeUltraWide, withItems(5), withDetailed(), withDeleteOverlay())
 	withHelpExpanded()(&m)
 	top := ansi.Strip(m.viewString())
 	if !strings.Contains(top, "Toggle branch deletion") {
 		t.Error("help panel missing")
 	}
-	if !strings.Contains(top, "test commit for root") {
+	if !strings.Contains(top, "test-project-root/") {
 		t.Error("dashboard rows missing beneath both overlays")
 	}
 	beneath := ansi.Strip(m.renderFrame(len(m.views) - 2))
@@ -171,10 +171,8 @@ func TestExistsPromptFork_EscReturnsToPRBrowser(t *testing.T) {
 // esc in the focused detail pane returns to the list, so the hint says so.
 func TestDetailFocusedHints_EscReturnsToList(t *testing.T) {
 	m := newTestModel(withItems(3), withSize(120, 40))
-	for _, h := range m.dashboardDetailFocusedHints() {
-		if h.Key == "esc" && h.Description != "list" {
-			t.Errorf("esc hint = %q, want %q", h.Description, "list")
-		}
+	if leave := m.dashboardDetailFooter().Leave; leave != (Hint{"esc/tab", "back"}) {
+		t.Errorf("leave hint = %+v, want esc/tab back", leave)
 	}
 }
 

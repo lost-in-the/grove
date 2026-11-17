@@ -8,9 +8,13 @@ import "charm.land/bubbles/v2/list"
 // is the only form that survives the list re-deriving its bindings on every
 // SetItems and SetSize. It also disables ForceQuit, which is re-enabled
 // because ctrl+c quits the dashboard through it.
+//
+// The list draws no filter line of its own: the dashboard draws the filter
+// row (filterRow), which stays visible while a filter is applied.
 func newWorktreeList(delegate list.ItemDelegate) list.Model {
 	l := list.New(nil, delegate, 0, 0)
 	l.SetShowTitle(false)
+	l.SetShowFilter(false)
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)
 	l.SetFilteringEnabled(true)
@@ -22,6 +26,12 @@ func newWorktreeList(delegate list.ItemDelegate) list.Model {
 	l.KeyMap.NextPage.SetKeys("pgdown")
 	l.KeyMap.GoToStart.SetKeys("home")
 	l.KeyMap.GoToEnd.SetKeys("end")
+	// A filter is kept with enter or tab only. The list's defaults also
+	// keep it on the arrows and ctrl+j/k, which applied it by surprise.
+	l.KeyMap.AcceptWhileFiltering.SetKeys("enter", "ctrl+m", "tab", "ctrl+i")
+	l.KeyMap.CancelWhileFiltering.SetKeys("esc", "ctrl+[")
+	l.KeyMap.ClearFilter.SetKeys("esc", "ctrl+[")
+	unbindDeleteAfterCursor(&l.FilterInput)
 	l.DisableQuitKeybindings()
 	l.KeyMap.ForceQuit.SetEnabled(true)
 	return l

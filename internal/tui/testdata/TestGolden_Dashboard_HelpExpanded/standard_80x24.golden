@@ -1,24 +1,24 @@
 [2m test-project · 5 worktrees · ⬍ name                                        1/5 [m
 [2m                                                                                [m
-[2m ❯ ● root [m╭──────────────────────────────────────────────────────────╮[2m  0s      [m
-[2m   ○ featu[m│                                                          │[2m 60m      [m
-[2m   ○ fix-b[m│   [1mNavigation[m                                             │[2m  2h      [m
-[2m   ● testi[m│  ──────────────────────────────────────────────────────  │[2m  3h      [m
-[2m   ○ refac[m│   [1m↑/k ↓/j[m                                                │[2m  4h      [m
-[2m          [m│   └ Move up / down                                       │[2m          [m
-[2m          [m│   [1mg[m                                                      │[2m          [m
-[2m          [m│   └ Goto strip (g top, p PRs, i issues, c config, u      │[2m          [m
-[2m          [m│  upgrade, d local diff, a agent under herdr)             │[2m          [m
-[2m          [m│   [1mgg / G[m                                                 │[2m          [m
-[2m          [m│   └ Top / bottom of list                                 │[2m          [m
-[2m          [m│   [1mctrl+d / ctrl+u[m                                        │[2m          [m
-[2m          [m│   └ Half page down / up                                  │[2m          [m
-[2m          [m│   [1menter[m                                                  │[2m          [m
-[2m          [m│   └ Switch to selected worktree                          │[2m          [m
-[2m          [m│   [1mU[m                                                      │[2m          [m
+[2m   ● root [m╭──────────────────────────────────────────────────────────╮[2m 0s       [m
+[2m     ⎇ roo[m│                                                          │[2m          [m
+[2m          [m│   [1mMoving and typing[m                                      │[2m          [m
+[2m   ○ featu[m│   j/k move. While you type, hold ctrl.                   │[2m60m       [m
+[2m     ⎇ fea[m│  ──────────────────────────────────────────────────────  │[2m          [m
+[2m          [m│   [1mmove / type[m                                            │[2m          [m
+[2m   ○ fix-b[m│   └ The footer's first word: letters are commands, or    │[2m 2h       [m
+[2m     ⎇ fix[m│  they type                                               │[2m          [m
+[2m          [m│   [1m↑/k ↓/j[m                                                │[2m          [m
+[2m   ● testi[m│   └ Move through rows or fields                          │[2m 3h       [m
+[2m     ⎇ tes[m│   [1mesc / ctrl+[[m                                           │[2m          [m
+[2m          [m│   └ Leave: back, close, clear, or cancel                 │[2m          [m
+[2m   ○ refac[m│   [1menter / ctrl+m[m                                         │[2m 4h       [m
+[2m     ⎇ ref[m│   └ The action the footer names                          │[2m          [m
+[2m          [m│   [1mtab / ctrl+i[m                                           │[2m          [m
+[2m          [m│   └ The tab key; ctrl+[, ctrl+m, and ctrl+i arrive as    │[2m          [m
 [2m          [m│  ──────────────────────────────────────────────────────  │[2m          [m
-[2m          [m│    [1m↑↓[m scroll · [1mesc[m close                                 │[2m          [m
+[2m          [m│    move · [1m↑↓/jk[m scroll · [1mesc[m close                       │[2m          [m
 [2m          [m│                                                          │[2m          [m
 [2m root · te[m╰──────────────────────────────────────────────────────────╯[2m          [m
-[2m  ↑↓ navigate · enter switch · ␣ find                                           [m
-[2m  tab detail · / filter · g goto · ? help                                       [m
+[2m  move · ↑↓/jk move · enter switch · space go to · tab detail                   [m
+[2m  / filter · v compact · g more · ? help · q quit                               [m

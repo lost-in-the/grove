@@ -215,11 +215,13 @@ func renderConfigSummary(w *cli.Writer, cfg *config.Config) {
 	_, _ = fmt.Fprintln(w)
 	cli.Bold(w, "[session]:")
 	cli.Label(w, "  command:", cfg.Session.Command)
-	// Unset means "new", and a user comparing this against their config file
-	// should be able to see which placement is actually in force.
+	// A user comparing this against their config file should be able to see
+	// which placement is actually in force.
 	openIn := cfg.Session.OpenIn
 	if openIn == "" {
 		openIn = cfg.EffectiveOpenIn() + " (default)"
+	} else if renamed, old := cfg.OpenInRename(); old {
+		openIn = fmt.Sprintf("%s (old spelling of %q)", openIn, renamed)
 	}
 	cli.Label(w, "  open_in:", openIn)
 

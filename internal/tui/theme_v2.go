@@ -46,6 +46,8 @@ type StyleSet struct {
 	DimmedItem    lipgloss.Style
 	ListCursor    lipgloss.Style
 	ListCursorDim lipgloss.Style
+	RowRule       lipgloss.Style // dashboard row leaders and dividers
+	RowBranch     lipgloss.Style // dashboard row branch
 
 	// List selection
 	SelectionRow lipgloss.Style
@@ -92,6 +94,7 @@ type StyleSet struct {
 	HelpKeyHighlight lipgloss.Style
 	HelpDesc         lipgloss.Style
 	HelpSep          lipgloss.Style
+	HelpMode         lipgloss.Style // the footer's mode word: move or type
 
 	// Input
 	InputBorder lipgloss.Style
@@ -144,6 +147,8 @@ func NewStyleSet(cs ColorScheme) StyleSet {
 		DimmedItem:    lipgloss.NewStyle().Foreground(cs.TextDim),
 		ListCursor:    lipgloss.NewStyle().Foreground(cs.Info),
 		ListCursorDim: lipgloss.NewStyle(),
+		RowRule:       lipgloss.NewStyle().Foreground(cs.SurfaceDim),
+		RowBranch:     lipgloss.NewStyle().Foreground(cs.Primary),
 
 		// Status badges
 		StatusClean:          lipgloss.NewStyle().Foreground(cs.Success),
@@ -194,6 +199,7 @@ func NewStyleSet(cs ColorScheme) StyleSet {
 		HelpKeyHighlight: lipgloss.NewStyle().Foreground(cs.HeaderBg).Background(cs.Primary).Bold(true),
 		HelpDesc:         lipgloss.NewStyle().Foreground(cs.TextMuted),
 		HelpSep:          lipgloss.NewStyle().Foreground(cs.TextMuted),
+		HelpMode:         lipgloss.NewStyle().Foreground(cs.TextMuted).Background(cs.SelectionBg),
 
 		// Input
 		InputBorder: lipgloss.NewStyle().

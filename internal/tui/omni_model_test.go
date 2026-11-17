@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -157,7 +159,7 @@ func TestOmni_FrameSizeIsFixed(t *testing.T) {
 				t.Errorf("%dx%d query %q: frame %dx%d, want %dx%d", size[0], size[1], q, w, h, w0, h0)
 			}
 		}
-		if h0 > size[1]-formTop {
+		if h0 > size[1]-omniTop {
 			t.Errorf("%dx%d: frame height %d runs off the screen", size[0], size[1], h0)
 		}
 	}
@@ -220,7 +222,7 @@ func TestOmni_RowsAlignAcrossGroups(t *testing.T) {
 	m = typeOmni(m, "fix")
 	col := -1
 	for _, line := range strings.Split(ansi.Strip(renderOmni(m.omni, 120, 40)), "\n") {
-		if strings.Contains(line, "⏎") {
+		if strings.Contains(line, omniStatus(m.omni)) {
 			continue // the status line repeats a label
 		}
 		for _, label := range []string{"Fix the thing", "Fix login", "fix-bug"} {
@@ -244,7 +246,83 @@ func TestOmni_StatusOnCurrentWorktree(t *testing.T) {
 			m.omni.Cursor = i
 		}
 	}
-	if st, _ := omniStatus(m.omni); st != "⏎ stays on root" {
+	if st := omniStatus(m.omni); st != "enter stays on root" {
 		t.Errorf("status = %q", st)
+	}
+}
+
+// Places come first, as with grove to <name>: when a query matches a
+// worktree and an action, enter goes to the worktree.
+func TestOmni_QueryMatchingWorktreeAndActionGoesToWorktree(t *testing.T) {
+	m := newTestModel(withItems(5), withSize(120, 40))
+	m = sendKey(m, "space")
+	m = typeOmni(m, "re")
+	var kinds []omniKind
+	for _, r := range m.omni.rows() {
+		kinds = append(kinds, r.Item.Kind)
+	}
+	if !slices.Contains(kinds, omniAction) || !slices.Contains(kinds, omniWorktree) {
+		t.Fatalf("query re: kinds %v, want both a worktree and an action", kinds)
+	}
+	if it, _ := m.omni.selected(); it.Kind != omniWorktree || it.Label != "refactor" {
+		t.Fatalf("highlighted %+v, want the worktree refactor", it)
+	}
+	next, cmd := pressKey(m, "enter")
+	if next.switchTo != "/tmp/test-project-refactor" || !isQuit(cmd) {
+		t.Errorf("switchTo %q quit %v, want refactor", next.switchTo, isQuit(cmd))
+	}
+}
+
+// The ? scope lists actions only, with the first action highlighted.
+func TestOmni_ActionsScopeListsOnlyActions(t *testing.T) {
+	m := newTestModel(withItems(5), withSize(120, 40))
+	m = sendKey(m, "?")
+	m = typeOmni(m, "re")
+	if got := groupNames(m.omni.groups); !reflect.DeepEqual(got, []string{"actions"}) {
+		t.Fatalf("groups = %v, want actions only", got)
+	}
+	if it, _ := m.omni.selected(); it.Kind != omniAction {
+		t.Errorf("highlighted %+v, want an action", it)
+	}
+}
+
+func TestOmni_NamedGoTo(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m = sendKey(m, "space")
+	lines := strings.Split(ansi.Strip(renderOmni(m.omni, 120, 40)), "\n")
+	if !strings.Contains(lines[1], "Go to") {
+		t.Errorf("title line %q, want Go to", lines[1])
+	}
+	if !strings.Contains(lines[2], "Go to: worktree, #PR, or action") {
+		t.Errorf("input line %q, want the Go to: prompt and its placeholder", lines[2])
+	}
+
+	a := sendKey(newTestModel(withItems(3), withSize(120, 40)), "?")
+	lines = strings.Split(ansi.Strip(renderOmni(a.omni, 120, 40)), "\n")
+	if !strings.Contains(lines[1], "Actions") || !strings.Contains(lines[2], "Actions: ") {
+		t.Errorf("actions scope title %q input %q, want Actions and an Actions: prompt", lines[1], lines[2])
+	}
+}
+
+// The status line spells the key as a word, as every footer does.
+func TestOmni_StatusSpellsEnter(t *testing.T) {
+	m := newTestModel(withItems(3), withSize(120, 40))
+	m = sendMsg(m, prsFetchedMsg{prs: []*tracker.PullRequest{{Number: 1, Title: "Fix the thing"}}})
+	m = sendMsg(m, issuesFetchedMsg{issues: []*tracker.Issue{{Number: 2, Title: "Fix login"}}})
+	m = sendKey(m, "space")
+	m = typeOmni(m, "f")
+	kinds := map[omniKind]bool{}
+	for i, r := range m.omni.rows() {
+		m.omni.Cursor = i
+		if _, ok := m.omni.selected(); !ok {
+			continue
+		}
+		kinds[r.Item.Kind] = true
+		if st := omniStatus(m.omni); !strings.HasPrefix(st, "enter ") || strings.Contains(st, "⏎") {
+			t.Errorf("status = %q, want it to start with enter", st)
+		}
+	}
+	if len(kinds) < 3 {
+		t.Errorf("covered %d row kinds, want worktrees, actions, PRs, and issues", len(kinds))
 	}
 }

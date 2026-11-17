@@ -1,6 +1,6 @@
 # Grove
 
-> **One command. Your worktree, branch, tmux session, credentials, and Docker stack — ready to go.**
+> **One command. Your worktree, branch, session, credentials, and Docker stack: ready to go.**
 
 Grove eliminates the mechanical overhead of context-switching between Git branches. Stop juggling 9 shell commands every time you pick up a PR or start a feature. One command does everything.
 
@@ -39,7 +39,7 @@ Nine commands. Easy to miss one. Interrupts your focus every time.
 grove fetch pr/42
 ```
 
-One command. Worktree created. Credentials copied. Dependencies symlinked. Docker running. Tmux session open. You're in.
+One command. Worktree created. Credentials copied. Dependencies symlinked. Docker running. Session open. You're in.
 
 ---
 
@@ -56,11 +56,11 @@ Grove wraps the full worktree lifecycle — create, switch, fork, clean up — a
 | What | How |
 |---|---|
 | **Interactive TUI Dashboard** | Run `grove` to browse, create, and manage worktrees in a full-screen terminal UI |
-| **Fast Context Switching** | `grove to <name>` — changes directory, runs hooks, attaches tmux in <500ms. It moves you only; `grove up` brings the Docker stack |
+| **Fast Context Switching** | `grove to <name>` changes directory, runs hooks, attaches the session in <500ms. It moves you only; `grove up` brings the Docker stack |
 | **GitHub Integration** | `grove fetch pr/42` or browse PRs and issues interactively with `grove prs` |
 | **Lifecycle Hooks** | Auto-copy `.env`, symlink `node_modules`, run `bundle install` on worktree create |
 | **Docker Support** | `grove up` brings the stack to the worktree you are in, `grove down` stops it, and `grove logs` tails it |
-| **Tmux Integration** | Every worktree gets its own tmux session; attach, detach, switch without losing context |
+| **Session Integration** | Every worktree gets its own session (tmux or herdr); attach, detach, switch without losing context |
 | **Herdr Support** | Prefer [herdr](https://herdr.dev)? Set `[mux] backend = "herdr"` and every worktree gets a herdr workspace instead — plus a live agent-status column (`idle` / `working` / `blocked`) in `grove ls` and the dashboard |
 | **Shell Integration** | `grove to` actually changes your directory; tab completion included |
 | **Agent-Ready** | `GROVE_AGENT_MODE=1` for headless use in CI, scripts, or AI coding tools |
@@ -88,13 +88,13 @@ go install github.com/lost-in-the/grove/cmd/grove@latest
 Download the latest release for your platform from the [releases page](https://github.com/lost-in-the/grove/releases).
 
 ```bash
-# macOS (Apple Silicon) — replace <VERSION> with the latest tag from the
-# releases page, e.g. 0.7.0
+# macOS (Apple Silicon): replace <VERSION> with the latest tag from the
+# releases page, without the leading "v" (e.g. 0.12.0)
 curl -L https://github.com/lost-in-the/grove/releases/download/v<VERSION>/grove_<VERSION>_Darwin_arm64.tar.gz | tar xz
 sudo mv grove /usr/local/bin/
 ```
 
-Find the latest tag on the [releases page](https://github.com/lost-in-the/grove/releases). Archive names follow the pattern `grove_<VERSION>_<OS>_<ARCH>.tar.gz` (e.g. `grove_0.7.0_Darwin_arm64.tar.gz`, `grove_0.7.0_Linux_amd64.tar.gz`).
+Find the latest tag on the [releases page](https://github.com/lost-in-the/grove/releases). Archive names follow the pattern `grove_<VERSION>_<OS>_<ARCH>.tar.gz` (e.g. `grove_0.12.0_Darwin_arm64.tar.gz`, `grove_0.12.0_Linux_amd64.tar.gz`).
 
 ### Build from Source
 
@@ -217,7 +217,7 @@ grove ls
   hotfix-css       fix/css          clean      none        ~/projects/my-app-hotfix-css
 ```
 
-`●` marks your current worktree. `dirty` means uncommitted changes. `detached` means a tmux session exists but you're not in it. Use `grove ls --json` for machine-readable output.
+`●` marks your current worktree. `dirty` means uncommitted changes. `detached` means a session exists but you're not in it. Use `grove ls --json` for machine-readable output.
 
 ### 6 — Open the TUI
 
@@ -245,7 +245,7 @@ No arguments. The full-screen dashboard shows all your worktrees, lets you creat
  [enter] switch  [n] new  [d] delete  [/] filter  [?] help  [q] quit
 ```
 
-The detail panel updates as you navigate — branch, commit, sync status, tmux state, and a live list of changed files. Toast notifications appear top-right and auto-dismiss after 3 seconds. The layout adapts: side-by-side on wide terminals, stacked on narrow ones.
+The detail panel updates as you navigate: branch, commit, sync status, session state, and a live list of changed files. Toast notifications appear top-right and auto-dismiss after 3 seconds. The layout adapts: side-by-side on wide terminals, stacked on narrow ones.
 
 ### Keyboard shortcuts
 
@@ -277,21 +277,23 @@ See [docs/TUI.md](docs/TUI.md) for the full reference — overlays, PR browser, 
 
 | Command | What it does |
 |---------|-------------|
-| `grove ls` | List all worktrees — name, branch, status, tmux state |
-| `grove new <name>` | Create a worktree + branch + tmux session (`--branch`, `--from`) |
+| `grove ls` | List all worktrees: name, branch, status, session state |
+| `grove new <name>` | Create a worktree + branch + its session (`--branch`, `--from`) |
 | `grove adopt [path]` | Bootstrap a git worktree that grove doesn't know about |
-| `grove to <name>` | Move to a worktree: directory, hooks, tmux. Does not touch the stack by default (see `[switch] container_switch`) |
+| `grove to <name>` | Move to a worktree: its session, hooks. Does not touch the stack by default (see `[switch] container_switch`) |
 | `grove to <name> --up` | Move and bring the stack to that worktree |
-| `grove to <name> --peek` | Lightweight move: skip hooks and tmux |
+| `grove to <name> --here` | Stay in the shell or pane you are in: change directory only. Hooks still run |
+| `grove to <name> --no-hooks` | Skip hooks and the dirty check |
+| `grove to <name> --peek` | Look without side effects: short for `--here --no-hooks` |
 | `grove up` / `grove down` | Bring the stack to the worktree you are in / stop the stack |
 | `grove here` | Show current worktree: branch, SHA, age, status |
 | `grove which` | Show where you are and the state of the stack (alias: `status`) |
 | `grove context` | Show full worktree context details |
 | `grove last` | Toggle to previous worktree (`--up` also brings the stack) |
-| `grove rm <name>` | Remove worktree, kill tmux session, delete branch |
+| `grove rm <name>` | Remove worktree, kill its session, delete branch |
 | `grove rename [old] [new]` | Rename a worktree |
 | `grove open <name>` | Open a session in any worktree (create if needed) |
-| `grove join [name]` | Join a tmux session without changing directory |
+| `grove join [name]` | Join a worktree's session without changing directory |
 
 ### GitHub integration
 
@@ -312,7 +314,7 @@ Requires `gh` CLI (installed and authenticated to your repo).
 | `grove fork <name>` | Fork current worktree into a new one (optionally move or copy WIP) |
 | `grove diff <name>` | Diff current worktree against another |
 | `grove graft <name>` | Cherry-pick commits or graft WIP from another worktree |
-| `grove sync [name]` | Fast-forward a worktree from its remote |
+| `grove sync [name]` | Fast-forward an environment worktree (made with `--mirror`) from its remote |
 | `grove test <name> [args]` | Run your test command in any worktree without switching |
 | `grove trim` | Trim worktrees not accessed in N days (default: 30) |
 
@@ -323,7 +325,7 @@ Requires `gh` CLI (installed and authenticated to your repo).
 | `grove up` | Bring the stack to this worktree |
 | `grove down` | Stop the stack |
 | `grove logs [service]` | Tail the stack's logs (one service, or all) |
-| `grove kick [service]` | Kick (restart) the stack's services |
+| `grove kick [services...]` | Restart the stack's services (all, or the ones you name) |
 | `grove up --isolated` | Start an isolated Docker stack (for parallel agent use) |
 | `grove ps` | Show active stacks with ports and reference IDs |
 
@@ -338,9 +340,9 @@ Requires `gh` CLI (installed and authenticated to your repo).
 | `grove setup` | Auto-configure shell integration |
 | `grove install <shell>` | Print shell integration code (use in `eval "$(grove install zsh)"`) |
 | `grove doctor` | Health check: binary, shell integration, git, tmux/herdr, Docker |
-| `grove repair` | Fix state inconsistencies and orphaned tmux sessions |
+| `grove repair` | Fix state inconsistencies and orphaned sessions (tmux or herdr) |
 | `grove agent-help` | Quick reference for AI agent workflows |
-| `grove version` | Show version information |
+| `grove version` | Show version information (`grove --version` prints the same line) |
 
 ---
 
@@ -414,15 +416,17 @@ Grove uses TOML config files. Later files override earlier ones:
 project_name = "my-project"
 
 [switch]
-# What to do with uncommitted changes when switching
-# "prompt" (default) | "auto-stash" | "refuse"
-dirty_handling = "prompt"
+# What to do when the worktree you are leaving has uncommitted changes
+# "warn" (default) | "ignore" | "prompt" | "refuse" | "auto-stash"
+# "auto-stash" leaves the stash parked after the move. Git stashes are shared
+# across all worktrees.
+dirty_handling = "warn"
 
 [tmux]
 # "auto" (default) | "manual" | "off"
 # auto:   Grove creates and attaches sessions automatically
 # manual: Grove creates sessions but doesn't attach (good for scripts)
-# off:    No tmux integration
+# off:    No session management
 mode = "auto"
 
 [test]
@@ -449,7 +453,7 @@ Run `grove config` to see the merged effective config for the current project.
 
 | Variable | Purpose |
 |----------|---------|
-| `GROVE_AGENT_MODE=1` | Suppress tmux attachment; activate isolated Docker for parallel use |
+| `GROVE_AGENT_MODE=1` | Suppress session attachment; activate isolated Docker for parallel use |
 | `GROVE_TUI=0` | Disable TUI; bare `grove` prints usage instead of the dashboard |
 | `GROVE_NONINTERACTIVE=1` | Auto-accept all prompts — useful in CI and scripts |
 | `GROVE_LOG=1` | Write debug logs to `~/.grove/grove.log` |
@@ -519,7 +523,7 @@ Grove works seamlessly with AI coding tools like Claude Code, Cursor, and CI age
 
 ```bash
 # Set at the start of any agent session
-export GROVE_AGENT_MODE=1       # suppress tmux takeover
+export GROVE_AGENT_MODE=1       # suppress session takeover
 export GROVE_NONINTERACTIVE=1   # no interactive prompts
 
 # Each agent gets its own isolated worktree
@@ -612,7 +616,7 @@ Works outside a Grove project to diagnose installation issues, or inside a proje
 | `not a grove project` | Run `grove init` from the project root |
 | Port conflicts between worktrees | Enable `auto_stop = true` or use `grove up --isolated` |
 | Stale tmux sessions after manual removal | Run `grove repair` |
-| `grove to` unexpectedly attaches tmux | Set `GROVE_AGENT_MODE=1` or `[tmux] mode = "manual"` in config |
+| `grove to` unexpectedly attaches a session | Set `GROVE_AGENT_MODE=1` or `[tmux] mode = "manual"` in config |
 
 See [docs/AGENT_GUIDE.md](docs/AGENT_GUIDE.md#8-troubleshooting) for in-depth troubleshooting including shell PATH edge cases and Docker configuration diagnostics.
 
