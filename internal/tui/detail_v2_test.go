@@ -589,3 +589,33 @@ func TestResolveStackOn_NamesTheWorktreeTheStackIsOn(t *testing.T) {
 		}
 	}
 }
+
+// The Git section names the folder, so compact mode still has it on screen.
+// A folder off the naming pattern says so in words.
+func TestRenderDetailV2_FolderLine(t *testing.T) {
+	item := WorktreeItem{ShortName: "checkout", Branch: "feat/checkout-redesign", Path: "/src/myapp-checkout"}
+	lines := strings.Split(stripAnsi(renderDetailV2(&item, 60)), "\n")
+	branch, folder := -1, -1
+	for i, l := range lines {
+		switch {
+		case strings.Contains(l, "Branch"):
+			branch = i
+		case strings.Contains(l, "Folder"):
+			folder = i
+			if !strings.Contains(l, "myapp-checkout/") || strings.Contains(l, "pattern") {
+				t.Errorf("folder line: %q", l)
+			}
+		}
+	}
+	if folder != branch+1 {
+		t.Errorf("Folder should follow Branch: branch line %d, folder line %d:\n%s", branch, folder, strings.Join(lines, "\n"))
+	}
+
+	off := WorktreeItem{ShortName: "legacy-api", Branch: "feat/api-v2", Path: "/src/legacy-api", FolderOffPattern: true}
+	if got := stripAnsi(renderDetailV2(&off, 60)); !strings.Contains(got, "legacy-api/ · not the folder pattern") {
+		t.Errorf("off-pattern folder:\n%s", got)
+	}
+	if got := stripAnsi(renderDetailV2(&WorktreeItem{ShortName: "x", Branch: "x"}, 60)); strings.Contains(got, "Folder") {
+		t.Errorf("no path, no folder line:\n%s", got)
+	}
+}

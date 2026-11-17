@@ -1,13 +1,13 @@
 [2m test-project ·[m╭────────────────────────────────────────────────╮[2m           1/3 [m
 [2m               [m│                                                │[2m               [m
-[2m ❯ ● root      [m│  [1mMessages[m                                      │[2m       0s      [m
-[2m   ○ feature-au[m│                                                │[2m      60m      [m
-[2m   ○ fix-bug   [m│  60s  ⚠ Created feature. 3 files not copied.   │[2m       2h      [m
-[2m               [m│         See space messages.                    │[2m               [m
-[2m               [m│  60s  ⚠ Not copied: .env (missing in the main  │[2m               [m
+[2m ❯ ● root │ tes[m│  [1mMessages[m                                      │[2m···   0s       [m
+[2m     ⎇ root    [m│                                                │[2m               [m
+[2m               [m│  60s  ⚠ Created feature. 3 files not copied.   │[2m               [m
+[2m   ○ feature-au[m│         See space messages.                    │[2m···  60m       [m
+[2m     ⎇ feature-[m│  60s  ⚠ Not copied: .env (missing in the main  │[2m               [m
 [2m               [m│         worktree)                              │[2m               [m
-[2m               [m│  60s  ⚠ Not copied: config/master.key          │[2m               [m
-[2m               [m│         (missing in the main worktree)         │[2m               [m
+[2m   ○ fix-bug │ [m│  60s  ⚠ Not copied: config/master.key          │[2m···   2h       [m
+[2m     ⎇ fix-bug [m│         (missing in the main worktree)         │[2m               [m
 [2m               [m│  60s  ⚠ Not copied: config/secret.key          │[2m               [m
 [2m               [m│         (missing in the main worktree)         │[2m               [m
 [2m               [m│  60s  ⚠ The worktree was created, but 3 files  │[2m               [m
@@ -21,4 +21,4 @@
 [2m               [m│                                                │[2m               [m
 [2m root · test co[m│  move · [1m↑↓/jk[m scroll · [1mesc[m close               │[2m               [m
 [2m  move · ↑↓/jk [m│                                                │[2m               [m
-[2m  tab detail · [m╰────────────────────────────────────────────────╯[2m               [m
+[2m  / filter · v [m╰────────────────────────────────────────────────╯[2m               [m

@@ -21,6 +21,10 @@ type HelpFooter struct {
 	// Highlight state: briefly flashes the key hint when pressed.
 	highlightedKey string
 	highlightedAt  time.Time
+
+	// listToggle is the list mode v switches to, for the dashboard footer;
+	// "" reads as "detailed". The model keeps it current.
+	listToggle string
 }
 
 // NewHelpFooter creates a HelpFooter.
@@ -100,7 +104,11 @@ func (h *HelpFooter) CompactFooter(view ActiveView) Footer {
 	case ViewDetailSheet:
 		return detailFooter(Hint{"esc/tab", "back"})
 	case ViewDashboard:
-		return moveFooter(Hint{"q", "quit"}, dashboardFooterHints()...)
+		toggle := h.listToggle
+		if toggle == "" {
+			toggle = "detailed"
+		}
+		return moveFooter(Hint{"q", "quit"}, dashboardFooterHints(toggle)...)
 	case ViewIssues:
 		return moveFooter(Hint{"esc", "close"},
 			Hint{"↑↓/jk", "move"}, Hint{"enter", "new worktree"}, Hint{"B", "open in browser"},

@@ -1,13 +1,13 @@
 [2m test-project · 3 worktrees · ⬍ name                                        1/3 [m
 [2m                                                                                [m
-[2m ❯ ● root                                                               0s      [m
-[2m   ○ feature-[m╭───────────────────────────────────────────────────╮[2m     60m      [m
-[2m   ○ fix-bug [m│                                                   │[2m      2h      [m
-[2m             [m│  [1mDelete Worktree[m                                  │[2m              [m
+[2m ❯ ● root │ test-project-root/ ·····································   0s       [m
+[2m     ⎇ root  [m╭───────────────────────────────────────────────────╮[2m              [m
 [2m             [m│                                                   │[2m              [m
+[2m   ○ feature-[m│  [1mDelete Worktree[m                                  │[2m··  60m       [m
+[2m     ⎇ featur[m│                                                   │[2m              [m
 [2m             [m│  [1mDelete "feature-auth"?[m                           │[2m              [m
-[2m             [m│                                                   │[2m              [m
-[2m             [m│  Path      /tmp/test-project-feature-auth         │[2m              [m
+[2m   ○ fix-bug [m│                                                   │[2m··   2h       [m
+[2m     ⎇ fix-bu[m│  Path      /tmp/test-project-feature-auth         │[2m              [m
 [2m             [m│  Branch    feature-auth                           │[2m              [m
 [2m             [m│  Commit    abc1234 · 2 hours ago                  │[2m              [m
 [2m             [m│  Status    ● clean                                │[2m              [m
@@ -20,5 +20,5 @@
 [2m             [m╰───────────────────────────────────────────────────╯[2m              [m
 [2m                                                                                [m
 [2m root · test commit for root                                                    [m
-[2m  move · ↑↓/jk move · enter switch · space go to                                [m
-[2m  tab detail · / filter · g more · ? help · q quit                              [m
+[2m  move · ↑↓/jk move · enter switch · space go to · tab detail                   [m
+[2m  / filter · v compact · g more · ? help · q quit                               [m

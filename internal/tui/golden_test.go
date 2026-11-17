@@ -70,10 +70,10 @@ func TestGolden_Dashboard_SortModes(t *testing.T) {
 	}
 }
 
-func TestGolden_Dashboard_TwoLine(t *testing.T) {
+func TestGolden_Dashboard_Detailed(t *testing.T) {
 	for _, size := range []termSize{sizeStandard, sizeWide} {
 		t.Run(size.name, func(t *testing.T) {
-			m := goldenModel(t, size, withItems(5), withTwoLine())
+			m := goldenModel(t, size, withItems(5), withDetailed())
 			golden.RequireEqual(t, []byte(m.viewString()))
 		})
 	}
@@ -347,12 +347,79 @@ func withRichRows() testOpt {
 		items := rowFixture()
 		li := make([]list.Item, len(items))
 		for i, it := range items {
-			it.Path = "/tmp/test-project-" + it.ShortName
 			li[i] = it
 		}
 		m.list.SetItems(li)
 		m.refreshDelegate()
 		m.updateLayout()
+	}
+}
+
+// withListFixture is rowFixture with checkout selected and pinned to 2,
+// and the detail pane filled. Under herdr every row has a workspace and
+// the agent states vary.
+func withListFixture(herdr bool) testOpt {
+	return func(m *Model) {
+		items := rowFixture()
+		if herdr {
+			agents := []mux.AgentStatus{mux.AgentIdle, mux.AgentBlocked, mux.AgentDone, mux.AgentWorking, mux.AgentUnknown}
+			for i := range items {
+				items[i].SessionBackend = "herdr"
+				items[i].TmuxStatus = string(mux.StatusOpen)
+				items[i].AgentStatus = agents[i]
+			}
+			items[0].TmuxStatus = string(mux.StatusActive)
+			m.agentAware, m.agentAwareSet = true, true
+		}
+		li := make([]list.Item, len(items))
+		for i, it := range items {
+			li[i] = it
+		}
+		m.list.SetItems(li)
+		m.pins = pinSet{"2": "checkout"}
+		m.updateLayout()
+		m.list.Select(1)
+		m.updateDetailContent()
+	}
+}
+
+var listModeGoldenSizes = []termSize{
+	{"narrow_44x24", 44, 24}, sizeStandard, sizeWide, {"ultrawide_160x50", 160, 50},
+}
+
+// Both list modes at every width tier, on rows that test them: the selected
+// row, a folder off the naming pattern, a long name on a long branch, every
+// state symbol, and agent state under herdr.
+func TestGolden_ListModes(t *testing.T) {
+	for _, mode := range []struct {
+		name string
+		opt  func() testOpt
+	}{{"compact", withCompact}, {"detailed", withDetailed}} {
+		for _, size := range listModeGoldenSizes {
+			for _, herdr := range []bool{false, true} {
+				name := mode.name + "_" + size.name
+				if herdr {
+					name += "_herdr"
+				}
+				t.Run(name, func(t *testing.T) {
+					m := goldenModel(t, size, mode.opt(), withListFixture(herdr))
+					golden.RequireEqual(t, []byte(m.viewString()))
+				})
+			}
+		}
+	}
+}
+
+// The list modes in color, to check each element's token.
+func TestGolden_Themed_ListModes(t *testing.T) {
+	for _, mode := range []struct {
+		name string
+		opt  func() testOpt
+	}{{"compact", withCompact}, {"detailed", withDetailed}} {
+		t.Run(mode.name, func(t *testing.T) {
+			m := goldenModelThemed(t, sizeStandard, mode.opt(), withListFixture(false))
+			golden.RequireEqual(t, []byte(m.viewString()))
+		})
 	}
 }
 
@@ -372,9 +439,9 @@ func TestGolden_Dashboard_PinStrip(t *testing.T) {
 	}
 }
 
-// Pinned rows show their slot digit in the lead column.
+// Detailed rows show a pinned worktree's slot digit in the lead column.
 func TestGolden_Dashboard_Pinned(t *testing.T) {
-	m := goldenModel(t, sizeWide, withItems(5), func(m *Model) {
+	m := goldenModel(t, sizeWide, withItems(5), withDetailed(), func(m *Model) {
 		m.pins = pinSet{"1": "root", "3": "testing"}
 		m.refreshDelegate()
 	})

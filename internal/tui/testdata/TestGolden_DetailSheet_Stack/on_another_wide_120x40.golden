@@ -1,15 +1,15 @@
  [1m[1mtest-project[m · 3 worktrees · ⬍ name                                                                                2/3[m 
                                                                         │ ╭─ [1mfeature-auth[m · focused ────────────────╮   
-   ● root                                                       0s      │ │── Git ────────────────────────────────  │   
- ❯ ○ [1mfeature-auth[m                                              60m      │ │Branch    feature-auth                   │   
-   ○ fix-bug                                                    2h      │ │Commit    abc1234 · 2 hours ago          │   
+     NAME         BRANCH                               STATE  AGE       │ │── Git ────────────────────────────────  │   
+   ● root         root ·····································   0s       │ │Branch    feature-auth                   │   
+ ❯ ○ [1mfeature-auth[m feature-auth ·····························  60m       │ │Folder    test-project-feature-auth/     │   
+   ○ fix-bug      fix-bug ··································   2h       │ │Commit    abc1234 · 2 hours ago          │   
                                                                         │ │Remote    not tracking                   │   
                                                                         │ │                                         │   
                                                                         │ │── Status ─────────────────────────────  │   
                                                                         │ │Working   ● clean                        │   
                                                                         │ │Docker    the stack is on root           │   
                                                                         │ ╰─────────────────────────────────────────╯   
-                                                                        │                                               
                                                                         │                                               
                                                                         │                                               
                                                                         │                                               

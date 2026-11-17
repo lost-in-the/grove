@@ -72,6 +72,14 @@ func dashboardActions() []Action {
 		{ID: "omni.open", Keys: []string{"space"}, Label: "go to", Footer: 3,
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) { return m.openOmni(omniScopeAll) }},
 		{ID: "list.filter", Keys: []string{"/"}, Label: "filter", Footer: 5, Synonyms: []string{"search"}},
+		// The footer names the mode v switches to (listToggleLabel).
+		{ID: "list.density", Keys: []string{"v"}, Label: "compact or detailed list", Footer: 6,
+			Synonyms: []string{"density", "compact", "detailed", "view mode", "list mode"},
+			Run: func(m Model, _ string) (tea.Model, tea.Cmd) {
+				m.helpFooter.SetHighlight("v")
+				m.toggleListMode()
+				return m, nil
+			}},
 		{ID: "detail.open", Keys: []string{"tab", "ctrl+i", "l"}, Label: "show detail", Short: "detail", Footer: 4,
 			Synonyms: []string{"details", "info"},
 			Run:      func(m Model, _ string) (tea.Model, tea.Cmd) { m.openDetail(); return m, nil }},
@@ -81,7 +89,7 @@ func dashboardActions() []Action {
 				m.sortMode = m.sortMode.Next(m.agentAware)
 				return m, m.applySortToList()
 			}},
-		{ID: "goto.open", Keys: []string{"g"}, Label: "more", Footer: 6,
+		{ID: "goto.open", Keys: []string{"g"}, Label: "more", Footer: 7,
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) {
 				m.pendingG = true
 				m.updateLayout()
@@ -89,7 +97,7 @@ func dashboardActions() []Action {
 			}},
 		// ? runs from handleKey in every view; its entry feeds the footer
 		// and keeps the key map and this table in step.
-		{ID: "app.help", Keys: []string{"?"}, Label: "help", Footer: 7},
+		{ID: "app.help", Keys: []string{"?"}, Label: "help", Footer: 8},
 		{ID: "app.messages", Label: "messages", Synonyms: []string{"warnings", "errors", "log", "history"},
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) { return m.openMessages() }},
 		{ID: "app.shortcuts", Label: "keyboard shortcuts", Synonyms: []string{"help", "keys", "cli commands"},
@@ -147,13 +155,6 @@ func dashboardActions() []Action {
 				m.helpFooter.SetHighlight("r")
 				m.loading = true
 				return m, tea.Batch(m.spinner.Tick, m.fetchWorktrees)
-			}},
-		{ID: "list.density", Keys: []string{"v"}, Label: "show or hide commit messages",
-			Synonyms: []string{"density", "compact", "view mode"},
-			Run: func(m Model, _ string) (tea.Model, tea.Cmd) {
-				m.helpFooter.SetHighlight("v")
-				m.toggleCompactMode()
-				return m, nil
 			}},
 		{ID: "list.sort_reverse", Keys: []string{"O"}, Label: "reverse sort",
 			Run: func(m Model, _ string) (tea.Model, tea.Cmd) {
@@ -237,8 +238,9 @@ func (m Model) openUpgrade() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// dashboardFooterHints are the footer-marked actions, in footer order.
-func dashboardFooterHints() []Hint {
+// dashboardFooterHints are the footer-marked actions, in footer order. v is
+// labeled with toggle, the list mode it switches to.
+func dashboardFooterHints(toggle string) []Hint {
 	var marked []Action
 	for _, a := range dashboardActions() {
 		if a.Footer > 0 {
@@ -249,7 +251,10 @@ func dashboardFooterHints() []Hint {
 	hints := make([]Hint, len(marked))
 	for i, a := range marked {
 		label := a.Label
-		if a.Short != "" {
+		switch {
+		case a.ID == "list.density":
+			label = toggle
+		case a.Short != "":
 			label = a.Short
 		}
 		hints[i] = Hint{a.display(), label}

@@ -303,6 +303,15 @@ is in [COMMAND_SPECIFICATIONS.md](COMMAND_SPECIFICATIONS.md#placement).
 means `"here"`. Both still load. `grove doctor` and `grove config` name the
 value to change to.
 
+**Older grove binaries.** grove 0.11.0 and older know only `"new"` and
+`"current"`: a file with `open_in = "session"` or `"here"` fails to load there,
+and that grove runs on defaults for the whole file. The settings panel (`c`)
+does not write a value equal to the built-in default when no config file sets
+the key, which keeps a fresh file readable. It cannot help with a non-default
+value: `open_in = "here"` still breaks an older grove that reads the same
+file. Where two versions share a project, keep the old word (`"current"`) in
+the file until every machine runs the newer grove.
+
 ---
 
 ### [protection]
@@ -346,15 +355,18 @@ default_branch_action = "split"    # string: split | fork
 # Default: "last_segment"
 worktree_name_from_branch = "last_segment"  # string: last_segment
 
-# One-line dashboard rows. false adds the commit message under each row.
+# The dashboard list's mode: true is compact (one line per worktree, in
+# columns), false is detailed (name and folder, then branch and state).
 # A choice saved with `v` in the TUI takes precedence.
-# Default: true
+# Default: unset, so the layout decides: compact when the detail panel sits
+# beside the list (110 columns and up), detailed when it does not.
 compact_list = true                # bool
 
-# Text after the alias on each dashboard row:
-# "branch" — `⎇ branch`, only when its last segment differs from the alias
-# "dir"    — the worktree's directory name
-# "off"    — nothing
+# Compact mode's second column, after the name:
+# "branch" : the branch (heading BRANCH)
+# "dir"    : the worktree's folder name (heading FOLDER)
+# "off"    : no second column; the name column takes its room
+# Detailed mode shows the folder and the branch, and ignores this key.
 # Default: "branch"
 list_secondary = "branch"          # string: branch | dir | off
 ```

@@ -1,13 +1,11 @@
- [1m[1mtest-project[m · 3 worktrees · ⬍ name                                                                                1/3[m 
+ [1m[1mtest-project[m · 5 worktrees · ⬍ name                                                                                1/5[m 
                                                                         │                                               
- ❯ ● [1mroot[m             ⎇ main                          ↓11 ~13   2d ⬢ ◆  │                                               
-   ○ auth             ⎇ feat/oauth                         ↑2   2h ⬡    │                                               
-   ○ login                                                      5w      │                                               
-                                                                        │                                               
-                                                                        │                                               
-                                                                        │                                               
-                                                                        │                                               
-                                                                        │                                               
+     NAME                    BRANCH                    STATE  AGE       │                                               
+ ❯ ● [1mroot[m                    main ··················· ↓12 ~1   3w ⬢ ◆   │                                               
+   ● checkout                feat/check…-redesign ······ ~13   2d ⬡     │                                               
+   ○ fix-login               fix/login-timeout ·············   5h       │                                               
+   ● legacy-api ≠            feat/api-…pagination ···· ↑3 ~2  24h       │                                               
+   ● payments-reconci…-audit agent/payment…-x7k2p · ↑1 ↓2 ~4  8mo       │                                               
                                                                         │                                               
                                                                         │                                               
                                                                         │                                               
@@ -37,4 +35,6 @@
                                                                         │                                               
                                                                         │                                               
                                                                         │                                               
-  move · [1m↑↓/jk[m move · [1menter[m switch · [1mspace[m go to · [1mtab[m detail · [1m/[m filter · [1mg[m more · [1m?[m help · [1mq[m quit                     
+                                                                        │                                               
+                                                                        │                                               
+  move · [1m↑↓/jk[m move · [1menter[m switch · [1mspace[m go to · [1mtab[m detail · [1m/[m filter · [1mv[m detailed · [1mg[m more · [1m?[m help · [1mq[m quit        

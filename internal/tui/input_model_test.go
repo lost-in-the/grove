@@ -405,7 +405,7 @@ func TestFooter_ModeWordFirst(t *testing.T) {
 		want string
 	}{
 		{"dashboard", func() Model { return newTestModel(withItems(5), withSize(160, 40)) },
-			"move · ↑↓/jk move · enter switch · space go to · tab detail · / filter · g more · ? help · q quit"},
+			"move · ↑↓/jk move · enter switch · space go to · tab detail · / filter · v detailed · g more · ? help · q quit"},
 		{"dashboard typing a filter", func() Model {
 			return typeText(sendKey(newTestModel(withItems(5), withSize(160, 40)), "/"), "fe")
 		}, "type · enter/tab keep · esc clear"},

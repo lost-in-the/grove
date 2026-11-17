@@ -1,7 +1,8 @@
  [1m[1mtest-project[m · 5 worktrees · ⬍ name                                                                                1/1[m 
  Filter: auth  1 of 5 · [1mesc[m clear                                       │ ╭─ [1mfeature-auth[m ──────────────────────────╮   
- ❯ ○ [1mfeature-auth[m                                              60m      │ │── Git ────────────────────────────────  │   
-                                                                        │ │Branch    feature-auth                   │   
+     NAME         BRANCH                               STATE  AGE       │ │── Git ────────────────────────────────  │   
+ ❯ ○ [1mfeature-auth[m feature-auth ·····························  60m       │ │Branch    feature-auth                   │   
+                                                                        │ │Folder    test-project-feature-auth/     │   
                                                                         │ │Commit    abc1234 · 2 hours ago          │   
                                                                         │ │Remote    not tracking                   │   
                                                                         │ │                                         │   
@@ -36,5 +37,4 @@
                                                                         │                                               
                                                                         │                                               
                                                                         │                                               
-                                                                        │                                               
-  move · [1m↑↓/jk[m move · [1menter[m switch · [1mspace[m go to · [1mtab[m detail · [1m/[m filter · [1mg[m more · [1m?[m help · [1mq[m quit                     
+  move · [1m↑↓/jk[m move · [1menter[m switch · [1mspace[m go to · [1mtab[m detail · [1m/[m filter · [1mv[m detailed · [1mg[m more · [1m?[m help · [1mq[m quit        

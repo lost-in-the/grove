@@ -1,11 +1,11 @@
  [1m[1mtest-project[m · 5 worktrees · ⬍ name                                                                                1/5[m 
                                                                         │ ──[1m New worktree [m───────────────────────────── 
-   ● [1mroot[m                                                       0s      │ ⠋ Creating worktree 'abc-12'...               
-   ○ feature-auth                                              60m      │                                               
-   ○ fix-bug                                                    2h      │                                               
-   ● testing                                                    3h      │                                               
-   ○ refactor                                                   4h      │                                               
-                                                                        │                                               
+     NAME         BRANCH                               STATE  AGE       │ ⠋ Creating worktree 'abc-12'...               
+   ● [1mroot[m         root ·····································   0s       │                                               
+   ○ feature-auth feature-auth ·····························  60m       │                                               
+   ○ fix-bug      fix-bug ··································   2h       │                                               
+   ● testing      testing ··································   3h       │                                               
+   ○ refactor     refactor ·································   4h       │                                               
                                                                         │                                               
                                                                         │                                               
                                                                         │                                               

@@ -1,0 +1,24 @@
+ [1m[1mtest-project[m · 5 worktrees · ⬍ name                                        2/5[m 
+                                                                                
+     ● [1mroot[m │ myapp/ ···············································   3w ⬢ ◆   
+       ⎇ main   ↓12 ~1                                                          
+                                                                                
+ 2 ❯ ● [1mcheckout[m │ myapp-checkout/ ··································   2d ⬡     
+       ⎇ feat/checkout-redesign   ~13                                           
+                                                                                
+     ○ [1mfix-login[m │ myapp-fix-login/ ································   5h       
+       ⎇ fix/login-timeout                                                      
+                                                                                
+     ● [1mlegacy-api[m │ legacy-api/ ····································  24h       
+       ⎇ feat/api-v2-pagination   ↑3 ~2                                         
+                                                                                
+     ● [1mpayments-reconciliation-audit[m │ myapp-payments-reco…-audit/ ·  8mo       
+       ⎇ agent/payments-reconciliation-audit-x7k2p   ↑1 ↓2 ~4                   
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ checkout · ⎇ feat/checkout-redesign · redesign the checkout                    
+  move · [1m↑↓/jk[m move · [1menter[m switch · [1mspace[m go to · [1mtab[m detail                   
+  [1m/[m filter · [1mv[m compact · [1mg[m more · [1m?[m help · [1mq[m quit                               

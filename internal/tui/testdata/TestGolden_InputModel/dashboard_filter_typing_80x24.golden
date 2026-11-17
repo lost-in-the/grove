@@ -1,7 +1,7 @@
  [1m[1mtest-project[m · 5 worktrees · ⬍ name                                        1/1[m 
  [37mFilter: [mauth[7;37m [m  1 of 5                                                          
- ❯ ○ [1mfeature-auth[m                                                      60m      
-                                                                                
+ ❯ ○ [1mfeature-auth[m │ test-project-feature-auth/ ·····················  60m       
+     ⎇ feature-auth                                                             
                                                                                 
                                                                                 
                                                                                 

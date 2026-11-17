@@ -1,11 +1,11 @@
 [2m test-project · 5 worktrees · ⬍ name                                                                                1/5 [m
 [2m                                                                        │                                               [m
-[2m ❯ ● root                                                       0s      │                                               [m
-[2m   ○ feature-au[m╭────────────────────────────────────────────────────────────────────────────────────────╮[2m               [m
-[2m   ○ fix-bug   [m│                                                                                        │[2m               [m
-[2m   ● testing   [m│   [1mMoving and typing[m                                                                    │[2m               [m
-[2m   ○ refactor  [m│   j/k move. While you type, hold ctrl.                                                 │[2m               [m
-[2m               [m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
+[2m     NAME         BRANCH                               STATE  AGE       │                                               [m
+[2m ❯ ● root      [m╭────────────────────────────────────────────────────────────────────────────────────────╮[2m               [m
+[2m   ○ feature-au[m│                                                                                        │[2m               [m
+[2m   ○ fix-bug   [m│   [1mMoving and typing[m                                                                    │[2m               [m
+[2m   ● testing   [m│   j/k move. While you type, hold ctrl.                                                 │[2m               [m
+[2m   ○ refactor  [m│  ────────────────────────────────────────────────────────────────────────────────────  │[2m               [m
 [2m               [m│   [1mmove / type[m                   The footer's first word: letters are commands, or      │[2m               [m
 [2m               [m│   they type                                                                            │[2m               [m
 [2m               [m│   [1m↑/k ↓/j[m                       Move through rows or fields                            │[2m               [m
@@ -37,4 +37,4 @@
 [2m                                                                        │                                               [m
 [2m                                                                        │                                               [m
 [2m                                                                        │                                               [m
-[2m  move · ↑↓/jk move · enter switch · space go to · tab detail · / filter · g more · ? help · q quit                     [m
+[2m  move · ↑↓/jk move · enter switch · space go to · tab detail · / filter · v detailed · g more · ? help · q quit        [m

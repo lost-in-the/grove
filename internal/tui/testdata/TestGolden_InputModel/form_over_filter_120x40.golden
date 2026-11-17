@@ -1,7 +1,7 @@
  [1m[1mtest-project[m · 5 worktrees · ⬍ name                                                                                1/1[m 
  Filter: auth  1 of 5 · [1mesc[m clear                                       │ ──[1m New worktree [m───────────────────────────── 
-   ○ [1mfeature-auth[m                                              60m      │ ❯ Branch  [37m[mabc-12[7;37m [m                             
-                                                                        │           › + new "abc-12"          from main 
+     NAME         BRANCH                               STATE  AGE       │ ❯ Branch  [37m[mabc-12[7;37m [m                             
+   ○ [1mfeature-auth[m feature-auth ·····························  60m       │           › + new "abc-12"          from main 
                                                                         │                                               
                                                                         │                                               
                                                                         │                                               

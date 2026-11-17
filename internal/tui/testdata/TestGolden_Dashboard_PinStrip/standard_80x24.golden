@@ -1,24 +1,24 @@
  [1m[1mtest-project[m · 5 worktrees · ⬍ name                                        3/5[m 
                                                                                 
- 1   ● root                                                             0s      
-     ○ feature-auth                                                    60m      
-   ❯ ○ [1mfix-bug[m                                                          2h      
-     ● testing                                                          3h      
-     ○ refactor                                                         4h      
+ 1   ● [1mroot[m │ test-project-root/ ···································   0s       
+       ⎇ root                                                                   
                                                                                 
+     ○ [1mfeature-auth[m │ test-project-feature-auth/ ···················  60m       
+       ⎇ feature-auth                                                           
                                                                                 
+   ❯ ○ [1mfix-bug[m │ test-project-fix-bug/ ·····························   2h       
+       ⎇ fix-bug                                                                
                                                                                 
+     ● [1mtesting[m │ test-project-testing/ ·····························   3h       
+       ⎇ testing                                                                
                                                                                 
-                                                                                
-                                                                                
-                                                                                
-                                                                                
-                                                                                
+     ○ [1mrefactor[m │ test-project-refactor/ ···························   4h       
+       ⎇ refactor                                                               
                                                                                 
                                                                                 
                                                                                 
  fix-bug · test commit for fix-bug                                              
  [1mm[m pin to slot · fix-bug is selected                                            
   [1m1[m root   [1m2[m ·   [1m3[m ·   [1m4[m ·   [1m5[m ·   [1m6[m ·   [1m7[m ·   [1m8[m ·   [1m9[m ·   [1m0[m unpin   [1mesc[m close  
-  move · [1m↑↓/jk[m move · [1menter[m switch · [1mspace[m go to                                
-  [1mtab[m detail · [1m/[m filter · [1mg[m more · [1m?[m help · [1mq[m quit                              
+  move · [1m↑↓/jk[m move · [1menter[m switch · [1mspace[m go to · [1mtab[m detail                   
+  [1m/[m filter · [1mv[m compact · [1mg[m more · [1m?[m help · [1mq[m quit                               

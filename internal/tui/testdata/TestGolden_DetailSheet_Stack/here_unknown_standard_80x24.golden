@@ -2,6 +2,7 @@
  ╭─ [1mfeature-auth[m ───────────────────────────────────────────────────────────╮   
  │── Git ─────────────────────────────────────────────────────────────────  │   
  │Branch    feature-auth                                                    │   
+ │Folder    test-project-feature-auth/                                      │   
  │Commit    abc1234 · 2 hours ago                                           │   
  │Remote    not tracking                                                    │   
  │                                                                          │   
@@ -11,7 +12,6 @@
  │          docker did not answer                                           │   
  │          the stack is on this worktree                                   │   
  ╰──────────────────────────────────────────────────────────────────────────╯   
-                                                                                
                                                                                 
                                                                                 
                                                                                 

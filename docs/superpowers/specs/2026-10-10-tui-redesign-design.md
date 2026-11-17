@@ -100,6 +100,8 @@ Terms are used with one meaning each throughout.
 
 ### 5.1 Row anatomy (N3)
 
+> **Superseded 2026-11-16.** The row now has two modes, compact (one line in columns under a `NAME BRANCH STATE AGE` heading, a dotted leader to the state, no pin digits, `≠` for a folder off the folder pattern) and detailed (name, `│`, folder, then `⎇ branch` and state on a second line, a blank line after each worktree). Neither shows the commit subject; the detail panel gains a Folder line. With no saved choice the list is compact at split widths and detailed below them. The branch chip (5.8), the shed order (5.2), and the commit line (5.4) below describe the earlier row. The current design and its rules are in `docs/TUI.md`, Worktree List. Reason: compared with v0.11.0's two modes, the single row with an optional commit line ran together and put the branch in a grey far column.
+
 Columns, left to right:
 
 | Column | Width | Content | Sheds? |

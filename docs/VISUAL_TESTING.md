@@ -65,6 +65,11 @@ internal/tui/testdata/
   TestGolden_Dashboard_Empty.golden
   TestGolden_Dashboard_Loading.golden
   TestGolden_Dashboard_WithToast.golden
+  TestGolden_ListModes/   (compact_* and detailed_* at narrow_44x24,
+                           standard_80x24, wide_120x40, ultrawide_160x50,
+                           each also _herdr with agent state)
+  TestGolden_Themed_ListModes/  (compact, detailed: read the SGR codes for
+                                 each element's token)
   TestGolden_Dashboard_SortModes/
     name.golden
     recent.golden

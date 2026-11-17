@@ -361,9 +361,9 @@ func (m Model) formListAt(v ActiveView, w, rows int) (header, body string, ok bo
 		d := m.rowDelegate()
 		d.Unfocused = true
 		l.SetDelegate(d)
-		l.SetSize(w, max(1, rows-1)) // under the filter row
+		l.SetSize(w, max(1, rows-1-d.headRows())) // under the filter row and the heading
 		l.Select(idx)
-		return m.buildDashboardHeader().View(m.width), m.dashboardListView(l), true
+		return m.buildDashboardHeader().View(m.width), m.dashboardListView(l, d), true
 	case ViewPRs:
 		if m.prState != nil {
 			return renderContextHeader("Pull Requests", m.projectName, m.width), renderPRList(m.prState, w, m.spinner.View(), rows, 1, false), true

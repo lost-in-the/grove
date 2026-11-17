@@ -1,11 +1,11 @@
  [1m[1mtest-project[m · 5 worktrees · ⬍ name                                                                                1/5[m 
                                                                         │                                               
- ❯ ● [1mroot[m                                                       0s      │                                               
-   ○ feature-auth                                              60m      │                                               
-   ○ fix-bug                                                    2h      │                                               
-   ● testing                                                    3h      │                                               
-   ○ refactor                                                   4h      │                                               
-                                                                        │                                               
+     NAME         BRANCH                               STATE  AGE       │                                               
+ ❯ ● [1mroot[m         root ·····································   0s       │                                               
+   ○ feature-auth feature-auth ·····························  60m       │                                               
+   ○ fix-bug      fix-bug ··································   2h       │                                               
+   ● testing      testing ··································   3h       │                                               
+   ○ refactor     refactor ·································   4h       │                                               
                                                                         │                                               
                                                                         │                                               
                                                                         │                                               
@@ -37,4 +37,4 @@
                                                                         │                                               
  [1mg[m more                                                                                                                 
   [1mg[m top of list   [1mp[m pull requests   [1mi[m issues   [1mc[m config   [1mu[m upgrade grove   [1md[m local diff   [1mesc[m close                    
-  move · [1m↑↓/jk[m move · [1menter[m switch · [1mspace[m go to · [1mtab[m detail · [1m/[m filter · [1mg[m more · [1m?[m help · [1mq[m quit                     
+  move · [1m↑↓/jk[m move · [1menter[m switch · [1mspace[m go to · [1mtab[m detail · [1m/[m filter · [1mv[m detailed · [1mg[m more · [1m?[m help · [1mq[m quit        

@@ -188,7 +188,7 @@ func DefaultKeyMap() KeyMap {
 		),
 		ViewMode: key.NewBinding(
 			key.WithKeys("v"),
-			key.WithHelp("v", "compact"),
+			key.WithHelp("v", "compact or detailed"),
 		),
 		Fork: key.NewBinding(
 			key.WithKeys("f"),

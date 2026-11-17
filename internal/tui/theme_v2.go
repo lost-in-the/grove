@@ -46,6 +46,8 @@ type StyleSet struct {
 	DimmedItem    lipgloss.Style
 	ListCursor    lipgloss.Style
 	ListCursorDim lipgloss.Style
+	RowRule       lipgloss.Style // dashboard row leaders and dividers
+	RowBranch     lipgloss.Style // dashboard row branch
 
 	// List selection
 	SelectionRow lipgloss.Style
@@ -145,6 +147,8 @@ func NewStyleSet(cs ColorScheme) StyleSet {
 		DimmedItem:    lipgloss.NewStyle().Foreground(cs.TextDim),
 		ListCursor:    lipgloss.NewStyle().Foreground(cs.Info),
 		ListCursorDim: lipgloss.NewStyle(),
+		RowRule:       lipgloss.NewStyle().Foreground(cs.SurfaceDim),
+		RowBranch:     lipgloss.NewStyle().Foreground(cs.Primary),
 
 		// Status badges
 		StatusClean:          lipgloss.NewStyle().Foreground(cs.Success),

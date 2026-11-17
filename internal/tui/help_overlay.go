@@ -329,7 +329,7 @@ var helpSectionsDashboard = append(helpSectionKeys[:len(helpSectionKeys):len(hel
 	{title: "Display", items: []helpEntry{
 		{"o", "Cycle sort (name → age → dirty)"},
 		{"O", "Reverse sort"},
-		{"v", "Show or hide commit messages"},
+		{"v", "Compact or detailed list"},
 		{"r", "Refresh worktree list"},
 		{"c", "Open configuration"},
 	}},

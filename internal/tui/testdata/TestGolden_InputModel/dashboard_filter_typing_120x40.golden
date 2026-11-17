@@ -1,14 +1,14 @@
  [1m[1mtest-project[m · 5 worktrees · ⬍ name                                                                                1/1[m 
  [37mFilter: [mauth[7;37m [m  1 of 5                                                  │ ╭─ [1mfeature-auth[m ──────────────────────────╮   
- ❯ ○ [1mfeature-auth[m                                              60m      │ │── Git ────────────────────────────────  │   
-                                                                        │ │Branch    feature-auth                   │   
+     NAME         BRANCH                               STATE  AGE       │ │── Git ────────────────────────────────  │   
+ ❯ ○ [1mfeature-auth[m feature-auth ·····························  60m       │ │Branch    feature-auth                   │   
+                                                                        │ │Folder    test-project-feature-auth/     │   
                                                                         │ │Commit    abc1234 · 2 hours ago          │   
                                                                         │ │Remote    not tracking                   │   
                                                                         │ │                                         │   
                                                                         │ │── Status ─────────────────────────────  │   
                                                                         │ │Working   ● clean                        │   
                                                                         │ ╰─────────────────────────────────────────╯   
-                                                                        │                                               
                                                                         │                                               
                                                                         │                                               
                                                                         │                                               

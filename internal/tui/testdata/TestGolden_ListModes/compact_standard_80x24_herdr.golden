@@ -1,0 +1,24 @@
+ [1m[1mtest-project[m · 5 worktrees · ! 1 blocked · ✓ 1 done · ⬍ name               2/5[m 
+                                                                                
+       NAME                       BRANCH                       STATE  AGE       
+     ● root                       main ······················ ↓12 ~1   3w ⬢ ◆   
+ ! ❯ ● [1mcheckout[m                   feat/checkout-redesign ······· ~13   2d ⬡     
+ ✓   ○ fix-login                  fix/login-timeout ················   5h ⬡     
+ ▸   ● legacy-api ≠               feat/api-v2-pagination ····· ↑3 ~2  24h ⬡     
+     ● payments-reconcilia…-audit agent/payments-…-x7k2p ·· ↑1 ↓2 ~4  8mo ⬡     
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ checkout · ⎇ feat/checkout-redesign · redesign the checkout                    
+  move · [1m↑↓/jk[m move · [1menter[m switch · [1mspace[m go to · [1mtab[m detail                   
+  [1m/[m filter · [1mv[m detailed · [1mg[m more · [1m?[m help · [1mq[m quit                              

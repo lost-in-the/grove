@@ -217,11 +217,15 @@ func withSortMode(mode SortMode) testOpt {
 	}
 }
 
-// withTwoLine switches the model to rows with the commit message.
-func withTwoLine() testOpt {
+// withDetailed chooses detailed rows, as v does.
+func withDetailed() testOpt { return withListChoice(false) }
+
+// withCompact chooses compact rows, as v does.
+func withCompact() testOpt { return withListChoice(true) }
+
+func withListChoice(compact bool) testOpt {
 	return func(m *Model) {
-		m.compactMode = false
-		m.refreshDelegate()
+		m.compactChoice = &compact
 		m.updateLayout()
 	}
 }

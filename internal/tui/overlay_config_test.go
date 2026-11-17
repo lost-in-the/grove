@@ -2,6 +2,8 @@ package tui
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -659,5 +661,89 @@ func TestConfig_OtherTextFieldsWriteAtOnce(t *testing.T) {
 	m = editTo(t, focusField(t, m, "projects_dir"), "~/src")
 	if m.configState.confirming || !strings.Contains(readConfigFile(t, path), `projects_dir = "~/src"`) {
 		t.Errorf("confirming %v, file:\n%s", m.configState.confirming, readConfigFile(t, path))
+	}
+}
+
+// stepTo presses l on the focused choice field until it reads value.
+func stepTo(t *testing.T, m Model, value string) Model {
+	t.Helper()
+	for range len(m.configState.focused().Options) {
+		if m.configState.focused().Value == value {
+			return m
+		}
+		m = sendConfigKeys(t, m, "l")
+	}
+	if got := m.configState.focused().Value; got != value {
+		t.Fatalf("could not step to %q: at %q", value, got)
+	}
+	return m
+}
+
+// isolateGlobalConfig points the global config at an empty home.
+func isolateGlobalConfig(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("GROVE_CONFIG", "")
+	return home
+}
+
+// A value equal to grove's built-in default is not written when no config
+// file sets the key: an older grove then never meets a key it may not read.
+func TestConfig_DefaultNotWrittenWhenNoFileSetsIt(t *testing.T) {
+	isolateGlobalConfig(t)
+	m := openConfigWith(t, 80, 24, func(c *config.Config) { c.Session.OpenIn = config.OpenInHere })
+	path := filepath.Join(".grove", "config.toml")
+	writes := recordWrites(t)
+	m = focusField(t, m, "session.open_in")
+	m = stepTo(t, m, config.OpenInSession)
+	if len(*writes) != 0 || readConfigFile(t, path) != "" {
+		t.Fatalf("default written: %v\n%s", *writes, readConfigFile(t, path))
+	}
+	if got := configHeaderLine(m); !strings.Contains(got, "already the default, nothing written") {
+		t.Errorf("header: %q", got)
+	}
+	m = sendConfigKeys(t, m, "u")
+	if got := m.configState.focused().Value; got != config.OpenInHere {
+		t.Errorf("undo: value %q, want here", got)
+	}
+	if got := readConfigFile(t, path); !strings.Contains(got, `open_in = "here"`) {
+		t.Errorf("undo should write the value before:\n%s", got)
+	}
+}
+
+// A key the project file already sets is written as before, default or not.
+func TestConfig_DefaultWrittenWhenTheProjectSetsIt(t *testing.T) {
+	isolateGlobalConfig(t)
+	m, path := openConfigIn(t, 80, 24, "[session]\nopen_in = \"here\"\n")
+	m = focusField(t, m, "session.open_in")
+	m = stepTo(t, m, config.OpenInSession)
+	if got := readConfigFile(t, path); !strings.Contains(got, `open_in = "session"`) {
+		t.Errorf("project file:\n%s", got)
+	}
+	if got := configHeaderLine(m); !strings.Contains(got, "✓ saved") {
+		t.Errorf("header: %q", got)
+	}
+}
+
+// When the global file sets the key, writing nothing would leave its value
+// in force, so the default is written.
+func TestConfig_DefaultWrittenWhenTheGlobalFileSetsIt(t *testing.T) {
+	home := isolateGlobalConfig(t)
+	global := filepath.Join(home, ".config", "grove", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(global), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(global, []byte("[session]\nopen_in = \"here\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, path := openConfigIn(t, 80, 24, "")
+	m = focusField(t, m, "session.open_in")
+	if m.configState.focused().Value != config.OpenInHere {
+		t.Fatalf("the global file's value should show: %q", m.configState.focused().Value)
+	}
+	stepTo(t, m, config.OpenInSession)
+	if got := readConfigFile(t, path); !strings.Contains(got, `open_in = "session"`) {
+		t.Errorf("project file:\n%s", got)
 	}
 }

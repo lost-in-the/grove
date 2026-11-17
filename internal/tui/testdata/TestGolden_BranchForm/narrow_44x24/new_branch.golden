@@ -1,14 +1,14 @@
  [1m[1mtest-project[m · 5 worktrees · ⬍ name    1/5[m 
                                             
-   ● [1mroot[m                           0s      
-   ○ feature-auth                  60m      
-   ○ fix-bug                        2h      
-   ● testing                        3h      
-   ○ refactor                       4h      
+   ● [1mroot[m │ test-project-root/ ·   0s       
+     ⎇ root                                 
+                                            
+   ○ [1mfeature-auth[m │ test…auth/ ·  60m       
+     ⎇ feature-auth                         
                                             
                                             
                                             
-                                            
+   [38;2;151;151;151m•[m[38;2;60;60;60m•[m[38;2;60;60;60m•[m                                      
  ──[1m New worktree [m────────────────────────── 
  ❯ Branch  [37m[mabc-12[7;37m [m                          
            › + new "abc-12"       from main 

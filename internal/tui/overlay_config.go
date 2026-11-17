@@ -54,6 +54,8 @@ type ConfigState struct {
 	Err    error          // the config did not load
 	Config *config.Config // the loaded config, kept current with each write
 
+	builtin [][]ConfigField // the fields as grove's built-in defaults fill them
+
 	cursor [ConfigTabCount]int
 
 	editing bool // a text field's value is being typed
@@ -83,6 +85,7 @@ func NewConfigState() *ConfigState {
 func (s *ConfigState) load(cfg *config.Config) {
 	s.Config = cfg
 	s.Fields = populateConfigFields(cfg)
+	s.builtin = populateConfigFields(config.LoadDefaults())
 	s.cursor = [ConfigTabCount]int{}
 	s.editing, s.confirming = false, false
 }
@@ -117,6 +120,13 @@ func loadConfigCmd() tea.Cmd {
 // saveProjectConfig writes keys to the project's .grove/config.toml, leaving
 // the rest of the file as it was. Tests point it at a temp project.
 var saveProjectConfig = config.SetProjectConfigValues
+
+// configKeySet reports whether the global or the project config file sets a
+// key.
+var configKeySet = config.KeyDefinedInFiles
+
+// noteDefaultNotWritten is the header note when a change needed no write.
+const noteDefaultNotWritten = "already the default, nothing written"
 
 // tomlString quotes s as a TOML basic string. strconv.Quote is close, but
 // its \a, \v, and \x escapes are not TOML: other control characters get
@@ -282,8 +292,12 @@ func (m *Model) stepConfigChoice(delta int) tea.Cmd {
 func (m *Model) changeConfigField(tab ConfigTab, index int, value, note string) tea.Cmd {
 	s := m.configState
 	prev := s.Fields[tab][index].Value
-	if err := m.writeConfigField(tab, index, value); err != nil {
+	wrote, err := m.writeConfigField(tab, index, value)
+	if err != nil {
 		return nil
+	}
+	if !wrote {
+		note = noteDefaultNotWritten
 	}
 	s.undo = append(s.undo, configChange{tab: tab, index: index, prev: prev})
 	if len(s.undo) > configUndoLimit {
@@ -294,17 +308,22 @@ func (m *Model) changeConfigField(tab ConfigTab, index int, value, note string) 
 
 // writeConfigField validates value as config loading would, writes that one
 // key, and only then shows it. Like the pins, the write happens here rather
-// than in a command, so writes land in the order they were made.
-func (m *Model) writeConfigField(tab ConfigTab, index int, value string) error {
+// than in a command, so writes land in the order they were made. A value
+// equal to the built-in default is not written when no config file sets the
+// key (isBuiltinUnset); wrote then reports false.
+func (m *Model) writeConfigField(tab ConfigTab, index int, value string) (wrote bool, err error) {
 	s := m.configState
 	f := &s.Fields[tab][index]
 	if err := f.validate(s.Config, value); err != nil {
-		return err
+		return false, err
 	}
-	if err := saveProjectConfig(map[string]string{f.Key: f.tomlValue(value)}); err != nil {
-		s.saveErr, s.saveErrKey = err, f.Key
-		s.flash = ""
-		return err
+	wrote = !s.isBuiltinUnset(tab, index, value)
+	if wrote {
+		if err := saveProjectConfig(map[string]string{f.Key: f.tomlValue(value)}); err != nil {
+			s.saveErr, s.saveErrKey = err, f.Key
+			s.flash = ""
+			return false, err
+		}
 	}
 	s.saveErr, s.saveErrKey = nil, ""
 	f.Value = value
@@ -314,7 +333,22 @@ func (m *Model) writeConfigField(tab ConfigTab, index int, value string) error {
 		s.Config = &next
 	}
 	m.reloadConfig()
-	return nil
+	return wrote, nil
+}
+
+// isBuiltinUnset reports whether value is grove's built-in default for the
+// field and neither config file sets its key, so writing it changes nothing
+// except what an older grove has to parse. A failed check counts as set.
+func (s *ConfigState) isBuiltinUnset(tab ConfigTab, index int, value string) bool {
+	if int(tab) >= len(s.builtin) || index >= len(s.builtin[tab]) || s.builtin[tab][index].Value != value {
+		return false
+	}
+	set, err := configKeySet(s.Fields[tab][index].Key)
+	if err != nil {
+		tuilog.Printf("warning: could not read the config files for %s: %v", s.Fields[tab][index].Key, err)
+		return false
+	}
+	return !set
 }
 
 // reloadConfig picks up the written file for the rest of the TUI, such as
@@ -338,7 +372,7 @@ func (m *Model) undoConfigChange() tea.Cmd {
 	}
 	c := s.undo[len(s.undo)-1]
 	s.Tab, s.cursor[c.tab] = c.tab, c.index
-	if err := m.writeConfigField(c.tab, c.index, c.prev); err != nil {
+	if _, err := m.writeConfigField(c.tab, c.index, c.prev); err != nil {
 		return nil
 	}
 	s.undo = s.undo[:len(s.undo)-1]

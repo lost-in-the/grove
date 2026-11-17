@@ -95,22 +95,58 @@ Left to right: project name, worktree count, agents that need you (under herdr: 
 
 ### Worktree List
 
-Each worktree is one row. Left to right:
+The list has two modes, **compact** and **detailed**. `v` switches between them; the footer names the mode it switches to (`v detailed`, `v compact`).
 
-| Column | Description |
-|--------|-------------|
-| Agent | Only under herdr: `!` blocked, `▸` working, `✓` done, blank otherwise |
-| Cursor | `❯` on the selected row |
-| Status | `●` current (green) or dirty (yellow), `✗` stale (red), `○` clean (muted) |
-| Alias | The worktree's short name, truncated in the middle when space is short (`abc-1349-migrate-…-path`) |
-| Branch chip | `⎇ branch`, only when the branch's last segment differs from the alias. `tui.list_secondary` picks `branch`, `dir`, or `off`. |
-| Counts | `↑n` ahead, `↓n` behind, `~n` changed files |
-| Age | Last commit, rounded the way git does: `45s`, `89m`, `35h`, `13d`, `10w`, `11mo`, `2y` |
-| Tail | Session `⬢` active / `⬡` open, then container `◆` running / `◇` stopped |
+**Compact**: one line per worktree, in columns, under a heading row.
 
-The cursor and status are separate columns, so the selected row keeps its status. As the terminal narrows, the chip goes first, then the age, then the counts collapse to the strongest one (`↓`, then `~`, then `↑`), and only then does the alias shorten, down to 16 columns.
+```
+    NAME                       BRANCH                         STATE  AGE
+  ● root                       main ························ ↓12 ~1   3w ⬢ ◆
+❯ ● checkout                   feat/checkout-redesign ········· ~13   2d ⬡
+  ○ fix-login                  fix/login-timeout ··················   5h
+  ● legacy-api ≠               feat/api-v2-pagination ······· ↑3 ~2  24h
+  ● payments-reconcilia…-audit agent/payments-…-x7k2p ···· ↑1 ↓2 ~4  8mo
+```
 
-`v` adds a second line under each row with the commit message. One line is the default; the choice is saved per project.
+**Detailed**: two lines per worktree and a blank line after each.
+
+```
+    ● root │ myapp/ ···············································   3w ⬢ ◆
+      ⎇ main   ↓12 ~1
+
+2 ❯ ● checkout │ myapp-checkout/ ··································   2d ⬡
+      ⎇ feat/checkout-redesign   ~13
+
+    ● legacy-api │ legacy-api/ ····································  24h
+      ⎇ feat/api-v2-pagination   ↑3 ~2
+```
+
+Line one is how you find the worktree: its name, then its folder. Line two is its branch and state. The selection bar covers the two lines, not the blank line.
+
+| Element | Compact | Detailed |
+|---|---|---|
+| Pin digit | Not shown (the `m` strip shows pins) | First column, when the project has pins; blank on unpinned rows |
+| Agent (herdr only) | `!` blocked, `▸` working, `✓` done, first column | After the pin column |
+| Cursor | `❯` on the selected row; `↩` on the previous worktree (`-`) | Same |
+| Status | `●` current (green) or dirty (yellow), `✗` stale (red), `○` clean (muted) | Same |
+| Name | Name column, cut in the middle when long | Bold, never cut |
+| Folder | Not shown (the detail panel's Folder line has it); `≠` after the name when off the folder pattern | After a `│`, with a trailing `/`, cut in the middle; in the warning color when off the folder pattern |
+| Branch | Branch column, cut in the middle | Line two, `⎇ branch`, cut in the middle |
+| State | `↑n` ahead, `↓n` behind, `~n` changed files, after a dotted leader | Line two, after the branch |
+| Age | Age column | End of line one, after a dotted leader |
+| Tail | Session `⬢` active / `⬡` open, then container `◆` running / `◇` stopped | End of line one |
+
+The age is the last commit, rounded the way git does: `45s`, `89m`, `35h`, `13d`, `10w`, `11mo`, `2y`. The commit subject is not in the row: the detail panel shows it, and so does the one-line summary above the footer below 110 columns.
+
+**Columns (compact).** The name column is a third of the list's width, between 12 and 32 columns, and no wider than the longest name needs (at least 8). The branch column takes the rest. When the branch column would drop under 12 columns, the state collapses to its strongest count (`↓`, then `~`, then `↑`), then the age goes, then the name column narrows down to 8. A name or branch that does not fit is cut in the middle, keeping its start and its end (`payments-reconcilia…-audit`, `agent/payments-…-x7k2p`): the start of a name and the end of a branch tell worktrees apart.
+
+**Detailed at narrow widths.** The name is never cut while anything else can give way: the folder goes first (a folder off the pattern then shows `≠`), then the age, then the tail moves to the end of line two.
+
+**Off the folder pattern (`≠`).** Grove reads a worktree's name from its folder name with `project_name` and `[naming] pattern`. A folder that does not follow the pattern (made by `git worktree add`, say, or before the pattern changed) keeps its whole folder name as its name. That folder is off the pattern; the main checkout never is.
+
+**Reserved.** The cell after the container glyph, at the end of the tail, is kept blank for a future "has a pull request" mark, so adding one does not move any column.
+
+**Default mode.** With no saved choice, the list is compact when the detail panel sits beside it (110 columns and up) and detailed when it does not. A choice made with `v` is saved per project in `.grove/ui_prefs.json` (`compact_mode`: `true` compact, `false` detailed) and holds at every width. `tui.compact_list` in the config sets the mode when nothing is saved. `tui.list_secondary` picks compact mode's second column: `branch` (default), `dir` (the folder, headed `FOLDER`), or `off` (no second column); detailed mode shows both and ignores it.
 
 The main worktree always sorts to the top.
 
@@ -120,7 +156,8 @@ Selecting a worktree updates the detail panel with:
 
 **Git section**
 - Branch name
-- Commit hash + message + age
+- Folder: the folder name with a trailing `/`; a folder off the folder pattern reads `legacy-api/ · not the folder pattern`
+- Commit hash + age
 
 **Status section**
 - Working tree status: clean / dirty (N files) / stale
@@ -132,7 +169,7 @@ Selecting a worktree updates the detail panel with:
 
 ### Footer
 
-A compact hint bar at the bottom shows essential keybindings, in the format the Input model section sets: `move · ↑↓/jk move · enter switch · space go to · tab detail · / filter · g more · ? help · q quit`. It takes two lines on a narrow terminal. The full reference, with every alternate key, is `keyboard shortcuts` in `?`.
+A compact hint bar at the bottom shows essential keybindings, in the format the Input model section sets: `move · ↑↓/jk move · enter switch · space go to · tab detail · / filter · v detailed · g more · ? help · q quit`. `v` names the list mode it switches to: `v detailed` in compact, `v compact` in detailed. It takes two lines under 114 columns. When two lines are not enough, hints drop from the right: `? help` first (gone at 60 columns), then `g more` (gone at 50), then `v` and `/ filter` (gone at 44). The full reference, with every alternate key, is `keyboard shortcuts` in `?`.
 
 ### Upgrade badge
 
@@ -217,7 +254,7 @@ Toast levels:
 | `o` | Cycle sort mode: name, age, dirty, and attention under herdr |
 | `O` | Reverse the sort |
 | `r` | Refresh worktree list |
-| `v` | Show or hide the commit message line |
+| `v` | Switch the list between compact and detailed |
 | `/` | Filter list (see Filtering) |
 | `space` | Go to: worktrees, loaded PRs and issues, and actions, as `grove to <name>` does for worktrees (see Go to below) |
 | `?` | Go to, limited to actions: every dashboard action with its key. `keyboard shortcuts` there opens the full key reference. |
@@ -404,6 +441,7 @@ A full-screen panel for the project's grove config. Every change is written to `
 - **The list** has one row per field: a plain label, then the value exactly as the file spells it. Behavior groups its fields under two headings.
 - **The context panel** under the rule explains the focused field: its label with its key in the file right after it, what it does, and every choice with its meaning. The current choice has `●`, the default says `(default)`. A text or list field shows its value, its default, and what to type.
 - **The header** says `✓ saved` for a few seconds after a write, and `✗ not saved` when a write fails. A failed write changes nothing on disk, and the panel shows the error under the field.
+- **A default is not written when no file sets it.** When the new value is grove's built-in default and neither `.grove/config.toml` nor the global config sets that key, nothing is written and the header reads `already the default, nothing written`. A key a file already sets is written as before. `u` still undoes the change.
 
 | Section | Fields (key) |
 |-----|----------|
@@ -561,7 +599,7 @@ Pin up to nine worktrees to the digit keys. Press `m` to open a strip above the 
 | `m 0` | Unpin the selected worktree |
 | `m esc`, or `m` and any other key | Close the strip |
 
-A worktree holds one slot at most. A bare `3` switches to slot 3's worktree; an empty slot flashes `slot 3 is empty · m 3 to pin`. Pinned rows show their digit in the first column.
+A worktree holds one slot at most. A bare `3` switches to slot 3's worktree; an empty slot flashes `slot 3 is empty · m 3 to pin`. In detailed mode, pinned rows show their digit in the first column; compact mode leaves the digits to the `m` strip.
 
 Pins are saved per project in `.grove/ui_prefs.json` (`pins`). Renaming or deleting a worktree in the TUI updates its pin; a pin to a worktree removed outside the TUI is dropped the next time the dashboard loads its list.
 
@@ -610,8 +648,8 @@ Every dashboard key is an `Action` in `internal/tui/actions.go`: its keys, label
 | `internal/theme/colors.go` | Centralized `ColorScheme` with semantic colors |
 | `internal/theme/palette.go` | The palettes as hex pairs (`DefaultPalette`, `HighContrastPalette`) |
 | `internal/tui/theme_v2.go` | `StyleSet` — lipgloss styles built from the color scheme |
-| `internal/tui/row_delegate.go` | The dashboard row (`rowDelegate`); one or two lines |
-| `internal/tui/row_layout.go` | Column widths and the shed order (`layoutColumns`, `middleTruncate`) |
+| `internal/tui/row_delegate.go` | The dashboard row (`rowDelegate`): compact and detailed, and compact's heading row (`heading`) |
+| `internal/tui/row_layout.go` | Compact column widths and the shed order (`layoutCompact`), middle truncation (`middleTruncate`, `cutMiddle`) |
 | `internal/tui/responsive.go` | Width tiers: guard under 44, list with a selection line, split at 110 |
 | `internal/tui/detail_sheet.go` | The full-screen detail sheet and the selection line |
 | `internal/tui/omni.go` | Go to (code name omni): sources, fuzzy matching, result groups (`omniResults`) |
@@ -638,4 +676,4 @@ Every dashboard key is an `Action` in `internal/tui/actions.go`: its keys, label
 | `internal/tui/config_view.go` | The settings frame: list, then the context panel under a rule or beside a divider, footer, one layout per size (`configLayout`) |
 
 ### List View Modes
-The `v` key toggles the commit message line at runtime and saves the choice in `.grove/ui_prefs.json` (`compact_mode`). `tui.compact_list = false` in config starts with two lines when no choice is saved.
+`v` switches compact and detailed (`toggleListMode`) and saves the choice in `.grove/ui_prefs.json` (`compact_mode`). `Model.compactChoice` holds the saved choice, else `tui.compact_list`, else nil; with nil, `listDetailed` follows the layout (compact at split widths). Compact's heading row sits under the filter row, so `updateLayout` and the docked form size the list by `rowDelegate.headRows`. Detailed rows set the list delegate's spacing to 1, so a page holds a third of the list's height. Whether a folder is off the naming pattern is decided when the list is built (`worktree.Worktree.OffPattern`), never per frame.

@@ -54,6 +54,11 @@ type WorktreeItem struct {
 	LastAccessed   time.Time
 	PluginStatuses []plugins.StatusEntry // status entries from plugins
 	StackOn        string                // display name of the worktree the shared stack is on (see resolveStackOn)
+
+	// FolderOffPattern: the folder name does not follow the naming pattern
+	// (see worktree.Worktree.OffPattern). Set when the list is built, so rows
+	// never work it out per frame.
+	FolderOffPattern bool
 }
 
 // sessionBadgeWord names the multiplexer behind an item's session badge and
@@ -69,6 +74,14 @@ func sessionBadgeWord(item *WorktreeItem) string {
 func (w WorktreeItem) Title() string       { return w.ShortName }
 func (w WorktreeItem) Description() string { return w.Branch }
 func (w WorktreeItem) FilterValue() string { return w.ShortName + " " + w.Branch }
+
+// folder is the worktree's folder name, or "" when the path is unknown.
+func (w WorktreeItem) folder() string {
+	if w.Path == "" {
+		return ""
+	}
+	return filepath.Base(w.Path)
+}
 
 // displayName returns the name used for tmux session naming.
 // Matches worktree.Worktree.DisplayName() logic.
@@ -326,6 +339,7 @@ func fetchWorktreesAndBackend(mgr *worktree.Manager, stateMgr *state.Manager, pl
 		item.IsMain = tree.IsMain
 		item.IsCurrent = tree.Path == fc.currentPath
 		item.IsPrunable = tree.IsPrunable
+		item.FolderOffPattern = tree.OffPattern
 
 		applySession(item, fc.sessions, fc.projectName, fc.backend)
 		fc.setStateInfo(item, tree.ShortName)

@@ -80,13 +80,13 @@ func TestHelpKeepsFooterOfViewBeneath(t *testing.T) {
 // on top of the delete box and hides it, so the delete box is checked in the
 // frame beneath help.
 func TestRenderFrame_HelpOverDeleteDrawsDeleteBeneath(t *testing.T) {
-	m := goldenModel(t, sizeUltraWide, withItems(5), withTwoLine(), withDeleteOverlay())
+	m := goldenModel(t, sizeUltraWide, withItems(5), withDetailed(), withDeleteOverlay())
 	withHelpExpanded()(&m)
 	top := ansi.Strip(m.viewString())
 	if !strings.Contains(top, "Toggle branch deletion") {
 		t.Error("help panel missing")
 	}
-	if !strings.Contains(top, "test commit for root") {
+	if !strings.Contains(top, "test-project-root/") {
 		t.Error("dashboard rows missing beneath both overlays")
 	}
 	beneath := ansi.Strip(m.renderFrame(len(m.views) - 2))

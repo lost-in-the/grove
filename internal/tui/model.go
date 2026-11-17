@@ -139,7 +139,9 @@ type Model struct {
 
 	// Layout
 	width, height int
-	compactMode   bool // true = one-line rows, false = rows with the commit message
+	// compactChoice is the list mode chosen with v or tui.compact_list: true
+	// compact, false detailed. nil lets the layout decide (listDetailed).
+	compactChoice *bool
 
 	// agentAware is true when the first fetch reported the herdr backend.
 	// It is decided once, so columns never appear or vanish mid-session.
@@ -182,9 +184,7 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 			pins[slot] = alias
 		}
 	}
-	compact := startupCompact(configCompact, prefCompact)
-
-	l := newWorktreeList(rowDelegate{TwoLine: !compact, Secondary: listSecondary(cfg)})
+	l := newWorktreeList(rowDelegate{Secondary: listSecondary(cfg)})
 
 	h := help.New()
 
@@ -213,7 +213,7 @@ func NewModel(mgr *worktree.Manager, stateMgr *state.Manager, projectRoot string
 		cfgLoadErr:          cfgErr,
 		keys:                keys,
 		list:                l,
-		compactMode:         compact,
+		compactChoice:       startupListChoice(configCompact, prefCompact),
 		pins:                pins,
 		now:                 time.Now,
 		lastActive:          lastWorktreeName(stateMgr),
@@ -846,6 +846,9 @@ func (m *Model) updateLayout() {
 		return
 	}
 
+	m.helpFooter.listToggle = m.listToggleLabel()
+	headRows := 1 + m.rowDelegate().headRows() // the filter row, and compact's heading
+
 	headerHeight := 1 // status bar
 	footerHeight := m.helpFooter.CompactHeight(m.layoutView(), m.width-4) + m.stripHeight()
 	available := m.height - headerHeight - footerHeight
@@ -859,13 +862,14 @@ func (m *Model) updateLayout() {
 		listWidth := contentWidth * 60 / 100
 		dividerWidth := 3 // " │ "
 		detailWidth := contentWidth - listWidth - dividerWidth
-		m.list.SetSize(listWidth, max(1, available-1))
+		m.list.SetSize(listWidth, max(1, available-headRows))
 		m.detail.SetWidth(detailWidth)
 		m.detail.SetHeight(available)
 	} else {
-		// The list takes everything but the filter row and the selection
-		// line. The detail viewport is sized for the full-screen sheet.
-		m.list.SetSize(contentWidth, max(1, available-2))
+		// The list takes everything but the rows above it and the
+		// selection line. The detail viewport is sized for the full-screen
+		// sheet.
+		m.list.SetSize(contentWidth, max(1, available-headRows-1))
 		m.detail.SetWidth(contentWidth)
 		m.detail.SetHeight(max(3, available))
 	}
@@ -875,35 +879,49 @@ func (m *Model) updateLayout() {
 	m.help.SetWidth(contentWidth)
 }
 
-// toggleCompactMode switches between V1 (compact) and V2 (two-line) delegates.
-func (m *Model) toggleCompactMode() {
-	m.compactMode = !m.compactMode
-
-	// Persist preference (best-effort, don't block on errors)
-	newVal := m.compactMode
-	if err := updateUIPrefs(m.projectRoot, func(p *UIPrefs) { p.CompactMode = &newVal }); err != nil {
+// toggleListMode switches compact and detailed and saves the choice
+// (compact_mode in ui_prefs.json, the key the commit-line toggle used: true
+// was one line, so it still means compact).
+func (m *Model) toggleListMode() {
+	compact := m.listDetailed()
+	m.compactChoice = &compact
+	if err := updateUIPrefs(m.projectRoot, func(p *UIPrefs) { p.CompactMode = &compact }); err != nil {
 		tuilog.Printf("warning: failed to save UI prefs: %v", err)
 	}
-
-	m.refreshDelegate()
+	idx := m.list.Index()
 	m.updateLayout()
+	m.list.Select(idx)
 	m.updateDetailContent()
 }
 
-// startupCompact decides the starting density: a saved preference, else the
-// tui.compact_list config, else one-line rows (spec 5.4).
-func startupCompact(config, pref *bool) bool {
-	switch {
-	case pref != nil:
-		return *pref
-	case config != nil:
-		return *config
+// startupListChoice is the mode chosen before this session: a saved
+// preference, else tui.compact_list, else nil for the layout to decide.
+func startupListChoice(config, pref *bool) *bool {
+	if pref != nil {
+		return pref
 	}
-	return true
+	return config
 }
 
-// listSecondary is the text after the alias: "branch" (default), "dir", or
-// "off" (tui.list_secondary).
+// listDetailed reports whether the list draws detailed rows: the chosen
+// mode, else compact beside the detail pane and detailed alone.
+func (m Model) listDetailed() bool {
+	if m.compactChoice != nil {
+		return !*m.compactChoice
+	}
+	return !isWideLayout(m.width)
+}
+
+// listToggleLabel is the mode v switches to, as the footer names it.
+func (m Model) listToggleLabel() string {
+	if m.listDetailed() {
+		return "compact"
+	}
+	return "detailed"
+}
+
+// listSecondary is compact mode's second column: "branch" (default), "dir",
+// or "off" (tui.list_secondary).
 func listSecondary(cfg *config.Config) string {
 	if cfg == nil || cfg.TUI.ListSecondary == "" {
 		return "branch"
@@ -918,7 +936,7 @@ func (m *Model) rowDelegate() rowDelegate {
 		pinOf[alias] = slot
 	}
 	return rowDelegate{
-		TwoLine:    !m.compactMode,
+		Detailed:   m.listDetailed(),
 		Pins:       len(m.pins) > 0,
 		PinOf:      pinOf,
 		LastActive: m.lastActive,
@@ -1707,27 +1725,32 @@ func (m Model) renderDashboardBody() string {
 
 func (m Model) renderSideBySideBody() string {
 	listWidth := m.list.Width()
-	listContent := lipgloss.NewStyle().Width(listWidth).Render(m.dashboardListView(m.list))
-	divider := renderVerticalDivider(m.list.Height()+1, Colors.SurfaceDim)
+	d := m.rowDelegate()
+	listContent := lipgloss.NewStyle().Width(listWidth).Render(m.dashboardListView(m.list, d))
+	divider := renderVerticalDivider(m.list.Height()+1+d.headRows(), Colors.SurfaceDim)
 	detailView := m.renderDetailPanel()
 	return lipgloss.JoinHorizontal(lipgloss.Top, listContent, divider, detailView)
 }
 
 func (m Model) renderStackedBody() string {
 	bodyWidth := m.width - 2
-	return lipgloss.JoinVertical(lipgloss.Left, m.dashboardListView(m.list), m.renderSelectionLine(bodyWidth))
+	return lipgloss.JoinVertical(lipgloss.Left, m.dashboardListView(m.list, m.rowDelegate()), m.renderSelectionLine(bodyWidth))
 }
 
 // dashboardListView is l under its filter row, which is blank when no
-// filter is open and grove can move you. l is the dashboard list, sized by
-// the caller.
-func (m Model) dashboardListView(l list.Model) string {
+// filter is open and grove can move you, and under compact mode's heading
+// row. l is the dashboard list drawn with d, sized by the caller.
+func (m Model) dashboardListView(l list.Model, d rowDelegate) string {
 	typing := l.FilterState() == list.Filtering
 	row := filterRow(filterInputView(l.FilterInput, typing), typing, l.FilterValue(), len(l.VisibleItems()), len(l.Items()))
 	if m.cannotMove {
 		row = strings.TrimLeft(row+"  "+moveNotice(), " ")
 	}
-	return ansi.Truncate(row, l.Width(), "…") + "\n" + l.View()
+	row = ansi.Truncate(row, l.Width(), "…")
+	if h := d.heading(l); h != "" {
+		row += "\n" + h
+	}
+	return row + "\n" + l.View()
 }
 
 // clampBodyToHeight trims the body so statusBar + body + footer fits exactly m.height lines.

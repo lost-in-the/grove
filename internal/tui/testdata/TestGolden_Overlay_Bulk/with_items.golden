@@ -1,7 +1,7 @@
 [2m test-project · 5 worktrees · ⬍ name                                        1/5 [m
 [2m                                                                                [m
-[2m ❯ ● root                                                               0s      [m
-[2m   ○ feature-auth                                                      60m      [m
+[2m ❯ ● root │ test-project-root/ ·····································   0s       [m
+[2m     ⎇ root                                                                     [m
 ╭──────────────────────────────────────────────────────────────────────────────╮
 │                                                                              │
 │  [1mBulk Delete[m                                                                 │
@@ -20,5 +20,5 @@
 ╰──────────────────────────────────────────────────────────────────────────────╯
 [2m                                                                                [m
 [2m root · test commit for root                                                    [m
-[2m  move · ↑↓/jk move · enter switch · space go to                                [m
-[2m  tab detail · / filter · g more · ? help · q quit                              [m
+[2m  move · ↑↓/jk move · enter switch · space go to · tab detail                   [m
+[2m  / filter · v compact · g more · ? help · q quit                               [m
