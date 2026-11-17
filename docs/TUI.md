@@ -195,6 +195,8 @@ grove moves you to a worktree by switching a tmux or herdr session, or by changi
 
 This happens inside the herdr desktop app, where `auto` resolves to `off`, when you run the binary by its path instead of through the `grove` function, and in a shell opened before grove was set up. The line sits in the filter row, so no list row moves; it truncates with `…` on a narrow list, and sits after the filter text while a filter is applied. `keyboard shortcuts` in `?` leads with the fix: `eval "$(grove install zsh)"` (or bash) in your shell config, then a new shell.
 
+The PR and issue browsers show the same notice in the blank row below their filter or open count, including while a filter is applied. Lists hide their cursor when a detail pane or overlay has focus.
+
 Everything else works. `enter`, the pins, go to, and the move after creating a worktree still close the dashboard; grove then prints why it could not move you, and the `cd '<path>'` to run, on stderr:
 
 ```

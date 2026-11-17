@@ -370,11 +370,11 @@ func (m Model) formListAt(v ActiveView, w, rows int) (header, body string, ok bo
 		return m.buildDashboardHeader().View(m.width), m.dashboardListView(l, d), true
 	case ViewPRs:
 		if m.prState != nil {
-			return renderContextHeader("Pull Requests", m.projectName, m.width), renderPRList(m.prState, w, m.spinner.View(), rows, 1, false), true
+			return renderContextHeader("Pull Requests", m.projectName, m.width), m.renderPRList(m.prState, w, m.spinner.View(), rows, 1, false), true
 		}
 	case ViewIssues:
 		if m.issueState != nil {
-			return renderContextHeader("Issues", m.projectName, m.width), renderIssueList(m.issueState, w, m.spinner.View(), rows, 1, false), true
+			return renderContextHeader("Issues", m.projectName, m.width), m.renderIssueList(m.issueState, w, m.spinner.View(), rows, 1, false), true
 		}
 	}
 	return "", "", false

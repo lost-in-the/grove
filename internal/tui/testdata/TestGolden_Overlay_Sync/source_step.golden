@@ -1,6 +1,6 @@
 [2m test-project ·[m╭────────────────────────────────────────────────╮[2m           1/5 [m
 [2m               [m│                                                │[2m               [m
-[2m ❯ ● root │ tes[m│  [1mSync Changes[m                                  │[2m···   0s       [m
+[2m   ● root │ tes[m│  [1mSync Changes[m                                  │[2m···   0s       [m
 [2m     ⎇ root    [m│                                                │[2m               [m
 [2m               [m│    ●━━━━━━━━━━━━━━━━━━○━━━━━━━━━━━━━━━━━━○     │[2m               [m
 [2m   ○ feature-au[m│    [1mSource[m          Preview         Confirm     │[2m···  60m       [m

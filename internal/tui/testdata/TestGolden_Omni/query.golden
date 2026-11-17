@@ -1,6 +1,6 @@
 [2m test-project · 5 worktrees · ⬍ name                                        1/5 [m
 [2m                                                                                [m
-[2m ❯ ● root │ [m╭──────────────────────────────────────────────────────╮[2m   0s       [m
+[2m   ● root │ [m╭──────────────────────────────────────────────────────╮[2m   0s       [m
 [2m     ⎇ root [m│ [1mGo to[m                                                │[2m            [m
 [2m            [m│ [37mGo to: [mfix[37;7m [m                                          │[2m            [m
 [2m   ○ feature[m│ worktrees      ❯ [1mfix[m-bug                             │[2m  60m       [m

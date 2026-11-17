@@ -1,19 +1,19 @@
 [2m test-project · 5 worktrees · ⬍ name                                        1/5 [m
 [2m                                                                                [m
-[2m ❯ ● root │ [m╭──────────────────────────────────────────────────────╮[2m   0s       [m
-[2m     ⎇ root [m│ [1mGo to[m                                                │[2m            [m
+[2m 1   ● root [m╭──────────────────────────────────────────────────────╮[2m   0s       [m
+[2m       ⎇ roo[m│ [1mGo to[m                                                │[2m            [m
 [2m            [m│ [37mGo to: [7mw[38;5;240;27morktree, #PR, or action                     [m │[2m            [m
-[2m   ○ feature[m│ pinned         ❯ root                              1 │[2m  60m       [m
-[2m     ⎇ featu[m│ recent           feature-auth                        │[2m            [m
+[2m     ○ featu[m│ pinned         ❯ root                              1 │[2m  60m       [m
+[2m       ⎇ fea[m│ recent           feature-auth                        │[2m            [m
 [2m            [m│                  fix-bug                             │[2m            [m
-[2m   ○ fix-bug[m│                  testing                             │[2m   2h       [m
-[2m     ⎇ fix-b[m│                  refactor                            │[2m            [m
+[2m     ○ fix-b[m│                  testing                             │[2m   2h       [m
+[2m       ⎇ fix[m│                  refactor                            │[2m            [m
 [2m            [m│                                                      │[2m            [m
-[2m   ● testing[m│                                                      │[2m   3h       [m
-[2m     ⎇ testi[m│                                                      │[2m            [m
+[2m     ● testi[m│                                                      │[2m   3h       [m
+[2m       ⎇ tes[m│                                                      │[2m            [m
 [2m            [m│                                                      │[2m            [m
-[2m   ○ refacto[m│                                                      │[2m   4h       [m
-[2m     ⎇ refac[m│                                                      │[2m            [m
+[2m     ○ refac[m│                                                      │[2m   4h       [m
+[2m       ⎇ ref[m│                                                      │[2m            [m
 [2m            [m│                                                      │[2m            [m
 [2m            [m│                                                      │[2m            [m
 [2m            [m│                                                      │[2m            [m

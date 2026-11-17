@@ -38,11 +38,20 @@ type rowDelegate struct {
 	Unfocused bool
 }
 
+// DashboardRowDelegate renders worktree rows and their column heading.
+type DashboardRowDelegate interface {
+	list.ItemDelegate
+	Heading(list.Model) string
+}
+
 // NewDashboardRowDelegate returns the dashboard's row delegate, for tools
 // that render the list outside the TUI (cmd/snapshot).
-func NewDashboardRowDelegate(detailed bool) list.ItemDelegate {
+func NewDashboardRowDelegate(detailed bool) DashboardRowDelegate {
 	return rowDelegate{Detailed: detailed, Secondary: "branch"}
 }
+
+// Heading returns the column heading, or an empty string in detailed mode.
+func (d rowDelegate) Heading(m list.Model) string { return d.heading(m) }
 
 func (d rowDelegate) Height() int {
 	if d.Detailed {

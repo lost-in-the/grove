@@ -1,7 +1,7 @@
 [2m test-project · 5 worktrees · ⬍ name                                                                                1/5 [m
 [2m                                                                        │                                               [m
 [2m     NAME         BRANCH                               STATE  AGE       │                                               [m
-[2m ❯ ● root      [m╭────────────────────────────────────────────────────────────────────────────────────────╮[2m               [m
+[2m   ● root      [m╭────────────────────────────────────────────────────────────────────────────────────────╮[2m               [m
 [2m   ○ feature-au[m│                                                                                        │[2m               [m
 [2m   ○ fix-bug   [m│   [1mMoving and typing[m                                                                    │[2m               [m
 [2m   ● testing   [m│   j/k move. While you type, hold ctrl.                                                 │[2m               [m

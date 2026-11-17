@@ -8,6 +8,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	lipgloss "charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/lost-in-the/grove/internal/worktree"
 )
@@ -51,17 +52,22 @@ func filterInputView(in textinput.Model, typing bool) string {
 
 // renderFilterBar writes the filter/count bar used by list views (Issues, PRs).
 // When filtering is active or a filter is set, it shows the filter row.
-// Otherwise it shows "N open" or an empty line.
-func renderFilterBar(b *strings.Builder, in textinput.Model, filtering bool, filter string, filteredCount, totalCount int) {
+// Otherwise it shows "N open" or an empty line. The second, normally blank
+// row holds the move notice without shifting the items or hiding the filter.
+func (m Model) renderFilterBar(b *strings.Builder, in textinput.Model, filtering bool, filter string, filteredCount, totalCount, width int) {
 	if row := filterRow(filterInputView(in, filtering), filtering, filter, filteredCount, totalCount); row != "" {
-		b.WriteString(row + "\n\n")
+		b.WriteString(ansi.Truncate(row, width, "…") + "\n")
 	} else {
 		if totalCount > 0 {
-			b.WriteString(Styles.DetailDim.Render(fmt.Sprintf("%d open", totalCount)) + "\n\n")
+			b.WriteString(Styles.DetailDim.Render(fmt.Sprintf("%d open", totalCount)) + "\n")
 		} else {
-			b.WriteString("\n\n")
+			b.WriteString("\n")
 		}
 	}
+	if m.cannotMove {
+		b.WriteString(ansi.Truncate(moveNotice(), width, "…"))
+	}
+	b.WriteString("\n")
 }
 
 func truncate(s string, max int) string {

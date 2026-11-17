@@ -980,6 +980,7 @@ func (m *Model) rowDelegate() rowDelegate {
 		AgentAware: m.agentAware,
 		Secondary:  listSecondary(m.cfg),
 		Now:        m.now,
+		Unfocused:  m.detailFocused || m.activeView() != ViewDashboard,
 	}
 }
 
@@ -1786,6 +1787,9 @@ func (m Model) renderStackedBody() string {
 // filter is open and grove can move you, and under compact mode's heading
 // row. l is the dashboard list drawn with d, sized by the caller.
 func (m Model) dashboardListView(l list.Model, d rowDelegate) string {
+	// Focus can change without a layout update. Install it on the view's
+	// copy so an overlay or detail pane never leaves a second cursor behind.
+	l.SetDelegate(d)
 	typing := l.FilterState() == list.Filtering
 	row := filterRow(filterInputView(l.FilterInput, typing), typing, l.FilterValue(), len(l.VisibleItems()), len(l.Items()))
 	if m.cannotMove {

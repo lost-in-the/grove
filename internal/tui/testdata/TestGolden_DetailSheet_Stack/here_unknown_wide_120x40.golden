@@ -2,7 +2,7 @@
                                                                         │ ╭─ [1mfeature-auth[m · focused ────────────────╮   
      NAME         BRANCH                               STATE  AGE       │ │── Git ────────────────────────────────  │   
    ● root         root ·····································   0s       │ │Branch    feature-auth                   │   
- ❯ ○ [1mfeature-auth[m feature-auth ·····························  60m   ◇   │ │Folder    test-project-feature-auth/     │   
+   ○ [1mfeature-auth[m feature-auth ·····························  60m   ◇   │ │Folder    test-project-feature-auth/     │   
    ○ fix-bug      fix-bug ··································   2h       │ │Commit    abc1234 · 2 hours ago          │   
                                                                         │ │Remote    not tracking                   │   
                                                                         │ │                                         │   

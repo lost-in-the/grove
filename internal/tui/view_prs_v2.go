@@ -112,7 +112,7 @@ func (m Model) renderPRPanel() string {
 		contextLabel: "Pull Requests",
 		footer:       m.renderPRFooter(),
 		renderList: func(width int, spinnerView string, maxHeight int) string {
-			return renderPRList(s, width, spinnerView, maxHeight, 3, true)
+			return m.renderPRList(s, width, spinnerView, maxHeight, 3, !s.DetailFocused && s.ExistsPrompt == nil && m.activeView() == ViewPRs)
 		},
 		renderDetail: func(width, height int) string {
 			if s.Loading {
@@ -136,7 +136,7 @@ func (m Model) renderPRPanel() string {
 // It handles loading/creating states, the filter bar, and the scrollable item list.
 // It shows at least minSlots PRs; the docked branch form passes 1 so a short
 // list still fits its rows, and focused false, since the form has focus.
-func renderPRList(s *PRViewState, width int, spinnerView string, maxHeight, minSlots int, focused bool) string {
+func (m Model) renderPRList(s *PRViewState, width int, spinnerView string, maxHeight, minSlots int, focused bool) string {
 	var b strings.Builder
 
 	if s.Loading {
@@ -156,7 +156,7 @@ func renderPRList(s *PRViewState, width int, spinnerView string, maxHeight, minS
 	total := len(s.PRs)
 
 	// Filter/count bar
-	renderFilterBar(&b, s.FilterInput, s.Filtering, filter, len(filtered), total)
+	m.renderFilterBar(&b, s.FilterInput, s.Filtering, filter, len(filtered), total, width)
 
 	displaySlots, contentWidth := calcDisplaySlots(strings.Count(b.String(), "\n"), maxHeight, width, minSlots)
 	b.WriteString(renderPRItemList(filtered, s.Cursor, displaySlots, contentWidth, s.WorktreeBranches, focused))

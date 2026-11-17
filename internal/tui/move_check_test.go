@@ -238,3 +238,27 @@ func TestHelp_CannotMoveExplainsTheFix(t *testing.T) {
 func withCannotMove() testOpt {
 	return func(m *Model) { m.setCannotMove(true) }
 }
+
+func TestBrowsers_CannotMoveNotice(t *testing.T) {
+	for _, size := range []termSize{sizeStandard, sizeWide} {
+		for _, browser := range browserFilters() {
+			t.Run(size.name+"/"+browser.name, func(t *testing.T) {
+				m := newTestModel(withItems(3), withSize(size.width, size.height), browser.open)
+				before := screenLines(t, m)
+				m.setCannotMove(true)
+				after := screenLines(t, m)
+				if !strings.Contains(strings.Join(after, "\n"), "⚠ grove cannot move you") {
+					t.Fatalf("missing move notice:\n%s", strings.Join(after, "\n"))
+				}
+				if len(before) != len(after) || lineIndex(before, "❯") != lineIndex(after, "❯") {
+					t.Fatal("move notice shifted the list or changed screen height")
+				}
+				m = typeText(sendKey(m, "/"), "a")
+				view := stripAnsi(m.viewString())
+				if !strings.Contains(view, "Filter: a") || !strings.Contains(view, "⚠ grove cannot move you") {
+					t.Fatalf("filter hid move notice:\n%s", view)
+				}
+			})
+		}
+	}
+}
