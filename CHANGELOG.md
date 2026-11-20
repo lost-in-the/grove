@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `copy_files` and `symlink_files` entries with `*`, `?`, or `[`, and any entry that is absolute or uses `..`, now fail config validation.
 
 ### Fixed
+- Isolated slot discovery recognizes the first Compose template directory as well as the external root. Startup refuses unknown or ambiguous occupancy; `ps` reports discovery failures with a nonzero exit and no longer marks empty local reservations as running.
 - A missing `copy_files` or symlink source is no longer silent. Stderr names each entry (`Not copied: config/secret.key (missing in the main worktree)`) and says how to fix it. This holds with `--json` too.
 - `--json` on `new`, `spawn`, `fork`, and `open` now includes `provisioned` and `file_setup`, so a script can tell a file was not copied.
 - File setup now runs even when state registration fails, and the failure is reported. The old hint to run `grove repair` did not copy files.

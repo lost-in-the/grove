@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -9,24 +10,17 @@ import (
 	"github.com/lost-in-the/grove/internal/cmdexec"
 )
 
-// occupancyFormat asks docker for each container's compose project name, the
-// working directory compose was invoked from, and the container's current
-// state. The working directory is the cross-namespace correlation key:
-// docker compose sets com.docker.compose.project.working_dir to the resolved
-// compose directory regardless of which grove project's COMPOSE_PROJECT_NAME
-// started the container, so two grove projects pointed at the same
-// [plugins.docker.external] path always agree on it even though their
-// compose project names differ (#147). project.working_dir is the label
-// docker compose actually sets; there is no dedicated "stack path" label to
-// key on instead. State (e.g. "running", "exited") lets callers distinguish
-// a live stack from one whose containers have merely never been removed.
+// occupancyFormat queries Compose identity and state, including stopped containers.
+// Compose's working_dir is the first -f file's directory unless overridden.
+// Correlate only exact configured directories, never arbitrary descendants.
 const occupancyFormat = `{{.Label "com.docker.compose.project"}}|{{.Label "com.docker.compose.project.working_dir"}}|{{.State}}`
 
 // stackOccupant is one compose project's claim on an agent slot, along with
 // whether that project currently has any container running for it.
 type stackOccupant struct {
-	Project string
-	Running bool
+	Project   string
+	Running   bool
+	Ambiguous bool
 }
 
 // stackOccupants returns, for the shared compose stack rooted at composePath,
@@ -43,22 +37,34 @@ type stackOccupant struct {
 // consult the per-occupant Running flag rather than filtering occupancy
 // itself.
 //
-// Best-effort: returns an error if docker can't be queried, but callers
-// should treat that as "occupancy unknown" and fall back to their own
-// records rather than blocking on it.
-func stackOccupants(composePath string) (map[int]stackOccupant, error) {
+// Unknown or ambiguous occupancy is an error: callers must not allocate blindly.
+func stackOccupants(composePath, templatePath string) (map[int]stackOccupant, error) {
 	out, err := cmdexec.Output(context.Background(), "docker",
 		[]string{"ps", "-a", "--format", occupancyFormat}, "", cmdexec.Docker)
 	if err != nil {
 		return nil, err
 	}
-	return parseStackOccupants(string(out), composePath), nil
+	paths := []string{composePath}
+	if templatePath != "" {
+		template := templatePath
+		if !filepath.IsAbs(template) {
+			template = filepath.Join(composePath, template)
+		}
+		paths = append(paths, filepath.Dir(template))
+	}
+	occupants := parseStackOccupants(string(out), paths...)
+	for slot, occ := range occupants {
+		if occ.Ambiguous {
+			return nil, fmt.Errorf("ambiguous stack occupancy: multiple compose projects hold slot %d", slot)
+		}
+	}
+	return occupants, nil
 }
 
 // parseStackOccupants is the pure half of stackOccupants, extracted for unit
 // testing without invoking docker. Each line of out is expected to be
 // "<compose-project>|<working-dir>|<state>" as produced by occupancyFormat.
-// Lines whose working dir doesn't match composePath (cleaned, exact match)
+// Lines whose working dir doesn't match a configured path (cleaned, exact match)
 // belong to an unrelated compose stack and are ignored. Project names that
 // don't end in "-agent-<N>" (e.g. the main stack, or the "-agent-ephemeral"
 // project used for one-off Run/Exec) aren't slot occupants and are ignored.
@@ -66,9 +72,12 @@ func stackOccupants(composePath string) (map[int]stackOccupant, error) {
 // A slot's Running is true if ANY container belonging to its compose project
 // is in the "running" state — a project with one running and one exited
 // container (e.g. mid-restart) still counts as running.
-func parseStackOccupants(out, composePath string) map[int]stackOccupant {
+func parseStackOccupants(out string, composePaths ...string) map[int]stackOccupant {
 	result := make(map[int]stackOccupant)
-	cleanPath := filepath.Clean(composePath)
+	paths := make(map[string]bool, len(composePaths))
+	for _, path := range composePaths {
+		paths[filepath.Clean(path)] = true
+	}
 
 	for _, line := range strings.Split(out, "\n") {
 		line = strings.TrimSpace(line)
@@ -83,7 +92,7 @@ func parseStackOccupants(out, composePath string) map[int]stackOccupant {
 		if project == "" || workingDir == "" {
 			continue
 		}
-		if filepath.Clean(workingDir) != cleanPath {
+		if !paths[filepath.Clean(workingDir)] {
 			continue
 		}
 		slot, ok := parseAgentSlot(project)
@@ -91,6 +100,11 @@ func parseStackOccupants(out, composePath string) map[int]stackOccupant {
 			continue
 		}
 		occ := result[slot]
+		if occ.Project != "" && occ.Project != project {
+			occ.Ambiguous = true
+			result[slot] = occ
+			continue
+		}
 		occ.Project = project
 		if state == "running" {
 			occ.Running = true
@@ -136,7 +150,7 @@ func foreignOccupants(occupants map[int]stackOccupant, projectName string) map[i
 	}
 	foreign := make(map[int]stackOccupant, len(occupants))
 	for slot, occ := range occupants {
-		if occ.Project == agentComposeProjectName(projectName, slot) {
+		if !occ.Ambiguous && occ.Project == agentComposeProjectName(projectName, slot) {
 			continue
 		}
 		foreign[slot] = occ

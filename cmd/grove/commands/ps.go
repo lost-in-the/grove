@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -45,8 +46,11 @@ Examples:
 		slots, err := docker.ListStackSlots(ctx.Config)
 		if err != nil {
 			if psJSON {
-				output.PrintJSONError(exitcode.ExternalCommandFailed, fmt.Sprintf("failed to list stacks: %v", err))
+				output.ExitWithJSONError(exitcode.ExternalCommandFailed, fmt.Sprintf("failed to list stacks: %v", err))
 				return nil
+			}
+			if !errors.Is(err, docker.ErrAgentStackNotConfigured) {
+				return fmt.Errorf("failed to list stacks: %w", err)
 			}
 			cli.Info(w, "Stacks not configured for this project")
 			cli.Faint(w, "")
@@ -102,6 +106,10 @@ Examples:
 				} else {
 					cli.Bold(w, "  #%d  held by %s", s.Slot, s.Project)
 				}
+				continue
+			}
+			if !s.Running {
+				cli.Bold(w, "  #%d  %s (stopped)", s.Slot, s.Worktree)
 				continue
 			}
 			url := docker.AgentURL(ctx.Config, s.Slot)

@@ -184,7 +184,7 @@ exit 0
 	origPath := os.Getenv("PATH")
 	t.Setenv("PATH", fakeDockerDir+":"+origPath)
 
-	occupants, err := stackOccupants(composePath)
+	occupants, err := stackOccupants(composePath, "")
 	if err != nil {
 		t.Fatalf("stackOccupants() error = %v", err)
 	}
