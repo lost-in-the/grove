@@ -80,7 +80,7 @@ func TestListStackSlots_NotConfigured(t *testing.T) {
 	}
 }
 
-func TestListStackSlots_FallsBackToLocalRecordsWhenOccupancyUnknown(t *testing.T) {
+func TestListStackSlots_EmptyDockerKeepsReservationStopped(t *testing.T) {
 	composePath := t.TempDir()
 	cfg := newTestAgentConfigWithSlots(t, "myapp", composePath)
 
@@ -91,8 +91,7 @@ func TestListStackSlots_FallsBackToLocalRecordsWhenOccupancyUnknown(t *testing.T
 		t.Fatalf("Allocate() error = %v", err)
 	}
 
-	// Point docker at a script that fails, simulating "docker unreachable" —
-	// occupancy should degrade to the local record rather than erroring out.
+	// A successful empty query keeps the reservation without claiming it is running.
 	writeFakeDocker(t) // no lines: empty docker ps output, still "succeeds"
 
 	slots, err := ListStackSlots(cfg)
@@ -101,6 +100,9 @@ func TestListStackSlots_FallsBackToLocalRecordsWhenOccupancyUnknown(t *testing.T
 	}
 	if len(slots) != 1 {
 		t.Fatalf("ListStackSlots() = %v, want 1 entry", slots)
+	}
+	if slots[0].Running {
+		t.Error("empty Docker result must not imply running")
 	}
 	if slots[0].Worktree != "myapp-feature-x" || slots[0].Foreign {
 		t.Errorf("ListStackSlots()[0] = %+v, want local attribution to myapp-feature-x, not foreign", slots[0])

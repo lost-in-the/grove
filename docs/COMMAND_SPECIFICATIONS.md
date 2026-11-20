@@ -1529,8 +1529,11 @@ Flags:
 2. Reconcile against ground-truth container occupancy for the shared compose stack (via
    `com.docker.compose.project.working_dir`, including stopped containers) — this project's own
    `.slots.json` only knows what *it* allocated, so a slot another grove project's stack holds at
-   the same `[plugins.docker.external].path` wouldn't otherwise be visible. Best-effort: if docker
-   can't be queried, falls back to local records alone.
+   the same stack wouldn't otherwise be visible. Match the external root or the first template's
+   directory (relative templates resolve against the external root); overlays and unrelated
+   directories do not extend discovery. Unknown Docker occupancy or multiple compose projects
+   claiming one slot is an error. Isolated startup uses the same rules and refuses allocation
+   when occupancy cannot be established.
 3. Display results with `#N` reference IDs and URLs; slots held by a different grove project are
    shown as `held by <compose-project>` instead of being attributed to a worktree here. Occupancy
    includes stopped containers (a pinned `container_name` still conflicts even when exited), so a
@@ -1598,13 +1601,15 @@ To enable, add to .grove/config.toml:
 grove has no worktree to attribute them to. `running` reflects whether the holding compose project
 has at least one running container right now; `running: false` on a foreign slot means it's held
 only by stopped/exited containers — still occupied (a pinned `container_name` conflicts either
-way) but not a live stack.
+way) but not a live stack. A local reservation with no containers also has `running: false`
+and appears as stopped in human output.
 
 **Edge Cases:**
 
 | Scenario | Behavior |
 |----------|----------|
-| Stacks not configured | Help text with config example |
+| Stacks not configured | Human output: help text, exit 0. JSON: error object on stderr, exit 6 |
+| Docker query fails or duplicate owners claim one slot | Nonzero exit; JSON error object on stderr with code/exit 6, no success array |
 | No active stacks | Info message |
 | Slot held by a different grove project's stack at the same `external.path` | Shown as `held by <compose-project>`, not attributed to a worktree here |
 | Slot held by a different grove project's stack, but its containers have all exited | Shown as `held by <compose-project> (stopped)`; still excluded from allocation |

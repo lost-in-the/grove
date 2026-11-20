@@ -128,12 +128,14 @@ func (s *agentExternalStrategy) Up(worktreePath string, detach bool) error {
 	// grove project's own .slots.json — a slot this project has never heard
 	// of can already be running under a different grove project's compose
 	// namespace if [plugins.docker.external].path is shared between them
-	// (#147). Best-effort: an unreachable docker daemon degrades to the old
-	// file-only behavior rather than blocking `grove up`.
+	// (#147). Unknown occupancy must block allocation.
 	// Excludes foreign slots whether their containers are running or merely
 	// stopped-but-not-removed — a pinned container_name conflicts with a new
 	// `docker compose up` either way (see stackOccupants/foreignOccupants).
-	occupants, _ := stackOccupants(composePath)
+	occupants, err := stackOccupants(composePath, s.agent.TemplatePath)
+	if err != nil {
+		return fmt.Errorf("failed to discover stack occupancy: %w", err)
+	}
 	foreign := foreignOccupants(occupants, s.cfg.ProjectName)
 	excluded := make(map[int]bool, len(foreign))
 	for slot := range foreign {
@@ -351,7 +353,7 @@ func (s *agentExternalStrategy) composeProjectName(slot int) string {
 // ownProjectName; ok=false covers both "not a conflict" and "occupancy
 // couldn't be determined" so callers fall back to the original error.
 func (s *agentExternalStrategy) foreignSlotHolder(composePath string, slot int, ownProjectName string) (string, bool) {
-	occupants, err := stackOccupants(composePath)
+	occupants, err := stackOccupants(composePath, s.agent.TemplatePath)
 	if err != nil {
 		return "", false
 	}

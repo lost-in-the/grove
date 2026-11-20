@@ -82,6 +82,11 @@ Isolated stacks allow multiple independent Docker environments to run simultaneo
 grove up --isolated          # Allocate the lowest free slot and start services
 ```
 
+Discovery includes running and stopped containers labeled with the external root or
+the first template's directory. `grove ps` and isolated startup fail when Docker
+cannot be queried or multiple Compose projects claim one slot. A local reservation
+without containers is reported as stopped; it is not evidence of a running stack.
+
 The slot is allocated automatically (lowest free, numbered from 1); there is no
 `--slot` flag. Each isolated stack gets:
 - A unique compose project name (`{project}-agent-{N}`, where N is the slot)

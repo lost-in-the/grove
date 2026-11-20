@@ -264,10 +264,13 @@ func FindWorktreeSlot(cfg *config.Config, worktreePath string) int {
 func ListActiveSlots(cfg *config.Config) ([]SlotInfo, error) {
 	sm := buildSlotManager(cfg)
 	if sm == nil {
-		return nil, fmt.Errorf("agent stack not configured")
+		return nil, ErrAgentStackNotConfigured
 	}
 	return sm.ListActive()
 }
+
+// ErrAgentStackNotConfigured indicates no isolated stack configuration is available.
+var ErrAgentStackNotConfigured = errors.New("agent stack not configured")
 
 // StackSlotStatus is one resolved agent slot for `grove ps`, reconciling
 // this grove project's own slot records with ground-truth container
@@ -277,19 +280,18 @@ type StackSlotStatus struct {
 	Worktree string // this project's worktree name; empty when the slot isn't attributed to this project
 	Project  string // compose project currently holding the slot (may belong to a different grove project)
 	Foreign  bool   // true when Project belongs to a different grove project than this one
-	Running  bool   // true when Project has at least one running container right now; false means held only by stopped/exited containers (or occupancy couldn't be determined and this is a local-only fallback, which is optimistically reported as running)
+	Running  bool   // true when Project has at least one running container right now; false includes stopped containers and local reservations without containers
 }
 
 // ListStackSlots returns the resolved state of every occupied agent slot for
 // the shared compose stack, merging this project's local .slots.json against
 // docker container occupancy so callers (`grove ps`) don't misattribute a
 // slot another grove project's namespace actually holds. Docker occupancy is
-// queried best-effort: if it can't be determined (docker unreachable), slots
-// fall back to local records alone, matching pre-#147 behavior.
+// required: unknown or ambiguous occupancy returns an error rather than stale status.
 func ListStackSlots(cfg *config.Config) ([]StackSlotStatus, error) {
 	sm := buildSlotManager(cfg)
 	if sm == nil {
-		return nil, fmt.Errorf("agent stack not configured")
+		return nil, ErrAgentStackNotConfigured
 	}
 	local, err := sm.ListActive()
 	if err != nil {
@@ -302,7 +304,10 @@ func ListStackSlots(cfg *config.Config) ([]StackSlotStatus, error) {
 	}
 
 	composePath := resolveComposePath(cfg.Plugins.Docker.External.Path)
-	occupants, _ := stackOccupants(composePath) // best-effort
+	occupants, err := stackOccupants(composePath, cfg.Plugins.Docker.External.Agent.TemplatePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to discover stack occupancy: %w", err)
+	}
 
 	slotNums := make(map[int]struct{}, len(local)+len(occupants))
 	for _, s := range local {
@@ -338,11 +343,10 @@ func ListStackSlots(cfg *config.Config) ([]StackSlotStatus, error) {
 				status.Worktree = rec.Worktree
 			}
 		case haveLocal:
-			// No docker ground truth (query failed, or containers aren't up
-			// right now) — fall back to the local record, same as before #147.
+			// Docker confirmed no containers for this local reservation.
 			status.Worktree = rec.Worktree
 			status.Project = ownProject
-			status.Running = true
+			status.Running = false
 		default:
 			continue // occupant slot with neither a local record nor a resolvable owner
 		}

@@ -303,6 +303,7 @@ func TestAgentExternalStrategy_OnPostSwitch_WithSlot(t *testing.T) {
 }
 
 func TestAgentExternalStrategy_Up_EmitsEnvDirective(t *testing.T) {
+	writeFakeDocker(t)
 	cfg := newTestAgentConfig(t)
 	s := newAgentExternalStrategy(cfg)
 
@@ -312,8 +313,8 @@ func TestAgentExternalStrategy_Up_EmitsEnvDirective(t *testing.T) {
 	t.Setenv("GROVE_SHELL", "1")
 	worktreePath := "/tmp/myapp-up-test"
 
-	// Up will fail because docker compose isn't available/configured, but the
-	// env directive is emitted before compose runs — that's what we're testing.
+	// Fake Docker confirms empty occupancy and accepts startup; verify the
+	// shell directives emitted for the allocated slot.
 	out := captureStdout(t, func() {
 		_ = s.Up(worktreePath, true)
 	})
@@ -344,7 +345,7 @@ func TestAgentExternalStrategy_Up_ReportsForeignSlotConflict(t *testing.T) {
 	s := newAgentExternalStrategy(cfg)
 	_ = os.MkdirAll(filepath.Dir(s.slots.slotsFile), 0755)
 
-	composePath := s.composePath()
+	composePath := filepath.Dir(s.resolveTemplatePaths()[0])
 	stateFile := filepath.Join(t.TempDir(), "ps-calls")
 
 	fakeDockerDir := t.TempDir()
